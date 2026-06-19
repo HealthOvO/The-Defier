@@ -9,6 +9,7 @@ import { BOSS_MECHANICS } from "../data/boss_mechanics.js";
 import { ACHIEVEMENTS, getAchievementRewardText } from "../data/achievements.js";
 import { Player } from "./player.js";
 import { AchievementSystem } from "./achievements.js";
+import { registerHubController } from "../runtime/hub-registry.js";
 const CollectionHubModule = (() => {
 const collectionHubMethods = Object.create(null);
   const COLLECTION_HISTORY_KEY = 'theDefierCollectionUnlockHistoryV1';
@@ -7095,6 +7096,9 @@ function attachCollectionHubController(game) {
   if (game.collectionHub instanceof CollectionHubController) return game.collectionHub;
   game.collectionHub = new CollectionHubController(game);
   return game.collectionHub;
+}
+if (typeof registerHubController === 'function') {
+  registerHubController('collection', attachCollectionHubController);
 }
 const collectionHubGlobal = typeof window !== 'undefined' ? window : typeof global !== 'undefined' ? global : typeof globalThis !== 'undefined' ? globalThis : null;
 if (collectionHubGlobal) {

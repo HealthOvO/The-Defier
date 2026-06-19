@@ -251,7 +251,7 @@ export const BackendClient = {
       return payload;
     } else {
       const errMsg = payload && payload.message ? payload.message : `HTTP ${response ? response.status : 'unknown'}`;
-      throw this.createError(errMsg, response ? response.status : 0);
+      throw this.createError(errMsg, response ? response.status : 0, payload && payload.reason ? { reason: payload.reason } : null);
     }
   },
   async register(username, password) {
@@ -726,6 +726,432 @@ export const BackendClient = {
         success: false,
         error,
         message: error.message || 'PVP 结算失败'
+      };
+    }
+  },
+  getLivePvpPathPrefix() {
+    const config = this.getServerConfig();
+    const base = config && typeof config.pvpPathPrefix === 'string' && config.pvpPathPrefix.trim()
+      ? config.pvpPathPrefix.trim().replace(/\/+$/, '')
+      : '/api/pvp';
+    return `${base}/live`;
+  },
+  async joinLivePvpQueue(options = {}) {
+    const user = this.getCurrentUser();
+    if (!user) return {
+      success: false,
+      message: '未登录'
+    };
+    try {
+      const displayName = typeof options.displayName === 'string' ? options.displayName.trim().slice(0, 40) : '';
+      const data = {};
+      if (displayName) data.displayName = displayName;
+      if (options.loadout && typeof options.loadout === 'object' && !Array.isArray(options.loadout)) {
+        data.loadout = this.cloneData(options.loadout);
+      }
+      const result = await this.requestServer(`${this.getLivePvpPathPrefix()}/queue/join`, {
+        method: 'POST',
+        data
+      });
+      return result && typeof result === 'object' ? result : {
+        success: false,
+        message: '实时论道入队返回异常'
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error,
+        reason: error && error.reason || undefined,
+        message: error.message || '实时论道入队失败'
+      };
+    }
+  },
+  async cancelLivePvpQueue(queueTicket = '') {
+    const user = this.getCurrentUser();
+    if (!user) return {
+      success: false,
+      message: '未登录'
+    };
+    const ticket = String(queueTicket || '').trim();
+    if (!ticket) return {
+      success: false,
+      message: '实时论道队列票据缺失'
+    };
+    try {
+      const result = await this.requestServer(`${this.getLivePvpPathPrefix()}/queue/cancel`, {
+        method: 'POST',
+        data: { queueTicket: ticket }
+      });
+      return result && typeof result === 'object' ? result : {
+        success: false,
+        message: '实时论道取消排队返回异常'
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error,
+        reason: error && error.reason || undefined,
+        message: error.message || '实时论道取消排队失败'
+      };
+    }
+  },
+  async getLivePvpQueueStatus(queueTicket = '') {
+    const user = this.getCurrentUser();
+    if (!user) return {
+      success: false,
+      message: '未登录'
+    };
+    const ticket = String(queueTicket || '').trim();
+    if (!ticket) return {
+      success: false,
+      message: '实时论道队列票据缺失'
+    };
+    try {
+      const result = await this.requestServer(`${this.getLivePvpPathPrefix()}/queue/status/${encodeURIComponent(ticket)}`, {
+        method: 'GET'
+      });
+      return result && typeof result === 'object' ? result : {
+        success: false,
+        message: '实时论道队列状态返回异常'
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error,
+        reason: error && error.reason || undefined,
+        message: error.message || '实时论道队列状态读取失败'
+      };
+    }
+  },
+  async createLivePvpInvite(options = {}) {
+    const user = this.getCurrentUser();
+    if (!user) return {
+      success: false,
+      message: '未登录'
+    };
+    try {
+      const displayName = typeof options.displayName === 'string' ? options.displayName.trim().slice(0, 40) : '';
+      const targetUsername = typeof options.targetUsername === 'string' ? options.targetUsername.trim() : '';
+      const data = {};
+      if (displayName) data.displayName = displayName;
+      if (targetUsername) data.targetUsername = targetUsername;
+      if (options.loadout && typeof options.loadout === 'object' && !Array.isArray(options.loadout)) {
+        data.loadout = this.cloneData(options.loadout);
+      }
+      const result = await this.requestServer(`${this.getLivePvpPathPrefix()}/invites`, {
+        method: 'POST',
+        data
+      });
+      return result && typeof result === 'object' ? result : {
+        success: false,
+        message: '实时论道邀请创建返回异常'
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error,
+        reason: error && error.reason || undefined,
+        message: error.message || '实时论道邀请创建失败'
+      };
+    }
+  },
+  async joinLivePvpInvite(inviteCode = '', options = {}) {
+    const user = this.getCurrentUser();
+    if (!user) return {
+      success: false,
+      message: '未登录'
+    };
+    const code = String(inviteCode || '').trim();
+    if (!code) return {
+      success: false,
+      message: '实时论道邀请码缺失'
+    };
+    try {
+      const displayName = typeof options.displayName === 'string' ? options.displayName.trim().slice(0, 40) : '';
+      const data = {};
+      if (displayName) data.displayName = displayName;
+      if (options.loadout && typeof options.loadout === 'object' && !Array.isArray(options.loadout)) {
+        data.loadout = this.cloneData(options.loadout);
+      }
+      const result = await this.requestServer(`${this.getLivePvpPathPrefix()}/invites/${encodeURIComponent(code)}/join`, {
+        method: 'POST',
+        data
+      });
+      return result && typeof result === 'object' ? result : {
+        success: false,
+        message: '实时论道邀请加入返回异常'
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error,
+        reason: error && error.reason || undefined,
+        message: error.message || '实时论道邀请加入失败'
+      };
+    }
+  },
+  async cancelLivePvpInvite(inviteCode = '') {
+    const user = this.getCurrentUser();
+    if (!user) return {
+      success: false,
+      message: '未登录'
+    };
+    const code = String(inviteCode || '').trim();
+    if (!code) return {
+      success: false,
+      message: '实时论道邀请码缺失'
+    };
+    try {
+      const result = await this.requestServer(`${this.getLivePvpPathPrefix()}/invites/${encodeURIComponent(code)}/cancel`, {
+        method: 'POST',
+        data: {}
+      });
+      return result && typeof result === 'object' ? result : {
+        success: false,
+        message: '实时论道邀请取消返回异常'
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error,
+        reason: error && error.reason || undefined,
+        message: error.message || '实时论道邀请取消失败'
+      };
+    }
+  },
+  async getCurrentLivePvpInvite() {
+    const user = this.getCurrentUser();
+    if (!user) return {
+      success: false,
+      message: '未登录'
+    };
+    try {
+      const result = await this.requestServer(`${this.getLivePvpPathPrefix()}/invites/current`, {
+        method: 'GET'
+      });
+      return result && typeof result === 'object' ? result : {
+        success: false,
+        message: '实时论道邀请状态返回异常'
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error,
+        reason: error && error.reason || undefined,
+        message: error.message || '实时论道邀请状态读取失败'
+      };
+    }
+  },
+  async getLivePvpInviteInbox() {
+    const user = this.getCurrentUser();
+    if (!user) return {
+      success: false,
+      message: '未登录'
+    };
+    try {
+      const result = await this.requestServer(`${this.getLivePvpPathPrefix()}/invites/inbox`, {
+        method: 'GET'
+      });
+      return result && typeof result === 'object' ? result : {
+        success: false,
+        message: '实时论道邀请收件箱返回异常'
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error,
+        reason: error && error.reason || undefined,
+        message: error.message || '实时论道邀请收件箱读取失败'
+      };
+    }
+  },
+  async getLivePvpMatch(matchId = '') {
+    const user = this.getCurrentUser();
+    if (!user) return {
+      success: false,
+      message: '未登录'
+    };
+    const id = String(matchId || '').trim();
+    if (!id) return {
+      success: false,
+      message: '实时论道战局缺失'
+    };
+    try {
+      const result = await this.requestServer(`${this.getLivePvpPathPrefix()}/matches/${encodeURIComponent(id)}`, {
+        method: 'GET'
+      });
+      return result && typeof result === 'object' ? result : {
+        success: false,
+        message: '实时论道战局返回异常'
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error,
+        reason: error && error.reason || undefined,
+        message: error.message || '实时论道战局读取失败'
+      };
+    }
+  },
+  async getCurrentLivePvpMatch() {
+    const user = this.getCurrentUser();
+    if (!user) return {
+      success: false,
+      message: '未登录'
+    };
+    try {
+      const result = await this.requestServer(`${this.getLivePvpPathPrefix()}/matches/current`, {
+        method: 'GET'
+      });
+      return result && typeof result === 'object' ? result : {
+        success: false,
+        message: '当前实时论道返回异常'
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error,
+        reason: error && error.reason || undefined,
+        message: error.message || '当前实时论道读取失败'
+      };
+    }
+  },
+  async getLivePvpReplay(matchId = '', options = {}) {
+    const user = this.getCurrentUser();
+    if (!user) return {
+      success: false,
+      message: '未登录'
+    };
+    const id = String(matchId || '').trim();
+    if (!id) return {
+      success: false,
+      message: '实时论道战局缺失'
+    };
+    const visibility = String(options && options.visibility || '').trim();
+    const allowedVisibility = ['', 'replay_self', 'replay_public', 'audit_safe'];
+    if (!allowedVisibility.includes(visibility)) {
+      return {
+        success: false,
+        reason: 'invalid_replay_visibility',
+        message: '不支持的回放可见性'
+      };
+    }
+    const query = visibility && visibility !== 'replay_self'
+      ? `?visibility=${encodeURIComponent(visibility)}`
+      : '';
+    try {
+      const result = await this.requestServer(`${this.getLivePvpPathPrefix()}/matches/${encodeURIComponent(id)}/replay${query}`, {
+        method: 'GET'
+      });
+      return result && typeof result === 'object' ? result : {
+        success: false,
+        message: '实时论道回放返回异常'
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error,
+        reason: error && error.reason || undefined,
+        message: error.message || '实时论道回放读取失败'
+      };
+    }
+  },
+  async requestLivePvpRematch(matchId = '', options = {}) {
+    const user = this.getCurrentUser();
+    if (!user) return {
+      success: false,
+      message: '未登录'
+    };
+    const id = String(matchId || '').trim();
+    if (!id) return {
+      success: false,
+      message: '实时论道战局缺失'
+    };
+    try {
+      const displayName = typeof options.displayName === 'string' ? options.displayName.trim().slice(0, 40) : '';
+      const data = {};
+      if (displayName) data.displayName = displayName;
+      if (options.loadout && typeof options.loadout === 'object' && !Array.isArray(options.loadout)) {
+        data.loadout = this.cloneData(options.loadout);
+      }
+      const result = await this.requestServer(`${this.getLivePvpPathPrefix()}/matches/${encodeURIComponent(id)}/rematch`, {
+        method: 'POST',
+        data
+      });
+      return result && typeof result === 'object' ? result : {
+        success: false,
+        message: '实时论道再战返回异常'
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error,
+        reason: error && error.reason || undefined,
+        message: error.message || '实时论道再战发起失败'
+      };
+    }
+  },
+  async heartbeatLivePvpMatch(matchId = '') {
+    const user = this.getCurrentUser();
+    if (!user) return {
+      success: false,
+      message: '未登录'
+    };
+    const id = String(matchId || '').trim();
+    if (!id) return {
+      success: false,
+      message: '实时论道战局缺失'
+    };
+    try {
+      const result = await this.requestServer(`${this.getLivePvpPathPrefix()}/matches/${encodeURIComponent(id)}/heartbeat`, {
+        method: 'POST',
+        data: {}
+      });
+      return result && typeof result === 'object' ? result : {
+        success: false,
+        message: '实时论道心跳返回异常'
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error,
+        reason: error && error.reason || undefined,
+        message: error.message || '实时论道心跳失败'
+      };
+    }
+  },
+  async submitLivePvpIntent(matchId = '', intent = {}) {
+    const user = this.getCurrentUser();
+    if (!user) return {
+      success: false,
+      message: '未登录'
+    };
+    const id = String(matchId || '').trim();
+    if (!id) return {
+      success: false,
+      message: '实时论道战局缺失'
+    };
+    const payload = {
+      intentId: String(intent.intentId || ''),
+      intentType: String(intent.intentType || ''),
+      stateVersion: Number.isFinite(Number(intent.stateVersion)) ? Math.floor(Number(intent.stateVersion)) : undefined,
+      payload: this.cloneData(intent.payload || {})
+    };
+    try {
+      const result = await this.requestServer(`${this.getLivePvpPathPrefix()}/matches/${encodeURIComponent(id)}/intents`, {
+        method: 'POST',
+        data: payload
+      });
+      return result && typeof result === 'object' ? result : {
+        success: false,
+        message: '实时论道行动返回异常'
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error,
+        reason: error && error.reason || undefined,
+        message: error.message || '实时论道行动提交失败'
       };
     }
   },

@@ -423,8 +423,8 @@
 
 规划与发布至少同步四处：
 
-1. `docs/designer_major_upgrade_planning_v7.md`
-2. `docs/designer_major_upgrade_requirements_v6.md`
+1. `docs/archive/implemented/designer_major_upgrade_planning_v7.md`
+2. `docs/archive/implemented/designer_major_upgrade_requirements_v6.md`
 3. `progress.md`
 4. 封板后再更新 `game-intro.html` 与游戏内更新页
 

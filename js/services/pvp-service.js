@@ -36,6 +36,117 @@ export const PVPService = {
       '天穹榜': 1.2
     }
   },
+  live: {
+    getClient() {
+      if (typeof PVPService === 'undefined' || !PVPService || typeof PVPService.getBackendPvpClient !== 'function') return null;
+      const client = PVPService.getBackendPvpClient();
+      if (!client || typeof client.ensureReady !== 'function') return null;
+      try {
+        if (!client.ensureReady()) return null;
+      } catch (error) {
+        return null;
+      }
+      return client;
+    },
+    async joinQueue(options = {}) {
+      const client = this.getClient();
+      if (!client || typeof client.joinLivePvpQueue !== 'function') {
+        return { success: false, message: '实时论道服务未就绪' };
+      }
+      return await client.joinLivePvpQueue(options);
+    },
+    async cancelQueue(queueTicket = '') {
+      const client = this.getClient();
+      if (!client || typeof client.cancelLivePvpQueue !== 'function') {
+        return { success: false, message: '实时论道服务未就绪' };
+      }
+      return await client.cancelLivePvpQueue(queueTicket);
+    },
+    async getQueueStatus(queueTicket = '') {
+      const client = this.getClient();
+      if (!client || typeof client.getLivePvpQueueStatus !== 'function') {
+        return { success: false, message: '实时论道服务未就绪' };
+      }
+      return await client.getLivePvpQueueStatus(queueTicket);
+    },
+    async createInvite(options = {}) {
+      const client = this.getClient();
+      if (!client || typeof client.createLivePvpInvite !== 'function') {
+        return { success: false, message: '实时论道服务未就绪' };
+      }
+      return await client.createLivePvpInvite(options);
+    },
+    async joinInvite(inviteCode = '', options = {}) {
+      const client = this.getClient();
+      if (!client || typeof client.joinLivePvpInvite !== 'function') {
+        return { success: false, message: '实时论道服务未就绪' };
+      }
+      return await client.joinLivePvpInvite(inviteCode, options);
+    },
+    async cancelInvite(inviteCode = '') {
+      const client = this.getClient();
+      if (!client || typeof client.cancelLivePvpInvite !== 'function') {
+        return { success: false, message: '实时论道服务未就绪' };
+      }
+      return await client.cancelLivePvpInvite(inviteCode);
+    },
+    async getCurrentInvite() {
+      const client = this.getClient();
+      if (!client || typeof client.getCurrentLivePvpInvite !== 'function') {
+        return { success: false, message: '实时论道服务未就绪' };
+      }
+      return await client.getCurrentLivePvpInvite();
+    },
+    async getInviteInbox() {
+      const client = this.getClient();
+      if (!client || typeof client.getLivePvpInviteInbox !== 'function') {
+        return { success: false, message: '实时论道服务未就绪' };
+      }
+      return await client.getLivePvpInviteInbox();
+    },
+    async getMatch(matchId = '') {
+      const client = this.getClient();
+      if (!client || typeof client.getLivePvpMatch !== 'function') {
+        return { success: false, message: '实时论道服务未就绪' };
+      }
+      return await client.getLivePvpMatch(matchId);
+    },
+    async getCurrentMatch() {
+      const client = this.getClient();
+      if (!client || typeof client.getCurrentLivePvpMatch !== 'function') {
+        return { success: false, message: '实时论道服务未就绪' };
+      }
+      return await client.getCurrentLivePvpMatch();
+    },
+    async getReplay(matchId = '', options = {}) {
+      const client = this.getClient();
+      if (!client || typeof client.getLivePvpReplay !== 'function') {
+        return { success: false, message: '实时论道服务未就绪' };
+      }
+      return await client.getLivePvpReplay(matchId, options);
+    },
+    async requestRematch(matchId = '', options = {}) {
+      const client = this.getClient();
+      if (!client || typeof client.requestLivePvpRematch !== 'function') {
+        return { success: false, message: '实时论道服务未就绪' };
+      }
+      return await client.requestLivePvpRematch(matchId, options);
+    },
+    async heartbeat(matchId = '') {
+      const client = this.getClient();
+      if (!client || typeof client.heartbeatLivePvpMatch !== 'function') {
+        return { success: false, message: '实时论道服务未就绪' };
+      }
+      return await client.heartbeatLivePvpMatch(matchId);
+    },
+    async submitIntent(matchId = '', intent = {}) {
+      const client = this.getClient();
+      if (!client || typeof client.submitLivePvpIntent !== 'function') {
+        return { success: false, message: '实时论道服务未就绪' };
+      }
+      return await client.submitLivePvpIntent(matchId, intent);
+    }
+  },
   init(context = {}) {
     this.context = {
       ...this.context,

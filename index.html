@@ -153,7 +153,7 @@
         <div class="void-particles" style="opacity: 0.3;"></div>
 
         <div class="screen-header transparent">
-            <button class="back-btn" onclick="game.showScreen('main-menu')">
+            <button class="back-btn" onclick="PVPScene.stopLivePolling(); PVPScene.stopLiveHeartbeat(); game.showScreen('main-menu')">
                 <span class="btn-icon">↩</span>
             </button>
             <div class="header-title-group">
@@ -176,6 +176,12 @@
                         <span class="rune-icon">📜</span>
                     </div>
                     <span class="rune-name">天道榜</span>
+                </button>
+                <button class="rune-tab" data-pvp-tab="live" onclick="PVPScene.switchTab('live')">
+                    <div class="rune-icon-container">
+                        <span class="rune-icon">⚔️</span>
+                    </div>
+                    <span class="rune-name">实时论道</span>
                 </button>
                 <button class="rune-tab" onclick="PVPScene.switchTab('defense')">
                     <div class="rune-icon-container">
@@ -214,6 +220,135 @@
                             <span class="btn-glow"></span>
                             <span class="text">⚔️ 论道切磋</span>
                         </button>
+                    </div>
+                </div>
+
+                <!-- Live PVP Tab -->
+                <div id="tab-live" class="pvp-tab-pane pvp-live-shell" data-live-pvp-root data-live-phase="idle" style="display:none;">
+                    <div class="pvp-risk-brief pvp-live-status-card">
+                        <div class="pvp-risk-kicker">实时论道 · 服务端权威</div>
+                        <div class="pvp-risk-header">
+                            <div class="pvp-risk-heading">
+                                <div class="pvp-risk-title" data-live-phase-label>未入队</div>
+                                <div class="pvp-risk-subtitle" data-live-summary>排队、行动与终局都走 /api/pvp/live，不接旧残影结算。</div>
+                            </div>
+                            <div class="pvp-risk-dri" data-live-status-chip>LIVE</div>
+                        </div>
+                        <div class="pvp-live-meta-grid">
+                            <div class="pvp-live-meta">
+                                <span class="label">队列</span>
+                                <span class="value" data-live-queue-ticket>--</span>
+                            </div>
+                            <div class="pvp-live-meta">
+                                <span class="label">战局</span>
+                                <span class="value" data-live-match-id>--</span>
+                            </div>
+                            <div class="pvp-live-meta">
+                                <span class="label">席位</span>
+                                <span class="value" data-live-seat>--</span>
+                            </div>
+                            <div class="pvp-live-meta">
+                                <span class="label">版本</span>
+                                <span class="value" data-live-state-version>--</span>
+                            </div>
+                            <div class="pvp-live-meta">
+                                <span class="label">行动</span>
+                                <span class="value" data-live-current-seat>--</span>
+                            </div>
+                        </div>
+                        <div class="pvp-live-quality" data-live-match-quality>匹配质量：等待真人</div>
+                        <div class="pvp-live-turn-timer" data-live-turn-timer>倒计时：--</div>
+                        <div class="pvp-live-connection-status" data-live-connection-status>连接：等待心跳</div>
+                        <div class="pvp-live-opening-safeguard" data-live-opening-safeguard>公平保护：等待权威状态</div>
+                        <div class="pvp-live-social-panel" data-live-social-panel>
+                            <div class="pvp-live-emote-row">
+                                <button class="pvp-live-emote-button" data-live-emote="respect" onclick="PVPScene.submitLiveEmote('respect')" disabled>抱拳</button>
+                                <button class="pvp-live-emote-button" data-live-emote="thinking" onclick="PVPScene.submitLiveEmote('thinking')" disabled>思考</button>
+                                <button class="pvp-live-emote-button" data-live-emote="well_played" onclick="PVPScene.submitLiveEmote('well_played')" disabled>妙手</button>
+                                <button class="pvp-live-emote-button secondary" data-live-action="toggle-social-mute" onclick="PVPScene.toggleLiveSocialMute()">静音表情</button>
+                            </div>
+                            <div class="pvp-live-social-status" data-live-social-status>社交：预设表情 · 无自由文本</div>
+                        </div>
+                        <div class="pvp-live-first-guide" data-live-first-guide data-live-first-match-guide>首战简报：等待真人匹配</div>
+                        <div class="pvp-live-waiting-report" data-live-waiting-report hidden>等待真人：未进入长等待分支</div>
+                        <div class="pvp-live-invite-panel" data-live-invite-panel>
+                            <div class="pvp-live-invite-head">
+                                <span>好友约战</span>
+                                <span class="pvp-live-invite-code" data-live-invite-code>--</span>
+                            </div>
+                            <div class="pvp-live-invite-controls">
+                                <input class="pvp-live-invite-input" data-live-target-username type="text" maxlength="40" placeholder="指定道友用户名">
+                                <input class="pvp-live-invite-input" data-live-invite-input type="text" maxlength="16" placeholder="输入邀请码">
+                                <button class="challenge-btn secondary" data-live-action="create-invite" onclick="PVPScene.createLiveInvite()">创建约战</button>
+                                <button class="challenge-btn secondary" data-live-action="join-invite" onclick="PVPScene.joinLiveInvite()">加入约战</button>
+                                <button class="challenge-btn secondary" data-live-action="cancel-invite" onclick="PVPScene.cancelLiveInvite()">取消约战</button>
+                            </div>
+                            <div class="pvp-live-invite-report" data-live-invite-report>约战不写正式积分，只和输入邀请码的真人匹配。</div>
+                            <div class="pvp-live-invite-inbox" data-live-invite-inbox>收到的约战：暂无</div>
+                        </div>
+                        <div class="pvp-live-post-review" data-live-post-match-review hidden>赛后复盘：等待对局结束</div>
+                        <div class="pvp-live-loadout-selector">
+                            <div class="pvp-live-seat-head">
+                                <span class="pvp-live-seat-title">入队斗法谱</span>
+                                <span class="pvp-live-seat-badge" data-live-selected-loadout>当前：默认斗法谱</span>
+                            </div>
+                            <div class="pvp-live-loadout-presets" data-live-loadout-presets></div>
+                        </div>
+                    </div>
+                    <div class="pvp-live-board ranking-scroll-area">
+                        <div class="pvp-live-duel-grid">
+                            <section class="pvp-live-seat-panel" data-live-self>
+                                <div class="pvp-live-seat-head">
+                                    <span class="pvp-live-seat-title">我方席位</span>
+                                    <span class="pvp-live-seat-badge" data-live-self-seat>--</span>
+                                </div>
+                                <div class="pvp-live-statline" data-live-self-stats>等待权威状态</div>
+                                <div class="pvp-live-loadout" data-live-self-loadout>斗法谱：--</div>
+                                <div class="pvp-live-card-row" data-live-hand></div>
+                            </section>
+                            <section class="pvp-live-seat-panel" data-live-opponent>
+                                <div class="pvp-live-seat-head">
+                                    <span class="pvp-live-seat-title">对方席位</span>
+                                    <span class="pvp-live-seat-badge" data-live-opponent-seat>--</span>
+                                </div>
+                                <div class="pvp-live-statline" data-live-opponent-stats>仅显示公开信息</div>
+                                <div class="pvp-live-loadout" data-live-opponent-loadout>公开谱：--</div>
+                                <div class="pvp-live-hidden-hand" data-live-opponent-hand>手牌：--</div>
+                            </section>
+                        </div>
+                        <div class="pvp-live-event-panel" data-live-event-panel>
+                            <div class="pvp-live-event-title">权威事件</div>
+                            <div class="pvp-live-event-log" data-live-event-log>暂无事件</div>
+                        </div>
+                    </div>
+                    <div class="pvp-nav-footer pvp-live-footer">
+                        <div class="challenge-intent-line" data-live-last-error>实时论道不会自动匹配残影；没有真人时可取消排队。</div>
+                        <div class="pvp-live-action-bar">
+                            <button class="challenge-btn" data-live-action="join-queue" onclick="PVPScene.joinLiveQueue()">
+                                <span class="text">入队</span>
+                            </button>
+                            <button class="challenge-btn secondary" data-live-action="cancel-queue" onclick="PVPScene.cancelLiveQueue()">
+                                <span class="text">取消</span>
+                            </button>
+                            <button class="challenge-btn secondary" data-live-action="practice-live" onclick="PVPScene.openLivePracticeHint()">
+                                <span class="text">问道练习</span>
+                            </button>
+                            <button class="challenge-btn secondary" data-live-action="refresh-match" onclick="PVPScene.refreshLiveMatch()">
+                                <span class="text">刷新</span>
+                            </button>
+                            <button class="challenge-btn secondary" data-live-action="confirm-mulligan" onclick="PVPScene.confirmLiveMulligan()">
+                                <span class="text">确认调息</span>
+                            </button>
+                            <button class="challenge-btn secondary" data-live-action="ready" onclick="PVPScene.readyLiveMatch()">
+                                <span class="text">准备就绪</span>
+                            </button>
+                            <button class="challenge-btn secondary" data-live-action="end-turn" onclick="PVPScene.endLiveTurn()">
+                                <span class="text">结束回合</span>
+                            </button>
+                            <button class="challenge-btn danger" data-live-action="surrender" onclick="PVPScene.surrenderLiveMatch()">
+                                <span class="text">认输</span>
+                            </button>
+                        </div>
                     </div>
                 </div>
 

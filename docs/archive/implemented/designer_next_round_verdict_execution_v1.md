@@ -6,8 +6,8 @@
 
 它服务于以下已有文档：
 
-- `docs/designer_major_upgrade_planning_v7.md`
-- `docs/designer_major_upgrade_requirements_v6.md`
+- `docs/archive/implemented/designer_major_upgrade_planning_v7.md`
+- `docs/archive/implemented/designer_major_upgrade_requirements_v6.md`
 
 本文只回答一件事：
 

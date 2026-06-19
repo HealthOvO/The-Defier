@@ -1,5 +1,1030 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-19: V10 真 PVP 浏览器发布门禁接入 CI
+  - 本轮完成
+    - `.github/workflows/pages.yml` 的 `browser-release` 矩阵现在把 `pvp-live` 与 `pvp-live-real` 纳入 `expedition-pvp` shard，避免本地过滤门禁通过但远端 Pages workflow 只跑旧 PVP。
+    - 包含 `pvp-live-real` 的 shard 会安装 `server/` 依赖，保证真实后端 smoke 在 CI 环境具备 Node API 运行条件。
+    - `tests/sanity_release_gate_coverage_checks.cjs` 增加 workflow marker，固定 CI 必须覆盖 live PVP 浏览器审计和真实后端 smoke。
+  - 已验证
+    - 红测：`node tests/sanity_release_gate_coverage_checks.cjs` 在 workflow 未包含 `pvp-live,pvp-live-real` 时失败。
+    - 绿测：补齐 workflow 后 `node tests/sanity_release_gate_coverage_checks.cjs` 通过。
+  - 当前结论
+    - live PVP 不再只依赖本地手工过滤浏览器门禁；推到远端后，Pages browser-release 也会守住实时论道 UI 和真实后端 smoke。它仍不是线上正式部署完成。
+
+- 2026-06-19: V10-S4B 真 PVP 前端权威心跳调度
+  - 本轮完成
+    - 针对 live PVP 体感仍依赖前端硬编码节奏的问题，`js/scenes/pvp-scene.js` 的 `startLiveHeartbeat()` 现在会从当前 `stateView.connectionReport.heartbeatIntervalMs` 读取服务端权威心跳周期，而不是固定 `5000ms`。
+    - 新增 `liveHeartbeatIntervalMs` 与 `getLiveHeartbeatIntervalMs()`：进入 matched / setup / active / sync_required 后仍会立即发送一次 heartbeat，但 interval 变化时会先 `stopLiveHeartbeat()` 再重建 timer，避免服务端调参后客户端继续沿用旧节奏。
+    - 按运行态回归补强：`sendLiveHeartbeat()` 收到服务端新 interval 后重建 timer 时不会再额外触发第二次立即 heartbeat，避免调参瞬间重复请求。
+    - `sendLiveHeartbeat()` 在收到新 StateView 后会根据最新 phase 决定停止或重建 heartbeat；这样 HTTP fallback 阶段已具备权威节奏消费能力，后续 WebSocket / missed-event 推送可以复用同一连接报告口径。
+    - `tests/sanity_pvp_live_ui_contract_checks.cjs` 增加红测后转绿：`startLiveHeartbeat` 必须消费 `heartbeatIntervalMs`，不能继续硬编码 `5000ms`，且 interval 变化时要重建 timer。
+    - `tests/sanity_pvp_live_session_checks.mjs` 固定 session 会保留服务端 heartbeat interval，保证 scene 调度不会被 session 层吞字段。
+    - `tests/sanity_pvp_live_ui_runtime_checks.mjs` 新增轻量运行态门禁：同 interval 不重复挂 timer，服务端 interval 改变后清旧 timer 并挂新 timer，且心跳同步后的 timer 重建不会重复发送 heartbeat。
+  - 已验证
+    - `node tests/sanity_pvp_live_ui_contract_checks.cjs`
+    - `node tests/sanity_pvp_live_session_checks.mjs`
+    - `node tests/sanity_release_gate_coverage_checks.cjs`
+  - 当前结论
+    - live PVP 的 HTTP heartbeat 已从前端猜测节奏推进到消费服务端权威节奏，弱网 / 重连窗口体验更容易跟服务端 SLA 对齐。它仍不是 WebSocket 实时推送、多实例共享队列、正式赛季入口、生产 smoke 或线上部署。
+
+- 2026-06-19: V10-S5B 真 PVP 独立事件表回放真源
+  - 本轮完成
+    - 针对“赛后回放、争议证据和未来 WebSocket missed-event 补发不能只依赖 `state_json.events`”的硬真源缺口，新增 append-only `pvp_live_match_events` SQLite 表；事件按 `match_id + event_id` 和 `match_id + event_sequence` 双唯一键幂等写入，保留完整服务端事件 JSON，并额外保存脱敏 `public_data_json` 供后续轻量审计。
+    - `server/pvp-live/live-persistence.js` 新增 `saveMatchEvents()` / `loadMatchEvents()`，按 `event_sequence` 稳定恢复事件流；`server/pvp-live/live-store.js` 在每次 `saveMatch()` 后统一补写当前 match 的事件流，覆盖开局快照、ready、battle_started、出牌、投降、超时、断线失效等已有保存路径。
+    - `server/routes/pvp-live.js` 的 replay API 现在优先读取持久化事件表，并传入 `buildMatchReplay()`；`server/pvp-live/replay.js` 支持外部事件源，事件表为空时继续回退旧 `state.events`，保证旧局兼容。
+    - 按挑战者复现修复不完整事件源边界：如果终局局的事件表非空但缺少连续 sequence 或 `match_finished`，且 `state.events` 也无法提供完整终局事件流，`buildMatchReplay()` 会返回 `null` 并由 route 走 `replay_not_ready`，不再返回“finished 但缺终局事件”的截断回放。
+    - `tests/sanity_pvp_live_persistence_checks.cjs` 增加红测后转绿：终局后先确认 `pvp_live_match_events` 至少保存公开回放事件，再故意清空 `pvp_live_matches.state_json.events`，重启服务后 `replay_public` 仍能从事件表恢复 `battle_started` 和 `match_finished`，且 hidden scan 为 0。
+    - `tests/sanity_pvp_live_replay_checks.cjs` 补充坏库红测后转绿：非空但不完整的持久事件源不能在 `state.events` 同样损坏时生成截断 replay。
+    - `tests/sanity_release_gate_coverage_checks.cjs` 固定事件表 schema、幂等写入、按序读取和恢复回放测试 marker，避免后续把事件表真源退回到单一 state snapshot。
+  - 已验证
+    - `node tests/sanity_pvp_live_persistence_checks.cjs`
+    - `node tests/sanity_pvp_live_replay_checks.cjs`
+    - `node tests/sanity_release_gate_coverage_checks.cjs`
+  - 当前结论
+    - live PVP 回放已经从“最小 API 读取 match state 内事件”推进到“独立事件表可恢复公开时间线”的长期真源雏形。它仍不是 WebSocket missed-event 推送、多实例共享队列、正式赛季全量入口、生产 smoke 或线上部署。
+
+- 2026-06-19: V10-S3A 真 PVP 近分优先匹配与入队评分锁定
+  - 本轮完成
+    - 针对“真正 PVP 且双方体验高，不能先手/强弱差直接碾压”的匹配公平缺口，修复 live ranked 公共队列仍按 FIFO 选第一个真人的问题；`joinQueue()` 现在会基于入队时评分快照恢复候选池，优先选择可接受范围内评分差最近的真人。
+    - `server/db/database.js` 为 `pvp_live_queue_tickets` 增加 `rating_score / rating_bucket / rating_season_id / rating_provisional`，按启动时 additive migration 自动补旧库；`server/pvp-live/live-persistence.js` 保存和恢复这些快照，并在重启后恢复完整等待候选池，避免只看最老等待者或前 32 条等待者。
+    - `server/routes/pvp-live.js` 新增 live PVP 默认 rating provider：优先读取 `pvp_ranks.score / division / season_id`，未建档玩家稳定落到 `1000 / provisional`，不会因为没有 rank 行而阻塞排队。
+    - 匹配策略收紧为：双方都 provisional 时保留 `mvp_open_pool / unrated_mvp` 兼容旧路径；只要任一方有正式 rating，就使用 `strict_rating / near_0_99`；长等待只自动扩到 `fair_100_199`；`200+` 分差当前不自动匹配，未来若开放必须先做显式接受合同。
+    - `matchQuality` 只暴露 `ratingDeltaBucket / expansionStage / candidatePoolSize / safeguards` 等脱敏字段，新增 `rating_bucketed / closest_rating_candidate / no_exact_rating_exposure` 保护项，不向 StateView、回放或 UI 泄露 exact rating。
+    - `tests/sanity_pvp_live_route_checks.cjs` 增加红测后转绿：1040 分玩家不会被直接配给 1800 分等待者，1000 分玩家会优先匹配 1040 分候选而不是更早入队的 1800 分候选；长等待 250 分差不会在没有显式接受的情况下自动匹配。
+    - `tests/sanity_pvp_live_persistence_checks.cjs` 增加跨三次服务重启的 SQLite 证据：远端高分先入队、近分候选重启后仍不被远端强配、第三人入队时按持久化评分快照选择最近候选，且远端高分等待票据保持 waiting；按挑战者巡检补上饱和队列回归，确认第 34 条近分候选不会因恢复上限被漏掉。
+    - `docs/designer_major_upgrade_overall_plan_v1.md`、`docs/designer_major_upgrade_requirements_v7.md` 和 `docs/designer_major_upgrade_implementation_input_v1.md` 同步当前阈值、字段名和脱敏口径，清掉旧的 `0-80 / 81-160 / ratingDiffBucket / exact rating` 草案残留。
+  - 已验证
+    - `node tests/sanity_pvp_live_route_checks.cjs`
+    - `node tests/sanity_pvp_live_persistence_checks.cjs`
+    - `node tests/sanity_release_gate_coverage_checks.cjs`
+    - 挑战者巡检：发现重启候选恢复只取前 32 条的缺口，已用饱和队列红测修复并转绿。
+  - 当前结论
+    - live PVP 公共匹配已经从“找到一个真人即可”推进到“入队评分锁定 + 近分优先 + 过宽分差不自动匹配”的可复查策略。它仍不是完整多实例共享队列、显式宽跨度接受、正式赛季全量入口、WebSocket、生产 smoke 或线上部署；这些仍需继续开发和封板验证。
+
+- 2026-06-19: V10-S4A 真 PVP active 回合计时独立锚点
+  - 本轮完成
+    - 针对“双方体验高、不能靠操作节奏拖垮对手”的公平性缺口，修复 active 回合倒计时复用 `match.updatedAt` 的问题：accepted `play_card` 仍可更新 match 最近变更时间，但不再刷新当前行动窗口的 `startedAt/deadlineAt`。
+    - `server/pvp-live/live-store.js` 新增 `turnTiming` 归一化和同步：开战、结束回合换手、timeout 托管换手会启动下一行动席位的新 timer；普通出牌只沿用当前回合 timer；timeout 判定也改读同一个 `turnTiming`，避免 UI deadline 和服务端判负窗口分叉。
+    - 按 challenger 巡检继续补强坏数据 / 旧持久化行兜底：缺失 `turnTiming` 且缺失 `battleStartedAt` 的 active match 不再回退到 `updated_at`，而是回退到 `createdAt` 或已超时锚点，避免重启恢复时把最近保存时间误当成新回合开始时间。
+    - `js/services/backend-client.js` 统一补齐 live queue / match / rematch / heartbeat / intent 失败分支的 `reason` 透传；`sync_required`、`active_match_exists`、`replay_not_ready` 等服务端契约原因不会再被 client bridge 吞掉。
+    - `tests/sanity_pvp_live_route_checks.cjs` 按 TDD 增加红灯后转绿的 route 合同：合法出牌后 timer start/deadline 不变，`end_turn` 后才刷新下一席位 timer；旧 timeout 测试同步切到 `turnTiming` 辅助，确保服务端仍能按行动窗口收束超时局。
+    - `tests/sanity_pvp_live_persistence_checks.cjs` 增加旧 active 行缺 `turnTiming` / `battleStartedAt` 的重启恢复红测后转绿；`tests/sanity_pvp_live_client_checks.mjs` 增加 stale intent `sync_required` reason 透传红测后转绿。
+    - `tests/sanity_release_gate_coverage_checks.cjs` 增加 marker，防止后续把该防拖时合同从 route sanity 中删掉。
+    - `docs/designer_major_upgrade_overall_plan_v1.md` 与 `docs/designer_major_upgrade_implementation_input_v1.md` 同步 S4A 当前事实：后续 WebSocket / 多实例队列也必须沿用独立计时锚点，不能回退到 `match.updatedAt` 推导倒计时。
+  - 已验证
+    - `node tests/sanity_pvp_live_route_checks.cjs`
+    - `node tests/sanity_pvp_live_persistence_checks.cjs`
+    - `node tests/sanity_pvp_live_golden_replay_checks.cjs`
+    - `node tests/sanity_pvp_live_client_checks.mjs`
+    - `node tests/sanity_pvp_live_service_bridge_checks.cjs`
+    - `node tests/sanity_pvp_live_session_checks.mjs`
+    - `node tests/sanity_pvp_live_settlement_checks.cjs`
+    - `node tests/sanity_release_gate_coverage_checks.cjs`
+    - `node tests/sanity_intro_progress_sync_checks.cjs`
+    - `npm run test:node`
+    - `npm run build:pages`
+    - `env AUDIT_FILTER=pvp-live,pvp-live-real bash tests/run_browser_release_checks.sh http://127.0.0.1:4174 output/release-browser-audits-pvp-live-s4a-s5a-replay-turntiming`：filtered release gate 通过；`pvp-live` 与 `pvp-live-real` 均 0 failed / 0 console errors。
+    - `git diff --check`
+  - 当前结论
+    - live PVP 不再允许玩家通过一张一张出牌来延长当前回合行动窗口；对手看到的倒计时和服务端 timeout 判定回到同一锚点。前端权威心跳调度已由上方 S4B 补齐；下一步仍需补匹配质量、UI 可行动作提示、WebSocket、多实例共享队列、生产 smoke 和线上部署。
+
+- 2026-06-19: V10-S5A 真 PVP 赛后 replay API 与三层客户端桥接
+  - 本轮完成
+    - 沿着“真正 PVP 且双方体验高”的主线，从 S2 的 reducer / store-backed replay 证据继续推进到可被玩家端拉取的最小赛后 replay API。新增 `server/pvp-live/replay.js`，统一生成 `replay_self`、`replay_public`、`audit_safe` 三层投影。
+    - `server/routes/pvp-live.js` 新增 `GET /api/pvp/live/matches/:matchId/replay`：只有参与者可访问，active 对局返回 `409 replay_not_ready`，非参与者 / 不存在返回 404，非法 visibility 返回 `400 invalid_replay_visibility`。
+    - replay 输出只暴露稳定 `matchRef`、`replayHash`、规则版本、终局摘要、脱敏 public event timeline 和 `hiddenScan`；不返回 raw `matchId`、手牌、牌库、卡牌实例 id、loadout snapshot、原始 payload 或 RNG。
+    - `replay_self` 只增加请求者自己的 `viewerSeat` 与赛后 review；`replay_public` 不暴露请求席位和席位私有 review；`audit_safe` 从 `replay_public` 派生字段路径、隐藏字段计数和来源 hash，避免审计层误读成服务端全量回放。
+    - `js/services/backend-client.js`、`js/services/pvp-service.js`、`js/services/pvp-live-session.js` 补齐 replay 客户端桥接，前端侧会本地拒绝 `server_full` 等非法 visibility，并把最新 replay 存入 session `lastReplay`。
+    - `tests/sanity_pvp_live_replay_checks.cjs` 锁定服务端 route 合同；client / service / session 三层 sanity 和 release coverage marker 同步补上 replay API 防漏断言；`tests/run_node_checks.sh` 已纳入 replay sanity。
+    - `docs/designer_major_upgrade_requirements_v7.md`、`docs/designer_major_upgrade_overall_plan_v1.md`、`docs/designer_major_upgrade_implementation_input_v1.md` 同步当前事实：S5A 是最小赛后 API，不是独立 `pvp_live_match_events` 长期真源，也不代表 WebSocket、正式赛季、多实例队列或生产 smoke 已完成。
+  - 已验证
+    - `node tests/sanity_pvp_live_replay_checks.cjs`
+    - `node tests/sanity_pvp_live_client_checks.mjs`
+    - `node tests/sanity_pvp_live_service_bridge_checks.cjs`
+    - `node tests/sanity_pvp_live_session_checks.mjs`
+    - `node tests/sanity_release_gate_coverage_checks.cjs`
+    - `node tests/sanity_intro_progress_sync_checks.cjs`
+    - `npm run test:node`
+    - `npm run build:pages`
+    - `env AUDIT_FILTER=pvp-live,pvp-live-real bash tests/run_browser_release_checks.sh http://127.0.0.1:4174 output/release-browser-audits-pvp-live-s5a-replay-api`：filtered release gate 通过；`pvp-live` 与 `pvp-live-real` 均 0 failed / 0 console errors。
+    - `git diff --check`
+  - 当前结论
+    - live PVP 已具备最小玩家端赛后 replay 拉取能力，能让输赢双方在终局后看到公开、可审计、不泄露隐藏信息的关键事件时间线，并为后续“失败可学习、胜利可复盘、战报可分享”打基础。独立事件表真源已由上方 S5B 补齐，active 回合计时锚定已由上方 S4A 补齐，前端权威心跳调度已由上方 S4B 补齐；后续仍需补匹配质量扩展、WebSocket、正式赛季入口、多实例共享队列、生产 smoke 和线上部署。
+
+- 2026-06-19: V10-S2F 真 PVP runtime round14 结算与 reducer-backed draw golden
+  - 本轮完成
+    - 接着 S2-E 的剩余缺口，把 `golden-draw-round14-001` 从 simulation-only 推进到 reducer-backed runtime evidence：`server/pvp-live/engine/reducer.js` 在 B 结束第 14 整轮后按公开长局分数追加 `match_finished`，分差大于等于 5 为 `round14_score`，分差不足 5 为 `round14_draw`。
+    - `server/pvp-live/engine/state.js` 为座位补齐 `longGameStats`，reducer 在公开出牌 / 防守 / 回合结束 / 托管行动中累计有效生命伤害、有效防守、公开 setup 转化、资源效率、预算拦截惩罚和托管惩罚；`server/pvp-live/engine/rules.js` 固定 `maxRounds=14`、`scoreThreshold=5` 和各项分数上限。
+    - `server/pvp-live/engine/state-view.js` 支持 draw review：`round14_draw` 使用 `winnerSeat: "draw"`、`loserSeat: ""`，不强造 loser；post-match review、key-turn replay 和 experience report 都基于公开事件，新增 `round14_resolution` 公平检查，并把 `scoreA / scoreB / scoreDelta / scoreThreshold / roundIndex` 作为 `match_finished` 的公开标量证据。
+    - `server/pvp-live/golden-replay-runner.js` 新增 reducer scenario runner，`golden-draw-round14-001` 直接构造第 14 整轮最后一个 reducer `end_turn` 场景验证 runtime 事件链，而不是继续依赖 balance simulation；`SIMULATION_BACKED_GOLDEN_REPLAY_IDS` 当前为空。
+    - `tests/sanity_pvp_live_engine_checks.cjs` 增加 runtime 红测后转绿：覆盖 `round14_draw` 不生成 loser、draw review 不泄露隐藏信息、不暗示奖励 / rating，以及 `round14_score` 按公开分差判胜负并生成正常胜负 review。
+    - `tests/sanity_pvp_live_route_checks.cjs` 追加真实 `/intents end_turn` route 合同：`round14_draw` 两边都能读到 draw review 且释放重排，`round14_score` 胜者能读到 win review。
+    - `server/pvp-live/live-settlement.js` 为 `round14_draw` 增加 no-ranked-impact 分支：不写 ranked settlement gate、不写历史、不发奖励，也不会落到 `invalid_finished_seats`；`tests/sanity_pvp_live_settlement_checks.cjs` 已锁定该口径。
+    - 按 challenger 巡检补齐 `round14_score` 正式写账断言：`tests/sanity_pvp_live_settlement_checks.cjs` 现在验证 `round14_score` 会写 settlement gate、双方历史、胜者 win / 败者 loss 和对应 rating 变化；`tests/sanity_release_gate_coverage_checks.cjs` 固定这些 marker。
+    - 友谊 Bo3 的 `round14_draw` 不再卡死：`server/pvp-live/live-store.js` 允许 draw finished payload，不给任何一方加分，但保留 `canRequestNextRound`；route sanity 已覆盖 friendly round14 draw 后仍展示下一局再战入口。
+    - `tests/sanity_pvp_live_golden_replay_checks.cjs` 和 `tests/sanity_release_gate_coverage_checks.cjs` 同步 S2-F marker，锁定 round14 reducer runtime scenario、reducer-backed draw、route 真实状态和 draw settlement no-impact。
+    - `docs/designer_major_upgrade_pvp_balance_fixtures_v1.md` 与 `docs/designer_major_upgrade_implementation_input_v1.md` 更新当前事实：round14 runtime 结算已进入 reducer 和 golden replay；后续缺口转为正式赛季积分 / 奖励 0 收益 / 历史记录、多实例队列、WebSocket、生产 smoke 和线上部署。
+  - 已验证
+    - `node tests/sanity_pvp_live_engine_checks.cjs`
+    - `node tests/sanity_pvp_live_golden_replay_checks.cjs`
+    - `node tests/sanity_pvp_live_route_checks.cjs`
+    - `node tests/sanity_pvp_live_settlement_checks.cjs`
+    - `node tests/sanity_pvp_live_balance_artifact_checks.cjs`
+    - `node tests/sanity_release_gate_coverage_checks.cjs`
+    - `node tests/sanity_pvp_live_balance_simulation_checks.cjs`
+    - `node tests/sanity_pvp_live_full_gate_balance_checks.cjs`
+    - `npm run test:node`
+    - `npm run build:pages`
+    - `env AUDIT_FILTER=pvp-live,pvp-live-real bash tests/run_browser_release_checks.sh http://127.0.0.1:4174 output/release-browser-audits-pvp-live-s2f-round14-final`：filtered release gate 通过；`pvp-live` 与 `pvp-live-real` 均 0 failed / 0 console errors。
+    - `git diff --check`
+  - 当前结论
+    - live reducer 已不再存在“第 14 整轮后继续拖局”的 runtime 缺口；长局会按公开分数强制收束，平局也作为已完成对局进入 review 体系，并在正式结算层保持 0 积分 / 0 奖励 / 0 历史写入；`round14_score` 已有正式 settlement / history / rating 写账门禁。下一步仍需补更广义正式赛季入口、多实例队列、WebSocket、生产 smoke 和线上部署。
+
+- 2026-06-19: V10-S2E 真 PVP store-backed golden replay 与首次 timeout 托管（历史状态，round14 已由上方 S2F 覆盖）
+  - 本轮完成
+    - 沿着“真正 PVP 且双方体验高、不允许先手秒杀”的主线，从 S2-D reducer replay 继续推进剩余高风险 golden：`golden-reconnect-resume-001`、`golden-soft-timeout-001`、`golden-forfeit-timeout-001`、`golden-invalid-match-001` 已声明 `executionLayer: "store"`，通过 live store 场景执行；当时 `golden-draw-round14-001` 仍只作为仿真证据，已由上方 S2F 升级为 reducer-backed runtime evidence。
+    - `server/pvp-live/golden-replay-runner.js` 新增 store / simulation runner：store runner 直接创建 live match、ready、驱动 heartbeat / timeout / setup timeout，再检查 event sequence、稳定 replay hash、公开 replay / audit-safe hidden scan、重连 stateVersion 和 review 出现时机；simulation runner 只证明 fixture 可以表达 `round14_draw`，不冒充 reducer/store runtime。
+    - `server/pvp-live/live-store.js` 将首次普通行动超时从直接判负改为低风险托管：第一次超过 `turnTimeoutMs` 会记录 `turn_timeout(finishReason=soft_timeout_automation)`，优先打出低伤害防御牌或自动结束回合并追加 `automation_action`，比赛保持 active；重复或严重 timeout 仍按 `timeout` 终局判负。
+    - `server/pvp-live/engine/state-view.js` 将 `ready_timeout`、`match_invalidated`、`automation_action` 纳入公开事件 / 审计证据 allowlist，保证 invalidated 和托管链路可被公开复盘而不泄露隐藏手牌、牌库顺序或实例 id。
+    - `server/pvp-live/balance-artifacts.js` 和 `server/pvp-live/fixtures/golden_replays_v1.jsonl` 同步新合同：active 的 reconnect / soft-timeout 不要求 post-match review，terminal 的 forfeit timeout 才要求 review，setup timeout invalidated 不产生 winner 或 review。
+    - `tests/sanity_pvp_live_golden_replay_checks.cjs` 补齐 S2-E 防漏断言：store-backed manifest、reconnect 恢复不推进 `stateVersion`、soft-timeout 首次托管且无终局 review、forfeit-timeout 终局 review、invalidated 无 review；当时 round14 仍未进入 runtime，已由上方 S2F 覆盖。
+    - `tests/sanity_pvp_live_settlement_checks.cjs` 同步首次 timeout 托管后的终局等待窗口；`tests/sanity_release_gate_coverage_checks.cjs` 固定 S2-E marker，防止后续删掉 store/simulation 分层检查。
+    - `docs/designer_major_upgrade_pvp_balance_fixtures_v1.md` 和 `docs/designer_major_upgrade_implementation_input_v1.md` 同步当时阶段：重连 / timeout / invalidated golden 已 store-backed；round14 runtime 后续已由上方 S2F 覆盖。
+  - 已验证
+    - `node tests/sanity_pvp_live_golden_replay_checks.cjs`
+    - `node tests/sanity_pvp_live_balance_artifact_checks.cjs`
+    - `node tests/sanity_release_gate_coverage_checks.cjs`
+    - `node tests/sanity_pvp_live_route_checks.cjs`
+    - `node tests/sanity_pvp_live_settlement_checks.cjs`
+    - `node tests/sanity_intro_progress_sync_checks.cjs`
+    - `npm run test:node`
+    - `npm run build:pages`
+    - `env AUDIT_FILTER=pvp-live,pvp-live-real bash tests/run_browser_release_checks.sh http://127.0.0.1:4174 output/release-browser-audits-pvp-live-s2e-store-replays`：filtered release gate 通过；`pvp-live` 与 `pvp-live-real` 均 0 failed / 0 console errors。
+    - `git diff --check`
+  - 当前结论
+    - S2 现在不只覆盖 reducer 可重放终局，也覆盖了 live store 层的重连、首次超时托管、严重超时判负和 setup timeout invalidated。首次 timeout 不再把玩家直接踢成失败，能减少弱网 / 临时离屏带来的体验断裂；当时 runtime round14 仍未封板，已由上方 S2F 覆盖。正式赛季积分、多实例共享队列、WebSocket、生产 smoke 和线上部署仍未封板，不能把本地 S2-E 门禁通过等同于真 PVP 正式上线完成。
+
+- 2026-06-19: V10-S2D 真 PVP reducer-backed golden replay 一致性门禁
+  - 本轮完成
+    - 沿着“真正 PVP 且双方体验高、不允许先手秒杀”的主线，从 S2-C full gate 继续推进到 S2-D 第一批可执行 golden replay：新增 `server/pvp-live/golden-replay-runner.js`，直接从提交内 `golden_replays_v1.jsonl` 读取 fixture，并通过 live reducer 重放，而不是重新合成测试数据。
+    - `server/pvp-live/balance-artifacts.js` 将 9 条 golden 标记为 `executionLayer: "reducer"`：`golden-budget-prevent-001`、`golden-no-hand-leak-001`、`golden-idempotent-action-001`、`golden-replay-public-redaction-001`、`golden-audit-safe-scan-001`、`golden-public-derivation-001`、`golden-response-window-preserved-001`、`golden-soft-lock-breakable-001`、`golden-public-loss-explanation-only-001`。
+    - 预算保护类固定 A 的 `pvp_burst / doubleStrike / battleCry` 首动压力与 B 的防御起手，必须公开产生 `budget_clamped` 且最终进入 lethal；非预算类固定双方都有进攻线，最终由 B lethal，证明这批 replay 不是全靠首动爆发预算削峰过关。
+    - `tests/sanity_pvp_live_golden_replay_checks.cjs` 锁定 event sequence 连续、`replayHash` / `finalStateHash` 稳定、终局 reason / winner 与 fixture 一致、`replay_public` / `audit_safe` 两个 visibility 分支真实执行、公开回放字段路径不泄露 opponent hand / deck order / cardId / instanceId / cardInstanceId / loadoutSnapshot / rngSeed / randomSeed / raw payload，并覆盖重复 intent 返回 duplicate 且不追加事件。
+    - `tests/run_node_checks.sh` 和 `tests/sanity_release_gate_coverage_checks.cjs` 已接入 S2-D golden replay 门禁，防止后续只跑 S2-B artifact 或 S2-C full gate 而漏掉 replay 一致性。
+    - `docs/designer_major_upgrade_pvp_balance_fixtures_v1.md` 和 `docs/designer_major_upgrade_implementation_input_v1.md` 同步当前阶段：第一批 reducer-backed replay 已完成；重连、timeout、14 轮平局、invalid 局、正式赛季积分、多实例共享队列、WebSocket、生产 smoke 和线上部署仍未封板。
+  - 已验证
+    - `node tests/sanity_pvp_live_golden_replay_checks.cjs`
+    - `node tests/sanity_pvp_live_balance_artifact_checks.cjs`
+    - `node tests/sanity_release_gate_coverage_checks.cjs`
+    - `npm run test:node`
+    - `npm run build:pages`
+    - `env AUDIT_FILTER=pvp-live,pvp-live-real bash tests/run_browser_release_checks.sh http://127.0.0.1:4174 output/release-browser-audits-pvp-live-golden-replay`：filtered release gate 通过；`pvp-live` 与 `pvp-live-real` 均 0 failed / 0 console errors。
+    - `git diff --check`
+  - 当前结论
+    - S2 现在不只具备 full-mode 平衡数字，也有第一批真实 reducer 回放证据：预算保护、隐藏信息审计、公开复盘推导、重复 action 幂等和双方行动线都能被固定 fixture 重放。下一步应继续补重连 / timeout / 14 轮平局 / invalid 局的一致性 replay，以及正式赛季积分和生产 smoke；不能把本地 replay 门禁通过等同于线上 PVP 正式封板。
+
+- 2026-06-19: V10-S2C 真 PVP full gate 平衡收口与后手公开护盾
+  - 本轮完成
+    - 将 S2-B 暴露出的 full gate 失败推进为 S2-C 正向通过：`tests/sanity_pvp_live_full_gate_balance_checks.cjs` 现在固定 8x8x500 = 32,000 局 full-mode matrix，并接入 `tests/run_node_checks.sh` 和 release coverage。
+    - `server/pvp-live/engine/rules.js` 新增 `openingSecondSeatBuffer.block = 3`；`server/pvp-live/engine/reducer.js` 在 `battle_started` 同批公开发放 `opening_second_seat_buffer_granted`，让后手从对局开始就有 3 点公开护盾，抵消先动节奏差，但不混同于被打到 1 血后的 8 点反打缓冲。
+    - `server/pvp-live/engine/state-view.js` 将后手开局护盾加入公开事件 allowlist、赛后证据和 `openingSafeguardReport.secondSeatBuffer`，双方 UI / 复盘都能看到该保护来自公开规则，不泄露隐藏信息。
+    - `server/pvp-live/balance-simulation.js` 修正两个仿真偏差：不再把某一方单回合卡手直接判为资源终局；双方牌库 / 手牌耗尽且无可行动线时按 `resource_draw` 处理，避免把“双方打空”误判成先手胜利来源。
+    - 胜率统计同步主方案口径：`round14_draw` / `resource_draw` 在 `firstSeatWinRate`、pair、archetype 和 matchup spread 中按 0.5 计入；full 报告不会因为平局样本把双方都误报成劣势构筑。
+    - `tests/sanity_pvp_live_balance_artifact_checks.cjs` 从 S2-B “full helper 暴露失败”升级为 S2-C “full helper 通过 32,000 局门禁”；fixtures 和 `output/pvp-live-balance/simulation_report_v1.json` 已按当前规则重生成。
+    - `docs/designer_major_upgrade_implementation_input_v1.md` 和 `docs/designer_major_upgrade_pvp_balance_fixtures_v1.md` 同步当前结论：S2-C full gate 已通过，但正式赛季积分、多实例共享队列、WebSocket、生产 smoke 和线上部署仍未封板。
+  - 已验证
+    - `node tests/sanity_pvp_live_balance_simulation_checks.cjs`：quick gate 10,048 局通过，先手胜率 50.14%，后手首行动前死亡 / 无行动线 / 不可读爆发为 0。
+    - `node tests/sanity_pvp_live_full_gate_balance_checks.cjs`：full gate 32,000 局通过，先手胜率 49.98%，8 套构筑胜率 49.73%-50.32%，pair first-seat 全部在 45%-55%。
+    - `node tests/sanity_pvp_live_engine_checks.cjs`
+    - `node tests/sanity_pvp_live_balance_artifact_checks.cjs`
+    - `node tests/sanity_release_gate_coverage_checks.cjs`
+  - 当前结论
+    - S2 现在不再只是 quick gate 或“失败显性化”：full-mode 仿真已把先手、后手行动权、构筑胜率、matchup spread 和开局防秒杀全部压到可接受范围。下一步应继续做 reducer-backed golden replay、真实浏览器回归、正式赛季积分和生产 smoke，不能把本地 full gate 通过等同于线上部署完成。
+
+- 2026-06-19: V10-S2B 真 PVP balance artifact foundation 与 full gate 失败显性化（历史状态，已由上方 S2-C 覆盖）
+  - 本轮完成
+    - 沿着“真正 PVP 且双方体验高、不允许先手秒杀”的主目标继续推进，本轮从 S2-A quick gate 进入 S2-B artifact foundation：把此前只在内存里跑的内容包 / opening probe / golden case / simulation report 推进到冻结路径和可读取 fixture。
+    - 新增 `server/pvp-live/balance-artifacts.js`：冻结 `pvp-live-balance-artifacts-v1` artifact contract，固定 `server/pvp-live/fixtures/baseline_loadouts_v1.json`、`baseline_bot_policies_v1.json`、`opening_scripts_v1.jsonl`、`golden_replays_v1.jsonl`、`output/pvp-live-balance/simulation_report_v1.json` 和 `failing_replays/` 路径；提供 artifact bundle 构建、校验、写入和 full gate helper。
+    - 生成并提交 `server/pvp-live/fixtures/`：8 套 baseline loadout、8 个 bot policy、10,000 条 opening script JSONL、14 条 required golden replay JSONL。`tests/sanity_pvp_live_balance_artifact_checks.cjs` 会读取提交内 fixture，断言 10,000 行 opening scripts、14 个 golden case 和 required manifest 完全一致。
+    - `server/pvp-live/balance-simulation.js` 不再把 `matchesPerOrderedPair=500` 的候选报告伪装成 quick pass：新增 `runBalanceSimulationFullGate()`，full 模式固定 500 per ordered pair / 32,000 matches，并用 full validation 计算 `pass`。
+    - 仿真报告字段从浅占位推进为派生指标：`staplePressure` / `stapleWatchEscalation` 从内容包出现率派生；`archetypeSpread` 从样本胜率派生；`metagameGraphContract.dominantEdges` 从 matchup 样本派生；`antiScriptPacing`、`resourceConsistencyByLoadout`、`actualComplexityLoadByLoadout` 也从样本和内容包派生，不再保留空表或固定 2/2 安全结论。
+    - 当时 full gate 明确失败而不是静默通过：32,000 局候选样本会暴露 pair first-seat 越界、archetype 胜率越界和 matchup spread 越界；当时观察到 `aggro_pressure` / `soft_control` / `low_hp_counter` 明显偏强，`tempo_mark` / `vulnerable_combo` / `draw_midrange` 偏弱，下一步应进入内容数值调优和 reducer-backed replay 审计。
+    - `tests/run_node_checks.sh` 和 `tests/sanity_release_gate_coverage_checks.cjs` 已接入 `tests/sanity_pvp_live_balance_artifact_checks.cjs`，防止后续只跑 S2-A quick gate 或移除 fixture 合同。
+    - `docs/designer_major_upgrade_pvp_balance_fixtures_v1.md` 将 fixture 路径从“未冻结示例”改为当前冻结路径，并同步 S2-A quick gate / S2-B artifact foundation / 后续 replay 一致性测试分工。
+    - `docs/designer_major_upgrade_implementation_input_v1.md` 同步当时阶段：S2-B artifact foundation 已完成，但完整 S2 仍未封板；full gate 当时失败在数值平衡和 matchup spread。
+  - 已验证
+    - `node tests/sanity_pvp_live_balance_artifact_checks.cjs`
+    - `node tests/sanity_pvp_live_balance_simulation_checks.cjs`
+    - `node tests/sanity_release_gate_coverage_checks.cjs`
+    - `npm run test:node`
+    - `npm run build:pages`
+    - `env AUDIT_FILTER=pvp-live,pvp-live-real bash tests/run_browser_release_checks.sh http://127.0.0.1:4174 output/release-browser-audits-pvp-live-s2b-artifacts`：filtered release gate 通过；`pvp-live` 46/46，`pvp-live-real` 29/29，0 console errors。
+    - `git diff --check`
+  - 当前结论
+    - 当时 S2 不再停在“有 quick gate 数字”上，而是有可提交的 fixture artifact 和 full gate 候选失败证据。真人 PVP 的防先手秒杀链路仍然稳住：quick gate 继续显示后手首行动前死亡 / 无行动线 / 不可读爆发为 0；但 full gate 当时暴露内容包生态明显失衡，不能宣称 S2 完整通过。该历史结论已由上方 S2-C full gate 通过记录覆盖。
+
+- 2026-06-19: V10-S2A 真 PVP 内容包 quick gate 与先后手预算修复
+  - 本轮完成
+    - 沿着“真正 PVP 且双方体验高”的主目标继续推进，本轮从上个切片的公平保护可见化进入 S2-A：把后手公平从单局规则解释推进到可重复跑的内容包 / 仿真门禁。
+    - `server/pvp-live/engine/rules.js` 扩展 `pvp-live-v1` PVP 合法牌定义，补齐内容包标签和角色位；新增 `drawPerTurn = 3`，让 live engine 不再只消耗起手 3 张牌后空转。
+    - `server/pvp-live/engine/reducer.js` 新增回合切换抽牌；抽牌只通过 `cards_drawn` 公开数量事件暴露，不泄露抽到的牌或牌库顺序。
+    - 修复首动预算语义：预算现在按 `setup.firstSeat` 的先手 / 后手计算，而不是写死 A=18 / B=22；B 被仿真或后续规则指定为先手时，也只能拿 first-seat 18 预算，A 作为后手拿 second-seat 22 预算。
+    - `server/pvp-live/engine/state-view.js` 同步 `cards_drawn` 公开 allowlist 和 `openingSafeguardReport` 预算展示，保证 UI / 复盘看到的是先后手语义预算，不是座位硬编码。
+    - 新增 `server/pvp-live/content/pvp-live-v1-content.js` 作为 S2-A 内容包单点事实源：8 套基准谱、8 个 bot policy、20 张卡、单卡最多 2 张、0 费 0 张、每套至少 10 张 1 费、至少 8 张交互牌、主牌重合度不超过 0.60，并覆盖开局 / 防御恢复 / 公开 setup / 收束 / 替换位。
+    - 新增 `server/pvp-live/balance-simulation.js` 和 `tests/sanity_pvp_live_balance_simulation_checks.cjs`：quick gate 跑 8x8 有序对、10,048 个样本，并实际执行 10,000 个 opening pressure probe；8 类 opening 脚本各 1250 条，锁定后手首行动前死亡 0、无行动线 0、不可读爆发 0、非游戏局 0、败因解释覆盖 100%、预算拦截样本存在。
+    - `tests/run_node_checks.sh` 与 `tests/sanity_release_gate_coverage_checks.cjs` 已接入新 balance simulation 门禁，防止后续改动绕过 S2-A quick gate。
+    - `docs/designer_major_upgrade_implementation_input_v1.md` 同步当前阶段：S2-A quick gate 已完成，但不等同于完整 S2 full gate；仍需每有序对 500 局 / 32,000 局 full simulation、golden replay、staple watch、正式内容全效果和双方体验公平审计。
+  - 已验证
+    - `node tests/sanity_pvp_live_balance_simulation_checks.cjs`
+    - `node tests/sanity_pvp_live_engine_checks.cjs`
+    - `node tests/sanity_pvp_live_route_checks.cjs`
+    - `node tests/sanity_pvp_live_ui_contract_checks.cjs`
+    - `node tests/sanity_release_gate_coverage_checks.cjs`
+    - `npm run test:node`
+    - `npm run build:pages`
+    - `env AUDIT_FILTER=pvp-live,pvp-live-real bash tests/run_browser_release_checks.sh http://127.0.0.1:4174 output/release-browser-audits-pvp-live-s2a-balance-quick-gate-r2`：filtered release gate 通过；`pvp-live` 46/46，`pvp-live-real` 29/29，0 console errors。
+    - `git diff --check`
+  - 当前结论
+    - 当前 live PVP 已从“有防秒杀机制”推进到“有 S2-A 内容输入和 quick gate 证据”：先手胜率 50.64%，8 类 opening pressure probe 各 1250 条，后手死亡 / 无行动线 / 不可读爆发为 0，最大连续低自主窗口为 1，并修掉了 B 先手时仍拿 seat-B 预算的公平隐患。下一步仍应继续做 full gate：把正式内容效果、opening_scripts/golden_replays 落盘，每有序对 500 局，补 staple watch、主宰构筑、长局和双方体验公平审计。
+
+- 2026-06-19: V10 真 PVP live 公平保护可见化与反打缓冲切片
+  - 本轮完成
+    - 继续沿着“大版本可玩性 / 真 PVP 双方体验”目标推进，本轮优先选择与“不要先手秒杀”最相关的高收益切片，而不是继续堆好友便利功能：把已有首动预算和开局护体从隐藏规则 / 赛后解释，推进为双方对局中可见的公开状态。
+    - `server/pvp-live/engine/state-view.js` 新增 `openingSafeguardReport`，固定 `pvp-live-opening-safeguard-v1`：投影首动伤害预算、第二动作预算、当前行动席位预算、开局护体最低血量、仍受保护的席位、护体后反打缓冲、公开来源和不使用隐藏信息标记。
+    - 按挑战者巡检建议补上“护体后反打缓冲”：`server/pvp-live/engine/rules.js` 新增 `openingCounterplay.block = 8`；`server/pvp-live/engine/reducer.js` 在 `opening_protection_triggered` 后标记待缓冲，受保护方拿到首个行动窗口时自动获得 8 点护盾，并发 `opening_counterplay_granted` 公开事件。
+    - `server/pvp-live/engine/state-view.js` 将 `opening_counterplay_granted` 纳入公开事件 allowlist、关键回合复盘、双方体验报告和 setup-ready 证据压缩保留；新增事件不会把 `player_ready` 挤出复盘证据，避免体验报告误判缺少双方确认。
+    - `js/scenes/pvp-scene.js` 新增 `getLiveOpeningSafeguardReport()`、`renderLiveOpeningSafeguardReport()` 并接入 `getLiveSnapshot()`；`index.html` / `css/pvp.css` 在 live 状态卡中新增紧凑的“公平保护”状态条，active 阶段直接展示“首动预算 / 当前席位 / 开局护体 / 保底 1 血 / 反打缓冲”。
+    - `tests/sanity_pvp_live_engine_checks.cjs` 先写红测再实现，锁定投影不泄露隐藏手牌、牌库、卡牌 instance、loadout snapshot 或隐藏评分；active 开局时 B 席位仍被护体保护，当前 A 首动作预算为 18，并补齐 B 首动作 22 与第二动作 28 的真实结算断言。
+    - `tests/sanity_pvp_live_route_checks.cjs` 锁定真实 API 链路：A 触发护体并交回合后，B 通过 route state view 读到自己的 8 点反打护盾，并能在 recent events 看到 `opening_counterplay_granted`。
+    - `tests/sanity_pvp_live_ui_contract_checks.cjs`、`tests/browser_pvp_live_audit.mjs` 和 `tests/sanity_release_gate_coverage_checks.cjs` 锁定 DOM 标记、前端规范化 / 渲染函数、浏览器可见文案、快照 payload、反打缓冲 cue、隐藏信息不泄漏和发布门禁 marker。
+    - `docs/designer_major_upgrade_implementation_input_v1.md` 同步当前实施状态：fairness 可见化和反打缓冲已完成，但 V10-S2 的后手开局压测、全量平衡仿真和双方体验公平审计仍未完成，不能把本切片误写成 S2 封板。
+  - 已验证
+    - `node tests/sanity_pvp_live_engine_checks.cjs`
+    - `node tests/sanity_pvp_live_route_checks.cjs`
+    - `node tests/sanity_pvp_live_session_checks.mjs`
+    - `node tests/sanity_pvp_live_ui_contract_checks.cjs`
+    - `node tests/sanity_release_gate_coverage_checks.cjs`
+    - `npm run test:node`
+    - `npm run build:pages`
+    - `node tests/browser_pvp_live_audit.mjs http://127.0.0.1:4174 output/browser-pvp-live-opening-safeguard-counterplay-r4`：46/46，0 console errors。
+    - `env AUDIT_FILTER=pvp-live,pvp-live-real bash tests/run_browser_release_checks.sh http://127.0.0.1:4174 output/release-browser-audits-pvp-live-opening-safeguard-counterplay`：filtered release gate 通过；`pvp-live` 46/46，`pvp-live-real` 29/29，0 console errors。
+    - `git diff --check`
+  - 当前结论
+    - live PVP 现在不只是“实际上有防秒杀规则”，还会在对局中直接告诉双方当前首动预算和护体状态；被护体方拿到首个行动窗口时还有 8 点护盾缓冲，避免 1 血裸奔导致体验割裂。这仍不是完整 S2：下一步应继续做后手开局压测与内容包仿真，证明多构筑、多座位样本下没有后手首行动前死亡、无有效行动线或不可读爆发。
+
+- 2026-06-19: V10 真 PVP live 定向约战通知 MVP
+  - 本轮完成
+    - `server/routes/pvp-live.js` 支持创建约战时传入 `targetUsername`：未知用户名返回 404 `target_user_not_found`，邀请自己返回 409 `invite_self_target`；新增 `GET /api/pvp/live/invites/inbox` 给被邀请方读取待处理约战。
+    - `server/pvp-live/live-store.js` 的 invite room 增加 `target`：定向邀请报告带 `target.displayName` 和 `targeted_invite_only` safeguard；非目标用户即使拿到邀请码也会被 409 `invite_target_mismatch` 拦截，目标用户加入后仍进入 `mode='friendly'`、不写正式积分。
+    - 反向巡检后补强定向约战的失败路径：受邀方加入时只有 `createMatch()` 与 `saveMatch()` 成功后才会清理 invite / queue；若 match 持久化失败，host 仍能通过 current invite 找回待处理约战，且不会留下未持久化的 current match。
+    - `server/db/database.js` 与 `server/pvp-live/live-persistence.js` 为 `pvp_live_invites` 增加 `target_user_id / target_user_name` 与 target 索引；服务器重启后目标方 inbox 仍能恢复 pending 邀请，接受后清理 invite row。
+    - `js/services/backend-client.js`、`js/services/pvp-service.js`、`js/services/pvp-live-session.js` 接通 `targetUsername` 和 `getInviteInbox / refreshInviteInbox`；session 新增 `inviteInbox`，失败刷新保留旧通知并暴露 `invite_inbox_failed`，成功刷新会清掉过时错误，从通知加入后清空收件箱。
+    - `index.html`、`css/pvp.css`、`js/scenes/pvp-scene.js` 在现有好友约战面板中加入“指定道友用户名”和“收到的约战”列表；目标玩家可直接点通知加入，无需手动复制邀请码。
+    - `js/scenes/pvp-scene.js` 在 live idle 阶段也纳入轮询，只刷新收件箱而不误触 match / queue；目标玩家停留在 live PVP 页面时，新定向邀请会自动出现在“收到的约战”列表。
+    - `tests/sanity_pvp_live_route_checks.cjs`、`tests/sanity_pvp_live_persistence_checks.cjs`、client/service/session/UI contract、`tests/browser_pvp_live_audit.mjs` 与 `tests/sanity_release_gate_coverage_checks.cjs` 固定目标查找、收件箱、旁观者拦截、重启恢复、UI 点击加入、失败持久化不丢约战、idle 自动刷新、无旧残影 / 旧结算路径。
+  - 已验证
+    - `node tests/sanity_pvp_live_route_checks.cjs`
+    - `node tests/sanity_pvp_live_persistence_checks.cjs`
+    - `node tests/sanity_pvp_live_session_checks.mjs`
+    - `node tests/sanity_pvp_live_client_checks.mjs`
+    - `node tests/sanity_pvp_live_service_bridge_checks.cjs`
+    - `node tests/sanity_pvp_live_ui_contract_checks.cjs`
+    - `node tests/sanity_release_gate_coverage_checks.cjs`
+    - `npm run test:node`
+    - `npm run build:pages`
+    - `node tests/browser_pvp_live_audit.mjs http://127.0.0.1:4174 output/browser-pvp-live-targeted-invite-inbox-r2`：44/44，0 console errors。
+    - `env AUDIT_FILTER=pvp-live,pvp-live-real bash tests/run_browser_release_checks.sh http://127.0.0.1:4174 output/release-browser-audits-pvp-live-targeted-invite-inbox-r2`：filtered release gate 通过。
+    - `git diff --check`
+  - 当前结论
+    - live PVP 从“复制邀请码”推进到“定向邀请 + 收件箱通知”最小闭环：创建方可以指定账号，目标方打开 live PVP 即可看到并加入，旁观者无法截胡；若中途持久化失败，约战仍可恢复而不是被提前消费。该链路仍保持 friendly / no-score / server-authoritative，不接旧残影，不允许先手结算绕过；下一步可继续做好友列表、在线状态与邀请弹窗。
+
+- 2026-06-19: V10 真 PVP live 好友约战邀请码房 MVP
+  - 本轮完成
+    - `server/routes/pvp-live.js` 新增 `POST /api/pvp/live/invites` 与 `POST /api/pvp/live/invites/:inviteCode/join`：房主创建私有邀请码，好友输入邀请码直接生成 live match；同账号自加入返回 `invite_self_join`，已消费邀请码不可复用。
+    - `server/pvp-live/live-store.js` 新增 invite room 状态机：创建约战会退出公共队列、锁定房主斗法谱、返回 `waiting_invite` 和 `pvp-live-invite-v1`；受邀方加入时退出双方公共队列，创建 `mode='friendly'` 的真人局，并在 `matchQuality` 中标记 `expansionStage='friend_invite'`、`ratingDeltaBucket='friend_invite'`、`invite_only_match`、`friendly_no_ranked_impact`。
+    - `server/db/database.js` 与 `server/pvp-live/live-persistence.js` 新增 `pvp_live_invites` 持久化：保存 `invite_code / host_user_id / host_display_name / host_loadout_snapshot_json / created_at`；服务器重启后好友仍可用原邀请码加入，创建成功后清理 invite row。
+    - `js/services/backend-client.js`、`js/services/pvp-service.js`、`js/services/pvp-live-session.js` 接通 `createInvite / joinInvite / pollInvite`；前端 session 新增 `waiting_invite`、`inviteCode`、`inviteReport`，房主等待时可通过 current match 轮询恢复到受邀方已接受的 friendly setup。
+    - `index.html`、`css/pvp.css`、`js/scenes/pvp-scene.js` 增加 live PVP 好友约战面板：空闲/等待阶段可创建或输入邀请码，等待中展示分享码和“不写正式积分”；进入 setup / active / finished / invalidated 后隐藏约战面板，避免移动端战斗状态卡膨胀。
+    - 反向巡检后补强 pending invite 互斥：房主在 `waiting_invite` 期间再次调用公共 `/queue/join` 会返回 409 `pending_invite_exists`，不会被公共队列匹配走；`pollInvite()` 也只把带 `friend_invite / invite_only_match` 的 current friendly match 认作本次邀请码被接受，遇到其他 current live match 会恢复当前对局并清掉等待态。
+    - 好友约战补齐取消 / 过期闭环：房主可通过 `POST /api/pvp/live/invites/:inviteCode/cancel` 主动取消，非房主取消返回 404；取消后邀请码不可加入，房主可重新进入公共队列；邀请码 TTL 到期后返回稳定 `invite_expired`，并清理内存与 SQLite 中的 pending invite，重启后过期邀请码也不会复活。
+    - 反向巡检继续补齐 host 侧恢复 / 过期体验：新增 `GET /api/pvp/live/invites/current`，房主刷新页面后可恢复 `waiting_invite`、邀请码和“取消约战”入口；等待态轮询若发现邀请码自然过期，会自动回到 idle、清空 inviteCode / inviteReport，并显示稳定 `invite_expired`，不再卡在无效等待。
+    - 前端 `BackendClient.cancelLivePvpInvite()`、`BackendClient.getCurrentLivePvpInvite()`、`PVPService.live.cancelInvite()`、`PVPService.live.getCurrentInvite()`、`pvp-live-session.cancelInvite()`、`pvp-live-session.resumeCurrentInvite()` 与 `PVPScene.cancelLiveInvite()` 已接通；等待态 UI 新增“取消约战”，取消后回到 idle、清空邀请码 / inviteReport，并保留可读的 `invite_cancelled` 或 `invite_expired` 原因。
+    - 移动端连接状态条取消 `nowrap + hidden` 截断，浏览器审计新增 390px 下“对方重连宽限 / 不会立即判负”可读性断言。
+    - `tests/sanity_pvp_live_route_checks.cjs`、`tests/sanity_pvp_live_persistence_checks.cjs`、`tests/sanity_pvp_live_session_checks.mjs`、client/service/UI contract、`tests/browser_pvp_live_audit.mjs` 和 `tests/sanity_release_gate_coverage_checks.cjs` 固定私有房间不污染公共队列、重启可恢复、服务端锁谱、UI 可见邀请码、加入后 friendly setup、取消 / 过期清理、无旧残影 / 旧结算路径。
+    - `tests/sanity_pvp_live_settlement_checks.cjs` 新增邀请码友谊局终局断言：不改双方 rank score / wins / losses，不累计钱包场次或天道币，不写 `pvp_live_match_settlements`，也不写 `pvp_match_history`。
+  - 已验证
+    - `node tests/sanity_pvp_live_route_checks.cjs`
+    - `node tests/sanity_pvp_live_persistence_checks.cjs`
+    - `node tests/sanity_pvp_live_settlement_checks.cjs`
+    - `node tests/sanity_pvp_live_session_checks.mjs`
+    - `node tests/sanity_pvp_live_client_checks.mjs`
+    - `node tests/sanity_pvp_live_service_bridge_checks.cjs`
+    - `node tests/sanity_pvp_live_ui_contract_checks.cjs`
+    - `node tests/sanity_release_gate_coverage_checks.cjs`
+    - `npm run build:pages`
+    - `node tests/browser_pvp_live_audit.mjs http://127.0.0.1:4174 output/browser-pvp-live-invite-room-current`：41/41，0 console errors。
+    - `env AUDIT_FILTER=pvp-live,pvp-live-real bash tests/run_browser_release_checks.sh http://127.0.0.1:4174 output/release-browser-audits-pvp-live-invite-room-current`：filtered release gate 通过。
+  - 当前结论
+    - live PVP 现在具备真正的“好友约战”最小闭环：玩家可以创建邀请码、分享给真人好友、好友输入后进入服务端权威 friendly live 局；该链路不走公共排队、不接旧残影、不写正式排位或经济结算，且重启 / 刷新后 pending 邀请仍可恢复。等待中的约战可以主动取消，过期邀请码会稳定拒绝、清理并让 host 侧退出等待态，不会让双方卡在无效等待里。剩余风险包括完整好友列表与邀请通知、跨实例并发锁、正式 MMR / 赛季积分、生产 smoke 和线上部署。
+
+- 2026-06-19: V10 真 PVP live pending 再战重启恢复切片
+  - 本轮完成
+    - `server/db/database.js` 新增 `pvp_live_rematch_requests`，持久化等待中的 friendly / Bo3 再战请求，包含 `source_match_id`、`series_id`、双方已确认玩家快照和时间戳。
+    - `server/pvp-live/live-persistence.js` 新增 `saveRematchRequest / loadRematchRequest / deleteRematchRequest`，只保存服务端规范化后的 `userId / displayName / loadoutSnapshot`，不保存客户端临时胜负或积分字段。
+    - `server/pvp-live/live-store.js` 在发起方进入 `waiting_rematch` 时写入 pending；服务重启后第二名原对手确认时会从 SQLite 恢复第一人的锁谱快照，直接创建同一 `seriesId` 的 friendly match；创建成功后清理 pending。
+    - `tests/sanity_pvp_live_persistence_checks.cjs` 覆盖 A 发起再战等待、服务器重启、B 接受后创建 friendly、A 通过 current match 找回新局、pending row 被清理；`tests/sanity_release_gate_coverage_checks.cjs` 固定相关发布门禁 marker。
+  - 已验证
+    - `node tests/sanity_pvp_live_persistence_checks.cjs`
+    - `node tests/sanity_pvp_live_route_checks.cjs`
+    - `node tests/sanity_pvp_live_settlement_checks.cjs`
+    - `node tests/sanity_release_gate_coverage_checks.cjs`
+    - `npm run test:node`
+    - `npm run build:pages`
+  - 当前结论
+    - Bo3 再战等待不再只是内存态：单进程重启后仍可恢复等待确认并进入同一系列，降低线上部署 / 重启时双方体验割裂。剩余风险包括多实例并发锁、好友房 / 邀请链接、正式 MMR / 赛季积分、生产 smoke 和线上部署。
+
+- 2026-06-19: V10 真 PVP live 友谊 Bo3 系列闭环切片
+  - 本轮完成
+    - `server/pvp-live/live-store.js` 将原先“一次低压力再战”扩展为 no-score Bo3 系列：ranked 源局作为第 1 局计分，friendly 第 2 局若打成 1-1 会继续允许双方确认第 3 局，任一源座位先到 2 胜后关闭继续再战入口。
+    - `friendlySeries` 新增 `targetWins / maxRounds / scoreBySourceSeat / sourceParticipants / seriesStatus / leaderSourceSeat / winnerSourceSeat / canRequestNextRound / originMatchId`，比分按源座位和源玩家累计，不受第 2、3 局换边影响。
+    - `server/pvp-live/engine/state.js` / `state-view.js` 同步规范化和投影 Bo3 字段；finished friendly 局不再简单隐藏 `friendly_rematch`，而是按系列是否未决决定是否展示“Bo3 决胜局”入口。
+    - `js/scenes/pvp-scene.js` 的友谊系列条展示 Bo3 局数、双方比分、系列是否未决或已结束，并继续标明“不写正式积分”；单局 `roundIndex / turnIndex` 仍只用于战斗内回合。
+    - `tests/sanity_pvp_live_settlement_checks.cjs` 覆盖 ranked 1-0、friendly 1-1、decider 2-1 后关闭系列，并验证 G2/G3 全程不写正式积分、钱包、历史和 live settlement gate。
+    - `tests/sanity_pvp_live_route_checks.cjs` 覆盖 `/rematch` 从 finished friendly 继续开启 Bo3 决胜局、沿用同一 `seriesId`、2 胜后 404 拒绝继续；session / UI contract / browser fake 同步固定 Bo3 字段保真和 UI 比分展示。
+  - 已验证
+    - `node tests/sanity_pvp_live_settlement_checks.cjs`
+    - `node tests/sanity_pvp_live_route_checks.cjs`
+    - `node tests/sanity_pvp_live_session_checks.mjs`
+    - `node tests/sanity_pvp_live_ui_contract_checks.cjs`
+    - `node tests/sanity_pvp_live_engine_checks.cjs`
+    - `node tests/sanity_release_gate_coverage_checks.cjs`
+    - `npm run build:pages`
+    - `node tests/browser_pvp_live_audit.mjs http://127.0.0.1:4174 output/browser-pvp-live-bo3-closeout-current`：36/36，0 console errors；新增覆盖 G2 1:1 后进入同一 `seriesId` 的 G3，以及 2:1 后隐藏 `friendly_rematch`。
+    - `node tests/browser_pvp_live_real_backend_smoke.mjs http://127.0.0.1:4174 output/browser-pvp-live-bo3-real-current`：29/29，0 console errors。
+    - `npm run test:node`
+    - `env AUDIT_FILTER=pvp-live,pvp-live-real bash tests/run_browser_release_checks.sh http://127.0.0.1:4174 output/release-browser-audits-pvp-live-bo3-closeout-current`
+  - 当前结论
+    - live PVP 已经从“单局后再来一局”升级为可闭环的低压力 Bo3：双方能围绕同一对手连续换边、看比分、打决胜局，2 胜后关闭继续再战入口，且不会污染正式积分。pending rematch 持久化已由后续切片补齐；剩余风险包括好友房 / 邀请链接、多实例队列策略 / 分布式锁、正式 MMR / 赛季积分、生产 smoke 和线上部署。
+
+- 2026-06-19: V10 真 PVP live 低干扰社交与离页心跳收口切片
+  - 本轮完成
+    - `server/pvp-live/engine/rules.js` / `reducer.js` 新增白名单预设表情：`respect / thinking / well_played`；表情是 `emote_sent` 公开事件，不推进回合、不改 `stateVersion`、不刷新行动倒计时，也不触发伤害、胜负或结算。
+    - 服务端按席位记录表情冷却，短时间重复发送返回 `emote_rate_limited`；非白名单表情返回 `invalid_emote`，不支持自由文本聊天。
+    - `index.html` / `css/pvp.css` / `js/scenes/pvp-scene.js` 增加 live 社交区、预设表情按钮和本地“静音表情”；静音只过滤本地事件面板里的对手表情，不改变服务端权威事件、复盘或审计事实。
+    - `js/services/pvp-live-session.js` 修正 `refreshMatch()`：刷新权威战局时会把 `stateView.recentEvents` 写回 `lastEvents`，避免事件面板长期停留在上一条本地行动事件。
+    - 挑战者检查发现返回主菜单只停 polling、不停 heartbeat；`index.html` 的 PVP 返回按钮已同步调用 `PVPScene.stopLiveHeartbeat()`，避免离开 PVP 页面后继续发送心跳或隐藏更新。
+    - `server/pvp-live/live-store.js` 进一步收口 active 双断线：双方都超过重连宽限时写 `connection_timeout + match_invalidated`，不把非当前行动席误判为赢家，也不生成胜负复盘或正式结算。
+    - `tests/sanity_pvp_live_engine_checks.cjs`、`tests/sanity_pvp_live_route_checks.cjs`、`tests/sanity_pvp_live_ui_contract_checks.cjs`、`tests/browser_pvp_live_audit.mjs` 和 `tests/sanity_release_gate_coverage_checks.cjs` 固定低干扰社交、限频、无自由文本、本地静音、离页 heartbeat teardown、移动端不溢出和 release gate marker。
+  - 已验证
+    - `npm run build:pages`
+    - `npm run test:node`
+    - `node tests/browser_pvp_live_audit.mjs http://127.0.0.1:4174 output/browser-pvp-live-social-emote-green`：34/34，0 console errors。
+    - `env AUDIT_FILTER=pvp-live,pvp-live-real bash tests/run_browser_release_checks.sh http://127.0.0.1:4174 output/release-browser-audits-pvp-live-social-emote-final`：filtered release gate 通过。
+  - 当前结论
+    - live PVP 现在有最小真人互动感：双方能用预设表情表达礼貌、思考和妙手，但没有自由文本、不会影响战斗状态、不会改变结算或积分；本地静音能降低干扰。挑战者指出的离开 PVP 页面 heartbeat 漏停和 active 双断线误判风险也已收口。剩余风险包括完整好友约战 / Bo3、正式 MMR / 赛季积分、生产 smoke 和线上部署。
+
+- 2026-06-19: V10 真 PVP live heartbeat / reconnect grace 公平切片
+  - 本轮完成
+    - `server/pvp-live/live-store.js` 新增 `pvp-live-connection-v1` seat-scoped 投影：每局维护双方 `lastHeartbeatAt`，按 `heartbeatStaleMs + reconnectGraceMs` 区分 `online / grace / disconnected`，所有 current / match / queue status / intent 响应都带 `connectionReport`。
+    - `server/routes/pvp-live.js` 新增 `POST /api/pvp/live/matches/:matchId/heartbeat`，只允许参与者写自己的心跳；断线恢复不会立即判负，而是先让对手看到重连宽限状态。
+    - `server/pvp-live/live-store.js` 同步补上宽限结束后的权威裁决：setup 阶段有参与者断线到期时写 `connection_timeout + match_invalidated`，不结算胜负；active 阶段只有当前行动席断线到期才写 `turn_timeout + match_finished(connection_timeout)`，非当前行动席断线不会抢判。
+    - `server/db/database.js` 与 `server/pvp-live/live-persistence.js` 新增 `connection_json` 持久化，服务重启后不会把最近心跳过的对手误重置成未知状态。
+    - `js/services/backend-client.js`、`js/services/pvp-service.js`、`js/services/pvp-live-session.js` 接通 heartbeat；`js/scenes/pvp-scene.js` 新增 live heartbeat loop，只在 matched / setup / active / sync_required 阶段运行，离开 live 页或终局自动停止。
+    - `js/scenes/pvp-scene.js` 同步收紧长等待轮询：进入 `pvp-live-waiting-report-v1.longWait` 后暂停自动 poll，让玩家明确选择继续刷新、问道练习或取消匹配；手动刷新会打开 30 秒继续等待窗口，用于重新自动发现真人匹配。
+    - `index.html` 增加 `data-live-connection-status` 稳定锚点；`css/pvp.css` 增加连接状态条，UI 明确显示“我方在线 / 对方在线 / 对方重连宽限 Xs / 不会立即判负”，并与行动倒计时分离。
+    - `server/pvp-live/engine/state-view.js` 与 `js/scenes/pvp-scene.js` 补充 `connection_timeout` 复盘文案和事件格式化，避免玩家把连接裁决误解成普通慢操作。
+    - `tests/sanity_pvp_live_route_checks.cjs` 覆盖 heartbeat 写入、对手 stale 后进入 grace、恢复 heartbeat 后回到 online、setup 断线无效局、active 非当前行动席不抢判、active 当前行动席连接超时结算；client / service bridge / session / UI contract / persistence / browser fake / real smoke / release coverage 同步固定该协议。
+  - 当前结论
+    - live PVP 现在能把“对手正在思考”和“对手连接波动”区分给双方看，且弱网不会立刻变成单方判负；宽限结束后也有服务端权威裁决，setup 不写分、active 只判当前行动席，进一步提高双方体验和公平感。剩余风险包括前后台节流下的更细 grace 归属、完整 Bo3 / 好友约战、正式 MMR、生产 smoke 和线上部署。
+
+- 2026-06-18: V10 真 PVP live 权威倒计时与行动窗口可见切片
+  - 本轮完成
+    - `server/pvp-live/live-store.js` 新增 `pvp-live-turn-timer-v1` seat-scoped 投影：setup 使用 `readyDeadlineAt`，active 使用 `match.updatedAt + turnTimeoutMs`，所有 current / match / queue status / intent 响应都统一带 `turnTimer`。
+    - `js/scenes/pvp-scene.js` 将 `turnTimer` 纳入 `getLiveSnapshot()` 和 UI 渲染；setup 显示“准备倒计时”，active 显示“行动倒计时 / 当前席位 / 我的行动窗口或等待对手行动”。
+    - `index.html` 增加 `data-live-turn-timer` 稳定锚点；`css/pvp.css` 增加倒计时条样式，并在移动端压缩密度，确保状态卡仍完整落在首屏 viewport 内。
+    - `tests/sanity_pvp_live_route_checks.cjs` 固定 setup、active、end turn 后的权威 timer：报告版本、phase、deadline、remaining、currentSeat 均必须存在且随回合切换。
+    - `tests/browser_pvp_live_audit.mjs` 覆盖 fake UI 的准备倒计时、行动倒计时、出牌后当前席位展示和移动端不溢出；`tests/browser_pvp_live_real_backend_smoke.mjs` 覆盖真实双账号 setup countdown、active countdown、A 结束回合后 B 侧倒计时 ownership。
+    - `tests/sanity_pvp_live_ui_contract_checks.cjs` 与 `tests/sanity_release_gate_coverage_checks.cjs` 同步固定 DOM/CSS/browser/route/real smoke marker，避免后续把倒计时从正式 live 链路中删掉。
+  - 当前结论
+    - live PVP 不再只告诉玩家“谁当前行动”，而是明确展示准备窗口和行动窗口的服务端权威倒计时；这为下一步 heartbeat / reconnect / grace 公平切片打地基。剩余风险仍包括断线状态、弱网恢复、grace 归属、完整 Bo3 / 好友约战、正式 MMR、生产 smoke 和线上部署。
+
+- 2026-06-18: V10 真 PVP live 再战等待方自动入局切片
+  - 本轮完成
+    - `js/services/pvp-live-session.js` 新增 `waiting_rematch` session phase 和 `pollRematch()`：发起方等待同对手确认时不再静止停在 finished，而是保留旧局复盘和 `friendlySeries`，持续通过 `getCurrentMatch()` 查找被对手接受后创建的新 friendly live match。
+    - `js/scenes/pvp-scene.js` 将 `waiting_rematch` 纳入 live polling、phase label、summary、hint 和按钮禁用状态；对手接受后，发起方同页自动切到新的 `mode='friendly'` setup，不需要手动重新入队或整页刷新。
+    - `tests/sanity_pvp_live_session_checks.mjs` 固定等待方红绿链：等待态必须是可轮询的 `waiting_rematch`，并在 current match 指向新 friendly 局时切换到 setup、清掉等待提示、保留 source match link。
+    - `tests/browser_pvp_live_audit.mjs` 覆盖 fake UI：点击 `friendly_rematch` 先显示等待提示与 `data-live-friendly-series`，随后自动轮询进入 `pvplm-browser-friendly` setup；不调用旧 `findOpponent / reportMatchResult / GhostEnemy / startPVPBattle / didWin / matchTicket`。
+    - `tests/sanity_pvp_live_route_checks.cjs` 新增服务端 current-match 证明：第二人接受后，第一人直接 `GET /api/pvp/live/matches/current` 能拿到同一个 friendly 新局。
+    - `tests/browser_pvp_live_real_backend_smoke.mjs` 推进真实双账号 smoke：B 发起低压力再战等待，A 接受后，B 自动进入 accepted friendly setup；随后 friendly 局仍可 ready、finish，并从赛后 `queue_again` 回到真人 waiting。
+    - 负向硬化：`pollRematch()` 只认领 source match / series id 匹配的 friendly current match，避免多标签或未来多系列时误接不相关友谊局；`waiting_rematch` 期间禁用 `friendly_rematch / queue_again / practice / adjust_loadout`，避免 pending rematch 与公共排队并存。
+    - `server/pvp-live/engine/state-view.js` 对 finished friendly match 不再投影新的 `friendly_rematch` 死按钮，只保留复盘、练习、调谱和回到真人排位。
+    - `tests/sanity_release_gate_coverage_checks.cjs` 同步固定 session、route、settlement、fake browser、real smoke marker，避免发布门禁漏掉 requester 自动入局和负向防竞态链路。
+  - 当前结论
+    - 低压力再战现在对双方都闭环：接受方点击后立即进入新局，发起等待方也会同页自动进入新局，避免“对手已接受但我还停在旧复盘页”的割裂体验；等待期间不会误入公共队列，friendly 结束后也不再露死按钮。剩余风险仍包括 pending rematch 目前是内存态、完整 Bo3 / 连续再战策略、好友系统、生产多实例策略和线上部署。
+
+- 2026-06-18: V10 真 PVP live 同对手低压力再战 MVP 切片
+  - 本轮完成
+    - `server/pvp-live/live-store.js` 新增同源终局 `requestFriendlyRematch()`：仅原 live match 双方可发起；第一人返回 `waiting_rematch` 和 `pvp-live-friendly-series-v1`，第二人确认后绕过公共队列直接创建新 live match。
+    - friendly rematch 新局固定 `mode='friendly'`，换边创建座位，允许双方在再战请求里提交本局斗法谱候选；新局仍走服务端锁谱、ready、开局保护、reducer、公开事件和 finished 复盘。
+    - `server/routes/pvp-live.js` 新增 `POST /api/pvp/live/matches/:matchId/rematch`；非参与者 404，已有活跃对局时拒绝，不把再战伪装成公共 `queue_again`。
+    - `server/pvp-live/engine/state.js` / `state-view.js` 增加 `mode`、`friendlySeries`、友谊再战首局简报和赛后 `friendly_rematch` 下一步动作；`render_game_to_text().pvp.live` 与 UI 同步暴露 `friendlySeries`，不包含 reward / rating / ELO 字段。后续 8S 已补充：finished friendly 局不再继续投影 `friendly_rematch` 死按钮。
+    - `server/pvp-live/live-settlement.js` 对 `mode='friendly'` 的 finished match 直接返回 `friendly_no_ranked_impact`，不会写 `pvp_live_match_settlements`、`pvp_match_history`、正式分数、钱包场次或天道币。
+    - `js/services/backend-client.js`、`js/services/pvp-service.js`、`js/services/pvp-live-session.js`、`js/scenes/pvp-scene.js` 接通赛后按钮：发起者看到“等待本局对手确认”，接受者进入新的 friendly setup 局；赛后卡片显示“换边再战 / 不写正式积分”。
+    - `tests/sanity_pvp_live_route_checks.cjs`、`tests/sanity_pvp_live_settlement_checks.cjs`、client/service/session/UI contract、fake browser audit、real backend smoke 和 release coverage 均固定 friendly rematch 的权限、模式投影、无正式结算、无旧残影 / 旧结算路径和可见 UI 提示。
+  - 当前结论
+    - live PVP 赛后现在有真正的同对手低压力再来一局入口：双方确认后能进入服务端权威的新真人局，并且不会污染排位积分、钱包、历史或正式结算。它仍不是完整好友系统、完整 Bo3 系列、持久化邀请、社交分享 / 举报闭环、多实例队列策略、生产 smoke 或线上部署。
+
+- 2026-06-18: V10 真 PVP live 赛后双方体验公平诊断 MVP 切片
+  - 本轮完成
+    - `server/pvp-live/engine/state-view.js` 在 `postMatchReview` 下新增 `pvp-live-experience-report-v1`，从已脱敏公开 `evidence` 派生双方体验诊断；报告固定 `sourceVisibility=public_events`、`usesHiddenInformation=false`、`rankedImpact=none`，不读取原始 payload、隐藏手牌、牌库顺序或斗法谱快照。
+    - 诊断报告输出 `nonGameRisk`、`nonGameRiskReasons`、`agencyLabel`、`decisionWindowCount`、`seatWindowSummary`、`safeguardSummary` 和四项公平检查：调息准备必须完成、首动伤害预算、开局护体 / 非秒杀观察、双方决策窗口；短局会标记为 `watch`，避免把体验风险伪装成稳定公平。
+    - `collectReviewEvidence()` 增加 allowlist 版 `publicData`，只允许 `firstSeat / nextSeat / seatId / count / targetSeat / protectedSeat / preventedDamage / hpDamage / targetHp / winnerSeat / loserSeat / finishReason` 等公开解释字段；`experienceReport.fairnessChecks[].linkedEvidence` 可回到具体公开事件，但仍不携带 cardId、instanceId、payload、hand、deck 或 loadoutSnapshot。
+    - `js/scenes/pvp-scene.js` 新增 `getLiveExperienceReport()` / `renderLiveExperienceReport()` / `handleLiveExperienceCheckFocus()`，finished 复盘卡展示 `data-live-experience-report`；点击任意 `data-live-experience-check` 会把事件面板切到 `experience_check:{id}`，只显示该检查项的 `linkedEvidence`。
+    - `render_game_to_text().pvp.live.postMatchReview.experienceReport` 与 UI 使用同一份白名单结构；`formatLiveEvent()` 支持从 `publicData` 渲染先手、换手、护体、预算和终局细节。
+    - `css/pvp.css` 补齐体验诊断卡、风险标签、检查项按钮、聚焦态和移动端折行样式；赛后关键回合复盘、公开事件轨迹、问道练习入口仍保留原有位置。
+    - `tests/sanity_pvp_live_engine_checks.cjs` 固定服务端公开诊断契约、linkedEvidence 和隐藏信息禁用；`tests/sanity_pvp_live_ui_contract_checks.cjs` 与 `tests/sanity_release_gate_coverage_checks.cjs` 固定 UI / CSS / browser audit marker；`tests/browser_pvp_live_audit.mjs` 和 `tests/browser_pvp_live_real_backend_smoke.mjs` 覆盖 fake / 真实双账号赛后体验诊断展示、点击检查项聚焦公开证据、文本导出 parity、无隐藏字段、无 reward / rating / ELO。
+  - 当前结论
+    - live PVP 赛后现在能明确告诉双方“这一局是否有准备、首动预算、护体和可读决策窗口”，降低玩家对先手秒杀、假公平和暗箱结算的感知风险。它仍不是完整交互式 replay、AI 复刻原局节奏、完整好友 / Bo3 再战系统、多实例队列、正式 ELO / 赛季奖励、生产 smoke 或线上部署。
+
+- 2026-06-18: V10 真 PVP live 关键回合复盘 MVP 切片
+  - 本轮完成
+    - `server/pvp-live/engine/state-view.js` 在 `postMatchReview` 下新增 `pvp-live-key-turn-replay-v1`，从已脱敏 `evidence` 中提取开战窗口、压力窗口和终局选择；输出只包含 `id / label / sequence / eventType / actingSeat / severity / lesson`，并固定 `sourceVisibility=public_events`、`usesHiddenInformation=false`、`rankedImpact=none`。
+    - 赛后 `nextActions` 新增 `review_key_turns`，但仍保留查看权威事件、调整斗法谱、问道练习和继续真人排位；前端 `nextActions` 上限扩为 5，避免新增关键回合入口后截掉继续排位。
+    - `js/scenes/pvp-scene.js` 新增 `getLiveKeyTurnReplay()` / `renderLiveKeyTurnReplay()`：finished 复盘卡展示“关键回合”紧凑网格，`render_game_to_text().pvp.live.postMatchReview.keyTurnReplay` 与 UI 使用同一份白名单结构。
+    - `handleLivePostReviewAction('review_key_turns')` 会把事件面板切到 `key_turns`，只用 `keyTurnReplay.turns` 重绘关键窗口列表；不会读取 `recentEvents / lastEvents` 的原始 payload，也不会调用旧残影或客户端结算路径。
+    - `css/pvp.css` 补齐关键回合卡片、三列窗口、移动端可折行和 focus 边框；点击关键回合后复盘区与事件面板都会有明确聚焦态。
+    - `tests/sanity_pvp_live_engine_checks.cjs` 固定服务端 key-turn 数据契约和隐藏信息禁用；`tests/sanity_pvp_live_ui_contract_checks.cjs` 固定 UI / CSS / browser audit marker；`tests/browser_pvp_live_audit.mjs` 和 `tests/browser_pvp_live_real_backend_smoke.mjs` 覆盖 fake / 真实双账号关键回合展示、点击聚焦、文本导出 parity、无隐藏字段和练习入口不回归。
+    - 已验证：`npm run test:node`、`npm run build:pages`、fake browser audit 27/27、real backend smoke 19/19 且 0 console errors、过滤 release gate `pvp-live,pvp-live-real` 全通过。
+  - 当前结论
+    - live PVP 赛后复盘现在不只显示公开事件流水，还能把这一局拆成玩家可理解的关键窗口：哪里开战、哪里形成压力、哪里进入终局。它仍不是完整逐步可交互 replay、正式 AI 复现原局节奏、完整好友 / Bo3 再战系统或线上部署。
+
+- 2026-06-18: V10 真 PVP live 赛后问道练习可玩入口 MVP 切片
+  - 本轮完成
+    - `js/scenes/pvp-scene.js` 将 finished 态赛后复盘里的“问道练习”从安全提示升级为可交接训练课题：点击后生成 `pvp-live-drill-scenario-v1`，记录 `sourceMatchId`、`sourceVisibility=replay_self`、`usesHiddenInformation=false`、`rankedImpact=none`、公开事件类型和事件序号。
+    - 练习交接只使用赛后公开复盘和本方可见信息：失败局推荐守势谱、胜局推荐前压谱、超时局推荐控场谱；不会写入 reward / rating / ELO，也不会调用旧 `findOpponent / reportMatchResult / GhostEnemy / startPVPBattle / didWin / matchTicket` 路径。
+    - `commitLivePostReviewPracticeHandoff()` 会把 `pvp_live:${matchId}` 写入 challenge hub 的 `trainingFocus.sourceRunId / guideRecordId`，并调用 `beginPvpLiveDrillScenario()` 进入锁定角色选择；确认后会启动 `practiceOnly + replayOnly` 的真人 PVP 问道练习命盘。
+    - `js/core/challenge_hub.js` 新增 `buildPvpLiveDrillBundle()` / `beginPvpLiveDrillScenario()`：按 `drillScenario.themeKey` 复用现有观星回放链路，生成 `PVP-*` 命盘签、真人练习 banner、公开事件训练重点和不计奖励 / 不计分 UI。
+    - `practiceOnly` 隔离已补齐：练习 run 不写 challenge completions / bestScore / totalScore，不新增 observatory archive，不触发 challenge / observatory collection unlock，不写 season verification；观星节点副作用也会跳过正式留痕。
+    - waiting 长等待里的 `practice-live` 仍保持安全提示，不跳转 challenge hub，避免把无终局复盘的等待态误当作赛后练习。
+    - `tests/browser_pvp_live_audit.mjs` 和 `tests/browser_pvp_live_real_backend_smoke.mjs` 已覆盖 fake / 真实双账号赛后点击练习后进入 `character-selection-screen`，pending 带 `practiceOnly=true`，确认后 fake 路径进入 `map-screen` 且 activeRun `currentScore=0`、banner 显示“练习不计分”。
+    - `tests/sanity_observatory_archive_checks.cjs` 已覆盖 PVP drill practice 的 progress / archive / unlock / verification 全隔离；`tests/sanity_pvp_live_ui_contract_checks.cjs` 与 `tests/sanity_release_gate_coverage_checks.cjs` 固定 `pvp-live-drill-scenario-v1`、`practiceOnly`、`sourceVisibility`、`usesHiddenInformation`、`rankedImpact` 和 fake / real browser release marker。
+  - 当前结论
+    - live PVP 赛后复盘现在能真正把“问道练习”承接到一个可开局、可玩的 practiceOnly 练习命盘，玩家打完后不会只剩读复盘卡或重新排队；练习不计分、不发奖励、不入正式 archive，也不读取隐藏信息。它仍不是按原局逐回合复刻的 AI 对手、关键回合可交互回放、完整好友 / Bo3 再战系统、正式 ELO / 赛季奖励、多实例队列策略、生产 smoke 或线上部署。
+
+- 2026-06-18: V10 真 PVP live 终局复盘刷新恢复 MVP 切片
+  - 本轮完成
+    - `js/services/pvp-live-session.js` 新增 `theDefierPvpLiveLastTerminalMatchV1` 本地恢复锚点：浏览器内按当前登录用户分槽保存；只有服务端返回 `finished` 且包含 `postMatchReview` 的 live match 才会写入，成功重新入队、取消排队和 reset 会主动清理，避免旧战报污染下一局或同源切账号误恢复。
+    - `resumeCurrentMatch()` 现在先走 `/api/pvp/live/matches/current` 恢复仍活跃的 live match；当服务端已释放 finished match、不再返回 current 时，再用本地 terminal `matchId` 调 `/api/pvp/live/matches/:matchId` 恢复双方可见的终局复盘。
+    - 恢复边界已收紧：只有 current 明确返回 no-current 才会 fallback 到 stored terminal match；terminal match 的 404 / 缺失会清 stale 锚点，网络或服务临时失败不会清掉可重试的复盘锚点，也不会进入假 finished；失败再入队会清掉内存中的旧 finished 态但保留刷新恢复锚点，成功进入新 waiting / matched 后才清锚点。
+    - `tests/sanity_pvp_live_session_checks.mjs` 增加红绿链路：终局复盘写入恢复锚点、整页刷新后的新 session 先查 current、再查 stored terminal match，并恢复 `postMatchReview`；同时覆盖 current 临时失败不走旧战报 fallback、terminal 临时失败保留锚点、terminal 404 清 stale 锚点、失败 / 成功再入队的锚点生命周期。
+    - `tests/browser_pvp_live_real_backend_smoke.mjs` 在真实双账号投降终局后执行整页 reload，重新打开 live tab 并只触发一次 `loadLivePanel()`，验证 finished 复盘卡、`render_game_to_text().pvp.live.postMatchReview` 和本地 terminal `matchId` 都能恢复。
+    - `tests/sanity_release_gate_coverage_checks.cjs` 固定 session 断言、真实浏览器 finding 和 `theDefierPvpLiveLastTerminalMatchV1` marker，避免后续退回“终局后刷新只剩 idle”的体验。
+  - 当前结论
+    - live PVP 终局复盘现在可以跨整页刷新保留：玩家不会因为赛后刷新就丢失胜负解释、公开证据和下一步动作。它仍不是完整关键回合回放、完整好友 / Bo3 再战系统、正式练习承接、多实例队列策略、生产 smoke 或线上部署。
+
+- 2026-06-18: V10 真 PVP live 公开复盘事件轨迹 MVP 切片
+  - 本轮完成
+    - `server/pvp-live/engine/state-view.js` 将 `postMatchReview.evidence` 从“只保留少量终局证据”升级为最多 12 条脱敏公开轨迹，纳入锁谱、调息、准备、开战、出牌、护盾、伤害、换手、认输 / 超时、终局等公开事件；输出仍只包含 `eventType / sequence / actingSeat`，不携带原始 payload、隐藏手牌或牌库顺序。
+    - `js/scenes/pvp-scene.js` 将赛后“查看权威事件”从单纯聚焦事件面板升级为复盘视图切换：finished 后点击会用 `postMatchReview.evidence` 重绘事件面板，让玩家看到从锁谱 / 调息 / 开战到终局的公开轨迹，而不是只看到最后一次 intent 的认输和对局结束。
+    - `js/scenes/pvp-scene.js` 在重新入队、取消或进入非 finished 状态时清理 `data-live-review-focus`，避免上一局赛后复盘聚焦态残留到新一轮 waiting / setup UI。
+    - `tests/sanity_pvp_live_engine_checks.cjs` 固定复盘轨迹至少包含 `battle_started` 与 `match_finished`，且不暴露 payload；`tests/browser_pvp_live_audit.mjs` 和 `tests/browser_pvp_live_real_backend_smoke.mjs` 固定 fake / 真实双账号点击复盘后能看到早期轨迹事件。
+    - `tests/sanity_release_gate_coverage_checks.cjs` 补齐公开复盘轨迹、事件面板文本、requeue 后焦点清理和真实双账号 smoke 的 release marker，避免后续回退成只有终局两条事件的“假复盘”。
+  - 当前结论
+    - live PVP 的赛后复盘现在具备可点击、可审计、双方都能理解的公开事件轨迹：玩家能追溯这局从准备到终局的关键公开节点，同时不暴露对手隐藏信息。它仍不是完整关键回合回放、整页刷新后 terminal review 保留、完整好友 / Bo3 再战系统、正式 ELO / 赛季奖励、多实例队列、生产 smoke 或线上部署。
+
+- 2026-06-18: V10 真 PVP live 赛后复盘动作入口 MVP 切片
+  - 本轮完成
+    - `js/scenes/pvp-scene.js` 将 `postMatchReview.nextActions` 从纯展示 chip 升级为可点击入口：查看权威事件会聚焦事件面板，调整斗法谱会聚焦入队谱选择器，问道练习继续只给“不写正式积分”的安全提示，继续真人排位会复用现有 `joinLiveQueue()` 重新入队。
+    - `js/services/pvp-live-session.js` 修复 finished 后再次入队失败的本地混合态：失败会回到干净 idle，并清掉旧 `matchId/stateView/postMatchReview`，只保留入队失败原因。
+    - `index.html` 为 live 事件面板增加 `data-live-event-panel`，`css/pvp.css` 补齐复盘动作按钮和聚焦态样式，finished 后选谱仍可编辑但不会改写已结束战报。
+    - `tests/browser_pvp_live_audit.mjs` 覆盖四个复盘动作均可点击、不会调用旧 `findOpponent / reportMatchResult / GhostEnemy / startPVPBattle / didWin / matchTicket`，且 `queue_again` 会回到 live waiting 并隐藏旧复盘卡。
+    - `tests/browser_pvp_live_real_backend_smoke.mjs` 在真实双账号 surrender 后点击复盘动作，验证事件聚焦、调谱解锁、练习安全提示和真实 `/api/pvp/live/queue/join` 再入队；`tests/sanity_pvp_live_session_checks.mjs` 覆盖失败再排队不会残留旧战报。
+    - `tests/sanity_pvp_live_ui_contract_checks.cjs` 与 `tests/sanity_release_gate_coverage_checks.cjs` 固定 `handleLivePostReviewAction()`、`data-live-post-review-action`、session stale 清理和 fake/real browser finding，防止后续退回不可操作的复盘文案。
+  - 当前结论
+    - live PVP 赛后复盘现在不只是“读一张卡”，还具备最小下一步动作闭环：回看、调谱、练习提示、再排队。问道练习仍是安全提示入口，不是完整练习战斗；完整好友 / Bo3 再战系统、关键回合回放、正式 ELO / 赛季奖励、多实例队列、生产 smoke 和线上部署仍未宣称完成。
+
+- 2026-06-18: V10 真 PVP live 赛后/首败复盘 MVP 切片
+  - 本轮完成
+    - `server/pvp-live/engine/reducer.js` 将正常伤害终局补齐为 `match_finished(finishReason=lethal)`；投降和超时继续分别使用 `surrender` / `timeout`，让终局复盘不需要猜测原因。
+    - `server/pvp-live/engine/state-view.js` 新增 `pvp-live-post-match-review-v1`：只在 `finished` 局面按席位投影，双方都能看到自己的胜/败局复盘；证据只包含公开事件类型、序号和行动席位，不携带对手隐藏手牌、牌库顺序或事件原始 payload。
+    - `index.html`、`css/pvp.css`、`js/scenes/pvp-scene.js` 新增 `data-live-post-match-review`：finished 后展示胜局/首败复盘、终局原因、公开证据、1-2 条建议和查看权威事件 / 调整斗法谱 / 问道练习 / 继续真人排位四个下一步动作；`render_game_to_text()` 同步输出 `pvp.live.postMatchReview`。
+    - `tests/sanity_pvp_live_engine_checks.cjs`、`tests/sanity_pvp_live_route_checks.cjs`、`tests/sanity_pvp_live_ui_contract_checks.cjs`、`tests/browser_pvp_live_audit.mjs`、`tests/browser_pvp_live_real_backend_smoke.mjs` 和 `tests/sanity_release_gate_coverage_checks.cjs` 已固定服务端投影、HTTP 返回、DOM / CSS / 方法锚点、fake UI 和真实双账号 finished 复盘 smoke。
+  - 当前结论
+    - live PVP 现在有公开事件版“赛后/首败复盘 MVP”：玩家不会只看到 finished，而是能知道胜负、终局原因、关键公开证据和下一步该回看、调谱、练习还是继续排位。赛后动作入口已由后续切片补成可点击 MVP；它仍不是完整深度首败复盘、关键回合回放、练习战斗承接、完整好友 / Bo3 再战系统、正式 ELO / 赛季奖励、多实例队列策略、生产 smoke 或线上部署。
+
+- 2026-06-18: V10 真 PVP live 120 秒无真人长等待分支 MVP 切片
+  - 本轮完成
+    - `server/pvp-live/live-store.js` 为 waiting queue 增加 `pvp-live-waiting-report-v1`：当等待达到 120 秒阈值后，仍保持 `status=waiting`，不会自动匹配残影，也不会写入正式积分、奖励或 ELO；报告公开等待时长、`no_ghost_fallback` / `no_score_change` 保护项，以及继续等待 / 问道练习 / 取消匹配三种安全选择。
+    - `js/services/pvp-live-session.js` 保存并清理 `waitingReport`，保证 queue poll 的长等待信息能进入前端 session state，同时进入 matched / setup / active / invalidated 后不会残留旧等待报告。
+    - `index.html`、`css/pvp.css`、`js/scenes/pvp-scene.js` 新增 `data-live-waiting-report` 和 `practice-live` 安全提示入口；长等待时 live 面板显示“120 秒无真人”、继续等待、问道练习不写正式积分、取消匹配和不会自动切残影。`render_game_to_text()` 同步输出 waiting report。
+    - `tests/sanity_pvp_live_route_checks.cjs` 覆盖 121 秒 waiting ticket 仍可读、仍是 waiting、不匹配 ghost、三动作存在、无 reward / rating / ELO 暗示；`tests/sanity_pvp_live_session_checks.mjs` 覆盖 session 保留 waiting report；`tests/browser_pvp_live_audit.mjs` 覆盖 fake live service 下长等待 UI 和 payload；`tests/sanity_pvp_live_ui_contract_checks.cjs`、`tests/sanity_release_gate_coverage_checks.cjs` 已固定 DOM、方法、CSS 和 release marker。
+  - 当前结论
+    - live PVP 现在不会让玩家在长时间无真人时误以为系统会塞残影或扣正式分：120 秒后会展示可审计的长等待分支，并保留继续等待和取消匹配的安全路径。问道练习当前是安全提示入口，不是完整练习战斗链路；赛后/首败复盘 MVP 已由后续切片补上，但正式练习模式承接、多实例队列策略、生产 smoke 和线上部署仍未宣称完成。
+
+- 2026-06-18: V10 真 PVP live 首战简报 MVP 切片
+  - 本轮完成
+    - `server/pvp-live/engine/state.js` 为 live match 初始状态写入 `firstMatchGuide`：固定 `pvp-live-first-match-guide-v1`，说明真人排位边界、斗法谱锁定、调息准备、开局护体和无效局不写正式积分。
+    - `server/pvp-live/engine/state-view.js` 将简报按当前状态投影给双方：setup 显示先调息准备，active 显示按当前行动席位出牌，finished / invalidated 也有对应下一步；同时公开三套 MVP 推荐斗法谱、各自弱点、准备超时 / 需要同步等异常分支和复盘动作。
+    - `index.html`、`css/pvp.css`、`js/scenes/pvp-scene.js` 在 live 状态区增加 `data-live-first-guide` / `data-live-first-match-guide`，展示首战简报、当前 next action、关键步骤和三套推荐谱弱点；`render_game_to_text()` 输出同一份 public payload。
+    - `tests/sanity_pvp_live_engine_checks.cjs`、`tests/sanity_pvp_live_route_checks.cjs`、`tests/sanity_pvp_live_ui_contract_checks.cjs`、`tests/browser_pvp_live_audit.mjs`、`tests/browser_pvp_live_real_backend_smoke.mjs` 和 `tests/sanity_release_gate_coverage_checks.cjs` 已固定服务端报告、路由投影、UI 锚点、fake audit、真实双账号 smoke 和无 reward / rating / ELO 暗示。
+  - 当前结论
+    - live PVP 现在有双方可见的“首战简报 MVP”：玩家能在第一局前知道是真人排位、入队锁谱、如何调息、为什么不会先手秒杀、准备超时为什么不计正式积分，以及三套 MVP 谱的弱点。120 秒无真人长等待 UI 和赛后/首败复盘 MVP 已由后续切片补上；它仍不是完整首战引导合同：正式问道练习战斗承接、正式 ELO / 赛季奖励、8 套正式斗法谱和线上部署仍未宣称完成。
+
+- 2026-06-18: V10 真 PVP live 开局防先手秒杀体验保护切片
+  - 本轮完成
+    - `server/pvp-live/engine/rules.js` 新增 `openingProtection.minimumHp`，作为 setup/ready 和首动伤害预算之后的第二道体验保险：如果伤害会击杀一个尚未获得行动回合的席位，服务端把该席位生命保底到 1。
+    - `server/pvp-live/engine/state.js` 为席位记录 `turnsTaken`；`server/pvp-live/engine/reducer.js` 在 `end_turn` 时累计已完成回合，并在伤害结算中广播公开 `opening_protection_triggered` 事件，说明被保护席位、保底血量和挡下的致命伤害。
+    - 该保护只挡“未行动方被提前终结”的非游戏局面；一旦对方已经拿到行动回合，后续正常 lethal 仍会写入 `match_finished`，避免把 PVP 做成无法终结的保底局。
+    - `js/scenes/pvp-scene.js` 将 live event panel 从裸 `eventType` 升级为中文事件标题 + 详情，`opening_protection_triggered` 会显示“护住 B · 保底 1 血 · 挡下 N 点致命伤害”；`css/pvp.css` 补了事件主标题/详情折行样式，避免移动端长事件撑宽。
+    - `tests/sanity_pvp_live_engine_checks.cjs` 覆盖低血量未行动防守方不会被首动终结、事件公开、重复 intent 幂等，以及对方获得行动回合后的正常终结仍有效。
+    - `tests/sanity_pvp_live_route_checks.cjs` 通过真实 `/api/pvp/live/*` 路由覆盖同一保护语义，并钉住 `minimumHp / preventedDamage / wouldHaveHp` 字段；`tests/browser_pvp_live_audit.mjs` 覆盖 fake live service 下最新 intent events 会覆盖旧 recentEvents，并在桌面和移动端显示保护详情而不是只显示裸事件名。
+    - `tests/sanity_pvp_live_ui_contract_checks.cjs` 和 `tests/sanity_release_gate_coverage_checks.cjs` 已固定事件格式化、CSS 类、浏览器 finding、引擎和路由断言 marker。
+  - 当前结论
+    - live PVP 不再只依赖“准备阶段禁止先打”和“首动预算”来解释防秒杀；现在已有一条服务端权威、双方可见、可审计的开局致命保护。首战简报 MVP 已由后续切片补上；它仍不是完整先后手公平算法或正式分段匹配系统，后续还需要多实例共享队列声明、完整首战引导合同、更多对局手感审计、生产 smoke 和线上部署。
+
+- 2026-06-18: V10 真 PVP live 匹配质量公开报告基线切片
+  - 本轮完成
+    - `server/pvp-live/engine/state.js` 为 live match 初始状态写入 `matchQuality`：固定 `pvp-live-match-quality-v1`、规则版本、MVP 本地赛季、`good` 标签、`mvp_open_pool` 扩圈阶段、`unrated_mvp` 评分差桶、双方等待耗时、候选池大小和服务端权威 / 快照锁 / 准备阶段 / 首动预算等保护项。
+    - `server/pvp-live/live-store.js` 在撮合瞬间生成匹配质量快照；当前 MVP 不引入真实 ELO 或隐藏评分，只用脱敏桶解释为什么可以匹配，后续可替换为正式评分策略。
+    - `server/pvp-live/engine/state-view.js` 将 `matchQuality` 投影给双方，但只暴露标签、阶段、桶化评分差、等待时间和保护项，不泄露精确 rating / score / ELO。
+    - `index.html`、`css/pvp.css`、`js/scenes/pvp-scene.js` 在 live 面板增加 `data-live-match-quality`，setup / active 都显示“匹配质量：良好 · mvp_open_pool · unrated_mvp · 等待 Ns”，`render_game_to_text()` 也输出同一份脱敏摘要。
+    - `tests/sanity_pvp_live_engine_checks.cjs`、`tests/sanity_pvp_live_route_checks.cjs`、`tests/sanity_pvp_live_ui_contract_checks.cjs`、`tests/browser_pvp_live_audit.mjs`、`tests/browser_pvp_live_real_backend_smoke.mjs` 和 `tests/sanity_release_gate_coverage_checks.cjs` 已固定服务端快照、UI 文案、fake audit、真实双账号 smoke 和无隐藏 rating 泄露。
+  - 当前结论
+    - live PVP 现在能给双方一个可复查的 MVP 匹配质量解释，解决“为什么是这个真人对手”的最小展示和审计入口；这不是完整匹配评分 / 扩圈 / 新人保护系统，后续仍需要正式多实例队列策略、首战引导报告、对局手感审计、生产 smoke 和线上部署。
+
+- 2026-06-18: V10 真 PVP live waiting queue SQLite 重启恢复基线切片
+  - 本轮完成
+    - `server/db/database.js` 新增 `pvp_live_queue_tickets`，保存 waiting queue ticket、用户、展示名、入队时已归一化的 `loadoutSnapshot` 和创建时间；匹配或取消后删除，避免把已消费的 matched ticket 当作可跨重启重复读取的数据。
+    - `server/pvp-live/live-persistence.js` 新增 waiting queue 的 `saveQueueEntry()`、`loadQueueEntryByTicket()`、`loadQueueEntryForUser()`、`loadOldestQueueEntryExceptUser()` 和 `deleteQueueEntry()`，与现有 active match SQLite persistence 共用同一 DB path。
+    - `server/pvp-live/live-store.js` 在 `joinQueue()`、`getQueueStatus()`、`cancelQueue()` 中按需 hydrate waiting ticket；同一用户重启后重复入队会复用原 ticket 和原 locked loadout hash，不读取新的客户端改谱；第二名玩家入队时可撮合重启前等待的玩家。
+    - active match 优先级高于 waiting row：如果崩溃窗口留下了 stale `pvp_live_queue_tickets` 行，重启后 current / join 恢复 active match 时会清理对应 waiting row，避免“已开局还能排队”。
+    - `tests/sanity_pvp_live_persistence_checks.cjs` 覆盖同一 SQLite DB path 下：A 入队等待 -> 后端重启 -> A ticket 仍 waiting -> A 重复提交篡改谱不覆盖 hash -> B 入队撮合 -> A 读取 matched 后 ticket 被消费；同时用 SQLite 手动插入 stale waiting row，验证 active match 重启恢复优先于脏队列行。
+    - `tests/sanity_release_gate_coverage_checks.cjs` 固定 waiting queue restart marker，防止后续只保留 active match 重启恢复而误报 waiting queue 也可恢复。
+  - 当前结论
+    - live PVP 已具备单 SQLite 后端重启后的 waiting queue 恢复基线，减少玩家排队中服务重启导致的丢票；匹配质量公开报告已由后续切片补上；这不是完整 Redis/多实例强一致队列，后续仍需要多实例并发声明、首战引导报告、对局手感审计、生产 smoke 和线上部署。
+
+- 2026-06-18: V10 真 PVP live 入队前基准斗法谱选择切片
+  - 本轮完成
+    - `index.html`、`css/pvp.css` 和 `js/scenes/pvp-scene.js` 在 live PVP 入队前新增 MVP 基准斗法谱选择器：默认 / 破阵 / 守势三套谱都只使用当前 `pvp-live-v1` engine 已支持的 `pvp_strike`、`pvp_guard`、`pvp_burst`，不提前宣称接入内容包里的 8 套正式卡池。
+    - `PVPScene.getLiveLoadoutPresets()`、`getLiveSelectedLoadoutPreset()`、`setLiveLoadoutPreset()` 和 `renderLiveLoadoutPresets()` 管理 UI 选择；`joinLiveQueue()` 读取当前选择并提交 `{ identitySlot, label, deck }`，服务端仍是唯一合法性校验、快照锁定和 hash 来源。
+    - 选择器在 `idle / finished / invalidated` 可改；进入 `queueing / waiting / setup / active` 后禁用，避免玩家误以为排队后还能中途换谱。
+    - `tests/browser_pvp_live_audit.mjs` 覆盖 fake live service 捕获 UI 点击后的 `joinQueue(options.loadout)`，并验证移动端布局不被新增选择器顶出视口。
+    - `tests/browser_pvp_live_real_backend_smoke.mjs` 改为两个真实浏览器页面分别通过 UI 选择破阵 / 守势后入队，再验证重复入队提交篡改谱不能覆盖已锁定 hash、双方 setup / ready / 出牌链路仍走真实后端。
+    - `tests/sanity_pvp_live_ui_contract_checks.cjs` 和 `tests/sanity_release_gate_coverage_checks.cjs` 已固定选择器 DOM、三档 preset、默认 `balanced`、selected payload、入队后禁用态和真实双账号 UI 选谱 finding，防止后续退回硬编码默认谱或绕开 UI。
+  - 当前结论
+    - live PVP 现在具备“入队前从 MVP 基准谱选择、入队后服务端锁定快照、重复提交不能改谱”的可验证闭环；waiting queue 单 SQLite 重启恢复和 MVP 匹配质量公开报告已由后续切片补上，但仍不是完整 V10-S3，后续还需要多实例共享队列声明、首战引导报告、正式评分 / 宽跨度审计、对局手感审计、生产 smoke 和线上部署。
+
+- 2026-06-18: V10 真 PVP live 真实双账号浏览器联调证据切片
+  - 本轮完成
+    - 新增 `tests/browser_pvp_live_real_backend_smoke.mjs`，脚本会启动真实 Node 后端和临时 SQLite，打开两个独立浏览器上下文，分别注册 / 登录两名真实用户，并通过页面中的真实 `BackendClient`、`AuthService`、`PVPService.live` 和 `PVPScene` 完成 live PVP 主路径。
+    - 双账号浏览器 smoke 覆盖：A 入队并锁定斗法谱、A 等待中重复提交不同斗法谱但不能覆盖旧 hash、B 入队匹配、双方看到同一 `matchId` 和互为公开摘要的 loadout hash、`snapshot_locked` 事件可见且对手完整快照 / 手牌不泄露、双方 ready 进入 active、A 出牌后 B 侧状态被真实后端更新。
+    - 该 smoke 不 patch fake live service，不走旧残影匹配或客户端结算路径；它使用真实 `/api/pvp/live/*`、真实登录态、真实浏览器 localStorage API 配置和真实服务端状态机。
+    - `tests/run_browser_release_checks.sh` 新增 `pvp-live-real` audit filter；`tests/sanity_release_gate_coverage_checks.cjs` 固定双账号 smoke 的关键 finding，防止后续只保留 fake UI 审计却误报真人联调已覆盖。
+  - 当前结论
+    - live PVP 已具备“两个真实浏览器账号在本地真实后端完成入队、匹配、快照锁、准备、出牌”的可复查证据；入队前 MVP 基准谱选择、waiting queue 单 SQLite 重启恢复和 MVP 匹配质量公开报告已由后续切片补上，但仍不是完整 V10-S3，后续还需要多实例共享队列声明、首战引导报告、正式评分 / 宽跨度审计、对局手感审计、生产 smoke 和线上部署。
+
+- 2026-06-18: V10 真 PVP live setup snapshot lock / 斗法谱快照切片
+  - 本轮完成
+    - 新增 `server/pvp-live/loadout.js`，服务端在入队时归一化斗法谱：固定 20 张卡、校验 PVP 合法卡池、记录规则版本、合法池 hash、身份槽、构筑标签、`loadoutHash` 和锁定时间；非法构筑返回 `400 + reason`，不进入队列。
+    - `server/pvp-live/live-store.js` 将 `loadoutSnapshot` 锁在 waiting queue entry 上；重复入队、已匹配或已有 active match 时始终复用旧快照，即使客户端后续带了不同或非法斗法谱，也不会覆盖这局的规则、身份槽或 hash。
+    - `server/pvp-live/engine/state.js` 从锁定快照生成起手和牌库，并在初始 setup 事件中写入公开 `snapshot_locked`；`state-view.js` 对本方暴露完整快照，对对手只暴露 `loadoutHash/loadoutSummary`，不泄露完整牌表、手牌或牌库顺序。
+    - `server/routes/pvp-live.js` 透传 `req.body.loadout` 并把斗法谱校验错误映射为可读的 `loadout_illegal` 响应；`js/services/backend-client.js`、`js/scenes/pvp-scene.js` 现在会提交 live 入队斗法谱候选，但服务端仍是唯一锁定和校验方。
+    - `index.html`、`css/pvp.css`、`js/scenes/pvp-scene.js` 在 live 面板展示本方锁定斗法谱和对手公开摘要；`render_game_to_text()` 也只输出双方公开摘要，不把对手完整快照写入浏览器审计 payload。
+    - `tests/sanity_pvp_live_engine_checks.cjs`、`tests/sanity_pvp_live_route_checks.cjs`、`tests/sanity_pvp_live_persistence_checks.cjs`、`tests/sanity_pvp_live_client_checks.mjs`、`tests/sanity_pvp_live_ui_contract_checks.cjs`、`tests/browser_pvp_live_audit.mjs` 和 `tests/sanity_release_gate_coverage_checks.cjs` 已覆盖快照事件、重复入队不改谱、非法构筑拒绝、重启恢复不漂移、对手完整快照不泄露和 release gate marker。
+  - 当前结论
+    - live PVP 的准备房已经具备“入队即锁定规则版本 / 合法池 / 身份槽 / 斗法谱 hash，整局复用快照”的最小闭环；真实双账号浏览器联调证据、入队前 MVP 基准谱选择、waiting queue 单 SQLite 重启恢复和 MVP 匹配质量公开报告已由后续切片补上，但仍不是完整 V10-S3，后续还需要多实例共享队列声明、正式评分 / 宽跨度审计、首战引导报告、对局手感审计、生产 smoke 和线上部署。
+
+- 2026-06-18: V10 真 PVP live ready timeout 无效局切片
+  - 本轮完成
+    - `server/pvp-live/live-store.js` 将 setup 超时纳入服务端 sweep：超过 `readyDeadlineAt` 的准备房会写入公开 `ready_timeout` 与 `match_invalidated(reason=ready_timeout)` 事件，状态落为 `invalidated`，并释放双方 active match 与未读取的 matched queue ticket。
+    - `server/pvp-live/live-store.js` 的 active 回合超时继续保持 `turn_timeout -> finished`，setup 超时不再被误判成胜负，也不走 `completeFinishedMatch()` / live settlement。
+    - `server/routes/pvp-live.js` 支持 `PVP_LIVE_SETUP_READY_TIMEOUT_MS` 测试配置；默认准备确认时限改为策划案口径的 45 秒。
+    - `server/pvp-live/live-persistence.js` 把 `invalidated` 当终态保存，SQLite 重启恢复时不会把准备超时无效局当作 current match 或重新挡住排队。
+    - `js/services/pvp-live-session.js`、`js/scenes/pvp-scene.js`、`css/pvp.css` 同步 `invalidated` phase：UI 展示“无效局 / 不计正式积分”，禁用战斗操作，同时允许重新匹配。
+    - `tests/sanity_pvp_live_route_checks.cjs` 覆盖 setup timeout -> invalidated、无效局事件、未读 ticket 清理和重新排队；`tests/sanity_pvp_live_settlement_checks.cjs` 覆盖 setup timeout 不写 rank/economy/history/settlement gate；`tests/sanity_pvp_live_persistence_checks.cjs` 覆盖 invalidated 重启后不恢复为 current match。
+    - `tests/sanity_pvp_live_session_checks.mjs`、`tests/sanity_pvp_live_ui_contract_checks.cjs`、`tests/browser_pvp_live_audit.mjs` 和 `tests/sanity_release_gate_coverage_checks.cjs` 已钉住 invalidated 前端显示、浏览器审计与 release gate marker。
+  - 当前结论
+    - live PVP 的准备房现在具备“不 ready 不算输赢、不改分、不发正式奖励、可重新匹配”的无效局收口；setup snapshot lock、真实双账号浏览器联调和 waiting queue 单 SQLite 重启恢复已由后续切片补上，但仍不是完整 V10-S3，后续还需要多实例共享队列声明、生产 smoke 和线上部署。
+
+- 2026-06-18: V10 真 PVP live 准备阶段、换牌与双方确认切片
+  - 本轮完成
+    - `server/pvp-live/engine/state.js` 将 live match 初始状态从直接 `active/main` 改为 `setup/setup`，写入 `readyDeadlineAt`、先手席位、换牌上限，并为双方席位保存 `ready`、`readyAt`、`mulliganUsed`。
+    - `server/pvp-live/engine/reducer.js` 新增 setup 阶段专用 `mulligan` 与 `ready` intent；准备阶段禁止 `play_card`、`end_turn`、`surrender`，避免匹配完成后先手立即打出爆发链。
+    - 换牌只允许从自己手牌选择 0-2 张且每人一次；公开事件只广播换牌张数，不泄露具体卡牌 ID；双方 ready 后才进入 `active/main` 并按服务端记录的 `firstSeat` 开始。
+    - `server/pvp-live/engine/state-view.js`、`js/services/pvp-live-session.js`、`index.html`、`js/scenes/pvp-scene.js`、`css/pvp.css` 同步 setup 视图、确认换牌按钮、准备按钮、卡牌选择态与阶段文案。
+    - live UI 在 setup 阶段只允许选择换牌/确认准备；主动出牌与结束回合按钮必须等 battle_started 后才启用，移动端浏览器审计也覆盖这条路径。
+    - `tests/sanity_pvp_live_engine_checks.cjs`、`tests/sanity_pvp_live_route_checks.cjs`、`tests/sanity_pvp_live_persistence_checks.cjs`、`tests/sanity_pvp_live_settlement_checks.cjs`、`tests/sanity_pvp_live_session_checks.mjs`、`tests/sanity_pvp_live_ui_contract_checks.cjs`、`tests/browser_pvp_live_audit.mjs` 已同步覆盖 setup -> mulligan -> ready -> active 纵切。
+  - 当前结论
+    - live PVP 已从“匹配后直接开打”改为“双方先进入准备调息，完成可选换牌与 ready 后再开战”，体验上先堵住先手秒杀和未准备被开局的问题；ready timeout invalidated、setup snapshot lock、真实双账号浏览器联调和 waiting queue 单 SQLite 重启恢复已由后续切片补上，但这仍不是完整 V10-S3，后续还需要多实例共享队列声明、生产 smoke 和线上部署。
+
+- 2026-06-18: V10 真 PVP live 服务端权威结算切片
+  - 本轮完成
+    - 新增 `server/pvp-live/live-settlement.js`，由 live 终局事件中的 `winnerSeat/loserSeat` 在服务端权威推导胜负，不接回旧客户端 `didWin` / `matchTicket` 上报路径。
+    - `server/db/database.js` 新增 `pvp_live_match_settlements` 幂等闸门表，记录 match、胜负双方、终局原因、双方积分变化、奖励和结算 payload。
+    - `server/pvp-live/live-store.js` 在 accepted intent 或 timeout 让 match 进入 `finished` 后触发 settlement；`server/app.js` 在真实后端启动时注入 SQLite persistence + settlement，轻量 route sanity 仍保持内存可测。
+    - live 结算会同时更新双方 `pvp_ranks`、`pvp_economy`，并向 `pvp_match_history` 追加双方视角历史；重复 intent / 重复读取不会二次加分、扣分或发奖。
+    - 根据挑战者巡检补齐 transient failure 重试：终局 snapshot 可先保存，但只有 settlement 成功后才释放 active match；若 settlement 抛错，玩家的 current match 仍可恢复并在下一次 current / match / duplicate / join 触发重试，避免 finished-but-unsettled 对局永久丢失正式积分和奖励。
+    - `server/routes/pvp-live.js` 支持 `PVP_LIVE_TURN_TIMEOUT_MS` 测试配置入口，保留 store 的 1000ms 下限，让真实后端 timeout 结算可以稳定进入集成测试。
+    - 新增 `tests/sanity_pvp_live_settlement_checks.cjs`，真实启动后端和临时 SQLite，注册两名用户、完成 live 投降终局，断言 winner/loser 段位、钱包、历史和 settlement gate 都只写一次；同文件还覆盖 settlement 首次失败后的重试释放，以及 timeout 终局写入 rank/economy/history。
+    - `server/db/database.js` 对 live match / settlement 相关 migration 增加显式错误回传，避免 live 表创建失败时仍误报初始化成功。
+    - `tests/run_node_checks.sh` 和 `tests/sanity_release_gate_coverage_checks.cjs` 已接入 live settlement gate，防止后续把真人排位结算退回旧客户端上报模式，或漏掉 timeout / retry 结算路径。
+  - 当前结论
+    - live PVP 已补上“正式玩法必须服务端写 rank/economy/history”的第一刀；setup/ready/mulligan、真实双账号浏览器联调和 waiting queue 单 SQLite 重启恢复已由后续切片补上，但仍未完成多实例共享队列、生产 smoke 和线上部署。
+
+- 2026-06-18: V10 真 PVP live SQLite 持久化与服务重启恢复切片
+  - 本轮完成
+    - `server/db/database.js` 新增 `pvp_live_matches` 表和按 A/B 席位用户 + 状态查询的索引，用于保存 live match 的服务端权威 `state_json`、席位用户、状态、创建 / 更新时间和终局时间。
+    - 新增 `server/pvp-live/live-persistence.js`，封装 SQLite `saveMatch()` 与 `loadActiveMatchForUser()`；只持久化已开局 match，不把等待队列、matched ticket 或正式积分结算伪装成已完成。
+    - `server/pvp-live/live-store.js` 支持注入 persistence：创建 match、接受 intent、timeout 终局都会写回 SQLite；服务重启后 `getActiveMatchForUser()` 和 `joinQueue()` 可按登录用户从 SQLite hydrate active match，恢复 `matchId`、seat、stateVersion、HP、事件和隐藏信息投影。
+    - `server/app.js` 在 `initDb()` 完成后才挂载 SQLite persistence，避免轻量 route sanity 在未初始化 DB 时误写默认库；`server/routes/pvp-live.js` 保持测试可用的内存 store，同时真实 server 具备 SQLite-backed recovery。
+    - 新增 `tests/sanity_pvp_live_persistence_checks.cjs`，用同一个 `DEFIER_DB_PATH` 启动真实后端、注册两名用户、匹配并提交一次 intent、停服重启，再断言 `/api/pvp/live/matches/current` 和重新入队都恢复同一场、同一 seat、最新 `stateVersion` 与 HP，且不泄露对手手牌。
+    - `tests/run_node_checks.sh` 和 `tests/sanity_release_gate_coverage_checks.cjs` 已接入持久化重启恢复 gate，明确钉住“同一 SQLite DB path survives backend restart”的语义，防止把同进程 current match 恢复误报成重启恢复。
+  - 当前结论
+    - live PVP 现在具备已开局对局的 SQLite-backed 服务重启恢复能力；waiting queue 单 SQLite 重启恢复、正式积分 / 赛季结算、setup/ready/mulligan 和真实双账号浏览器联调已由后续切片补上，但仍未完成多实例共享队列和生产 smoke。
+
+- 2026-06-18: V10 真 PVP live 当前对局恢复与超时基线切片
+  - 本轮完成
+    - `server/pvp-live/live-store.js` 新增当前对局恢复入口和服务端回合超时收口：按登录用户可找回 `activeMatchByUserId` 指向的 match；若活跃对局超过 `turnTimeoutMs` 未推进，会由服务端写入公开 `turn_timeout` 与 `match_finished(finishReason=timeout)` 事件，判当前行动方失败，并释放双方 active match。
+    - `server/routes/pvp-live.js` 新增 `GET /api/pvp/live/matches/current`，必须鉴权，只返回当前登录用户自己的 seat-scoped `stateView`；该路由放在 `GET /matches/:matchId` 之前，避免被当作普通 matchId。
+    - `js/services/backend-client.js` 新增 `getCurrentLivePvpMatch()`，`js/services/pvp-service.js` 新增 `PVPService.live.getCurrentMatch()`，`js/services/pvp-live-session.js` 新增 `resumeCurrentMatch()`；没有当前对局时保持 idle，不把“无对局”显示成错误。
+    - `js/scenes/pvp-scene.js` 的 live tab 打开时会在本地无 queue/match 的情况下尝试恢复当前对局，页面刷新后重新进入 PVP 页可按登录态找回服务端仍在内存中的 live match。
+    - `tests/sanity_pvp_live_route_checks.cjs` 覆盖 current match 恢复、外人不可恢复、超时终局、公开 timeout 事件、timeout 后释放重新排队；client / bridge / session / UI 合同测试同步覆盖 current/resume；`tests/sanity_release_gate_coverage_checks.cjs` 已钉住这些 marker。
+  - 当前结论
+    - live PVP 现在具备“掉前端票据后找回当前对局”和“挂机超时不永久卡局”的基础能力；服务重启后的已开局 match 恢复已由后续 SQLite 持久化切片补上，但正式积分结算、setup/ready/mulligan、真实双浏览器联调和生产 smoke 仍未完成。
+
+- 2026-06-18: V10 真 PVP live 最小可玩 UI 切片
+  - 本轮完成
+    - `index.html` 在天道榜左侧导航新增“实时论道” tab，并在 `.pvp-content-container` 内新增 `#tab-live` 面板；面板提供入队、取消、刷新、结束回合、认输按钮，以及 queueTicket、matchId、seatId、stateVersion、currentSeat、双方公开状态、我方手牌和权威事件流。
+    - `index.html` 的 PVP 返回按钮会先调用 `PVPScene.stopLivePolling()`，避免玩家离开 live tab 后后台轮询继续改 UI。
+    - `js/scenes/pvp-scene.js` 接入 `createPvpLiveSession()`，新增 `getLiveSession()`、`renderLivePanel()`、`joinLiveQueue()`、`cancelLiveQueue()`、`refreshLiveMatch()`、`submitLiveCard()`、`endLiveTurn()`、`surrenderLiveMatch()`、`getLiveSnapshot()`；live UI 只调用 `PVPService.live.*` 和 session controller，不复用旧 `findOpponent()`、`GhostEnemy`、`startPVPBattle()`、`reportMatchResult()` 或旧结果页。
+    - `submitLiveCard()` 现在从服务端 `stateView.opponent.seatId` 推导目标席位，B 席位玩家出牌会指向 A，不再硬编码 `targetSeat = B`。
+    - `js/game.js` 的 `render_game_to_text()` 新增 `pvp.live` 快照，供浏览器审计和后续 UI 自动化读取 live phase / match / seat / stateVersion / hidden-info 状态。
+    - `css/pvp.css` 新增 live 面板样式，沿用当前天道榜水墨 / 暗金视觉；移动端 PVP 导航改为两列换行，`#pvp-screen` 允许纵向滚动，live 面板带滚动安全边距，避免新增第四个 tab 和 live 长面板造成横向溢出或顶部裁切。
+    - 新增 `tests/sanity_pvp_live_ui_contract_checks.cjs`，固定 live tab DOM 钩子、PVPScene live 方法、旧链路隔离、CSS marker、`render_game_to_text` 快照、Node gate 和 browser gate 接线。
+    - 新增 `tests/browser_pvp_live_audit.mjs`，用浏览器 patch 的 fake live service 验证入队、匹配、隐藏对手手牌、提交出牌 intent、B 席位目标 A、投降终局、旧 `findOpponent` / `reportMatchResult` 不被调用，并覆盖桌面截图、移动端顶部可见和底部按钮可触达。
+    - `tests/run_node_checks.sh`、`tests/run_browser_release_checks.sh`、`tests/sanity_release_gate_coverage_checks.cjs` 已接入 live UI 合同与独立 `pvp-live` browser audit。
+  - 当前结论
+    - 玩家现在能在 PVP 页看到并操作最小 live PVP 流程：入队、刷新匹配、出牌、结束回合、认输；这仍是首个可玩 UI 纵切，不代表正式排位完成。下一步需要真实双端浏览器联调、重连 / 超时、持久化、正式积分结算和线上 smoke。
+
+- 2026-06-18: V10 真 PVP live 取消排队与投降终局切片
+  - 本轮完成
+    - `server/pvp-live/engine/reducer.js` 新增 `surrender` intent 支持，投降由服务端 reducer 权威落为 `finished`，并输出 `player_surrendered` 与 `match_finished` 事件；终局后新 intent 仍返回 `match_not_active`，不接受客户端自报胜负。
+    - `server/pvp-live/live-store.js` 新增 waiting queue ticket 取消能力，并在 match 进入 `finished` 后释放双方 `activeMatchByUserId`，避免投降或终局后玩家被旧 active match 卡住无法重新排队。
+    - 根据挑战者巡检继续修复 `pendingQueueResults` 生命周期：matched queue ticket 首次成功读取后即消费；若对局在首位玩家读取前已经终局，终局清理会删除未读取的 matched ticket，避免旧 queue ticket 永久回出旧 `matchId` / 旧 `stateView`。
+    - `server/routes/pvp-live.js` 新增 `POST /api/pvp/live/queue/cancel`，只允许当前登录用户取消自己的 waiting ticket；投降继续走 `/matches/:matchId/intents` 的统一 intent envelope，不新增旧式结算或结果上报路由。
+    - `js/services/backend-client.js` 新增 `cancelLivePvpQueue()`，`js/services/pvp-service.js` 新增 `PVPService.live.cancelQueue()`，`js/services/pvp-live-session.js` 新增 `cancelQueue()` 与 `surrender()`，前端 session 可以回到 idle 或进入 finished；`sync_required` 分支现在也会保留服务端返回的最新权威 `stateView`。
+    - 根据最终挑战者巡检继续补齐 session race：如果首位玩家尚未读取 matched ticket，而对局已经由对手投降等方式终局，下一次 `pollQueue()` 收到 404 / 票据不存在时会退出 `waiting`、清空 `queueTicket`，并给出 `queue_ticket_expired`，避免 UI 假卡在等待态。
+    - `tests/sanity_pvp_live_engine_checks.cjs`、`tests/sanity_pvp_live_route_checks.cjs`、`tests/sanity_pvp_live_client_checks.mjs`、`tests/sanity_pvp_live_service_bridge_checks.cjs`、`tests/sanity_pvp_live_session_checks.mjs` 补齐取消排队、投降终局、终局后重新排队、matched ticket 一次性消费、终局清理未读 ticket、过期 queue ticket 退出 waiting、他人取消负例、`sync_required` 权威视图吸收，以及 live 链路不接旧 `didWin` / `matchTicket` / `reportResult` 的断言。
+    - `tests/run_node_checks.sh` 与 `tests/sanity_release_gate_coverage_checks.cjs` 已钉住本轮 live cancel / surrender / queue ticket 生命周期 / queue ticket 过期收口 / sync_required 覆盖，避免后续 UI 接入时绕回旧 PVP 结算链或旧轮询状态。
+  - 当前结论
+    - live PVP 已具备更完整的最小生命周期：等待可取消、对局可投降、终局可释放并重新排队，旧 matched ticket 不会长期污染轮询，前端也不会在已过期 ticket 上假卡等待；但正式真人 PVP 仍未完成，下一步还需要玩家可见 UI、重连 / 超时、正式积分结算、持久化、浏览器交互验收和生产 smoke。
+
+- 2026-06-17: V10 真 PVP live 前端 client 合同切片
+  - 本轮完成
+    - `js/services/backend-client.js` 新增 live PVP 4 个独立方法：`joinLivePvpQueue()`、`getLivePvpQueueStatus()`、`getLivePvpMatch()`、`submitLivePvpIntent()`，统一走 `/api/pvp/live/*`，不复用旧 `/api/pvp/match` 或 `/api/pvp/match/result`。
+    - `js/services/pvp-service.js` 新增 `PVPService.live` 命名空间，只转发 live queue / match / intent，不暴露 `reportResult` 或任何客户端自报胜负接口，避免接回旧 `reportMatchResult()` 的 rank / history / season 写入链。
+    - 新增 `tests/sanity_pvp_live_client_checks.mjs`，覆盖 live 路径、空 ticket / matchId 本地失败、displayName trim/clamp、payload clone、`stateVersion` 归一，以及 `matchTicket` / `didWin` 不进入 live intent payload。
+    - 新增 `tests/sanity_pvp_live_service_bridge_checks.cjs`，覆盖 `PVPService.live` 只调用 `BackendClient` live 方法，且不调用 legacy `reportPvpMatchResult()`。
+    - `tests/run_node_checks.sh` 接入 live client/bridge 两条检查；`tests/sanity_release_gate_coverage_checks.cjs` 也钉住这些检查和 `/api/pvp/live/*` 路径隔离，防止后续被误删。
+  - 当前结论
+    - live PVP 已有服务端权威基础和前端 client 合同，但仍未接入实际真人 PVP UI；下一步应实现玩家可见入口 / 等待态 / matched 状态，并继续隔离旧 GhostEnemy、旧结果页和赛季验证写回。
+
+- 2026-06-17: V10 真 PVP live session controller 切片
+  - 本轮完成
+    - 新增 `js/services/pvp-live-session.js`，提供无 DOM、可注入依赖的 live session controller，覆盖 `idle -> queueing/waiting -> matched -> active/sync_required/finished` 的前端状态流。
+    - session controller 只调用 `PVPService.live` / 注入的 live service，不 import 旧 `PVPService` 依赖链，不调用 `findOpponent()`、`reportMatchResult()` 或任何客户端自报胜负接口。
+    - 新增 `tests/sanity_pvp_live_session_checks.mjs`，覆盖入队、轮询匹配、刷新战局、提交 intent 自动注入当前 `stateVersion`、隐藏对手手牌、缺失 queue ticket 本地失败，以及不触碰旧 PVP 路径。
+    - `tests/run_node_checks.sh` 和 `tests/sanity_release_gate_coverage_checks.cjs` 接入 live session 检查，防止后续 UI 接入时绕回旧 ghost / settlement 链。
+  - 当前结论
+    - live PVP 前端已经有可绑定的 session 状态机；下一步可以开始做玩家可见入口和等待 / 匹配 / 行动 UI，但仍不能复用旧 `PVPScene.startPVPBattle()`、`GhostEnemy`、旧结果页或赛季验证写回。
+
+- 2026-06-17: V10 真 PVP 首个服务端权威开发切片
+  - 本轮完成
+    - 新增 `server/pvp-live/engine/` 权威战斗内核，提供 `RULE_VERSION`、确定性初始状态、seat-scoped `StateView`、`reduceIntent()`、首动伤害预算、`budget_clamped` 公开事件、重复 intent 幂等和冲突拒绝。
+    - 新增 `server/pvp-live/live-store.js` 和 `server/routes/pvp-live.js`，提供最小 HTTP live PVP 闭环：双用户入队、第二人撮合、第一人轮询拿同一场、按登录用户绑定 seat、提交 intent 推进同一个服务端状态。
+    - `server/app.js` 挂载 `/api/pvp/live/*`，并放在旧 `/api/pvp/*` 快照路由之前，避免新 live ranked 语义误落到旧残影 / ticket 链路。
+    - 新增 `tests/sanity_pvp_live_engine_checks.cjs` 和 `tests/sanity_pvp_live_route_checks.cjs`，覆盖隐藏信息投影、反先手爆发预算、重复 intent 幂等、状态过期、鉴权、双人撮合、服务端状态推进和对手视角不泄露手牌。
+    - 根据挑战者巡检补齐并修复两个 P0：同一 intent 产生重复 `eventId/sequence`、已匹配用户可重复入队并开启第二场；当前由事件序号唯一性、active match rejoin、终局后重复 intent 幂等断言覆盖。
+    - 补齐服务端 turn-flow 和访问控制负向用例：`end_turn` 后 seat 切换、错 seat 行动拒绝、终局后新 intent 拒绝、非参战用户不可读取 match、他人不可读取 queue ticket。
+    - `tests/run_node_checks.sh` 接入两条 live PVP sanity，整套 `npm run test:node` 已通过。
+    - `docs/designer_major_upgrade_implementation_input_v1.md` 同步旧 PVP 只读巡检结论，明确旧天道榜入口、残影快照、客户端 `didWin`、本地结算、旧 ticket、赛季验证和旧测试绿灯都不能作为 V10 真人排位真源。
+  - 当前结论
+    - V10 真 PVP 已从方案输入进入开发测试；当前服务端权威最小闭环可作为后续切片基础，但不代表正式排位完成。下一步应继续补重连 / 持久化 / 正式积分隔离 / 前端真人入口 / 浏览器与生产 smoke。
+
+- 2026-06-17: 当前实现 vs V10 真 PVP 目标差距
+  - 固定提醒
+    - `progress.md` 下方历史记录中出现的“镜像演武兜底”“残影 fallback”“客户端本地胜负路径”“旧匹配/结算 API 未齐”等描述，属于旧实现或历史阶段，不是 V10 真 PVP 的目标方案。
+    - V10 真 PVP 正式排位目标以 `docs/designer_major_upgrade_overall_plan_v1.md` 为准：排位对手只能是真实在线玩家，匹配不到真人只能继续等待、取消或进入问道练习，不能自动切残影。
+  - must_replace_before_true_pvp
+    - `mirror_fallback`: 无真人时自动回退镜像 / 残影演武的正式排位路径必须替换。
+    - `local_result_path`: 客户端上报胜负或本地结算路径不能写正式积分、段位、奖励或正式历史。
+    - `missing_backend_rank_match_settlement`: 真人匹配、服务端 reducer、事件日志、幂等结算、赛季积分和回放安全链路必须补齐。
+    - `old_ticket_path`: 旧 `pvp_match_tickets` / 残影练习 ticket 不能被 live ranked 消费。
+    - `ghost_as_ranked_opponent`: `GhostEnemy` 只能用于练习、托管、回放对照或 engine 单测，不能作为正式排位主对手。
+  - 当前结论
+    - 当前仍处于 V10 整体方案和开发合同打磨阶段，尚未进入具体源码文件实施计划，更未完成开发、封板、push 或上线。
+
+- 2026-06-17: V10 真 PVP 开发合同继续打磨
+  - 本轮完成
+    - `docs/designer_major_upgrade_overall_plan_v1.md` 新增状态映射合同、开局前结果矩阵、断线 / 超时 / 托管统一计数模型、回放受众矩阵、争议工单状态机和 `PVP-US-30` 双方体验公平故事。
+    - `docs/designer_major_upgrade_overall_plan_v1.md` 把体验公平审计接入非文件级合同、实施切片、验收证据和完成定义，要求非游戏局、控制锁死、不可读爆发、有效选择低分位和败因解释覆盖率都可验收。
+    - `docs/designer_major_upgrade_overall_plan_v1.md` 新增跨文档真值索引和当前未冻结范围，明确本阶段只保存整体方案，不提前锁定具体源码文件、接口落点或测试路径。
+    - `docs/designer_major_upgrade_requirements_v7.md` 修正玩家回放不得返回完整双方手牌历史，明确 `server_full / replay_self / replay_public / audit_safe` 回放受众矩阵，并同步开局前无效分支、统一计数模型、长局平局结算口径和新增平衡门槛。
+    - `docs/designer_major_upgrade_requirements_v7.md` 补齐 matchmaking snapshot 版本组、`match_found` 匹配质量字段、匹配质量报告、首战进度持久化和赛季循环四类数据合同。
+    - `docs/designer_major_upgrade_pvp_content_pack_v1.md` 与 `docs/designer_major_upgrade_pvp_balance_fixtures_v1.md` 扩展仿真报告字段，覆盖镜像先后手差、调息后有效行动率、中高爆发反制窗、软锁压力、资源脚本化、克制网、泛用牌 uplift、实际复杂度和体验公平。
+    - `docs/designer_major_upgrade_pvp_content_pack_v1.md` 与 `docs/designer_major_upgrade_pvp_balance_fixtures_v1.md` 补齐 `staple_watch` 升级矩阵、生态克制图合同、golden 覆盖矩阵、公开复盘推导审计和匹配质量报告门槛。
+    - `docs/designer_major_upgrade_pvp_ui_copy_samples_v1.md` 补齐首战三模式差异、赛季变更触达时机、赛季回访卡、好友约战状态、争议结论文案、败因证据链和移动端高风险遮挡矩阵。
+    - `docs/designer_major_upgrade_overall_plan_v1.md` 补齐娱乐性与再来一局合同、流派探索合同、反脚本化资源节奏冻结条件、反刷场奖励合同、练习 / 约战正向乐趣结构和失败复盘最短行动原则。
+    - `docs/designer_major_upgrade_overall_plan_v1.md` 与 `docs/designer_major_upgrade_requirements_v7.md` 统一预算命中语义：合法行动超预算时返回 accepted、推进 revision、写 `budget_clamped` 公开事件，不再作为旧版预算 reject。
+    - `docs/designer_major_upgrade_overall_plan_v1.md`、`docs/designer_major_upgrade_requirements_v7.md`、`docs/designer_major_upgrade_pvp_ui_copy_samples_v1.md` 统一护命窗口为双方前两次行动窗口，并补齐 `settling` 终局时间线、三类 dismiss 状态隔离和 UI 枚举面拆分。
+    - `docs/designer_major_upgrade_pvp_content_pack_v1.md` 与 `docs/designer_major_upgrade_pvp_balance_fixtures_v1.md` 新增构筑身份差异、跨谱重合度、前 3 轮重复局面、镜像分支熵和核心牌曝光率门槛，避免首发 PVP 变成脚本化或换皮构筑。
+    - `progress.md` 顶部新增“当前实现 vs V10 真 PVP 目标差距”固定区块，明确旧镜像 / 残影 fallback、本地胜负路径和缺失后端真人匹配结算链路都必须在真 PVP 前替换。
+    - `docs/README.md` 同步当前方案索引，继续明确本阶段不锁具体修改文件。
+  - 当前结论
+    - 当前方案进一步从“场景可验收”推进到“合同可拆开发”：PVP 生命周期、回放安全、结算边界、体验公平、娱乐性、好友约战、争议反馈、匹配质量、首战恢复、赛季循环、反刷场奖励和移动端验收都已有可追踪口径；具体修改文件、接口落点和测试路径仍留到后续按最新仓库结构重生成实施计划。
+
+- 2026-06-17: V10 真 PVP 实施计划生成门禁补强
+  - 本轮完成
+    - `docs/designer_major_upgrade_overall_plan_v1.md` 新增 `10.10 实施计划生成门禁`，明确下一阶段不能直接跳到源码改动，必须先交付合同冻结记录、用户故事覆盖矩阵、风险域映射、证据门禁矩阵、回滚和隔离口径、文档漂移审计、当前仓库状态摘要。
+    - 实施计划输出被限制在体验切片、责任域和验收门槛层级；在文档漂移审计完成前，不得写死最终源码文件名、目录结构、模块 owner、接口路径、迁移文件名、测试文件名、部署脚本、配置键名或监控面板地址。
+    - `docs/README.md` 同步主方案入口说明，明确当前整体方案已经包含实施计划生成门禁，但仍不锁定具体修改文件。
+  - 当前结论
+    - 当前方案继续向“可直接生成开发计划”推进：下一步可以先生成非文件级实施计划输入包，再按最新仓库状态拆具体文件；这避免在仓库结构可能变化时提前锁死实现路径。
+
+- 2026-06-17: V10 真 PVP P0 合同与协议漂移继续收口
+  - 本轮完成
+    - 根据只读挑战巡检，`docs/designer_major_upgrade_requirements_v7.md` 清理旧 action 协议壳：REST / WS 行动样例统一为 `intentId / intentType / stateVersion / payload` 的 intent envelope，传输层结果统一为 `intent_result(accepted/rejected)`，不再使用旧本地行动 ID、旧状态基线和旧 ack / reject 消息名作为新合同。
+    - `docs/designer_major_upgrade_requirements_v7.md` 修正 `battle_end` 内联 settlement 的漂移：终局消息改为 `match_finished -> settlement_pending -> settlement_written` 时间线，外部只读结果不能成为结算真源。
+    - `docs/designer_major_upgrade_requirements_v7.md` 将早期具体落点降级为职责域 / 历史映射示例，去掉会误导为已冻结文件计划的强制语气；`docs/designer_major_upgrade_pvp_balance_fixtures_v1.md` 将 fixture 文件清单改为未冻结的证据结构示例。
+    - `progress.md` 为 2026-03-19 的旧 PVP / 残影约战历史块新增块级标记，明确镜像演武、镜像兜底、guest-pvp 等历史记录不能作为 V10 真 PVP 当前方案或验收依据。
+    - `docs/designer_major_upgrade_overall_plan_v1.md` 新增先手 / 座位分配合同、开局前对手信息揭示矩阵、匹配质量分层门槛、计时 SLA、复合终局优先级、模式 / 终局 / 奖励计数真值表、赛季奖励快照与争议口径、`drillScenario` 合同、好友约战 `friendlySeries` 合同、回放和争议留存周期。
+    - `docs/designer_major_upgrade_requirements_v7.md` 和 `docs/README.md` 同步上述新增整体口径，仍只冻结非文件级合同，不锁定具体源码文件、接口落点或测试文件名。
+  - 当前结论
+    - 当前方案继续从“整体可讲清”推进到“边界可执行”：先手公平、看信息 dodge、防刷奖励、复盘练习、复合终局、计时、赛季收官和旧协议漂移都有了唯一口径，下一阶段更适合生成非文件级实施计划输入包。
+
+- 2026-06-17: V10 真 PVP 场景化验收与支撑文档漂移补强
+  - 本轮完成
+    - `docs/designer_major_upgrade_overall_plan_v1.md` 新增 `PVP-US-29` 赛季回访循环故事，并把 `PVP-US-15` 复盘从“看懂失败”扩展为能带上下文进入练习、斗法谱调整、继续排位或好友复现。
+    - `docs/designer_major_upgrade_overall_plan_v1.md` 补入首战异常分支、双端弱网公平报告、赛季循环审计，并把 V10-S7 / V10-S8 范围扩展到 `PVP-US-29`。
+    - `docs/designer_major_upgrade_requirements_v7.md` 统一 action reject machine code，明确旧 `not_current_turn` / `stale_revision` / `effect_disabled_in_pvp` 等只允许作为迁移期别名，不能进入新合同、fixture、浏览器断言或玩家文案映射。
+    - `docs/designer_major_upgrade_requirements_v7.md` 补齐首战异常分支矩阵、首败复盘下一步动作、双端弱网公平验收，并把完成定义扩展到 19 条。
+    - `docs/designer_major_upgrade_pvp_ui_copy_samples_v1.md` 新增首战引导与赛季变更沟通样例，覆盖首次确认卡、规则短卡、推荐谱、排位前演武、首战异常、首败复盘入口、平衡补丁、合法池变化、规则版本变化和赛季重置。
+    - `docs/designer_major_upgrade_pvp_content_pack_v1.md` 新增构筑健康与复杂度预算，要求角色位覆盖、推荐谱复杂度限制、`staple_watch` 泛用牌压力监控和主宰构筑 / 假流派阻断。
+    - `docs/designer_major_upgrade_pvp_balance_fixtures_v1.md` 新增 `replay_public` / `audit_safe` 隐藏信息 golden case、隐藏信息审计报告字段，以及构筑曲线、角色位、泛用牌压力、复杂度违规和元环境 spread 报告字段。
+    - `docs/README.md` 同步支撑文档范围说明。
+  - 当前结论
+    - 当前方案进一步从“原则完整”推进到“场景可验收”：首战失败路径、失败后继续玩、弱网双方公平、赛季回访和协议码统一都有明确证据口径，后续更适合按最新仓库结构生成实施计划。
+
+- 2026-06-17: V10 真 PVP 需求拆解同步主方案新增整体口径
+  - 本轮完成
+    - `docs/designer_major_upgrade_requirements_v7.md` 新增 `1.4 当前主方案增补范围`，把首战引导、赛季变更沟通、对局手感、低干扰社交和支撑文档漂移审计纳入当前整体需求输入。
+    - 前端体验职责补充为非文件级口径：首战引导、等待扩圈、行动同步、弱网恢复、低干扰社交和赛季提示必须被实现，但不锁定具体页面、组件或测试文件落点。
+    - 根据只读侧翼巡检补齐合同粒度：新增首战引导合同、赛季变更公告字段、对局手感状态证据矩阵、社交安全底线和文档漂移审计清单。
+    - 明确首战引导复杂度预算、跳过/回看入口、无隐藏数值补偿、引导奖励边界、旧斗法谱替换建议、拉黑后仍匹配解释、匹配评分不受社交影响和脱敏战报字段。
+    - Phase 0、Phase 3、Phase 4、Phase 5 验收同步补入文档漂移、首战引导、等待同步、复盘学习、脱敏战报、举报争议、赛季规则快照和发布候选审计。
+    - 完成定义从 12 条扩展到 18 条，确保 `PVP-US-24` 至 `PVP-US-28` 的核心验收不只停留在主方案中。
+    - `docs/README.md` 同步 requirements 支撑范围说明，继续强调本阶段不冻结具体修改文件，但冻结体验合同、审计字段和完成定义。
+  - 当前结论
+    - 当前整体方案的主文档和需求拆解已经对齐到可执行合同粒度：后续即使文件结构变化，也能按同一套体验、规则、安全、审计和上线验收口径重新生成开发计划。
+
+- 2026-06-17: V10 真 PVP UI 文案样例对局手感与低干扰社交同步
+  - 本轮完成
+    - `docs/designer_major_upgrade_pvp_ui_copy_samples_v1.md` 增加阶段说明，明确本文只冻结玩家可见口径和浏览器验收要点，不冻结具体页面、组件或测试文件落点。
+    - 对局 HUD 文案补齐 `裁定中`、`正在同步权威状态`、行动 pending、accepted、rejected、duplicate、sync_required、行动计时、对手思考计时、弱网恢复和动画跳过文案。
+    - Toast 与 reject 文案新增 `action_pending`、`duplicate_action`、`sync_required`、`opponent_thinking`、`timer_low`、`timer_expired`、`emote_limited`、`emote_muted`。
+    - 新增 `7. 低干扰社交与战报分享`，覆盖预设表情、静音/恢复、举报异常、发起约战、加好友、分享脱敏战报、实时观战禁用提示和社交红线。
+    - 浏览器审计断言同步补入行动提交、重复行动、过期同步、对手计时、脱敏战报、举报、约战、静音、无自由文本聊天、无实时观战入口和移动端遮挡检查。
+    - 根据只读侧翼巡检补齐漏项：文档优先级与漂移说明、等待扩圈/长等待三选一、需要刷新、行动待确认、拉黑/解除拉黑、拉黑后仍匹配解释和表情冷却中限频态。
+    - `docs/README.md` 同步 UI 文案样例范围说明。
+  - 当前结论
+    - 主方案新增的 `PVP-US-26` / `PVP-US-27` 已有玩家可见文案和浏览器验收口径支撑；后续开发时不需要临时发明对局手感和社交文案。
+
+- 2026-06-17: V10 真 PVP 整体方案支撑文档优先级与漂移处理补强
+  - 本轮完成
+    - `docs/designer_major_upgrade_overall_plan_v1.md` 在方案定位中新增文档优先级：玩法、公平、上线门槛以主方案为准；合法牌池和基准谱以内容包为准但不得突破主方案禁用机制；文案和 fixture 作为素材，旧文件路径不能当成冻结事实。
+    - 新增 `10.7 支撑文档优先级与漂移处理合同`，明确进入开发前必须做文档漂移审计，列出主方案、内容包、需求拆解、UI 文案样例和 fixture 合同之间的冲突、裁定和重生成条件。
+    - 非文件级开发合同新增支撑文档漂移合同；用户故事新增 `PVP-US-28`，要求后续开发负责人能判断冲突时以哪个文档为准。
+    - 首版切片同步：V10-S0 和 V10-S8 纳入文档漂移审计，V10-S8 覆盖范围扩展到 `PVP-US-01` 至 `PVP-US-28`。
+    - 验收证据模板新增文档漂移审计，阻断开发计划冻结、封板和上线宣称。
+    - `docs/designer_major_upgrade_requirements_v7.md` 和 `docs/designer_major_upgrade_pvp_balance_fixtures_v1.md` 增加阶段说明，明确其中具体目录、模块、接口、fixture 路径和测试文件名当前不冻结，进入开发前必须按最新仓库结构重生成实施计划。
+    - `docs/README.md` 同步主方案入口说明，仍不锁定具体修改文件。
+  - 当前结论
+    - 当前方案更接近可直接开发：不仅有玩法和验收合同，也明确了支撑文档之间的真值顺序，避免后续把过早写下的旧路径误当成最终开发方案。
+
+- 2026-06-17: V10 真 PVP 整体方案对局手感与低干扰社交补强
+  - 本轮完成
+    - `docs/designer_major_upgrade_overall_plan_v1.md` 新增 `3.3 对局手感、等待体验与低干扰社交`，把 pending、accepted、rejected、duplicate、sync_required、对方回合等待、行动计时、弱网恢复、动画跳过和移动端确认纳入整体方案。
+    - 明确首版计时原则：准备阶段和行动阶段分离，行动计时双方可见，最后 10 秒有明显提示，连续超时才进入托管或判负，客户端卡顿和短时后台切换不能直接等同恶意拖局。
+    - 明确低干扰社交边界：首版只做预设表情、静音、限频、结算再战、加好友、举报异常和脱敏战报分享；不做自由文本聊天和实时观战。
+    - 非文件级开发合同新增对局手感合同和社交安全合同；用户故事新增 `PVP-US-26` 行动/等待/同步状态感知、`PVP-US-27` 安全表达、再战、举报和屏蔽。
+    - 首版切片同步：V10-S0、V10-S1、V10-S3、V10-S4、V10-S5、V10-S6、V10-S8 纳入对局手感或社交安全，V10-S8 覆盖范围扩展到 `PVP-US-01` 至 `PVP-US-27`。
+    - 验收证据模板新增对局手感审计和社交安全审计，要求证明操作状态可感知、战报脱敏、实时观战禁用、社交动作不影响积分或奖励。
+    - `docs/README.md` 同步主方案入口说明，仍不锁定具体修改文件。
+  - 当前结论
+    - 当前整体方案更接近真正可玩的真人 PVP：不只保证规则公平，也要求双方在等待、出牌、弱网、结算和轻社交里都有明确反馈，且社交不会破坏隐藏信息和正式结算。
+
+- 2026-06-17: V10 真 PVP 整体方案首战引导与赛季变更沟通补强
+  - 本轮完成
+    - `docs/designer_major_upgrade_overall_plan_v1.md` 新增 `7.8 首战引导与赛季变更沟通`，把第一次进入真人排位、规则短卡、推荐谱、排位前演武、首败复盘和补丁公告纳入整体方案。
+    - 明确新手复杂度预算：首次入口只解释真人、正式积分、练习隔离三个核心概念；推荐谱不得包含 0 费、免费释放、无限递归、额外回合、硬控、随机闪避或复杂检索。
+    - 新增赛季变更沟通表，覆盖文案修正、平衡数值、合法池变化、规则版本变化和赛季重置；已入队或已开局对局继续使用入队规则快照。
+    - 非文件级开发合同新增首战引导合同和赛季变更合同；用户故事新增 `PVP-US-24` 首战短引导和 `PVP-US-25` 补丁/赛季变更影响说明。
+    - 首版切片同步：V10-S0、V10-S3、V10-S7、V10-S8 纳入首战引导、补丁公告、赛季变更公告审计，V10-S8 覆盖范围扩展到 `PVP-US-01` 至 `PVP-US-25`。
+    - 验收证据模板新增首战引导报告和赛季变更公告审计，要求证明无隐藏数值补偿、旧回放兼容、旧斗法谱失效时有替换建议。
+    - `docs/README.md` 同步主方案入口说明，仍不锁定具体修改文件。
+  - 当前结论
+    - 当前整体方案进一步接近可直接开发：真人 PVP 不只要公平能打，还要让新玩家能顺利完成第一局、让老玩家理解补丁和赛季变化，并避免规则暗改或历史回放失真。
+
+- 2026-06-17: V10 真 PVP 整体方案反作弊与争议处理补强
+  - 本轮完成
+    - `docs/designer_major_upgrade_overall_plan_v1.md` 新增 `6.6 反作弊、滥用防护与争议处理合同`，把客户端篡改、重放、自动化刷局、恶意拖局、合谋刷分、规则漏洞利用和争议申诉纳入整体方案。
+    - 明确反作弊原则：服务端权威优先，不用单一弱信号直接封禁、扣分或没收奖励；连接差、移动端误触和短时后台切换不能自动等同作弊。
+    - 新增争议证据包字段，要求包含对局、赛季、规则版本、构筑快照、action 意图序列、事件日志、状态 hash、RNG 结果摘要、终局和奖励写入记录。
+    - 新增申诉结论类型：`normal_result`、`invalidated_bug`、`abuse_confirmed`、`insufficient_evidence`、`duplicate_report`，避免异常局只靠人工口头判断。
+    - 非文件级开发合同新增风控争议合同；用户故事新增 `PVP-US-23` 异常局申诉与可复查结论。
+    - V10-S4 扩展为“重连、超时、结算与争议”，V10-S8 覆盖范围扩展到 `PVP-US-01` 至 `PVP-US-23`。
+    - 验收证据模板新增风控争议审计，并把灰度监控和发布候选总报告同步补入风控争议结果。
+    - `docs/README.md` 同步主方案入口说明，仍不锁定具体修改文件。
+  - 当前结论
+    - 当前整体方案继续向可直接开发收口：真人 PVP 不只保证对局内公平，也要求异常局可隔离、可申诉、可复核，同时避免正常玩家被弱信号误伤。
+
+- 2026-06-17: V10 真 PVP 整体方案上线灰度与生产验证补强
+  - 本轮完成
+    - `docs/designer_major_upgrade_overall_plan_v1.md` 新增 `10.6 上线灰度与生产验证合同`，把候选版准入、生产 smoke、灰度阶段、线上监控、阻断阈值和回滚动作固化为非文件级合同。
+    - 明确正式环境以 `https://080305.xyz/` 为玩家访问目标；当前方案只冻结验证口径，不锁具体部署脚本、测试文件或监控实现。
+    - 生产 smoke 覆盖正式站点可达、API health、注册登录、存档读写、残影上传拉取、测试赛季真人 PVP 和正式积分隔离。
+    - 灰度阶段分为内部测试赛季、小范围自愿灰度、正式赛季预开放和全量开放；每一步都保留停排、冻结匹配、规则回滚和积分隔离能力。
+    - 新增立即阻断条件：隐藏信息泄露、后手首次真实行动前死亡、后手无合法非投降行动线、重复结算、客户端自报胜负改正式积分、残影污染正式排位和生产关键链路异常。
+    - 新增 `PVP-US-22`，要求正式服玩家只会在通过灰度和生产验证的版本中进入排位；V10-S8 覆盖范围同步扩展到 `PVP-US-01` 至 `PVP-US-22`。
+    - 验收证据模板新增生产 smoke 报告和上线灰度监控报告，发布候选总报告同步补入灰度结论。
+    - `docs/README.md` 同步主方案入口说明，仍不锁定具体修改文件。
+  - 当前结论
+    - 当前整体方案进一步接近可直接开发：不仅知道怎么做真人 PVP，也明确了什么时候能上正式服、出问题怎么停、怎么回滚、哪些事故必须立即阻断。
+
+- 2026-06-17: V10 真 PVP 整体方案匹配公平与赛季积分补强
+  - 本轮完成
+    - `docs/designer_major_upgrade_overall_plan_v1.md` 新增 `3.1 匹配公平与等待策略`，把真人匹配从“能匹配到人”推进到“匹配跨度、等待扩圈、连接健康和新玩家保护可审计”。
+    - 新增 `3.2 新玩家与低样本保护`，明确前 5 场正式排位优先匹配低样本或相邻低段玩家；保护只影响匹配、解释和可见积分平滑，不能增加生命、抽牌、灵力、伤害、起手质量或隐藏爆率。
+    - 新增 `7.7 段位、赛季积分与结算激励`，冻结匹配评分、赛季积分和段位徽章三层数据边界；积分只来自正式服务端结算，奖励只给荣誉和表达，不给排位强度。
+    - 非文件级开发合同新增匹配质量合同和赛季积分合同；用户故事新增 `PVP-US-20` 匹配质量、`PVP-US-21` 积分解释。
+    - 首版切片同步：V10-S3 增加匹配质量审计，V10-S7 增加赛季积分审计，V10-S8 覆盖范围扩展到 `PVP-US-01` 至 `PVP-US-21`。
+    - 验收证据模板新增匹配质量报告和赛季积分审计，要求宽跨度匹配、定级、无效局、重复结算和奖励边界都有可复查证据。
+    - `docs/README.md` 同步主方案入口说明，仍不锁定具体修改文件。
+  - 当前结论
+    - 当前方案继续向可直接开发收口：真人 PVP 不只保证战斗内公平，也开始约束匹配池、等待体验、新玩家挫败和赛季长期动机。
+
+- 2026-06-17: V10 真 PVP 整体方案事件日志与回放可见性补强
+  - 本轮完成
+    - `docs/designer_major_upgrade_overall_plan_v1.md` 新增 `6.5 事件日志与回放可见性合同`，把重连、复盘、争议排查和平衡仿真必须共用的事件事实源固化到整体方案。
+    - 明确事件日志 append-only、连续序号、由初始快照 + 事件日志重建回放；客户端动画、toast 和本地缓存不能成为事实来源。
+    - 新增事件最小包络，覆盖 `eventId`、`matchId`、`sequence`、`eventType`、`turnIndex`、`roundIndex`、`actingSeat`、状态版本、公开摘要、payload、可见性、脱敏标签和状态摘要。
+    - 新增首版事件类型清单，覆盖对局创建、快照锁定、调息、准备、回合开始、状态结算、抽牌、手牌上限、灵力重置、出牌、拒绝、伤害、护盾、治疗、状态、setup、预算截断、回合结束、超时、托管、终局和结算写入。
+    - 新增 `server_full`、`seat_self_live`、`seat_opponent_live`、`replay_self`、`replay_public`、`audit_safe` 六类可见性层级，确保复盘可学习但不泄露对手手牌、牌库顺序或随机种子。
+    - 新增复盘标记：首次压力、最大爆发、预算救场、错过反制窗口、无有效行动风险、长局转折、托管影响。
+    - `docs/README.md`、非文件级开发合同、验收证据模板和当前完成定义同步补入事件日志与回放可见性口径。
+  - 当前结论
+    - 当前方案进一步接近可直接开发：重连、复盘、隐藏信息审计和浏览器验收可以围绕同一套事件与可见性合同推进。
+
+- 2026-06-17: V10 真 PVP 整体方案行动意图与拒绝码补强
+  - 本轮完成
+    - `docs/designer_major_upgrade_overall_plan_v1.md` 新增 `6.4 行动意图与拒绝码合同`，把 HTTP、实时连接、重连补发和测试夹具需要共用的动作语义固化到整体方案。
+    - 行动意图最小字段冻结为 `intentId`、`matchId`、`seatId`、`intentType`、`ruleVersion`、`stateVersion`、`payload`、`submittedAt`，明确客户端不能携带权威结果。
+    - 首版动作类型覆盖排队、取消、调息、准备、出牌、结束回合、投降、重连同步和回放请求；行动结果统一为 `accepted`、`rejected`、`duplicate`、`sync_required` 四类。
+    - 新增稳定拒绝码清单，覆盖非本局、状态不允许、非当前回合、状态过旧、规则版本不一致、快照已锁定、禁用牌、灵力不足、目标非法、调息已用、预算拦截、超时、终局已结算等场景。
+    - `docs/README.md` 和当前完成定义同步补入行动意图与拒绝码口径，仍不绑定具体接口文件或代码落点。
+  - 当前结论
+    - 当前方案对真人 PVP 的协议层更接近可开发：前端、服务端、仿真和回放可以围绕同一组动作、结果和拒绝语义收口。
+
+- 2026-06-17: V10 真 PVP 整体方案回合结构与长局判定补强
+  - 本轮完成
+    - `docs/designer_major_upgrade_overall_plan_v1.md` 新增 `4.3 回合结构与行动窗口`，把整轮、回合、行动窗口、真实行动窗口和公开 setup 的语义冻结到整体方案。
+    - 新增固定回合阶段：回合开始、起始状态结算、抽牌、灵力重置、行动窗口、回合结束、终局检查；明确首版不提供响应链、打断栈和对手回合即时出牌，优先保障真人 PVP 的节奏、公平、移动端可读性和确定性回放。
+    - 明确手牌上限只限制继续抽牌，不触发随机弃牌、自动弃牌或隐藏弃牌收益；后手公平检查按“后手第一个真实行动窗口”计算，不把托管动作算作玩家行动权。
+    - 新增 `4.4 长局强制判定`，把第 14 整轮后的 `round14_score` / `round14_draw` 收束公式机械化，分数只来自公开生命差、有效伤害、有效防守、公开 setup 转化、资源效率、预算拦截惩罚和托管惩罚。
+    - `docs/README.md` 和验收证据模板同步补入回合结构与长局判定口径，仍不锁定具体修改文件。
+  - 当前结论
+    - 当前方案继续向“可直接开发”推进：战斗内核、仿真、回放和 UI 不再需要各自解释回合阶段与长局收束规则。
+
+- 2026-06-17: V10 真 PVP 整体方案验收证据模板补强
+  - 本轮完成
+    - `docs/designer_major_upgrade_overall_plan_v1.md` 新增 `10.5 验收证据产物模板`，把后续开发需要提交的证据类型固化为非文件级合同。
+    - 证据模板覆盖规则快照、内容映射、构筑快照、后手开局压测、全量平衡仿真、协议一致性、隐藏信息审计、浏览器全路径、移动端布局、复盘样本、模式隔离、奖励边界和发布候选总报告。
+    - 每类证据都明确证明问题、必要字段、覆盖切片和失败阻断口径，避免后续只用“本地看起来可用”替代真人 PVP 的上线依据。
+    - `docs/README.md` 同步主方案入口说明，明确当前整体方案包含验收证据模板，但仍不锁具体修改文件。
+  - 当前结论
+    - 当前方案已经从“切片顺序可执行”进一步推进到“证据收口可执行”：后续即使文件结构变化，也能按证据类型推进开发和验收。
+
+- 2026-06-17: V10 真 PVP 整体方案首版实施切片补强
+  - 本轮完成
+    - `docs/designer_major_upgrade_overall_plan_v1.md` 新增 `10.4 首版实施切片与依赖顺序`，把首版开发拆成非文件级体验切片：合同冻结、权威战斗内核、后手公平仿真、真人匹配与准备、重连超时与结算、复盘学习、练习约战隔离、赛季奖励、移动端和封板验收。
+    - 每个切片都绑定覆盖的 `PVP-US-*` 用户故事、前置依赖和退出证据，后续可以按体验切片拆任务，不需要按当前文件路径拆。
+    - 新增切片推进规则：V10-S0 未冻结不能开发正式排位结果，V10-S1/S2 未通过不能开放真人排位，V10-S4 未通过不能写正式积分，V10-S5 未通过不能宣称失败可学习，V10-S8 未通过不能宣称首版可上线。
+    - 新增并行边界：仿真、准备房间、复盘文案可在事件日志稳定后并行；练习/奖励可在正式结算合同稳定后并行；移动端验收从准备房间阶段开始持续跟随。
+    - `docs/README.md` 同步主方案入口说明，明确当前方案已包含首版实施切片，但仍不锁具体修改文件。
+  - 当前结论
+    - 方案已经从“用户故事可开发”进一步推进到“切片顺序可执行”：后续实施计划可以直接按切片生成任务和验证门槛。
+
+- 2026-06-17: V10 真 PVP 整体方案 Ready / Done 验收层补强
+  - 本轮完成
+    - `docs/designer_major_upgrade_overall_plan_v1.md` 新增 `10.3 开工准备与完成验收`，把用户故事进入开发前的 Definition of Ready 和完成后的 Definition of Done 固化到整体方案。
+    - Ready 层要求每个故事开工前必须具备规则锚点、玩家文案、数据输入、风险标签、验收证据和回滚口径，避免实现阶段自行解释规则。
+    - Done 层要求每个故事完成时证明主路径、失败路径、服务端权威、公平底线、回放可读、模式隔离、移动端可用和证据可复查。
+    - `docs/README.md` 同步入口说明，明确主方案已经包含 Ready/Done 验收层，但仍不锁具体修改文件。
+  - 当前结论
+    - 当前整体方案进一步接近“可直接开发”：后续不需要先猜文件路径，可以先按用户故事检查 Ready，再按 Done 证据收口。
+
+- 2026-06-17: V10 真 PVP 整体方案可开发用户故事补强
+  - 本轮完成
+    - `docs/designer_major_upgrade_overall_plan_v1.md` 新增 `10.2 可开发用户故事与验收场景`，把整体方案继续压成不锁文件的体验 backlog。
+    - 新增 19 条首版用户故事，覆盖真人匹配、匹配不到真人不塞残影、构筑禁限、入队快照锁定、调息换牌、行动反馈、后手有效行动、预算拦截、隐藏信息脱敏、断线重连、拖局防护、终局结算、正式结果只写一次、复盘建议、练习隔离、好友约战、赛季奖励和移动端完整路径。
+    - 每条故事都绑定验收场景，强调主路径、失败路径和证据路径，方便后续按最新仓库结构拆开发任务。
+    - 根据只读挑战支线复核，补齐“权威结算只写一次”“隐藏信息脱敏”“入队快照锁定”三项首版核心故事，并收紧断线无效局口径：对局中玩家侧多次断线 / 超时默认托管后判负，`invalidated` 只用于准备阶段无效局或服务端异常。
+    - `docs/README.md` 同步主方案入口说明，明确当前整体方案已经包含可验收用户故事，但仍不锁具体修改文件。
+  - 当前结论
+    - 当前方案从“规则和合同可开发”进一步推进到“体验切片可开发”：后续进入实施计划时，可以按用户故事拆任务，而不是先按过期文件路径拆任务。
+
+- 2026-06-17: V10 真 PVP 整体方案打磨闭环与开发合同补强
+  - 本轮完成
+    - `docs/designer_major_upgrade_overall_plan_v1.md` 新增打磨迭代闭环，明确每轮必须留下仿真报告、代表回放、浏览器截图和反馈标签四类证据。
+    - 新增固定调参顺序：先查内容池，再调基准谱，再微调单效果，再处理匹配，最后才改生命、起手、抽牌、灵力、伤害预算等规则真值。
+    - 新增打磨禁止项，防止用暗中补偿、旧残影数据、总体胜率或高熟练玩家样本掩盖真人 PVP 的体验问题。
+    - 新增非文件级开发合同包，覆盖规则快照、构筑快照、对局生命周期、行动意图、座位视图、事件回放、结算、体验文案和打磨证据。
+    - `docs/README.md` 已同步主方案入口说明，明确当前主方案包含可玩性循环、打磨闭环和非文件级开发合同，但仍不锁具体修改文件。
+  - 当前结论
+    - 当前方案进一步接近可直接开发：后续可以先冻结合同，再按当时最新仓库结构拆任务；不需要现在提前绑定文件路径。
+
+- 2026-06-17: V10 真 PVP 整体方案可玩性循环补强
+  - 本轮完成
+    - `docs/designer_major_upgrade_overall_plan_v1.md` 新增可玩性核心循环，把真人 PVP 的长期动机收束为开局选择、对局读信息、行动取舍、终局解释和下一局调整。
+    - 新增日常、周常与赛季节奏，覆盖 10 分钟单局、20-30 分钟多局调整、当日课题、每周目标和赛季目标，明确这些目标不能变成排位数值门槛。
+    - 新增奖励与成长边界，明确 PVP 奖励只给段位、称号、外观、回放徽章、流派熟练度和表达能力，不给生命、伤害、抽牌、灵力、起手质量等排位强度。
+    - 新增练习、约战与复盘的再战动机，要求问道练习、好友约战、战报回放、基准谱试炼各自承担学习和社交价值，但不能污染正式排位结算。
+    - 新增反挫败底线，明确连败、长等待、预算拦截、失败文案、新玩家匹配和长局判定都必须解释清楚且不暗改规则。
+  - 当前结论
+    - 主方案仍不绑定具体修改文件；本轮补强的是整体玩法和娱乐性闭环，让 V10 不只“公平可用”，还要让玩家愿意复盘、调整并再打一局。
+
+- 2026-06-17: V10 真 PVP 整体方案单一真值补强
+  - 本轮完成
+    - `docs/designer_major_upgrade_overall_plan_v1.md` 新增单一规则真值表，明确排位真人、服务端结算、0 费禁入、首回合无额外抽牌/灵力、后手行动权、高爆发 setup 和长局收束的唯一口径。
+    - 新增回合预算解释，明确预算是防非游戏击杀的保险丝，不触发吸血、反伤、击杀奖励或其他二次收益。
+    - 新增内容映射准则，将卡牌 / 身份槽 / 状态统一分为 `legal`、`translated`、`disabled`、`test_only`、`future_candidate`，避免后续静默降级。
+    - 新增抽象协议状态机和协议不变量，覆盖排队、准备、对战、结算、无效局、幂等行动、重连补发和结算只写一次。
+    - 新增后手有效行动权定义，把“不被秒”推进到必须有可支付行动、可改变局面、不会被托管误伤。
+    - 新增独立测试赛道，明确旧 PVP 绿灯不能替代 live ranked 的规则仿真、协议一致性、浏览器、移动端、文案和生产 smoke。
+    - 根据挑战分支复核，补入规则裁定顺序表、终局结果矩阵和核心风险验收矩阵；同步把支撑文档中的首回合额外抽牌 / 灵力口径统一为 0。
+    - 统一协议命名：预算拦截当前已收敛为 `budget_clamped` 公开事件，终局事件使用 `match_finished`。
+  - 当前结论
+    - 整体方案仍不绑定具体文件，但已经把进入开发前最容易产生歧义的规则、协议、内容和验收口径机械化。
+
+- 2026-06-17: V10 真 PVP 整体方案存档
+  - 本轮完成
+    - 根据用户新口径，当前阶段不再锁定具体修改文件、模块拆分和代码 owner；已删除未提交的逐文件实施草案。
+    - 新增 `docs/designer_major_upgrade_overall_plan_v1.md`，保存 V10 大版本整体方案：真人排位、练习分离、反先手秒杀、首版规则、内容边界、服务端权威、复盘成长、平衡验收和阶段路线。
+    - `docs/README.md` 已把整体方案设为当前入口，并移除逐文件开发计划入口。
+    - `docs/designer_major_upgrade_pvp_content_pack_v1.md` 的主文档引用已切换到整体方案。
+  - 当前结论
+    - 当前文档集适合先作为版本基线保存；进入开发前仍需基于届时仓库状态重新生成实施计划，不能复用过早锁定的文件路径。
+
+- 2026-06-17: V10 真 PVP 首版内容包补齐
+  - 本轮完成
+    - 新增 `docs/designer_major_upgrade_pvp_content_pack_v1.md`，把首版真 PVP 的合法效果、禁用效果、合法牌池、8 套基准斗法谱、T1 身份槽、bot 策略和平衡仿真输入拆成可开发规格。
+    - 新增 `docs/designer_major_upgrade_pvp_ui_copy_samples_v1.md`，锁定入口、匹配、准备、对局 HUD、toast/reject、断线、超时、结算与复盘文案样例。
+    - 新增 `docs/designer_major_upgrade_pvp_balance_fixtures_v1.md`，定义 baseline loadout、bot policy、opening script、golden replay、simulation report 与失败报告格式。
+    - 内容包基于当前 `js/data/cards.js` 的 217 张卡和真实 effect / buff 类型收口，首版排位不开放 0 费牌，避免回灵、过牌和复制链破坏先后手公平。
+    - 首版合法池已移出 `retainBlock` / `nextTurnBlock` 相关留盾牌，避免旧 `GhostEnemy` 非对称护盾生命周期影响真 PVP 排位。
+    - `docs/designer_major_upgrade_requirements_v7.md` 已引用内容包，后续实现平衡仿真和合法牌快照时不再只写抽象 archetype 名称。
+
+- 2026-06-17: V10 真 PVP 策划二次打磨 / 公平体验与开发合同补强
+  - 本轮完成
+    - `docs/designer_major_upgrade_planning_v8.md` 补强对局非游戏防线：调息换牌、最低行动权、可读爆发前兆、控制不剥夺完整回合、天劫压境长局收束。
+    - `docs/designer_major_upgrade_planning_v8.md` 把斗法谱身份槽收敛为命格 / 誓约 / 命途三选一，固定 PVP 版 T1，避免局外养成多层叠加变成排位数值碾压。
+    - `docs/designer_major_upgrade_requirements_v7.md` 补齐仓库真实落点：后端入口为 `server/app.js`，live route 挂 `/api/pvp/live`，现有 `pvp-scene` 保留为入口并新增 live tab。
+    - `docs/designer_major_upgrade_requirements_v7.md` 补齐 StateView 脱敏合同、action 幂等、mulligan API、事件可见性、消息时序、服务端状态机、断线重连恢复算法和全局错误码。
+    - `docs/designer_major_upgrade_requirements_v7.md` 将 PVP 规则矩阵扩展到当前真实 effect/buff 风险：`damagePerCard`、`conditionalDamage`、`drawCalculated`、`addStatus`、`echoLastPlayedCard`、`dodgeChance`、`oathDebt` 等均明确支持、转写或禁用。
+    - `docs/designer_major_upgrade_requirements_v7.md` 增加平衡仿真硬门槛：10,000 局样本、先手 47%-53%、任意对阵 45%-55%、后手首行动前死亡 0 次、P95/P99 时长上限、第 14 整轮强制终局。
+  - 本轮验证
+    - 使用 `game-design-theory`、`card-game-design` 复核核心循环、反非游戏体验、卡牌资源系统风险。
+    - 并行派出 `gpt-5.4` 支线审查 PVP 公平体验与开发可执行缺口，结论已合入文档。
+    - `rg` 检查旧入口、软性上限、占位词残留 ✅
+    - `git diff --check` ✅
+  - 当前结论
+    - V10 文档已从“方向正确”推进到“首版工程可按合同开工”的状态；后续真正开发仍需按 Phase 0 先冻结规则版本和测试文件，再进入服务端 engine MVP。
+
+- 2026-06-17: 当前文档集清理与 V10 真 PVP 策划入口收口
+  - 本轮完成
+    - `docs/README.md` 新增当前文档索引，明确 `docs/` 根目录只保留当前开发依据、运行部署资料与安全边界记录。
+    - 当前大版本策划入口收口为 `docs/designer_major_upgrade_planning_v8.md` 与 `docs/designer_major_upgrade_requirements_v7.md`，后续真 PVP 开发以这两份为主。
+    - 仍有现功能解释价值的 V9 / seasonBoard / 会审 / 债账 / 谱系相关文档移入 `docs/archive/implemented/`。
+    - 仍有技术解释价值、但不应作为当前大版本主策划的架构蓝图移入 `docs/archive/technical/`。
+    - 清理旧异步 PVP 方案、过期版本策划、失真的客户端 HMAC 路线图、过期 QA/UI 快照，避免后续继续被误当成当前开发依据。
+    - `progress.md` 中相关历史记录同步改为 archive 路径或“已清理”描述，避免继续暴露旧根路径。
+  - 本轮验证
+    - `find docs -maxdepth 3 -type f -print | sort` ✅
+    - `rg` 检查旧根路径残留 ✅
+    - `git diff --check` ✅
+  - 当前结论
+    - 当前文档根目录已从多代策划堆叠收敛为“索引 + V10 真 PVP + 生产/迁移/安全资料”；历史实现说明进入 archive，不再和当前开发主线混在一起。
+
 - 2026-06-16: 禁术工程事件池扩展与本地前后端全量复验
   - 本轮完成
     - `js/data/events.js` 把 `forbidden_altar` 纳入战略工程事件联动主线，新增 `STRATEGIC_ENGINEERING_EVENT_POOLS / STRATEGIC_ENGINEERING_EVENT_BIAS_CHANCE / STRATEGIC_ENGINEERING_EVENT_FEEDBACK` 对应的禁术工程配置，并在 `applyForbiddenAltarEngineeringAugment()` 中为 `ancientAltar / bloodForgeCovenant / demonContract / blackbannerExecution / bloodloomGarden / ashLedgerTrial` 追加禁术工程强化。
@@ -600,7 +1625,7 @@ Original prompt: 进入全自动审查与修复模式，按顺序审查并修复
 - 2026-06-15: 星债誓玩法扩展与本地浏览器验证
   - 本轮完成
     - `js/data/run_vows.js` 新增 `starDebt / 星债誓`：定位为“预支首拍、后续还债”的章末誓约，提供首回合灵力、奖励高稀有倾向、观星/裂隙/事件/商店路线偏置，同时用每战开场失血与商店涨价作为代价。
-    - `starDebt` 支持两阶：初契提供每战开场失去 3 生命、首回合灵力 +1、商店价格 +10%、高稀有奖励倾向；陨契提升为每战开场失去 5 生命、首击伤害 +3、商店价格 +18%、更高奖励倾向。
+    - `starDebt` 支持两阶：初契提供每战开场失去 3 生命、旧版本首回合灵力加成、商店价格上涨和高稀有奖励倾向；陨契提升为每战开场失去 5 生命、首击伤害加成、商店价格进一步上涨和更高奖励倾向。该历史誓约记录不作为 V10 真人排位规则口径。
     - `tests/sanity_run_vow_system_checks.cjs` 增加星债誓回归，直接验证誓约存在、初契/陨契运行时效果聚合、每战开场扣血、首回合灵力、首击伤害、奖励倾向与商店债务。
     - `tests/browser_vow_choice_audit.mjs` 增加浏览器可操作验证：在本地页面中预置星债誓初契后打开章末誓约选择，按卡牌内容定位陨契升阶项，确认开场失血、首击伤害、商店涨价、高稀有奖励倾向等玩家可读信息。
   - 本轮验证
@@ -984,7 +2009,7 @@ Original prompt: 进入全自动审查与修复模式，按顺序审查并修复
       - 谱系 track 从 character/style/node/research 扩展为 character/style/node/research/frontier，断言 frontier 风格独立于验证风格。
     - `tests/browser_meta_screen_audit.mjs`
       - 浏览器 Sanctum 点击 probe 扩展为检查 `frontier.chronicleArchive`、回看 panel、entry、无 projection leak、无 frontier action source。
-    - `docs/designer_next_version_frontier_settlement_planning_v1.md`
+    - `docs/archive/implemented/designer_next_version_frontier_settlement_planning_v1.md`
       - Phase D 状态从“待开发 / 下一刀”更新为已完成，并把下一版本建议改为 V9.2 三周战役章。
     - `game-intro.html`
       - 当前版本重点同步为会审裁记 Phase D，明确战役史卷多周回看、命盘谱系 `frontierTrack` 和下一轮“三周一章”方向。
@@ -1020,7 +2045,7 @@ Original prompt: 进入全自动审查与修复模式，按顺序审查并修复
       - 增加 durable commit 断言：真实提交 `rebalance_support` 后，持久 `frontier_resolution` 会通过 `getSeasonBoardSnapshot()` 推动普通 lane 与 route shift。
       - 增加 durable hard-gate 与旧镜像身份漂移断言：ranking/正卷主验证不会被 `rebalance_support` 覆盖，旧 `nextWeekGoal.sourceId` 不匹配时会被丢弃。
       - 增加 lockline / debt 负断言：会审偏置不覆盖 `locking_sheet` settlement route，也不覆盖 `debt_pack` 强目标位。
-    - `docs/designer_next_version_frontier_settlement_planning_v1.md`
+    - `docs/archive/implemented/designer_next_version_frontier_settlement_planning_v1.md`
       - 同步 Phase C 已完成，下一刀改为 Phase D：战役史卷多周回看与谱系风格累计。
     - `game-intro.html`
       - 当前版本说明同步为会审裁记 Phase C，明确普通排班偏置和硬目标优先边界。
@@ -1117,7 +2142,7 @@ Original prompt: 进入全自动审查与修复模式，按顺序审查并修复
     - 当前系统已经具备 `seasonBoard.lanes / nextTask / nextWeekGoal / settlement / debtPack / verificationOrders / weekVerdictLedger / laneRewards / claimedLaneRewards` 等真源，因此下一版本不能再重复策划“账本从无到有”，也不能把 `frontier.council` 做成第二任务源。
     - 新版本红线明确为：`frontier.council` 继续无 `actionType / actionValue / ctaLabel`，reward 页不新增第二主 CTA，map 页不新增 frontier action，史卷封记不新增奖励领取账本，会审裁记只能轻量影响普通分线排序，不能覆盖欠卷强目标位和主验证状。
   - 本轮产物
-    - 新增 `docs/designer_next_version_frontier_settlement_planning_v1.md`，版本暂定名为 `V9.1《诸界战线：会审归卷》`。
+    - 新增 `docs/archive/implemented/designer_next_version_frontier_settlement_planning_v1.md`，版本暂定名为 `V9.1《诸界战线：会审归卷》`。
     - 策划文档把下一版本拆成四个模块：诸界会审裁记、战役史卷封记、下周排班偏置、谱系风格记录。
     - 文档建议首发三种会审裁记：`hold_primary` 继续守主战线、`rebalance_support` 给副线补证、`seal_dispute` 封存争议不改排序。
     - 字段边界建议采用 `seasonBoard.frontier.resolution` 作为派生投影；真正提交动作通过类似 `commitSeasonBoardFrontierResolution(choiceId)` 的单点函数写入周裁定上下文和 `seasonVerificationState.records/history`，而不是把行动字段写进 `frontier.council`。
@@ -1614,7 +2639,7 @@ Original prompt: 进入全自动审查与修复模式，按顺序审查并修复
 
 - 2026-04-19: 下一轮硬结算闭环继续收口为开发拆解，补齐 Phase / 字段 / 门禁蓝图
   - 本轮完成
-    - `docs/designer_next_round_verdict_delivery_breakdown_v1.md`
+    - `docs/archive/implemented/designer_next_round_verdict_delivery_breakdown_v1.md`
       - 新增“下一轮硬结算闭环开发拆解 V1”，把上一轮已经锁定的主切片继续压成可直接进入开发的分阶段蓝图。
       - 明确拆出 `Phase A / Phase B / Phase C`，分别对应：
         - `周裁定账本 + 债账占位`
@@ -1637,7 +2662,7 @@ Original prompt: 进入全自动审查与修复模式，按顺序审查并修复
 
 - 2026-04-19: 下一轮功能策划收口，锁定“硬结算闭环”作为主切片
   - 本轮完成
-    - `docs/designer_next_round_verdict_execution_v1.md`
+    - `docs/archive/implemented/designer_next_round_verdict_execution_v1.md`
       - 新增下一轮执行策划蓝图，把当前最值得继续推进的功能收束为：`周结算 -> 押卷结果 -> 债账包 -> 主/旁验证状 -> 回写下周目标`。
       - 明确写清这轮为什么不该继续补观察站筛面、PVP 档案字段或更多 reward 摘要，而应该优先把 `seasonBoard / heavenlyMandate / lineage / aftereffect` 之间的硬结算回写做成真正可经营的押注链。
       - 拆清下一轮的主玩法、MDA 目标、债账生命周期、验证状回写、拖延惩罚、owner / precedence matrix、UI 投影面与 Node / 浏览器门禁方向，方便后续直接按切片进入开发。
@@ -1796,11 +2821,11 @@ Original prompt: 进入全自动审查与修复模式，按顺序审查并修复
 
 - 2026-04-18: 可玩性扩展策划续推 / 周结算・季押卷・结业验证链
   - 本轮完成
-    - `docs/designer_major_upgrade_planning_v7.md`
+    - `docs/archive/implemented/designer_major_upgrade_planning_v7.md`
       - 新增“`赛季押卷与结业验证`”模块，把当前已经落地的天道敕令、洞府议程、界痕后效与赛季天道盘继续收束成 `周结算 -> 季押卷 -> 验证状 -> 清账回流` 主链。
       - 明确 `agenda / seasonBoard / aftereffect / lineage` 的 owner 划分，避免已经出现过的“季盘与议程双重加码”问题继续扩大。
       - 补入建议参数锚点、当前建议优先切片、行为级 QA 门禁与反目标，避免后续开发继续停留在“信息越来越厚、可玩押注不够硬”的状态。
-    - `docs/designer_major_upgrade_requirements_v6.md`
+    - `docs/archive/implemented/designer_major_upgrade_requirements_v6.md`
       - 新增“首发后优先扩展”与“周结算 / 季押卷 / 结业验证”要求，明确下一轮不是再造新模式，而是给现有四层结构补一个更硬的结算层。
       - 需求层同步锁定：`正卷 / 险卷 / 欠卷` 三类结算、`研究债账包`、`ranking` 阶段主 / 旁验证状，以及 owner / precedence matrix 的最小边界。
     - `progress.md`
@@ -1984,11 +3009,11 @@ Original prompt: 进入全自动审查与修复模式，按顺序审查并修复
 
 - 2026-04-16: V9.0《命盘战争》大版本策划收口
   - 本轮完成
-    - `docs/designer_major_upgrade_planning_v7.md`
+    - `docs/archive/implemented/designer_major_upgrade_planning_v7.md`
       - 新增下一次大版本完整策划案，主轴从“单页功能继续变厚”收束为“观察站读题 -> 远征作答 -> 洞府押注 -> PVP / 无尽验证 -> 谱系沉淀”的赛季命盘战争线。
       - 明确本次大版本的四个核心结构层：`天道敕令周循环板`、`命盘谱系`、`界痕抉择 / 契约后效`、`赛季天道盘`，并给出 10-20 小时玩家循环、三阶段开发切片、QA 门禁与反目标。
       - 工程上明确要求继续沿洞府议程主链纵深，优先在既有状态机 / payload / browser audit chokepoint 上扩容，而不是并发重写 battle、地图生态、PVP 与新局外系统。
-    - `docs/designer_major_upgrade_requirements_v6.md`
+    - `docs/archive/implemented/designer_major_upgrade_requirements_v6.md`
       - 新增配套需求文档，把首发范围、第二阶段预留、模块级功能要求、字段要求、Node / 浏览器门禁要求和首发不承诺内容拆清。
       - 需求层把首发重点锁定在“周目标 + 长期谱系 + 跨章后果 + 自动化门禁扩线”，避免大版本策划阶段就失控成全系统并发翻修。
     - `progress.md`
@@ -2507,7 +3532,7 @@ Original prompt: 进入全自动审查与修复模式，按顺序审查并修复
     - Node 检查：`npm run test:node` ✅ 全通过。
     - Browser 检查：在本地静态服务 `http://127.0.0.1:4173` 下复跑 `browser_feature_audit.mjs` 与 `browser_mobile_layout_audit.mjs` ✅，控制台无新报错。
     - 人工视觉复核：查看 `output/web-feature-audit-current/feature-audit.png`、`output/web-mobile-layout-audit-current/mobile-forge-workshop-modal.png`、`output/web-mobile-layout-audit-current/mobile-trial-challenge-modal.png`，画面与文本状态一致。
-  - 产出文档：新增 `docs/the-defier-upgrade-plan-2026-03.md`，给出 v7.0 全面升级策划、难度评定与 QA 验收方案。
+  - 产出文档：新增 `旧 V7.0 升级案（已清理）`，给出 v7.0 全面升级策划、难度评定与 QA 验收方案。
 
 - 2026-03-13: 战斗怪物意图 UI 优化（当前轮）
   - `js/ui/battle-hud.js`：新增敌方意图展示辅助函数，意图文案改为“图标 + 可选短标签 + 数值角标”模式，避免 `🕯️诵调`、`📜裁令` 一类长意图被塞进 42px 圆徽章后竖排错位。
@@ -3833,7 +4858,7 @@ Original prompt: 进入全自动审查与修复模式，按顺序审查并修复
     - 已读取 `card-game-design` 的 `patterns/sharp_edges/validations`，并将“0费滥用、任意检索、即时胜利、无代价抽牌引擎”列为新增内容红线。
     - 已核对本地 `game-designer`，同步命环/五行/世界观约束。
   - 输出物：
-    - 新增策划文档：`docs/designer_gameplay_planning_v1.md`
+    - 新增策划文档：`早期玩法策划 V1（已清理）`
     - 内容覆盖：命环路径、法宝套装、新增流派、怪物生态分层、地图节点扩展、无尽模式深化、分期开发与测试验收门槛。
   - 备注：
     - 下一执行优先级建议：先做“怪物同质化治理（P1）”，再推进“新增流派与卡池（P2）”。
@@ -5149,7 +6174,7 @@ Original prompt: 进入全自动审查与修复模式，按顺序审查并修复
 - 2026-03-12: 第五十轮 TODO 归档清理
   - 处理结论
     - `progress.md` 中既往“TODO / 下轮建议 / 下一轮建议”已统一改写为“历史建议（已归档）”，不再保留活动缺陷标记。
-    - `docs/codex_development_blueprint.md` 的记录规范同步改为“变更 + 验证 + 后续事项”，避免继续引入无效 TODO 字样。
+    - `旧 Codex 开发蓝图（已清理）` 的记录规范同步改为“变更 + 验证 + 后续事项”，避免继续引入无效 TODO 字样。
     - `js/core/map.js` 中已完成落地的 `ghostPayload` 注释改为正式说明，不再保留伪待办。
   - 本轮验证（全通过）
     - Node：
@@ -5416,7 +6441,7 @@ Original prompt: 进入全自动审查与修复模式，按顺序审查并修复
 
 - 2026-03-13: 第五十五轮 策划案交付（V6.0 大版本升级方案）
   - 本轮变更
-    - 新增完整策划文档 `docs/designer_major_upgrade_planning_v3.md`
+    - 新增完整策划文档 `旧 V6.0 策划案（已清理）`
       - 基于当前项目真实状态整理版本基线：
         - `6` 名角色、`178` 张卡、`46` 件法宝、`61` 个事件、`76` 个敌人
         - 主线 / 无尽 / 传承 / 图鉴 / 异步 PvP / 成就已具备骨架
@@ -5434,7 +6459,7 @@ Original prompt: 进入全自动审查与修复模式，按顺序审查并修复
     - 交付物为文档策划案，本轮未运行自动化测试。
     - 已人工核对文档内容与当前仓库结构、已有设计文档及数据规模一致，无脱离项目现状的空泛提案。
   - 后续事项
-    - 可继续把 `docs/designer_major_upgrade_planning_v3.md` 拆成：
+    - 可继续把 `旧 V6.0 策划案（已清理）` 拆成：
       - 产品摘要版
       - 系统拆解版
       - 开发排期版
@@ -5442,7 +6467,7 @@ Original prompt: 进入全自动审查与修复模式，按顺序审查并修复
 
 - 2026-03-13: 第五十六轮 策划文档深化（V6.0 功能需求版）
   - 本轮变更
-    - 新增配套需求文档 `docs/designer_major_upgrade_requirements_v3.md`
+    - 新增配套需求文档 `旧 V6.0 需求文档（已清理）`
       - 明确 V6.0 不写排期、只写“要做什么”的文档边界。
       - 将总案拆细为具体功能需求：
         - 开局层：角色二阶道途、命格谱系、灵契护道
@@ -5457,7 +6482,7 @@ Original prompt: 进入全自动审查与修复模式，按顺序审查并修复
     - 交付物为文档策划案，本轮未运行自动化测试。
     - 已人工检查章节结构与标题层级，确认文档以需求清单为主，不含排期和人力估算内容。
   - 后续事项
-    - 可继续基于 `docs/designer_major_upgrade_requirements_v3.md` 拆出：
+    - 可继续基于 `旧 V6.0 需求文档（已清理）` 拆出：
       - 卡牌与流派详细需求书
       - 章节 / Boss 详细需求书
       - 洞府 / 图鉴 / 周挑战需求书
@@ -6882,9 +7907,9 @@ Original prompt: 进入全自动审查与修复模式，按顺序审查并修复
 - 2026-03-15: 第五十四轮 V6.1 完整策划落档
   - 已完成：输出 `V6.1《万象归途》` 的完整大版本策划与功能需求文档
     - 新增策划总案：
-      - `docs/designer_major_upgrade_planning_v4.md`
+      - `旧 V6.1 策划案（已清理）`
     - 新增功能需求：
-      - `docs/designer_major_upgrade_requirements_v4.md`
+      - `旧 V6.1 需求文档（已清理）`
   - 策划核心方向
     - 把主线从“逐层推进”升级为“裂界远征”：
       - 主线 + 支线区域
@@ -7003,7 +8028,7 @@ Original prompt: 进入全自动审查与修复模式，按顺序审查并修复
       - 文本状态同步
       - 发布门禁
     - 需要明确区分：
-      - `docs/designer_major_upgrade_planning_v4.md` / `requirements_v4.md` 描述的是整版 `V6.1` 大版本蓝图，不是已被一次性全部实现的小型 TODO 清单。
+      - `旧 V6.1 策划案（已清理）` / `旧 V6.1 需求文档（已清理）` 描述的是整版 `V6.1` 大版本蓝图，不是已被一次性全部实现的小型 TODO 清单。
       - 当前仓库已经完成 `V6.1` 的第一条完整纵切，并通过 Node / Browser / 官方客户端三层验证。
       - 后续若继续推进 `V6.1`，应沿同样方式继续拆下一条纵切（例如挑战板、洞府推演、PvP 命盘联动、奖励页理由可视化），逐条开发并封口。
 
@@ -7202,7 +8227,7 @@ Original prompt: 进入全自动审查与修复模式，按顺序审查并修复
     - 命途主线在“角色选择 -> 开局 -> 地图追踪 -> 战斗 HUD -> render_game_to_text”这条链路上已闭环
     - 新增命途浏览器审计已稳定通过，不再把登录门槛误判成玩法状态缺失
   - 下一步建议
-    - 若继续按 `docs/the-defier-upgrade-plan-2026-03.md` 推进，可优先做下一条高价值功能线：
+    - 若继续按 `旧 V7.0 升级案（已清理）` 推进，可优先做下一条高价值功能线：
       - 章节 Boss 多阶段专属命途反制
       - 命途专属事件池 / 商店配套 / 法宝套装协同
       - 命途完成后的局内结算页与长期解锁反馈
@@ -7327,7 +8352,7 @@ Original prompt: 进入全自动审查与修复模式，按顺序审查并修复
       - Boss 三幕的读法与拆招提示
     - 新增内容已经同步到 UI 与 `render_game_to_text`，方便后续继续扩自动化验收
   - 下一步建议
-    - 若继续沿 `docs/the-defier-upgrade-plan-2026-03.md` 往下做，可优先补：
+    - 若继续沿 `旧 V7.0 升级案（已清理）` 往下做，可优先补：
       - 命途完成后的长期收藏 / 图鉴解锁反馈
       - 命途专属轻量事件（不是只做偏置，而是做真正独立事件）
       - 命途与章节 Boss 的更细粒度数值 / 机制反制
@@ -8010,7 +9035,7 @@ Original prompt: 进入全自动审查与修复模式，按顺序审查并修复
         - 同步新版介绍结构与措辞，移除不稳定硬编码规模数字；
         - 改为“当前版本重点 + V6.2 方向”表达。
     - 新增完整策划文档
-      - 新建 `docs/designer_major_upgrade_planning_v5.md`：
+      - 新建 `旧 V8.0 策划案（已清理）`：
         - 版本定位：`V6.2《天机回响》`
         - 设计支柱、12 个必做模块、难度评定（DRI）、切片开发、QA 门禁、回滚策略、验收标准。
     - 发现并修复 UI 可见性缺陷（额外收口）
@@ -8055,7 +9080,7 @@ Original prompt: 进入全自动审查与修复模式，按顺序审查并修复
       - 更新页内容改为“V7.0 已开发能力 + 当前体验路径 + V7.x 后续方向”。
     - `game-intro.html`
       - 静态介绍页同步到 `V7.0` 口径，去除 `V6.2` 导向表述。
-    - `docs/designer_major_upgrade_planning_v5.md`
+    - `旧 V8.0 策划案（已清理）`
       - 文档定位从 `V6.2` 修正为 `V7.0《命途裂变》`。
   - 本轮完成（开发）
     - 新增章节 `DRI` 风险指数体系并接入主流程：
@@ -8960,6 +9985,12 @@ Original prompt: 进入全自动审查与修复模式，按顺序审查并修复
     - endless DRI 不仅功能落地，而且完成了一轮“审计脚本可信度”修复
     - 当前 release gate 现在会对真实失败给出非零退出码，不再出现假绿
     - 本轮最终状态为：Node checks 全绿 + browser release gate 全绿 + 文案口径已统一
+
+- 2026-03-19: 旧 PVP / 残影约战历史块说明
+  - 重要标记
+    - 以下 2026-03-19 附近的 `PVP 赛后复盘`、`焦点约战`、`镜像演武`、`镜像兜底`、`guest-pvp` 等记录，属于旧 PVP / 残影约战历史实现。
+    - 这些记录可以帮助理解旧 UI、旧榜单和旧残影练习能力，但不能作为 V10 真 PVP 当前方案、开发合同、验收门禁或上线依据。
+    - V10 真 PVP 以 `docs/designer_major_upgrade_overall_plan_v1.md` 为准：正式排位只能匹配真实在线玩家，不能用残影、镜像或客户端本地胜负路径写正式积分、段位、奖励或正式历史。
 
 - 2026-03-19: PVP 赛后复盘卡落地 + 审计截图取景修复（本轮）
   - 本轮完成

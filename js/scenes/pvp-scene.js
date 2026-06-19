@@ -1,4 +1,5 @@
 import { PVPService } from "../services/pvp-service.js";
+import { createPvpLiveSession } from "../services/pvp-live-session.js";
 import { PVP_SHOP_ITEMS } from "../data/shop-items.js";
 import { Utils } from "../core/utils.js";
 import { GhostEnemy } from "../entities/ghost-enemy.js";
@@ -20,6 +21,16 @@ export const PVPScene = {
   isMatching: false,
   // 匹配锁，防止重复请求导致状态竞争
   matchingTimeoutMs: 8000,
+  liveSession: null,
+  livePollTimer: null,
+  liveHeartbeatTimer: null,
+  liveHeartbeatIntervalMs: 0,
+  liveLongWaitPollUntil: 0,
+  liveIntentSeq: 0,
+  liveMulliganSelection: new Set(),
+  liveSelectedLoadoutPreset: 'balanced',
+  liveDrillScenario: null,
+  liveSocialMuted: false,
   rankingFocusId: null,
   rankingFocusData: null,
   lastLoadedRankings: [],
@@ -403,6 +414,10 @@ export const PVPScene = {
     this.renderChallengeIntent();
   },
   switchTab(tabName) {
+    if (this.activeTab === 'live' && tabName !== 'live') {
+      this.stopLivePolling();
+      this.stopLiveHeartbeat();
+    }
     this.activeTab = tabName;
 
     // Update Runes
@@ -422,8 +437,1674 @@ export const PVPScene = {
 
     // Load Data
     if (tabName === 'ranking') this.loadRankings();
+    if (tabName === 'live') this.loadLivePanel();
     if (tabName === 'defense') this.loadDefenseInfo();
     if (tabName === 'shop') this.loadShop();
+  },
+  getLiveSession() {
+    if (!this.liveSession) {
+      this.liveSession = createPvpLiveSession({
+        liveService: PVPService && PVPService.live ? PVPService.live : null
+      });
+    }
+    return this.liveSession;
+  },
+  getLiveLoadoutPresets() {
+    return [
+      {
+        id: 'balanced',
+        identitySlot: 'balanced',
+        label: '默认斗法谱',
+        summary: '攻防均衡，适合首战',
+        pattern: ['pvp_strike', 'pvp_guard', 'pvp_strike', 'pvp_burst']
+      },
+      {
+        id: 'sword',
+        identitySlot: 'sword',
+        label: '破阵斗法谱',
+        summary: '压制起手，保留护身',
+        pattern: ['pvp_burst', 'pvp_strike', 'pvp_guard', 'pvp_strike']
+      },
+      {
+        id: 'shield',
+        identitySlot: 'shield',
+        label: '守势斗法谱',
+        summary: '稳住前两手，反击破局',
+        pattern: ['pvp_guard', 'pvp_strike', 'pvp_burst', 'pvp_guard']
+      }
+    ];
+  },
+  getLiveSelectedLoadoutPreset() {
+    const presets = this.getLiveLoadoutPresets();
+    return presets.find(preset => preset.id === this.liveSelectedLoadoutPreset) || presets[0];
+  },
+  canEditLiveLoadout(phase = 'idle') {
+    return phase === 'idle' || phase === 'finished' || phase === 'invalidated';
+  },
+  setLiveLoadoutPreset(presetId) {
+    const session = this.getLiveSession();
+    const state = session && typeof session.getState === 'function' ? session.getState() : null;
+    const phase = state && state.phase ? state.phase : 'idle';
+    if (!this.canEditLiveLoadout(phase)) {
+      this.renderLiveLoadoutPresets(phase);
+      return;
+    }
+    const presets = this.getLiveLoadoutPresets();
+    const next = presets.find(preset => preset.id === presetId) || presets[0];
+    this.liveSelectedLoadoutPreset = next.id;
+    this.renderLiveLoadoutPresets(phase);
+  },
+  buildLiveLoadoutDeck(pattern) {
+    const source = Array.isArray(pattern) && pattern.length > 0 ? pattern : ['pvp_strike', 'pvp_guard', 'pvp_burst'];
+    const deck = [];
+    for (let index = 0; deck.length < 20; index += 1) {
+      deck.push(source[index % source.length]);
+    }
+    return deck.map(id => ({ id, upgraded: false }));
+  },
+  getLiveQueueLoadoutCandidate(presetId = this.getLiveSelectedLoadoutPreset().id) {
+    const presets = this.getLiveLoadoutPresets();
+    const preset = presets.find(item => item.id === presetId) || presets[0];
+    return {
+      identitySlot: preset.identitySlot,
+      label: preset.label,
+      deck: this.buildLiveLoadoutDeck(preset.pattern)
+    };
+  },
+  getLiveMatchQuality(view) {
+    const report = view && view.matchQuality && typeof view.matchQuality === 'object' ? view.matchQuality : null;
+    if (!report) return null;
+    const waitMs = report.waitMs && typeof report.waitMs === 'object' ? report.waitMs : {};
+    return {
+      reportVersion: String(report.reportVersion || 'pvp-live-match-quality-v1'),
+      tag: String(report.tag || 'good'),
+      expansionStage: String(report.expansionStage || 'mvp_open_pool'),
+      ratingDeltaBucket: String(report.ratingDeltaBucket || 'unrated_mvp'),
+      candidatePoolSize: Math.max(1, Math.floor(Number(report.candidatePoolSize) || 1)),
+      waitMs: {
+        A: Math.max(0, Math.floor(Number(waitMs.A) || 0)),
+        B: Math.max(0, Math.floor(Number(waitMs.B) || 0))
+      },
+      connectionHealth: String(report.connectionHealth || 'not_measured'),
+      safeguards: Array.isArray(report.safeguards) ? report.safeguards.map(item => String(item || '')).filter(Boolean).slice(0, 8) : []
+    };
+  },
+  formatLiveMatchQuality(view) {
+    const report = this.getLiveMatchQuality(view);
+    if (!report) return '匹配质量：等待真人';
+    const labels = {
+      good: '良好',
+      expanded: '扩圈',
+      wide_but_accepted: '宽跨度',
+      rejected: '拒绝'
+    };
+    const tag = labels[report.tag] || report.tag;
+    const maxWaitSec = Math.ceil(Math.max(report.waitMs.A, report.waitMs.B) / 1000);
+    return `匹配质量：${tag} · ${report.expansionStage} · ${report.ratingDeltaBucket} · 等待 ${maxWaitSec}s`;
+  },
+  getLiveTurnTimer(view) {
+    const timer = view && view.turnTimer && typeof view.turnTimer === 'object' ? view.turnTimer : null;
+    if (!timer) return null;
+    const deadlineAt = Math.max(0, Math.floor(Number(timer.deadlineAt) || 0));
+    const fallbackRemaining = Math.max(0, Math.floor(Number(timer.remainingMs) || 0));
+    const remainingMs = deadlineAt > 0 ? Math.max(0, deadlineAt - Date.now()) : fallbackRemaining;
+    return {
+      reportVersion: String(timer.reportVersion || 'pvp-live-turn-timer-v1'),
+      phase: timer.phase === 'setup' ? 'setup' : timer.phase === 'active' ? 'active' : '',
+      currentSeat: String(timer.currentSeat || ''),
+      viewerSeat: String(timer.viewerSeat || ''),
+      isViewerTurn: timer.isViewerTurn === true,
+      viewerCanAct: timer.viewerCanAct === true,
+      startedAt: Math.max(0, Math.floor(Number(timer.startedAt) || 0)),
+      deadlineAt,
+      timeoutMs: Math.max(0, Math.floor(Number(timer.timeoutMs) || 0)),
+      remainingMs
+    };
+  },
+  formatLiveTurnTimer(view) {
+    const timer = this.getLiveTurnTimer(view);
+    if (!timer || !timer.phase) return '倒计时：等待权威状态';
+    const remainingSec = Math.max(0, Math.ceil(timer.remainingMs / 1000));
+    if (timer.phase === 'setup') {
+      return `准备倒计时：${remainingSec}s · 双方确认后开战`;
+    }
+    const turnLabel = timer.isViewerTurn ? '我的行动窗口' : `等待 ${timer.currentSeat || '--'} 行动`;
+    return `行动倒计时：${remainingSec}s · 当前 ${timer.currentSeat || '--'} · ${turnLabel}`;
+  },
+  getLiveConnectionReport(view) {
+    const report = view && view.connectionReport && typeof view.connectionReport === 'object' ? view.connectionReport : null;
+    if (!report) return null;
+    const normalizeSeat = (seat) => {
+      if (!seat || typeof seat !== 'object') return null;
+      const status = ['online', 'grace', 'disconnected'].includes(seat.status) ? seat.status : 'online';
+      return {
+        seatId: String(seat.seatId || ''),
+        status,
+        isViewer: seat.isViewer === true,
+        lastHeartbeatAt: Math.max(0, Math.floor(Number(seat.lastHeartbeatAt) || 0)),
+        elapsedMs: Math.max(0, Math.floor(Number(seat.elapsedMs) || 0)),
+        remainingGraceMs: Math.max(0, Math.floor(Number(seat.remainingGraceMs) || 0))
+      };
+    };
+    return {
+      reportVersion: String(report.reportVersion || 'pvp-live-connection-v1'),
+      connectionHealth: String(report.connectionHealth || 'good'),
+      viewerSeat: String(report.viewerSeat || ''),
+      opponentSeat: String(report.opponentSeat || ''),
+      heartbeatIntervalMs: Math.max(1000, Math.floor(Number(report.heartbeatIntervalMs) || 5000)),
+      heartbeatStaleMs: Math.max(1000, Math.floor(Number(report.heartbeatStaleMs) || 15000)),
+      graceMs: Math.max(1000, Math.floor(Number(report.graceMs) || 30000)),
+      viewer: normalizeSeat(report.viewer),
+      opponent: normalizeSeat(report.opponent)
+    };
+  },
+  formatLiveConnectionStatus(view) {
+    const report = this.getLiveConnectionReport(view);
+    if (!report || !report.viewer || !report.opponent) return '连接：等待心跳';
+    const labels = {
+      online: '在线',
+      grace: '重连宽限',
+      disconnected: '断线'
+    };
+    const viewerLabel = labels[report.viewer.status] || report.viewer.status;
+    const opponentLabel = labels[report.opponent.status] || report.opponent.status;
+    const opponentGraceSec = Math.ceil((report.opponent.remainingGraceMs || 0) / 1000);
+    if (report.opponent.status === 'grace') {
+      return `连接：我方${viewerLabel} · 对方重连宽限 ${opponentGraceSec}s · 不会立即判负`;
+    }
+    if (report.opponent.status === 'disconnected') {
+      return `连接：我方${viewerLabel} · 对方断线 · 等待权威超时结算`;
+    }
+    if (report.viewer.status === 'grace') {
+      const viewerGraceSec = Math.ceil((report.viewer.remainingGraceMs || 0) / 1000);
+      return `连接：我方重连宽限 ${viewerGraceSec}s · 对方${opponentLabel}`;
+    }
+    return `连接：我方${viewerLabel} · 对方${opponentLabel}`;
+  },
+  getLiveOpeningSafeguardReport(view) {
+    const report = view && view.openingSafeguardReport && typeof view.openingSafeguardReport === 'object' ? view.openingSafeguardReport : null;
+    if (!report) return null;
+    const damageBudget = report.damageBudget && typeof report.damageBudget === 'object' ? report.damageBudget : {};
+    const protection = report.openingProtection && typeof report.openingProtection === 'object' ? report.openingProtection : {};
+    const secondSeatBuffer = report.secondSeatBuffer && typeof report.secondSeatBuffer === 'object' ? report.secondSeatBuffer : {};
+    const counterplay = report.counterplay && typeof report.counterplay === 'object' ? report.counterplay : {};
+    const secondSeatBufferBlock = Math.max(0, Math.floor(Number(secondSeatBuffer.block) || 0));
+    return {
+      reportVersion: String(report.reportVersion || 'pvp-live-opening-safeguard-v1'),
+      status: String(report.status || ''),
+      currentSeat: String(report.currentSeat || damageBudget.currentSeat || ''),
+      viewerSeat: String(report.viewerSeat || ''),
+      firstSeat: String(report.firstSeat || ''),
+      secondSeat: String(report.secondSeat || ''),
+      damageBudget: {
+        firstSeat: Math.max(0, Math.floor(Number(damageBudget.firstSeat) || 0)),
+        secondSeat: Math.max(0, Math.floor(Number(damageBudget.secondSeat) || 0)),
+        secondAction: Math.max(0, Math.floor(Number(damageBudget.secondAction) || 0)),
+        currentSeat: String(damageBudget.currentSeat || report.currentSeat || ''),
+        currentActionBudget: damageBudget.currentActionBudget === null || damageBudget.currentActionBudget === undefined
+          ? null
+          : Math.max(0, Math.floor(Number(damageBudget.currentActionBudget) || 0))
+      },
+      openingProtection: {
+        minimumHp: Math.max(0, Math.floor(Number(protection.minimumHp) || 0)),
+        protectedSeats: Array.isArray(protection.protectedSeats)
+          ? protection.protectedSeats.map(item => String(item || '')).filter(item => item === 'A' || item === 'B').slice(0, 2)
+          : [],
+        active: !!protection.active,
+        summary: String(protection.summary || '')
+      },
+      secondSeatBuffer: {
+        block: secondSeatBufferBlock,
+        seatId: String(secondSeatBuffer.seatId || report.secondSeat || ''),
+        active: secondSeatBuffer.active === undefined ? secondSeatBufferBlock > 0 : !!secondSeatBuffer.active,
+        summary: String(secondSeatBuffer.summary || '')
+      },
+      counterplay: {
+        block: Math.max(0, Math.floor(Number(counterplay.block) || 0)),
+        pendingSeats: Array.isArray(counterplay.pendingSeats)
+          ? counterplay.pendingSeats.map(item => String(item || '')).filter(item => item === 'A' || item === 'B').slice(0, 2)
+          : [],
+        grantedSeats: Array.isArray(counterplay.grantedSeats)
+          ? counterplay.grantedSeats.map(item => String(item || '')).filter(item => item === 'A' || item === 'B').slice(0, 2)
+          : [],
+        summary: String(counterplay.summary || '')
+      },
+      sourceVisibility: String(report.sourceVisibility || 'public_state'),
+      usesHiddenInformation: report.usesHiddenInformation === true,
+      rankedImpact: String(report.rankedImpact || 'none')
+    };
+  },
+  renderLiveOpeningSafeguardReport(view) {
+    const report = this.getLiveOpeningSafeguardReport(view);
+    if (!report) return '公平保护：等待权威状态';
+    const currentSeat = report.damageBudget.currentSeat || report.currentSeat || '--';
+    const currentBudget = report.damageBudget.currentActionBudget;
+    const currentBudgetText = currentBudget === null
+      ? `当前 ${currentSeat}：准备后生效`
+      : `当前 ${currentSeat}：${currentBudget}`;
+    const protectedSeats = report.openingProtection.protectedSeats.length
+      ? report.openingProtection.protectedSeats.join('/')
+      : '无';
+    const protectionText = report.openingProtection.active
+      ? `保护 ${protectedSeats} · 保底 ${report.openingProtection.minimumHp} 血`
+      : '已完成首轮保护窗口';
+    const secondSeatBufferSeat = report.secondSeatBuffer.seatId || report.secondSeat || '--';
+    const secondSeatBufferText = report.secondSeatBuffer.block > 0
+      ? `${secondSeatBufferSeat} +${report.secondSeatBuffer.block} · 公开规则`
+      : '未启用';
+    const counterplaySeats = report.counterplay.pendingSeats.length
+      ? `待发放 ${report.counterplay.pendingSeats.join('/')}`
+      : report.counterplay.grantedSeats.length ? `已发放 ${report.counterplay.grantedSeats.join('/')}` : '待触发';
+    return `
+      <span class="pvp-live-opening-safeguard-chip">首动预算 · ${this.escapeHtml(currentBudgetText)}</span>
+      <span class="pvp-live-opening-safeguard-chip">先手 ${this.escapeHtml(report.firstSeat || 'A')} ${report.damageBudget.firstSeat} / 后手 ${this.escapeHtml(report.secondSeat || 'B')} ${report.damageBudget.secondSeat}</span>
+      <span class="pvp-live-opening-safeguard-chip" data-live-opening-second-seat-buffer>后手护盾 · ${this.escapeHtml(secondSeatBufferText)}</span>
+      <span class="pvp-live-opening-safeguard-chip">开局护体 · ${this.escapeHtml(protectionText)}</span>
+      <span class="pvp-live-opening-safeguard-chip">反打缓冲 · 护盾 ${report.counterplay.block} · ${this.escapeHtml(counterplaySeats)}</span>
+    `;
+  },
+  getLiveFirstMatchGuide(view) {
+    const report = view && view.firstMatchGuide && typeof view.firstMatchGuide === 'object' ? view.firstMatchGuide : null;
+    if (!report) return null;
+    const steps = Array.isArray(report.steps) ? report.steps : [];
+    const recommendedLoadouts = Array.isArray(report.recommendedLoadouts) ? report.recommendedLoadouts : [];
+    const exceptionBranches = Array.isArray(report.exceptionBranches) ? report.exceptionBranches : [];
+    const reviewActions = Array.isArray(report.reviewActions) ? report.reviewActions : [];
+    return {
+      reportVersion: String(report.reportVersion || 'pvp-live-first-match-guide-v1'),
+      title: String(report.title || '首战简报'),
+      summary: String(report.summary || ''),
+      nextAction: String(report.nextAction || ''),
+      safeguards: Array.isArray(report.safeguards) ? report.safeguards.map(item => String(item || '')).filter(Boolean).slice(0, 8) : [],
+      steps: steps.slice(0, 6).map(step => ({
+        id: String(step && step.id || ''),
+        label: String(step && step.label || ''),
+        detail: String(step && step.detail || '')
+      })).filter(step => step.id && step.label && step.detail),
+      recommendedLoadouts: recommendedLoadouts.slice(0, 3).map(item => ({
+        id: String(item && item.id || ''),
+        label: String(item && item.label || ''),
+        role: String(item && item.role || ''),
+        weakness: String(item && item.weakness || '')
+      })).filter(item => item.id && item.label && item.role && item.weakness),
+      exceptionBranches: exceptionBranches.slice(0, 6).map(item => ({
+        id: String(item && item.id || ''),
+        label: String(item && item.label || ''),
+        detail: String(item && item.detail || '')
+      })).filter(item => item.id && item.label && item.detail),
+      reviewActions: reviewActions.slice(0, 6).map(item => ({
+        id: String(item && item.id || ''),
+        label: String(item && item.label || '')
+      })).filter(item => item.id && item.label)
+    };
+  },
+  getLiveFriendlySeries(source) {
+    const report = source && source.friendlySeries && typeof source.friendlySeries === 'object'
+      ? source.friendlySeries
+      : source && typeof source === 'object' ? source : null;
+    if (!report) return null;
+    return {
+      reportVersion: String(report.reportVersion || 'pvp-live-friendly-series-v1'),
+      sourceMatchId: String(report.sourceMatchId || ''),
+      originMatchId: String(report.originMatchId || report.sourceMatchId || ''),
+      seriesId: String(report.seriesId || ''),
+      status: String(report.status || ''),
+      format: String(report.format || 'bo3_mvp'),
+      targetWins: Math.max(2, Math.min(5, Math.floor(Number(report.targetWins) || 2))),
+      maxRounds: Math.max(1, Math.floor(Number(report.maxRounds) || 3)),
+      roundIndex: Math.max(1, Math.floor(Number(report.roundIndex) || 2)),
+      roundLabel: String(report.roundLabel || '换边再战'),
+      seriesStatus: String(report.seriesStatus || ''),
+      scoreBySourceSeat: {
+        A: Math.max(0, Math.floor(Number(report.scoreBySourceSeat && report.scoreBySourceSeat.A) || 0)),
+        B: Math.max(0, Math.floor(Number(report.scoreBySourceSeat && report.scoreBySourceSeat.B) || 0))
+      },
+      sourceParticipants: {
+        A: {
+          sourceSeat: 'A',
+          userId: String(report.sourceParticipants && report.sourceParticipants.A && report.sourceParticipants.A.userId || ''),
+          displayName: String(report.sourceParticipants && report.sourceParticipants.A && (report.sourceParticipants.A.displayName || report.sourceParticipants.A.userId) || '甲方')
+        },
+        B: {
+          sourceSeat: 'B',
+          userId: String(report.sourceParticipants && report.sourceParticipants.B && report.sourceParticipants.B.userId || ''),
+          displayName: String(report.sourceParticipants && report.sourceParticipants.B && (report.sourceParticipants.B.displayName || report.sourceParticipants.B.userId) || '乙方')
+        }
+      },
+      leaderSourceSeat: String(report.leaderSourceSeat || ''),
+      winnerSourceSeat: String(report.winnerSourceSeat || ''),
+      canRequestNextRound: !!report.canRequestNextRound,
+      rankedImpact: String(report.rankedImpact || 'none'),
+      formalResultPolicy: String(report.formalResultPolicy || 'practice_only'),
+      seatPolicy: String(report.seatPolicy || 'swap_sides'),
+      loadoutPolicy: String(report.loadoutPolicy || 'per_game_change_allowed'),
+      confirmationCount: Math.max(1, Math.min(2, Math.floor(Number(report.confirmationCount) || 1))),
+      safeguards: Array.isArray(report.safeguards) ? report.safeguards.map(item => String(item || '')).filter(Boolean).slice(0, 8) : []
+    };
+  },
+  renderLiveFirstMatchGuide(view) {
+    const guide = this.getLiveFirstMatchGuide(view);
+    if (!guide) return '首战简报：等待真人匹配';
+    const visibleSteps = guide.steps.slice(0, 4);
+    const visibleLoadouts = guide.recommendedLoadouts.slice(0, 3);
+    return `
+      <div class="pvp-live-guide-head">
+        <span class="pvp-live-guide-title">${this.escapeHtml(guide.title)}</span>
+        <span class="pvp-live-guide-next">${this.escapeHtml(guide.nextAction || guide.summary)}</span>
+      </div>
+      <div class="pvp-live-guide-steps">
+        ${visibleSteps.map(step => `<span class="pvp-live-guide-step" title="${this.escapeHtml(step.detail)}">${this.escapeHtml(step.label)}：${this.escapeHtml(step.detail)}</span>`).join('')}
+      </div>
+      ${visibleLoadouts.length ? `
+        <div class="pvp-live-guide-loadouts">
+          ${visibleLoadouts.map(item => `<span class="pvp-live-guide-loadout" title="${this.escapeHtml(item.role)}">${this.escapeHtml(item.label)} · ${this.escapeHtml(item.weakness)}</span>`).join('')}
+        </div>
+      ` : ''}
+    `;
+  },
+  getLiveWaitingReport(state) {
+    const report = state && state.waitingReport && typeof state.waitingReport === 'object' ? state.waitingReport : null;
+    if (!report) return null;
+    const actions = Array.isArray(report.actions) ? report.actions : [];
+    return {
+      reportVersion: String(report.reportVersion || 'pvp-live-waiting-report-v1'),
+      waitMs: Math.max(0, Math.floor(Number(report.waitMs) || 0)),
+      longWaitThresholdMs: Math.max(0, Math.floor(Number(report.longWaitThresholdMs) || 120000)),
+      longWait: !!report.longWait,
+      message: String(report.message || ''),
+      safeguards: Array.isArray(report.safeguards) ? report.safeguards.map(item => String(item || '')).filter(Boolean).slice(0, 8) : [],
+      actions: actions.slice(0, 4).map(action => ({
+        id: String(action && action.id || ''),
+        label: String(action && action.label || ''),
+        detail: String(action && action.detail || '')
+      })).filter(action => action.id && action.label && action.detail)
+    };
+  },
+  isLiveLongWait(state) {
+    return !!this.getLiveWaitingReport(state)?.longWait;
+  },
+  shouldLivePoll(state) {
+    if (!state) return false;
+    if (state.phase === 'idle') return true;
+    if (state.phase === 'waiting_invite') return true;
+    if (state.phase === 'waiting_rematch') return true;
+    if (state.phase !== 'waiting') return false;
+    if (!this.isLiveLongWait(state)) return true;
+    return Date.now() < Math.max(0, Number(this.liveLongWaitPollUntil) || 0);
+  },
+  renderLiveWaitingReport(state) {
+    const report = this.getLiveWaitingReport(state);
+    if (!report || !report.longWait) return '';
+    const waitSec = Math.ceil(report.waitMs / 1000);
+    return `
+      <div class="pvp-live-waiting-head">
+        <span>120 秒无真人</span>
+        <span>已等待 ${this.escapeHtml(waitSec)}s</span>
+      </div>
+      <div>${this.escapeHtml(report.message || '当前真人较少，可继续等待、进入问道练习或取消匹配；不会自动切残影。')}</div>
+      <div class="pvp-live-waiting-actions">
+        ${report.actions.map(action => `<span class="pvp-live-waiting-action" title="${this.escapeHtml(action.detail)}">${this.escapeHtml(action.label)}：${this.escapeHtml(action.detail)}</span>`).join('')}
+      </div>
+    `;
+  },
+  renderLiveInviteReport(report) {
+    const source = report && typeof report === 'object' ? report : null;
+    if (!source) return '约战不写正式积分，只和输入邀请码的真人匹配。';
+    const code = String(source.inviteCode || '').trim() || '--';
+    const status = String(source.status || 'waiting');
+    const hostName = source.host && source.host.displayName ? source.host.displayName : '邀请者';
+    const targetName = source.target && source.target.displayName ? source.target.displayName : '';
+    const statusLabel = status === 'matched' ? '已成局' : status === 'cancelled' ? '已取消' : '等待好友加入';
+    const impact = source.rankedImpact === 'none' ? '不写正式积分' : String(source.rankedImpact || '友谊局');
+    const targetLabel = targetName ? ` · 指定 ${this.escapeHtml(targetName)}` : '';
+    return `${statusLabel} · ${impact} · 房主 ${this.escapeHtml(hostName)}${targetLabel} · 邀请码 ${this.escapeHtml(code)}`;
+  },
+  renderLiveInviteInbox(invites = []) {
+    const list = Array.isArray(invites) ? invites : [];
+    if (list.length === 0) return '收到的约战：暂无';
+    return list.slice(0, 4).map(invite => {
+      const report = invite && invite.inviteReport ? invite.inviteReport : {};
+      const code = String(invite && invite.inviteCode || report.inviteCode || '').trim();
+      if (!code) return '';
+      const hostName = report.host && report.host.displayName ? report.host.displayName : '道友';
+      const expiresAt = Number(report.expiresAt) || 0;
+      const expiresLabel = expiresAt ? ` · ${Math.max(0, Math.ceil((expiresAt - Date.now()) / 60000))} 分钟内有效` : '';
+      return `
+        <div class="pvp-live-invite-inbox-item">
+          <span>${this.escapeHtml(hostName)} 邀请你友谊约战 · ${this.escapeHtml(code)} · 不写正式积分${this.escapeHtml(expiresLabel)}</span>
+          <button class="challenge-btn secondary" data-live-inbox-join="${this.escapeHtml(code)}" onclick="PVPScene.joinLiveInboxInvite('${this.escapeHtml(code)}')">加入</button>
+        </div>
+      `;
+    }).filter(Boolean).join('') || '收到的约战：暂无';
+  },
+  getLivePostMatchReview(view) {
+    const report = view && view.postMatchReview && typeof view.postMatchReview === 'object' ? view.postMatchReview : null;
+    if (!report) return null;
+    const evidence = Array.isArray(report.evidence) ? report.evidence : [];
+    const suggestions = Array.isArray(report.suggestions) ? report.suggestions : [];
+    const nextActions = Array.isArray(report.nextActions) ? report.nextActions : [];
+    return {
+      reportVersion: String(report.reportVersion || 'pvp-live-post-match-review-v1'),
+      title: String(report.title || '赛后复盘 MVP'),
+      result: String(report.result || ''),
+      winnerSeat: String(report.winnerSeat || ''),
+      loserSeat: String(report.loserSeat || ''),
+      finishReason: String(report.finishReason || ''),
+      summary: String(report.summary || ''),
+      evidence: evidence.slice(0, 12).map(event => this.getLivePublicEventRef(event)).filter(Boolean),
+      keyTurnReplay: this.getLiveKeyTurnReplay(report.keyTurnReplay),
+      experienceReport: this.getLiveExperienceReport(report.experienceReport),
+      friendlySeries: this.getLiveFriendlySeries(report.friendlySeries),
+      suggestions: suggestions.slice(0, 2).map(item => String(item || '')).filter(Boolean),
+      nextActions: nextActions.slice(0, 6).map(action => ({
+        id: String(action && action.id || ''),
+        label: String(action && action.label || ''),
+        detail: String(action && action.detail || '')
+      })).filter(action => action.id && action.label)
+    };
+  },
+  renderLiveFriendlySeries(report) {
+    const series = this.getLiveFriendlySeries(report);
+    if (!series) return '';
+    const impactLabel = series.rankedImpact === 'none' ? '不写正式积分' : series.rankedImpact;
+    const nameA = series.sourceParticipants.A.displayName || '甲方';
+    const nameB = series.sourceParticipants.B.displayName || '乙方';
+    const scoreLabel = `${nameA} ${series.scoreBySourceSeat.A} : ${series.scoreBySourceSeat.B} ${nameB}`;
+    const seriesLabel = series.winnerSourceSeat
+      ? `系列结束 · ${series.winnerSourceSeat === 'A' ? nameA : nameB} 先到 ${series.targetWins} 胜`
+      : series.canRequestNextRound ? '系列未决 · 可继续决胜局' : '系列进行中';
+    return `
+      <div class="pvp-live-friendly-series" data-live-friendly-series>
+        <span>${this.escapeHtml(series.roundLabel)} · ${this.escapeHtml(scoreLabel)}</span>
+        <span>${this.escapeHtml(seriesLabel)} · ${this.escapeHtml(impactLabel)}</span>
+        <span>系列 ${this.escapeHtml(series.seriesId.slice(0, 12) || '--')} · ${this.escapeHtml(series.seatPolicy)}</span>
+      </div>
+    `;
+  },
+  getLivePublicEventData(event) {
+    const source = event && event.publicData && typeof event.publicData === 'object' ? event.publicData : {};
+    const allowedKeys = [
+      'firstSeat',
+      'nextSeat',
+      'seatId',
+      'count',
+      'targetSeat',
+      'protectedSeat',
+      'minimumHp',
+      'preventedDamage',
+      'wouldHaveHp',
+      'rawDamage',
+      'actualDamage',
+      'budgetedDamage',
+      'blockedDamage',
+      'hpDamage',
+      'targetHp',
+      'block',
+      'totalBlock',
+      'completedTurns',
+      'roundIndex',
+      'turnIndex',
+      'winnerSeat',
+      'loserSeat',
+      'finishReason',
+      'cost',
+      'remainingEnergy'
+    ];
+    return allowedKeys.reduce((publicData, key) => {
+      const value = source[key];
+      if (value === undefined || value === null) return publicData;
+      if (typeof value === 'number') {
+        publicData[key] = Number.isFinite(value) ? value : 0;
+      } else if (typeof value === 'boolean') {
+        publicData[key] = value;
+      } else if (typeof value === 'string') {
+        publicData[key] = String(value).slice(0, 64);
+      }
+      return publicData;
+    }, {});
+  },
+  getLivePublicEventRef(event) {
+    const eventType = String(event && event.eventType || '');
+    if (!eventType) return null;
+    const ref = {
+      eventType,
+      sequence: Number.isFinite(Number(event && event.sequence)) ? Math.floor(Number(event.sequence)) : null,
+      actingSeat: String(event && event.actingSeat || '')
+    };
+    const publicData = this.getLivePublicEventData(event);
+    if (Object.keys(publicData).length > 0) {
+      ref.publicData = publicData;
+    }
+    return ref;
+  },
+  getLiveExperienceReport(source) {
+    const report = source && typeof source === 'object' && source.experienceReport
+      ? source.experienceReport
+      : source && typeof source === 'object' ? source : null;
+    if (!report) return null;
+    const checks = Array.isArray(report.fairnessChecks) ? report.fairnessChecks : [];
+    return {
+      reportVersion: String(report.reportVersion || 'pvp-live-experience-report-v1'),
+      title: String(report.title || '双方体验诊断'),
+      sourceVisibility: String(report.sourceVisibility || 'public_events'),
+      usesHiddenInformation: report.usesHiddenInformation === true,
+      rankedImpact: String(report.rankedImpact || 'none'),
+      nonGameRisk: String(report.nonGameRisk || 'watch'),
+      nonGameRiskReasons: Array.isArray(report.nonGameRiskReasons) ? report.nonGameRiskReasons.map(item => String(item || '')).filter(Boolean).slice(0, 6) : [],
+      agencyLabel: String(report.agencyLabel || '公开窗口待复查'),
+      decisionWindowCount: Math.max(0, Math.floor(Number(report.decisionWindowCount) || 0)),
+      seatWindowSummary: {
+        firstSeat: report.seatWindowSummary && report.seatWindowSummary.firstSeat ? String(report.seatWindowSummary.firstSeat) : '',
+        secondSeat: report.seatWindowSummary && report.seatWindowSummary.secondSeat ? String(report.seatWindowSummary.secondSeat) : '',
+        secondSeatWindowObserved: !!(report.seatWindowSummary && report.seatWindowSummary.secondSeatWindowObserved),
+        terminalBeforeSecondSeatWindow: !!(report.seatWindowSummary && report.seatWindowSummary.terminalBeforeSecondSeatWindow)
+      },
+      safeguardSummary: {
+        setupReady: String(report.safeguardSummary && report.safeguardSummary.setupReady || ''),
+        firstActionBudget: String(report.safeguardSummary && report.safeguardSummary.firstActionBudget || ''),
+        openingProtection: String(report.safeguardSummary && report.safeguardSummary.openingProtection || '')
+      },
+      summary: String(report.summary || ''),
+      recommendedAction: String(report.recommendedAction || ''),
+      fairnessChecks: checks.slice(0, 5).map(check => ({
+        id: String(check && check.id || ''),
+        label: String(check && check.label || ''),
+        passed: check && check.passed === true,
+        detail: String(check && check.detail || ''),
+        linkedEvidence: Array.isArray(check && check.linkedEvidence)
+          ? check.linkedEvidence.map(event => this.getLivePublicEventRef(event)).filter(Boolean).slice(0, 4)
+          : []
+      })).filter(check => check.id && check.label && check.detail)
+    };
+  },
+  getLiveKeyTurnReplay(source) {
+    const report = source && typeof source === 'object' && source.keyTurnReplay
+      ? source.keyTurnReplay
+      : source && typeof source === 'object' ? source : null;
+    if (!report) return null;
+    const turns = Array.isArray(report.turns) ? report.turns : [];
+    return {
+      reportVersion: String(report.reportVersion || 'pvp-live-key-turn-replay-v1'),
+      title: String(report.title || '关键回合复盘'),
+      sourceVisibility: String(report.sourceVisibility || 'public_events'),
+      usesHiddenInformation: report.usesHiddenInformation === true,
+      rankedImpact: String(report.rankedImpact || 'none'),
+      summary: String(report.summary || ''),
+      recommendedAction: String(report.recommendedAction || ''),
+      turns: turns.slice(0, 3).map(turn => ({
+        id: String(turn && turn.id || ''),
+        label: String(turn && turn.label || ''),
+        sequence: Number.isFinite(Number(turn && turn.sequence)) ? Math.floor(Number(turn.sequence)) : null,
+        eventType: String(turn && turn.eventType || ''),
+        actingSeat: String(turn && turn.actingSeat || ''),
+        severity: String(turn && turn.severity || 'tempo'),
+        lesson: String(turn && turn.lesson || '')
+      })).filter(turn => turn.id && turn.label && turn.eventType && turn.lesson)
+    };
+  },
+  renderLiveExperienceReport(review) {
+    const report = this.getLiveExperienceReport(review);
+    if (!report) return '';
+    const riskLabel = report.nonGameRisk === 'low' ? '低风险' : '需观察';
+    return `
+      <div
+        class="pvp-live-experience-report risk-${this.escapeHtml(report.nonGameRisk)}"
+        data-live-experience-report
+        data-live-experience-source="${this.escapeHtml(report.sourceVisibility)}"
+        data-live-experience-hidden="${report.usesHiddenInformation ? 'true' : 'false'}"
+      >
+        <div class="pvp-live-experience-head">
+          <span>${this.escapeHtml(report.title)}</span>
+          <span>${this.escapeHtml(riskLabel)} · ${this.escapeHtml(report.agencyLabel)}</span>
+        </div>
+        <div class="pvp-live-experience-summary">${this.escapeHtml(report.summary)}</div>
+        <div class="pvp-live-experience-checks">
+          ${report.fairnessChecks.map(check => `
+            <button
+              type="button"
+              class="pvp-live-experience-check ${check.passed ? 'passed' : 'watch'}"
+              data-live-experience-check="${this.escapeHtml(check.id)}"
+              onclick="PVPScene.handleLiveExperienceCheckFocus('${this.escapeHtml(check.id)}')"
+              title="查看 ${this.escapeHtml(check.label)} 的公开证据"
+            >
+              <div class="pvp-live-experience-check-head">
+                <span>${this.escapeHtml(check.label)}</span>
+                <span>${check.passed ? '通过' : '观察'}</span>
+              </div>
+              <div class="pvp-live-experience-check-detail">${this.escapeHtml(check.detail)}</div>
+            </button>
+          `).join('')}
+        </div>
+      </div>
+    `;
+  },
+  renderLiveKeyTurnReplay(review) {
+    const replay = this.getLiveKeyTurnReplay(review);
+    if (!replay || replay.turns.length === 0) return '';
+    return `
+      <div
+        class="pvp-live-key-turns"
+        data-live-key-turn-replay
+        data-live-key-turn-source="${this.escapeHtml(replay.sourceVisibility)}"
+        data-live-key-turn-hidden="${replay.usesHiddenInformation ? 'true' : 'false'}"
+      >
+        <div class="pvp-live-key-turns-head">
+          <span>${this.escapeHtml(replay.title)}</span>
+          <span>${this.escapeHtml(replay.sourceVisibility)} · ${this.escapeHtml(replay.rankedImpact)}</span>
+        </div>
+        ${replay.summary ? `<div class="pvp-live-key-turns-summary">${this.escapeHtml(replay.summary)}</div>` : ''}
+        <div class="pvp-live-key-turn-grid">
+          ${replay.turns.map(turn => `
+            <div class="pvp-live-key-turn severity-${this.escapeHtml(turn.severity)}" data-live-key-turn="${this.escapeHtml(turn.id)}">
+              <div class="pvp-live-key-turn-meta">
+                <span>${this.escapeHtml(turn.label)}</span>
+                <span>${turn.sequence !== null ? `#${this.escapeHtml(turn.sequence)}` : '--'} · ${this.escapeHtml(turn.eventType)}</span>
+              </div>
+              <div class="pvp-live-key-turn-lesson">${this.escapeHtml(turn.lesson)}</div>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    `;
+  },
+  isLivePostReviewActionDisabled(actionId, phase = 'idle') {
+    if (phase !== 'waiting_rematch') return false;
+    return ['friendly_rematch', 'adjust_loadout', 'practice', 'queue_again'].includes(String(actionId || ''));
+  },
+  renderLivePostMatchReview(view, phase = 'idle') {
+    const review = this.getLivePostMatchReview(view);
+    if (!review) return '';
+    const resultLabel = review.result === 'win' ? '胜局' : review.result === 'loss' ? '败局' : '终局';
+    const finishLabels = {
+      surrender: '认输',
+      lethal: '伤害终结',
+      timeout: '行动超时'
+    };
+    const finishLabel = finishLabels[review.finishReason] || review.finishReason || '终局';
+    return `
+      <div class="pvp-live-review-head">
+        <span class="pvp-live-guide-title">${this.escapeHtml(review.title)}</span>
+        <span class="pvp-live-review-chip">${this.escapeHtml(resultLabel)} · ${this.escapeHtml(finishLabel)}</span>
+      </div>
+      <div class="pvp-live-review-summary">${this.escapeHtml(review.summary)}</div>
+      ${review.evidence.length ? `
+        <div class="pvp-live-review-evidence">
+          ${review.evidence.map(event => {
+            const formatted = this.formatLiveEvent(event);
+            return `<span title="${this.escapeHtml(formatted.detail)}">${this.escapeHtml(formatted.label)}${event.sequence !== null ? ` #${this.escapeHtml(event.sequence)}` : ''}</span>`;
+          }).join('')}
+        </div>
+      ` : ''}
+      ${review.suggestions.length ? `
+        <div class="pvp-live-review-suggestions">
+          ${review.suggestions.map(line => `<span>${this.escapeHtml(line)}</span>`).join('')}
+        </div>
+      ` : ''}
+      ${this.renderLiveFriendlySeries(review.friendlySeries)}
+      ${this.renderLiveExperienceReport(review)}
+      ${this.renderLiveKeyTurnReplay(review)}
+      <div class="pvp-live-review-actions">
+        ${review.nextActions.map(action => `
+          <button
+            type="button"
+            data-live-post-review-action="${this.escapeHtml(action.id)}"
+            onclick="PVPScene.handleLivePostReviewAction('${this.escapeHtml(action.id)}')"
+            title="${this.escapeHtml(action.detail || action.label)}"
+            ${this.isLivePostReviewActionDisabled(action.id, phase) ? 'disabled' : ''}
+          >${this.escapeHtml(action.label)}</button>
+        `).join('')}
+      </div>
+    `;
+  },
+  buildLivePostReviewDrillScenario(state = null) {
+    const sourceState = state && typeof state === 'object' ? state : this.getLiveSession().getState();
+    const view = sourceState && sourceState.stateView ? sourceState.stateView : null;
+    const review = this.getLivePostMatchReview(view);
+    const matchId = String((sourceState && sourceState.matchId) || (view && view.matchId) || '').trim();
+    if (!matchId || !review) return null;
+    const theme = review.finishReason === 'timeout'
+      ? { key: 'oracle', label: '推演控场', advice: '先练读秒前的权威局面刷新，再练保留可执行动作。' }
+      : review.result === 'win'
+        ? { key: 'assault', label: '前压爆发', advice: '把本局有效压制节奏复刻成可重复的前两手路线。' }
+        : { key: 'bulwark', label: '稳守续航', advice: '先练低费防御、调息保留和首轮稳血，再回到真人排位。' };
+    const recommendedLoadoutId = review.result === 'loss' ? 'shield' : this.getLiveSelectedLoadoutPreset().id;
+    const recommendedLoadout = this.getLiveLoadoutPresets().find(preset => preset.id === recommendedLoadoutId) || this.getLiveSelectedLoadoutPreset();
+    const evidence = Array.isArray(review.evidence) ? review.evidence.slice(0, 12) : [];
+    const publicEventTypes = evidence.map(event => String(event && event.eventType || '')).filter(Boolean);
+    const sourceEventSequences = evidence
+      .map(event => Number.isFinite(Number(event && event.sequence)) ? Math.floor(Number(event.sequence)) : null)
+      .filter(sequence => sequence !== null);
+    const resultLabel = review.result === 'loss' ? '首败' : review.result === 'win' ? '胜局' : '终局';
+    const trainingAdvice = `真人 PVP ${resultLabel}复盘：${theme.advice}`;
+    return {
+      reportVersion: 'pvp-live-drill-scenario-v1',
+      sourceMatchId: matchId,
+      sourceVisibility: 'replay_self',
+      usesHiddenInformation: false,
+      rankedImpact: 'none',
+      result: review.result,
+      finishReason: review.finishReason,
+      recommendedLoadoutId: recommendedLoadout.id,
+      recommendedLoadoutLabel: recommendedLoadout.label,
+      themeKey: theme.key,
+      themeLabel: theme.label,
+      trainingAdvice,
+      drillObjective: `${recommendedLoadout.label}：围绕 ${theme.label} 复刻本局公开失误窗口，不写正式积分。`,
+      trainingTags: ['真人 PVP', resultLabel === '首败' ? '首败复盘' : '赛后复盘', '不计积分', theme.label],
+      publicEventTypes,
+      sourceEventSequences
+    };
+  },
+  async commitLivePostReviewPracticeHandoff() {
+    const scenario = this.buildLivePostReviewDrillScenario();
+    if (!scenario) {
+      this.openLivePracticeHint();
+      return null;
+    }
+    this.liveDrillScenario = scenario;
+    const gameRef = this.getGameRef();
+    const focus = {
+      sourceRunId: `pvp_live:${scenario.sourceMatchId}`,
+      guideRecordId: `pvp_live:${scenario.sourceMatchId}`,
+      chapterName: '真人 PVP 复盘',
+      sourceTitle: scenario.recommendedLoadoutLabel,
+      themeKey: scenario.themeKey,
+      themeLabel: scenario.themeLabel,
+      ratingLabel: scenario.result === 'loss' ? '首败练习' : '赛后练习',
+      ratingTone: 'selected',
+      trainingAdvice: scenario.trainingAdvice,
+      highlightLine: scenario.drillObjective,
+      routeFocusLine: '练习不写正式积分；只复用公开事件和本方可见复盘。',
+      compareHint: '对照公开事件顺序、首动预算和调息窗口，不读取对手隐藏手牌或牌库。',
+      trainingTags: scenario.trainingTags,
+      goalHighlights: [
+        `公开事件：${scenario.publicEventTypes.slice(0, 4).join(' / ') || '暂无'}`,
+        `推荐谱：${scenario.recommendedLoadoutLabel}`,
+        '正式积分：不变'
+      ]
+    };
+    if (gameRef && typeof gameRef.ensureChallengeHubLoaded === 'function') {
+      await gameRef.ensureChallengeHubLoaded();
+    }
+    if (gameRef && typeof gameRef.setObservatoryTrainingFocus === 'function') {
+      gameRef.setObservatoryTrainingFocus(focus, { silent: true });
+    }
+    const message = '已生成真人 PVP 练习课题：练习不写正式积分，只使用公开事件和本方复盘信息。';
+    const root = document.querySelector('[data-live-pvp-root]');
+    const hint = root ? root.querySelector('[data-live-last-error]') : null;
+    if (hint) hint.textContent = message;
+    if (typeof Utils !== 'undefined' && Utils && typeof Utils.showBattleLog === 'function') {
+      Utils.showBattleLog(message);
+    }
+    let drillStarted = false;
+    if (gameRef && typeof gameRef.beginPvpLiveDrillScenario === 'function') {
+      drillStarted = !!gameRef.beginPvpLiveDrillScenario(scenario);
+    }
+    if (drillStarted) {
+      return scenario;
+    }
+    if (gameRef && typeof gameRef.showChallengeHub === 'function') {
+      await gameRef.showChallengeHub('daily');
+    }
+    return scenario;
+  },
+  formatLiveEvent(event = {}) {
+    const type = String(event && event.eventType || 'event');
+    const payload = event && event.payload && typeof event.payload === 'object'
+      ? event.payload
+      : event && event.publicData && typeof event.publicData === 'object' ? event.publicData : {};
+    const actor = event && event.actingSeat ? `席位 ${event.actingSeat}` : '';
+    const eventMap = {
+      opening_protection_triggered: '开局护体触发',
+      opening_second_seat_buffer_granted: '后手护盾发放',
+      opening_counterplay_granted: '反打缓冲发放',
+      budget_clamped: '首动伤害压制',
+      damage_applied: '伤害结算',
+      block_gained: '护盾结算',
+      card_played: '术式打出',
+      turn_ended: '回合交替',
+      mulligan_completed: '调息完成',
+      player_ready: '准备确认',
+      battle_started: '开战',
+      player_surrendered: '认输',
+      ready_timeout: '准备超时',
+      connection_timeout: '连接超时',
+      turn_timeout: '行动超时',
+      match_invalidated: '无效局',
+      match_finished: '对局结束',
+      snapshot_locked: '斗法谱锁定',
+      emote_sent: '预设表情'
+    };
+    let detail = actor;
+    if (type === 'opening_protection_triggered') {
+      const protectedSeat = String(payload.protectedSeat || '');
+      const minimumHp = Math.max(0, Math.floor(Number(payload.minimumHp) || 0));
+      const preventedDamage = Math.max(0, Math.floor(Number(payload.preventedDamage) || 0));
+      detail = `${protectedSeat ? `护住 ${protectedSeat}` : '护住未行动方'} · 保底 ${minimumHp || 1} 血 · 挡下 ${preventedDamage} 点致命伤害`;
+    } else if (type === 'opening_second_seat_buffer_granted') {
+      const seatId = String(payload.seatId || '');
+      const firstSeat = String(payload.firstSeat || '');
+      const block = Math.max(0, Math.floor(Number(payload.block) || 0));
+      const totalBlock = Math.max(0, Math.floor(Number(payload.totalBlock) || 0));
+      detail = `${seatId ? `给 ${seatId}` : '给后手'} · 护盾 +${block} · 当前护盾 ${totalBlock}${firstSeat ? ` · 先手 ${firstSeat}` : ''}`;
+    } else if (type === 'opening_counterplay_granted') {
+      const seatId = String(payload.seatId || '');
+      const block = Math.max(0, Math.floor(Number(payload.block) || 0));
+      const totalBlock = Math.max(0, Math.floor(Number(payload.totalBlock) || 0));
+      detail = `${seatId ? `给 ${seatId}` : '受保护方'} · 护盾 +${block} · 当前护盾 ${totalBlock}`;
+    } else if (type === 'budget_clamped') {
+      const targetSeat = String(payload.targetSeat || '');
+      const preventedDamage = Math.max(0, Math.floor(Number(payload.preventedDamage) || 0));
+      detail = `${targetSeat ? `目标 ${targetSeat}` : '首动'} · 压下 ${preventedDamage} 点爆发`;
+    } else if (type === 'damage_applied') {
+      const targetSeat = String(payload.targetSeat || '');
+      const hpDamage = Math.max(0, Math.floor(Number(payload.hpDamage) || 0));
+      const targetHp = Math.max(0, Math.floor(Number(payload.targetHp) || 0));
+      detail = `${targetSeat ? `目标 ${targetSeat}` : '目标'} · 生命伤害 ${hpDamage} · 剩余 ${targetHp}`;
+    } else if (type === 'match_invalidated' && payload.reason) {
+      detail = `原因：${String(payload.reason)}`;
+    } else if (type === 'match_finished') {
+      detail = `胜者 ${String(payload.winnerSeat || '--')} · 败者 ${String(payload.loserSeat || '--')}`;
+    } else if (type === 'battle_started') {
+      detail = `先手 ${String(payload.firstSeat || '--')}`;
+    } else if (type === 'mulligan_completed') {
+      detail = `${String(payload.seatId || event.actingSeat || '--')} 调息 ${Math.max(0, Math.floor(Number(payload.count) || 0))} 张`;
+    } else if (type === 'turn_ended') {
+      detail = `下一手 ${String(payload.nextSeat || '--')}`;
+    } else if (type === 'ready_timeout') {
+      const seats = Array.isArray(payload.unreadySeats) ? payload.unreadySeats.join('/') : '';
+      detail = seats ? `未准备：${seats}` : '准备窗口关闭';
+    } else if (type === 'connection_timeout') {
+      const seats = Array.isArray(payload.disconnectedSeats) ? payload.disconnectedSeats.join('/') : String(payload.seatId || '');
+      detail = seats ? `断线席位：${seats}` : '重连宽限结束';
+    } else if (type === 'turn_timeout') {
+      const loserSeat = String(payload.loserSeat || payload.seatId || event.actingSeat || '--');
+      detail = payload.finishReason === 'connection_timeout'
+        ? `${loserSeat} 重连宽限结束`
+        : `${loserSeat} 行动窗口超时`;
+    } else if (type === 'emote_sent') {
+      const seatId = String(payload.seatId || event.actingSeat || '--');
+      const label = String(payload.label || payload.emoteId || '预设表情');
+      detail = `${seatId} · ${label}`;
+    }
+    return {
+      type,
+      label: eventMap[type] || type,
+      detail: detail || actor || '公共事件'
+    };
+  },
+  getLiveEmoteOptions() {
+    return [
+      { id: 'respect', label: '抱拳' },
+      { id: 'thinking', label: '思考' },
+      { id: 'well_played', label: '妙手' }
+    ];
+  },
+  canSendLiveEmote(phase) {
+    return phase === 'setup' || phase === 'active' || phase === 'sync_required';
+  },
+  filterLiveEventsForMute(events = []) {
+    if (!this.liveSocialMuted) return Array.isArray(events) ? events : [];
+    const state = this.getLiveSession().getState();
+    const mySeat = String(state && state.seatId || '');
+    return (Array.isArray(events) ? events : []).filter(event => {
+      if (!event || event.eventType !== 'emote_sent') return true;
+      const payload = event.payload && typeof event.payload === 'object'
+        ? event.payload
+        : event.publicData && typeof event.publicData === 'object' ? event.publicData : {};
+      const seatId = String(payload.seatId || event.actingSeat || '');
+      return seatId === mySeat;
+    });
+  },
+  async submitLiveEmote(emoteId) {
+    const option = this.getLiveEmoteOptions().find(item => item.id === emoteId);
+    if (!option) return;
+    const session = this.getLiveSession();
+    const state = session.getState();
+    if (!state || !state.matchId || !this.canSendLiveEmote(state.phase)) {
+      const root = document.querySelector('[data-live-pvp-root]');
+      const hint = root ? root.querySelector('[data-live-last-error]') : null;
+      if (hint) hint.textContent = '表情只能在准备或对局中发送。';
+      return;
+    }
+    await session.submitIntent({
+      intentId: this.makeLiveIntentId('emote'),
+      intentType: 'emote',
+      payload: { emoteId: option.id }
+    });
+    this.renderLivePanel();
+  },
+  toggleLiveSocialMute() {
+    this.liveSocialMuted = !this.liveSocialMuted;
+    this.renderLivePanel();
+    const root = document.querySelector('[data-live-pvp-root]');
+    const hint = root ? root.querySelector('[data-live-last-error]') : null;
+    if (hint) {
+      hint.textContent = this.liveSocialMuted
+        ? '已静音对手表情；只影响本地显示，不改变权威事件。'
+        : '已恢复表情显示；仍只允许预设表情，无自由文本。';
+    }
+  },
+  renderLiveLoadoutPresets(phase = 'idle') {
+    const root = document.querySelector('[data-live-pvp-root]');
+    if (!root) return;
+    const presetsEl = root.querySelector('[data-live-loadout-presets]');
+    const selectedEl = root.querySelector('[data-live-selected-loadout]');
+    const presets = this.getLiveLoadoutPresets();
+    const selectedPreset = this.getLiveSelectedLoadoutPreset();
+    const editable = this.canEditLiveLoadout(phase);
+    if (selectedEl) {
+      selectedEl.textContent = `当前：${selectedPreset.label}`;
+    }
+    if (!presetsEl) return;
+    presetsEl.innerHTML = presets.map(preset => {
+      const isSelected = preset.id === selectedPreset.id;
+      return `
+        <button
+          type="button"
+          class="pvp-live-loadout-option ${isSelected ? 'selected' : ''}"
+          data-live-loadout-preset="${this.escapeHtml(preset.id)}"
+          aria-pressed="${isSelected ? 'true' : 'false'}"
+          onclick="PVPScene.setLiveLoadoutPreset('${this.escapeHtml(preset.id)}')"
+          ${editable ? '' : 'disabled'}
+        >
+          <span class="pvp-live-loadout-name">${this.escapeHtml(preset.label)}</span>
+          <span class="pvp-live-loadout-desc">${this.escapeHtml(preset.summary)}</span>
+        </button>
+      `;
+    }).join('');
+  },
+  getLiveLoadoutSummary(seat) {
+    if (!seat || typeof seat !== 'object') return null;
+    const summary = seat.loadoutSummary && typeof seat.loadoutSummary === 'object' ? seat.loadoutSummary : null;
+    return {
+      loadoutHash: String(seat.loadoutHash || summary && summary.loadoutHash || ''),
+      label: String(summary && summary.label || '斗法谱'),
+      identitySlot: String(summary && summary.identitySlot || ''),
+      deckSize: Math.max(0, Math.floor(Number(summary && summary.deckSize) || 0)),
+      locked: !summary || summary.locked !== false
+    };
+  },
+  formatLiveLoadoutSummary(seat, fallback = '斗法谱：--') {
+    const summary = this.getLiveLoadoutSummary(seat);
+    if (!summary || !summary.loadoutHash) return fallback;
+    const hash = summary.loadoutHash.slice(0, 8);
+    const identity = summary.identitySlot ? ` · ${summary.identitySlot}` : '';
+    const deckSize = summary.deckSize ? ` · ${summary.deckSize}张` : '';
+    return `${summary.label}${identity}${deckSize} · ${hash}${summary.locked ? ' · 已锁定' : ''}`;
+  },
+  getLiveSnapshot() {
+    const session = this.getLiveSession();
+    const state = session && typeof session.getState === 'function' ? session.getState() : null;
+    if (!state) return null;
+    const view = state.stateView || null;
+    const drillScenario = this.liveDrillScenario && this.liveDrillScenario.sourceMatchId === (state.matchId || (view && view.matchId) || '')
+      ? {
+          ...this.liveDrillScenario,
+          trainingTags: Array.isArray(this.liveDrillScenario.trainingTags) ? this.liveDrillScenario.trainingTags.slice(0, 6) : [],
+          publicEventTypes: Array.isArray(this.liveDrillScenario.publicEventTypes) ? this.liveDrillScenario.publicEventTypes.slice(0, 12) : [],
+          sourceEventSequences: Array.isArray(this.liveDrillScenario.sourceEventSequences) ? this.liveDrillScenario.sourceEventSequences.slice(0, 12) : []
+        }
+      : null;
+    return {
+      phase: state.phase || 'idle',
+      queueTicket: state.queueTicket || '',
+      inviteCode: state.inviteCode || '',
+      matchId: state.matchId || '',
+      seatId: state.seatId || '',
+      mode: view && view.mode === 'friendly' ? 'friendly' : 'ranked',
+      stateVersion: view && Number.isFinite(Number(view.stateVersion)) ? Math.floor(Number(view.stateVersion)) : null,
+      currentSeat: view ? view.currentSeat || '' : '',
+      status: view ? view.status || '' : '',
+      social: {
+        muted: !!this.liveSocialMuted,
+        emotes: this.getLiveEmoteOptions().map(item => item.id)
+      },
+      matchQuality: this.getLiveMatchQuality(view),
+      turnTimer: this.getLiveTurnTimer(view),
+      connectionReport: this.getLiveConnectionReport(view),
+      openingSafeguardReport: this.getLiveOpeningSafeguardReport(view),
+      friendlySeries: this.getLiveFriendlySeries(view && view.friendlySeries ? view.friendlySeries : state.rematchReport),
+      firstMatchGuide: this.getLiveFirstMatchGuide(view),
+      postMatchReview: this.getLivePostMatchReview(view),
+      drillScenario,
+      waitingReport: this.getLiveWaitingReport(state),
+      inviteReport: state.inviteReport || null,
+      inviteInbox: Array.isArray(state.inviteInbox) ? state.inviteInbox.slice(0, 20) : [],
+      lastError: state.lastError ? {
+        reason: String(state.lastError.reason || ''),
+        message: String(state.lastError.message || '')
+      } : null,
+      lastEvents: Array.isArray(state.lastEvents) ? state.lastEvents.slice(0, 8).map(event => ({
+        eventType: String(event && event.eventType || ''),
+        actingSeat: String(event && event.actingSeat || ''),
+        sequence: Number.isFinite(Number(event && event.sequence)) ? Math.floor(Number(event.sequence)) : null
+      })) : [],
+      self: view && view.self ? {
+        seatId: String(view.self.seatId || ''),
+        hp: Math.max(0, Math.floor(Number(view.self.hp) || 0)),
+        maxHp: Math.max(0, Math.floor(Number(view.self.maxHp) || 0)),
+        energy: Math.max(0, Math.floor(Number(view.self.energy) || 0)),
+        maxEnergy: Math.max(0, Math.floor(Number(view.self.maxEnergy) || 0)),
+        handCount: Array.isArray(view.self.hand) ? view.self.hand.length : Math.max(0, Math.floor(Number(view.self.handCount) || 0)),
+        loadout: this.getLiveLoadoutSummary(view.self)
+      } : null,
+      opponent: view && view.opponent ? {
+        seatId: String(view.opponent.seatId || ''),
+        hp: Math.max(0, Math.floor(Number(view.opponent.hp) || 0)),
+        maxHp: Math.max(0, Math.floor(Number(view.opponent.maxHp) || 0)),
+        energy: Math.max(0, Math.floor(Number(view.opponent.energy) || 0)),
+        maxEnergy: Math.max(0, Math.floor(Number(view.opponent.maxEnergy) || 0)),
+        handCount: Math.max(0, Math.floor(Number(view.opponent.handCount) || 0)),
+        loadout: this.getLiveLoadoutSummary(view.opponent)
+      } : null
+    };
+  },
+  async loadLivePanel() {
+    const session = this.getLiveSession();
+    const liveState = session.getState();
+    if (liveState.phase === 'idle' && !liveState.queueTicket && !liveState.matchId) {
+      await this.resumeLiveMatch();
+      const afterMatchResume = session.getState();
+      if (afterMatchResume.phase === 'idle' && !afterMatchResume.queueTicket && !afterMatchResume.matchId && typeof session.resumeCurrentInvite === 'function') {
+        await session.resumeCurrentInvite();
+        this.renderLivePanel();
+      }
+      const afterInviteResume = session.getState();
+      if (afterInviteResume.phase === 'idle' && !afterInviteResume.queueTicket && !afterInviteResume.matchId && typeof session.refreshInviteInbox === 'function') {
+        await session.refreshInviteInbox();
+        this.renderLivePanel();
+      }
+      const recoveredState = this.getLiveSnapshot();
+      if (this.shouldLivePoll(recoveredState)) this.startLivePolling();
+      return;
+    }
+    this.renderLivePanel();
+    const state = this.getLiveSnapshot();
+    if (this.shouldLivePoll(state)) this.startLivePolling();
+  },
+  async resumeLiveMatch() {
+    const session = this.getLiveSession();
+    if (typeof session.resumeCurrentMatch === 'function') {
+      await session.resumeCurrentMatch();
+    }
+    this.renderLivePanel();
+    const state = session.getState();
+    if (this.shouldLivePoll(state)) this.startLivePolling();
+  },
+  getLivePhaseLabel(phase) {
+    const labels = {
+      idle: '未入队',
+      queueing: '入队中',
+      waiting: '等待真人',
+      waiting_invite: '等待好友加入',
+      waiting_rematch: '等待再战确认',
+      matched: '已匹配',
+      setup: '准备调息',
+      active: '对局中',
+      sync_required: '需要同步权威状态',
+      finished: '对局结束',
+      invalidated: '无效局'
+    };
+    return labels[phase] || '实时论道';
+  },
+  renderLivePanel() {
+    const root = document.querySelector('[data-live-pvp-root]');
+    if (!root) return;
+    const session = this.getLiveSession();
+    const state = session.getState();
+    const view = state.stateView || null;
+    const phase = state.phase || 'idle';
+    root.dataset.livePhase = phase;
+    root.setAttribute('data-live-phase', phase);
+    const setText = (selector, value) => {
+      const el = root.querySelector(selector);
+      if (el) el.textContent = value;
+    };
+    const statusText = this.getLivePhaseLabel(phase);
+    const modeLabel = phase === 'waiting_rematch' || view && view.mode === 'friendly' ? '友谊再战' : '真人排位';
+    setText('[data-live-phase-label]', statusText);
+    setText('[data-live-status-chip]', phase === 'finished' ? 'FIN' : phase === 'invalidated' ? 'VOID' : phase === 'active' ? 'LIVE' : phase.toUpperCase());
+    setText('[data-live-summary]', view && phase === 'setup'
+      ? `${modeLabel} · 准备阶段 · 调息上限 ${view.setup && view.setup.mulliganLimit !== undefined ? view.setup.mulliganLimit : 2} 张 · 服务端版本 ${view.stateVersion || '--'}`
+      : phase === 'waiting_invite'
+        ? `好友约战 · 分享邀请码等待对手加入 · 不写正式积分`
+      : view && phase === 'waiting_rematch'
+        ? `${modeLabel} · 等待本局对手确认 · 不写正式积分 · 服务端版本 ${view.stateVersion || '--'}`
+      : view && phase === 'invalidated'
+        ? `${modeLabel} · 准备超时或无效局 · 不计正式积分 · 服务端版本 ${view.stateVersion || '--'}`
+      : view ? `${modeLabel} · 第 ${view.roundIndex || 1} 轮 · 第 ${view.turnIndex || 1} 手 · 服务端版本 ${view.stateVersion || '--'}` : '排队、行动与终局都走 /api/pvp/live，不接旧残影结算。');
+    setText('[data-live-queue-ticket]', state.queueTicket || '--');
+    setText('[data-live-invite-code]', state.inviteCode || '--');
+    setText('[data-live-match-id]', state.matchId || '--');
+    setText('[data-live-seat]', state.seatId || '--');
+    setText('[data-live-state-version]', view && view.stateVersion !== undefined ? String(view.stateVersion) : '--');
+    setText('[data-live-current-seat]', view && view.currentSeat ? view.currentSeat : '--');
+    setText('[data-live-match-quality]', this.formatLiveMatchQuality(view));
+    setText('[data-live-turn-timer]', this.formatLiveTurnTimer(view));
+    setText('[data-live-connection-status]', this.formatLiveConnectionStatus(view));
+    const openingSafeguardEl = root.querySelector('[data-live-opening-safeguard]');
+    if (openingSafeguardEl) {
+      openingSafeguardEl.innerHTML = this.renderLiveOpeningSafeguardReport(view);
+    }
+    setText('[data-live-social-status]', this.liveSocialMuted
+      ? '社交：已静音对手表情 · 只影响本地显示'
+      : '社交：预设表情 · 无自由文本');
+    const guideEl = root.querySelector('[data-live-first-guide]');
+    if (guideEl) guideEl.innerHTML = this.renderLiveFirstMatchGuide(view);
+    const waitingReportEl = root.querySelector('[data-live-waiting-report]');
+    if (waitingReportEl) {
+      const waitingReportMarkup = this.renderLiveWaitingReport(state);
+      waitingReportEl.hidden = !waitingReportMarkup;
+      waitingReportEl.innerHTML = waitingReportMarkup || '等待真人：未进入长等待分支';
+    }
+    const inviteReportEl = root.querySelector('[data-live-invite-report]');
+    if (inviteReportEl) {
+      inviteReportEl.textContent = this.renderLiveInviteReport(state.inviteReport);
+    }
+    const inviteInboxEl = root.querySelector('[data-live-invite-inbox]');
+    if (inviteInboxEl) {
+      inviteInboxEl.innerHTML = this.renderLiveInviteInbox(state.inviteInbox);
+    }
+    const postReviewEl = root.querySelector('[data-live-post-match-review]');
+    if (postReviewEl) {
+      const postReviewMarkup = this.renderLivePostMatchReview(view, phase);
+      const rematchReportMarkup = this.renderLiveFriendlySeries(state.rematchReport);
+      postReviewEl.hidden = !(postReviewMarkup || rematchReportMarkup);
+      postReviewEl.innerHTML = postReviewMarkup || rematchReportMarkup
+        ? `${postReviewMarkup}${rematchReportMarkup}`
+        : '赛后复盘：等待对局结束';
+    }
+    if (phase !== 'finished' && phase !== 'waiting_rematch') {
+      root.querySelectorAll('[data-live-review-focus]').forEach(element => {
+        element.removeAttribute('data-live-review-focus');
+      });
+    }
+    this.renderLiveLoadoutPresets(phase);
+
+    const self = view && view.self ? view.self : null;
+    const opponent = view && view.opponent ? view.opponent : null;
+    setText('[data-live-self-seat]', self && self.seatId ? self.seatId : '--');
+    setText('[data-live-opponent-seat]', opponent && opponent.seatId ? opponent.seatId : '--');
+    setText('[data-live-self-stats]', self ? `生命 ${self.hp}/${self.maxHp} · 灵力 ${self.energy}/${self.maxEnergy} · 护盾 ${self.block || 0} · ${self.ready ? '已准备' : '未准备'}${self.mulliganUsed ? ' · 已调息' : ''}` : '等待权威状态');
+    setText('[data-live-opponent-stats]', opponent ? `生命 ${opponent.hp}/${opponent.maxHp} · 灵力 ${opponent.energy}/${opponent.maxEnergy} · 手牌 ${opponent.handCount} · ${opponent.ready ? '已准备' : '未准备'}` : '仅显示公开信息');
+    setText('[data-live-self-loadout]', self ? `斗法谱：${this.formatLiveLoadoutSummary(self, '未锁定')}` : '斗法谱：--');
+    setText('[data-live-opponent-loadout]', opponent ? `公开谱：${this.formatLiveLoadoutSummary(opponent, '仅显示公开摘要')}` : '公开谱：--');
+    setText('[data-live-opponent-hand]', opponent ? `手牌：${Math.max(0, Number(opponent.handCount) || 0)} 张（隐藏）` : '手牌：--');
+
+    const handEl = root.querySelector('[data-live-hand]');
+    if (handEl) {
+      const cards = self && Array.isArray(self.hand) ? self.hand : [];
+      if (cards.length === 0) {
+        handEl.innerHTML = '<div class="pvp-live-empty">暂无可用手牌</div>';
+      } else {
+        const liveCardIds = new Set(cards.map(card => card.instanceId).filter(Boolean));
+        this.liveMulliganSelection.forEach(cardId => {
+          if (!liveCardIds.has(cardId)) this.liveMulliganSelection.delete(cardId);
+        });
+        const canAct = phase === 'active' && view && view.currentSeat === state.seatId;
+        const canSelectMulligan = phase === 'setup' && self && !self.mulliganUsed;
+        handEl.innerHTML = cards.map(card => `
+          <button class="pvp-live-card ${this.liveMulliganSelection.has(card.instanceId) ? 'selected' : ''}" ${canSelectMulligan ? `data-live-mulligan-card="${this.escapeHtml(card.instanceId || '')}" onclick="PVPScene.toggleLiveMulliganCard('${this.escapeHtml(card.instanceId || '')}')"` : `data-live-card="${this.escapeHtml(card.instanceId || '')}" onclick="PVPScene.submitLiveCard('${this.escapeHtml(card.instanceId || '')}')"`} ${canAct || canSelectMulligan ? '' : 'disabled'}>
+            <span class="pvp-live-card-name">${this.escapeHtml(card.name || card.cardId || '术式')}</span>
+            <span class="pvp-live-card-meta">耗 ${this.escapeHtml(card.cost || 0)} · 伤 ${this.escapeHtml(card.damage || 0)} · 护 ${this.escapeHtml(card.block || 0)}</span>
+          </button>
+        `).join('');
+      }
+    }
+
+    const eventLog = root.querySelector('[data-live-event-log]');
+    if (eventLog) {
+      const eventPanel = root.querySelector('[data-live-event-panel]');
+      const reviewFocus = eventPanel ? eventPanel.getAttribute('data-live-review-focus') : '';
+      const review = this.getLivePostMatchReview(view);
+      const reviewEvents = reviewFocus === 'events' ? review?.evidence || [] : [];
+      const keyTurnEvents = reviewFocus === 'key_turns' ? review?.keyTurnReplay?.turns || [] : [];
+      const experienceCheckId = reviewFocus && reviewFocus.startsWith('experience_check:') ? reviewFocus.slice('experience_check:'.length) : '';
+      const experienceEvents = experienceCheckId
+        ? (review?.experienceReport?.fairnessChecks || []).find(check => check.id === experienceCheckId)?.linkedEvidence || []
+        : [];
+      const focusedEvents = experienceEvents.length > 0 ? experienceEvents : keyTurnEvents.length > 0 ? keyTurnEvents : reviewEvents;
+      const events = focusedEvents.length > 0
+        ? focusedEvents
+        : Array.isArray(state.lastEvents) && state.lastEvents.length > 0 ? state.lastEvents : view && Array.isArray(view.recentEvents) ? view.recentEvents.slice(-5) : [];
+      const filteredEvents = this.filterLiveEventsForMute(events);
+      const visibleEvents = focusedEvents.length > 0 ? filteredEvents.slice(0, 12) : filteredEvents.slice(-8);
+      eventLog.innerHTML = visibleEvents.length > 0 ? visibleEvents.map(event => {
+        const formatted = this.formatLiveEvent(event);
+        return `
+        <div class="pvp-live-event-row" data-live-event-type="${this.escapeHtml(formatted.type)}">
+          <span class="pvp-live-event-main">${this.escapeHtml(formatted.label)}</span>
+          <span class="pvp-live-event-detail">${this.escapeHtml(formatted.detail)}</span>
+        </div>
+      `;
+      }).join('') : '暂无事件';
+    }
+
+    const errorText = state.lastError ? `${state.lastError.message || state.lastError.reason}` : phase === 'invalidated' ? '本局在开战前无效，不写正式积分；可以重新匹配或先练习斗法谱。' : phase === 'setup' ? '准备阶段只能调息或确认准备，不能提前出牌。' : phase === 'waiting_rematch' ? '已发起低压力再战，等待本局对手确认；不写正式积分。' : phase === 'waiting' ? '等待真实玩家加入；不会自动切换残影。' : '实时论道不会自动匹配残影；没有真人时可取消排队。';
+    setText('[data-live-last-error]', errorText);
+    this.updateLiveButtons(phase, !!view && view.currentSeat === state.seatId, self);
+    if (this.shouldLiveHeartbeat(phase)) {
+      this.startLiveHeartbeat();
+    } else {
+      this.stopLiveHeartbeat();
+    }
+  },
+  updateLiveButtons(phase, isMyTurn, self = null) {
+    const root = document.querySelector('[data-live-pvp-root]');
+    if (!root) return;
+    const setDisabled = (action, disabled) => {
+      const btn = root.querySelector(`[data-live-action="${action}"]`);
+      if (btn) btn.disabled = !!disabled;
+    };
+    setDisabled('join-queue', phase === 'queueing' || phase === 'waiting' || phase === 'waiting_invite' || phase === 'waiting_rematch' || phase === 'matched' || phase === 'setup' || phase === 'active');
+    setDisabled('create-invite', phase === 'queueing' || phase === 'waiting' || phase === 'waiting_invite' || phase === 'waiting_rematch' || phase === 'matched' || phase === 'setup' || phase === 'active');
+    setDisabled('join-invite', phase === 'queueing' || phase === 'waiting' || phase === 'waiting_invite' || phase === 'waiting_rematch' || phase === 'matched' || phase === 'setup' || phase === 'active');
+    setDisabled('cancel-invite', phase !== 'waiting_invite');
+    setDisabled('cancel-queue', phase !== 'waiting');
+    setDisabled('practice-live', !(phase === 'waiting' && this.getLiveWaitingReport(this.getLiveSession().getState())?.longWait));
+    setDisabled('refresh-match', phase === 'queueing' || phase === 'idle' || phase === 'finished' || phase === 'invalidated');
+    setDisabled('confirm-mulligan', !(phase === 'setup' && self && !self.mulliganUsed));
+    setDisabled('ready', !(phase === 'setup' && self && !self.ready));
+    setDisabled('end-turn', !(phase === 'active' && isMyTurn));
+    setDisabled('surrender', !(phase === 'active' || phase === 'sync_required'));
+    root.querySelectorAll('[data-live-emote]').forEach(button => {
+      button.disabled = !this.canSendLiveEmote(phase);
+      const emoteId = button.getAttribute('data-live-emote') || '';
+      const option = this.getLiveEmoteOptions().find(item => item.id === emoteId);
+      if (option) button.textContent = option.label;
+    });
+    const muteButton = root.querySelector('[data-live-action="toggle-social-mute"]');
+    if (muteButton) {
+      muteButton.disabled = false;
+      muteButton.textContent = this.liveSocialMuted ? '取消静音' : '静音表情';
+      muteButton.classList.toggle('selected', !!this.liveSocialMuted);
+    }
+  },
+  startLivePolling() {
+    this.stopLivePolling();
+    this.livePollTimer = window.setInterval(async () => {
+      const state = this.getLiveSession().getState();
+      if (!this.shouldLivePoll(state)) {
+        this.stopLivePolling();
+        return;
+      }
+      await this.refreshLiveMatch({ fromAutoPoll: true });
+    }, 2500);
+  },
+  stopLivePolling() {
+    if (this.livePollTimer && typeof window !== 'undefined') {
+      window.clearInterval(this.livePollTimer);
+    }
+    this.livePollTimer = null;
+  },
+  shouldLiveHeartbeat(phase) {
+    return phase === 'matched' || phase === 'setup' || phase === 'active' || phase === 'sync_required';
+  },
+  getLiveHeartbeatIntervalMs(state = null) {
+    const sourceState = state || this.getLiveSession().getState();
+    const report = this.getLiveConnectionReport(sourceState && sourceState.stateView);
+    return report ? report.heartbeatIntervalMs : 5000;
+  },
+  startLiveHeartbeat({ sendImmediately = true } = {}) {
+    if (typeof window === 'undefined') return;
+    const state = this.getLiveSession().getState();
+    const heartbeatIntervalMs = this.getLiveHeartbeatIntervalMs(state);
+    if (this.liveHeartbeatTimer && this.liveHeartbeatIntervalMs === heartbeatIntervalMs) return;
+    this.stopLiveHeartbeat();
+    this.liveHeartbeatIntervalMs = heartbeatIntervalMs;
+    this.liveHeartbeatTimer = window.setInterval(async () => {
+      try {
+        await this.sendLiveHeartbeat();
+      } catch (error) {
+        console.warn('[PVP Live] heartbeat failed', error);
+      }
+    }, heartbeatIntervalMs);
+    if (sendImmediately) {
+      Promise.resolve(this.sendLiveHeartbeat()).catch(error => {
+        console.warn('[PVP Live] heartbeat failed', error);
+      });
+    }
+  },
+  stopLiveHeartbeat() {
+    if (this.liveHeartbeatTimer && typeof window !== 'undefined') {
+      window.clearInterval(this.liveHeartbeatTimer);
+    }
+    this.liveHeartbeatTimer = null;
+    this.liveHeartbeatIntervalMs = 0;
+  },
+  async sendLiveHeartbeat() {
+    const session = this.getLiveSession();
+    const state = session.getState();
+    if (!state || !state.matchId || !this.shouldLiveHeartbeat(state.phase)) {
+      this.stopLiveHeartbeat();
+      return;
+    }
+    if (typeof session.heartbeat !== 'function') return;
+    await session.heartbeat();
+    const next = session.getState();
+    if (!this.shouldLiveHeartbeat(next.phase)) {
+      this.stopLiveHeartbeat();
+      return;
+    }
+    this.startLiveHeartbeat({ sendImmediately: false });
+    this.renderLivePanel();
+  },
+  makeLiveIntentId(type) {
+    this.liveIntentSeq += 1;
+    return `live-ui-${type}-${Date.now().toString(36)}-${this.liveIntentSeq}`;
+  },
+  async joinLiveQueue() {
+    const session = this.getLiveSession();
+    const gameRef = this.getGameRef();
+    const displayName = gameRef && gameRef.player && gameRef.player.name ? gameRef.player.name : '无名修士';
+    const selectedPreset = this.getLiveSelectedLoadoutPreset();
+    await session.joinQueue({
+      displayName,
+      loadout: this.getLiveQueueLoadoutCandidate(selectedPreset.id)
+    });
+    this.liveLongWaitPollUntil = 0;
+    this.renderLivePanel();
+    const state = session.getState();
+    if (['waiting', 'matched', 'setup', 'active'].includes(state.phase)) {
+      this.liveDrillScenario = null;
+    }
+    if (this.shouldLivePoll(state)) this.startLivePolling();
+  },
+  async createLiveInvite() {
+    const session = this.getLiveSession();
+    const gameRef = this.getGameRef();
+    const displayName = gameRef && gameRef.player && gameRef.player.name ? gameRef.player.name : '无名修士';
+    const selectedPreset = this.getLiveSelectedLoadoutPreset();
+    const root = document.querySelector('[data-live-pvp-root]');
+    const targetInput = root ? root.querySelector('[data-live-target-username]') : null;
+    const targetUsername = targetInput ? String(targetInput.value || '').trim() : '';
+    if (!session || typeof session.createInvite !== 'function') return;
+    await session.createInvite({
+      displayName,
+      targetUsername,
+      loadout: this.getLiveQueueLoadoutCandidate(selectedPreset.id)
+    });
+    this.liveLongWaitPollUntil = 0;
+    this.renderLivePanel();
+    const state = session.getState();
+    if (state.phase === 'waiting_invite') {
+      this.liveDrillScenario = null;
+      this.startLivePolling();
+    }
+  },
+  async joinLiveInvite() {
+    const session = this.getLiveSession();
+    const root = document.querySelector('[data-live-pvp-root]');
+    const input = root ? root.querySelector('[data-live-invite-input]') : null;
+    const inviteCode = input ? String(input.value || '').trim() : '';
+    const gameRef = this.getGameRef();
+    const displayName = gameRef && gameRef.player && gameRef.player.name ? gameRef.player.name : '无名修士';
+    const selectedPreset = this.getLiveSelectedLoadoutPreset();
+    if (!session || typeof session.joinInvite !== 'function') return;
+    await session.joinInvite(inviteCode, {
+      displayName,
+      loadout: this.getLiveQueueLoadoutCandidate(selectedPreset.id)
+    });
+    this.liveLongWaitPollUntil = 0;
+    this.renderLivePanel();
+    const state = session.getState();
+    if (['matched', 'setup', 'active'].includes(state.phase)) {
+      this.liveDrillScenario = null;
+    }
+    if (this.shouldLivePoll(state)) this.startLivePolling();
+  },
+  async joinLiveInboxInvite(inviteCode = '') {
+    const code = String(inviteCode || '').trim();
+    if (!code) return;
+    const session = this.getLiveSession();
+    const gameRef = this.getGameRef();
+    const displayName = gameRef && gameRef.player && gameRef.player.name ? gameRef.player.name : '无名修士';
+    const selectedPreset = this.getLiveSelectedLoadoutPreset();
+    if (!session || typeof session.joinInvite !== 'function') return;
+    await session.joinInvite(code, {
+      displayName,
+      loadout: this.getLiveQueueLoadoutCandidate(selectedPreset.id)
+    });
+    this.liveLongWaitPollUntil = 0;
+    this.renderLivePanel();
+    const state = session.getState();
+    if (['matched', 'setup', 'active'].includes(state.phase)) {
+      this.liveDrillScenario = null;
+    }
+    if (this.shouldLivePoll(state)) this.startLivePolling();
+  },
+  async cancelLiveInvite() {
+    const session = this.getLiveSession();
+    if (!session || typeof session.cancelInvite !== 'function') return;
+    const state = session.getState();
+    await session.cancelInvite(state.inviteCode || '');
+    this.liveLongWaitPollUntil = 0;
+    this.stopLivePolling();
+    this.renderLivePanel();
+  },
+  async cancelLiveQueue() {
+    const session = this.getLiveSession();
+    await session.cancelQueue();
+    this.liveLongWaitPollUntil = 0;
+    this.stopLivePolling();
+    this.renderLivePanel();
+  },
+  openLivePracticeHint() {
+    const message = '问道练习不会写正式积分；当前切片先保留真人排队，你也可以取消匹配后再进入练习入口。';
+    const root = document.querySelector('[data-live-pvp-root]');
+    const hint = root ? root.querySelector('[data-live-last-error]') : null;
+    if (hint) hint.textContent = message;
+    if (typeof Utils !== 'undefined' && Utils && typeof Utils.showBattleLog === 'function') {
+      Utils.showBattleLog(message);
+    }
+  },
+  handleLiveExperienceCheckFocus(checkId) {
+    const id = String(checkId || '').trim();
+    if (!id) return;
+    const root = document.querySelector('[data-live-pvp-root]');
+    const eventPanel = root ? root.querySelector('[data-live-event-panel]') : null;
+    if (eventPanel) {
+      eventPanel.setAttribute('data-live-review-focus', `experience_check:${id}`);
+    }
+    this.renderLivePanel();
+    const focusedCheck = root
+      ? Array.from(root.querySelectorAll('[data-live-experience-check]')).find(item => item.getAttribute('data-live-experience-check') === id)
+      : null;
+    if (focusedCheck) {
+      focusedCheck.setAttribute('data-live-review-focus', `experience_check:${id}`);
+      if (typeof focusedCheck.scrollIntoView === 'function') {
+        focusedCheck.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      }
+    }
+    const hint = root ? root.querySelector('[data-live-last-error]') : null;
+    const message = '已定位体验诊断证据；事件面板只显示该检查项关联的公开事件。';
+    if (hint) hint.textContent = message;
+    if (typeof Utils !== 'undefined' && Utils && typeof Utils.showBattleLog === 'function') {
+      Utils.showBattleLog(message);
+    }
+  },
+  async handleLivePostReviewAction(actionId) {
+    const id = String(actionId || '');
+    const root = document.querySelector('[data-live-pvp-root]');
+    const setHint = (message) => {
+      const hint = root ? root.querySelector('[data-live-last-error]') : null;
+      if (hint) hint.textContent = message;
+      if (typeof Utils !== 'undefined' && Utils && typeof Utils.showBattleLog === 'function') {
+        Utils.showBattleLog(message);
+      }
+    };
+    const currentPhase = this.getLiveSession().getState()?.phase || '';
+    if (this.isLivePostReviewActionDisabled(id, currentPhase)) {
+      setHint('已发起低压力再战，等待本局对手确认；当前先保留复盘，不再改走其他入口。');
+      this.renderLivePanel();
+      return;
+    }
+    if (id === 'queue_again') {
+      await this.joinLiveQueue();
+      return;
+    }
+    if (id === 'practice') {
+      await this.commitLivePostReviewPracticeHandoff();
+      return;
+    }
+    if (id === 'friendly_rematch') {
+      const session = this.getLiveSession();
+      const gameRef = this.getGameRef();
+      const displayName = gameRef && gameRef.player && gameRef.player.name ? gameRef.player.name : '无名修士';
+      const selectedPreset = this.getLiveSelectedLoadoutPreset();
+      if (!session || typeof session.requestRematch !== 'function') {
+        setHint('实时论道再战服务未就绪。');
+        return;
+      }
+      await session.requestRematch({
+        displayName,
+        loadout: this.getLiveQueueLoadoutCandidate(selectedPreset.id)
+      });
+      this.stopLivePolling();
+      this.renderLivePanel();
+      const next = session.getState();
+      if (next.phase === 'setup' || next.phase === 'active') {
+        this.liveDrillScenario = null;
+        setHint('已进入低压力再战；本局不写正式积分。');
+      } else if (next.lastError && next.lastError.reason === 'waiting_rematch') {
+        setHint(next.lastError.message || '已发起低压力再战，等待本局对手确认；不写正式积分。');
+        if (next.phase === 'waiting_rematch') this.startLivePolling();
+      }
+      return;
+    }
+    if (id === 'review_events') {
+      const eventPanel = root ? root.querySelector('[data-live-event-panel]') : null;
+      if (eventPanel) {
+        eventPanel.setAttribute('data-live-review-focus', 'events');
+      }
+      this.renderLivePanel();
+      const focusedPanel = root ? root.querySelector('[data-live-event-panel]') : null;
+      if (focusedPanel) {
+        if (typeof focusedPanel.scrollIntoView === 'function') {
+          focusedPanel.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        }
+      }
+      setHint('已定位本局权威事件；复盘只展示公开事件，不暴露隐藏手牌或牌库顺序。');
+      return;
+    }
+    if (id === 'review_key_turns') {
+      const eventPanel = root ? root.querySelector('[data-live-event-panel]') : null;
+      const keyTurnPanel = root ? root.querySelector('[data-live-key-turn-replay]') : null;
+      if (eventPanel) {
+        eventPanel.setAttribute('data-live-review-focus', 'key_turns');
+      }
+      if (keyTurnPanel) {
+        keyTurnPanel.setAttribute('data-live-review-focus', 'key_turns');
+      }
+      this.renderLivePanel();
+      const focusedKeyTurnPanel = root ? root.querySelector('[data-live-key-turn-replay]') : null;
+      if (focusedKeyTurnPanel) {
+        focusedKeyTurnPanel.setAttribute('data-live-review-focus', 'key_turns');
+      }
+      const focusedPanel = focusedKeyTurnPanel || (root ? root.querySelector('[data-live-event-panel]') : null);
+      if (focusedPanel && typeof focusedPanel.scrollIntoView === 'function') {
+        focusedPanel.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      }
+      setHint('已定位关键回合；这里只使用公开事件序列，不读取隐藏手牌、牌库或事件 payload。');
+      return;
+    }
+    if (id === 'adjust_loadout') {
+      const loadoutPanel = root ? root.querySelector('.pvp-live-loadout-selector') : null;
+      if (loadoutPanel) {
+        loadoutPanel.setAttribute('data-live-review-focus', 'loadout');
+        if (typeof loadoutPanel.scrollIntoView === 'function') {
+          loadoutPanel.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        }
+      }
+      setHint('可以先调整入队斗法谱；finished 后改谱只影响下一局，当前战报保持不变。');
+      return;
+    }
+    setHint('该复盘动作还在 MVP 阶段，当前不会写正式积分或调用旧残影结算。');
+  },
+  async refreshLiveMatch(options = {}) {
+    const fromAutoPoll = options && options.fromAutoPoll === true;
+    const session = this.getLiveSession();
+    const state = session.getState();
+    if (state.phase === 'waiting' && this.isLiveLongWait(state) && !fromAutoPoll) {
+      this.liveLongWaitPollUntil = Date.now() + 30 * 1000;
+    }
+    if (state.phase === 'waiting') {
+      await session.pollQueue();
+    } else if (state.phase === 'idle' && typeof session.refreshInviteInbox === 'function') {
+      await session.refreshInviteInbox();
+    } else if (state.phase === 'waiting_invite' && typeof session.pollInvite === 'function') {
+      await session.pollInvite();
+    } else if (state.phase === 'waiting_rematch' && typeof session.pollRematch === 'function') {
+      await session.pollRematch();
+    } else if (state.matchId) {
+      await session.refreshMatch();
+    }
+    const next = session.getState();
+    if (next.phase !== 'waiting' || !this.isLiveLongWait(next)) {
+      this.liveLongWaitPollUntil = 0;
+    }
+    if (this.shouldLivePoll(next) && !this.livePollTimer) this.startLivePolling();
+    if (!this.shouldLivePoll(next)) this.stopLivePolling();
+    this.renderLivePanel();
+  },
+  async submitLiveCard(cardInstanceId) {
+    const session = this.getLiveSession();
+    if (!cardInstanceId) return;
+    const state = session.getState();
+    const view = state && state.stateView ? state.stateView : null;
+    const targetSeat = view && view.opponent && view.opponent.seatId
+      ? view.opponent.seatId
+      : state && state.seatId === 'B'
+        ? 'A'
+        : 'B';
+    await session.submitIntent({
+      intentId: this.makeLiveIntentId('play-card'),
+      intentType: 'play_card',
+      payload: {
+        cardInstanceId,
+        targetSeat
+      }
+    });
+    this.renderLivePanel();
+  },
+  toggleLiveMulliganCard(cardInstanceId) {
+    if (!cardInstanceId) return;
+    if (this.liveMulliganSelection.has(cardInstanceId)) {
+      this.liveMulliganSelection.delete(cardInstanceId);
+    } else if (this.liveMulliganSelection.size < 2) {
+      this.liveMulliganSelection.add(cardInstanceId);
+    }
+    this.renderLivePanel();
+  },
+  async confirmLiveMulligan() {
+    const session = this.getLiveSession();
+    await session.mulligan({
+      intentId: this.makeLiveIntentId('mulligan'),
+      cardInstanceIds: Array.from(this.liveMulliganSelection).slice(0, 2)
+    });
+    this.liveMulliganSelection.clear();
+    this.renderLivePanel();
+  },
+  async readyLiveMatch() {
+    const session = this.getLiveSession();
+    await session.ready({ intentId: this.makeLiveIntentId('ready') });
+    this.renderLivePanel();
+  },
+  async endLiveTurn() {
+    const session = this.getLiveSession();
+    await session.submitIntent({
+      intentId: this.makeLiveIntentId('end-turn'),
+      intentType: 'end_turn',
+      payload: {}
+    });
+    this.renderLivePanel();
+  },
+  async surrenderLiveMatch() {
+    const session = this.getLiveSession();
+    await session.surrender({ intentId: this.makeLiveIntentId('surrender') });
+    this.stopLivePolling();
+    this.renderLivePanel();
   },
   async updateMyRankInfo() {
     if (!PVPService || typeof PVPService.syncRank !== 'function') return;

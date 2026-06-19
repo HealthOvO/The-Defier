@@ -13,6 +13,7 @@ function read(relativePath) {
   const collectionHub = read("js/core/collection_hub.js");
   const challengeHub = read("js/core/challenge_hub.js");
   const expeditionHub = read("js/core/expedition_hub.js");
+  const hubRegistry = read("js/runtime/hub-registry.js");
   const game = read("js/game.js");
   const map = read("js/core/map.js");
 
@@ -28,11 +29,18 @@ function read(relativePath) {
   assert(/__attachCollectionHubController/.test(collectionHub), "collection hub should expose explicit attach entry");
   assert(/__attachChallengeHubController/.test(challengeHub), "challenge hub should expose explicit attach entry");
   assert(/__attachExpeditionHubController/.test(expeditionHub), "expedition hub should expose explicit attach entry");
+  assert(/registerHubController\('collection'/.test(collectionHub), "collection hub should register with hub registry");
+  assert(/registerHubController\('challenge'/.test(challengeHub), "challenge hub should register with hub registry");
+  assert(/registerHubController\('expedition'/.test(expeditionHub), "expedition hub should register with hub registry");
 
   assert(/attachHubControllers\(\)/.test(game), "game should define attachHubControllers");
-  assert(/runtimeGlobal\.__attachCollectionHubController\(this\)/.test(game), "game should attach collection hub controller");
-  assert(/runtimeGlobal\.__attachChallengeHubController\(this\)/.test(game), "game should attach challenge hub controller");
-  assert(/runtimeGlobal\.__attachExpeditionHubController\(this\)/.test(game), "game should attach expedition hub controller");
+  assert(/attachRegisteredHubControllers\(this\)/.test(game), "game should attach registered hub controllers");
+  assert(/attachLegacyHubControllers\(runtimeGlobal\)/.test(game), "game should keep legacy hub fallback");
+  assert(/runtimeGlobal\.__attachCollectionHubController\(this\)/.test(game), "game should keep collection hub fallback");
+  assert(/runtimeGlobal\.__attachChallengeHubController\(this\)/.test(game), "game should keep challenge hub fallback");
+  assert(/runtimeGlobal\.__attachExpeditionHubController\(this\)/.test(game), "game should keep expedition hub fallback");
+  assert(/registerHubController/.test(hubRegistry), "hub registry should register attach functions");
+  assert(/attachRegisteredHubControllers/.test(hubRegistry), "hub registry should attach registered controllers");
 
   assert(/registerHook\(name, callback\)/.test(map), "map should expose hook registration");
   assert(/runHooks\('afterRender'/.test(map), "map should trigger afterRender hook");

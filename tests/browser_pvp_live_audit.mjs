@@ -1,0 +1,2297 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import { chromium } from 'playwright';
+
+const url = process.argv[2] || 'http://127.0.0.1:4173';
+const outDir = process.argv[3] || 'output/web-pvp-live-audit';
+fs.mkdirSync(outDir, { recursive: true });
+
+const findings = [];
+const consoleErrors = [];
+
+function add(name, pass, detail = '') {
+  findings.push({ name, pass, detail });
+}
+
+async function safeElementScreenshot(page, selector, outputPath) {
+  try {
+    await page.addStyleTag({
+      content: '*, *::before, *::after { animation: none !important; transition: none !important; }'
+    }).catch(() => {});
+    const target = page.locator(selector).first();
+    await target.waitFor({ state: 'visible', timeout: 5000 });
+    await target.screenshot({ path: outputPath, timeout: 12000, animations: 'disabled' });
+  } catch (err) {
+    console.warn(`[browser_pvp_live_audit] screenshot skipped (${selector}): ${err?.message || err}`);
+  }
+}
+
+(async () => {
+  const executablePath = process.env.PLAYWRIGHT_EXECUTABLE_PATH || undefined;
+  const browser = await chromium.launch({
+    executablePath,
+    headless: true,
+    args: ['--use-gl=angle', '--use-angle=swiftshader'],
+  });
+  const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+
+  page.on('console', (msg) => {
+    if (msg.type() === 'error') consoleErrors.push(msg.text());
+  });
+  page.on('pageerror', (err) => {
+    consoleErrors.push(String(err));
+  });
+
+  await page.goto(url, { waitUntil: 'domcontentloaded' });
+  await page.waitForTimeout(1200);
+
+  const authActive = await page.evaluate(() => !!document.getElementById('auth-modal')?.classList.contains('active'));
+  if (authActive) {
+    await page.click('#auth-modal .modal-close', { timeout: 3000, force: true }).catch(() => {});
+    await page.waitForTimeout(200);
+  }
+
+  await page.evaluate(() => {
+    window.__livePvpAuditCalls = [];
+    const push = (entry) => window.__livePvpAuditCalls.push(entry);
+    const selfLoadoutSummary = {
+      loadoutHash: 'hash-self-sword-123456',
+      label: '破阵斗法谱',
+      identitySlot: 'sword',
+      deckSize: 20,
+      locked: true,
+    };
+    const opponentLoadoutSummary = {
+      loadoutHash: 'hash-opponent-shield-654321',
+      label: '守势斗法谱',
+      identitySlot: 'shield',
+      deckSize: 20,
+      locked: true,
+    };
+    const makeFirstMatchGuide = (status = 'setup') => ({
+      reportVersion: 'pvp-live-first-match-guide-v1',
+      title: '首战简报',
+      summary: '先确认斗法谱，再调息准备；开局保护会防止未行动方被直接终结。',
+      nextAction: {
+        setup: '先调息手牌，确认准备后再开战。',
+        active: '按当前行动席位出牌，留意权威事件。',
+        finished: '对局已结束，查看结算后可重新排队。',
+        invalidated: '本局未开战成功，不计正式积分，可重新匹配。',
+      }[status] || '先调息手牌，确认准备后再开战。',
+      safeguards: ['server_authoritative', 'snapshot_locked', 'setup_ready_required', 'opening_protection', 'invalidated_no_score'],
+      steps: [
+        { id: 'mode_boundary', label: '模式', detail: '真人排位只匹配真实在线玩家，不接旧残影。' },
+        { id: 'snapshot_locked', label: '锁谱', detail: '入队后斗法谱由服务端锁定，本局不能中途改谱。' },
+        { id: 'setup_ready', label: '调息', detail: '准备阶段可调息 0-2 张手牌，双方确认准备后才开战。' },
+        { id: 'opening_protection', label: '护体', detail: '未获得行动回合的一方不会被开局伤害直接终结。' },
+        { id: 'invalidated_no_score', label: '无效局', detail: '准备超时会成为无效局，不写正式积分。' },
+      ],
+      recommendedLoadouts: [
+        { id: 'balanced', label: '默认斗法谱', role: '攻防均衡，适合首战熟悉流程。', weakness: '弱点：缺少极限爆发。' },
+        { id: 'sword', label: '破阵斗法谱', role: '更容易制造压力，适合主动试探。', weakness: '弱点：防守窗口较窄。' },
+        { id: 'shield', label: '守势斗法谱', role: '前两手更稳，适合先观察对方节奏。', weakness: '弱点：收束较慢。' },
+      ],
+      exceptionBranches: [
+        { id: 'no_real_player_120s', label: '120 秒无真人', detail: '可以继续等待，也可以取消匹配；不会自动切到残影。' },
+        { id: 'ready_timeout', label: '准备超时', detail: '本局未开战成功，不写正式积分。' },
+        { id: 'refresh_required', label: '需要同步', detail: '刷新权威局面后再继续行动。' },
+      ],
+      reviewActions: [
+        { id: 'review_events', label: '查看权威事件' },
+        { id: 'adjust_loadout', label: '调整斗法谱' },
+        { id: 'queue_again', label: '继续真人排位' },
+      ],
+    });
+    const makePostMatchReview = (status = 'setup') => status === 'finished' ? ({
+      reportVersion: 'pvp-live-post-match-review-v1',
+      result: 'loss',
+      winnerSeat: 'B',
+      loserSeat: 'A',
+      finishReason: 'surrender',
+      title: '首败复盘 MVP',
+      summary: '本局由认输结束，先回看最后两条权威事件，再决定是否调整斗法谱。',
+      evidence: [
+        { eventType: 'snapshot_locked', sequence: 1, actingSeat: '' },
+        { eventType: 'mulligan_completed', sequence: 2, actingSeat: 'A', publicData: { seatId: 'A', count: 1 } },
+        { eventType: 'player_ready', sequence: 3, actingSeat: 'A', publicData: { seatId: 'A' } },
+        { eventType: 'player_ready', sequence: 4, actingSeat: 'B', publicData: { seatId: 'B' } },
+        { eventType: 'battle_started', sequence: 5, actingSeat: 'B', publicData: { firstSeat: 'A' } },
+        { eventType: 'card_played', sequence: 6, actingSeat: 'A', publicData: { cost: 1, remainingEnergy: 2 } },
+        { eventType: 'turn_ended', sequence: 7, actingSeat: 'A', publicData: { nextSeat: 'B' } },
+        { eventType: 'player_surrendered', sequence: 8, actingSeat: 'A', publicData: { loserSeat: 'A', winnerSeat: 'B' } },
+        { eventType: 'match_finished', sequence: 9, actingSeat: 'A', publicData: { winnerSeat: 'B', loserSeat: 'A', finishReason: 'surrender' } },
+      ],
+      keyTurnReplay: {
+        reportVersion: 'pvp-live-key-turn-replay-v1',
+        title: '首败关键回合',
+        sourceVisibility: 'public_events',
+        usesHiddenInformation: false,
+        rankedImpact: 'none',
+        summary: '只根据公开事件拆出开战、压力和终局窗口。',
+        recommendedAction: 'practice',
+        turns: [
+          { id: 'opening_window', label: '开战窗口', sequence: 5, eventType: 'battle_started', actingSeat: 'B', severity: 'setup', lesson: '先确认首动预算和调息结果。' },
+          { id: 'pressure_window', label: '压力窗口', sequence: 6, eventType: 'card_played', actingSeat: 'A', severity: 'swing', lesson: '这里决定是否需要改成守势谱。' },
+          { id: 'terminal_window', label: '终局选择', sequence: 9, eventType: 'match_finished', actingSeat: 'A', severity: 'terminal', lesson: '终局只记录结果，真正要练的是前一手。' },
+        ],
+      },
+      experienceReport: {
+        reportVersion: 'pvp-live-experience-report-v1',
+        title: '双方体验诊断',
+        sourceVisibility: 'public_events',
+        usesHiddenInformation: false,
+        rankedImpact: 'none',
+        nonGameRisk: 'low',
+        nonGameRiskReasons: ['public_events_show_readable_windows'],
+        agencyLabel: '双方均有可读窗口',
+        decisionWindowCount: 2,
+        seatWindowSummary: {
+          firstSeat: 'A',
+          secondSeat: 'B',
+          secondSeatWindowObserved: true,
+          terminalBeforeSecondSeatWindow: false,
+        },
+        safeguardSummary: {
+          setupReady: 'confirmed',
+          firstActionBudget: 'not_triggered',
+          openingProtection: 'not_needed',
+        },
+        summary: '本局公开轨迹能解释开战、压力和终局，不属于无解释先手秒杀。',
+        recommendedAction: 'queue_again',
+        fairnessChecks: [
+          { id: 'setup_ready_required', label: '双方确认开战', passed: true, detail: '公开事件显示双方准备后才开战。', linkedEvidence: [
+            { eventType: 'player_ready', sequence: 3, actingSeat: 'A', publicData: { seatId: 'A' } },
+            { eventType: 'player_ready', sequence: 4, actingSeat: 'B', publicData: { seatId: 'B' } },
+            { eventType: 'battle_started', sequence: 5, actingSeat: 'B', publicData: { firstSeat: 'A' } },
+          ] },
+          { id: 'first_action_budget', label: '首动爆发预算', passed: true, detail: '本局按首动预算规则运行。', linkedEvidence: [
+            { eventType: 'battle_started', sequence: 5, actingSeat: 'B', publicData: { firstSeat: 'A' } },
+            { eventType: 'card_played', sequence: 6, actingSeat: 'A', publicData: { cost: 1, remainingEnergy: 2 } },
+          ] },
+          { id: 'opening_protection', label: '开局护体', passed: true, detail: '未行动方不会被开局直接终结。', linkedEvidence: [
+            { eventType: 'battle_started', sequence: 5, actingSeat: 'B', publicData: { firstSeat: 'A' } },
+            { eventType: 'turn_ended', sequence: 7, actingSeat: 'A', publicData: { nextSeat: 'B' } },
+          ] },
+          { id: 'decision_windows', label: '公开决策窗口', passed: true, detail: '公开事件至少覆盖 2 个行动席位。', linkedEvidence: [
+            { eventType: 'battle_started', sequence: 5, actingSeat: 'B', publicData: { firstSeat: 'A' } },
+            { eventType: 'turn_ended', sequence: 7, actingSeat: 'A', publicData: { nextSeat: 'B' } },
+          ] },
+        ],
+      },
+      suggestions: [
+        '查看认输前的生命、灵力和手牌窗口，确认是不是过早放弃。',
+        '如果连续被压低血线，下一局先换守势斗法谱或保留低费防御。',
+      ],
+      nextActions: [
+        { id: 'review_events', label: '查看权威事件' },
+        { id: 'review_key_turns', label: '关键回合复盘' },
+        { id: 'friendly_rematch', label: '低压力再战' },
+        { id: 'adjust_loadout', label: '调整斗法谱' },
+        { id: 'practice', label: '问道练习' },
+        { id: 'queue_again', label: '继续真人排位' },
+      ],
+    }) : null;
+    const makeTurnTimer = (status, currentSeat, viewerSeat = 'A') => {
+      if (status !== 'setup' && status !== 'active') return null;
+      const timeoutMs = status === 'setup' ? 45000 : 90000;
+      const startedAt = Date.now();
+      return {
+        reportVersion: 'pvp-live-turn-timer-v1',
+        phase: status === 'setup' ? 'setup' : 'active',
+        currentSeat: status === 'setup' ? '' : currentSeat,
+        viewerSeat,
+        isViewerTurn: status === 'active' && currentSeat === viewerSeat,
+        startedAt,
+        deadlineAt: startedAt + timeoutMs,
+        timeoutMs,
+        remainingMs: timeoutMs,
+      };
+    };
+    const makeConnectionReport = (mode = window.__livePvpAuditConnectionMode || 'online') => {
+      const status = ['online', 'grace', 'disconnected'].includes(mode) ? mode : 'online';
+      const lastHeartbeatAt = status === 'online' ? Date.now() : Date.now() - 16000;
+      const remainingGraceMs = status === 'grace' ? 18000 : 0;
+      return {
+        reportVersion: 'pvp-live-connection-v1',
+        connectionHealth: status === 'online' ? 'good' : status === 'grace' ? 'opponent_grace' : 'opponent_disconnected',
+        viewerSeat: 'A',
+        opponentSeat: 'B',
+        heartbeatIntervalMs: 5000,
+        heartbeatStaleMs: 15000,
+        graceMs: 30000,
+        viewer: {
+          seatId: 'A',
+          status: 'online',
+          isViewer: true,
+          lastHeartbeatAt: Date.now(),
+          elapsedMs: 0,
+          remainingGraceMs: 0,
+        },
+        opponent: {
+          seatId: 'B',
+          status,
+          isViewer: false,
+          lastHeartbeatAt,
+          elapsedMs: status === 'online' ? 0 : 16000,
+          remainingGraceMs,
+        },
+      };
+    };
+    const makeStateView = (stateVersion = 1, currentSeat = 'A', status = 'setup') => ({
+      matchId: 'pvplm-browser-live',
+      ruleVersion: 'pvp-live-v1',
+      mode: 'ranked',
+      status,
+      matchQuality: {
+        reportVersion: 'pvp-live-match-quality-v1',
+        tag: 'good',
+        ruleVersion: 'pvp-live-v1',
+        expansionStage: 'mvp_open_pool',
+        ratingDeltaBucket: 'unrated_mvp',
+        waitMs: { A: 3200, B: 0 },
+        candidatePoolSize: 2,
+        safeguards: ['server_authoritative', 'snapshot_locked', 'setup_ready_required'],
+      },
+      openingSafeguardReport: {
+        reportVersion: 'pvp-live-opening-safeguard-v1',
+        status: status === 'active' ? 'armed' : 'preview',
+        currentSeat,
+        viewerSeat: 'A',
+        firstSeat: 'A',
+        secondSeat: 'B',
+        damageBudget: {
+          firstSeat: 18,
+          secondSeat: 22,
+          secondAction: 28,
+          currentSeat,
+          currentActionBudget: currentSeat === 'A' ? 18 : 22,
+        },
+        openingProtection: {
+          minimumHp: 1,
+          protectedSeats: status === 'active' ? ['B'] : ['A', 'B'],
+          active: status === 'active',
+          summary: '未完成首个回合的席位不会被开局伤害直接终结。',
+        },
+        secondSeatBuffer: {
+          block: 3,
+          seatId: 'B',
+          active: status === 'active',
+          summary: '后手开局获得 3 点公开护盾，抵消先动节奏差。',
+        },
+        counterplay: {
+          block: 8,
+          pendingSeats: status === 'active' && stateVersion === 4 ? [] : [],
+          grantedSeats: status === 'active' && stateVersion >= 4 ? ['B'] : [],
+          summary: '护体后首个行动窗口会获得 8 点护盾缓冲。',
+        },
+        sourceVisibility: 'public_state',
+        usesHiddenInformation: false,
+        rankedImpact: 'none',
+      },
+      firstMatchGuide: makeFirstMatchGuide(status),
+      postMatchReview: makePostMatchReview(status),
+      setup: status === 'setup' ? { readyDeadlineAt: Date.now() + 45000, mulliganLimit: 2 } : null,
+      turnTimer: makeTurnTimer(status, currentSeat),
+      connectionReport: makeConnectionReport(),
+      stateVersion,
+      roundIndex: 1,
+      turnIndex: stateVersion,
+      currentSeat,
+      self: {
+        seatId: 'A',
+        displayName: '甲',
+        loadoutHash: selfLoadoutSummary.loadoutHash,
+        loadoutSummary: selfLoadoutSummary,
+        loadoutSnapshot: {
+          ...selfLoadoutSummary,
+          deck: Array.from({ length: 20 }, (_, index) => ({ id: index % 2 ? 'pvp_strike' : 'pvp_guard', upgraded: false })),
+        },
+        hp: 50,
+        maxHp: 50,
+        energy: 3,
+        maxEnergy: 3,
+        block: 0,
+        ready: status === 'active',
+        mulliganUsed: stateVersion > 1,
+        hand: status === 'finished' ? [] : [
+          { instanceId: 'A-strike-1', cardId: 'pvp_strike', name: '试探斩', cost: 1, damage: 8, block: 0 },
+        ],
+      },
+      opponent: {
+        seatId: 'B',
+        displayName: '乙',
+        loadoutHash: opponentLoadoutSummary.loadoutHash,
+        loadoutSummary: opponentLoadoutSummary,
+        hp: stateVersion > 1 ? 42 : 50,
+        maxHp: 50,
+        energy: 3,
+        maxEnergy: 3,
+        block: 0,
+        handCount: 3,
+        deckCount: 12,
+        discardCount: 0,
+        ready: status === 'active',
+      },
+      recentEvents: [{ eventType: 'snapshot_locked', payload: { seats: { A: selfLoadoutSummary, B: opponentLoadoutSummary } } }],
+    });
+    window.__makeLivePvpAuditStateView = makeStateView;
+    const makeFriendlySeries = (status = 'matched', confirmationCount = 2, overrides = {}) => ({
+      reportVersion: 'pvp-live-friendly-series-v1',
+      sourceMatchId: 'pvplm-browser-live',
+      originMatchId: 'pvplm-browser-live',
+      seriesId: 'pvpls-browser-live',
+      status,
+      format: 'bo3_mvp',
+      targetWins: 2,
+      maxRounds: 3,
+      roundIndex: 2,
+      roundLabel: 'Bo3 第 2 局 · 换边再战',
+      seriesStatus: 'ongoing',
+      scoreBySourceSeat: { A: 1, B: 0 },
+      sourceParticipants: {
+        A: { sourceSeat: 'A', userId: 'browser-a', displayName: '甲' },
+        B: { sourceSeat: 'B', userId: 'browser-b', displayName: '乙' },
+      },
+      leaderSourceSeat: 'A',
+      winnerSourceSeat: '',
+      canRequestNextRound: false,
+      rankedImpact: 'none',
+      formalResultPolicy: 'practice_only',
+      seatPolicy: 'swap_sides',
+      loadoutPolicy: 'per_game_change_allowed',
+      confirmationCount,
+      safeguards: ['friendly_no_ranked_impact', 'seat_rotation'],
+      ...overrides,
+    });
+    window.__makeLivePvpAuditFriendlyView = () => ({
+      ...makeStateView(1, 'B', 'setup'),
+      matchId: 'pvplm-browser-friendly',
+      mode: 'friendly',
+      friendlySeries: makeFriendlySeries('matched', 2),
+    });
+    window.__makeLivePvpAuditFriendlyFinishedView = () => {
+      const friendlySeries = makeFriendlySeries('finished', 2, {
+        sourceMatchId: 'pvplm-browser-live',
+        scoreBySourceSeat: { A: 1, B: 1 },
+        leaderSourceSeat: '',
+        canRequestNextRound: true,
+      });
+      return {
+        ...makeStateView(6, 'B', 'finished'),
+        matchId: 'pvplm-browser-friendly',
+        mode: 'friendly',
+        friendlySeries,
+        postMatchReview: {
+          ...makePostMatchReview('finished'),
+          friendlySeries,
+          nextActions: [
+            { id: 'review_events', label: '查看权威事件', detail: '只查看公开事件序列。' },
+            { id: 'review_key_turns', label: '关键回合复盘', detail: '按公开事件复盘。' },
+            { id: 'friendly_rematch', label: 'Bo3 决胜局', detail: '邀请本局对手完成 Bo3 决胜局；不写正式积分。' },
+            { id: 'adjust_loadout', label: '调整斗法谱', detail: '按本局窗口微调。' },
+            { id: 'practice', label: '问道练习', detail: '练习不写正式结果。' },
+            { id: 'queue_again', label: '回到真人排位', detail: '结束友谊局，回到真人排位队列。' },
+          ],
+        },
+      };
+    };
+    window.__makeLivePvpAuditFriendlyDeciderView = () => ({
+      ...makeStateView(1, 'A', 'setup'),
+      matchId: 'pvplm-browser-friendly-decider',
+      mode: 'friendly',
+      friendlySeries: makeFriendlySeries('matched', 2, {
+        sourceMatchId: 'pvplm-browser-friendly',
+        roundIndex: 3,
+        roundLabel: 'Bo3 决胜局 · 换边再战',
+        scoreBySourceSeat: { A: 1, B: 1 },
+        leaderSourceSeat: '',
+      }),
+    });
+    window.__makeLivePvpAuditFriendlyCompleteView = () => {
+      const friendlySeries = makeFriendlySeries('finished', 2, {
+        sourceMatchId: 'pvplm-browser-friendly',
+        roundIndex: 3,
+        roundLabel: 'Bo3 已结束',
+        seriesStatus: 'complete',
+        scoreBySourceSeat: { A: 2, B: 1 },
+        leaderSourceSeat: 'A',
+        winnerSourceSeat: 'A',
+        canRequestNextRound: false,
+      });
+      return {
+        ...makeStateView(8, 'B', 'finished'),
+        matchId: 'pvplm-browser-friendly-decider',
+        mode: 'friendly',
+        friendlySeries,
+        postMatchReview: {
+          ...makePostMatchReview('finished'),
+          friendlySeries,
+          nextActions: [
+            { id: 'review_events', label: '查看权威事件', detail: '只查看公开事件序列。' },
+            { id: 'review_key_turns', label: '关键回合复盘', detail: '按公开事件复盘。' },
+            { id: 'adjust_loadout', label: '调整斗法谱', detail: '按本局窗口微调。' },
+            { id: 'practice', label: '问道练习', detail: '练习不写正式结果。' },
+            { id: 'queue_again', label: '回到真人排位', detail: '结束友谊局，回到真人排位队列。' },
+          ],
+        },
+      };
+    };
+    let queueStatusPolls = 0;
+    window.PVPService.findOpponent = async () => {
+      throw new Error('live UI should not call legacy PVP matching or settlement');
+    };
+    window.PVPService.reportMatchResult = async () => {
+      throw new Error('live UI should not call legacy PVP matching or settlement');
+    };
+    window.PVPService.live = {
+      joinQueue: async (options = {}) => {
+        push({ method: 'joinQueue', options });
+        return { success: true, status: 'waiting', queueTicket: 'pvplq-browser-live' };
+      },
+      cancelQueue: async (queueTicket) => {
+        push({ method: 'cancelQueue', queueTicket });
+        return { success: true, status: 'cancelled', queueTicket };
+      },
+      getQueueStatus: async (queueTicket) => {
+        push({ method: 'getQueueStatus', queueTicket });
+        queueStatusPolls += 1;
+        if (queueStatusPolls === 1) {
+          return {
+            success: true,
+            status: 'waiting',
+            queueTicket,
+            waitingReport: {
+              reportVersion: 'pvp-live-waiting-report-v1',
+              waitMs: 121000,
+              longWaitThresholdMs: 120000,
+              longWait: true,
+              message: '当前真人较少，可继续等待、进入问道练习或取消匹配；不会自动切残影。',
+              safeguards: ['real_player_only', 'no_ghost_fallback', 'no_score_change'],
+              actions: [
+                { id: 'continue_waiting', label: '继续等待', detail: '继续等待真人，不自动切残影。' },
+                { id: 'practice', label: '问道练习', detail: '练习不写正式积分。' },
+                { id: 'cancel_queue', label: '取消匹配', detail: '取消本次排队，不影响正式积分。' },
+              ],
+            },
+          };
+        }
+        return {
+          success: true,
+          status: 'matched',
+          matchId: 'pvplm-browser-live',
+          seatId: 'A',
+          stateView: makeStateView(1, 'A', 'setup'),
+        };
+      },
+      createInvite: async (options = {}) => {
+        push({ method: 'createInvite', options });
+        const targetUsername = String(options.targetUsername || '').trim();
+        return {
+          success: true,
+          status: 'waiting_invite',
+          inviteCode: 'TDAB12',
+          loadoutHash: 'browser-invite-host-hash',
+          inviteReport: {
+            reportVersion: 'pvp-live-invite-v1',
+            inviteCode: 'TDAB12',
+            status: 'waiting',
+            mode: 'friendly',
+            host: { displayName: '甲' },
+            target: targetUsername ? { displayName: targetUsername } : null,
+            rankedImpact: 'none',
+            safeguards: targetUsername
+              ? ['invite_only_match', 'targeted_invite_only', 'friendly_no_ranked_impact', 'server_authoritative', 'snapshot_locked']
+              : ['invite_only_match', 'friendly_no_ranked_impact', 'server_authoritative', 'snapshot_locked'],
+          },
+        };
+      },
+      joinInvite: async (inviteCode, options = {}) => {
+        push({ method: 'joinInvite', inviteCode, options });
+        return {
+          success: true,
+          status: 'matched',
+          matchId: 'pvplm-browser-invite',
+          seatId: 'B',
+          stateView: {
+            ...makeStateView(1, 'A', 'setup'),
+            matchId: 'pvplm-browser-invite',
+            mode: 'friendly',
+            matchQuality: {
+              reportVersion: 'pvp-live-match-quality-v1',
+              tag: 'good',
+              ruleVersion: 'pvp-live-v1',
+              seasonId: 'mvp-local',
+              matchedAt: Date.now(),
+              expansionStage: 'friend_invite',
+              ratingDeltaBucket: 'friend_invite',
+              waitMs: { A: 0, B: 0 },
+              candidatePoolSize: 2,
+              connectionHealth: 'not_measured',
+              wideMatchReason: '',
+              safeguards: ['server_authoritative', 'snapshot_locked', 'setup_ready_required', 'first_action_budget', 'invite_only_match', 'friendly_no_ranked_impact'],
+            },
+            firstMatchGuide: {
+              ...makeFirstMatchGuide('setup'),
+              safeguards: ['server_authoritative', 'snapshot_locked', 'setup_ready_required', 'first_action_budget', 'friendly_no_ranked_impact'],
+            },
+          },
+        };
+      },
+      cancelInvite: async (inviteCode) => {
+        push({ method: 'cancelInvite', inviteCode });
+        return {
+          success: true,
+          status: 'cancelled',
+          inviteCode,
+          inviteReport: {
+            reportVersion: 'pvp-live-invite-v1',
+            inviteCode,
+            status: 'cancelled',
+            rankedImpact: 'none',
+          },
+        };
+      },
+      getCurrentInvite: async () => {
+        push({ method: 'getCurrentInvite', mode: window.__livePvpAuditCurrentInviteMode || '' });
+        if (window.__livePvpAuditCurrentInviteMode === 'pending') {
+          return {
+            success: true,
+            status: 'waiting_invite',
+            inviteCode: 'TDAB12',
+            inviteReport: {
+              reportVersion: 'pvp-live-invite-v1',
+              inviteCode: 'TDAB12',
+              status: 'waiting',
+              rankedImpact: 'none',
+              safeguards: ['invite_only_match', 'friendly_no_ranked_impact'],
+            },
+          };
+        }
+        if (window.__livePvpAuditCurrentInviteMode === 'expired') {
+          return {
+            success: false,
+            reason: 'invite_expired',
+            message: '好友约战邀请码已过期',
+          };
+        }
+        return {
+          success: false,
+          reason: 'no_current_invite',
+          message: '当前没有等待中的好友约战',
+        };
+      },
+      getInviteInbox: async () => {
+        push({ method: 'getInviteInbox', mode: window.__livePvpAuditInboxMode || '' });
+        if (window.__livePvpAuditInboxMode === 'pending') {
+          return {
+            success: true,
+            status: 'invite_inbox',
+            invites: [
+              {
+                inviteCode: 'TDIN42',
+                inviteReport: {
+                  reportVersion: 'pvp-live-invite-v1',
+                  inviteCode: 'TDIN42',
+                  status: 'waiting',
+                  mode: 'friendly',
+                  host: { displayName: '甲' },
+                  target: { displayName: '当前道友' },
+                  rankedImpact: 'none',
+                  safeguards: ['invite_only_match', 'targeted_invite_only', 'friendly_no_ranked_impact'],
+                },
+              },
+            ],
+          };
+        }
+        return {
+          success: true,
+          status: 'invite_inbox',
+          invites: [],
+        };
+      },
+      getMatch: async (matchId) => {
+        push({ method: 'getMatch', matchId });
+        const stateView = window.__livePvpAuditOpponentEmote
+          ? {
+              ...makeStateView(4, 'B', 'active'),
+              recentEvents: [
+                { eventType: 'emote_sent', actingSeat: 'B', payload: { seatId: 'B', emoteId: 'thinking', label: '思考' } },
+              ],
+            }
+          : makeStateView(1, 'A', 'setup');
+        return {
+          success: true,
+          matchId,
+          seatId: 'A',
+          stateView,
+        };
+      },
+      requestRematch: async (matchId, options = {}) => {
+        push({ method: 'requestRematch', matchId, options });
+        window.__livePvpFriendlyAccepted = true;
+        return {
+          success: true,
+          status: 'waiting_rematch',
+          friendlySeries: {
+            ...makeFriendlySeries('waiting_rematch', 1),
+            sourceMatchId: matchId,
+            originMatchId: matchId,
+          },
+        };
+      },
+      heartbeat: async (matchId) => {
+        push({ method: 'heartbeat', matchId });
+        return {
+          success: true,
+          matchId,
+          seatId: 'A',
+          stateView: String(matchId || '').includes('decider')
+            ? window.__makeLivePvpAuditFriendlyDeciderView()
+            : String(matchId || '').includes('friendly')
+            ? window.__makeLivePvpAuditFriendlyView()
+            : String(matchId || '').includes('invite')
+            ? {
+                ...makeStateView(1, 'A', 'setup'),
+                matchId: 'pvplm-browser-invite',
+                mode: 'friendly',
+                matchQuality: {
+                  reportVersion: 'pvp-live-match-quality-v1',
+                  tag: 'good',
+                  ruleVersion: 'pvp-live-v1',
+                  expansionStage: 'friend_invite',
+                  ratingDeltaBucket: 'friend_invite',
+                  waitMs: { A: 0, B: 0 },
+                  candidatePoolSize: 2,
+                  connectionHealth: 'not_measured',
+                  safeguards: ['server_authoritative', 'snapshot_locked', 'setup_ready_required', 'invite_only_match', 'friendly_no_ranked_impact'],
+                },
+              }
+            : makeStateView(1, 'A', 'setup'),
+        };
+      },
+      submitIntent: async (matchId, intent) => {
+        push({ method: 'submitIntent', matchId, intent });
+        const isSurrender = intent.intentType === 'surrender';
+        const isMulligan = intent.intentType === 'mulligan';
+        const isReady = intent.intentType === 'ready';
+        const isPlayCard = intent.intentType === 'play_card';
+        const isEmote = intent.intentType === 'emote';
+        if (isEmote) {
+          window.__livePvpAuditOpponentEmote = true;
+        }
+        const emoteLabel = intent.payload && intent.payload.emoteId === 'respect' ? '抱拳' : '预设表情';
+        return {
+          success: true,
+          result: 'accepted',
+          events: isEmote ? [
+            { eventType: 'emote_sent', actingSeat: 'A', payload: { seatId: 'A', emoteId: intent.payload?.emoteId || 'respect', label: emoteLabel } },
+          ] : isPlayCard ? [
+            {
+              eventType: 'opening_second_seat_buffer_granted',
+              actingSeat: 'A',
+              payload: {
+                seatId: 'B',
+                firstSeat: 'A',
+                block: 3,
+                totalBlock: 3,
+                source: 'opening_second_seat_buffer',
+              },
+            },
+            {
+              eventType: 'opening_protection_triggered',
+              actingSeat: 'A',
+              payload: {
+                protectedSeat: 'B',
+                minimumHp: 1,
+                preventedDamage: 6,
+              },
+            },
+            {
+              eventType: 'opening_counterplay_granted',
+              actingSeat: 'A',
+              payload: {
+                seatId: 'B',
+                block: 8,
+                totalBlock: 8,
+                minimumHp: 1,
+                source: 'opening_protection',
+              },
+            },
+            {
+              eventType: 'damage_applied',
+              actingSeat: 'A',
+              payload: {
+                targetSeat: 'B',
+                hpDamage: 9,
+                targetHp: 1,
+              },
+            },
+          ] : isSurrender ? [
+            { eventType: 'player_surrendered', actingSeat: 'A', payload: { loserSeat: 'A', winnerSeat: 'B' } },
+            { eventType: 'match_finished', actingSeat: 'A', payload: { winnerSeat: 'B', loserSeat: 'A', finishReason: 'surrender' } },
+          ] : [{ eventType: intent.intentType }],
+          stateView: makeStateView(
+            isSurrender ? 5 : isReady ? 3 : isMulligan ? 2 : 4,
+            isSurrender ? 'A' : isMulligan || isReady ? 'A' : 'B',
+            isSurrender ? 'finished' : isMulligan ? 'setup' : isReady || isPlayCard || isEmote ? 'active' : 'active',
+          ),
+        };
+      },
+    };
+    if (window.PVPScene) {
+      window.PVPScene.liveSession = null;
+    }
+  });
+
+  await page.click('#pvp-btn', { timeout: 5000, force: true });
+  await page.waitForTimeout(400);
+
+  await page.click('[data-pvp-tab="live"]', { timeout: 5000, force: true });
+  await page.waitForSelector('[data-live-loadout-preset="sword"]', { timeout: 5000 });
+  const initialPresetProbe = await page.evaluate(() => ({
+    selectedPreset: document.querySelector('[data-live-loadout-preset].selected')?.getAttribute('data-live-loadout-preset') || '',
+    selectedLoadout: document.querySelector('[data-live-selected-loadout]')?.textContent || '',
+    presetIds: Array.from(document.querySelectorAll('[data-live-loadout-preset]')).map(button => button.getAttribute('data-live-loadout-preset')),
+    disabled: Array.from(document.querySelectorAll('[data-live-loadout-preset]')).map(button => button.disabled),
+  }));
+  add(
+    'live UI renders all baseline loadouts with balanced selected by default',
+    initialPresetProbe.selectedPreset === 'balanced'
+      && /默认斗法谱/.test(initialPresetProbe.selectedLoadout)
+      && ['balanced', 'sword', 'shield'].every(id => initialPresetProbe.presetIds.includes(id))
+      && initialPresetProbe.disabled.every(value => value === false),
+    JSON.stringify(initialPresetProbe),
+  );
+  await page.click('[data-live-loadout-preset="sword"]', { timeout: 5000, force: true });
+  await page.waitForTimeout(100);
+  await page.click('[data-live-action="join-queue"]', { timeout: 5000, force: true });
+  await page.waitForTimeout(200);
+
+  const waitingProbe = await page.evaluate(() => ({
+    phase: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-phase') || '',
+    ticket: document.querySelector('[data-live-queue-ticket]')?.textContent || '',
+    selectedLoadout: document.querySelector('[data-live-selected-loadout]')?.textContent || '',
+    selectedPreset: document.querySelector('[data-live-loadout-preset].selected')?.getAttribute('data-live-loadout-preset') || '',
+    presetDisabled: Array.from(document.querySelectorAll('[data-live-loadout-preset]')).map(button => button.disabled),
+    calls: window.__livePvpAuditCalls,
+  }));
+  add('live UI joins queue and shows waiting ticket', waitingProbe.phase === 'waiting' && /pvplq-browser-live/.test(waitingProbe.ticket), JSON.stringify(waitingProbe));
+  add(
+    'live UI selects a baseline loadout before queue join',
+    /破阵斗法谱/.test(waitingProbe.selectedLoadout)
+      && waitingProbe.selectedPreset === 'sword'
+      && waitingProbe.calls.some(call => call.method === 'joinQueue' && call.options?.loadout?.identitySlot === 'sword' && call.options?.loadout?.deck?.length === 20),
+    JSON.stringify(waitingProbe),
+  );
+  add(
+    'live UI locks baseline loadout selector after queue join',
+    waitingProbe.presetDisabled.length === 3 && waitingProbe.presetDisabled.every(value => value === true),
+    JSON.stringify(waitingProbe),
+  );
+
+  await page.click('[data-live-action="refresh-match"]', { timeout: 5000, force: true });
+  await page.waitForTimeout(200);
+  const longWaitProbe = await page.evaluate(() => ({
+    phase: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-phase') || '',
+    report: document.querySelector('[data-live-waiting-report]')?.textContent || '',
+    buttons: Object.fromEntries(Array.from(document.querySelectorAll('[data-live-action]')).map(button => [button.getAttribute('data-live-action'), button.disabled])),
+    calls: window.__livePvpAuditCalls,
+    payload: JSON.parse(window.render_game_to_text()).pvp?.live || null,
+  }));
+  add(
+    'live UI renders 120s no-real-player waiting branch without ghost fallback',
+    longWaitProbe.phase === 'waiting'
+      && /120 秒无真人/.test(longWaitProbe.report)
+      && /继续等待/.test(longWaitProbe.report)
+      && /问道练习/.test(longWaitProbe.report)
+      && /取消匹配/.test(longWaitProbe.report)
+      && /不会自动切残影/.test(longWaitProbe.report)
+      && /不写正式积分/.test(longWaitProbe.report)
+      && longWaitProbe.buttons['practice-live'] === false
+      && longWaitProbe.buttons['cancel-queue'] === false
+      && longWaitProbe.payload?.waitingReport?.reportVersion === 'pvp-live-waiting-report-v1'
+      && longWaitProbe.payload?.waitingReport?.longWait === true
+      && longWaitProbe.payload?.waitingReport?.actions?.some(action => action.id === 'practice' && /不写正式积分/.test(action.detail))
+      && !/PVPService\\.findOpponent|reportMatchResult|GhostEnemy|reward|rating|elo/i.test(`${longWaitProbe.report} ${JSON.stringify(longWaitProbe.payload?.waitingReport || {})} ${JSON.stringify(longWaitProbe.calls)}`),
+    JSON.stringify(longWaitProbe),
+  );
+  await page.click('[data-live-action="practice-live"]', { timeout: 5000, force: true });
+  await page.waitForTimeout(100);
+  const practiceHintProbe = await page.evaluate(() => ({
+    phase: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-phase') || '',
+    hint: document.querySelector('[data-live-last-error]')?.textContent || '',
+    calls: window.__livePvpAuditCalls,
+  }));
+  add(
+    'live UI practice hint does not call legacy ghost fallback or settlement',
+    practiceHintProbe.phase === 'waiting'
+      && /问道练习不会写正式积分/.test(practiceHintProbe.hint)
+      && !/findOpponent|reportMatchResult|GhostEnemy|startPVPBattle|didWin|matchTicket/.test(JSON.stringify(practiceHintProbe.calls)),
+    JSON.stringify(practiceHintProbe),
+  );
+
+  await page.click('[data-live-action="refresh-match"]', { timeout: 5000, force: true });
+  await page.waitForTimeout(200);
+  const matchedProbe = await page.evaluate(() => ({
+    phase: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-phase') || '',
+    matchId: document.querySelector('[data-live-match-id]')?.textContent || '',
+    seat: document.querySelector('[data-live-seat]')?.textContent || '',
+    stateVersion: document.querySelector('[data-live-state-version]')?.textContent || '',
+    selfLoadout: document.querySelector('[data-live-self-loadout]')?.textContent || '',
+    opponentLoadout: document.querySelector('[data-live-opponent-loadout]')?.textContent || '',
+    matchQuality: document.querySelector('[data-live-match-quality]')?.textContent || '',
+    turnTimer: document.querySelector('[data-live-turn-timer]')?.textContent || '',
+    connectionStatus: document.querySelector('[data-live-connection-status]')?.textContent || '',
+    openingSafeguard: document.querySelector('[data-live-opening-safeguard]')?.textContent || '',
+    firstGuide: document.querySelector('[data-live-first-guide]')?.textContent || '',
+    opponentHandLeaked: Array.from(document.querySelectorAll('[data-live-opponent] [data-live-card]')).length,
+    presetDisabled: Array.from(document.querySelectorAll('[data-live-loadout-preset]')).map(button => button.disabled),
+    payload: JSON.parse(window.render_game_to_text()).pvp?.live || null,
+  }));
+  add(
+    'live UI shows matched setup state without opponent hand leak',
+    /setup/.test(matchedProbe.phase)
+      && /pvplm-browser-live/.test(matchedProbe.matchId)
+      && /A/.test(matchedProbe.seat)
+      && /1/.test(matchedProbe.stateVersion)
+      && matchedProbe.opponentHandLeaked === 0
+      && matchedProbe.presetDisabled.every(value => value === true)
+      && /准备倒计时/.test(matchedProbe.turnTimer)
+      && /连接：我方在线 · 对方在线/.test(matchedProbe.connectionStatus)
+      && matchedProbe.payload?.turnTimer?.reportVersion === 'pvp-live-turn-timer-v1'
+      && matchedProbe.payload?.turnTimer?.phase === 'setup'
+      && matchedProbe.payload?.connectionReport?.reportVersion === 'pvp-live-connection-v1'
+      && matchedProbe.payload?.connectionReport?.opponent?.status === 'online'
+      && matchedProbe.payload?.matchId === 'pvplm-browser-live',
+    JSON.stringify(matchedProbe),
+  );
+  await page.evaluate(() => {
+    window.__livePvpAuditConnectionMode = 'grace';
+  });
+  await page.click('[data-live-action="refresh-match"]', { timeout: 5000, force: true });
+  await page.waitForTimeout(200);
+  const connectionGraceProbe = await page.evaluate(() => ({
+    phase: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-phase') || '',
+    connectionStatus: document.querySelector('[data-live-connection-status]')?.textContent || '',
+    turnTimer: document.querySelector('[data-live-turn-timer]')?.textContent || '',
+    payload: JSON.parse(window.render_game_to_text()).pvp?.live || null,
+  }));
+  add(
+    'live UI renders opponent reconnect grace without confusing it with action timeout',
+    connectionGraceProbe.phase === 'setup'
+      && /对方重连宽限/.test(connectionGraceProbe.connectionStatus)
+      && /不会立即判负/.test(connectionGraceProbe.connectionStatus)
+      && /准备倒计时/.test(connectionGraceProbe.turnTimer)
+      && connectionGraceProbe.payload?.connectionReport?.opponent?.status === 'grace'
+      && connectionGraceProbe.payload?.connectionReport?.opponent?.remainingGraceMs > 0,
+    JSON.stringify(connectionGraceProbe),
+  );
+  await page.evaluate(() => {
+    window.__livePvpAuditConnectionMode = 'online';
+  });
+  await page.click('[data-live-action="refresh-match"]', { timeout: 5000, force: true });
+  await page.waitForTimeout(200);
+  add(
+    'live UI renders snapshot_locked loadout summaries without opponent deck leak',
+    /破阵斗法谱/.test(matchedProbe.selfLoadout)
+      && /sword/.test(matchedProbe.selfLoadout)
+      && /已锁定/.test(matchedProbe.selfLoadout)
+      && /守势斗法谱/.test(matchedProbe.opponentLoadout)
+      && /shield/.test(matchedProbe.opponentLoadout)
+      && /已锁定/.test(matchedProbe.opponentLoadout)
+      && matchedProbe.payload?.self?.loadout?.loadoutHash === 'hash-self-sword-123456'
+      && matchedProbe.payload?.opponent?.loadout?.loadoutHash === 'hash-opponent-shield-654321'
+      && !matchedProbe.payload?.opponent?.loadoutSnapshot
+      && !matchedProbe.payload?.opponent?.deck
+      && !matchedProbe.payload?.opponent?.loadout?.deck,
+    JSON.stringify(matchedProbe),
+  );
+  add(
+    'live UI renders public match quality report without hidden rating leak',
+    /匹配质量：良好/.test(matchedProbe.matchQuality)
+      && /mvp_open_pool/.test(matchedProbe.matchQuality)
+      && /unrated_mvp/.test(matchedProbe.matchQuality)
+      && matchedProbe.payload?.matchQuality?.reportVersion === 'pvp-live-match-quality-v1'
+      && matchedProbe.payload?.matchQuality?.tag === 'good'
+      && matchedProbe.payload?.matchQuality?.ratingDeltaBucket === 'unrated_mvp'
+      && !/rating":|score":|elo/i.test(JSON.stringify(matchedProbe.payload?.matchQuality || {})),
+    JSON.stringify(matchedProbe),
+  );
+  add(
+    'live UI renders first-match guide report without reward or rating promises',
+    /首战简报/.test(matchedProbe.firstGuide)
+      && /模式/.test(matchedProbe.firstGuide)
+      && /锁谱/.test(matchedProbe.firstGuide)
+      && /调息/.test(matchedProbe.firstGuide)
+      && /护体/.test(matchedProbe.firstGuide)
+      && /默认斗法谱/.test(matchedProbe.firstGuide)
+      && /破阵斗法谱/.test(matchedProbe.firstGuide)
+      && /守势斗法谱/.test(matchedProbe.firstGuide)
+      && /弱点/.test(matchedProbe.firstGuide)
+      && matchedProbe.payload?.firstMatchGuide?.reportVersion === 'pvp-live-first-match-guide-v1'
+      && matchedProbe.payload?.firstMatchGuide?.safeguards?.includes('opening_protection')
+      && matchedProbe.payload?.firstMatchGuide?.recommendedLoadouts?.length === 3
+      && matchedProbe.payload?.firstMatchGuide?.exceptionBranches?.some(item => item.id === 'ready_timeout')
+      && matchedProbe.payload?.firstMatchGuide?.reviewActions?.length >= 3
+      && matchedProbe.payload?.firstMatchGuide?.steps?.some(step => step.id === 'setup_ready')
+      && !/reward|rating|elo/i.test(`${matchedProbe.firstGuide} ${JSON.stringify(matchedProbe.payload?.firstMatchGuide || {})}`),
+    JSON.stringify(matchedProbe),
+  );
+
+  await page.click('[data-live-mulligan-card]', { timeout: 5000, force: true });
+  await page.click('[data-live-action="confirm-mulligan"]', { timeout: 5000, force: true });
+  await page.waitForTimeout(200);
+  await page.click('[data-live-action="ready"]', { timeout: 5000, force: true });
+  await page.waitForTimeout(200);
+  const setupProbe = await page.evaluate(() => ({
+    phase: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-phase') || '',
+    firstGuide: document.querySelector('[data-live-first-guide]')?.textContent || '',
+    openingSafeguard: document.querySelector('[data-live-opening-safeguard]')?.textContent || '',
+    turnTimer: document.querySelector('[data-live-turn-timer]')?.textContent || '',
+    presetDisabled: Array.from(document.querySelectorAll('[data-live-loadout-preset]')).map(button => button.disabled),
+    calls: window.__livePvpAuditCalls,
+    payload: JSON.parse(window.render_game_to_text()).pvp?.live || null,
+  }));
+  add(
+    'live UI completes setup mulligan and ready before battle actions',
+    setupProbe.phase === 'active'
+      && setupProbe.presetDisabled.every(value => value === true)
+      && /行动倒计时/.test(setupProbe.turnTimer)
+      && setupProbe.payload?.turnTimer?.phase === 'active'
+      && /mulligan/.test(JSON.stringify(setupProbe.calls))
+      && /ready/.test(JSON.stringify(setupProbe.calls)),
+    JSON.stringify(setupProbe),
+  );
+  add(
+    'live UI updates first-match guide next action after setup',
+    setupProbe.phase === 'active'
+      && /按当前行动席位出牌/.test(setupProbe.firstGuide)
+      && setupProbe.payload?.firstMatchGuide?.nextAction === '按当前行动席位出牌，留意权威事件。',
+    JSON.stringify(setupProbe),
+  );
+  add(
+    'live UI renders active opening safeguard report without hidden payloads',
+    setupProbe.phase === 'active'
+      && /首动预算/.test(setupProbe.openingSafeguard)
+      && /当前 A/.test(setupProbe.openingSafeguard)
+      && /18/.test(setupProbe.openingSafeguard)
+      && /开局护体/.test(setupProbe.openingSafeguard)
+      && /保底 1 血/.test(setupProbe.openingSafeguard)
+      && /后手护盾/.test(setupProbe.openingSafeguard)
+      && /B \+3/.test(setupProbe.openingSafeguard)
+      && setupProbe.payload?.openingSafeguardReport?.reportVersion === 'pvp-live-opening-safeguard-v1'
+      && setupProbe.payload?.openingSafeguardReport?.damageBudget?.currentActionBudget === 18
+      && setupProbe.payload?.openingSafeguardReport?.secondSeatBuffer?.seatId === 'B'
+      && setupProbe.payload?.openingSafeguardReport?.secondSeatBuffer?.block === 3
+      && setupProbe.payload?.openingSafeguardReport?.openingProtection?.protectedSeats?.includes('B')
+      && setupProbe.payload?.openingSafeguardReport?.usesHiddenInformation === false
+      && !/payload|hand|deck|cardId|instanceId|loadoutSnapshot|reward|rating|elo/i.test(`${setupProbe.openingSafeguard} ${JSON.stringify(setupProbe.payload?.openingSafeguardReport || {})}`),
+    JSON.stringify(setupProbe),
+  );
+
+  await page.click('[data-live-card]', { timeout: 5000, force: true });
+  await page.waitForTimeout(200);
+  const actionProbe = await page.evaluate(() => ({
+    stateVersion: document.querySelector('[data-live-state-version]')?.textContent || '',
+    currentSeat: document.querySelector('[data-live-current-seat]')?.textContent || '',
+    turnTimer: document.querySelector('[data-live-turn-timer]')?.textContent || '',
+    openingSafeguard: document.querySelector('[data-live-opening-safeguard]')?.textContent || '',
+    events: document.querySelector('[data-live-event-log]')?.textContent || '',
+    payload: JSON.parse(window.render_game_to_text()).pvp?.live || null,
+    calls: window.__livePvpAuditCalls,
+  }));
+  add(
+    'live UI submits card intent through live service',
+    /4/.test(actionProbe.stateVersion)
+      && /B/.test(actionProbe.currentSeat)
+      && /B/.test(actionProbe.turnTimer)
+      && /play_card/.test(JSON.stringify(actionProbe.calls))
+      && !/didWin|matchTicket/.test(JSON.stringify(actionProbe.calls)),
+    JSON.stringify(actionProbe),
+  );
+  add(
+    'live UI renders opening protection public event details',
+    /开局护体触发/.test(actionProbe.events)
+      && /护住 B/.test(actionProbe.events)
+      && /保底 1 血/.test(actionProbe.events)
+      && /挡下 6 点致命伤害/.test(actionProbe.events)
+      && !/opening_protection_triggered/.test(actionProbe.events),
+    JSON.stringify(actionProbe),
+  );
+  add(
+    'live UI renders opening counterplay cue after protection',
+    /后手护盾发放/.test(actionProbe.events)
+      && /护盾 \+3/.test(actionProbe.events)
+      && /反打缓冲发放/.test(actionProbe.events)
+      && /给 B/.test(actionProbe.events)
+      && /护盾 \+8/.test(actionProbe.events)
+      && /后手护盾/.test(actionProbe.openingSafeguard)
+      && /B \+3/.test(actionProbe.openingSafeguard)
+      && /反打缓冲/.test(actionProbe.openingSafeguard)
+      && /已发放 B/.test(actionProbe.openingSafeguard)
+      && actionProbe.payload?.openingSafeguardReport?.secondSeatBuffer?.seatId === 'B'
+      && actionProbe.payload?.openingSafeguardReport?.secondSeatBuffer?.block === 3
+      && actionProbe.payload?.openingSafeguardReport?.counterplay?.grantedSeats?.includes('B')
+      && !/payload|hand|deck|cardId|instanceId|loadoutSnapshot|reward|rating|elo/i.test(`${actionProbe.events} ${actionProbe.openingSafeguard} ${JSON.stringify(actionProbe.payload?.openingSafeguardReport || {})}`),
+    JSON.stringify(actionProbe),
+  );
+
+  await page.click('[data-live-emote="respect"]', { timeout: 5000, force: true });
+  await page.waitForTimeout(200);
+  const ownEmoteProbe = await page.evaluate(() => ({
+    panel: document.querySelector('[data-live-social-panel]')?.textContent || '',
+    events: document.querySelector('[data-live-event-log]')?.textContent || '',
+    status: document.querySelector('[data-live-social-status]')?.textContent || '',
+    payload: window.PVPScene.getLiveSnapshot()?.social || null,
+    calls: window.__livePvpAuditCalls,
+  }));
+  await page.click('[data-live-action="refresh-match"]', { timeout: 5000, force: true });
+  await page.waitForTimeout(200);
+  const opponentEmoteProbe = await page.evaluate(() => ({
+    panel: document.querySelector('[data-live-social-panel]')?.textContent || '',
+    events: document.querySelector('[data-live-event-log]')?.textContent || '',
+    status: document.querySelector('[data-live-social-status]')?.textContent || '',
+    payload: window.PVPScene.getLiveSnapshot()?.social || null,
+  }));
+  await page.click('[data-live-action="toggle-social-mute"]', { timeout: 5000, force: true });
+  await page.waitForTimeout(200);
+  const mutedEmoteProbe = await page.evaluate(() => ({
+    panel: document.querySelector('[data-live-social-panel]')?.textContent || '',
+    events: document.querySelector('[data-live-event-log]')?.textContent || '',
+    status: document.querySelector('[data-live-social-status]')?.textContent || '',
+    hint: document.querySelector('[data-live-last-error]')?.textContent || '',
+    payload: window.PVPScene.getLiveSnapshot()?.social || null,
+  }));
+  add(
+    'live UI sends preset emote and can locally mute opponent emotes',
+    /emote/.test(JSON.stringify(ownEmoteProbe.calls))
+      && /预设表情/.test(ownEmoteProbe.events)
+      && /抱拳/.test(ownEmoteProbe.events)
+      && /B · 思考/.test(opponentEmoteProbe.events)
+      && /已静音/.test(mutedEmoteProbe.status)
+      && mutedEmoteProbe.payload?.muted === true
+      && !/B · 思考/.test(mutedEmoteProbe.events)
+      && !/自由文本/.test(JSON.stringify(ownEmoteProbe.calls)),
+    JSON.stringify({ ownEmoteProbe, opponentEmoteProbe, mutedEmoteProbe }),
+  );
+
+  await page.click('[data-live-action="surrender"]', { timeout: 5000, force: true });
+  await page.waitForTimeout(200);
+  const surrenderProbe = await page.evaluate(() => ({
+    phase: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-phase') || '',
+    events: document.querySelector('[data-live-event-log]')?.textContent || '',
+    reviewText: document.querySelector('[data-live-post-match-review]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+    keyTurnText: document.querySelector('[data-live-key-turn-replay]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+    keyTurnSource: document.querySelector('[data-live-key-turn-replay]')?.getAttribute('data-live-key-turn-source') || '',
+    keyTurnHidden: document.querySelector('[data-live-key-turn-replay]')?.getAttribute('data-live-key-turn-hidden') || '',
+    keyTurnCount: document.querySelectorAll('[data-live-key-turn]').length,
+    experienceText: document.querySelector('[data-live-experience-report]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+    experienceSource: document.querySelector('[data-live-experience-report]')?.getAttribute('data-live-experience-source') || '',
+    experienceHidden: document.querySelector('[data-live-experience-report]')?.getAttribute('data-live-experience-hidden') || '',
+    experienceCheckIds: Array.from(document.querySelectorAll('[data-live-experience-check]')).map(item => item.getAttribute('data-live-experience-check')),
+    reviewActionIds: Array.from(document.querySelectorAll('[data-live-post-review-action]')).map(button => button.getAttribute('data-live-post-review-action')),
+    reviewPayload: window.PVPScene.getLiveSnapshot()?.postMatchReview || null,
+    textPayload: JSON.parse(window.render_game_to_text()).pvp?.live?.postMatchReview || null,
+    calls: window.__livePvpAuditCalls,
+  }));
+  const reviewParity = surrenderProbe.reviewPayload && surrenderProbe.textPayload ? {
+    result: surrenderProbe.reviewPayload.result === surrenderProbe.textPayload.result,
+    finishReason: surrenderProbe.reviewPayload.finishReason === surrenderProbe.textPayload.finishReason,
+    evidence: JSON.stringify((surrenderProbe.reviewPayload.evidence || []).map(event => event.eventType)) === JSON.stringify((surrenderProbe.textPayload.evidence || []).map(event => event.eventType)),
+    nextActions: JSON.stringify((surrenderProbe.reviewPayload.nextActions || []).map(action => action.id)) === JSON.stringify((surrenderProbe.textPayload.nextActions || []).map(action => action.id)),
+    keyTurns: JSON.stringify((surrenderProbe.reviewPayload.keyTurnReplay?.turns || []).map(event => event.eventType)) === JSON.stringify((surrenderProbe.textPayload.keyTurnReplay?.turns || []).map(event => event.eventType)),
+    experienceChecks: JSON.stringify((surrenderProbe.reviewPayload.experienceReport?.fairnessChecks || []).map(item => item.id)) === JSON.stringify((surrenderProbe.textPayload.experienceReport?.fairnessChecks || []).map(item => item.id)),
+  } : null;
+  add(
+    'live UI surrenders through live intent and reaches finished phase',
+    surrenderProbe.phase === 'finished'
+      && /认输/.test(surrenderProbe.events)
+      && /surrender/.test(JSON.stringify(surrenderProbe.calls)),
+    JSON.stringify(surrenderProbe),
+  );
+  add(
+    'live UI renders post-match review MVP from public finished state',
+    /首败复盘|赛后复盘/.test(surrenderProbe.reviewText)
+      && /认输/.test(surrenderProbe.reviewText)
+      && /查看权威事件/.test(surrenderProbe.reviewText)
+      && /继续真人排位/.test(surrenderProbe.reviewText)
+      && ['review_events', 'review_key_turns', 'friendly_rematch', 'adjust_loadout', 'practice', 'queue_again'].every(id => surrenderProbe.reviewActionIds.includes(id))
+      && surrenderProbe.reviewPayload?.reportVersion === 'pvp-live-post-match-review-v1'
+      && surrenderProbe.reviewPayload?.result === 'loss'
+      && surrenderProbe.textPayload?.reportVersion === 'pvp-live-post-match-review-v1'
+      && reviewParity?.result === true
+      && reviewParity?.finishReason === true
+      && reviewParity?.evidence === true
+      && reviewParity?.nextActions === true
+      && !/reward|rating|elo/i.test(`${surrenderProbe.reviewText} ${JSON.stringify(surrenderProbe.reviewPayload || {})}`),
+    JSON.stringify({ ...surrenderProbe, reviewParity }),
+  );
+  add(
+    'live UI renders post-match key-turn replay from public events',
+    /关键回合|开战窗口|压力窗口|终局选择/.test(surrenderProbe.keyTurnText)
+      && surrenderProbe.keyTurnSource === 'public_events'
+      && surrenderProbe.keyTurnHidden === 'false'
+      && surrenderProbe.keyTurnCount >= 2
+      && surrenderProbe.reviewPayload?.keyTurnReplay?.reportVersion === 'pvp-live-key-turn-replay-v1'
+      && surrenderProbe.reviewPayload?.keyTurnReplay?.sourceVisibility === 'public_events'
+      && surrenderProbe.reviewPayload?.keyTurnReplay?.usesHiddenInformation === false
+      && surrenderProbe.reviewPayload?.keyTurnReplay?.rankedImpact === 'none'
+      && (surrenderProbe.reviewPayload?.keyTurnReplay?.turns || []).some(turn => turn.eventType === 'battle_started')
+      && (surrenderProbe.reviewPayload?.keyTurnReplay?.turns || []).some(turn => turn.eventType === 'match_finished' || turn.eventType === 'player_surrendered')
+      && reviewParity?.keyTurns === true
+      && !/payload|hand|deck|cardId|instanceId|loadoutSnapshot/i.test(JSON.stringify(surrenderProbe.reviewPayload?.keyTurnReplay || {})),
+    JSON.stringify({ ...surrenderProbe, reviewParity }),
+  );
+  add(
+    'live UI renders post-match experience report from public events',
+    /双方体验诊断|低风险|双方均有可读窗口|公开轨迹/.test(surrenderProbe.experienceText)
+      && surrenderProbe.experienceSource === 'public_events'
+      && surrenderProbe.experienceHidden === 'false'
+      && ['setup_ready_required', 'first_action_budget', 'opening_protection', 'decision_windows'].every(id => surrenderProbe.experienceCheckIds.includes(id))
+      && surrenderProbe.reviewPayload?.experienceReport?.reportVersion === 'pvp-live-experience-report-v1'
+      && surrenderProbe.reviewPayload?.experienceReport?.sourceVisibility === 'public_events'
+      && surrenderProbe.reviewPayload?.experienceReport?.usesHiddenInformation === false
+      && surrenderProbe.reviewPayload?.experienceReport?.rankedImpact === 'none'
+      && surrenderProbe.reviewPayload?.experienceReport?.nonGameRisk === 'low'
+      && surrenderProbe.reviewPayload?.experienceReport?.decisionWindowCount >= 1
+      && reviewParity?.experienceChecks === true
+      && !/payload|hand|deck|cardId|instanceId|loadoutSnapshot|reward|rating|elo/i.test(JSON.stringify(surrenderProbe.reviewPayload?.experienceReport || {})),
+    JSON.stringify({ ...surrenderProbe, reviewParity }),
+  );
+
+  await page.click('[data-live-experience-check="decision_windows"]', { timeout: 5000, force: true });
+  await page.waitForTimeout(100);
+  const experienceFocusProbe = await page.evaluate(() => ({
+    phase: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-phase') || '',
+    hint: document.querySelector('[data-live-last-error]')?.textContent || '',
+    eventsPanelFocused: document.querySelector('[data-live-event-panel]')?.getAttribute('data-live-review-focus') || '',
+    checkFocused: document.querySelector('[data-live-experience-check="decision_windows"]')?.getAttribute('data-live-review-focus') || '',
+    focusedEvents: document.querySelector('[data-live-event-log]')?.textContent || '',
+    eventTypes: Array.from(document.querySelectorAll('[data-live-event-type]')).map(item => item.getAttribute('data-live-event-type')),
+    experiencePayload: window.PVPScene.getLiveSnapshot()?.postMatchReview?.experienceReport || null,
+    calls: window.__livePvpAuditCalls,
+  }));
+  add(
+    'live UI experience check focuses linked public evidence without hidden payloads',
+    experienceFocusProbe.phase === 'finished'
+      && /体验诊断证据/.test(experienceFocusProbe.hint)
+      && experienceFocusProbe.eventsPanelFocused === 'experience_check:decision_windows'
+      && experienceFocusProbe.checkFocused === 'experience_check:decision_windows'
+      && experienceFocusProbe.eventTypes.includes('battle_started')
+      && experienceFocusProbe.eventTypes.includes('turn_ended')
+      && /开战/.test(experienceFocusProbe.focusedEvents)
+      && /回合交替/.test(experienceFocusProbe.focusedEvents)
+      && (experienceFocusProbe.experiencePayload?.fairnessChecks || []).some(item => item.id === 'decision_windows' && (item.linkedEvidence || []).some(event => event.eventType === 'battle_started'))
+      && !/payload|hand|deck|cardId|instanceId|loadoutSnapshot|reward|rating|elo/i.test(JSON.stringify(experienceFocusProbe.experiencePayload || {}))
+      && !/findOpponent|reportMatchResult|GhostEnemy|startPVPBattle|didWin|matchTicket/.test(JSON.stringify(experienceFocusProbe.calls)),
+    JSON.stringify(experienceFocusProbe),
+  );
+
+  await page.click('[data-live-post-review-action="review_key_turns"]', { timeout: 5000, force: true });
+  await page.waitForTimeout(100);
+  const keyTurnActionProbe = await page.evaluate(() => ({
+    phase: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-phase') || '',
+    hint: document.querySelector('[data-live-last-error]')?.textContent || '',
+    eventsPanelFocused: document.querySelector('[data-live-event-panel]')?.getAttribute('data-live-review-focus') || '',
+    keyTurnFocused: document.querySelector('[data-live-key-turn-replay]')?.getAttribute('data-live-review-focus') || '',
+    focusedEvents: document.querySelector('[data-live-event-log]')?.textContent || '',
+    keyTurnPayload: window.PVPScene.getLiveSnapshot()?.postMatchReview?.keyTurnReplay || null,
+    calls: window.__livePvpAuditCalls,
+  }));
+  add(
+    'live UI post-match key-turn action focuses replay without hidden payloads',
+    keyTurnActionProbe.phase === 'finished'
+      && /关键回合/.test(keyTurnActionProbe.hint)
+      && keyTurnActionProbe.eventsPanelFocused === 'key_turns'
+      && keyTurnActionProbe.keyTurnFocused === 'key_turns'
+      && /开战|术式打出|对局结束/.test(keyTurnActionProbe.focusedEvents)
+      && !/payload|hand|deck|cardId|instanceId|loadoutSnapshot/i.test(JSON.stringify(keyTurnActionProbe.keyTurnPayload || {}))
+      && !/findOpponent|reportMatchResult|GhostEnemy|startPVPBattle|didWin|matchTicket/.test(JSON.stringify(keyTurnActionProbe.calls)),
+    JSON.stringify(keyTurnActionProbe),
+  );
+
+  await page.click('[data-live-post-review-action="review_events"]', { timeout: 5000, force: true });
+  await page.click('[data-live-post-review-action="adjust_loadout"]', { timeout: 5000, force: true });
+  await page.waitForTimeout(100);
+  const postReviewActionProbe = await page.evaluate(() => ({
+    phase: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-phase') || '',
+    hint: document.querySelector('[data-live-last-error]')?.textContent || '',
+    loadoutDisabled: Array.from(document.querySelectorAll('[data-live-loadout-preset]')).map(button => button.disabled),
+    eventsPanelFocused: document.querySelector('[data-live-event-panel]')?.getAttribute('data-live-review-focus') || '',
+    focusedEvents: document.querySelector('[data-live-event-log]')?.textContent || '',
+    calls: window.__livePvpAuditCalls,
+  }));
+  add(
+    'live UI post-match review actions are clickable safe handoff entries',
+    postReviewActionProbe.phase === 'finished'
+      && /改谱只影响下一局/.test(postReviewActionProbe.hint)
+      && /events/.test(postReviewActionProbe.eventsPanelFocused)
+      && /开战/.test(postReviewActionProbe.focusedEvents)
+      && /调息完成/.test(postReviewActionProbe.focusedEvents)
+      && /对局结束/.test(postReviewActionProbe.focusedEvents)
+      && postReviewActionProbe.loadoutDisabled.every(value => value === false)
+      && !/findOpponent|reportMatchResult|GhostEnemy|startPVPBattle|didWin|matchTicket/.test(JSON.stringify(postReviewActionProbe.calls)),
+    JSON.stringify(postReviewActionProbe),
+  );
+
+  await page.click('[data-live-post-review-action="practice"]', { timeout: 5000, force: true });
+  await page.waitForTimeout(450);
+  const postReviewPracticeProbe = await page.evaluate(() => {
+    const payload = typeof window.render_game_to_text === 'function'
+      ? JSON.parse(window.render_game_to_text())
+      : null;
+    return {
+      currentScreen: window.game?.currentScreen || '',
+      tab: window.game?.challengeHubState?.tab || '',
+      pending: payload?.challenge?.pending || null,
+      focus: payload?.challenge?.trainingFocus || null,
+      bannerText: document.getElementById('challenge-selection-banner')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+      insightText: document.querySelector('#challenge-selection-banner .challenge-record-insight')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+      confirmText: document.querySelector('#confirm-character-btn .btn-text')?.textContent?.trim() || '',
+      drillScenario: payload?.pvp?.live?.drillScenario || window.PVPScene.getLiveSnapshot()?.drillScenario || null,
+      calls: window.__livePvpAuditCalls,
+    };
+  });
+  add(
+    'live UI post-match practice handoff creates no-score drill scenario and opens replay-only playable challenge drill',
+    postReviewPracticeProbe.currentScreen === 'character-selection-screen'
+      && postReviewPracticeProbe.pending?.replayOnly === true
+      && postReviewPracticeProbe.pending?.practiceOnly === true
+      && /^pvp_live_drill_/.test(postReviewPracticeProbe.pending?.ruleId || '')
+      && /^PVP-/.test(postReviewPracticeProbe.pending?.seedSignature || '')
+      && postReviewPracticeProbe.focus?.sourceRunId === 'pvp_live:pvplm-browser-live'
+      && postReviewPracticeProbe.focus?.guideRecordId === 'pvp_live:pvplm-browser-live'
+      && /真人 PVP|首败|复盘/.test(postReviewPracticeProbe.focus?.trainingAdvice || '')
+      && /真人 PVP|问道练习|不计/.test(postReviewPracticeProbe.bannerText || '')
+      && /公开事件|不写正式积分|隐藏/.test(postReviewPracticeProbe.insightText || '')
+      && /回放命盘/.test(postReviewPracticeProbe.confirmText || '')
+      && postReviewPracticeProbe.drillScenario?.reportVersion === 'pvp-live-drill-scenario-v1'
+      && postReviewPracticeProbe.drillScenario?.sourceMatchId === 'pvplm-browser-live'
+      && postReviewPracticeProbe.drillScenario?.sourceVisibility === 'replay_self'
+      && postReviewPracticeProbe.drillScenario?.usesHiddenInformation === false
+      && postReviewPracticeProbe.drillScenario?.rankedImpact === 'none'
+      && (postReviewPracticeProbe.drillScenario?.trainingTags || []).includes('首败复盘')
+      && (postReviewPracticeProbe.drillScenario?.publicEventTypes || []).includes('battle_started')
+      && !/reward|rating|elo/i.test(JSON.stringify(postReviewPracticeProbe.drillScenario || {}))
+      && !/findOpponent|reportMatchResult|GhostEnemy|startPVPBattle|didWin|matchTicket/.test(JSON.stringify(postReviewPracticeProbe.calls)),
+    JSON.stringify(postReviewPracticeProbe),
+  );
+
+  await page.click('#confirm-character-btn', { timeout: 5000, force: true });
+  await page.waitForTimeout(900);
+  const postReviewDrillStartProbe = await page.evaluate(() => {
+    const payload = typeof window.render_game_to_text === 'function'
+      ? JSON.parse(window.render_game_to_text())
+      : null;
+    const bannerText = document.getElementById('challenge-run-banner')?.textContent?.replace(/\s+/g, ' ').trim() || '';
+    const focusText = document.querySelector('#challenge-run-banner .challenge-run-focus')?.textContent?.replace(/\s+/g, ' ').trim() || '';
+    return {
+      mode: payload?.mode || '',
+      currentScreen: window.game?.currentScreen || '',
+      activeRun: payload?.challenge?.activeRun || null,
+      bannerText,
+      focusText,
+      calls: window.__livePvpAuditCalls,
+    };
+  });
+  add(
+    'live UI post-match practice drill can start replay-only no-reward challenge run',
+    postReviewDrillStartProbe.currentScreen === 'map-screen'
+      && postReviewDrillStartProbe.activeRun?.replayOnly === true
+      && postReviewDrillStartProbe.activeRun?.practiceOnly === true
+      && postReviewDrillStartProbe.activeRun?.currentScore === 0
+      && /^pvp_live_drill_/.test(postReviewDrillStartProbe.activeRun?.ruleId || '')
+      && /^PVP-/.test(postReviewDrillStartProbe.activeRun?.seedSignature || '')
+      && /真人练习|不计奖励|练习不计分/.test(postReviewDrillStartProbe.bannerText || '')
+      && /训练重点/.test(postReviewDrillStartProbe.focusText || '')
+      && !/findOpponent|reportMatchResult|GhostEnemy|startPVPBattle|didWin|matchTicket/.test(JSON.stringify(postReviewDrillStartProbe.calls)),
+    JSON.stringify(postReviewDrillStartProbe),
+  );
+
+  await page.evaluate(async () => {
+    window.game.showScreen('pvp-screen');
+    window.PVPScene.switchTab('live');
+    await window.PVPScene.loadLivePanel();
+  });
+  await page.waitForTimeout(100);
+  await page.click('[data-live-post-review-action="queue_again"]', { timeout: 5000, force: true });
+  await page.waitForTimeout(200);
+  const postReviewRequeueProbe = await page.evaluate(() => ({
+    phase: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-phase') || '',
+    queueTicket: document.querySelector('[data-live-queue-ticket]')?.textContent || '',
+    reviewHidden: document.querySelector('[data-live-post-match-review]')?.hidden ?? false,
+    eventsPanelFocused: document.querySelector('[data-live-event-panel]')?.getAttribute('data-live-review-focus') || '',
+    calls: window.__livePvpAuditCalls,
+  }));
+  add(
+    'live UI post-match queue again re-enters live queue without legacy settlement',
+    postReviewRequeueProbe.phase === 'waiting'
+      && /pvplq-browser-live/.test(postReviewRequeueProbe.queueTicket)
+      && postReviewRequeueProbe.reviewHidden === true
+      && postReviewRequeueProbe.eventsPanelFocused === ''
+      && postReviewRequeueProbe.calls.filter(call => call.method === 'joinQueue').length >= 2
+      && !/findOpponent|reportMatchResult|GhostEnemy|startPVPBattle|didWin|matchTicket/.test(JSON.stringify(postReviewRequeueProbe.calls)),
+    JSON.stringify(postReviewRequeueProbe),
+  );
+
+  await page.evaluate(async () => {
+    window.PVPScene.liveSession = null;
+    window.__livePvpAuditCalls = [];
+    await window.PVPScene.loadLivePanel();
+    const targetInput = document.querySelector('[data-live-target-username]');
+    if (targetInput) targetInput.value = '乙';
+  });
+  await page.waitForTimeout(100);
+  await page.click('[data-live-action="create-invite"]', { timeout: 5000, force: true });
+  await page.waitForTimeout(150);
+  const inviteCreateProbe = await page.evaluate(() => ({
+    phase: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-phase') || '',
+    inviteCode: document.querySelector('[data-live-invite-code]')?.textContent || '',
+    inviteReport: document.querySelector('[data-live-invite-report]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+    snapshot: window.PVPScene.getLiveSnapshot(),
+    calls: window.__livePvpAuditCalls,
+  }));
+  add(
+    'live UI private invite creation shows share code without entering public queue',
+    inviteCreateProbe.phase === 'waiting_invite'
+      && /TDAB12/.test(inviteCreateProbe.inviteCode)
+      && /好友约战|邀请|约战/.test(inviteCreateProbe.inviteReport)
+      && /乙/.test(inviteCreateProbe.inviteReport)
+      && /不写正式积分/.test(inviteCreateProbe.inviteReport)
+      && inviteCreateProbe.snapshot?.inviteCode === 'TDAB12'
+      && inviteCreateProbe.snapshot?.queueTicket === ''
+      && inviteCreateProbe.snapshot?.inviteReport?.reportVersion === 'pvp-live-invite-v1'
+      && inviteCreateProbe.snapshot?.inviteReport?.rankedImpact === 'none'
+      && inviteCreateProbe.calls.some(call => call.method === 'createInvite' && call.options?.targetUsername === '乙' && call.options?.loadout?.deck?.length === 20)
+      && !inviteCreateProbe.calls.slice(-3).some(call => call.method === 'joinQueue')
+      && !/findOpponent|reportMatchResult|GhostEnemy|startPVPBattle|didWin|matchTicket/.test(JSON.stringify(inviteCreateProbe.calls)),
+    JSON.stringify(inviteCreateProbe),
+  );
+
+  await page.click('[data-live-action="cancel-invite"]', { timeout: 5000, force: true });
+  await page.waitForTimeout(150);
+  const inviteCancelProbe = await page.evaluate(() => ({
+    phase: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-phase') || '',
+    inviteCode: document.querySelector('[data-live-invite-code]')?.textContent || '',
+    lastError: document.querySelector('[data-live-last-error]')?.textContent || '',
+    snapshot: window.PVPScene.getLiveSnapshot(),
+    calls: window.__livePvpAuditCalls,
+  }));
+  add(
+    'live UI private invite cancel returns to idle without public queue',
+    inviteCancelProbe.phase === 'idle'
+      && /--/.test(inviteCancelProbe.inviteCode)
+      && /已取消|约战/.test(inviteCancelProbe.lastError)
+      && inviteCancelProbe.snapshot?.inviteCode === ''
+      && inviteCancelProbe.snapshot?.inviteReport === null
+      && inviteCancelProbe.calls.some(call => call.method === 'cancelInvite' && call.inviteCode === 'TDAB12')
+      && !inviteCancelProbe.calls.slice(-3).some(call => call.method === 'joinQueue')
+      && !/findOpponent|reportMatchResult|GhostEnemy|startPVPBattle|didWin|matchTicket/.test(JSON.stringify(inviteCancelProbe.calls)),
+    JSON.stringify(inviteCancelProbe),
+  );
+
+  await page.evaluate(async () => {
+    window.PVPScene.liveSession = null;
+    window.__livePvpAuditCalls = [];
+    window.__livePvpAuditCurrentInviteMode = 'pending';
+    window.PVPService.live.getCurrentMatch = async () => {
+      window.__livePvpAuditCalls.push({ method: 'getCurrentMatch', inviteResume: true });
+      return { success: false, reason: 'no_current_match', message: '当前没有进行中的实时论道' };
+    };
+    await window.PVPScene.loadLivePanel();
+  });
+  await page.waitForTimeout(100);
+  const inviteResumeProbe = await page.evaluate(() => ({
+    phase: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-phase') || '',
+    inviteCode: document.querySelector('[data-live-invite-code]')?.textContent || '',
+    inviteReport: document.querySelector('[data-live-invite-report]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+    cancelDisabled: document.querySelector('[data-live-action="cancel-invite"]')?.disabled,
+    snapshot: window.PVPScene.getLiveSnapshot(),
+    calls: window.__livePvpAuditCalls,
+  }));
+  add(
+    'live UI refresh resumes pending private invite with cancel action',
+    inviteResumeProbe.phase === 'waiting_invite'
+      && /TDAB12/.test(inviteResumeProbe.inviteCode)
+      && /不写正式积分/.test(inviteResumeProbe.inviteReport)
+      && inviteResumeProbe.cancelDisabled === false
+      && inviteResumeProbe.snapshot?.inviteCode === 'TDAB12'
+      && inviteResumeProbe.snapshot?.inviteReport?.status === 'waiting'
+      && inviteResumeProbe.calls.some(call => call.method === 'getCurrentInvite' && call.mode === 'pending')
+      && !inviteResumeProbe.calls.some(call => call.method === 'joinQueue')
+      && !/findOpponent|reportMatchResult|GhostEnemy|startPVPBattle|didWin|matchTicket/.test(JSON.stringify(inviteResumeProbe.calls)),
+    JSON.stringify(inviteResumeProbe),
+  );
+
+  await page.evaluate(async () => {
+    window.PVPScene.liveSession = null;
+    window.__livePvpAuditCalls = [];
+    window.__livePvpAuditCurrentInviteMode = '';
+    window.__livePvpAuditInboxMode = '';
+    await window.PVPScene.loadLivePanel();
+  });
+  await page.waitForTimeout(100);
+  await page.evaluate(() => {
+    window.__livePvpAuditInboxMode = 'pending';
+  });
+  await page.waitForTimeout(2800);
+  const inviteInboxAutoRefreshProbe = await page.evaluate(() => ({
+    phase: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-phase') || '',
+    inbox: document.querySelector('[data-live-invite-inbox]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+    snapshot: window.PVPScene.getLiveSnapshot(),
+    calls: window.__livePvpAuditCalls,
+  }));
+  add(
+    'live UI idle panel auto-refreshes targeted private invite inbox',
+    inviteInboxAutoRefreshProbe.phase === 'idle'
+      && /甲/.test(inviteInboxAutoRefreshProbe.inbox)
+      && /TDIN42/.test(inviteInboxAutoRefreshProbe.inbox)
+      && inviteInboxAutoRefreshProbe.snapshot?.inviteInbox?.length === 1
+      && inviteInboxAutoRefreshProbe.calls.filter(call => call.method === 'getInviteInbox').length >= 2
+      && !/findOpponent|reportMatchResult|GhostEnemy|startPVPBattle|didWin|matchTicket/.test(JSON.stringify(inviteInboxAutoRefreshProbe.calls)),
+    JSON.stringify(inviteInboxAutoRefreshProbe),
+  );
+  await page.evaluate(() => window.PVPScene.stopLivePolling());
+
+  await page.evaluate(async () => {
+    window.PVPScene.liveSession = null;
+    window.__livePvpAuditCalls = [];
+    window.__livePvpAuditCurrentInviteMode = '';
+    window.__livePvpAuditInboxMode = 'pending';
+    await window.PVPScene.loadLivePanel();
+  });
+  await page.waitForTimeout(100);
+  const inviteInboxProbe = await page.evaluate(() => ({
+    phase: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-phase') || '',
+    inbox: document.querySelector('[data-live-invite-inbox]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+    inboxButtons: Array.from(document.querySelectorAll('[data-live-inbox-join]')).map(button => button.getAttribute('data-live-inbox-join')),
+    snapshot: window.PVPScene.getLiveSnapshot(),
+    calls: window.__livePvpAuditCalls,
+  }));
+  add(
+    'live UI renders targeted private invite inbox while idle',
+    inviteInboxProbe.phase === 'idle'
+      && /甲/.test(inviteInboxProbe.inbox)
+      && /TDIN42/.test(inviteInboxProbe.inbox)
+      && /不写正式积分/.test(inviteInboxProbe.inbox)
+      && inviteInboxProbe.inboxButtons.includes('TDIN42')
+      && inviteInboxProbe.snapshot?.inviteInbox?.length === 1
+      && inviteInboxProbe.calls.some(call => call.method === 'getInviteInbox' && call.mode === 'pending')
+      && !/findOpponent|reportMatchResult|GhostEnemy|startPVPBattle|didWin|matchTicket/.test(JSON.stringify(inviteInboxProbe.calls)),
+    JSON.stringify(inviteInboxProbe),
+  );
+  await page.click('[data-live-inbox-join="TDIN42"]', { timeout: 5000, force: true });
+  await page.waitForTimeout(150);
+  const inviteInboxJoinProbe = await page.evaluate(() => ({
+    phase: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-phase') || '',
+    matchId: document.querySelector('[data-live-match-id]')?.textContent || '',
+    summary: document.querySelector('[data-live-summary]')?.textContent || '',
+    inbox: document.querySelector('[data-live-invite-inbox]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+    snapshot: window.PVPScene.getLiveSnapshot(),
+    calls: window.__livePvpAuditCalls,
+  }));
+  add(
+    'live UI joins targeted private invite from inbox without manual code copy',
+    inviteInboxJoinProbe.phase === 'setup'
+      && /pvplm-browser-invite/.test(inviteInboxJoinProbe.matchId)
+      && /友谊再战|准备阶段/.test(inviteInboxJoinProbe.summary)
+      && inviteInboxJoinProbe.snapshot?.mode === 'friendly'
+      && Array.isArray(inviteInboxJoinProbe.snapshot?.inviteInbox)
+      && inviteInboxJoinProbe.snapshot.inviteInbox.length === 0
+      && inviteInboxJoinProbe.calls.some(call => call.method === 'joinInvite' && call.inviteCode === 'TDIN42' && call.options?.loadout?.deck?.length === 20)
+      && !/findOpponent|reportMatchResult|GhostEnemy|startPVPBattle|didWin|matchTicket/.test(JSON.stringify(inviteInboxJoinProbe.calls)),
+    JSON.stringify(inviteInboxJoinProbe),
+  );
+
+  await page.evaluate(async () => {
+    window.PVPScene.liveSession = null;
+    window.__livePvpAuditCalls = [];
+    window.__livePvpAuditCurrentInviteMode = '';
+    window.__livePvpAuditInboxMode = '';
+    await window.PVPScene.loadLivePanel();
+    const input = document.querySelector('[data-live-invite-input]');
+    if (input) input.value = 'TDAB12';
+  });
+  await page.click('[data-live-action="join-invite"]', { timeout: 5000, force: true });
+  await page.waitForTimeout(150);
+  const inviteJoinProbe = await page.evaluate(() => ({
+    phase: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-phase') || '',
+    matchId: document.querySelector('[data-live-match-id]')?.textContent || '',
+    summary: document.querySelector('[data-live-summary]')?.textContent || '',
+    inviteCode: document.querySelector('[data-live-invite-code]')?.textContent || '',
+    snapshot: window.PVPScene.getLiveSnapshot(),
+    calls: window.__livePvpAuditCalls,
+  }));
+  add(
+    'live UI private invite join enters friendly setup without legacy settlement',
+    inviteJoinProbe.phase === 'setup'
+      && /pvplm-browser-invite/.test(inviteJoinProbe.matchId)
+      && /友谊再战|准备阶段/.test(inviteJoinProbe.summary)
+      && /--/.test(inviteJoinProbe.inviteCode)
+      && inviteJoinProbe.snapshot?.mode === 'friendly'
+      && inviteJoinProbe.snapshot?.matchQuality?.expansionStage === 'friend_invite'
+      && (inviteJoinProbe.snapshot?.matchQuality?.safeguards || []).includes('invite_only_match')
+      && (inviteJoinProbe.snapshot?.matchQuality?.safeguards || []).includes('friendly_no_ranked_impact')
+      && inviteJoinProbe.calls.some(call => call.method === 'joinInvite' && call.inviteCode === 'TDAB12' && call.options?.loadout?.deck?.length === 20)
+      && !/findOpponent|reportMatchResult|GhostEnemy|startPVPBattle|didWin|matchTicket/.test(JSON.stringify(inviteJoinProbe.calls)),
+    JSON.stringify(inviteJoinProbe),
+  );
+
+  await page.evaluate(async () => {
+    window.__livePvpFriendlyAccepted = false;
+    window.PVPService.live.getCurrentMatch = async () => {
+      window.__livePvpAuditCalls.push({ method: 'getCurrentMatch', rematchAccepted: !!window.__livePvpFriendlyAccepted });
+      if (window.__livePvpFriendlyAccepted) {
+        return {
+          success: true,
+          matchId: 'pvplm-browser-friendly',
+          seatId: 'B',
+          stateView: window.__makeLivePvpAuditFriendlyView(),
+        };
+      }
+      return {
+        success: true,
+        matchId: 'pvplm-browser-live',
+        seatId: 'A',
+        stateView: window.__makeLivePvpAuditStateView(5, 'A', 'finished'),
+      };
+    };
+    window.PVPScene.liveSession = null;
+    await window.PVPScene.loadLivePanel();
+  });
+  await page.waitForTimeout(100);
+  await page.click('[data-live-post-review-action="friendly_rematch"]', { timeout: 5000, force: true });
+  await page.waitForTimeout(120);
+  const friendlyRematchProbe = await page.evaluate(() => ({
+    phase: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-phase') || '',
+    hint: document.querySelector('[data-live-last-error]')?.textContent || '',
+    friendlyText: document.querySelector('[data-live-friendly-series]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+    snapshot: window.PVPScene.getLiveSnapshot()?.friendlySeries || null,
+    actionDisabled: Object.fromEntries(Array.from(document.querySelectorAll('[data-live-post-review-action]')).map(button => [button.getAttribute('data-live-post-review-action'), button.disabled])),
+    calls: window.__livePvpAuditCalls,
+  }));
+  add(
+    'live UI post-match friendly rematch waits for same opponent without legacy settlement',
+    friendlyRematchProbe.phase === 'waiting_rematch'
+      && /等待本局对手确认/.test(friendlyRematchProbe.hint)
+      && /Bo3 第 2 局/.test(friendlyRematchProbe.friendlyText)
+      && /甲 1 : 0 乙/.test(friendlyRematchProbe.friendlyText)
+      && /不写正式积分/.test(friendlyRematchProbe.friendlyText)
+      && friendlyRematchProbe.snapshot?.reportVersion === 'pvp-live-friendly-series-v1'
+      && friendlyRematchProbe.snapshot?.sourceMatchId === 'pvplm-browser-live'
+      && friendlyRematchProbe.snapshot?.targetWins === 2
+      && friendlyRematchProbe.snapshot?.scoreBySourceSeat?.A === 1
+      && friendlyRematchProbe.snapshot?.scoreBySourceSeat?.B === 0
+      && friendlyRematchProbe.snapshot?.rankedImpact === 'none'
+      && friendlyRematchProbe.actionDisabled?.friendly_rematch === true
+      && friendlyRematchProbe.actionDisabled?.queue_again === true
+      && friendlyRematchProbe.actionDisabled?.practice === true
+      && friendlyRematchProbe.calls.some(call => call.method === 'requestRematch')
+      && !/findOpponent|reportMatchResult|GhostEnemy|startPVPBattle|didWin|matchTicket/.test(JSON.stringify(friendlyRematchProbe.calls)),
+    JSON.stringify(friendlyRematchProbe),
+  );
+  await page.waitForTimeout(2800);
+  const friendlyRecoveryProbe = await page.evaluate(() => ({
+    phase: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-phase') || '',
+    matchId: document.querySelector('[data-live-match-id]')?.textContent || '',
+    summary: document.querySelector('[data-live-summary]')?.textContent || '',
+    hint: document.querySelector('[data-live-last-error]')?.textContent || '',
+    snapshot: window.PVPScene.getLiveSnapshot()?.friendlySeries || null,
+    calls: window.__livePvpAuditCalls,
+  }));
+  add(
+    'live UI waiting friendly rematch auto-enters accepted friendly setup for the requester',
+    friendlyRecoveryProbe.phase === 'setup'
+      && /pvplm-browser-friendly/.test(friendlyRecoveryProbe.matchId)
+      && /友谊再战/.test(friendlyRecoveryProbe.summary)
+      && friendlyRecoveryProbe.snapshot?.rankedImpact === 'none'
+      && friendlyRecoveryProbe.snapshot?.scoreBySourceSeat?.A === 1
+      && friendlyRecoveryProbe.snapshot?.scoreBySourceSeat?.B === 0
+      && friendlyRecoveryProbe.snapshot?.status === 'matched'
+      && friendlyRecoveryProbe.calls.some(call => call.method === 'getCurrentMatch' && call.rematchAccepted === true)
+      && !/findOpponent|reportMatchResult|GhostEnemy|startPVPBattle|didWin|matchTicket/.test(JSON.stringify(friendlyRecoveryProbe.calls)),
+    JSON.stringify(friendlyRecoveryProbe),
+  );
+
+  await page.evaluate(async () => {
+    window.__livePvpFriendlyDeciderAccepted = false;
+    window.PVPService.live.getCurrentMatch = async () => {
+      window.__livePvpAuditCalls.push({ method: 'getCurrentMatch', deciderAccepted: !!window.__livePvpFriendlyDeciderAccepted });
+      if (window.__livePvpFriendlyDeciderAccepted) {
+        return {
+          success: true,
+          matchId: 'pvplm-browser-friendly-decider',
+          seatId: 'A',
+          stateView: window.__makeLivePvpAuditFriendlyDeciderView(),
+        };
+      }
+      return {
+        success: true,
+        matchId: 'pvplm-browser-friendly',
+        seatId: 'B',
+        stateView: window.__makeLivePvpAuditFriendlyFinishedView(),
+      };
+    };
+    window.PVPService.live.requestRematch = async (matchId, options = {}) => {
+      window.__livePvpAuditCalls.push({ method: 'requestRematch', matchId, options, decider: true });
+      window.__livePvpFriendlyDeciderAccepted = true;
+      return {
+        success: true,
+        status: 'waiting_rematch',
+        friendlySeries: {
+          ...window.__makeLivePvpAuditFriendlyDeciderView().friendlySeries,
+          status: 'waiting_rematch',
+          confirmationCount: 1,
+        },
+      };
+    };
+    window.PVPScene.liveSession = null;
+    await window.PVPScene.loadLivePanel();
+  });
+  await page.waitForTimeout(100);
+  const friendlyDeciderCtaProbe = await page.evaluate(() => ({
+    phase: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-phase') || '',
+    friendlyText: document.querySelector('[data-live-friendly-series]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+    actionIds: Array.from(document.querySelectorAll('[data-live-post-review-action]')).map(button => button.getAttribute('data-live-post-review-action')),
+    snapshot: window.PVPScene.getLiveSnapshot()?.friendlySeries || null,
+  }));
+  await page.click('[data-live-post-review-action="friendly_rematch"]', { timeout: 5000, force: true });
+  await page.waitForTimeout(2800);
+  const friendlyDeciderRecoveryProbe = await page.evaluate(() => ({
+    phase: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-phase') || '',
+    matchId: document.querySelector('[data-live-match-id]')?.textContent || '',
+    summary: document.querySelector('[data-live-summary]')?.textContent || '',
+    friendlyText: document.querySelector('[data-live-friendly-series]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+    snapshot: window.PVPScene.getLiveSnapshot()?.friendlySeries || null,
+    calls: window.__livePvpAuditCalls,
+  }));
+  add(
+    'live UI Bo3 tied friendly review exposes decider and auto-enters G3 with same series id',
+    friendlyDeciderCtaProbe.phase === 'finished'
+      && /甲 1 : 1 乙/.test(friendlyDeciderCtaProbe.friendlyText)
+      && friendlyDeciderCtaProbe.snapshot?.canRequestNextRound === true
+      && friendlyDeciderCtaProbe.actionIds.includes('friendly_rematch')
+      && friendlyDeciderRecoveryProbe.phase === 'setup'
+      && /pvplm-browser-friendly-decider/.test(friendlyDeciderRecoveryProbe.matchId)
+      && /Bo3 决胜局/.test(friendlyDeciderRecoveryProbe.friendlyText)
+      && friendlyDeciderRecoveryProbe.snapshot?.seriesId === friendlyDeciderCtaProbe.snapshot?.seriesId
+      && friendlyDeciderRecoveryProbe.snapshot?.roundIndex === 3
+      && friendlyDeciderRecoveryProbe.snapshot?.scoreBySourceSeat?.A === 1
+      && friendlyDeciderRecoveryProbe.snapshot?.scoreBySourceSeat?.B === 1
+      && friendlyDeciderRecoveryProbe.calls.some(call => call.method === 'requestRematch' && call.decider === true)
+      && friendlyDeciderRecoveryProbe.calls.some(call => call.method === 'getCurrentMatch' && call.deciderAccepted === true)
+      && !/findOpponent|reportMatchResult|GhostEnemy|startPVPBattle|didWin|matchTicket/.test(JSON.stringify(friendlyDeciderRecoveryProbe.calls)),
+    JSON.stringify({ friendlyDeciderCtaProbe, friendlyDeciderRecoveryProbe }),
+  );
+
+  await page.evaluate(async () => {
+    window.PVPService.live.getCurrentMatch = async () => ({
+      success: true,
+      matchId: 'pvplm-browser-friendly-decider',
+      seatId: 'B',
+      stateView: window.__makeLivePvpAuditFriendlyCompleteView(),
+    });
+    window.PVPScene.liveSession = null;
+    await window.PVPScene.loadLivePanel();
+  });
+  await page.waitForTimeout(100);
+  const friendlyCompleteProbe = await page.evaluate(() => ({
+    phase: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-phase') || '',
+    friendlyText: document.querySelector('[data-live-friendly-series]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+    actionIds: Array.from(document.querySelectorAll('[data-live-post-review-action]')).map(button => button.getAttribute('data-live-post-review-action')),
+    snapshot: window.PVPScene.getLiveSnapshot()?.friendlySeries || null,
+  }));
+  add(
+    'live UI completed Bo3 hides friendly rematch after source seat reaches two wins',
+    friendlyCompleteProbe.phase === 'finished'
+      && /甲 2 : 1 乙/.test(friendlyCompleteProbe.friendlyText)
+      && /系列结束/.test(friendlyCompleteProbe.friendlyText)
+      && friendlyCompleteProbe.snapshot?.seriesStatus === 'complete'
+      && friendlyCompleteProbe.snapshot?.winnerSourceSeat === 'A'
+      && friendlyCompleteProbe.snapshot?.canRequestNextRound === false
+      && !friendlyCompleteProbe.actionIds.includes('friendly_rematch')
+      && friendlyCompleteProbe.actionIds.includes('queue_again'),
+    JSON.stringify(friendlyCompleteProbe),
+  );
+
+  add(
+    'live UI should not call legacy PVP matching or settlement',
+    !consoleErrors.some((line) => /legacy PVP matching/.test(line)),
+    JSON.stringify(consoleErrors),
+  );
+
+  await page.evaluate(async () => {
+    const invalidatedView = {
+      matchId: 'pvplm-browser-invalidated',
+      ruleVersion: 'pvp-live-v1',
+      status: 'invalidated',
+      phase: 'invalidated',
+      firstMatchGuide: {
+        reportVersion: 'pvp-live-first-match-guide-v1',
+        title: '首战简报',
+        summary: '先确认斗法谱，再调息准备。',
+        nextAction: '本局未开战成功，不计正式积分，可重新匹配。',
+        safeguards: ['snapshot_locked', 'setup_ready_required', 'opening_protection', 'invalidated_no_score'],
+        steps: [
+          { id: 'setup_ready', label: '调息', detail: '准备阶段可调息 0-2 张手牌。' },
+          { id: 'invalidated_no_score', label: '无效局', detail: '准备超时会成为无效局，不写正式积分。' },
+        ],
+        recommendedLoadouts: [
+          { id: 'balanced', label: '默认斗法谱', role: '攻防均衡，适合首战熟悉流程。', weakness: '弱点：缺少极限爆发。' },
+          { id: 'sword', label: '破阵斗法谱', role: '更容易制造压力，适合主动试探。', weakness: '弱点：防守窗口较窄。' },
+          { id: 'shield', label: '守势斗法谱', role: '前两手更稳，适合先观察对方节奏。', weakness: '弱点：收束较慢。' },
+        ],
+        exceptionBranches: [{ id: 'ready_timeout', label: '准备超时', detail: '本局未开战成功，不写正式积分。' }],
+        reviewActions: [{ id: 'queue_again', label: '继续真人排位' }],
+      },
+      setup: null,
+      stateVersion: 9,
+      roundIndex: 1,
+      turnIndex: 1,
+      currentSeat: 'A',
+      self: {
+        seatId: 'A',
+        displayName: '甲',
+        hp: 50,
+        maxHp: 50,
+        energy: 3,
+        maxEnergy: 3,
+        block: 0,
+        ready: false,
+        mulliganUsed: false,
+        hand: [],
+      },
+      opponent: {
+        seatId: 'B',
+        displayName: '乙',
+        hp: 50,
+        maxHp: 50,
+        energy: 3,
+        maxEnergy: 3,
+        block: 0,
+        handCount: 3,
+        ready: false,
+      },
+      recentEvents: [{ eventType: 'match_invalidated', payload: { reason: 'ready_timeout' } }],
+    };
+    window.PVPService.live.getCurrentMatch = async () => ({
+      success: true,
+      matchId: invalidatedView.matchId,
+      seatId: 'A',
+      stateView: invalidatedView,
+    });
+    if (window.PVPScene) {
+      window.PVPScene.liveSession = null;
+      window.PVPScene.liveMulliganSelection?.clear?.();
+      await window.PVPScene.loadLivePanel();
+    }
+  });
+  await page.waitForTimeout(200);
+  const invalidatedProbe = await page.evaluate(() => ({
+    phase: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-phase') || '',
+    label: document.querySelector('[data-live-phase-label]')?.textContent || '',
+    chip: document.querySelector('[data-live-status-chip]')?.textContent || '',
+    summary: document.querySelector('[data-live-summary]')?.textContent || '',
+    hint: document.querySelector('[data-live-last-error]')?.textContent || '',
+    firstGuide: document.querySelector('[data-live-first-guide]')?.textContent || '',
+    events: document.querySelector('[data-live-event-log]')?.textContent || '',
+    postReviewHidden: document.querySelector('[data-live-post-match-review]')?.hidden ?? false,
+    postReviewText: document.querySelector('[data-live-post-match-review]')?.textContent || '',
+    buttons: Object.fromEntries(Array.from(document.querySelectorAll('[data-live-action]')).map(button => [button.getAttribute('data-live-action'), button.disabled])),
+    payload: JSON.parse(window.render_game_to_text()).pvp?.live || null,
+  }));
+  add(
+    'live UI renders ready_timeout invalidated as no-score terminal state',
+    invalidatedProbe.phase === 'invalidated'
+      && /无效局/.test(invalidatedProbe.label)
+      && /VOID/.test(invalidatedProbe.chip)
+      && /不计正式积分/.test(`${invalidatedProbe.summary} ${invalidatedProbe.hint}`)
+      && /不计正式积分/.test(invalidatedProbe.firstGuide)
+      && /无效局/.test(invalidatedProbe.events)
+      && /ready_timeout/.test(invalidatedProbe.events)
+      && invalidatedProbe.postReviewHidden === true
+      && !invalidatedProbe.payload?.postMatchReview
+      && invalidatedProbe.buttons['join-queue'] === false
+      && invalidatedProbe.buttons['refresh-match'] === true
+      && invalidatedProbe.buttons.surrender === true
+      && invalidatedProbe.buttons['end-turn'] === true
+      && invalidatedProbe.payload?.phase === 'invalidated',
+    JSON.stringify(invalidatedProbe),
+  );
+
+  await page.evaluate(async () => {
+    const connectionTimeoutView = {
+      matchId: 'pvplm-browser-connection-timeout',
+      ruleVersion: 'pvp-live-v1',
+      status: 'finished',
+      phase: 'finished',
+      stateVersion: 12,
+      roundIndex: 1,
+      turnIndex: 1,
+      currentSeat: 'A',
+      postMatchReview: {
+        reportVersion: 'pvp-live-post-match-review-v1',
+        audience: 'seat',
+        title: '首败复盘 MVP',
+        result: 'loss',
+        winnerSeat: 'B',
+        loserSeat: 'A',
+        finishReason: 'connection_timeout',
+        summary: '本局因你的连接超时结束；下局前先确认网络或前后台状态。',
+        evidence: [
+          { eventType: 'player_ready', sequence: 1, actingSeat: 'A', publicData: { seatId: 'A' } },
+          { eventType: 'player_ready', sequence: 2, actingSeat: 'B', publicData: { seatId: 'B' } },
+          { eventType: 'battle_started', sequence: 3, actingSeat: 'B', publicData: { firstSeat: 'A' } },
+          { eventType: 'turn_timeout', sequence: 4, actingSeat: 'A', publicData: { seatId: 'A', loserSeat: 'A', winnerSeat: 'B', finishReason: 'connection_timeout' } },
+          { eventType: 'match_finished', sequence: 5, actingSeat: 'A', publicData: { winnerSeat: 'B', loserSeat: 'A', finishReason: 'connection_timeout' } },
+        ],
+        keyTurnReplay: {
+          reportVersion: 'pvp-live-key-turn-replay-v1',
+          sourceVisibility: 'public_events',
+          usesHiddenInformation: false,
+          rankedImpact: 'none',
+          turns: [
+            { id: 'terminal_window', label: '终局选择', sequence: 4, eventType: 'turn_timeout', actingSeat: 'A', severity: 'terminal', lesson: '连接宽限结束说明行动窗口被网络中断占用。' },
+          ],
+        },
+        experienceReport: {
+          reportVersion: 'pvp-live-experience-report-v1',
+          sourceVisibility: 'public_events',
+          usesHiddenInformation: false,
+          rankedImpact: 'none',
+          nonGameRisk: 'watch',
+          nonGameRiskReasons: ['connection_timeout_finish'],
+          agencyLabel: '连接中断影响行动窗口',
+          decisionWindowCount: 1,
+          seatWindowSummary: { firstSeat: 'A', secondSeat: 'B', secondSeatWindowObserved: false, terminalBeforeSecondSeatWindow: true },
+          safeguardSummary: { setupReady: 'confirmed', firstActionBudget: 'not_observable', openingProtection: 'not_observable' },
+          summary: '连接超时来自公开事件，不读取隐藏手牌。',
+          recommendedAction: 'queue_again',
+          fairnessChecks: [],
+        },
+        suggestions: [
+          '如果需要切后台，优先在行动前完成低风险动作或结束回合。',
+          '复查连接超时前的公开事件，确认是否还有可恢复的防守或结束回合选择。',
+        ],
+        nextActions: [
+          { id: 'review_events', label: '查看权威事件', detail: '只查看公开事件序列，不暴露隐藏手牌。' },
+          { id: 'queue_again', label: '继续真人排位', detail: '带着本局结论重新入队。' },
+        ],
+      },
+      firstMatchGuide: null,
+      setup: null,
+      self: {
+        seatId: 'A',
+        displayName: '甲',
+        hp: 50,
+        maxHp: 50,
+        energy: 3,
+        maxEnergy: 3,
+        block: 0,
+        ready: true,
+        mulliganUsed: false,
+        hand: [],
+      },
+      opponent: {
+        seatId: 'B',
+        displayName: '乙',
+        hp: 50,
+        maxHp: 50,
+        energy: 3,
+        maxEnergy: 3,
+        block: 0,
+        handCount: 3,
+        ready: true,
+      },
+      recentEvents: [
+        { eventType: 'turn_timeout', actingSeat: 'A', payload: { seatId: 'A', loserSeat: 'A', winnerSeat: 'B', finishReason: 'connection_timeout' } },
+        { eventType: 'match_finished', actingSeat: 'A', payload: { winnerSeat: 'B', loserSeat: 'A', finishReason: 'connection_timeout' } },
+      ],
+    };
+    window.PVPService.live.getCurrentMatch = async () => ({
+      success: true,
+      matchId: connectionTimeoutView.matchId,
+      seatId: 'A',
+      stateView: connectionTimeoutView,
+    });
+    if (window.PVPScene) {
+      window.PVPScene.liveSession = null;
+      window.PVPScene.liveMulliganSelection?.clear?.();
+      await window.PVPScene.loadLivePanel();
+    }
+  });
+  await page.waitForTimeout(200);
+  const connectionTimeoutProbe = await page.evaluate(() => ({
+    phase: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-phase') || '',
+    events: document.querySelector('[data-live-event-log]')?.textContent || '',
+    review: document.querySelector('[data-live-post-match-review]')?.textContent || '',
+    payload: JSON.parse(window.render_game_to_text()).pvp?.live || null,
+  }));
+  add(
+    'live UI renders connection_timeout as reconnect grace terminal review',
+    connectionTimeoutProbe.phase === 'finished'
+      && /行动超时/.test(connectionTimeoutProbe.events)
+      && /重连宽限结束/.test(connectionTimeoutProbe.events)
+      && /connection_timeout/.test(JSON.stringify(connectionTimeoutProbe.payload?.postMatchReview || {}))
+      && /连接超时|网络|前后台/.test(connectionTimeoutProbe.review)
+      && connectionTimeoutProbe.payload?.postMatchReview?.finishReason === 'connection_timeout',
+    JSON.stringify(connectionTimeoutProbe),
+  );
+
+  const mobilePage = await browser.newPage({
+    viewport: { width: 390, height: 844 },
+    isMobile: true,
+    hasTouch: true,
+  });
+  mobilePage.on('console', (msg) => {
+    if (msg.type() === 'error') consoleErrors.push(msg.text());
+  });
+  mobilePage.on('pageerror', (err) => {
+    consoleErrors.push(String(err));
+  });
+  await mobilePage.goto(url, { waitUntil: 'domcontentloaded' });
+  await mobilePage.waitForTimeout(1200);
+  const mobileAuthActive = await mobilePage.evaluate(() => !!document.getElementById('auth-modal')?.classList.contains('active'));
+  if (mobileAuthActive) {
+    await mobilePage.click('#auth-modal .modal-close', { timeout: 3000, force: true }).catch(() => {});
+    await mobilePage.waitForTimeout(200);
+  }
+  await mobilePage.evaluate(() => {
+    window.__livePvpMobileAuditCalls = [];
+    const push = (entry) => window.__livePvpMobileAuditCalls.push(entry);
+    const selfLoadoutSummary = {
+      loadoutHash: 'hash-mobile-self-balanced',
+      label: '默认斗法谱',
+      identitySlot: 'balanced',
+      deckSize: 20,
+      locked: true,
+    };
+    const opponentLoadoutSummary = {
+      loadoutHash: 'hash-mobile-opponent-sword',
+      label: '攻击斗法谱',
+      identitySlot: 'sword',
+      deckSize: 20,
+      locked: true,
+    };
+    const firstMatchGuide = {
+      reportVersion: 'pvp-live-first-match-guide-v1',
+      title: '首战简报',
+      summary: '先确认斗法谱，再调息准备。',
+      nextAction: '先调息手牌，确认准备后再开战。',
+      safeguards: ['snapshot_locked', 'setup_ready_required', 'opening_protection'],
+      steps: [
+        { id: 'setup_ready', label: '调息', detail: '准备阶段可调息 0-2 张手牌。' },
+        { id: 'opening_protection', label: '护体', detail: '未行动方不会被开局伤害直接终结。' },
+      ],
+    };
+    const makeStateView = (stateVersion = 1, currentSeat = 'B', status = 'setup') => ({
+      matchId: 'pvplm-browser-live-mobile',
+      ruleVersion: 'pvp-live-v1',
+      status,
+      matchQuality: {
+        reportVersion: 'pvp-live-match-quality-v1',
+        tag: 'good',
+        ruleVersion: 'pvp-live-v1',
+        expansionStage: 'mvp_open_pool',
+        ratingDeltaBucket: 'unrated_mvp',
+        waitMs: { A: 0, B: 4100 },
+        candidatePoolSize: 2,
+        safeguards: ['server_authoritative', 'snapshot_locked', 'setup_ready_required'],
+      },
+      firstMatchGuide,
+      setup: status === 'setup' ? { readyDeadlineAt: Date.now() + 45000, mulliganLimit: 2 } : null,
+      connectionReport: {
+        reportVersion: 'pvp-live-connection-v1',
+        connectionHealth: 'opponent_grace',
+        viewerSeat: 'B',
+        opponentSeat: 'A',
+        heartbeatIntervalMs: 5000,
+        heartbeatStaleMs: 15000,
+        graceMs: 30000,
+        viewer: {
+          seatId: 'B',
+          status: 'online',
+          isViewer: true,
+          lastHeartbeatAt: Date.now(),
+          elapsedMs: 0,
+          remainingGraceMs: 0,
+        },
+        opponent: {
+          seatId: 'A',
+          status: 'grace',
+          isViewer: false,
+          lastHeartbeatAt: Date.now() - 16000,
+          elapsedMs: 16000,
+          remainingGraceMs: 18000,
+        },
+      },
+      stateVersion,
+      roundIndex: 1,
+      turnIndex: stateVersion,
+      currentSeat,
+      self: {
+        seatId: 'B',
+        loadoutHash: selfLoadoutSummary.loadoutHash,
+        loadoutSummary: selfLoadoutSummary,
+        loadoutSnapshot: {
+          ...selfLoadoutSummary,
+          deck: Array.from({ length: 20 }, (_, index) => ({ id: index % 2 ? 'pvp_strike' : 'pvp_guard', upgraded: false })),
+        },
+        hp: 50,
+        maxHp: 50,
+        energy: 3,
+        maxEnergy: 3,
+        block: 0,
+        ready: status === 'active',
+        mulliganUsed: stateVersion > 1,
+        hand: [{ instanceId: 'B-strike-1', cardId: 'pvp_strike', name: '试探斩', cost: 1, damage: 8, block: 0 }],
+      },
+      opponent: {
+        seatId: 'A',
+        loadoutHash: opponentLoadoutSummary.loadoutHash,
+        loadoutSummary: opponentLoadoutSummary,
+        hp: 50,
+        maxHp: 50,
+        energy: 3,
+        maxEnergy: 3,
+        block: 0,
+        handCount: 3,
+        deckCount: 12,
+        discardCount: 0,
+        ready: status === 'active',
+      },
+      recentEvents: [{ eventType: 'snapshot_locked', payload: { seats: { A: opponentLoadoutSummary, B: selfLoadoutSummary } } }],
+    });
+    window.PVPService.findOpponent = async () => {
+      throw new Error('live UI should not call legacy PVP matching or settlement');
+    };
+    window.PVPService.reportMatchResult = async () => {
+      throw new Error('live UI should not call legacy PVP matching or settlement');
+    };
+    window.PVPService.live = {
+      joinQueue: async (options = {}) => {
+        push({ method: 'joinQueue', options });
+        return { success: true, status: 'waiting', queueTicket: 'pvplq-browser-live-mobile' };
+      },
+      cancelQueue: async (queueTicket) => {
+        push({ method: 'cancelQueue', queueTicket });
+        return { success: true, status: 'cancelled', queueTicket };
+      },
+      getQueueStatus: async (queueTicket) => ({
+        success: true,
+        status: 'matched',
+        matchId: 'pvplm-browser-live-mobile',
+        seatId: 'B',
+        stateView: makeStateView(1, 'B', 'setup'),
+      }),
+      getMatch: async (matchId) => ({ success: true, matchId, seatId: 'B', stateView: makeStateView(1, 'B', 'setup') }),
+      submitIntent: async (matchId, intent) => {
+        push({ method: 'submitIntent', matchId, intent });
+        const isMulligan = intent.intentType === 'mulligan';
+        const isReady = intent.intentType === 'ready';
+        const isPlayCard = intent.intentType === 'play_card';
+        return {
+          success: true,
+          result: 'accepted',
+          events: isPlayCard ? [
+            {
+              eventType: 'opening_protection_triggered',
+              actingSeat: 'B',
+              payload: {
+                protectedSeat: 'A',
+                minimumHp: 1,
+                preventedDamage: 6,
+              },
+            },
+          ] : [{ eventType: intent.intentType }],
+          stateView: makeStateView(isReady ? 3 : isMulligan ? 2 : 4, isReady || isMulligan ? 'B' : 'A', isMulligan ? 'setup' : 'active'),
+        };
+      },
+    };
+    if (window.PVPScene) {
+      window.PVPScene.liveSession = null;
+    }
+  });
+  await mobilePage.click('#pvp-btn', { timeout: 5000, force: true });
+  await mobilePage.waitForTimeout(400);
+  await mobilePage.click('[data-pvp-tab="live"]', { timeout: 5000, force: true });
+  await mobilePage.waitForSelector('[data-live-loadout-preset="shield"]', { timeout: 5000 });
+  await mobilePage.click('[data-live-loadout-preset="shield"]', { timeout: 5000, force: true });
+  await mobilePage.click('[data-live-action="join-queue"]', { timeout: 5000, force: true });
+  await mobilePage.waitForTimeout(100);
+  await mobilePage.click('[data-live-action="refresh-match"]', { timeout: 5000, force: true });
+  await mobilePage.waitForTimeout(250);
+  const mobileConnectionProbe = await mobilePage.evaluate(() => {
+    const node = document.querySelector('[data-live-connection-status]');
+    const style = node ? window.getComputedStyle(node) : null;
+    const rect = node?.getBoundingClientRect();
+    return {
+      text: node?.textContent || '',
+      whiteSpace: style?.whiteSpace || '',
+      overflow: style?.overflow || '',
+      rect: rect ? {
+        left: Math.round(rect.left),
+        right: Math.round(rect.right),
+        width: Math.round(rect.width),
+        height: Math.round(rect.height),
+      } : null,
+      viewportWidth: window.innerWidth,
+    };
+  });
+  add(
+    'live UI mobile keeps reconnect grace text readable',
+    /对方重连宽限/.test(mobileConnectionProbe.text)
+      && /不会立即判负/.test(mobileConnectionProbe.text)
+      && mobileConnectionProbe.whiteSpace !== 'nowrap'
+      && mobileConnectionProbe.overflow !== 'hidden'
+      && mobileConnectionProbe.rect?.left >= -1
+      && mobileConnectionProbe.rect?.right <= mobileConnectionProbe.viewportWidth + 2,
+    JSON.stringify(mobileConnectionProbe),
+  );
+  await mobilePage.click('[data-live-mulligan-card]', { timeout: 5000, force: true });
+  await mobilePage.click('[data-live-action="confirm-mulligan"]', { timeout: 5000, force: true });
+  await mobilePage.waitForTimeout(100);
+  await mobilePage.click('[data-live-action="ready"]', { timeout: 5000, force: true });
+  await mobilePage.waitForTimeout(100);
+  await mobilePage.click('[data-live-card]', { timeout: 5000, force: true });
+  await mobilePage.waitForTimeout(150);
+  const mobileActionProbe = await mobilePage.evaluate(() => {
+    const eventPanel = document.querySelector('.pvp-live-event-panel');
+    const rect = eventPanel?.getBoundingClientRect();
+    return {
+      calls: window.__livePvpMobileAuditCalls || [],
+      events: document.querySelector('[data-live-event-log]')?.textContent || '',
+      viewportWidth: window.innerWidth,
+      eventPanel: rect ? {
+        left: Math.round(rect.left),
+        right: Math.round(rect.right),
+        width: Math.round(rect.width),
+      } : null,
+    };
+  });
+  add(
+    'live UI targets opponent seat for player B',
+    mobileActionProbe.calls.some((call) => call.method === 'submitIntent' && call.intent?.payload?.targetSeat === 'A'),
+    JSON.stringify(mobileActionProbe),
+  );
+  add(
+    'live UI mobile renders opening protection event without overflow',
+    /开局护体触发/.test(mobileActionProbe.events)
+      && /护住 A/.test(mobileActionProbe.events)
+      && /保底 1 血/.test(mobileActionProbe.events)
+      && /挡下 6 点致命伤害/.test(mobileActionProbe.events)
+      && mobileActionProbe.eventPanel?.left >= -1
+      && mobileActionProbe.eventPanel?.right <= mobileActionProbe.viewportWidth + 2,
+    JSON.stringify(mobileActionProbe),
+  );
+  await mobilePage.evaluate(() => {
+    const root = document.querySelector('[data-live-pvp-root]');
+    const screen = document.getElementById('pvp-screen');
+    if (root && screen) {
+      screen.scrollTo({ top: Math.max(0, root.offsetTop - 22), left: 0, behavior: 'auto' });
+    } else {
+      root?.scrollIntoView({ block: 'start', inline: 'nearest' });
+    }
+  }).catch(() => {});
+  await mobilePage.waitForTimeout(100);
+  const mobileProbe = await mobilePage.evaluate(() => {
+    const toRect = (el) => {
+      if (!el) return null;
+      const rect = el.getBoundingClientRect();
+      return {
+        left: Math.round(rect.left),
+        right: Math.round(rect.right),
+        top: Math.round(rect.top),
+        bottom: Math.round(rect.bottom),
+        width: Math.round(rect.width),
+        height: Math.round(rect.height),
+      };
+    };
+    const root = document.querySelector('[data-live-pvp-root]');
+    const statusCard = document.querySelector('.pvp-live-status-card');
+    const eventPanel = document.querySelector('.pvp-live-event-panel');
+    const tabs = Array.from(document.querySelectorAll('.pvp-nav-sidebar .rune-tab'));
+    const buttons = Array.from(document.querySelectorAll('.pvp-live-footer [data-live-action]'));
+    const pvpScreen = document.getElementById('pvp-screen');
+    return {
+      phase: root?.getAttribute('data-live-phase') || '',
+      scrollWidth: document.documentElement.scrollWidth,
+      viewportWidth: window.innerWidth,
+      viewportHeight: window.innerHeight,
+      bodyScrollHeight: document.body.scrollHeight,
+      screenScrollHeight: pvpScreen?.scrollHeight || 0,
+      root: toRect(root),
+      statusCard: toRect(statusCard),
+      eventPanel: toRect(eventPanel),
+      tabs: tabs.map((tab) => toRect(tab)),
+      buttons: buttons.map((button) => toRect(button)),
+    };
+  });
+  await mobilePage.evaluate(() => {
+    document.querySelector('[data-live-action="surrender"]')?.scrollIntoView({ block: 'end', inline: 'nearest' });
+  }).catch(() => {});
+  await mobilePage.waitForTimeout(100);
+  const mobileBottomProbe = await mobilePage.evaluate(() => {
+    const toRect = (el) => {
+      if (!el) return null;
+      const rect = el.getBoundingClientRect();
+      return {
+        left: Math.round(rect.left),
+        right: Math.round(rect.right),
+        top: Math.round(rect.top),
+        bottom: Math.round(rect.bottom),
+        width: Math.round(rect.width),
+        height: Math.round(rect.height),
+      };
+    };
+    return {
+      viewportWidth: window.innerWidth,
+      viewportHeight: window.innerHeight,
+      buttons: Array.from(document.querySelectorAll('.pvp-live-footer [data-live-action]')).map((button) => toRect(button)),
+    };
+  });
+  add(
+    'live UI mobile layout stays inside viewport',
+    /matched|active/.test(mobileProbe.phase)
+      && mobileProbe.scrollWidth <= mobileProbe.viewportWidth + 2
+      && mobileProbe.statusCard?.top >= -1
+      && mobileProbe.statusCard?.bottom <= mobileProbe.viewportHeight + 2
+      && mobileProbe.root?.left >= 0
+      && mobileProbe.root?.right <= mobileProbe.viewportWidth + 2
+      && mobileProbe.eventPanel?.left >= -1
+      && mobileProbe.eventPanel?.right <= mobileProbe.viewportWidth + 2
+      && mobileProbe.tabs.every((rect) => rect && rect.left >= -1 && rect.right <= mobileProbe.viewportWidth + 2)
+      && mobileBottomProbe.buttons.every((rect) => rect && rect.left >= -1 && rect.right <= mobileBottomProbe.viewportWidth + 2 && rect.bottom <= mobileBottomProbe.viewportHeight + 2 && rect.height >= 34),
+    JSON.stringify({ top: mobileProbe, bottom: mobileBottomProbe }),
+  );
+
+  await safeElementScreenshot(page, '[data-live-pvp-root]', path.join(outDir, 'pvp-live-panel.png'));
+  await mobilePage.evaluate(() => {
+    const root = document.querySelector('[data-live-pvp-root]');
+    const screen = document.getElementById('pvp-screen');
+    if (root && screen) {
+      screen.scrollTo({ top: Math.max(0, root.offsetTop - 22), left: 0, behavior: 'auto' });
+    } else {
+      root?.scrollIntoView({ block: 'start', inline: 'nearest' });
+    }
+  }).catch(() => {});
+  await mobilePage.waitForTimeout(100);
+  await safeElementScreenshot(mobilePage, '[data-live-pvp-root]', path.join(outDir, 'pvp-live-panel-mobile.png'));
+  await mobilePage.close();
+  const report = {
+    summary: {
+      total: findings.length,
+      passed: findings.filter((f) => f.pass).length,
+      failed: findings.filter((f) => !f.pass).length,
+    },
+    findings,
+    consoleErrors,
+  };
+  fs.writeFileSync(path.join(outDir, 'report.json'), JSON.stringify(report, null, 2));
+  console.log(JSON.stringify(report, null, 2));
+  await browser.close();
+  if (report.summary.failed > 0 || consoleErrors.length > 0) process.exit(1);
+})().catch((error) => {
+  console.error(error);
+  process.exit(1);
+});

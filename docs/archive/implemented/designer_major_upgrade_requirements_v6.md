@@ -2,7 +2,7 @@
 
 ## 1. 文档用途
 
-本文是 `designer_major_upgrade_planning_v7.md` 的配套需求文档。
+本文是 `docs/archive/implemented/designer_major_upgrade_planning_v7.md` 的配套需求文档。
 
 本文不写工时与排期，只定义一件事：
 

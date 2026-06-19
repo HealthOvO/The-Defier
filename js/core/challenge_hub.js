@@ -3,6 +3,7 @@ import { PVPService } from "../services/pvp-service.js";
 import { GameMap } from "./map.js";
 import { Utils } from "./utils.js";
 import { CHARACTERS } from "../data/index.js";
+import { registerHubController } from "../runtime/hub-registry.js";
 const ChallengeHubModule = (() => {
 const challengeHubMethods = Object.create(null);
   const CHALLENGE_PROGRESS_KEY = 'theDefierChallengeProgressV1';
@@ -2171,6 +2172,111 @@ const challengeHubMethods = Object.create(null);
       archiveEntryId: entry.id
     };
   };
+  challengeHubMethods.buildPvpLiveDrillBundle = function (scenario = null) {
+    this.ensureChallengeHubBootState();
+    const source = scenario && typeof scenario === 'object' ? scenario : null;
+    if (!source || source.reportVersion !== 'pvp-live-drill-scenario-v1') return null;
+    if (source.sourceVisibility !== 'replay_self' || source.usesHiddenInformation !== false || source.rankedImpact !== 'none') return null;
+    const matchId = String(source.sourceMatchId || '').trim();
+    if (!matchId) return null;
+    const themeKey = ['assault', 'bulwark', 'oracle', 'tempo'].includes(source.themeKey) ? source.themeKey : 'bulwark';
+    const themeRuleMap = {
+      assault: 'daily_ember_break',
+      bulwark: 'daily_bastion_vow',
+      oracle: 'daily_star_script',
+      tempo: 'daily_frost_clinic'
+    };
+    const dailyRules = typeof CHALLENGE_RULES !== 'undefined' && CHALLENGE_RULES && Array.isArray(CHALLENGE_RULES.daily) ? CHALLENGE_RULES.daily : [];
+    const baseRule = dailyRules.find(rule => rule && rule.id === themeRuleMap[themeKey]) || this.pickChallengeRule('daily', matchId);
+    const shortHash = hashString(`pvp-live-drill:${matchId}:${themeKey}:${source.finishReason || ''}`).toString(36).toUpperCase();
+    const trainingTags = normalizeTagList(Array.isArray(source.trainingTags) ? source.trainingTags : [], 4);
+    const publicEventTypes = normalizeTagList(Array.isArray(source.publicEventTypes) ? source.publicEventTypes : [], 4);
+    const eventLine = publicEventTypes.length ? publicEventTypes.join(' / ') : '公开事件';
+    const resultLabel = source.result === 'loss' ? '首败' : source.result === 'win' ? '胜局' : '终局';
+    const rule = normalizeChallengeRuleSnapshot({
+      ...clone(baseRule),
+      id: `pvp_live_drill_${shortHash.toLowerCase()}`,
+      icon: '⚔️',
+      name: `真人复盘 · ${source.themeLabel || '问道练习'}`,
+      intro: String(source.trainingAdvice || `真人 PVP ${resultLabel}复盘练习。`),
+      objective: String(source.drillObjective || '按公开事件复刻本局失误窗口，不写正式积分。'),
+      targetChapter: `真人 PVP ${resultLabel}复盘`,
+      goalRealm: 3,
+      tags: normalizeTagList(['真人 PVP', '问道练习', '不计奖励', ...trainingTags], 6)
+    });
+    const themeMeta = this.getChallengeThemeMeta(rule, 'daily');
+    const archiveInsight = normalizeChallengeArchiveInsight({
+      title: `真人 PVP ${resultLabel}练习`,
+      summary: String(source.trainingAdvice || '从赛后公开复盘生成的问道练习。'),
+      focusLines: [
+        String(source.drillObjective || '按公开事件复刻本局失误窗口。'),
+        `公开事件：${eventLine}`,
+        '不写正式积分，不读取隐藏手牌或牌库。'
+      ],
+      preferredNodeLine: themeMeta?.preferredNodes?.length ? buildChallengePreferredNodeLine(themeMeta.preferredNodes) : '',
+      reasonLabel: '真人 PVP 赛后',
+      trainingTags: normalizeTagList(trainingTags.length ? trainingTags : ['真人 PVP', '问道练习'], 3),
+      coachBrief: '先按公开轨迹复盘关键窗口，再用观星回放开一局不计奖励的练习。',
+      drillObjective: String(source.drillObjective || '复刻公开失误窗口，不写正式积分。')
+    });
+    const rotationKey = `pvp-live-drill-${shortHash.toLowerCase()}`;
+    return {
+      mode: 'daily',
+      rotationKey,
+      rotationLabel: '真人 PVP 练习',
+      meta: {
+        title: '真人 PVP · 问道练习',
+        subtitle: '基于赛后公开事件生成的无奖励练习命盘，不读取隐藏信息，不写正式积分。',
+        label: '真人练习',
+        accentClass: 'daily'
+      },
+      rule,
+      themeMeta,
+      dangerProfile: this.buildChallengeDangerProfile(rule, 'daily', themeMeta),
+      seedSignature: `PVP-${shortHash}`,
+      archiveInsight: hasChallengeArchiveInsight(archiveInsight) ? archiveInsight : null,
+      progress: createProgressEntry(),
+      rewards: [],
+      records: [],
+      leaderboard: [],
+      replayOnly: true,
+      practiceOnly: true,
+      archiveEntryId: `pvp_live:${matchId}`
+    };
+  };
+  challengeHubMethods.beginPvpLiveDrillScenario = function (scenario = null) {
+    this.ensureChallengeHubBootState();
+    const bundle = this.buildPvpLiveDrillBundle(scenario);
+    if (!bundle || !bundle.rule) return false;
+    if (this.activeChallengeRun && !this.activeChallengeRun.resolved && this.activeChallengeRun.replayOnly && this.activeChallengeRun.archiveEntryId === bundle.archiveEntryId) {
+      this.showScreen('map-screen');
+      return true;
+    }
+    this.pendingChallengeStart = {
+      mode: bundle.mode,
+      rotationKey: bundle.rotationKey,
+      rule: clone(bundle.rule),
+      modeLabel: bundle.meta.label,
+      bundleSnapshot: clone(bundle),
+      replayOnly: true,
+      practiceOnly: true,
+      seedSignature: bundle.seedSignature || '',
+      archiveEntryId: bundle.archiveEntryId || '',
+      archiveInsight: bundle.archiveInsight && hasChallengeArchiveInsight(bundle.archiveInsight) ? normalizeChallengeArchiveInsight(bundle.archiveInsight) : null
+    };
+    if (typeof Utils !== 'undefined' && Utils && typeof Utils.showBattleLog === 'function') {
+      Utils.showBattleLog(`真人 PVP 问道练习已锁定【${bundle.rule.name}】。本轮只记录留痕，不计奖励或正式积分。`, {
+        category: 'system',
+        duration: 3000
+      });
+    }
+    if (typeof this.showCharacterSelection === 'function') {
+      this.showCharacterSelection();
+    } else if (typeof this.openSaveSlotsWithSync === 'function') {
+      this.openSaveSlotsWithSync();
+    }
+    return true;
+  };
   challengeHubMethods.buildChallengeLeaderboard = function (rotationKey = '', entry = null) {
     const baseNames = ['丹渊', '孤衡', '南烛', '玄泠', '照川', '寂河', '停云', '白述'];
     const scores = [];
@@ -3109,6 +3215,7 @@ const challengeHubMethods = Object.create(null);
       finalScore: clampInt(source.finalScore, 0),
       seedSignature: String(source.seedSignature || ''),
       replayOnly: !!source.replayOnly,
+      practiceOnly: !!source.practiceOnly,
       archiveEntryId: String(source.archiveEntryId || ''),
       archiveInsight: source.archiveInsight && hasChallengeArchiveInsight(source.archiveInsight) ? normalizeChallengeArchiveInsight(source.archiveInsight) : null,
       progress: {
@@ -3149,6 +3256,7 @@ const challengeHubMethods = Object.create(null);
       startedAt: Date.now(),
       seedSignature: String(bundle.seedSignature || this.buildChallengeSeedSignature(bundle.mode, bundle.rotationKey, bundle.rule)),
       replayOnly: !!bundle.replayOnly,
+      practiceOnly: !!bundle.practiceOnly,
       archiveEntryId: String(bundle.archiveEntryId || ''),
       archiveInsight: bundle.archiveInsight && hasChallengeArchiveInsight(bundle.archiveInsight) ? normalizeChallengeArchiveInsight(bundle.archiveInsight) : null,
       progress: {
@@ -3318,6 +3426,7 @@ const challengeHubMethods = Object.create(null);
   };
   challengeHubMethods.recordChallengeArchiveResult = function (run, options = {}) {
     if (!run) return null;
+    if (run.practiceOnly) return null;
     const profile = options.featuredProfile || this.buildChallengeArchiveProfile(run, options);
     const rule = profile.rule;
     const statusLabel = options.completed ? '完成' : '中断';
@@ -3369,17 +3478,19 @@ const challengeHubMethods = Object.create(null);
     run.finalScore = this.computeActiveChallengeScore(run);
     run.progress.currentScore = run.finalScore;
     const featuredProfile = this.buildChallengeArchiveProfile(run, options);
-    if (!run.replayOnly) {
+    if (!run.replayOnly && !run.practiceOnly) {
       this.recordChallengeCompletion(run, {
         ...options,
         featuredProfile
       });
     }
-    this.recordChallengeArchiveResult(run, {
-      ...options,
-      featuredProfile
-    });
-    if (!run.replayOnly && options.completed && run.mode === 'weekly' && typeof this.recordSeasonVerificationResult === 'function') {
+    if (!run.practiceOnly) {
+      this.recordChallengeArchiveResult(run, {
+        ...options,
+        featuredProfile
+      });
+    }
+    if (!run.replayOnly && !run.practiceOnly && options.completed && run.mode === 'weekly' && typeof this.recordSeasonVerificationResult === 'function') {
       this.recordSeasonVerificationResult({
         recordId: `season_verification_${String(run.rotationKey || 'current').trim()}_side_challenge`,
         weekTag: String(run.rotationKey || '').trim(),
@@ -3403,7 +3514,7 @@ const challengeHubMethods = Object.create(null);
         priority: 2
       });
     }
-    if (!run.replayOnly && options.completed && typeof this.recordCollectionUnlock === 'function') {
+    if (!run.replayOnly && !run.practiceOnly && options.completed && typeof this.recordCollectionUnlock === 'function') {
       this.recordCollectionUnlock('challenge', {
         id: `challenge:${run.mode}:${run.rotationKey}:${run.ruleId}`,
         name: `${run.modeLabel}·${run.ruleName}`,
@@ -3412,7 +3523,9 @@ const challengeHubMethods = Object.create(null);
       });
     }
     if (typeof Utils !== 'undefined' && Utils && typeof Utils.showBattleLog === 'function') {
-      Utils.showBattleLog(`【${run.modeLabel}】${options.completed ? '完成' : '中断'}：${run.ruleName}，得分 ${run.finalScore}${run.replayOnly ? '（不计奖励）' : ''}`);
+      Utils.showBattleLog(run.practiceOnly
+        ? `【${run.modeLabel}】${options.completed ? '完成' : '中断'}：${run.ruleName}，练习不计分、不入档。`
+        : `【${run.modeLabel}】${options.completed ? '完成' : '中断'}：${run.ruleName}，得分 ${run.finalScore}${run.replayOnly ? '（不计奖励）' : ''}`);
     }
     this.clearActiveChallengeRun();
     this.renderMainMenuChallengeSummary();
@@ -3555,8 +3668,8 @@ const challengeHubMethods = Object.create(null);
                 ${replayFocus ? `<span class="challenge-run-focus">训练重点：${escapeHtml(replayFocus)}</span>` : ''}
             </div>
             <div class="challenge-run-stats">
-                <span>${run.replayOnly ? '观星回放 · 不计奖励' : `完成线 第 ${run.goalRealm} 重`}</span>
-                <strong>${score} 分</strong>
+                <span>${run.practiceOnly ? '真人练习 · 不计奖励' : run.replayOnly ? '观星回放 · 不计奖励' : `完成线 第 ${run.goalRealm} 重`}</span>
+                <strong>${run.practiceOnly ? '练习不计分' : `${score} 分`}</strong>
             </div>
         `;
   };
@@ -3774,6 +3887,7 @@ const challengeHubMethods = Object.create(null);
         ruleId: this.pendingChallengeStart.rule?.id || '',
         characterId: this.pendingChallengeStart.rule?.characterId || '',
         replayOnly: !!this.pendingChallengeStart.replayOnly,
+        practiceOnly: !!this.pendingChallengeStart.practiceOnly,
         seedSignature: String(this.pendingChallengeStart.seedSignature || ''),
         dangerProfile: serializeChallengeDangerProfile(pendingDangerProfile),
         archiveInsight: serializeChallengeArchiveInsight(pendingArchiveInsight)
@@ -3784,9 +3898,10 @@ const challengeHubMethods = Object.create(null);
         ruleId: this.activeChallengeRun.ruleId,
         ruleName: this.activeChallengeRun.ruleName,
         goalRealm: this.activeChallengeRun.goalRealm,
-        currentScore: clampInt(this.activeChallengeRun.progress?.currentScore, 0),
+        currentScore: this.activeChallengeRun.practiceOnly ? 0 : clampInt(this.activeChallengeRun.progress?.currentScore, 0),
         resolved: !!this.activeChallengeRun.resolved,
         replayOnly: !!this.activeChallengeRun.replayOnly,
+        practiceOnly: !!this.activeChallengeRun.practiceOnly,
         seedSignature: String(this.activeChallengeRun.seedSignature || ''),
         dangerProfile: serializeChallengeDangerProfile(activeRunDangerProfile),
         archiveInsight: serializeChallengeArchiveInsight(activeRunArchiveInsight)
@@ -4047,7 +4162,7 @@ const challengeHubMethods = Object.create(null);
   };
   challengeHubMethods.finishStrategicNode = function (node, title, message, icon = '✨') {
     const result = typeof originalFinishStrategicNode === 'function' ? originalFinishStrategicNode.call(this, node, title, message, icon) : undefined;
-    if (node && node.type === 'observatory') {
+    if (node && node.type === 'observatory' && !this.activeChallengeRun?.practiceOnly) {
       const note = String(message || '').split('\n').map(line => line.trim()).filter(Boolean).slice(0, 2).join(' / ');
       const entry = this.recordObservatoryArchiveEntry({
         id: `omen:${Date.now()}:${hashString(`${title}:${message}`)}`,
@@ -4156,6 +4271,9 @@ function attachChallengeHubController(game) {
   if (game.challengeHub instanceof ChallengeHubController) return game.challengeHub;
   game.challengeHub = new ChallengeHubController(game);
   return game.challengeHub;
+}
+if (typeof registerHubController === 'function') {
+  registerHubController('challenge', attachChallengeHubController);
 }
 const challengeHubGlobal = typeof window !== 'undefined' ? window : typeof global !== 'undefined' ? global : typeof globalThis !== 'undefined' ? globalThis : null;
 if (challengeHubGlobal) {

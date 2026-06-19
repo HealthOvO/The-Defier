@@ -41,6 +41,7 @@ import { MetaProgressionManager } from "./managers/MetaProgressionManager.js";
 import { SeasonBoardManager } from "./managers/SeasonBoardManager.js";
 import { SanctumAgendaManager } from "./managers/SanctumAgendaManager.js";
 import { CampfireView } from "./views/CampfireView.js";
+import { attachRegisteredHubControllers } from "./runtime/hub-registry.js";
 /**
  * The Defier 4.2 - 逆命者
  * 主游戏控制器（修复版）
@@ -252,14 +253,21 @@ export class Game {
   }
   attachHubControllers() {
     const runtimeGlobal = typeof window !== 'undefined' ? window : typeof global !== 'undefined' ? global : typeof globalThis !== 'undefined' ? globalThis : null;
+    const attached = typeof attachRegisteredHubControllers === 'function' ? attachRegisteredHubControllers(this) : {};
+    if (attached.collection) this.collectionHub = attached.collection;
+    if (attached.challenge) this.challengeHub = attached.challenge;
+    if (attached.expedition) this.expeditionHub = attached.expedition;
+    this.attachLegacyHubControllers(runtimeGlobal);
+  }
+  attachLegacyHubControllers(runtimeGlobal) {
     if (!runtimeGlobal) return;
-    if (typeof runtimeGlobal.__attachCollectionHubController === 'function') {
+    if (!this.collectionHub && typeof runtimeGlobal.__attachCollectionHubController === 'function') {
       this.collectionHub = runtimeGlobal.__attachCollectionHubController(this);
     }
-    if (typeof runtimeGlobal.__attachChallengeHubController === 'function') {
+    if (!this.challengeHub && typeof runtimeGlobal.__attachChallengeHubController === 'function') {
       this.challengeHub = runtimeGlobal.__attachChallengeHubController(this);
     }
-    if (typeof runtimeGlobal.__attachExpeditionHubController === 'function') {
+    if (!this.expeditionHub && typeof runtimeGlobal.__attachExpeditionHubController === 'function') {
       this.expeditionHub = runtimeGlobal.__attachExpeditionHubController(this);
     }
   }
@@ -452,6 +460,7 @@ export class Game {
     };
     const pvpMyRank = typeof PVPService !== 'undefined' && PVPService && PVPService.currentRankData ? PVPService.currentRankData : null;
     const pvpFocus = typeof window !== 'undefined' && typeof PVPScene !== 'undefined' && PVPScene && typeof PVPScene.getRankingFocusSnapshot === 'function' ? PVPScene.getRankingFocusSnapshot() : null;
+    const pvpLive = typeof window !== 'undefined' && typeof PVPScene !== 'undefined' && PVPScene && typeof PVPScene.getLiveSnapshot === 'function' ? PVPScene.getLiveSnapshot() : null;
     const pvpDangerProfile = normalizePvpDanger(this.pvpDangerProfile);
     const pvpMatchIntent = this.pvpMatchIntent && typeof this.pvpMatchIntent === 'object' ? {
       targetName: String(this.pvpMatchIntent.targetName || ''),
@@ -495,6 +504,7 @@ export class Game {
     } : null;
     const pvpPayload = mode === 'pvp-screen' || this.mode === 'pvp' || !!pvpFocus || !!this.pvpOpponentRank || !!pvpDangerProfile || !!pvpResultReview ? {
       activeTab: typeof window !== 'undefined' && PVPScene ? PVPScene.activeTab || null : null,
+      live: pvpLive,
       myRank: pvpMyRank ? {
         score: Math.max(0, Math.floor(Number(pvpMyRank.score) || 0)),
         realm: Math.max(1, Math.floor(Number(pvpMyRank.realm) || 1)),

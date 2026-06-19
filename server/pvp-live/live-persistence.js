@@ -1,0 +1,588 @@
+const { db } = require('../db/database');
+
+function dbGet(sql, params = []) {
+    return new Promise((resolve, reject) => {
+        db.get(sql, params, (err, row) => {
+            if (err) reject(err);
+            else resolve(row || null);
+        });
+    });
+}
+
+function dbRun(sql, params = []) {
+    return new Promise((resolve, reject) => {
+        db.run(sql, params, function(err) {
+            if (err) reject(err);
+            else resolve(this);
+        });
+    });
+}
+
+function dbAll(sql, params = []) {
+    return new Promise((resolve, reject) => {
+        db.all(sql, params, (err, rows) => {
+            if (err) reject(err);
+            else resolve(Array.isArray(rows) ? rows : []);
+        });
+    });
+}
+
+function serializeState(state) {
+    return JSON.stringify(state || {});
+}
+
+function serializeSnapshot(snapshot) {
+    return JSON.stringify(snapshot || {});
+}
+
+function normalizeRatingScore(value) {
+    const numeric = Number(value);
+    return Math.max(0, Math.min(9999, Math.floor(Number.isFinite(numeric) ? numeric : 1000)));
+}
+
+function makeRatingBucket(score) {
+    const safeScore = normalizeRatingScore(score);
+    const floor = Math.floor(safeScore / 100) * 100;
+    return `${floor}_${floor + 99}`;
+}
+
+function normalizeRatingSnapshot(snapshot = {}) {
+    const source = snapshot && typeof snapshot === 'object' ? snapshot : {};
+    const score = normalizeRatingScore(source.score);
+    return {
+        score,
+        bucket: String(source.bucket || makeRatingBucket(score)).slice(0, 24),
+        seasonId: String(source.seasonId || source.season_id || 's1-genesis').slice(0, 40),
+        provisional: source.provisional !== false
+    };
+}
+
+function serializeConnection(connection) {
+    return JSON.stringify(connection || {});
+}
+
+const PUBLIC_EVENT_DATA_KEYS = Object.freeze({
+    mulligan_completed: ['seatId', 'count'],
+    player_ready: ['seatId'],
+    battle_started: ['firstSeat', 'roundIndex', 'turnIndex'],
+    opening_second_seat_buffer_granted: ['seatId', 'block', 'totalBlock', 'firstSeat', 'source'],
+    card_played: ['cost', 'remainingEnergy'],
+    turn_ended: ['nextSeat', 'completedTurns', 'roundIndex', 'turnIndex'],
+    cards_drawn: ['seatId', 'count', 'handCount', 'deckCount', 'capped'],
+    block_gained: ['block', 'seatId', 'totalBlock'],
+    opening_counterplay_granted: ['seatId', 'block', 'totalBlock', 'minimumHp', 'source'],
+    opening_protection_triggered: ['protectedSeat', 'minimumHp', 'preventedDamage', 'wouldHaveHp'],
+    budget_clamped: ['rawDamage', 'actualDamage', 'preventedDamage', 'targetSeat'],
+    damage_applied: ['actualDamage', 'budgetedDamage', 'blockedDamage', 'hpDamage', 'targetSeat', 'targetHp'],
+    player_surrendered: ['loserSeat', 'winnerSeat'],
+    match_finished: ['winnerSeat', 'loserSeat', 'finishReason', 'scoreA', 'scoreB', 'scoreDelta', 'scoreThreshold', 'roundIndex'],
+    turn_timeout: ['seatId', 'winnerSeat', 'loserSeat', 'finishReason'],
+    connection_timeout: ['seatId', 'phase', 'elapsedMs'],
+    emote_sent: ['seatId', 'emoteId', 'label'],
+    ready_timeout: ['elapsedMs'],
+    match_invalidated: ['reason'],
+    automation_action: ['seatId', 'actionType', 'reason', 'automationCount']
+});
+
+function normalizeEvent(event, fallbackMatchId = '') {
+    const source = event && typeof event === 'object' ? event : {};
+    const sequence = Math.max(0, Math.floor(Number(source.sequence) || 0));
+    const matchId = String(source.matchId || fallbackMatchId || '').trim();
+    const eventType = String(source.eventType || '').trim();
+    const eventId = String(source.eventId || (matchId && sequence ? `${matchId}-evt-${sequence}` : '')).trim();
+    if (!matchId || !eventId || !sequence || !eventType) return null;
+    return {
+        eventId,
+        sequence,
+        eventType,
+        matchId,
+        actingSeat: source.actingSeat === null || source.actingSeat === undefined ? null : String(source.actingSeat),
+        visibility: String(source.visibility || 'public').trim() || 'public',
+        payload: source.payload && typeof source.payload === 'object' && !Array.isArray(source.payload)
+            ? source.payload
+            : {}
+    };
+}
+
+function sanitizePublicData(eventType, payload) {
+    const allowedKeys = PUBLIC_EVENT_DATA_KEYS[eventType] || [];
+    if (!payload || typeof payload !== 'object' || allowedKeys.length === 0) return {};
+    return allowedKeys.reduce((data, key) => {
+        const value = payload[key];
+        if (value === undefined || value === null) return data;
+        if (typeof value === 'number') {
+            data[key] = Number.isFinite(value) ? value : 0;
+        } else if (typeof value === 'boolean') {
+            data[key] = value;
+        } else if (typeof value === 'string') {
+            data[key] = String(value).slice(0, 64);
+        }
+        return data;
+    }, {});
+}
+
+function parseEventJson(value) {
+    if (!value) return null;
+    try {
+        const parsed = JSON.parse(value);
+        return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : null;
+    } catch (error) {
+        return null;
+    }
+}
+
+function makeEventFromRow(row) {
+    if (!row || !row.match_id) return null;
+    const parsed = normalizeEvent(parseEventJson(row.event_json), row.match_id);
+    if (parsed) return parsed;
+    return normalizeEvent({
+        matchId: row.match_id,
+        eventId: row.event_id,
+        sequence: row.event_sequence,
+        eventType: row.event_type,
+        actingSeat: row.acting_seat || null,
+        visibility: row.visibility || 'public',
+        payload: parseEventJson(row.public_data_json) || {}
+    }, row.match_id);
+}
+
+function serializeRematchPlayers(playersByUserId) {
+    const entries = [];
+    if (playersByUserId && typeof playersByUserId.forEach === 'function') {
+        playersByUserId.forEach((player, userId) => {
+            if (!player || !userId || !player.loadoutSnapshot) return;
+            entries.push({
+                userId: String(userId),
+                displayName: String(player.displayName || userId),
+                loadoutSnapshot: player.loadoutSnapshot
+            });
+        });
+    }
+    return JSON.stringify(entries);
+}
+
+function parseState(row) {
+    if (!row || !row.state_json) return null;
+    try {
+        return JSON.parse(row.state_json);
+    } catch (error) {
+        return null;
+    }
+}
+
+function parseConnection(row) {
+    if (!row || !row.connection_json) return null;
+    try {
+        const parsed = JSON.parse(row.connection_json);
+        return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : null;
+    } catch (error) {
+        return null;
+    }
+}
+
+function makeMatchFromRow(row) {
+    const state = parseState(row);
+    if (!state || !state.matchId) return null;
+    return {
+        matchId: row.match_id,
+        createdAt: Number(row.created_at) || 0,
+        updatedAt: Number(row.updated_at) || 0,
+        state,
+        connection: parseConnection(row),
+        seatsByUserId: {
+            [row.seat_a_user_id]: 'A',
+            [row.seat_b_user_id]: 'B'
+        }
+    };
+}
+
+function parseSnapshot(row) {
+    if (!row || !row.loadout_snapshot_json) return null;
+    try {
+        return JSON.parse(row.loadout_snapshot_json);
+    } catch (error) {
+        return null;
+    }
+}
+
+function makeQueueEntryFromRow(row) {
+    const loadoutSnapshot = parseSnapshot(row);
+    if (!row || !row.queue_ticket || !row.user_id || !loadoutSnapshot || !loadoutSnapshot.loadoutHash) return null;
+    const ratingSnapshot = normalizeRatingSnapshot({
+        score: row.rating_score,
+        bucket: row.rating_bucket,
+        seasonId: row.rating_season_id,
+        provisional: Number(row.rating_provisional) !== 0
+    });
+    return {
+        queueTicket: row.queue_ticket,
+        player: {
+            userId: row.user_id,
+            displayName: row.display_name || row.user_id,
+            loadoutSnapshot
+        },
+        ratingSnapshot,
+        createdAt: Number(row.created_at) || 0
+    };
+}
+
+function makeRematchRequestFromRow(row) {
+    if (!row || !row.source_match_id || !row.series_id || !row.players_json) return null;
+    let players = [];
+    try {
+        const parsed = JSON.parse(row.players_json);
+        players = Array.isArray(parsed) ? parsed : [];
+    } catch (error) {
+        return null;
+    }
+    const playersByUserId = new Map();
+    players.forEach(player => {
+        if (!player || !player.userId || !player.loadoutSnapshot || !player.loadoutSnapshot.loadoutHash) return;
+        playersByUserId.set(String(player.userId), {
+            userId: String(player.userId),
+            displayName: String(player.displayName || player.userId),
+            loadoutSnapshot: player.loadoutSnapshot
+        });
+    });
+    if (playersByUserId.size === 0) return null;
+    return {
+        sourceMatchId: row.source_match_id,
+        seriesId: row.series_id,
+        createdAt: Math.max(0, Math.floor(Number(row.created_at) || 0)),
+        playersByUserId
+    };
+}
+
+function makeInviteRoomFromRow(row) {
+    const loadoutSnapshot = parseSnapshot({
+        loadout_snapshot_json: row && row.host_loadout_snapshot_json
+    });
+    if (!row || !row.invite_code || !row.host_user_id || !loadoutSnapshot || !loadoutSnapshot.loadoutHash) return null;
+    return {
+        inviteCode: String(row.invite_code),
+        host: {
+            userId: String(row.host_user_id),
+            displayName: String(row.host_display_name || row.host_user_id),
+            loadoutSnapshot
+        },
+        target: row.target_user_id ? {
+            userId: String(row.target_user_id),
+            displayName: String(row.target_user_name || row.target_user_id)
+        } : null,
+        createdAt: Math.max(0, Math.floor(Number(row.created_at) || 0))
+    };
+}
+
+function makeSqliteLivePvpPersistence() {
+    return {
+        async saveQueueEntry(queueEntry) {
+            if (!queueEntry || !queueEntry.queueTicket || !queueEntry.player || !queueEntry.player.userId || !queueEntry.player.loadoutSnapshot) return;
+            const createdAt = Math.max(0, Math.floor(Number(queueEntry.createdAt) || Date.now()));
+            const ratingSnapshot = normalizeRatingSnapshot(queueEntry.ratingSnapshot);
+            await dbRun(
+                `INSERT INTO pvp_live_queue_tickets
+                    (queue_ticket, user_id, display_name, loadout_snapshot_json, rating_score, rating_bucket, rating_season_id, rating_provisional, created_at)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 ON CONFLICT(user_id) DO UPDATE SET
+                    queue_ticket = excluded.queue_ticket,
+                    display_name = excluded.display_name,
+                    loadout_snapshot_json = excluded.loadout_snapshot_json,
+                    rating_score = excluded.rating_score,
+                    rating_bucket = excluded.rating_bucket,
+                    rating_season_id = excluded.rating_season_id,
+                    rating_provisional = excluded.rating_provisional,
+                    created_at = excluded.created_at`,
+                [
+                    queueEntry.queueTicket,
+                    queueEntry.player.userId,
+                    queueEntry.player.displayName || queueEntry.player.userId,
+                    serializeSnapshot(queueEntry.player.loadoutSnapshot),
+                    ratingSnapshot.score,
+                    ratingSnapshot.bucket,
+                    ratingSnapshot.seasonId,
+                    ratingSnapshot.provisional ? 1 : 0,
+                    createdAt
+                ]
+            );
+        },
+        async deleteQueueEntry(queueTicket) {
+            const ticket = String(queueTicket || '').trim();
+            if (!ticket) return;
+            await dbRun('DELETE FROM pvp_live_queue_tickets WHERE queue_ticket = ?', [ticket]);
+        },
+        async deleteQueueEntryForUser(userId) {
+            const id = String(userId || '').trim();
+            if (!id) return;
+            await dbRun('DELETE FROM pvp_live_queue_tickets WHERE user_id = ?', [id]);
+        },
+        async loadQueueEntryByTicket(queueTicket) {
+            const ticket = String(queueTicket || '').trim();
+            if (!ticket) return null;
+            const row = await dbGet(
+                `SELECT * FROM pvp_live_queue_tickets
+                 WHERE queue_ticket = ?
+                 LIMIT 1`,
+                [ticket]
+            );
+            return makeQueueEntryFromRow(row);
+        },
+        async loadQueueEntryForUser(userId) {
+            const id = String(userId || '').trim();
+            if (!id) return null;
+            const row = await dbGet(
+                `SELECT * FROM pvp_live_queue_tickets
+                 WHERE user_id = ?
+                 ORDER BY created_at ASC
+                 LIMIT 1`,
+                [id]
+            );
+            return makeQueueEntryFromRow(row);
+        },
+        async loadOldestQueueEntryExceptUser(userId) {
+            const id = String(userId || '').trim();
+            if (!id) return null;
+            const row = await dbGet(
+                `SELECT * FROM pvp_live_queue_tickets
+                 WHERE user_id != ?
+                 ORDER BY created_at ASC
+                 LIMIT 1`,
+                [id]
+            );
+            return makeQueueEntryFromRow(row);
+        },
+        async loadQueueEntriesExceptUser(userId) {
+            const id = String(userId || '').trim();
+            if (!id) return [];
+            const rows = await new Promise((resolve, reject) => {
+                db.all(
+                    `SELECT * FROM pvp_live_queue_tickets
+                     WHERE user_id != ?
+                     ORDER BY created_at ASC`,
+                    [id],
+                    (err, resultRows) => {
+                        if (err) reject(err);
+                        else resolve(Array.isArray(resultRows) ? resultRows : []);
+                    }
+                );
+            });
+            return rows.map(makeQueueEntryFromRow).filter(Boolean);
+        },
+        async saveMatch(match) {
+            if (!match || !match.state || !match.matchId || !match.state.seats) return;
+            const seatA = match.state.seats.A;
+            const seatB = match.state.seats.B;
+            if (!seatA || !seatB || !seatA.userId || !seatB.userId) return;
+            const status = String(match.state.status || 'active');
+            const now = Math.max(0, Math.floor(Number(match.updatedAt) || Date.now()));
+            const createdAt = Math.max(0, Math.floor(Number(match.createdAt) || now));
+            const finishedAt = status === 'finished' || status === 'invalidated' ? now : 0;
+            await dbRun(
+                `INSERT INTO pvp_live_matches
+                    (match_id, status, seat_a_user_id, seat_b_user_id, state_json, connection_json, created_at, updated_at, finished_at)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 ON CONFLICT(match_id) DO UPDATE SET
+                    status = excluded.status,
+                    seat_a_user_id = excluded.seat_a_user_id,
+                    seat_b_user_id = excluded.seat_b_user_id,
+                    state_json = excluded.state_json,
+                    connection_json = excluded.connection_json,
+                    updated_at = excluded.updated_at,
+                    finished_at = excluded.finished_at`,
+                [
+                    match.matchId,
+                    status,
+                    seatA.userId,
+                    seatB.userId,
+                    serializeState(match.state),
+                    serializeConnection(match.connection),
+                    createdAt,
+                    now,
+                    finishedAt
+                ]
+            );
+        },
+        async saveMatchEvents(matchId, events = []) {
+            const id = String(matchId || '').trim();
+            if (!id || !Array.isArray(events) || events.length === 0) return;
+            for (const event of events) {
+                const normalized = normalizeEvent(event, id);
+                if (!normalized || normalized.matchId !== id) continue;
+                const publicData = sanitizePublicData(normalized.eventType, normalized.payload);
+                await dbRun(
+                    `INSERT OR IGNORE INTO pvp_live_match_events
+                        (match_id, event_id, event_sequence, event_type, acting_seat, visibility, public_data_json, event_json, created_at)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                    [
+                        id,
+                        normalized.eventId,
+                        normalized.sequence,
+                        normalized.eventType,
+                        normalized.actingSeat || '',
+                        normalized.visibility,
+                        JSON.stringify(publicData),
+                        JSON.stringify(normalized),
+                        Date.now()
+                    ]
+                );
+            }
+        },
+        async loadMatchEvents(matchId) {
+            const id = String(matchId || '').trim();
+            if (!id) return [];
+            const rows = await dbAll(
+                `SELECT *
+                 FROM pvp_live_match_events
+                 WHERE match_id = ?
+                 ORDER BY event_sequence ASC`,
+                [id]
+            );
+            return rows.map(makeEventFromRow).filter(Boolean);
+        },
+        async loadActiveMatchForUser(userId) {
+            const id = String(userId || '').trim();
+            if (!id) return null;
+            const row = await dbGet(
+                `SELECT m.* FROM pvp_live_matches m
+                 LEFT JOIN pvp_live_match_settlements s ON s.match_id = m.match_id
+                 WHERE ((m.status != 'finished' AND m.status != 'invalidated') OR (m.status = 'finished' AND s.match_id IS NULL))
+                   AND (m.seat_a_user_id = ? OR m.seat_b_user_id = ?)
+                 ORDER BY m.updated_at DESC
+                 LIMIT 1`,
+                [id, id]
+            );
+            return makeMatchFromRow(row);
+        },
+        async loadMatchForUser(userId, matchId) {
+            const id = String(userId || '').trim();
+            const match = String(matchId || '').trim();
+            if (!id || !match) return null;
+            const row = await dbGet(
+                `SELECT * FROM pvp_live_matches
+                 WHERE match_id = ?
+                   AND (seat_a_user_id = ? OR seat_b_user_id = ?)
+                 LIMIT 1`,
+                [match, id, id]
+            );
+            return makeMatchFromRow(row);
+        },
+        async saveRematchRequest(request) {
+            if (!request || !request.sourceMatchId || !request.seriesId || !request.playersByUserId) return;
+            const playersJson = serializeRematchPlayers(request.playersByUserId);
+            if (!playersJson || playersJson === '[]') return;
+            const createdAt = Math.max(0, Math.floor(Number(request.createdAt) || Date.now()));
+            const updatedAt = Date.now();
+            await dbRun(
+                `INSERT INTO pvp_live_rematch_requests
+                    (source_match_id, series_id, players_json, created_at, updated_at)
+                 VALUES (?, ?, ?, ?, ?)
+                 ON CONFLICT(source_match_id) DO UPDATE SET
+                    series_id = excluded.series_id,
+                    players_json = excluded.players_json,
+                    updated_at = excluded.updated_at`,
+                [
+                    request.sourceMatchId,
+                    request.seriesId,
+                    playersJson,
+                    createdAt,
+                    updatedAt
+                ]
+            );
+        },
+        async loadRematchRequest(sourceMatchId) {
+            const match = String(sourceMatchId || '').trim();
+            if (!match) return null;
+            const row = await dbGet(
+                `SELECT * FROM pvp_live_rematch_requests
+                 WHERE source_match_id = ?
+                 LIMIT 1`,
+                [match]
+            );
+            return makeRematchRequestFromRow(row);
+        },
+        async deleteRematchRequest(sourceMatchId) {
+            const match = String(sourceMatchId || '').trim();
+            if (!match) return;
+            await dbRun('DELETE FROM pvp_live_rematch_requests WHERE source_match_id = ?', [match]);
+        },
+        async saveInviteRoom(inviteRoom) {
+            if (!inviteRoom || !inviteRoom.inviteCode || !inviteRoom.host || !inviteRoom.host.userId || !inviteRoom.host.loadoutSnapshot) return;
+            const createdAt = Math.max(0, Math.floor(Number(inviteRoom.createdAt) || Date.now()));
+            const target = inviteRoom.target && inviteRoom.target.userId ? inviteRoom.target : null;
+            await dbRun(
+                `INSERT INTO pvp_live_invites
+                    (invite_code, host_user_id, host_display_name, host_loadout_snapshot_json, target_user_id, target_user_name, created_at)
+                 VALUES (?, ?, ?, ?, ?, ?, ?)
+                 ON CONFLICT(host_user_id) DO UPDATE SET
+                    invite_code = excluded.invite_code,
+                    host_display_name = excluded.host_display_name,
+                    host_loadout_snapshot_json = excluded.host_loadout_snapshot_json,
+                    target_user_id = excluded.target_user_id,
+                    target_user_name = excluded.target_user_name,
+                    created_at = excluded.created_at`,
+                [
+                    inviteRoom.inviteCode,
+                    inviteRoom.host.userId,
+                    inviteRoom.host.displayName || inviteRoom.host.userId,
+                    serializeSnapshot(inviteRoom.host.loadoutSnapshot),
+                    target ? target.userId : '',
+                    target ? target.displayName || target.userId : '',
+                    createdAt
+                ]
+            );
+        },
+        async loadInviteRoomByCode(inviteCode) {
+            const code = String(inviteCode || '').trim().toUpperCase();
+            if (!code) return null;
+            const row = await dbGet(
+                `SELECT * FROM pvp_live_invites
+                 WHERE invite_code = ?
+                 LIMIT 1`,
+                [code]
+            );
+            return makeInviteRoomFromRow(row);
+        },
+        async loadInviteRoomForHost(userId) {
+            const id = String(userId || '').trim();
+            if (!id) return null;
+            const row = await dbGet(
+                `SELECT * FROM pvp_live_invites
+                 WHERE host_user_id = ?
+                 LIMIT 1`,
+                [id]
+            );
+            return makeInviteRoomFromRow(row);
+        },
+        async loadInviteRoomsForTarget(userId) {
+            const id = String(userId || '').trim();
+            if (!id) return [];
+            const rows = await new Promise((resolve, reject) => {
+                db.all(
+                    `SELECT * FROM pvp_live_invites
+                     WHERE target_user_id = ?
+                     ORDER BY created_at DESC
+                     LIMIT 20`,
+                    [id],
+                    (err, resultRows) => {
+                        if (err) reject(err);
+                        else resolve(Array.isArray(resultRows) ? resultRows : []);
+                    }
+                );
+            });
+            return rows.map(makeInviteRoomFromRow).filter(Boolean);
+        },
+        async deleteInviteRoom(inviteCode) {
+            const code = String(inviteCode || '').trim().toUpperCase();
+            if (!code) return;
+            await dbRun('DELETE FROM pvp_live_invites WHERE invite_code = ?', [code]);
+        },
+        async deleteInviteRoomForHost(userId) {
+            const id = String(userId || '').trim();
+            if (!id) return;
+            await dbRun('DELETE FROM pvp_live_invites WHERE host_user_id = ?', [id]);
+        }
+    };
+}
+
+module.exports = {
+    makeSqliteLivePvpPersistence
+};

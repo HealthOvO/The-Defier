@@ -145,7 +145,157 @@ const initDb = () => {
             db.run(`CREATE INDEX IF NOT EXISTS idx_pvp_ranks_score ON pvp_ranks(score DESC)`);
             db.run(`CREATE INDEX IF NOT EXISTS idx_pvp_ranks_realm ON pvp_ranks(realm)`);
             db.run(`CREATE INDEX IF NOT EXISTS idx_pvp_tickets_user_consumed ON pvp_match_tickets(user_id, consumed_at)`);
-            db.run(`CREATE INDEX IF NOT EXISTS idx_pvp_tickets_expires ON pvp_match_tickets(expires_at)`, (err) => {
+            db.run(`CREATE INDEX IF NOT EXISTS idx_pvp_tickets_expires ON pvp_match_tickets(expires_at)`);
+
+            // Live PVP authoritative snapshots. Waiting queue tickets are
+            // persisted separately from active/finished match state so a
+            // backend restart can recover a still-waiting player without
+            // replaying consumed matched tickets.
+            db.run(`CREATE TABLE IF NOT EXISTS pvp_live_queue_tickets (
+                queue_ticket TEXT PRIMARY KEY,
+                user_id TEXT NOT NULL UNIQUE,
+                display_name TEXT NOT NULL,
+                loadout_snapshot_json TEXT NOT NULL,
+                rating_score INTEGER NOT NULL DEFAULT 1000,
+                rating_bucket TEXT NOT NULL DEFAULT 'unrated',
+                rating_season_id TEXT NOT NULL DEFAULT 's1-genesis',
+                rating_provisional INTEGER NOT NULL DEFAULT 1,
+                created_at INTEGER NOT NULL,
+                FOREIGN KEY(user_id) REFERENCES users(id)
+            )`, (err) => {
+                if (err) fail(err);
+            });
+            [
+                `ALTER TABLE pvp_live_queue_tickets ADD COLUMN rating_score INTEGER NOT NULL DEFAULT 1000`,
+                `ALTER TABLE pvp_live_queue_tickets ADD COLUMN rating_bucket TEXT NOT NULL DEFAULT 'unrated'`,
+                `ALTER TABLE pvp_live_queue_tickets ADD COLUMN rating_season_id TEXT NOT NULL DEFAULT 's1-genesis'`,
+                `ALTER TABLE pvp_live_queue_tickets ADD COLUMN rating_provisional INTEGER NOT NULL DEFAULT 1`
+            ].forEach((sql) => {
+                db.run(sql, (err) => {
+                    if (err && !/duplicate column/i.test(String(err.message || ''))) {
+                        fail(err);
+                    }
+                });
+            });
+            db.run(`CREATE INDEX IF NOT EXISTS idx_pvp_live_queue_created ON pvp_live_queue_tickets(created_at)`, (err) => {
+                if (err) fail(err);
+            });
+            db.run(`CREATE INDEX IF NOT EXISTS idx_pvp_live_queue_rating ON pvp_live_queue_tickets(rating_score, created_at)`, (err) => {
+                if (err) fail(err);
+            });
+            db.run(`CREATE TABLE IF NOT EXISTS pvp_live_matches (
+                match_id TEXT PRIMARY KEY,
+                status TEXT NOT NULL,
+                seat_a_user_id TEXT NOT NULL,
+                seat_b_user_id TEXT NOT NULL,
+                state_json TEXT NOT NULL,
+                connection_json TEXT NOT NULL DEFAULT '{}',
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL,
+                finished_at INTEGER NOT NULL DEFAULT 0
+            )`, (err) => {
+                if (err) fail(err);
+            });
+            db.run(`ALTER TABLE pvp_live_matches ADD COLUMN connection_json TEXT NOT NULL DEFAULT '{}'`, (err) => {
+                if (err && !/duplicate column/i.test(String(err.message || ''))) {
+                    fail(err);
+                }
+            });
+            db.run(`CREATE INDEX IF NOT EXISTS idx_pvp_live_matches_seat_a_status ON pvp_live_matches(seat_a_user_id, status, updated_at)`, (err) => {
+                if (err) fail(err);
+            });
+            db.run(`CREATE INDEX IF NOT EXISTS idx_pvp_live_matches_seat_b_status ON pvp_live_matches(seat_b_user_id, status, updated_at)`, (err) => {
+                if (err) fail(err);
+            });
+            db.run(`CREATE TABLE IF NOT EXISTS pvp_live_match_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                match_id TEXT NOT NULL,
+                event_id TEXT NOT NULL,
+                event_sequence INTEGER NOT NULL,
+                event_type TEXT NOT NULL,
+                acting_seat TEXT NOT NULL DEFAULT '',
+                visibility TEXT NOT NULL DEFAULT 'public',
+                public_data_json TEXT NOT NULL DEFAULT '{}',
+                event_json TEXT NOT NULL,
+                created_at INTEGER NOT NULL,
+                UNIQUE(match_id, event_id),
+                UNIQUE(match_id, event_sequence),
+                FOREIGN KEY(match_id) REFERENCES pvp_live_matches(match_id)
+            )`, (err) => {
+                if (err) fail(err);
+            });
+            db.run(`CREATE INDEX IF NOT EXISTS idx_pvp_live_match_events_match_sequence ON pvp_live_match_events(match_id, event_sequence)`, (err) => {
+                if (err) fail(err);
+            });
+            db.run(`CREATE INDEX IF NOT EXISTS idx_pvp_live_match_events_type_created ON pvp_live_match_events(event_type, created_at)`, (err) => {
+                if (err) fail(err);
+            });
+            db.run(`CREATE TABLE IF NOT EXISTS pvp_live_rematch_requests (
+                source_match_id TEXT PRIMARY KEY,
+                series_id TEXT NOT NULL,
+                players_json TEXT NOT NULL,
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL,
+                FOREIGN KEY(source_match_id) REFERENCES pvp_live_matches(match_id)
+            )`, (err) => {
+                if (err) fail(err);
+            });
+            db.run(`CREATE INDEX IF NOT EXISTS idx_pvp_live_rematch_updated ON pvp_live_rematch_requests(updated_at)`, (err) => {
+                if (err) fail(err);
+            });
+            db.run(`CREATE TABLE IF NOT EXISTS pvp_live_invites (
+                invite_code TEXT PRIMARY KEY,
+                host_user_id TEXT NOT NULL UNIQUE,
+                host_display_name TEXT NOT NULL,
+                host_loadout_snapshot_json TEXT NOT NULL,
+                target_user_id TEXT NOT NULL DEFAULT '',
+                target_user_name TEXT NOT NULL DEFAULT '',
+                created_at INTEGER NOT NULL,
+                FOREIGN KEY(host_user_id) REFERENCES users(id)
+            )`, (err) => {
+                if (err) fail(err);
+            });
+            db.run(`ALTER TABLE pvp_live_invites ADD COLUMN target_user_id TEXT NOT NULL DEFAULT ''`, (err) => {
+                if (err && !/duplicate column/i.test(String(err.message || ''))) {
+                    fail(err);
+                }
+            });
+            db.run(`ALTER TABLE pvp_live_invites ADD COLUMN target_user_name TEXT NOT NULL DEFAULT ''`, (err) => {
+                if (err && !/duplicate column/i.test(String(err.message || ''))) {
+                    fail(err);
+                }
+            });
+            db.run(`CREATE INDEX IF NOT EXISTS idx_pvp_live_invites_created ON pvp_live_invites(created_at)`, (err) => {
+                if (err) fail(err);
+            });
+            db.run(`CREATE INDEX IF NOT EXISTS idx_pvp_live_invites_target ON pvp_live_invites(target_user_id, created_at)`, (err) => {
+                if (err) fail(err);
+            });
+            db.run(`CREATE TABLE IF NOT EXISTS pvp_live_match_settlements (
+                match_id TEXT PRIMARY KEY,
+                winner_user_id TEXT NOT NULL,
+                loser_user_id TEXT NOT NULL,
+                winner_seat TEXT NOT NULL,
+                loser_seat TEXT NOT NULL,
+                finish_reason TEXT NOT NULL,
+                rating_delta_winner INTEGER NOT NULL,
+                rating_delta_loser INTEGER NOT NULL,
+                winner_score_after INTEGER NOT NULL,
+                loser_score_after INTEGER NOT NULL,
+                winner_coins_awarded INTEGER NOT NULL,
+                loser_coins_awarded INTEGER NOT NULL,
+                payload TEXT,
+                created_at INTEGER NOT NULL,
+                FOREIGN KEY(match_id) REFERENCES pvp_live_matches(match_id),
+                FOREIGN KEY(winner_user_id) REFERENCES users(id),
+                FOREIGN KEY(loser_user_id) REFERENCES users(id)
+            )`, (err) => {
+                if (err) fail(err);
+            });
+            db.run(`CREATE INDEX IF NOT EXISTS idx_pvp_live_settlements_winner ON pvp_live_match_settlements(winner_user_id, created_at)`, (err) => {
+                if (err) fail(err);
+            });
+            db.run(`CREATE INDEX IF NOT EXISTS idx_pvp_live_settlements_loser ON pvp_live_match_settlements(loser_user_id, created_at)`, (err) => {
                 if (err) fail(err);
                 else done();
             });

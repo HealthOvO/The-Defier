@@ -2,7 +2,7 @@
 
 ## 0. 文档定位
 
-本文是 `docs/designer_next_round_verdict_execution_v1.md` 的配套开发拆解文档。
+本文是 `docs/archive/implemented/designer_next_round_verdict_execution_v1.md` 的配套开发拆解文档。
 
 上一轮执行策划已经回答了：
 
