@@ -124,13 +124,79 @@ function waitForMessage(ws, predicate, label) {
   });
 }
 
+function expectNoMessage(ws, predicate, label, timeoutMs = 250) {
+  return new Promise((resolve, reject) => {
+    attachMessageQueue(ws);
+    const queuedIndex = ws.__defierMessageQueue.findIndex(predicate);
+    if (queuedIndex >= 0) {
+      const [message] = ws.__defierMessageQueue.splice(queuedIndex, 1);
+      reject(new Error(`unexpected ws message: ${label} ${JSON.stringify(message)}`));
+      return;
+    }
+    const timer = setTimeout(() => {
+      cleanup();
+      resolve();
+    }, timeoutMs);
+    function cleanup() {
+      clearTimeout(timer);
+      const waiters = ws.__defierWaiters || [];
+      const waiterIndex = waiters.findIndex(waiter => waiter.reject === rejectUnexpected);
+      if (waiterIndex >= 0) waiters.splice(waiterIndex, 1);
+    }
+    function rejectUnexpected(message) {
+      cleanup();
+      reject(new Error(`unexpected ws message: ${label} ${JSON.stringify(message)}`));
+    }
+    ws.__defierWaiters.push({
+      predicate,
+      resolve: rejectUnexpected,
+      reject: rejectUnexpected
+    });
+  });
+}
+
 function sendJson(ws, payload) {
   ws.send(JSON.stringify(payload));
+}
+
+function makeSharedLiveWsSignalStore() {
+  let lastSignalId = 0;
+  const signals = [];
+  return {
+    async getLiveWsLatestSignalId() {
+      return lastSignalId;
+    },
+    async appendLiveWsSignal(signal) {
+      const matchId = String(signal && signal.matchId || '').trim();
+      if (!matchId) return null;
+      lastSignalId += 1;
+      const row = {
+        signalId: lastSignalId,
+        id: lastSignalId,
+        matchId,
+        signalType: String(signal && signal.signalType || 'state_sync'),
+        stateVersion: Math.max(0, Math.floor(Number(signal && signal.stateVersion) || 0)),
+        reason: String(signal && signal.reason || ''),
+        sourceInstanceId: String(signal && signal.sourceInstanceId || ''),
+        createdAt: Date.now()
+      };
+      signals.push(row);
+      return row;
+    },
+    async loadLiveWsSignalsSince(signalId) {
+      const cursor = Math.max(0, Math.floor(Number(signalId) || 0));
+      return signals.filter(signal => signal.signalId > cursor);
+    },
+    getSignals() {
+      return signals.slice();
+    }
+  };
 }
 
 async function runSyncRequiredBroadcastCheck() {
   let authoritativeVersion = 10;
   const fakeMatchId = 'pvplm-ws-sync-required';
+  const signalStore = makeSharedLiveWsSignalStore();
   const fakeStore = {
     heartbeatIntervalMs: 1500,
     async getMatchForUser(userId, matchId) {
@@ -152,7 +218,10 @@ async function runSyncRequiredBroadcastCheck() {
     async submitIntent(userId, matchId, intent) {
       assert.equal(userId, 'ws-sync-a', 'WS sync_required broadcast should submit as the acting user');
       assert.equal(matchId, fakeMatchId, 'WS sync_required broadcast should submit the requested match');
-      assert.equal(intent.intentId, 'ws-sync-required-intent', 'WS sync_required broadcast should forward the intent payload');
+      assert.ok(
+        intent.intentId === 'ws-sync-required-intent' || intent.intentId === 'ws-sync-required-intent-repeat',
+        'WS sync_required broadcast should forward the intent payload',
+      );
       authoritativeVersion = 11;
       return {
         result: 'sync_required',
@@ -174,7 +243,11 @@ async function runSyncRequiredBroadcastCheck() {
   };
 
   const server = http.createServer();
-  attachLivePvpWebSocket(server, { livePvpStore: fakeStore });
+  attachLivePvpWebSocket(server, {
+    livePvpStore: fakeStore,
+    liveWsSignalStore: signalStore,
+    liveWsSignalPollIntervalMs: 25
+  });
   await listen(server);
   const wsBaseUrl = `ws://127.0.0.1:${server.address().port}`;
   const tokenA = generateToken({ id: 'ws-sync-a', username: 'ws-sync-a' });
@@ -212,6 +285,21 @@ async function runSyncRequiredBroadcastCheck() {
     assert.equal(syncToA.stateView?.currentSeat, intentResultA.stateView?.currentSeat, 'WS sync_required sender state_sync should match intent_result authoritative turn');
     const broadcastToB = await waitForMessage(socketB, message => message.type === 'state_sync' && message.matchId === fakeMatchId && message.stateView?.stateVersion === 11, 'sync_required broadcast state_sync B');
     assert.equal(broadcastToB.seatId, 'B', 'WS sync_required intent should broadcast authoritative sync to the opponent seat');
+
+    sendJson(socketA, {
+      type: 'intent',
+      matchId: fakeMatchId,
+      intent: {
+        intentId: 'ws-sync-required-intent-repeat',
+        intentType: 'play_card',
+        stateVersion: 9,
+        payload: { cardInstanceId: 'A-card-1', targetSeat: 'B' }
+      }
+    });
+    await waitForMessage(socketA, message => message.type === 'intent_result' && message.intentId === 'ws-sync-required-intent-repeat', 'sync_required repeat intent_result A');
+    await waitForMessage(socketA, message => message.type === 'state_sync' && message.matchId === fakeMatchId && message.stateView?.stateVersion === 11, 'sync_required repeat state_sync A');
+    const syncRequiredSignals = signalStore.getSignals().filter(signal => signal.reason === 'sync_required');
+    assert.equal(syncRequiredSignals.length, 1, 'WS sync_required fanout should throttle repeated same-version signals');
   } finally {
     if (socketA) socketA.close();
     if (socketB) socketB.close();
@@ -413,10 +501,215 @@ async function runCrossProcessHeartbeatStateCatchupCheck() {
   }
 }
 
+async function runJoinRaceSignalFanoutCheck() {
+  const fakeMatchId = 'pvplm-ws-join-race-signal';
+  const signalStore = makeSharedLiveWsSignalStore();
+  let authoritativeVersion = 40;
+  let signalInsertedDuringJoin = false;
+
+  const makeStateView = (userId) => {
+    const seatId = userId === 'ws-join-race-b' ? 'B' : 'A';
+    return {
+      matchId: fakeMatchId,
+      status: 'active',
+      stateVersion: authoritativeVersion,
+      currentSeat: authoritativeVersion >= 41 ? 'B' : 'A',
+      self: { seatId, hand: [] },
+      opponent: { seatId: seatId === 'A' ? 'B' : 'A', handCount: 3 }
+    };
+  };
+
+  const fakeStore = {
+    heartbeatIntervalMs: 1500,
+    async getMatchForUser(userId, matchId) {
+      assert.equal(matchId, fakeMatchId, 'join race fanout should read the requested match');
+      return {
+        match: { matchId: fakeMatchId },
+        seatId: userId === 'ws-join-race-b' ? 'B' : 'A',
+        stateView: makeStateView(userId)
+      };
+    },
+    async loadMatchEvents(matchId) {
+      assert.equal(matchId, fakeMatchId, 'join race fanout should load events during join');
+      if (!signalInsertedDuringJoin) {
+        signalInsertedDuringJoin = true;
+        authoritativeVersion = 41;
+        await signalStore.appendLiveWsSignal({
+          matchId: fakeMatchId,
+          signalType: 'state_sync',
+          stateVersion: authoritativeVersion,
+          reason: 'match_saved',
+          sourceInstanceId: 'remote-process'
+        });
+      }
+      return [];
+    }
+  };
+
+  const server = http.createServer();
+  attachLivePvpWebSocket(server, {
+    livePvpStore: fakeStore,
+    liveWsSignalStore: signalStore,
+    liveWsSignalPollIntervalMs: 25
+  });
+  await listen(server);
+  const wsBaseUrl = `ws://127.0.0.1:${server.address().port}`;
+  const tokenB = generateToken({ id: 'ws-join-race-b', username: 'ws-join-race-b' });
+  let socketB = null;
+  try {
+    socketB = await openSocket(`${wsBaseUrl}/api/pvp/live/ws?token=${encodeURIComponent(tokenB)}`);
+    await waitForMessage(socketB, message => message.type === 'connected', 'join race connected B');
+
+    sendJson(socketB, { type: 'join_match', matchId: fakeMatchId, lastSeenRevision: 0 });
+    await waitForMessage(socketB, message => message.type === 'state_sync' && message.matchId === fakeMatchId && message.stateView?.stateVersion === 40, 'join race initial state_sync B');
+    await waitForMessage(socketB, message => message.type === 'events_replay' && message.matchId === fakeMatchId, 'join race events_replay B');
+    const raceFanoutB = await waitForMessage(socketB, message => message.type === 'state_sync' && message.matchId === fakeMatchId && message.stateView?.stateVersion === 41, 'join race concurrent signal state_sync B');
+    assert.equal(raceFanoutB.seatId, 'B', 'join_match cursor baseline should not skip a signal created during join');
+  } finally {
+    if (socketB) socketB.close();
+    await close(server);
+  }
+}
+
+async function runCrossProcessPassiveStateFanoutCheck() {
+  const fakeMatchId = 'pvplm-ws-cross-passive-fanout';
+  const signalStore = makeSharedLiveWsSignalStore();
+  let authoritativeVersion = 30;
+  let processBHeartbeatReads = 0;
+
+  const makeStateView = (userId) => {
+    const seatId = userId === 'ws-passive-a' ? 'A' : 'B';
+    return {
+      matchId: fakeMatchId,
+      status: 'active',
+      stateVersion: authoritativeVersion,
+      currentSeat: authoritativeVersion >= 31 ? 'B' : 'A',
+      recentEvents: authoritativeVersion >= 31
+        ? [{ eventType: 'card_played', sequence: 11 }]
+        : [{ eventType: 'battle_started', sequence: 10 }],
+      self: { seatId, hand: [] },
+      opponent: { seatId: seatId === 'A' ? 'B' : 'A', handCount: 3 }
+    };
+  };
+
+  const makeAccess = (userId) => ({
+    match: { matchId: fakeMatchId },
+    seatId: userId === 'ws-passive-a' ? 'A' : 'B',
+    stateView: makeStateView(userId)
+  });
+
+  const makeStore = (processLabel) => ({
+    heartbeatIntervalMs: 1500,
+    async getMatchForUser(userId, matchId) {
+      assert.equal(matchId, fakeMatchId, `${processLabel} passive fanout should read the requested match`);
+      return makeAccess(userId);
+    },
+    async recordHeartbeat() {
+      processBHeartbeatReads += 1;
+      throw new Error('passive cross-process fanout should not require a remote heartbeat');
+    },
+    async submitIntent(userId, matchId, intent, options = {}) {
+      assert.equal(processLabel, 'process-a', 'passive cross-process state advance should happen on process A');
+      assert.equal(userId, 'ws-passive-a', 'passive cross-process state advance should submit as player A');
+      assert.equal(matchId, fakeMatchId, 'passive cross-process state advance should submit to the shared match');
+      assert.equal(intent.intentId, 'ws-passive-advance', 'passive cross-process state advance should forward the intent payload');
+      assert.ok(options.liveWsSourceInstanceId, 'passive cross-process accepted save should receive the origin WS instance id');
+      authoritativeVersion = 31;
+      const liveWsSignal = await signalStore.appendLiveWsSignal({
+        matchId,
+        signalType: 'state_sync',
+        stateVersion: authoritativeVersion,
+        reason: 'match_saved',
+        sourceInstanceId: options.liveWsSourceInstanceId
+      });
+      return {
+        result: 'accepted',
+        reason: 'accepted',
+        events: [{ sequence: 11, eventType: 'card_played', visibility: 'public', actingSeat: 'A', payload: { cost: 1, remainingEnergy: 2 } }],
+        stateView: makeStateView(userId),
+        saveResult: {
+          saved: true,
+          skipped: false,
+          reason: 'saved',
+          liveWsSignalAppended: true,
+          liveWsSignalId: liveWsSignal && liveWsSignal.signalId
+        }
+      };
+    },
+    async loadMatchEvents() {
+      return [];
+    }
+  });
+
+  const serverA = http.createServer();
+  const serverB = http.createServer();
+  attachLivePvpWebSocket(serverA, {
+    livePvpStore: makeStore('process-a'),
+    liveWsSignalStore: signalStore,
+    liveWsSignalPollIntervalMs: 25
+  });
+  attachLivePvpWebSocket(serverB, {
+    livePvpStore: makeStore('process-b'),
+    liveWsSignalStore: signalStore,
+    liveWsSignalPollIntervalMs: 25
+  });
+  await listen(serverA);
+  await listen(serverB);
+  const wsBaseUrlA = `ws://127.0.0.1:${serverA.address().port}`;
+  const wsBaseUrlB = `ws://127.0.0.1:${serverB.address().port}`;
+  const tokenA = generateToken({ id: 'ws-passive-a', username: 'ws-passive-a' });
+  const tokenB = generateToken({ id: 'ws-passive-b', username: 'ws-passive-b' });
+  let socketA = null;
+  let socketB = null;
+  try {
+    socketA = await openSocket(`${wsBaseUrlA}/api/pvp/live/ws?token=${encodeURIComponent(tokenA)}`);
+    socketB = await openSocket(`${wsBaseUrlB}/api/pvp/live/ws?token=${encodeURIComponent(tokenB)}`);
+    await waitForMessage(socketA, message => message.type === 'connected', 'passive cross-process connected A');
+    await waitForMessage(socketB, message => message.type === 'connected', 'passive cross-process connected B');
+
+    sendJson(socketA, { type: 'join_match', matchId: fakeMatchId, lastSeenRevision: 0 });
+    await waitForMessage(socketA, message => message.type === 'state_sync' && message.matchId === fakeMatchId && message.stateView?.stateVersion === 30, 'passive cross-process initial state_sync A');
+    await waitForMessage(socketA, message => message.type === 'events_replay' && message.matchId === fakeMatchId, 'passive cross-process events_replay A');
+    sendJson(socketB, { type: 'join_match', matchId: fakeMatchId, lastSeenRevision: 0 });
+    await waitForMessage(socketB, message => message.type === 'state_sync' && message.matchId === fakeMatchId && message.stateView?.stateVersion === 30, 'passive cross-process initial state_sync B');
+    await waitForMessage(socketB, message => message.type === 'events_replay' && message.matchId === fakeMatchId, 'passive cross-process events_replay B');
+
+    sendJson(socketA, {
+      type: 'intent',
+      matchId: fakeMatchId,
+      intent: {
+        intentId: 'ws-passive-advance',
+        intentType: 'play_card',
+        stateVersion: 30,
+        payload: { cardInstanceId: 'A-card-1', targetSeat: 'B' }
+      }
+    });
+    await waitForMessage(socketA, message => message.type === 'intent_result' && message.intentId === 'ws-passive-advance' && message.stateView?.stateVersion === 31, 'passive cross-process intent_result A');
+    await waitForMessage(socketA, message => message.type === 'state_sync' && message.matchId === fakeMatchId && message.stateView?.stateVersion === 31, 'passive cross-process local state_sync A');
+    const passiveFanoutB = await waitForMessage(socketB, message => message.type === 'state_sync' && message.matchId === fakeMatchId && message.stateView?.stateVersion === 31, 'passive cross-process remote state_sync B');
+    assert.equal(passiveFanoutB.seatId, 'B', 'passive cross-process fanout should keep the remote seat scope');
+    assert.equal(passiveFanoutB.stateView?.currentSeat, 'B', 'passive cross-process fanout should read the remote authoritative state');
+    assert.equal(processBHeartbeatReads, 0, 'passive cross-process fanout should not rely on opponent heartbeat');
+    await expectNoMessage(
+      socketA,
+      message => message.type === 'state_sync' && message.matchId === fakeMatchId && message.stateView?.stateVersion === 31,
+      'passive cross-process origin should not echo its own persisted signal',
+      250
+    );
+  } finally {
+    if (socketA) socketA.close();
+    if (socketB) socketB.close();
+    await close(serverA);
+    await close(serverB);
+  }
+}
+
 (async () => {
   await runSyncRequiredBroadcastCheck();
   await runHeartbeatEventsReplayCheck();
   await runCrossProcessHeartbeatStateCatchupCheck();
+  await runJoinRaceSignalFanoutCheck();
+  await runCrossProcessPassiveStateFanoutCheck();
 
   pvpLiveRoutes.__livePvpStore.reset();
 

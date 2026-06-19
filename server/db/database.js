@@ -251,6 +251,21 @@ const initDb = () => {
             db.run(`CREATE INDEX IF NOT EXISTS idx_pvp_live_match_events_type_created ON pvp_live_match_events(event_type, created_at)`, (err) => {
                 if (err) fail(err);
             });
+            db.run(`CREATE TABLE IF NOT EXISTS pvp_live_state_signals (
+                signal_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                match_id TEXT NOT NULL,
+                signal_type TEXT NOT NULL DEFAULT 'state_sync',
+                state_version INTEGER NOT NULL DEFAULT 0,
+                reason TEXT NOT NULL DEFAULT 'match_saved',
+                source_instance_id TEXT NOT NULL DEFAULT '',
+                created_at INTEGER NOT NULL,
+                FOREIGN KEY(match_id) REFERENCES pvp_live_matches(match_id)
+            )`, (err) => {
+                if (err) fail(err);
+            });
+            db.run(`CREATE INDEX IF NOT EXISTS idx_pvp_live_state_signals_match_created ON pvp_live_state_signals(match_id, created_at)`, (err) => {
+                if (err) fail(err);
+            });
             db.run(`CREATE TABLE IF NOT EXISTS pvp_live_rematch_requests (
                 source_match_id TEXT PRIMARY KEY,
                 series_id TEXT NOT NULL,

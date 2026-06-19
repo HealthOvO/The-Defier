@@ -1199,9 +1199,9 @@ class LivePvpStore {
         };
     }
 
-    async saveMatch(match) {
+    async saveMatch(match, { liveWsSourceInstanceId = '' } = {}) {
         if (!this.persistence || typeof this.persistence.saveMatch !== 'function') return { saved: true, skipped: false, reason: 'no_persistence' };
-        const result = await this.persistence.saveMatch(match);
+        const result = await this.persistence.saveMatch(match, { liveWsSourceInstanceId });
         const saveResult = result && typeof result === 'object' ? result : { saved: true, skipped: false, reason: 'legacy_persistence' };
         if (saveResult.saved === false) return saveResult;
         if (typeof this.persistence.saveMatchEvents === 'function' && match && match.state && Array.isArray(match.state.events)) {
@@ -1446,7 +1446,7 @@ class LivePvpStore {
             && sourceOutcome.loserSeat === authoritativeOutcome.loserSeat;
     }
 
-    async compensateSettlementReportSaveLoss(match, saveResult) {
+    async compensateSettlementReportSaveLoss(match, saveResult, options = {}) {
         if (!this.isStaleStateSaveResult(saveResult)) return null;
         if (!match || !match.matchId || !match.seatsByUserId || !match.state || !match.state.settlementReport) return null;
         const [userId] = Object.keys(match.seatsByUserId);
@@ -1456,7 +1456,7 @@ class LivePvpStore {
         if (!this.canApplySettlementReportCompensation(match, authoritativeMatch)) return null;
         authoritativeMatch.state.settlementReport = JSON.parse(JSON.stringify(match.state.settlementReport));
         authoritativeMatch.updatedAt = this.now();
-        const compensationSaveResult = await this.saveMatch(authoritativeMatch);
+        const compensationSaveResult = await this.saveMatch(authoritativeMatch, options);
         if (compensationSaveResult && compensationSaveResult.saved === false) {
             return { completed: false, saveResult: compensationSaveResult, match: authoritativeMatch };
         }
@@ -1472,21 +1472,21 @@ class LivePvpStore {
         return status === 'finished' || status === 'invalidated';
     }
 
-    async completeFinishedMatch(match) {
+    async completeFinishedMatch(match, options = {}) {
         if (!match || !match.state || match.state.status !== 'finished') {
             return { completed: false, saveResult: null };
         }
         this.updateFriendlySeriesAfterFinish(match);
-        const initialSaveResult = await this.saveMatch(match);
+        const initialSaveResult = await this.saveMatch(match, options);
         if (initialSaveResult && initialSaveResult.saved === false) {
             return { completed: false, saveResult: initialSaveResult };
         }
         const settlementResult = await this.settleFinishedMatch(match);
         let settlementSaveResult = null;
         if (this.attachSettlementReport(match, settlementResult)) {
-            settlementSaveResult = await this.saveMatch(match);
+            settlementSaveResult = await this.saveMatch(match, options);
             if (settlementSaveResult && settlementSaveResult.saved === false) {
-                const compensation = await this.compensateSettlementReportSaveLoss(match, settlementSaveResult);
+                const compensation = await this.compensateSettlementReportSaveLoss(match, settlementSaveResult, options);
                 if (compensation && compensation.completed) return compensation;
                 return { completed: false, saveResult: settlementSaveResult };
             }
@@ -2390,7 +2390,7 @@ class LivePvpStore {
         };
     }
 
-    async submitIntent(userId, matchId, intentInput) {
+    async submitIntent(userId, matchId, intentInput, { liveWsSourceInstanceId = '' } = {}) {
         const matchAccess = await this.getMatchForUser(userId, matchId);
         if (!matchAccess) return null;
         const { match, seatId } = matchAccess;
@@ -2408,6 +2408,7 @@ class LivePvpStore {
             payload: intentInput && intentInput.payload ? intentInput.payload : {}
         };
         const reduced = reduceIntent(match.state, intent);
+        let acceptedSaveResult = null;
         if (reduced.result === 'accepted') {
             match.state = reduced.state;
             this.syncTurnTimingAfterAcceptedIntent(match, previousState, reduced.events);
@@ -2415,16 +2416,18 @@ class LivePvpStore {
                 match.updatedAt = this.now();
             }
             if (match.state.status === 'finished') {
-                const completion = await this.completeFinishedMatch(match);
+                const completion = await this.completeFinishedMatch(match, { liveWsSourceInstanceId });
                 if (this.isStaleStateSaveResult(completion && completion.saveResult)) {
                     const authoritative = await this.rehydrateAuthoritativeMatchForUser(userId, match.matchId);
                     return this.makeStaleStateSyncResult(authoritative, completion.saveResult);
                 }
+                acceptedSaveResult = completion && completion.saveResult || null;
                 if (completion && completion.match && completion.match.state) {
                     reduced.state = completion.match.state;
                 }
             } else {
-                const saveResult = await this.saveMatch(match);
+                const saveResult = await this.saveMatch(match, { liveWsSourceInstanceId });
+                acceptedSaveResult = saveResult;
                 if (this.isStaleStateSaveResult(saveResult)) {
                     const authoritative = await this.rehydrateAuthoritativeMatchForUser(userId, match.matchId);
                     return this.makeStaleStateSyncResult(authoritative, saveResult);
@@ -2434,6 +2437,9 @@ class LivePvpStore {
             await this.releaseIfTerminal(match);
         }
         reduced.stateView = this.projectMatchStateView(match, seatId);
+        if (acceptedSaveResult) {
+            reduced.saveResult = acceptedSaveResult;
+        }
         return reduced;
     }
 }

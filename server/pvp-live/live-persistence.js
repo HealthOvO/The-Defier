@@ -87,6 +87,58 @@ function getStateVersion(state) {
     return Math.max(0, Math.floor(Number(state && state.stateVersion) || 0));
 }
 
+function makeLiveWsSignalFromRow(row) {
+    if (!row || !row.match_id) return null;
+    const signalId = Math.max(0, Math.floor(Number(row.signal_id) || 0));
+    if (!signalId) return null;
+    return {
+        signalId,
+        id: signalId,
+        matchId: String(row.match_id),
+        signalType: String(row.signal_type || 'state_sync'),
+        stateVersion: Math.max(0, Math.floor(Number(row.state_version) || 0)),
+        reason: String(row.reason || 'match_saved'),
+        sourceInstanceId: String(row.source_instance_id || ''),
+        createdAt: Math.max(0, Math.floor(Number(row.created_at) || 0))
+    };
+}
+
+async function appendLiveWsSignalRow({
+    matchId,
+    signalType = 'state_sync',
+    stateVersion = 0,
+    reason = 'match_saved',
+    sourceInstanceId = '',
+    createdAt = Date.now()
+} = {}) {
+    const id = String(matchId || '').trim();
+    if (!id) return null;
+    const result = await dbRun(
+        `INSERT INTO pvp_live_state_signals
+            (match_id, signal_type, state_version, reason, source_instance_id, created_at)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [
+            id,
+            String(signalType || 'state_sync').trim().slice(0, 40) || 'state_sync',
+            Math.max(0, Math.floor(Number(stateVersion) || 0)),
+            String(reason || 'match_saved').trim().slice(0, 64) || 'match_saved',
+            String(sourceInstanceId || '').trim().slice(0, 96),
+            Math.max(0, Math.floor(Number(createdAt) || Date.now()))
+        ]
+    );
+    const signalId = Math.max(0, Math.floor(Number(result && result.lastID) || 0));
+    return {
+        signalId,
+        id: signalId,
+        matchId: id,
+        signalType: String(signalType || 'state_sync').trim().slice(0, 40) || 'state_sync',
+        stateVersion: Math.max(0, Math.floor(Number(stateVersion) || 0)),
+        reason: String(reason || 'match_saved').trim().slice(0, 64) || 'match_saved',
+        sourceInstanceId: String(sourceInstanceId || '').trim().slice(0, 96),
+        createdAt: Math.max(0, Math.floor(Number(createdAt) || Date.now()))
+    };
+}
+
 async function loadPersistedMatchStateSnapshot(matchId) {
     const id = String(matchId || '').trim();
     if (!id) return null;
@@ -497,7 +549,7 @@ function makeSqliteLivePvpPersistence() {
             });
             return rows.map(makeQueueEntryFromRow).filter(Boolean);
         },
-        async saveMatch(match) {
+        async saveMatch(match, { liveWsSourceInstanceId = '' } = {}) {
             if (!match || !match.state || !match.matchId || !match.state.seats) return { saved: false, skipped: true, reason: 'invalid_match' };
             const seatA = match.state.seats.A;
             const seatB = match.state.seats.B;
@@ -606,12 +658,26 @@ function makeSqliteLivePvpPersistence() {
                     persistedStateVersion: latestPersistedStateVersion || persistedStateVersion || stateVersion
                 };
             }
+            const shouldAppendLiveWsSignal = persistedStateVersion === null
+                || stateVersion > persistedStateVersion
+                || status === 'finished'
+                || status === 'invalidated';
+            const liveWsSignal = shouldAppendLiveWsSignal
+                ? await appendLiveWsSignalRow({
+                    matchId: match.matchId,
+                    stateVersion,
+                    reason: 'match_saved',
+                    sourceInstanceId: liveWsSourceInstanceId
+                })
+                : null;
             return {
                 saved: true,
                 skipped: false,
                 reason: 'saved',
                 stateVersion,
-                persistedStateVersion: Math.max(stateVersion, persistedStateVersion || 0)
+                persistedStateVersion: Math.max(stateVersion, persistedStateVersion || 0),
+                liveWsSignalId: liveWsSignal ? liveWsSignal.signalId : 0,
+                liveWsSignalAppended: !!liveWsSignal
             };
         },
         async saveMatchEvents(matchId, events = []) {
@@ -650,6 +716,26 @@ function makeSqliteLivePvpPersistence() {
                 [id]
             );
             return rows.map(makeEventFromRow).filter(Boolean);
+        },
+        async appendLiveWsSignal(signal = {}) {
+            return appendLiveWsSignalRow(signal);
+        },
+        async getLiveWsLatestSignalId() {
+            const row = await dbGet('SELECT COALESCE(MAX(signal_id), 0) AS signal_id FROM pvp_live_state_signals');
+            return Math.max(0, Math.floor(Number(row && row.signal_id) || 0));
+        },
+        async loadLiveWsSignalsSince(signalId, limit = 100) {
+            const cursor = Math.max(0, Math.floor(Number(signalId) || 0));
+            const safeLimit = Math.max(1, Math.min(500, Math.floor(Number(limit) || 100)));
+            const rows = await dbAll(
+                `SELECT *
+                 FROM pvp_live_state_signals
+                 WHERE signal_id > ?
+                 ORDER BY signal_id ASC
+                 LIMIT ?`,
+                [cursor, safeLimit]
+            );
+            return rows.map(makeLiveWsSignalFromRow).filter(Boolean);
         },
         async loadActiveMatchForUser(userId) {
             const id = String(userId || '').trim();

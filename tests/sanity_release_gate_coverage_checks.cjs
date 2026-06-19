@@ -41,6 +41,7 @@ const pvpLiveGoldenReplayRunner = read('server/pvp-live/golden-replay-runner.js'
 const pvpLiveReplayChecks = read('tests/sanity_pvp_live_replay_checks.cjs');
 const pvpLiveReplaySource = read('server/pvp-live/replay.js');
 const pvpLiveWsChecks = read('tests/sanity_pvp_live_ws_checks.cjs');
+const pvpLiveCrossProcessWsFanoutChecks = read('tests/sanity_pvp_live_cross_process_ws_fanout_checks.cjs');
 const pvpLiveWsSource = read('server/pvp-live/live-ws.js');
 const pvpLiveStore = read('server/pvp-live/live-store.js');
 const pvpLiveCrossProcessQueueChecks = read('tests/sanity_pvp_live_cross_process_queue_checks.cjs');
@@ -436,6 +437,7 @@ const layoutAudit = read('tests/browser_frontend_layout_audit.mjs');
   'node tests/sanity_pvp_live_golden_replay_checks.cjs',
   'node tests/sanity_pvp_live_replay_checks.cjs',
   'node tests/sanity_pvp_live_ws_checks.cjs',
+  'node tests/sanity_pvp_live_cross_process_ws_fanout_checks.cjs',
   'node tests/sanity_pvp_live_cross_process_queue_checks.cjs',
   'node tests/sanity_pvp_live_route_checks.cjs',
   'node tests/sanity_pvp_live_persistence_checks.cjs',
@@ -858,6 +860,20 @@ assert.ok(
   'livePvpStore.recordHeartbeat',
   'livePvpStore.submitIntent',
   "result.result === 'accepted' || (result.result === 'sync_required' && result.stateView)",
+  'liveWsSignalStore',
+  'startLiveWsSignalPolling',
+  'loadLiveWsSignalsSince',
+  'getLiveWsLatestSignalId',
+  'signalDedupWindowMs',
+  'shouldSkipDuplicateSignal',
+  'markClientSignalSeen',
+  'snapshotLiveWsSignalCursor',
+  'syncClientSignalCursor',
+  'broadcastStateForSignal',
+  'client.liveWsSignalCursor',
+  'appendLiveWsSignal(matchId, result',
+  'sourceInstanceId: instanceId',
+  'liveWsSourceInstanceId: instanceId',
   'jwt.verify(token, getJwtSecret())',
   "socket.write('HTTP/1.1 401 Unauthorized",
 ].forEach((needle) => {
@@ -897,11 +913,37 @@ assert.ok(
   'cross-process heartbeat should catch up opponent state from authoritative store',
   'cross-process heartbeat catch-up should keep the remote seat scope',
   'cross-process state advance should happen on process A',
+  'passive cross-process fanout should not rely on opponent heartbeat',
+  'passive cross-process fanout should keep the remote seat scope',
+  'passive cross-process fanout should read the remote authoritative state',
+  'passive cross-process remote state_sync B',
+  'passive cross-process accepted save should receive the origin WS instance id',
+  'passive cross-process origin should not echo its own persisted signal',
+  'WS sync_required fanout should throttle repeated same-version signals',
+  'join_match cursor baseline should not skip a signal created during join',
+  'makeSharedLiveWsSignalStore',
   'attachLivePvpWebSocket(serverA, { livePvpStore: makeStore',
 ].forEach((needle) => {
   assert.ok(
     pvpLiveWsChecks.includes(needle),
     `live PVP WS sanity should pin S6A realtime behavior marker: ${needle}`,
+  );
+});
+
+[
+  'shared DEFIER_DB_PATH first backend process should persist waiting player',
+  'shared DEFIER_DB_PATH second backend process should create a shared live match',
+  'shared DEFIER_DB_PATH should let two backend processes observe the same live match',
+  'different backend process should not need local submitIntent to observe state advance',
+  'remote process socket should receive authoritative state_sync after opponent intent',
+  'cross-process proactive WS fanout should not require heartbeat catch-up',
+  'origin process should not echo its own SQLite state_sync signal',
+  'PVP_LIVE_WS_SIGNAL_POLL_INTERVAL_MS',
+  'DEFIER_DB_PATH',
+].forEach((needle) => {
+  assert.ok(
+    pvpLiveCrossProcessWsFanoutChecks.includes(needle),
+    `live PVP cross-process WS fanout sanity should pin SQLite-backed fanout marker: ${needle}`,
   );
 });
 
@@ -1215,6 +1257,10 @@ assert.ok(
   'replay should recover public timeline from persisted event table when state events are corrupted',
   'event table replay recovery should include battle_started',
   'event table replay recovery should include match_finished',
+  'SQLite live WS signal table should persist state_sync signals for state advances',
+  'SQLite live WS signal table should include the latest persisted state version',
+  'SQLite live WS signal cursor should load state_sync fanout signals by match id',
+  'SQLite live WS signal cursor should not replay already consumed signals',
   'SQLite queue pair claim should fail when either ticket is missing',
   'SQLite queue pair claim should not partially claim when either ticket is missing',
   'SQLite queue pair claim should keep the first ticket when the pair is incomplete',
@@ -1250,6 +1296,10 @@ assert.ok(
   'UNIQUE(match_id, event_id)',
   'UNIQUE(match_id, event_sequence)',
   'idx_pvp_live_match_events_match_sequence',
+  'CREATE TABLE IF NOT EXISTS pvp_live_state_signals',
+  'signal_id INTEGER PRIMARY KEY AUTOINCREMENT',
+  'source_instance_id TEXT NOT NULL DEFAULT',
+  'idx_pvp_live_state_signals_match_created',
 ].forEach((needle) => {
   assert.ok(
     pvpLiveDatabase.includes(needle),
@@ -1303,6 +1353,16 @@ assert.ok(
   'INSERT OR IGNORE INTO pvp_live_match_events',
   'async loadMatchEvents(matchId)',
   'ORDER BY event_sequence ASC',
+  'function makeLiveWsSignalFromRow(row)',
+  'async function appendLiveWsSignalRow',
+  'INSERT INTO pvp_live_state_signals',
+  'liveWsSignalAppended: !!liveWsSignal',
+  'async appendLiveWsSignal(signal = {})',
+  'async getLiveWsLatestSignalId()',
+  'async loadLiveWsSignalsSince(signalId, limit = 100)',
+  'FROM pvp_live_state_signals',
+  "async saveMatch(match, { liveWsSourceInstanceId = '' } = {})",
+  'sourceInstanceId: liveWsSourceInstanceId',
 ].forEach((needle) => {
   assert.ok(
     pvpLivePersistence.includes(needle),
@@ -1315,6 +1375,8 @@ assert.ok(
   "reason: 'legacy_persistence'",
   "saveResult.reason === 'conflicting_state_version'",
   'if (saveResult.saved === false) return saveResult',
+  "async saveMatch(match, { liveWsSourceInstanceId = '' } = {})",
+  'this.persistence.saveMatch(match, { liveWsSourceInstanceId })',
   'isStaleStateSaveResult(saveResult)',
   'evictMatchCache(matchId)',
   'this.evictMatchCache(requestedMatchId)',
@@ -1323,19 +1385,22 @@ assert.ok(
   'return authoritative ? { ...authoritative, saveResult } : null',
   "result: 'sync_required'",
   'this.makeStaleStateSyncResult(authoritative, saveResult)',
+  "async submitIntent(userId, matchId, intentInput, { liveWsSourceInstanceId = '' } = {})",
+  'this.completeFinishedMatch(match, { liveWsSourceInstanceId })',
+  'this.saveMatch(match, { liveWsSourceInstanceId })',
   'const authoritative = await this.rehydrateAuthoritativeMatchForUser(userId, activeMatchId)',
   'match = authoritative && authoritative.match || null',
   'getFinishedOutcome(state)',
-  'async compensateSettlementReportSaveLoss(match, saveResult)',
+  'async compensateSettlementReportSaveLoss(match, saveResult, options = {})',
   'this.canApplySettlementReportCompensation(match, authoritativeMatch)',
   '!sourceOutcome.finishReason || !sourceOutcome.winnerSeat',
   'authoritativeMatch.state.settlementReport = JSON.parse(JSON.stringify(match.state.settlementReport))',
-  'const compensationSaveResult = await this.saveMatch(authoritativeMatch)',
+  'const compensationSaveResult = await this.saveMatch(authoritativeMatch, options)',
   'reduced.state = completion.match.state',
-  'const initialSaveResult = await this.saveMatch(match)',
+  'const initialSaveResult = await this.saveMatch(match, options)',
   'return { completed: false, saveResult: initialSaveResult }',
-  'const compensation = await this.compensateSettlementReportSaveLoss(match, settlementSaveResult)',
-  'const completion = await this.completeFinishedMatch(match)',
+  'const compensation = await this.compensateSettlementReportSaveLoss(match, settlementSaveResult, options)',
+  'const completion = await this.completeFinishedMatch(match, { liveWsSourceInstanceId })',
   'this.isStaleStateSaveResult(completion && completion.saveResult)',
   'return { completed: true, saveResult: settlementSaveResult || initialSaveResult }',
   'const automationResult = await this.executeFirstTimeoutAutomation(match, loserSeat, elapsed)',

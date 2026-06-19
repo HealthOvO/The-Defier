@@ -1539,6 +1539,32 @@ async function readyBoth({ matchId, tokenA, tokenB, stateVersionA, prefix }) {
   const latestActiveState = JSON.parse(activeMatchRow.state_json);
   assert.equal(latestActiveState.stateVersion, stateVersionAfterIntent, 'active match row should contain latest state version before stale-save CAS check');
   assert.equal(Number(activeMatchRow.state_version), stateVersionAfterIntent, 'active match row should persist state_version beside state_json');
+  const liveWsSignalSummary = await dbGet(
+    `SELECT COUNT(*) AS signal_count, MAX(state_version) AS max_state_version
+     FROM pvp_live_state_signals
+     WHERE match_id = ? AND signal_type = 'state_sync'`,
+    [matchId],
+  );
+  assert.ok(
+    Number(liveWsSignalSummary?.signal_count || 0) >= 1,
+    'SQLite live WS signal table should persist state_sync signals for state advances',
+  );
+  assert.ok(
+    Number(liveWsSignalSummary?.max_state_version || 0) >= stateVersionAfterIntent,
+    'SQLite live WS signal table should include the latest persisted state version',
+  );
+  const signalPersistence = makeLivePvpPersistenceForTest();
+  const latestSignalId = await signalPersistence.getLiveWsLatestSignalId();
+  const loadedSignals = await signalPersistence.loadLiveWsSignalsSince(0);
+  assert.ok(
+    loadedSignals.some(signal => signal.matchId === matchId && signal.signalType === 'state_sync' && signal.stateVersion >= stateVersionAfterIntent),
+    'SQLite live WS signal cursor should load state_sync fanout signals by match id',
+  );
+  assert.deepEqual(
+    await signalPersistence.loadLiveWsSignalsSince(latestSignalId),
+    [],
+    'SQLite live WS signal cursor should not replay already consumed signals',
+  );
   const acceptedSaveResult = await makeLivePvpPersistenceForTest().saveMatch({
     matchId,
     createdAt: Number(activeMatchRow.created_at) || Date.now(),
