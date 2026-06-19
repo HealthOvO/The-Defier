@@ -42,6 +42,7 @@ const pvpLiveReplayChecks = read('tests/sanity_pvp_live_replay_checks.cjs');
 const pvpLiveReplaySource = read('server/pvp-live/replay.js');
 const pvpLiveWsChecks = read('tests/sanity_pvp_live_ws_checks.cjs');
 const pvpLiveWsSource = read('server/pvp-live/live-ws.js');
+const pvpLiveStore = read('server/pvp-live/live-store.js');
 const pvpLiveCrossProcessQueueChecks = read('tests/sanity_pvp_live_cross_process_queue_checks.cjs');
 const serverApp = read('server/app.js');
 const pvpLiveRouteChecks = read('tests/sanity_pvp_live_route_checks.cjs');
@@ -1074,6 +1075,19 @@ assert.ok(
   'restarted active match should take precedence over any stale waiting row',
   'restarted current match should keep latest state version',
   'active match row should persist state_version beside state_json',
+  'store saveMatch should surface skipped stale persistence writes',
+  'store saveMatch should mark skipped stale persistence writes',
+  'store saveMatch should keep stale_state_version reason',
+  'store saveMatch should not append events when match state persistence is skipped',
+  'persistence saveMatch should report accepted active snapshots as saved',
+  'persistence saveMatch should not mark accepted active snapshots as skipped',
+  'persistence accepted save result should expose saved reason',
+  'persistence saveMatch should report stale lower-version saves as skipped',
+  'persistence stale save result should mark skipped true',
+  'persistence stale save result should expose a stable stale_state_version reason',
+  'migrated stale lower-version saves should report skipped',
+  'migrated stale save result should mark skipped true',
+  'migrated stale save result should expose stale_state_version',
   'persistence CAS should reject stale active match saves with lower stateVersion',
   'persistence CAS should keep the latest combat state when a stale process saves later',
   'persistence CAS should derive existing revision from state_json for migrated rows',
@@ -1140,6 +1154,13 @@ assert.ok(
 });
 
 [
+  "return { saved: false, skipped: true, reason: 'invalid_match' }",
+  "return { saved: false, skipped: true, reason: 'invalid_seats' }",
+  "reason: 'stale_state_version'",
+  'skipped: true',
+  "saved: true",
+  "skipped: false",
+  "reason: 'saved'",
   'function getStateVersion(state)',
   'async function loadPersistedMatchStateVersion(matchId)',
   'loadPersistedMatchStateVersion(match.matchId)',
@@ -1160,6 +1181,18 @@ assert.ok(
   assert.ok(
     pvpLivePersistence.includes(needle),
     `live PVP persistence should pin append-only event stream marker: ${needle}`,
+  );
+});
+
+[
+  "return { saved: true, skipped: false, reason: 'no_persistence' }",
+  "reason: 'legacy_persistence'",
+  'if (saveResult.saved === false) return saveResult',
+  'await this.persistence.saveMatchEvents(match.matchId, match.state.events)',
+].forEach((needle) => {
+  assert.ok(
+    pvpLiveStore.includes(needle),
+    `live PVP store should surface skipped persistence writes marker: ${needle}`,
   );
 });
 

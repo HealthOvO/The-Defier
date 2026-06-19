@@ -1159,11 +1159,14 @@ class LivePvpStore {
     }
 
     async saveMatch(match) {
-        if (!this.persistence || typeof this.persistence.saveMatch !== 'function') return;
-        await this.persistence.saveMatch(match);
+        if (!this.persistence || typeof this.persistence.saveMatch !== 'function') return { saved: true, skipped: false, reason: 'no_persistence' };
+        const result = await this.persistence.saveMatch(match);
+        const saveResult = result && typeof result === 'object' ? result : { saved: true, skipped: false, reason: 'legacy_persistence' };
+        if (saveResult.saved === false) return saveResult;
         if (typeof this.persistence.saveMatchEvents === 'function' && match && match.state && Array.isArray(match.state.events)) {
             await this.persistence.saveMatchEvents(match.matchId, match.state.events);
         }
+        return saveResult;
     }
 
     async loadMatchEvents(matchId) {

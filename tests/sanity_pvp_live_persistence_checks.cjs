@@ -5,6 +5,7 @@ const path = require('node:path');
 const { spawn } = require('node:child_process');
 const sqlite3 = require('../server/node_modules/sqlite3').verbose();
 const { normalizeLoadoutSnapshot } = require('../server/pvp-live/loadout');
+const { createLivePvpStore } = require('../server/pvp-live/live-store');
 
 const ROOT_DIR = path.resolve(__dirname, '..');
 const PORT = Number(process.env.PVP_LIVE_PERSISTENCE_PORT || 9021);
@@ -276,6 +277,49 @@ async function readyBoth({ matchId, tokenA, tokenB, stateVersionA, prefix }) {
   removeDbFiles();
   // The second server below reuses the same DB path to prove restart recovery
   // is SQLite-backed, not just in-memory activeMatchByUserId state.
+  let skippedEventSaveCount = 0;
+  const skippedStore = createLivePvpStore({
+    persistence: {
+      async saveMatch() {
+        return { saved: false, skipped: true, reason: 'stale_state_version' };
+      },
+      async saveMatchEvents() {
+        skippedEventSaveCount += 1;
+      },
+    },
+  });
+  const skippedStoreSave = await skippedStore.saveMatch({
+    matchId: 'pvplm-stale-store-save',
+    createdAt: 1,
+    updatedAt: 2,
+    state: {
+      matchId: 'pvplm-stale-store-save',
+      stateVersion: 1,
+      status: 'active',
+      seats: {
+        A: { userId: 'store-stale-a' },
+        B: { userId: 'store-stale-b' },
+      },
+      events: [
+        {
+          matchId: 'pvplm-stale-store-save',
+          eventId: 'pvplm-stale-store-save-evt-1',
+          sequence: 1,
+          eventType: 'card_played',
+          payload: { cost: 1 },
+        },
+      ],
+    },
+    seatsByUserId: {
+      'store-stale-a': 'A',
+      'store-stale-b': 'B',
+    },
+  });
+  assert.equal(skippedStoreSave?.saved, false, 'store saveMatch should surface skipped stale persistence writes');
+  assert.equal(skippedStoreSave?.skipped, true, 'store saveMatch should mark skipped stale persistence writes');
+  assert.equal(skippedStoreSave?.reason, 'stale_state_version', 'store saveMatch should keep stale_state_version reason');
+  assert.equal(skippedEventSaveCount, 0, 'store saveMatch should not append events when match state persistence is skipped');
+
   let userA;
   let userB;
   let matchId;
@@ -577,12 +621,26 @@ async function readyBoth({ matchId, tokenA, tokenB, stateVersionA, prefix }) {
   const latestActiveState = JSON.parse(activeMatchRow.state_json);
   assert.equal(latestActiveState.stateVersion, stateVersionAfterIntent, 'active match row should contain latest state version before stale-save CAS check');
   assert.equal(Number(activeMatchRow.state_version), stateVersionAfterIntent, 'active match row should persist state_version beside state_json');
+  const acceptedSaveResult = await makeLivePvpPersistenceForTest().saveMatch({
+    matchId,
+    createdAt: Number(activeMatchRow.created_at) || Date.now(),
+    updatedAt: Date.now(),
+    state: latestActiveState,
+    connection: {},
+    seatsByUserId: {
+      [userA.userId]: 'A',
+      [userB.userId]: 'B',
+    },
+  });
+  assert.equal(acceptedSaveResult?.saved, true, 'persistence saveMatch should report accepted active snapshots as saved');
+  assert.equal(acceptedSaveResult?.skipped, false, 'persistence saveMatch should not mark accepted active snapshots as skipped');
+  assert.equal(acceptedSaveResult?.reason, 'saved', 'persistence accepted save result should expose saved reason');
   const staleActiveState = JSON.parse(JSON.stringify(latestActiveState));
   staleActiveState.stateVersion = Math.max(0, latestActiveState.stateVersion - 1);
   if (staleActiveState.seats && staleActiveState.seats.B) {
     staleActiveState.seats.B.hp = Math.min(50, opponentHpAfterIntent + 1);
   }
-  await makeLivePvpPersistenceForTest().saveMatch({
+  const staleSaveResult = await makeLivePvpPersistenceForTest().saveMatch({
     matchId,
     createdAt: Number(activeMatchRow.created_at) || Date.now(),
     updatedAt: Date.now() + 1,
@@ -593,6 +651,9 @@ async function readyBoth({ matchId, tokenA, tokenB, stateVersionA, prefix }) {
       [userB.userId]: 'B',
     },
   });
+  assert.equal(staleSaveResult?.saved, false, 'persistence saveMatch should report stale lower-version saves as skipped');
+  assert.equal(staleSaveResult?.skipped, true, 'persistence stale save result should mark skipped true');
+  assert.equal(staleSaveResult?.reason, 'stale_state_version', 'persistence stale save result should expose a stable stale_state_version reason');
   const rowAfterStaleSave = await dbGet('SELECT state_json FROM pvp_live_matches WHERE match_id = ?', [matchId]);
   const stateAfterStaleSave = JSON.parse(rowAfterStaleSave.state_json);
   assert.equal(
@@ -609,7 +670,7 @@ async function readyBoth({ matchId, tokenA, tokenB, stateVersionA, prefix }) {
     'UPDATE pvp_live_matches SET state_version = 0, state_json = ? WHERE match_id = ?',
     [JSON.stringify(latestActiveState), matchId],
   );
-  await makeLivePvpPersistenceForTest().saveMatch({
+  const migratedStaleSaveResult = await makeLivePvpPersistenceForTest().saveMatch({
     matchId,
     createdAt: Number(activeMatchRow.created_at) || Date.now(),
     updatedAt: Date.now() + 2,
@@ -620,6 +681,9 @@ async function readyBoth({ matchId, tokenA, tokenB, stateVersionA, prefix }) {
       [userB.userId]: 'B',
     },
   });
+  assert.equal(migratedStaleSaveResult?.saved, false, 'migrated stale lower-version saves should report skipped');
+  assert.equal(migratedStaleSaveResult?.skipped, true, 'migrated stale save result should mark skipped true');
+  assert.equal(migratedStaleSaveResult?.reason, 'stale_state_version', 'migrated stale save result should expose stale_state_version');
   const migratedRowAfterStaleSave = await dbGet('SELECT state_json FROM pvp_live_matches WHERE match_id = ?', [matchId]);
   const migratedStateAfterStaleSave = JSON.parse(migratedRowAfterStaleSave.state_json);
   assert.equal(

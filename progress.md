@@ -1,5 +1,20 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-20: V10-S8G live PVP stale save 写输合同
+  - 本轮完成
+    - `server/pvp-live/live-persistence.js` 的 `saveMatch()` 不再只静默跳过低版本 stale save；现在返回 `{ saved: false, skipped: true, reason: 'stale_state_version' }`，成功保存返回 `{ saved: true, skipped: false, reason: 'saved' }`。
+    - `server/pvp-live/live-store.js` 的 `saveMatch()` 透传 persistence 保存结果；当 match state 持久化被跳过时，不再继续调用 `saveMatchEvents()`，避免旧状态写输后还把旧事件追加到事件表。
+    - `tests/sanity_pvp_live_persistence_checks.cjs` 新增 store 层写输合同断言：fake persistence 返回 skipped 时，store 必须 surface `stale_state_version`，并且事件保存计数保持 0。
+    - 同一 persistence 测试补正向合同：同版本权威 active snapshot 直接保存时必须返回 `saved=true / skipped=false / reason=saved`；迁移 stale 分支仍必须返回 skipped。
+    - `tests/sanity_release_gate_coverage_checks.cjs` 固定 saved/skipped 合同、store 透传和跳过事件保存 marker，防止后续退回静默 skip。
+  - 已验证
+    - 红测：`node tests/sanity_pvp_live_persistence_checks.cjs` 在 store 透传实现撤回后失败于 `store saveMatch should surface skipped stale persistence writes`。
+    - 红测：`node tests/sanity_pvp_live_persistence_checks.cjs` 在 persistence 返回合同实现前失败于 `persistence saveMatch should report stale lower-version saves as skipped`。
+    - 绿测：`node tests/sanity_pvp_live_persistence_checks.cjs`
+    - `node tests/sanity_release_gate_coverage_checks.cjs`
+  - 当前结论
+    - live PVP 现在不只是 DB 层挡住低版本晚写，也能把写输原因交还给 store，并避免 stale state 的事件流继续追加。这为下一步 heartbeat / intent 写输后的权威 rehydrate 提供稳定接口。该切片仍不是完整 active match CAS：同版本双写、写输后 route 级 authoritative rehydrate、DB 原子撮合 / 并发 claim 防重、跨进程 WS fanout、生产 smoke 和线上部署仍未封板。
+
 - 2026-06-20: V10-S8F live PVP active match 低版本晚写保护
   - 本轮完成
     - `server/db/database.js` 为 `pvp_live_matches` 增加 `state_version INTEGER NOT NULL DEFAULT 0`，让 active match 的权威 revision 不再只藏在 `state_json` 里。

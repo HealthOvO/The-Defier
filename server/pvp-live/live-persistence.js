@@ -431,14 +431,22 @@ function makeSqliteLivePvpPersistence() {
             return rows.map(makeQueueEntryFromRow).filter(Boolean);
         },
         async saveMatch(match) {
-            if (!match || !match.state || !match.matchId || !match.state.seats) return;
+            if (!match || !match.state || !match.matchId || !match.state.seats) return { saved: false, skipped: true, reason: 'invalid_match' };
             const seatA = match.state.seats.A;
             const seatB = match.state.seats.B;
-            if (!seatA || !seatB || !seatA.userId || !seatB.userId) return;
+            if (!seatA || !seatB || !seatA.userId || !seatB.userId) return { saved: false, skipped: true, reason: 'invalid_seats' };
             const status = String(match.state.status || 'active');
             const stateVersion = getStateVersion(match.state);
             const persistedStateVersion = await loadPersistedMatchStateVersion(match.matchId);
-            if (persistedStateVersion !== null && stateVersion < persistedStateVersion) return;
+            if (persistedStateVersion !== null && stateVersion < persistedStateVersion) {
+                return {
+                    saved: false,
+                    skipped: true,
+                    reason: 'stale_state_version',
+                    stateVersion,
+                    persistedStateVersion
+                };
+            }
             const now = Math.max(0, Math.floor(Number(match.updatedAt) || Date.now()));
             const createdAt = Math.max(0, Math.floor(Number(match.createdAt) || now));
             const finishedAt = status === 'finished' || status === 'invalidated' ? now : 0;
@@ -469,6 +477,13 @@ function makeSqliteLivePvpPersistence() {
                     finishedAt
                 ]
             );
+            return {
+                saved: true,
+                skipped: false,
+                reason: 'saved',
+                stateVersion,
+                persistedStateVersion: Math.max(stateVersion, persistedStateVersion || 0)
+            };
         },
         async saveMatchEvents(matchId, events = []) {
             const id = String(matchId || '').trim();
