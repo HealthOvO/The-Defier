@@ -768,7 +768,9 @@ V10 排位的胜负必须由服务端决定。
 - 事件日志可以在服务端保存完整信息，但发给玩家、回放、分享和审计时必须按视角脱敏。
 - 随机结果可以记录，随机种子和未来牌库顺序不能进入任何玩家视图。
 
-当前 S5B 最小实现已把 `pvp_live_match_events` 落成 append-only SQLite 事件表：服务端保存 match 时幂等补写事件流，replay API 优先从事件表恢复公开时间线，旧局缺少事件表记录时才回退 `state.events`。终局 replay 只允许使用连续 sequence 覆盖且包含 `match_finished` / `match_invalidated` 的完整事件源；如果事件表和 `state.events` 都不完整，API 必须拒绝生成回放，而不是返回截断时间线。这一步只解决回放 / 争议 / missed-event 的事实源基础，不等同于 WebSocket 推送、多实例共享队列、正式赛季入口或生产 smoke 已完成。
+当前 S5B 最小实现已把 `pvp_live_match_events` 落成 append-only SQLite 事件表：服务端保存 match 时幂等补写事件流，replay API 优先从事件表恢复公开时间线，旧局缺少事件表记录时才回退 `state.events`。终局 replay 只允许使用连续 sequence 覆盖且包含 `match_finished` / `match_invalidated` 的完整事件源；如果事件表和 `state.events` 都不完整，API 必须拒绝生成回放，而不是返回截断时间线。这一步只解决回放 / 争议 / missed-event 的事实源基础，不等同于多实例共享队列、正式赛季入口或生产 smoke 已完成。
+
+当前 S6A 最小实现已把单进程 WebSocket 推送接到上述事件真源：`join_match` 会先返回 seat-scoped `state_sync`，再按 `lastSeenRevision` 补发公开 `events_replay`；`heartbeat` 返回 `presence`，`intent` 返回 `intent_result` 并触发双方最新 StateView 广播。它仍是本机 / 单进程权威同步闭环，不等同于跨进程房间、共享队列、灰度监控或线上部署完成。
 
 回放和争议留存周期：
 

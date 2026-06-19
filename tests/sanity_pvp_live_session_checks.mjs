@@ -90,7 +90,7 @@ const liveService = {
         stateView: {
           matchId,
           status: 'active',
-          stateVersion: 4,
+          stateVersion: 8,
           currentSeat: 'B',
           self: { seatId: 'A', hand: [] },
           opponent: { seatId: 'B', handCount: 2 }
@@ -99,6 +99,7 @@ const liveService = {
     }
     const isSurrender = intent && intent.intentType === 'surrender';
     const isSetupIntent = intent && (intent.intentType === 'ready' || intent.intentType === 'mulligan');
+    const nextVersion = isSurrender ? 9 : isSetupIntent ? 3 : 7;
     return {
       success: true,
       result: 'accepted',
@@ -106,7 +107,7 @@ const liveService = {
       stateView: {
         matchId,
         status: isSurrender ? 'finished' : isSetupIntent ? 'setup' : 'active',
-        stateVersion: 3,
+        stateVersion: nextVersion,
         currentSeat: 'B',
         self: { seatId: 'A', hand: [] },
         opponent: { seatId: 'B', handCount: 3 }
@@ -402,7 +403,7 @@ const submitted = await session.submitIntent({
   payload: { cardInstanceId: 'A-strike-1', targetSeat: 'B' }
 });
 assert.equal(submitted.phase, 'active', 'accepted intent should keep session active');
-assert.equal(submitted.stateView.stateVersion, 3, 'accepted intent should update state view');
+assert.equal(submitted.stateView.stateVersion, 7, 'accepted intent should update state view');
 assert.deepEqual(submitted.lastEvents, [{ eventType: 'card_played' }], 'accepted intent should store last public events');
 assert.deepEqual(calls.at(-1).intent, {
   intentId: 'session-intent-1',
@@ -420,13 +421,13 @@ const syncRequired = await session.submitIntent({
 assert.equal(syncRequired.phase, 'sync_required', 'sync_required should move session into sync_required phase');
 assert.equal(syncRequired.lastError.reason, 'stale_state', 'sync_required should keep authoritative reject reason');
 assert.deepEqual(syncRequired.lastEvents, [{ eventType: 'sync_required' }], 'sync_required should keep sync events');
-assert.equal(syncRequired.stateView.stateVersion, 4, 'sync_required should retain latest authoritative state view');
+assert.equal(syncRequired.stateView.stateVersion, 8, 'sync_required should retain latest authoritative state view');
 
 const surrendered = await session.surrender({ intentId: 'session-surrender-1' });
 assert.equal(surrendered.phase, 'finished', 'surrender should move session into finished phase');
 assert.equal(calls.at(-1).method, 'submitIntent', 'surrender should submit a live intent');
 assert.equal(calls.at(-1).intent.intentType, 'surrender', 'surrender should use surrender intent type');
-assert.equal(calls.at(-1).intent.stateVersion, 4, 'surrender should use latest state version');
+assert.equal(calls.at(-1).intent.stateVersion, 8, 'surrender should use latest state version');
 
 const noTicketSession = createPvpLiveSession({ liveService });
 const noTicket = await noTicketSession.pollQueue();
@@ -1111,6 +1112,269 @@ const scopedUserAReader = createPvpLiveSession({
 const scopedUserAState = await scopedUserAReader.resumeCurrentMatch();
 assert.equal(scopedUserAState.phase, 'finished', 'same logged-in user should restore scoped terminal review');
 assert.deepEqual(scopedUserACalls, ['getCurrentMatch', 'getMatch:pvplm-user-a-review'], 'same logged-in user should use scoped stored terminal match');
+
+const realtimeSentMessages = [];
+let realtimeHandlers = null;
+const realtimeSession = createPvpLiveSession({
+  liveService: {
+    connectRealtime: (handlers) => {
+      realtimeHandlers = handlers;
+      return {
+        send: (payload) => {
+          realtimeSentMessages.push(payload);
+          return true;
+        },
+        close: () => {
+          realtimeSentMessages.push({ type: 'closed' });
+          return true;
+        }
+      };
+    }
+  },
+  now: () => 1781870000000
+});
+assert.equal(typeof realtimeSession.connectRealtime, 'function', 'live session should expose connectRealtime');
+assert.equal(typeof realtimeSession.joinRealtimeMatch, 'function', 'live session should expose joinRealtimeMatch');
+assert.equal(typeof realtimeSession.submitRealtimeIntent, 'function', 'live session should expose submitRealtimeIntent');
+assert.equal(typeof realtimeSession.heartbeatRealtime, 'function', 'live session should expose heartbeatRealtime');
+assert.equal(typeof realtimeSession.disconnectRealtime, 'function', 'live session should expose disconnectRealtime');
+const realtimeInitial = realtimeSession.connectRealtime();
+assert.equal(realtimeInitial.realtimeStatus, 'connecting', 'connectRealtime should mark realtime connecting');
+assert.ok(realtimeHandlers && typeof realtimeHandlers.onMessage === 'function', 'connectRealtime should register message handler');
+realtimeHandlers.onMessage({
+  type: 'connected',
+  connectionId: 'ws-session-1',
+  connectionReport: { heartbeatIntervalMs: 1200 }
+});
+assert.equal(realtimeSession.getState().realtimeStatus, 'connected', 'connected WS message should mark realtime connected');
+assert.equal(realtimeSession.getState().lastRealtimeConnectionId, 'ws-session-1', 'connected WS message should retain connection id');
+
+realtimeHandlers.onMessage({
+  type: 'state_sync',
+  matchId: 'pvplm-ws-session',
+  seatId: 'A',
+  stateView: {
+    matchId: 'pvplm-ws-session',
+    status: 'active',
+    stateVersion: 8,
+    currentSeat: 'A',
+    recentEvents: [{ eventType: 'battle_started', sequence: 3 }],
+    self: { seatId: 'A', hand: [] },
+    opponent: { seatId: 'B', handCount: 3 }
+  }
+});
+assert.equal(realtimeSession.getState().phase, 'active', 'state_sync WS message should update live phase');
+assert.equal(realtimeSession.getState().matchId, 'pvplm-ws-session', 'state_sync WS message should retain match id');
+assert.equal(realtimeSession.getState().seatId, 'A', 'state_sync WS message should retain seat id');
+assert.equal(realtimeSession.getState().lastRealtimeSyncMatchId, 'pvplm-ws-session', 'state_sync WS message should record synchronized match id');
+assert.equal(realtimeSession.getState().lastRealtimeSyncAt, 1781870000000, 'state_sync WS message should record synchronization time');
+assert.equal(realtimeSession.getState().lastEvents[0].eventType, 'battle_started', 'state_sync WS message should refresh recent public events');
+
+realtimeHandlers.onMessage({
+  type: 'events_replay',
+  matchId: 'pvplm-ws-session',
+  fromRevision: 0,
+  events: [{ eventType: 'player_ready', sequence: 4 }]
+});
+assert.equal(realtimeSession.getState().lastEvents[0].eventType, 'player_ready', 'events_replay WS message should replace last events with missed public events');
+
+realtimeHandlers.onMessage({
+  type: 'presence',
+  matchId: 'pvplm-ws-session',
+  connectionReport: {
+    reportVersion: 'pvp-live-connection-v1',
+    viewer: { seatId: 'A', status: 'online' },
+    opponent: { seatId: 'B', status: 'grace' },
+    heartbeatIntervalMs: 1200
+  }
+});
+assert.equal(realtimeSession.getState().stateView.connectionReport.opponent.status, 'grace', 'presence WS message should update connection report');
+
+realtimeHandlers.onMessage({
+  type: 'intent_result',
+  matchId: 'pvplm-ws-session',
+  intentId: 'ws-intent-session',
+  result: 'accepted',
+  events: [{ eventType: 'card_played', sequence: 5 }],
+  stateView: {
+    matchId: 'pvplm-ws-session',
+    status: 'active',
+    stateVersion: 9,
+    currentSeat: 'B',
+    self: { seatId: 'A', hand: [] },
+    opponent: { seatId: 'B', handCount: 3 }
+  }
+});
+assert.equal(realtimeSession.getState().stateView.stateVersion, 9, 'intent_result WS message should update state view');
+assert.equal(realtimeSession.getState().lastEvents[0].eventType, 'card_played', 'intent_result WS message should retain public intent events');
+
+realtimeHandlers.onMessage({
+  type: 'state_sync',
+  matchId: 'pvplm-ws-session',
+  seatId: 'A',
+  stateView: {
+    matchId: 'pvplm-ws-session',
+    status: 'active',
+    stateVersion: 8,
+    currentSeat: 'A',
+    recentEvents: [{ eventType: 'stale_state_sync', sequence: 4 }],
+    self: { seatId: 'A', hand: [{ instanceId: 'stale-card' }] },
+    opponent: { seatId: 'B', handCount: 3 }
+  }
+});
+assert.equal(realtimeSession.getState().stateView.stateVersion, 9, 'stale state_sync WS message should not downgrade authoritative stateVersion');
+assert.equal(realtimeSession.getState().lastEvents[0].eventType, 'card_played', 'stale state_sync WS message should not downgrade public events');
+
+realtimeHandlers.onMessage({
+  type: 'intent_result',
+  matchId: 'pvplm-ws-session',
+  intentId: 'ws-intent-stale',
+  result: 'accepted',
+  events: [{ eventType: 'stale_intent_result', sequence: 4 }],
+  stateView: {
+    matchId: 'pvplm-ws-session',
+    status: 'active',
+    stateVersion: 7,
+    currentSeat: 'A',
+    self: { seatId: 'A', hand: [{ instanceId: 'stale-card-2' }] },
+    opponent: { seatId: 'B', handCount: 3 }
+  }
+});
+assert.equal(realtimeSession.getState().stateView.stateVersion, 9, 'stale intent_result WS message should not downgrade authoritative stateVersion');
+assert.equal(realtimeSession.getState().lastEvents[0].eventType, 'card_played', 'stale intent_result WS message should not downgrade public events');
+
+realtimeSession.joinRealtimeMatch('pvplm-ws-session', { lastSeenRevision: 4 });
+realtimeSession.heartbeatRealtime();
+realtimeSession.submitRealtimeIntent({
+  intentId: 'ws-intent-session-2',
+  intentType: 'end_turn',
+  stateVersion: 9,
+  payload: {}
+});
+assert.deepEqual(realtimeSentMessages.slice(0, 3), [
+  { type: 'join_match', matchId: 'pvplm-ws-session', lastSeenRevision: 4 },
+  { type: 'heartbeat', matchId: 'pvplm-ws-session' },
+  {
+    type: 'intent',
+    matchId: 'pvplm-ws-session',
+    intent: {
+      intentId: 'ws-intent-session-2',
+      intentType: 'end_turn',
+      stateVersion: 9,
+      payload: {}
+    }
+  }
+], 'live session realtime helpers should send stable WS message envelopes');
+realtimeSession.disconnectRealtime();
+assert.equal(realtimeSession.getState().realtimeStatus, 'closed', 'disconnectRealtime should mark realtime closed');
+
+const delayedRealtimeSent = [];
+let delayedRealtimeHandlers = null;
+let delayedRealtimeOpen = false;
+const delayedRealtimeSession = createPvpLiveSession({
+  liveService: {
+    connectRealtime: (handlers) => {
+      delayedRealtimeHandlers = handlers;
+      return {
+        send: (payload) => {
+          if (!delayedRealtimeOpen) return false;
+          delayedRealtimeSent.push(payload);
+          return true;
+        },
+        close: () => true
+      };
+    }
+  },
+  now: () => 1781870000000
+});
+delayedRealtimeSession.connectRealtime();
+delayedRealtimeSession.joinRealtimeMatch('pvplm-delayed-open', { lastSeenRevision: 6 });
+assert.equal(delayedRealtimeSent.length, 0, 'joinRealtimeMatch before socket open should not pretend to send');
+delayedRealtimeOpen = true;
+delayedRealtimeHandlers.onOpen();
+assert.deepEqual(delayedRealtimeSent[0], {
+  type: 'join_match',
+  matchId: 'pvplm-delayed-open',
+  lastSeenRevision: 6
+}, 'onOpen should replay pending join_match after the socket becomes writable');
+
+const staleHttpSession = createPvpLiveSession({
+  liveService: {
+    joinQueue: async () => ({
+      success: true,
+      status: 'matched',
+      matchId: 'pvplm-stale-http',
+      seatId: 'A',
+      stateView: {
+        matchId: 'pvplm-stale-http',
+        status: 'active',
+        stateVersion: 9,
+        currentSeat: 'B',
+        recentEvents: [{ eventType: 'fresh_http_anchor', sequence: 9 }],
+        self: { seatId: 'A', hand: [] },
+        opponent: { seatId: 'B', handCount: 2 }
+      }
+    }),
+    getMatch: async (matchId) => ({
+      success: true,
+      matchId,
+      seatId: 'A',
+      stateView: {
+        matchId,
+        status: 'active',
+        stateVersion: 8,
+        currentSeat: 'A',
+        recentEvents: [{ eventType: 'stale_http_refresh', sequence: 8 }],
+        self: { seatId: 'A', hand: [{ instanceId: 'old-refresh-card' }] },
+        opponent: { seatId: 'B', handCount: 3 }
+      }
+    }),
+    heartbeat: async (matchId) => ({
+      success: true,
+      matchId,
+      seatId: 'A',
+      stateView: {
+        matchId,
+        status: 'active',
+        stateVersion: 7,
+        currentSeat: 'A',
+        recentEvents: [{ eventType: 'stale_http_heartbeat', sequence: 7 }],
+        connectionReport: { reportVersion: 'pvp-live-connection-v1', heartbeatIntervalMs: 1000 },
+        self: { seatId: 'A', hand: [{ instanceId: 'old-heartbeat-card' }] },
+        opponent: { seatId: 'B', handCount: 3 }
+      }
+    }),
+    submitIntent: async (matchId) => ({
+      success: true,
+      result: 'accepted',
+      events: [{ eventType: 'stale_http_intent', sequence: 6 }],
+      stateView: {
+        matchId,
+        status: 'active',
+        stateVersion: 6,
+        currentSeat: 'A',
+        self: { seatId: 'A', hand: [{ instanceId: 'old-intent-card' }] },
+        opponent: { seatId: 'B', handCount: 3 }
+      }
+    })
+  },
+  now: () => 1781870000000
+});
+await staleHttpSession.joinQueue({ displayName: '单调守卫' });
+assert.equal(staleHttpSession.getState().stateView.stateVersion, 9, 'stale HTTP guard test should start from fresh version 9');
+await staleHttpSession.refreshMatch();
+assert.equal(staleHttpSession.getState().stateView.stateVersion, 9, 'stale HTTP refresh should not downgrade authoritative stateVersion');
+assert.equal(staleHttpSession.getState().lastEvents[0].eventType, 'fresh_http_anchor', 'stale HTTP refresh should not downgrade public events');
+await staleHttpSession.heartbeat();
+assert.equal(staleHttpSession.getState().stateView.stateVersion, 9, 'stale HTTP heartbeat should not downgrade authoritative stateVersion');
+await staleHttpSession.submitIntent({
+  intentId: 'stale-http-intent',
+  intentType: 'end_turn',
+  stateVersion: 9,
+  payload: {}
+});
+assert.equal(staleHttpSession.getState().stateView.stateVersion, 9, 'stale HTTP intent result should not downgrade authoritative stateVersion');
+assert.equal(staleHttpSession.getState().lastEvents[0].eventType, 'fresh_http_anchor', 'stale HTTP intent result should not downgrade public events');
 
 assert.ok(!calls.some(call => call.method === 'reportMatchResult' || call.method === 'findOpponent'), 'live session should not use legacy PVP paths');
 

@@ -12,6 +12,11 @@ const DEFAULT_STATE = Object.freeze({
   lastReplay: null,
   lastEvents: [],
   lastError: null,
+  realtimeStatus: 'idle',
+  lastRealtimeConnectionId: '',
+  lastRealtimeSyncMatchId: '',
+  lastRealtimeSyncAt: 0,
+  realtimeReport: null,
   updatedAt: 0
 });
 const LAST_TERMINAL_MATCH_STORAGE_KEY = 'theDefierPvpLiveLastTerminalMatchV1';
@@ -151,8 +156,11 @@ export function createPvpLiveSession({
   liveService = getDefaultLiveService(),
   storage = getDefaultLiveStorage(),
   userScope = getDefaultLiveUserScope,
+  onChange = null,
   now = () => Date.now()
 } = {}) {
+  let realtimeHandle = null;
+  let pendingRealtimeJoin = null;
   let state = {
     ...DEFAULT_STATE,
     updatedAt: now()
@@ -164,7 +172,75 @@ export function createPvpLiveSession({
       ...patch,
       updatedAt: now()
     };
+    if (typeof onChange === 'function') {
+      try {
+        onChange(getState());
+      } catch (error) {
+        // UI listeners are best-effort; state ownership stays inside the session.
+      }
+    }
     return getState();
+  };
+
+  const getStateViewVersion = (stateView) => {
+    const value = Number(stateView && stateView.stateVersion);
+    return Number.isFinite(value) ? Math.max(0, Math.floor(value)) : null;
+  };
+
+  const getStateViewMatchId = (stateView) => String(stateView && stateView.matchId || '').trim();
+
+  const getStateViewProgressRank = (stateView) => {
+    const status = String(stateView && stateView.status || '').trim();
+    if (status === 'finished' || status === 'invalidated') return 3;
+    if (status === 'active') return 2;
+    if (status === 'setup' || status === 'matched') return 1;
+    return 0;
+  };
+
+  const isSameLiveMatch = (stateView) => {
+    const currentMatchId = String(state.matchId || getStateViewMatchId(state.stateView) || '').trim();
+    const nextMatchId = getStateViewMatchId(stateView);
+    if (!currentMatchId || !nextMatchId) return true;
+    return currentMatchId === nextMatchId;
+  };
+
+  const resolveAuthoritativeStateView = (incomingStateView) => {
+    if (!incomingStateView || typeof incomingStateView !== 'object') {
+      return { stateView: state.stateView, accepted: true };
+    }
+    const currentVersion = getStateViewVersion(state.stateView);
+    const incomingVersion = getStateViewVersion(incomingStateView);
+    const isLowerVersion = isSameLiveMatch(incomingStateView)
+      && currentVersion !== null
+      && incomingVersion !== null
+      && incomingVersion < currentVersion;
+    const movesMatchForward = getStateViewProgressRank(incomingStateView) > getStateViewProgressRank(state.stateView);
+    const isStale = isLowerVersion && !movesMatchForward;
+    return {
+      stateView: isStale ? state.stateView : incomingStateView,
+      accepted: !isStale
+    };
+  };
+
+  const getEventSequence = (event) => Math.max(0, Math.floor(Number(event && event.sequence) || 0));
+
+  const getMaxEventSequence = (events = []) => (Array.isArray(events) ? events : [])
+    .reduce((max, event) => Math.max(max, getEventSequence(event)), 0);
+
+  const resolveAuthoritativeEvents = (incomingEvents, incomingStateView = null, acceptedStateView = true) => {
+    if (!acceptedStateView) return Array.isArray(state.lastEvents) ? state.lastEvents : [];
+    const candidate = Array.isArray(incomingEvents)
+      ? incomingEvents.slice(-8)
+      : incomingStateView && Array.isArray(incomingStateView.recentEvents)
+        ? incomingStateView.recentEvents.slice(-8)
+        : null;
+    if (!candidate) return Array.isArray(state.lastEvents) ? state.lastEvents : [];
+    const currentMax = getMaxEventSequence(state.lastEvents);
+    const candidateMax = getMaxEventSequence(candidate);
+    if (isSameLiveMatch(incomingStateView) && currentMax > 0 && candidateMax > 0 && candidateMax < currentMax) {
+      return Array.isArray(state.lastEvents) ? state.lastEvents : [];
+    }
+    return candidate;
   };
 
   const getTerminalStorageKey = () => {
@@ -253,6 +329,173 @@ export function createPvpLiveSession({
     return await liveService[method](...args);
   };
 
+  function handleRealtimeMessage(message = {}) {
+    const type = String(message && message.type || '').trim();
+    if (type === 'connected') {
+      return publish({
+        realtimeStatus: 'connected',
+        lastRealtimeConnectionId: String(message.connectionId || ''),
+        realtimeReport: message.connectionReport && typeof message.connectionReport === 'object'
+          ? cloneData(message.connectionReport)
+          : null,
+        lastError: null
+      });
+    }
+    if (type === 'state_sync') {
+      const resolved = resolveAuthoritativeStateView(message.stateView || state.stateView);
+      const stateView = resolved.stateView;
+      const next = publish({
+        phase: normalizePhaseFromView(stateView, 'active'),
+        matchId: resolved.accepted ? String(message.matchId || state.matchId || stateView && stateView.matchId || '') : state.matchId,
+        seatId: resolved.accepted ? String(message.seatId || state.seatId || '') : state.seatId,
+        stateView,
+        waitingReport: null,
+        rematchReport: state.rematchReport || null,
+        realtimeStatus: state.realtimeStatus === 'idle' ? 'connected' : state.realtimeStatus,
+        lastRealtimeSyncMatchId: String(message.matchId || state.matchId || stateView && stateView.matchId || ''),
+        lastRealtimeSyncAt: now(),
+        lastError: null,
+        lastEvents: resolveAuthoritativeEvents(null, stateView, resolved.accepted)
+      });
+      rememberTerminalReviewMatch(next);
+      return next;
+    }
+    if (type === 'events_replay') {
+      return publish({
+        matchId: String(message.matchId || state.matchId || ''),
+        realtimeStatus: state.realtimeStatus === 'idle' ? 'connected' : state.realtimeStatus,
+        lastEvents: Array.isArray(message.events) ? message.events.slice(-8) : []
+      });
+    }
+    if (type === 'presence') {
+      const connectionReport = message.connectionReport && typeof message.connectionReport === 'object'
+        ? cloneData(message.connectionReport)
+        : null;
+      return publish({
+        matchId: String(message.matchId || state.matchId || ''),
+        seatId: String(message.seatId || state.seatId || ''),
+        realtimeStatus: state.realtimeStatus === 'idle' ? 'connected' : state.realtimeStatus,
+        stateView: state.stateView && connectionReport
+          ? { ...state.stateView, connectionReport }
+          : state.stateView,
+        lastError: null
+      });
+    }
+    if (type === 'intent_result') {
+      const resolved = resolveAuthoritativeStateView(message.stateView || state.stateView);
+      const stateView = resolved.stateView;
+      const result = String(message.result || '').trim();
+      const next = publish({
+        phase: resolved.accepted ? normalizePhaseFromView(stateView, 'active') : state.phase,
+        matchId: resolved.accepted ? String(message.matchId || state.matchId || stateView && stateView.matchId || '') : state.matchId,
+        stateView,
+        realtimeStatus: state.realtimeStatus === 'idle' ? 'connected' : state.realtimeStatus,
+        waitingReport: null,
+        rematchReport: state.rematchReport || null,
+        lastEvents: resolveAuthoritativeEvents(message.events, stateView, resolved.accepted),
+        lastError: result === 'accepted'
+          ? null
+          : { reason: message.reason || result || 'intent_result', message: message.message || '实时论道行动需要处理' }
+      });
+      rememberTerminalReviewMatch(next);
+      return next;
+    }
+    if (type === 'error') {
+      return publish({
+        realtimeStatus: state.realtimeStatus === 'idle' ? 'error' : state.realtimeStatus,
+        lastError: {
+          reason: message.reason || 'ws_error',
+          message: message.message || '实时论道 WS 异常'
+        }
+      });
+    }
+    return getState();
+  }
+
+  function connectRealtime() {
+    if (!liveService || typeof liveService.connectRealtime !== 'function') {
+      return publish({
+        realtimeStatus: 'unavailable',
+        lastError: { reason: 'live_ws_unavailable', message: '实时论道 WebSocket 未就绪' }
+      });
+    }
+    if (realtimeHandle) return getState();
+    realtimeHandle = liveService.connectRealtime({
+      onMessage: handleRealtimeMessage,
+      onOpen: () => {
+        publish({ realtimeStatus: 'connected', lastError: null });
+        if (pendingRealtimeJoin) {
+          sendRealtime({
+            type: 'join_match',
+            matchId: pendingRealtimeJoin.matchId,
+            lastSeenRevision: pendingRealtimeJoin.lastSeenRevision
+          });
+        }
+      },
+      onClose: () => {
+        realtimeHandle = null;
+        publish({ realtimeStatus: 'closed' });
+      },
+      onError: () => publish({
+        realtimeStatus: 'error',
+        lastError: { reason: 'live_ws_error', message: '实时论道 WebSocket 连接异常' }
+      })
+    });
+    if (!realtimeHandle) {
+      return publish({
+        realtimeStatus: 'unavailable',
+        lastError: { reason: 'live_ws_unavailable', message: '实时论道 WebSocket 未就绪' }
+      });
+    }
+    return publish({ realtimeStatus: 'connecting', lastError: null });
+  }
+
+  function sendRealtime(payload = {}) {
+    if (!realtimeHandle || typeof realtimeHandle.send !== 'function') {
+      return false;
+    }
+    return realtimeHandle.send(cloneData(payload));
+  }
+
+  function joinRealtimeMatch(matchId = '', { lastSeenRevision = 0 } = {}) {
+    const id = String(matchId || state.matchId || '').trim();
+    if (!id) return false;
+    pendingRealtimeJoin = {
+      matchId: id,
+      lastSeenRevision: Math.max(0, Math.floor(Number(lastSeenRevision) || 0))
+    };
+    return sendRealtime({
+      type: 'join_match',
+      matchId: pendingRealtimeJoin.matchId,
+      lastSeenRevision: pendingRealtimeJoin.lastSeenRevision
+    });
+  }
+
+  function heartbeatRealtime(matchId = '') {
+    const id = String(matchId || state.matchId || '').trim();
+    if (!id) return false;
+    return sendRealtime({ type: 'heartbeat', matchId: id });
+  }
+
+  function submitRealtimeIntent(intent = {}, matchId = '') {
+    const id = String(matchId || state.matchId || '').trim();
+    if (!id) return false;
+    return sendRealtime({
+      type: 'intent',
+      matchId: id,
+      intent: cloneData(intent || {})
+    });
+  }
+
+  function disconnectRealtime() {
+    if (realtimeHandle && typeof realtimeHandle.close === 'function') {
+      realtimeHandle.close();
+    }
+    realtimeHandle = null;
+    pendingRealtimeJoin = null;
+    return publish({ realtimeStatus: 'closed' });
+  }
+
   function getState() {
     return cloneData(state);
   }
@@ -283,6 +526,7 @@ export function createPvpLiveSession({
         waitingReport: null,
         inviteReport: null,
         rematchReport: null,
+        lastEvents: stateView && Array.isArray(stateView.recentEvents) ? stateView.recentEvents.slice(-8) : [],
         lastError: null
       });
     }
@@ -367,15 +611,17 @@ export function createPvpLiveSession({
       return fail(result && result.reason || 'match_refresh_failed', result && result.message || '实时论道战局读取失败');
     }
     const stateView = result.stateView || null;
+    const resolved = resolveAuthoritativeStateView(stateView);
+    const nextView = resolved.stateView;
     const next = publish({
-      phase: normalizePhaseFromView(stateView, 'active'),
-      matchId: result.matchId || state.matchId,
-      seatId: result.seatId || state.seatId,
-      stateView,
+      phase: resolved.accepted ? normalizePhaseFromView(nextView, 'active') : state.phase,
+      matchId: resolved.accepted ? result.matchId || state.matchId : state.matchId,
+      seatId: resolved.accepted ? result.seatId || state.seatId : state.seatId,
+      stateView: nextView,
       waitingReport: null,
       rematchReport: null,
       lastError: null,
-      lastEvents: stateView && Array.isArray(stateView.recentEvents) ? stateView.recentEvents.slice(-8) : []
+      lastEvents: resolveAuthoritativeEvents(null, nextView, resolved.accepted)
     });
     rememberTerminalReviewMatch(next);
     return next;
@@ -461,32 +707,37 @@ export function createPvpLiveSession({
       return fail(result && result.reason || 'intent_submit_failed', result && result.message || '实时论道行动提交失败');
     }
     if (result.result === 'sync_required') {
+      const resolved = resolveAuthoritativeStateView(result.stateView || state.stateView);
+      const nextView = resolved.stateView;
       return publish({
-      phase: 'sync_required',
-      stateView: result.stateView || state.stateView,
-      waitingReport: null,
-      rematchReport: state.rematchReport || null,
-      lastError: { reason: result.reason || 'sync_required', message: result.message || '需要同步权威状态' },
-        lastEvents: Array.isArray(result.events) ? result.events : []
+        phase: resolved.accepted ? 'sync_required' : state.phase,
+        stateView: nextView,
+        waitingReport: null,
+        rematchReport: state.rematchReport || null,
+        lastError: { reason: result.reason || 'sync_required', message: result.message || '需要同步权威状态' },
+        lastEvents: resolveAuthoritativeEvents(result.events, nextView, resolved.accepted)
       });
     }
     if (result.result === 'rejected') {
+      const resolved = resolveAuthoritativeStateView(result.stateView || state.stateView);
+      const nextView = resolved.stateView;
       return publish({
-        phase: normalizePhaseFromView(result.stateView || state.stateView, state.phase || 'active'),
-        stateView: result.stateView || state.stateView,
+        phase: resolved.accepted ? normalizePhaseFromView(nextView, state.phase || 'active') : state.phase,
+        stateView: nextView,
         waitingReport: null,
         rematchReport: state.rematchReport || null,
         lastError: { reason: result.reason || 'rejected', message: result.message || '行动被拒绝' },
-        lastEvents: Array.isArray(result.events) ? result.events : []
+        lastEvents: resolveAuthoritativeEvents(result.events, nextView, resolved.accepted)
       });
     }
-    const nextView = result.stateView || state.stateView;
+    const resolved = resolveAuthoritativeStateView(result.stateView || state.stateView);
+    const nextView = resolved.stateView;
     const next = publish({
-      phase: normalizePhaseFromView(nextView, 'active'),
+      phase: resolved.accepted ? normalizePhaseFromView(nextView, 'active') : state.phase,
       stateView: nextView,
       waitingReport: null,
-      rematchReport: nextView && nextView.friendlySeries ? nextView.friendlySeries : state.rematchReport || null,
-      lastEvents: Array.isArray(result.events) ? result.events : [],
+      rematchReport: resolved.accepted && nextView && nextView.friendlySeries ? nextView.friendlySeries : state.rematchReport || null,
+      lastEvents: resolveAuthoritativeEvents(result.events, nextView, resolved.accepted),
       lastError: null
     });
     rememberTerminalReviewMatch(next);
@@ -502,15 +753,17 @@ export function createPvpLiveSession({
       return fail(result && result.reason || 'heartbeat_failed', result && result.message || '实时论道心跳失败', state.phase);
     }
     const stateView = result.stateView || state.stateView;
+    const resolved = resolveAuthoritativeStateView(stateView);
+    const nextView = resolved.stateView;
     const next = publish({
-      phase: normalizePhaseFromView(stateView, state.phase || 'active'),
-      matchId: result.matchId || state.matchId,
-      seatId: result.seatId || state.seatId,
-      stateView,
+      phase: resolved.accepted ? normalizePhaseFromView(nextView, state.phase || 'active') : state.phase,
+      matchId: resolved.accepted ? result.matchId || state.matchId : state.matchId,
+      seatId: resolved.accepted ? result.seatId || state.seatId : state.seatId,
+      stateView: nextView,
       waitingReport: null,
       rematchReport: state.rematchReport || null,
       lastError: null,
-      lastEvents: stateView && Array.isArray(stateView.recentEvents) ? stateView.recentEvents.slice(-8) : state.lastEvents
+      lastEvents: resolveAuthoritativeEvents(null, nextView, resolved.accepted)
     });
     rememberTerminalReviewMatch(next);
     return next;
@@ -915,6 +1168,11 @@ export function createPvpLiveSession({
     resumeCurrentInvite,
     submitIntent,
     heartbeat,
+    connectRealtime,
+    joinRealtimeMatch,
+    submitRealtimeIntent,
+    heartbeatRealtime,
+    disconnectRealtime,
     getReplay,
     requestRematch,
     pollRematch,

@@ -91,6 +91,7 @@ node tests/sanity_pvp_live_full_gate_balance_checks.cjs
 node tests/sanity_pvp_live_balance_artifact_checks.cjs
 node tests/sanity_pvp_live_golden_replay_checks.cjs
 node tests/sanity_pvp_live_replay_checks.cjs
+node tests/sanity_pvp_live_ws_checks.cjs
 node tests/sanity_pvp_live_route_checks.cjs
 node tests/sanity_pvp_live_persistence_checks.cjs
 node tests/sanity_pvp_live_settlement_checks.cjs

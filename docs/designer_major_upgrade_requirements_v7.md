@@ -695,6 +695,8 @@ HTTP fallback 行动提交。WebSocket 可用时优先走 WS。
 
 ## 5. WebSocket 协议
 
+当前 S6A 最小实现已接入单进程 WS 权威同步：`connected`、`join_match -> state_sync + events_replay`、`heartbeat -> presence`、`intent -> intent_result + state_sync broadcast` 已有服务端、前端桥和 Node 门禁。下列表格仍保留完整目标协议，其中 `match_found`、`ready_state`、`turn_change`、`match_finished`、`settlement_*` 等独立推送消息属于后续扩展；当前实现主要通过 seat-scoped `state_sync` 承载状态变化。
+
 ### 5.1 连接
 
 路径：

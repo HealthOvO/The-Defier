@@ -736,6 +736,51 @@ export const BackendClient = {
       : '/api/pvp';
     return `${base}/live`;
   },
+  getLivePvpWebSocketUrl() {
+    const config = this.getServerConfig();
+    const session = this.loadServerSession();
+    const token = session && session.token ? String(session.token) : '';
+    if (!config || !config.baseUrl || !token) return '';
+    const wsBaseUrl = String(config.baseUrl).replace(/^http:/, 'ws:').replace(/^https:/, 'wss:').replace(/\/+$/, '');
+    return `${wsBaseUrl}${this.getLivePvpPathPrefix()}/ws?token=${encodeURIComponent(token)}`;
+  },
+  connectLivePvpWebSocket(handlers = {}) {
+    const url = this.getLivePvpWebSocketUrl();
+    const SocketCtor = typeof WebSocket !== 'undefined' ? WebSocket : null;
+    if (!url || !SocketCtor) return null;
+    const socket = new SocketCtor(url);
+    if (typeof handlers.onOpen === 'function') {
+      socket.addEventListener('open', handlers.onOpen);
+    }
+    if (typeof handlers.onClose === 'function') {
+      socket.addEventListener('close', handlers.onClose);
+    }
+    if (typeof handlers.onError === 'function') {
+      socket.addEventListener('error', handlers.onError);
+    }
+    if (typeof handlers.onMessage === 'function') {
+      socket.addEventListener('message', (event) => {
+        try {
+          const message = JSON.parse(String(event.data || ''));
+          handlers.onMessage(message);
+        } catch (error) {
+          handlers.onMessage({ type: 'error', reason: 'invalid_ws_payload', message: '实时论道 WS 消息解析失败' });
+        }
+      });
+    }
+    return {
+      socket,
+      send(payload = {}) {
+        if (socket.readyState !== SocketCtor.OPEN) return false;
+        socket.send(JSON.stringify(payload || {}));
+        return true;
+      },
+      close() {
+        socket.close();
+        return true;
+      }
+    };
+  },
   async joinLivePvpQueue(options = {}) {
     const user = this.getCurrentUser();
     if (!user) return {

@@ -38,6 +38,9 @@ const pvpLiveGoldenReplayChecks = read('tests/sanity_pvp_live_golden_replay_chec
 const pvpLiveGoldenReplayRunner = read('server/pvp-live/golden-replay-runner.js');
 const pvpLiveReplayChecks = read('tests/sanity_pvp_live_replay_checks.cjs');
 const pvpLiveReplaySource = read('server/pvp-live/replay.js');
+const pvpLiveWsChecks = read('tests/sanity_pvp_live_ws_checks.cjs');
+const pvpLiveWsSource = read('server/pvp-live/live-ws.js');
+const serverApp = read('server/app.js');
 const pvpLiveRouteChecks = read('tests/sanity_pvp_live_route_checks.cjs');
 const pvpLivePersistenceChecks = read('tests/sanity_pvp_live_persistence_checks.cjs');
 const pvpLiveDatabase = read('server/db/database.js');
@@ -414,6 +417,7 @@ const layoutAudit = read('tests/browser_frontend_layout_audit.mjs');
   'node tests/sanity_pvp_live_balance_artifact_checks.cjs',
   'node tests/sanity_pvp_live_golden_replay_checks.cjs',
   'node tests/sanity_pvp_live_replay_checks.cjs',
+  'node tests/sanity_pvp_live_ws_checks.cjs',
   'node tests/sanity_pvp_live_route_checks.cjs',
   'node tests/sanity_pvp_live_persistence_checks.cjs',
   'node tests/sanity_pvp_live_settlement_checks.cjs',
@@ -539,7 +543,7 @@ const layoutAudit = read('tests/browser_frontend_layout_audit.mjs');
   'real browser live match exposes public match quality report',
   'real browser live match renders authoritative setup countdown',
   'real browser live match exposes authoritative connection report',
-  'real browser weak opponent heartbeat enters reconnect grace without ending setup',
+  'real browser opponent connection report stays readable without ending setup',
   'real browser opponent heartbeat recovers reconnect grace to online',
   'real browser live match exposes and renders first-match guide report',
   'real browser render_game_to_text exposes first-match guide report',
@@ -547,7 +551,9 @@ const layoutAudit = read('tests/browser_frontend_layout_audit.mjs');
   'real browser state exposes snapshot_locked without leaking opponent hidden data',
   'real browser setup ready flow reaches active on both seats',
   'real browser live match renders authoritative active action countdown',
-  'real browser accepted card intent updates opponent state without legacy settlement',
+  'real browser accepted card intent auto-pushes opponent state without manual refresh',
+  'waitForLiveSnapshot(seatB.page, previousHp',
+  'waitForLiveSnapshot(seatB.page, expectedVersion',
   'real browser end turn switches authoritative action countdown to opponent',
   'real browser live match renders public post-match review after surrender',
   'real browser live match renders experience report from public post-match events',
@@ -576,6 +582,10 @@ const layoutAudit = read('tests/browser_frontend_layout_audit.mjs');
     `live PVP real-backend browser smoke should pin two-account marker: ${needle}`,
   );
 });
+assert.ok(
+  !browserPvpLiveRealSmoke.includes('await window.PVPScene.refreshLiveMatch();\n      await window.PVPScene.readyLiveMatch();'),
+  'live PVP real-backend browser smoke must not require manual refresh before ready auto-push checks',
+);
 
 [
   'seat A should start with a server-locked loadout snapshot',
@@ -766,6 +776,55 @@ const layoutAudit = read('tests/browser_frontend_layout_audit.mjs');
   assert.ok(
     pvpLiveReplaySource.includes(needle),
     `live PVP replay source should pin partial event stream fallback marker: ${needle}`,
+  );
+});
+
+[
+  'attachLivePvpWebSocket',
+  'makeEventReplay',
+  'PUBLIC_EVENT_DATA_KEYS',
+  "type: 'connected'",
+  "type: 'state_sync'",
+  "type: 'events_replay'",
+  "type: 'presence'",
+  "type: 'intent_result'",
+  "message.type === 'join_match'",
+  "message.type === 'heartbeat'",
+  "message.type === 'intent'",
+  'livePvpStore.recordHeartbeat',
+  'livePvpStore.submitIntent',
+  'jwt.verify(token, getJwtSecret())',
+  "socket.write('HTTP/1.1 401 Unauthorized",
+].forEach((needle) => {
+  assert.ok(
+    pvpLiveWsSource.includes(needle),
+    `live PVP WS source should pin S6A authoritative realtime marker: ${needle}`,
+  );
+});
+
+[
+  'attachLivePvpWebSocket(server, { livePvpStore: pvpLiveRoutes.__livePvpStore })',
+  'WS /api/pvp/live/ws',
+].forEach((needle) => {
+  assert.ok(
+    serverApp.includes(needle),
+    `backend app should mount live PVP WS marker: ${needle}`,
+  );
+});
+
+[
+  'WS connected should expose stable connection id',
+  'WS connected should expose authoritative heartbeat interval',
+  'WS state_sync should be seat scoped for A',
+  'WS join_match should send missed events replay array',
+  'WS events_replay should not expose hidden deck data',
+  'WS heartbeat should return presence connection report',
+  'WS intent should return accepted intent_result',
+  'WS accepted intent should push state_sync to the opponent seat',
+].forEach((needle) => {
+  assert.ok(
+    pvpLiveWsChecks.includes(needle),
+    `live PVP WS sanity should pin S6A realtime behavior marker: ${needle}`,
   );
 });
 
@@ -1045,6 +1104,9 @@ const layoutAudit = read('tests/browser_frontend_layout_audit.mjs');
   'BackendClient should expose getCurrentLivePvpInvite',
   'BackendClient should expose getLivePvpInviteInbox',
   'BackendClient should expose heartbeatLivePvpMatch',
+  'BackendClient should expose getLivePvpWebSocketUrl',
+  'BackendClient should expose connectLivePvpWebSocket',
+  'live WebSocket URL should reuse server base URL, live path, and encoded session token',
   'live private invite creation should clone loadout before sending',
   'live targeted private invite should forward trimmed target username',
   'live invite inbox should use inbox endpoint',
@@ -1089,7 +1151,9 @@ const layoutAudit = read('tests/browser_frontend_layout_audit.mjs');
   'live invite inbox bridge should call BackendClient.getLivePvpInviteInbox',
   'live heartbeat bridge should call BackendClient.heartbeatLivePvpMatch',
   'live rematch bridge should call BackendClient.requestLivePvpRematch',
+  'live realtime bridge should call BackendClient.connectLivePvpWebSocket',
   'submitLivePvpIntent',
+  'connectRealtime',
 ].forEach((needle) => {
   assert.ok(
     pvpLiveServiceBridgeChecks.includes(needle),
@@ -1155,6 +1219,26 @@ const layoutAudit = read('tests/browser_frontend_layout_audit.mjs');
   'resumeCurrentMatch should enter active when server has current match',
   'resumeCurrentMatch should stay idle when server has no current match',
   'heartbeat should retain authoritative heartbeat interval for scene scheduling',
+  'live session should expose connectRealtime',
+  'live session should expose joinRealtimeMatch',
+  'live session should expose submitRealtimeIntent',
+  'live session should expose heartbeatRealtime',
+  'live session should expose disconnectRealtime',
+  'connectRealtime should mark realtime connecting',
+  'connectRealtime should register message handler',
+  'connected WS message should mark realtime connected',
+  'state_sync WS message should update live phase',
+  'events_replay WS message should replace last events with missed public events',
+  'presence WS message should update connection report',
+  'intent_result WS message should update state view',
+  'live session realtime helpers should send stable WS message envelopes',
+  'disconnectRealtime should mark realtime closed',
+  'onOpen should replay pending join_match after the socket becomes writable',
+  'stale state_sync WS message should not downgrade authoritative stateVersion',
+  'stale intent_result WS message should not downgrade authoritative stateVersion',
+  'stale HTTP refresh should not downgrade authoritative stateVersion',
+  'stale HTTP heartbeat should not downgrade authoritative stateVersion',
+  'stale HTTP intent result should not downgrade authoritative stateVersion',
 ].forEach((needle) => {
   assert.ok(
     pvpLiveSessionChecks.includes(needle),
@@ -1167,6 +1251,17 @@ const layoutAudit = read('tests/browser_frontend_layout_audit.mjs');
   'startLiveHeartbeat must not hard-code 5000ms once server interval is exposed',
   'startLiveHeartbeat should rebuild heartbeat timer when authoritative interval changes',
   'startLiveHeartbeat should allow timer rebuild without duplicate immediate heartbeat',
+  'startLiveRealtime(state = null)',
+  'session.joinRealtimeMatch(sourceState.matchId',
+  'lastSeenRevision: this.getLiveLastSeenEventRevision(sourceState)',
+  'this.stopLiveRealtime()',
+  'PVPScene should re-render when live session receives realtime state',
+  'PVPScene should batch realtime render updates',
+  'PVPScene should persist post-review focus across realtime re-renders',
+  'sendLiveHeartbeat should prefer realtime heartbeat when WS is connected',
+  'sendLiveHeartbeat should keep HTTP heartbeat fallback',
+  'submitLiveIntent should prefer realtime intent when WS is connected',
+  'submitLiveIntent should keep HTTP intent fallback',
 ].forEach((needle) => {
   assert.ok(
     pvpLiveUiContractChecks.includes(needle),

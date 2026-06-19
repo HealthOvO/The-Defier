@@ -5,6 +5,7 @@ const { validateAuthConfig } = require('./middleware/auth');
 const { validateIntegrityConfig } = require('./utils/hmac');
 const { makeSqliteLivePvpPersistence } = require('./pvp-live/live-persistence');
 const { makeSqliteLivePvpSettlement } = require('./pvp-live/live-settlement');
+const { attachLivePvpWebSocket } = require('./pvp-live/live-ws');
 
 const authRoutes = require('./routes/auth');
 const savesRoutes = require('./routes/saves');
@@ -50,7 +51,7 @@ const startServer = async () => {
         }
         console.log('Database initialized successfully.');
         
-        app.listen(PORT, () => {
+        const server = app.listen(PORT, () => {
             console.log(`Server is running on http://127.0.0.1:${PORT}`);
             console.log(`API endpoints ready:`);
             console.log(`- POST /api/auth/register`);
@@ -60,8 +61,10 @@ const startServer = async () => {
             console.log(`- POST /api/ghosts/current`);
             console.log(`- GET /api/ghosts/random`);
             console.log(`- GET/POST /api/pvp/live/*`);
+            console.log(`- WS /api/pvp/live/ws`);
             console.log(`- GET/POST /api/pvp/*`);
         });
+        attachLivePvpWebSocket(server, { livePvpStore: pvpLiveRoutes.__livePvpStore });
     } catch (err) {
         console.error('Failed to start server:', err);
         process.exit(1);

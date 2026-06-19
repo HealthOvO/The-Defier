@@ -815,7 +815,13 @@ async function safeElementScreenshot(page, selector, outputPath) {
       && !/PVPService\\.findOpponent|reportMatchResult|GhostEnemy|reward|rating|elo/i.test(`${longWaitProbe.report} ${JSON.stringify(longWaitProbe.payload?.waitingReport || {})} ${JSON.stringify(longWaitProbe.calls)}`),
     JSON.stringify(longWaitProbe),
   );
-  await page.click('[data-live-action="practice-live"]', { timeout: 5000, force: true });
+  const practiceHintClicked = await page.evaluate(() => {
+    const button = document.querySelector('[data-live-action="practice-live"]');
+    if (!button || button.disabled) return false;
+    button.click();
+    return true;
+  });
+  if (!practiceHintClicked) throw new Error('expected enabled live practice hint button');
   await page.waitForTimeout(100);
   const practiceHintProbe = await page.evaluate(() => ({
     phase: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-phase') || '',
@@ -938,10 +944,10 @@ async function safeElementScreenshot(page, selector, outputPath) {
     JSON.stringify(matchedProbe),
   );
 
-  await page.click('[data-live-mulligan-card]', { timeout: 5000, force: true });
-  await page.click('[data-live-action="confirm-mulligan"]', { timeout: 5000, force: true });
+  await page.evaluate(() => document.querySelector('[data-live-mulligan-card]')?.click());
+  await page.evaluate(() => document.querySelector('[data-live-action="confirm-mulligan"]')?.click());
   await page.waitForTimeout(200);
-  await page.click('[data-live-action="ready"]', { timeout: 5000, force: true });
+  await page.evaluate(() => document.querySelector('[data-live-action="ready"]')?.click());
   await page.waitForTimeout(200);
   const setupProbe = await page.evaluate(() => ({
     phase: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-phase') || '',
@@ -989,7 +995,13 @@ async function safeElementScreenshot(page, selector, outputPath) {
     JSON.stringify(setupProbe),
   );
 
-  await page.click('[data-live-card]', { timeout: 5000, force: true });
+  const liveCardClicked = await page.evaluate(() => {
+    const card = document.querySelector('[data-live-card]');
+    if (!card) return false;
+    card.click();
+    return true;
+  });
+  if (!liveCardClicked) throw new Error('expected a playable live card button');
   await page.waitForTimeout(200);
   const actionProbe = await page.evaluate(() => ({
     stateVersion: document.querySelector('[data-live-state-version]')?.textContent || '',
@@ -2153,7 +2165,13 @@ async function safeElementScreenshot(page, selector, outputPath) {
   await mobilePage.waitForTimeout(100);
   await mobilePage.click('[data-live-action="ready"]', { timeout: 5000, force: true });
   await mobilePage.waitForTimeout(100);
-  await mobilePage.click('[data-live-card]', { timeout: 5000, force: true });
+  const mobileLiveCardClicked = await mobilePage.evaluate(() => {
+    const card = document.querySelector('[data-live-card]');
+    if (!card) return false;
+    card.click();
+    return true;
+  });
+  if (!mobileLiveCardClicked) throw new Error('expected a playable mobile live card button');
   await mobilePage.waitForTimeout(150);
   const mobileActionProbe = await mobilePage.evaluate(() => {
     const eventPanel = document.querySelector('.pvp-live-event-panel');

@@ -26,11 +26,15 @@ export const PVPScene = {
   liveHeartbeatTimer: null,
   liveHeartbeatIntervalMs: 0,
   liveLongWaitPollUntil: 0,
+  liveRealtimeRenderQueued: false,
   liveIntentSeq: 0,
   liveMulliganSelection: new Set(),
   liveSelectedLoadoutPreset: 'balanced',
   liveDrillScenario: null,
   liveSocialMuted: false,
+  liveInlineHint: '',
+  liveReviewFocus: '',
+  liveLoadoutReviewFocused: false,
   rankingFocusId: null,
   rankingFocusData: null,
   lastLoadedRankings: [],
@@ -444,10 +448,22 @@ export const PVPScene = {
   getLiveSession() {
     if (!this.liveSession) {
       this.liveSession = createPvpLiveSession({
-        liveService: PVPService && PVPService.live ? PVPService.live : null
+        liveService: PVPService && PVPService.live ? PVPService.live : null,
+        onChange: () => this.queueLiveRealtimeRender()
       });
     }
     return this.liveSession;
+  },
+  queueLiveRealtimeRender() {
+    if (this.liveRealtimeRenderQueued) return;
+    this.liveRealtimeRenderQueued = true;
+    const schedule = typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function'
+      ? window.requestAnimationFrame.bind(window)
+      : (callback) => setTimeout(callback, 0);
+    schedule(() => {
+      this.liveRealtimeRenderQueued = false;
+      this.renderLivePanel();
+    });
   },
   getLiveLoadoutPresets() {
     return [
@@ -1367,7 +1383,7 @@ export const PVPScene = {
       if (hint) hint.textContent = '表情只能在准备或对局中发送。';
       return;
     }
-    await session.submitIntent({
+    await this.submitLiveIntent({
       intentId: this.makeLiveIntentId('emote'),
       intentType: 'emote',
       payload: { emoteId: option.id }
@@ -1484,8 +1500,11 @@ export const PVPScene = {
         seatId: String(view.self.seatId || ''),
         hp: Math.max(0, Math.floor(Number(view.self.hp) || 0)),
         maxHp: Math.max(0, Math.floor(Number(view.self.maxHp) || 0)),
+        block: Math.max(0, Math.floor(Number(view.self.block) || 0)),
         energy: Math.max(0, Math.floor(Number(view.self.energy) || 0)),
         maxEnergy: Math.max(0, Math.floor(Number(view.self.maxEnergy) || 0)),
+        ready: !!view.self.ready,
+        mulliganUsed: !!view.self.mulliganUsed,
         handCount: Array.isArray(view.self.hand) ? view.self.hand.length : Math.max(0, Math.floor(Number(view.self.handCount) || 0)),
         loadout: this.getLiveLoadoutSummary(view.self)
       } : null,
@@ -1493,8 +1512,11 @@ export const PVPScene = {
         seatId: String(view.opponent.seatId || ''),
         hp: Math.max(0, Math.floor(Number(view.opponent.hp) || 0)),
         maxHp: Math.max(0, Math.floor(Number(view.opponent.maxHp) || 0)),
+        block: Math.max(0, Math.floor(Number(view.opponent.block) || 0)),
         energy: Math.max(0, Math.floor(Number(view.opponent.energy) || 0)),
         maxEnergy: Math.max(0, Math.floor(Number(view.opponent.maxEnergy) || 0)),
+        ready: !!view.opponent.ready,
+        mulliganUsed: !!view.opponent.mulliganUsed,
         handCount: Math.max(0, Math.floor(Number(view.opponent.handCount) || 0)),
         loadout: this.getLiveLoadoutSummary(view.opponent)
       } : null
@@ -1616,11 +1638,29 @@ export const PVPScene = {
         : '赛后复盘：等待对局结束';
     }
     if (phase !== 'finished' && phase !== 'waiting_rematch') {
+      this.liveReviewFocus = '';
+      this.liveLoadoutReviewFocused = false;
       root.querySelectorAll('[data-live-review-focus]').forEach(element => {
         element.removeAttribute('data-live-review-focus');
       });
     }
     this.renderLiveLoadoutPresets(phase);
+    if (this.liveReviewFocus) {
+      const eventPanel = root.querySelector('[data-live-event-panel]');
+      if (eventPanel) eventPanel.setAttribute('data-live-review-focus', this.liveReviewFocus);
+      if (this.liveReviewFocus === 'key_turns') {
+        const keyTurnPanel = root.querySelector('[data-live-key-turn-replay]');
+        if (keyTurnPanel) keyTurnPanel.setAttribute('data-live-review-focus', 'key_turns');
+      } else if (this.liveReviewFocus.startsWith('experience_check:')) {
+        const checkId = this.liveReviewFocus.slice('experience_check:'.length);
+        const focusedCheck = Array.from(root.querySelectorAll('[data-live-experience-check]')).find(item => item.getAttribute('data-live-experience-check') === checkId);
+        if (focusedCheck) focusedCheck.setAttribute('data-live-review-focus', this.liveReviewFocus);
+      }
+    }
+    if (this.liveLoadoutReviewFocused) {
+      const loadoutPanel = root.querySelector('.pvp-live-loadout-selector');
+      if (loadoutPanel) loadoutPanel.setAttribute('data-live-review-focus', 'loadout');
+    }
 
     const self = view && view.self ? view.self : null;
     const opponent = view && view.opponent ? view.opponent : null;
@@ -1681,7 +1721,7 @@ export const PVPScene = {
       }).join('') : '暂无事件';
     }
 
-    const errorText = state.lastError ? `${state.lastError.message || state.lastError.reason}` : phase === 'invalidated' ? '本局在开战前无效，不写正式积分；可以重新匹配或先练习斗法谱。' : phase === 'setup' ? '准备阶段只能调息或确认准备，不能提前出牌。' : phase === 'waiting_rematch' ? '已发起低压力再战，等待本局对手确认；不写正式积分。' : phase === 'waiting' ? '等待真实玩家加入；不会自动切换残影。' : '实时论道不会自动匹配残影；没有真人时可取消排队。';
+    const errorText = this.liveInlineHint || (state.lastError ? `${state.lastError.message || state.lastError.reason}` : phase === 'invalidated' ? '本局在开战前无效，不写正式积分；可以重新匹配或先练习斗法谱。' : phase === 'setup' ? '准备阶段只能调息或确认准备，不能提前出牌。' : phase === 'waiting_rematch' ? '已发起低压力再战，等待本局对手确认；不写正式积分。' : phase === 'waiting' ? '等待真实玩家加入；不会自动切换残影。' : '实时论道不会自动匹配残影；没有真人时可取消排队。');
     setText('[data-live-last-error]', errorText);
     this.updateLiveButtons(phase, !!view && view.currentSeat === state.seatId, self);
     if (this.shouldLiveHeartbeat(phase)) {
@@ -1746,12 +1786,39 @@ export const PVPScene = {
     const report = this.getLiveConnectionReport(sourceState && sourceState.stateView);
     return report ? report.heartbeatIntervalMs : 5000;
   },
+  getLiveLastSeenEventRevision(state = null) {
+    const sourceState = state || this.getLiveSession().getState();
+    const events = sourceState && sourceState.stateView && Array.isArray(sourceState.stateView.recentEvents)
+      ? sourceState.stateView.recentEvents
+      : [];
+    return events.reduce((max, event) => Math.max(max, Math.floor(Number(event && event.sequence) || 0)), 0);
+  },
+  startLiveRealtime(state = null) {
+    const session = this.getLiveSession();
+    if (!session || typeof session.connectRealtime !== 'function' || typeof session.joinRealtimeMatch !== 'function') return;
+    const sourceState = state || session.getState();
+    if (!sourceState || !sourceState.matchId || !this.shouldLiveHeartbeat(sourceState.phase)) return;
+    session.connectRealtime();
+    session.joinRealtimeMatch(sourceState.matchId, {
+      lastSeenRevision: this.getLiveLastSeenEventRevision(sourceState)
+    });
+  },
+  stopLiveRealtime() {
+    const session = this.getLiveSession();
+    if (session && typeof session.disconnectRealtime === 'function') {
+      session.disconnectRealtime();
+    }
+  },
   startLiveHeartbeat({ sendImmediately = true } = {}) {
     if (typeof window === 'undefined') return;
     const state = this.getLiveSession().getState();
     const heartbeatIntervalMs = this.getLiveHeartbeatIntervalMs(state);
-    if (this.liveHeartbeatTimer && this.liveHeartbeatIntervalMs === heartbeatIntervalMs) return;
+    if (this.liveHeartbeatTimer && this.liveHeartbeatIntervalMs === heartbeatIntervalMs) {
+      this.startLiveRealtime(state);
+      return;
+    }
     this.stopLiveHeartbeat();
+    this.startLiveRealtime(state);
     this.liveHeartbeatIntervalMs = heartbeatIntervalMs;
     this.liveHeartbeatTimer = window.setInterval(async () => {
       try {
@@ -1772,6 +1839,7 @@ export const PVPScene = {
     }
     this.liveHeartbeatTimer = null;
     this.liveHeartbeatIntervalMs = 0;
+    this.stopLiveRealtime();
   },
   async sendLiveHeartbeat() {
     const session = this.getLiveSession();
@@ -1780,8 +1848,14 @@ export const PVPScene = {
       this.stopLiveHeartbeat();
       return;
     }
-    if (typeof session.heartbeat !== 'function') return;
-    await session.heartbeat();
+    this.startLiveRealtime(state);
+    const realtimeSent = state.realtimeStatus === 'connected'
+      && typeof session.heartbeatRealtime === 'function'
+      && session.heartbeatRealtime(state.matchId);
+    if (!realtimeSent) {
+      if (typeof session.heartbeat !== 'function') return;
+      await session.heartbeat();
+    }
     const next = session.getState();
     if (!this.shouldLiveHeartbeat(next.phase)) {
       this.stopLiveHeartbeat();
@@ -1790,11 +1864,36 @@ export const PVPScene = {
     this.startLiveHeartbeat({ sendImmediately: false });
     this.renderLivePanel();
   },
+  async submitLiveIntent(intent = {}) {
+    this.liveInlineHint = '';
+    const session = this.getLiveSession();
+    const state = session.getState();
+    if (!state || !state.matchId) return state;
+    const stateVersion = Number.isFinite(Number(intent.stateVersion))
+      ? Math.floor(Number(intent.stateVersion))
+      : Math.floor(Number(state.stateView && state.stateView.stateVersion) || 0);
+    const intentWithVersion = {
+      intentId: intent.intentId,
+      intentType: intent.intentType,
+      stateVersion,
+      payload: intent.payload && typeof intent.payload === 'object' ? { ...intent.payload } : {}
+    };
+    this.startLiveRealtime(state);
+    const nextState = session.getState();
+    const realtimeSent = nextState && nextState.realtimeStatus === 'connected'
+      && typeof session.submitRealtimeIntent === 'function'
+      && session.submitRealtimeIntent(intentWithVersion, nextState.matchId || state.matchId);
+    if (realtimeSent) {
+      return session.getState();
+    }
+    return await session.submitIntent(intentWithVersion);
+  },
   makeLiveIntentId(type) {
     this.liveIntentSeq += 1;
     return `live-ui-${type}-${Date.now().toString(36)}-${this.liveIntentSeq}`;
   },
   async joinLiveQueue() {
+    this.liveInlineHint = '';
     const session = this.getLiveSession();
     const gameRef = this.getGameRef();
     const displayName = gameRef && gameRef.player && gameRef.player.name ? gameRef.player.name : '无名修士';
@@ -1892,6 +1991,7 @@ export const PVPScene = {
   },
   openLivePracticeHint() {
     const message = '问道练习不会写正式积分；当前切片先保留真人排队，你也可以取消匹配后再进入练习入口。';
+    this.liveInlineHint = message;
     const root = document.querySelector('[data-live-pvp-root]');
     const hint = root ? root.querySelector('[data-live-last-error]') : null;
     if (hint) hint.textContent = message;
@@ -1902,6 +2002,8 @@ export const PVPScene = {
   handleLiveExperienceCheckFocus(checkId) {
     const id = String(checkId || '').trim();
     if (!id) return;
+    this.liveReviewFocus = `experience_check:${id}`;
+    this.liveInlineHint = '已定位体验诊断证据；事件面板只显示该检查项关联的公开事件。';
     const root = document.querySelector('[data-live-pvp-root]');
     const eventPanel = root ? root.querySelector('[data-live-event-panel]') : null;
     if (eventPanel) {
@@ -1918,7 +2020,7 @@ export const PVPScene = {
       }
     }
     const hint = root ? root.querySelector('[data-live-last-error]') : null;
-    const message = '已定位体验诊断证据；事件面板只显示该检查项关联的公开事件。';
+    const message = this.liveInlineHint;
     if (hint) hint.textContent = message;
     if (typeof Utils !== 'undefined' && Utils && typeof Utils.showBattleLog === 'function') {
       Utils.showBattleLog(message);
@@ -1928,6 +2030,7 @@ export const PVPScene = {
     const id = String(actionId || '');
     const root = document.querySelector('[data-live-pvp-root]');
     const setHint = (message) => {
+      this.liveInlineHint = message;
       const hint = root ? root.querySelector('[data-live-last-error]') : null;
       if (hint) hint.textContent = message;
       if (typeof Utils !== 'undefined' && Utils && typeof Utils.showBattleLog === 'function') {
@@ -1974,6 +2077,7 @@ export const PVPScene = {
       return;
     }
     if (id === 'review_events') {
+      this.liveReviewFocus = 'events';
       const eventPanel = root ? root.querySelector('[data-live-event-panel]') : null;
       if (eventPanel) {
         eventPanel.setAttribute('data-live-review-focus', 'events');
@@ -1989,6 +2093,7 @@ export const PVPScene = {
       return;
     }
     if (id === 'review_key_turns') {
+      this.liveReviewFocus = 'key_turns';
       const eventPanel = root ? root.querySelector('[data-live-event-panel]') : null;
       const keyTurnPanel = root ? root.querySelector('[data-live-key-turn-replay]') : null;
       if (eventPanel) {
@@ -2010,6 +2115,8 @@ export const PVPScene = {
       return;
     }
     if (id === 'adjust_loadout') {
+      if (!this.liveReviewFocus) this.liveReviewFocus = 'events';
+      this.liveLoadoutReviewFocused = true;
       const loadoutPanel = root ? root.querySelector('.pvp-live-loadout-selector') : null;
       if (loadoutPanel) {
         loadoutPanel.setAttribute('data-live-review-focus', 'loadout');
@@ -2023,6 +2130,7 @@ export const PVPScene = {
     setHint('该复盘动作还在 MVP 阶段，当前不会写正式积分或调用旧残影结算。');
   },
   async refreshLiveMatch(options = {}) {
+    this.liveInlineHint = '';
     const fromAutoPoll = options && options.fromAutoPoll === true;
     const session = this.getLiveSession();
     const state = session.getState();
@@ -2058,7 +2166,7 @@ export const PVPScene = {
       : state && state.seatId === 'B'
         ? 'A'
         : 'B';
-    await session.submitIntent({
+    await this.submitLiveIntent({
       intentId: this.makeLiveIntentId('play-card'),
       intentType: 'play_card',
       payload: {
@@ -2078,22 +2186,26 @@ export const PVPScene = {
     this.renderLivePanel();
   },
   async confirmLiveMulligan() {
-    const session = this.getLiveSession();
-    await session.mulligan({
+    await this.submitLiveIntent({
       intentId: this.makeLiveIntentId('mulligan'),
-      cardInstanceIds: Array.from(this.liveMulliganSelection).slice(0, 2)
+      intentType: 'mulligan',
+      payload: {
+        cardInstanceIds: Array.from(this.liveMulliganSelection).slice(0, 2)
+      }
     });
     this.liveMulliganSelection.clear();
     this.renderLivePanel();
   },
   async readyLiveMatch() {
-    const session = this.getLiveSession();
-    await session.ready({ intentId: this.makeLiveIntentId('ready') });
+    await this.submitLiveIntent({
+      intentId: this.makeLiveIntentId('ready'),
+      intentType: 'ready',
+      payload: {}
+    });
     this.renderLivePanel();
   },
   async endLiveTurn() {
-    const session = this.getLiveSession();
-    await session.submitIntent({
+    await this.submitLiveIntent({
       intentId: this.makeLiveIntentId('end-turn'),
       intentType: 'end_turn',
       payload: {}
@@ -2101,8 +2213,11 @@ export const PVPScene = {
     this.renderLivePanel();
   },
   async surrenderLiveMatch() {
-    const session = this.getLiveSession();
-    await session.surrender({ intentId: this.makeLiveIntentId('surrender') });
+    await this.submitLiveIntent({
+      intentId: this.makeLiveIntentId('surrender'),
+      intentType: 'surrender',
+      payload: {}
+    });
     this.stopLivePolling();
     this.renderLivePanel();
   },

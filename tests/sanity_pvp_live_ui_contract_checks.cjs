@@ -97,6 +97,7 @@ const liveBrowserAudit = read('tests/browser_pvp_live_audit.mjs');
   'handleLivePostReviewAction(',
   'friendly_rematch',
   'openLivePracticeHint(',
+  'this.liveInlineHint = message',
   'getLiveLoadoutPresets()',
   'getLiveSelectedLoadoutPreset()',
   'setLiveLoadoutPreset(',
@@ -118,6 +119,12 @@ const liveBrowserAudit = read('tests/browser_pvp_live_audit.mjs');
   'submitLiveEmote(',
   'toggleLiveSocialMute(',
   'createLiveInvite(',
+  'ready: !!view.self.ready',
+  'mulliganUsed: !!view.self.mulliganUsed',
+  'block: Math.max(0, Math.floor(Number(view.self.block) || 0))',
+  'ready: !!view.opponent.ready',
+  'mulliganUsed: !!view.opponent.mulliganUsed',
+  'block: Math.max(0, Math.floor(Number(view.opponent.block) || 0))',
   'joinLiveInvite(',
   'cancelLiveInvite(',
   'filterLiveEventsForMute(',
@@ -202,6 +209,19 @@ assert.ok(!startLiveHeartbeatBody.includes('}, 5000)'), 'startLiveHeartbeat must
 assert.ok(startLiveHeartbeatBody.includes('this.stopLiveHeartbeat()'), 'startLiveHeartbeat should rebuild heartbeat timer when authoritative interval changes');
 assert.ok(scene.includes('startLiveHeartbeat({ sendImmediately = true } = {})'), 'startLiveHeartbeat should allow timer rebuild without duplicate immediate heartbeat');
 assert.ok(scene.includes('this.startLiveHeartbeat({ sendImmediately: false })'), 'sendLiveHeartbeat should rebuild timer without duplicate immediate heartbeat');
+assert.ok(scene.includes('startLiveRealtime(state = null)'), 'PVPScene should start live realtime transport from session state');
+assert.ok(scene.includes('session.joinRealtimeMatch(sourceState.matchId'), 'PVPScene should join realtime match with the current match id');
+assert.ok(scene.includes('lastSeenRevision: this.getLiveLastSeenEventRevision(sourceState)'), 'PVPScene should request missed event replay from the last seen event revision');
+assert.ok(scene.includes('this.stopLiveRealtime()'), 'PVPScene should close realtime transport when heartbeat lifecycle stops');
+assert.ok(scene.includes('onChange: () => this.queueLiveRealtimeRender()'), 'PVPScene should re-render when live session receives realtime state');
+assert.ok(scene.includes('queueLiveRealtimeRender()'), 'PVPScene should batch realtime render updates');
+assert.ok(scene.includes('liveReviewFocus'), 'PVPScene should persist post-review focus across realtime re-renders');
+const sendLiveHeartbeatBody = methodBody(scene, 'sendLiveHeartbeat');
+assert.ok(sendLiveHeartbeatBody.includes('session.heartbeatRealtime(state.matchId)'), 'sendLiveHeartbeat should prefer realtime heartbeat when WS is connected');
+assert.ok(sendLiveHeartbeatBody.includes('await session.heartbeat()'), 'sendLiveHeartbeat should keep HTTP heartbeat fallback');
+const submitLiveIntentBody = methodBody(scene, 'submitLiveIntent');
+assert.ok(submitLiveIntentBody.includes('session.submitRealtimeIntent(intentWithVersion'), 'submitLiveIntent should prefer realtime intent when WS is connected');
+assert.ok(submitLiveIntentBody.includes('return await session.submitIntent(intentWithVersion)'), 'submitLiveIntent should keep HTTP intent fallback');
 
 [
   "liveSelectedLoadoutPreset: 'balanced'",

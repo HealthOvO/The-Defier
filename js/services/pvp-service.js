@@ -145,6 +145,13 @@ export const PVPService = {
         return { success: false, message: '实时论道服务未就绪' };
       }
       return await client.submitLivePvpIntent(matchId, intent);
+    },
+    connectRealtime(handlers = {}) {
+      const client = this.getClient();
+      if (!client || typeof client.connectLivePvpWebSocket !== 'function') {
+        return null;
+      }
+      return client.connectLivePvpWebSocket(handlers);
     }
   },
   init(context = {}) {

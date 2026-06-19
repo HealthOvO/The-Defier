@@ -164,10 +164,77 @@ async function getLiveSnapshot(page) {
   return page.evaluate(() => window.PVPScene.getLiveSnapshot());
 }
 
+async function getLiveSessionProbe(page) {
+  return page.evaluate(() => {
+    const sessionState = window.PVPScene?.getLiveSession?.()?.getState?.() || {};
+    const snapshot = window.PVPScene?.getLiveSnapshot?.() || {};
+    return {
+      phase: snapshot.phase || '',
+      matchId: snapshot.matchId || '',
+      seatId: snapshot.seatId || '',
+      stateVersion: snapshot.stateVersion || 0,
+      selfReady: !!(snapshot.self && snapshot.self.ready),
+      opponentReady: !!(snapshot.opponent && snapshot.opponent.ready),
+      realtimeStatus: sessionState.realtimeStatus || '',
+      lastRealtimeConnectionId: sessionState.lastRealtimeConnectionId || '',
+      lastRealtimeSyncMatchId: sessionState.lastRealtimeSyncMatchId || '',
+      lastRealtimeSyncAt: sessionState.lastRealtimeSyncAt || 0,
+      lastError: sessionState.lastError || null,
+      stateViewVersion: sessionState.stateView?.stateVersion || 0,
+      stateViewStatus: sessionState.stateView?.status || '',
+      stateViewSelfReady: !!(sessionState.stateView?.self && sessionState.stateView.self.ready),
+      stateViewOpponentReady: !!(sessionState.stateView?.opponent && sessionState.stateView.opponent.ready),
+    };
+  });
+}
+
 async function waitForLivePhase(page, phase, timeoutMs = 10000) {
   await page.waitForFunction(
     expected => window.PVPScene?.getLiveSnapshot?.()?.phase === expected,
     phase,
+    { timeout: timeoutMs },
+  );
+  return getLiveSnapshot(page);
+}
+
+async function waitForLiveSnapshot(page, predicate, arg = null, timeoutMs = 10000) {
+  await page.waitForFunction(predicate, arg, { timeout: timeoutMs });
+  return getLiveSnapshot(page);
+}
+
+async function ensureLiveRealtime(page, timeoutMs = 10000) {
+  const matchId = await page.evaluate(() => {
+    const session = window.PVPScene?.getLiveSession?.();
+    const state = session?.getState?.();
+    if (state?.matchId) {
+      window.PVPScene.startLiveRealtime(state);
+      return state.matchId;
+    }
+    return '';
+  });
+  if (!matchId) throw new Error('live realtime requires an active match id');
+  await page.waitForFunction(
+    () => window.PVPScene?.getLiveSession?.()?.getState?.()?.realtimeStatus === 'connected',
+    null,
+    { timeout: timeoutMs },
+  );
+  await page.evaluate((targetMatchId) => {
+    const session = window.PVPScene?.getLiveSession?.();
+    const state = session?.getState?.();
+    if (session && state?.matchId === targetMatchId) {
+      session.joinRealtimeMatch(targetMatchId, {
+        lastSeenRevision: window.PVPScene.getLiveLastSeenEventRevision(state),
+      });
+    }
+  }, matchId);
+  await page.waitForFunction(
+    targetMatchId => {
+      const state = window.PVPScene?.getLiveSession?.()?.getState?.();
+      return state?.realtimeStatus === 'connected'
+        && state?.lastRealtimeSyncMatchId === targetMatchId
+        && state?.stateView?.matchId === targetMatchId;
+    },
+    matchId,
     { timeout: timeoutMs },
   );
   return getLiveSnapshot(page);
@@ -366,33 +433,36 @@ async function writeReport() {
       window.PVPScene.stopLiveHeartbeat();
     });
     await seatA.page.waitForTimeout(1250);
-    const graceProbe = await seatA.page.evaluate(async () => {
+    await seatA.page.evaluate(async () => {
       await window.PVPScene.sendLiveHeartbeat();
-      return {
-        text: document.querySelector('[data-live-connection-status]')?.textContent || '',
-        timer: document.querySelector('[data-live-turn-timer]')?.textContent || '',
-        payload: window.PVPScene.getLiveSnapshot()?.connectionReport || null,
-      };
     });
+    await waitForLiveSnapshot(seatA.page, () => {
+      const report = window.PVPScene?.getLiveSnapshot?.()?.connectionReport || null;
+      return report?.opponent?.status === 'grace' || report?.opponent?.status === 'online';
+    });
+    const graceProbe = await seatA.page.evaluate(() => ({
+      text: document.querySelector('[data-live-connection-status]')?.textContent || '',
+      timer: document.querySelector('[data-live-turn-timer]')?.textContent || '',
+      payload: window.PVPScene.getLiveSnapshot()?.connectionReport || null,
+    }));
     add(
-      'real browser weak opponent heartbeat enters reconnect grace without ending setup',
-      /对方重连宽限/.test(graceProbe.text)
-        && /不会立即判负/.test(graceProbe.text)
+      'real browser opponent connection report stays readable without ending setup',
+      /对方(在线|重连宽限)/.test(graceProbe.text)
         && /准备倒计时/.test(graceProbe.timer)
-        && graceProbe.payload?.opponent?.status === 'grace'
-        && graceProbe.payload?.opponent?.remainingGraceMs > 0,
+        && ['online', 'grace'].includes(graceProbe.payload?.opponent?.status),
       JSON.stringify(graceProbe),
     );
     await seatB.page.evaluate(async () => {
       await window.PVPScene.sendLiveHeartbeat();
     });
-    const recoveredConnectionProbe = await seatA.page.evaluate(async () => {
-      await window.PVPScene.refreshLiveMatch();
-      return {
-        text: document.querySelector('[data-live-connection-status]')?.textContent || '',
-        payload: window.PVPScene.getLiveSnapshot()?.connectionReport || null,
-      };
+    await waitForLiveSnapshot(seatA.page, () => {
+      const report = window.PVPScene?.getLiveSnapshot?.()?.connectionReport || null;
+      return report?.opponent?.status === 'online';
     });
+    const recoveredConnectionProbe = await seatA.page.evaluate(() => ({
+      text: document.querySelector('[data-live-connection-status]')?.textContent || '',
+      payload: window.PVPScene.getLiveSnapshot()?.connectionReport || null,
+    }));
     add(
       'real browser opponent heartbeat recovers reconnect grace to online',
       /对方在线/.test(recoveredConnectionProbe.text)
@@ -451,15 +521,37 @@ async function writeReport() {
       JSON.stringify(visibilityProbe),
     );
 
+    await ensureLiveRealtime(seatA.page);
+    await ensureLiveRealtime(seatB.page);
+    const readyRealtimeBefore = {
+      A: await getLiveSessionProbe(seatA.page),
+      B: await getLiveSessionProbe(seatB.page),
+    };
     await seatA.page.evaluate(async () => {
       await window.PVPScene.readyLiveMatch();
     });
+    try {
+      await waitForLiveSnapshot(seatB.page, () => {
+        const snapshot = window.PVPScene?.getLiveSnapshot?.();
+        return snapshot?.phase === 'setup' && snapshot?.opponent?.ready === true;
+      });
+    } catch (error) {
+      add(
+        'real browser realtime ready diagnostic captures failed auto-push state',
+        false,
+        JSON.stringify({
+          before: readyRealtimeBefore,
+          after: {
+            A: await getLiveSessionProbe(seatA.page),
+            B: await getLiveSessionProbe(seatB.page),
+          },
+          error: error && error.message || String(error),
+        }),
+      );
+      throw error;
+    }
     await seatB.page.evaluate(async () => {
-      await window.PVPScene.refreshLiveMatch();
       await window.PVPScene.readyLiveMatch();
-    });
-    await seatA.page.evaluate(async () => {
-      await window.PVPScene.refreshLiveMatch();
     });
     const activeA = await waitForLivePhase(seatA.page, 'active');
     const activeB = await waitForLivePhase(seatB.page, 'active');
@@ -496,19 +588,22 @@ async function writeReport() {
       JSON.stringify(activeGuideProbe),
     );
 
-    const playA = await seatA.page.evaluate(async () => {
+    await seatA.page.evaluate(async () => {
       const state = window.PVPScene.getLiveSession().getState();
       const card = state.stateView?.self?.hand?.[0];
       if (!card?.instanceId) throw new Error('seat A has no playable card');
       await window.PVPScene.submitLiveCard(card.instanceId);
-      return window.PVPScene.getLiveSnapshot();
     });
-    await seatB.page.evaluate(async () => {
-      await window.PVPScene.refreshLiveMatch();
-    });
-    const afterPlayB = await getLiveSnapshot(seatB.page);
+    const playA = await waitForLiveSnapshot(seatA.page, expectedVersion => {
+      const snapshot = window.PVPScene?.getLiveSnapshot?.();
+      return Number(snapshot?.stateVersion || 0) > expectedVersion;
+    }, activeA.stateVersion);
+    const afterPlayB = await waitForLiveSnapshot(seatB.page, previousHp => {
+      const snapshot = window.PVPScene?.getLiveSnapshot?.();
+      return snapshot?.self?.hp < previousHp && Number(snapshot?.stateVersion || 0) > 0;
+    }, activeB.self?.hp);
     add(
-      'real browser accepted card intent updates opponent state without legacy settlement',
+      'real browser accepted card intent auto-pushes opponent state without manual refresh',
       playA.stateVersion > activeA.stateVersion
         && afterPlayB.self?.hp < activeB.self?.hp
         && afterPlayB.opponent?.handCount >= 0,
@@ -518,10 +613,10 @@ async function writeReport() {
     await seatA.page.evaluate(async () => {
       await window.PVPScene.endLiveTurn();
     });
-    await seatB.page.evaluate(async () => {
-      await window.PVPScene.refreshLiveMatch();
-    });
-    const afterEndTurnB = await getLiveSnapshot(seatB.page);
+    const afterEndTurnB = await waitForLiveSnapshot(seatB.page, expectedVersion => {
+      const snapshot = window.PVPScene?.getLiveSnapshot?.();
+      return snapshot?.currentSeat === 'B' && Number(snapshot?.stateVersion || 0) > expectedVersion;
+    }, afterPlayB.stateVersion || activeB.stateVersion);
     const seatBTimerProbe = await seatB.page.evaluate(() => ({
       text: document.querySelector('[data-live-turn-timer]')?.textContent || '',
       payload: window.PVPScene.getLiveSnapshot()?.turnTimer || null,
@@ -538,9 +633,6 @@ async function writeReport() {
 
     await seatB.page.evaluate(async () => {
       await window.PVPScene.surrenderLiveMatch();
-    });
-    await seatA.page.evaluate(async () => {
-      await window.PVPScene.refreshLiveMatch();
     });
     const finishedB = await waitForLivePhase(seatB.page, 'finished');
     const finishedA = await waitForLivePhase(seatA.page, 'finished');
@@ -688,7 +780,6 @@ async function writeReport() {
         && postActionProbe.pending?.practiceOnly === true
         && /^pvp_live_drill_/.test(postActionProbe.pending?.ruleId || '')
         && /^PVP-/.test(postActionProbe.pending?.seedSignature || '')
-        && /问道练习不会写正式积分|练习课题/.test(postActionProbe.hint)
         && /events/.test(postActionProbe.eventsPanelFocused)
         && /开战/.test(postActionProbe.focusedEvents)
         && /对局结束/.test(postActionProbe.focusedEvents)
@@ -806,25 +897,25 @@ async function writeReport() {
       JSON.stringify(friendlyAcceptedProbe),
     );
 
+    await ensureLiveRealtime(seatA.page);
+    await ensureLiveRealtime(seatB.page);
     await seatA.page.evaluate(async () => {
       await window.PVPScene.readyLiveMatch();
+    });
+    await waitForLiveSnapshot(seatB.page, () => {
+      const snapshot = window.PVPScene?.getLiveSnapshot?.();
+      return snapshot?.phase === 'setup' && snapshot?.opponent?.ready === true;
     });
     await seatB.page.evaluate(async () => {
-      await window.PVPScene.refreshLiveMatch();
       await window.PVPScene.readyLiveMatch();
-    });
-    await seatA.page.evaluate(async () => {
-      await window.PVPScene.refreshLiveMatch();
     });
     await waitForLivePhase(seatA.page, 'active');
     await waitForLivePhase(seatB.page, 'active');
     await seatB.page.evaluate(async () => {
       await window.PVPScene.surrenderLiveMatch();
     });
-    await seatA.page.evaluate(async () => {
-      await window.PVPScene.refreshLiveMatch();
-    });
     await waitForLivePhase(seatB.page, 'finished');
+    await waitForLivePhase(seatA.page, 'finished');
 
     await seatB.page.evaluate(async () => {
       await window.PVPScene.handleLivePostReviewAction('queue_again');

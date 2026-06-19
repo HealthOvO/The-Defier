@@ -1,5 +1,22 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-19: V10-S6A 真 PVP WebSocket 权威同步最小闭环
+  - 本轮完成
+    - 新增 `server/pvp-live/live-ws.js`，后端在 `/api/pvp/live/ws?token=<sessionToken>` 挂载单进程 WebSocket 入口：连接时校验 JWT，返回 `connected + pvp-live-ws-v1`，`join_match` 返回 seat-scoped `state_sync` 并补发公开 `events_replay`，`heartbeat` 返回 `presence` 并广播最新 StateView，`intent` 返回 `intent_result` 后向双方推送权威状态。
+    - WS 补发只走公开事件白名单，`makeEventReplay()` 不输出手牌、牌库顺序、实例 id、原始 payload 或 RNG；事件源优先读取 `pvp_live_match_events`，缺表记录时才回退 `match.state.events`。
+    - `js/services/backend-client.js` / `js/services/pvp-service.js` 新增 live WebSocket URL 与 `connectRealtime()` 桥；`js/services/pvp-live-session.js` 新增 realtime 状态、连接、join、heartbeat、intent 和 disconnect helper；`js/scenes/pvp-scene.js` 在 live heartbeat 生命周期内启动 WS、按最新公开事件 revision 请求 missed-event 补发，并在停止 heartbeat 时关闭实时连接。
+    - `tests/sanity_pvp_live_ws_checks.cjs` 覆盖双人真实后端 + WS：connected、seat-scoped `state_sync`、`events_replay` 脱敏、heartbeat presence、accepted intent_result 和对手 state_sync 广播；前端 client / service / session / UI contract 测试同步锁住桥接行为。
+    - `tests/run_node_checks.sh` 与 `tests/sanity_release_gate_coverage_checks.cjs` 已接入 S6A WS 门禁，避免后续只跑 HTTP fallback 而漏掉实时同步合同。
+  - 已验证
+    - `node tests/sanity_pvp_live_ws_checks.cjs`
+    - `node tests/sanity_pvp_live_client_checks.mjs`
+    - `node tests/sanity_pvp_live_service_bridge_checks.cjs`
+    - `node tests/sanity_pvp_live_session_checks.mjs`
+    - `node tests/sanity_pvp_live_ui_contract_checks.cjs`
+    - `node tests/sanity_release_gate_coverage_checks.cjs`
+  - 当前结论
+    - live PVP 已从 HTTP heartbeat / 轮询 fallback 推进到“单进程 WS 权威同步 + 公开事件补发”的最小可玩实时链路。它仍不是多实例共享队列、断线跨进程恢复、正式赛季全量入口、生产 smoke 或线上部署；这些仍需继续开发和封板验证。
+
 - 2026-06-19: V10 真 PVP 浏览器发布门禁接入 CI
   - 本轮完成
     - `.github/workflows/pages.yml` 的 `browser-release` 矩阵现在把 `pvp-live` 与 `pvp-live-real` 纳入 `expedition-pvp` shard，避免本地过滤门禁通过但远端 Pages workflow 只跑旧 PVP。
@@ -25,7 +42,7 @@ Original prompt: 进入全自动审查与修复模式，按顺序审查并修复
     - `node tests/sanity_pvp_live_session_checks.mjs`
     - `node tests/sanity_release_gate_coverage_checks.cjs`
   - 当前结论
-    - live PVP 的 HTTP heartbeat 已从前端猜测节奏推进到消费服务端权威节奏，弱网 / 重连窗口体验更容易跟服务端 SLA 对齐。它仍不是 WebSocket 实时推送、多实例共享队列、正式赛季入口、生产 smoke 或线上部署。
+    - live PVP 的 HTTP heartbeat 已从前端猜测节奏推进到消费服务端权威节奏，弱网 / 重连窗口体验更容易跟服务端 SLA 对齐。该切片当时未覆盖 WebSocket 实时推送、多实例共享队列、正式赛季入口、生产 smoke 或线上部署；WebSocket 最小闭环已由上方 S6A 继续推进。
 
 - 2026-06-19: V10-S5B 真 PVP 独立事件表回放真源
   - 本轮完成
@@ -41,7 +58,7 @@ Original prompt: 进入全自动审查与修复模式，按顺序审查并修复
     - `node tests/sanity_pvp_live_replay_checks.cjs`
     - `node tests/sanity_release_gate_coverage_checks.cjs`
   - 当前结论
-    - live PVP 回放已经从“最小 API 读取 match state 内事件”推进到“独立事件表可恢复公开时间线”的长期真源雏形。它仍不是 WebSocket missed-event 推送、多实例共享队列、正式赛季全量入口、生产 smoke 或线上部署。
+    - live PVP 回放已经从“最小 API 读取 match state 内事件”推进到“独立事件表可恢复公开时间线”的长期真源雏形。该切片当时未覆盖 WebSocket missed-event 推送、多实例共享队列、正式赛季全量入口、生产 smoke 或线上部署；WebSocket 最小闭环已由上方 S6A 继续推进。
 
 - 2026-06-19: V10-S3A 真 PVP 近分优先匹配与入队评分锁定
   - 本轮完成
@@ -86,7 +103,7 @@ Original prompt: 进入全自动审查与修复模式，按顺序审查并修复
     - `env AUDIT_FILTER=pvp-live,pvp-live-real bash tests/run_browser_release_checks.sh http://127.0.0.1:4174 output/release-browser-audits-pvp-live-s4a-s5a-replay-turntiming`：filtered release gate 通过；`pvp-live` 与 `pvp-live-real` 均 0 failed / 0 console errors。
     - `git diff --check`
   - 当前结论
-    - live PVP 不再允许玩家通过一张一张出牌来延长当前回合行动窗口；对手看到的倒计时和服务端 timeout 判定回到同一锚点。前端权威心跳调度已由上方 S4B 补齐；下一步仍需补匹配质量、UI 可行动作提示、WebSocket、多实例共享队列、生产 smoke 和线上部署。
+    - live PVP 不再允许玩家通过一张一张出牌来延长当前回合行动窗口；对手看到的倒计时和服务端 timeout 判定回到同一锚点。前端权威心跳调度已由上方 S4B 补齐；当时下一步仍需补匹配质量、UI 可行动作提示、WebSocket、多实例共享队列、生产 smoke 和线上部署，其中 WebSocket 最小闭环已由上方 S6A 继续推进。
 
 - 2026-06-19: V10-S5A 真 PVP 赛后 replay API 与三层客户端桥接
   - 本轮完成
@@ -138,7 +155,7 @@ Original prompt: 进入全自动审查与修复模式，按顺序审查并修复
     - `env AUDIT_FILTER=pvp-live,pvp-live-real bash tests/run_browser_release_checks.sh http://127.0.0.1:4174 output/release-browser-audits-pvp-live-s2f-round14-final`：filtered release gate 通过；`pvp-live` 与 `pvp-live-real` 均 0 failed / 0 console errors。
     - `git diff --check`
   - 当前结论
-    - live reducer 已不再存在“第 14 整轮后继续拖局”的 runtime 缺口；长局会按公开分数强制收束，平局也作为已完成对局进入 review 体系，并在正式结算层保持 0 积分 / 0 奖励 / 0 历史写入；`round14_score` 已有正式 settlement / history / rating 写账门禁。下一步仍需补更广义正式赛季入口、多实例队列、WebSocket、生产 smoke 和线上部署。
+    - live reducer 已不再存在“第 14 整轮后继续拖局”的 runtime 缺口；长局会按公开分数强制收束，平局也作为已完成对局进入 review 体系，并在正式结算层保持 0 积分 / 0 奖励 / 0 历史写入；`round14_score` 已有正式 settlement / history / rating 写账门禁。当时下一步仍需补更广义正式赛季入口、多实例队列、WebSocket、生产 smoke 和线上部署，其中 WebSocket 最小闭环已由上方 S6A 继续推进。
 
 - 2026-06-19: V10-S2E 真 PVP store-backed golden replay 与首次 timeout 托管（历史状态，round14 已由上方 S2F 覆盖）
   - 本轮完成

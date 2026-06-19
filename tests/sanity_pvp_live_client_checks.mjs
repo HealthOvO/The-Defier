@@ -48,12 +48,23 @@ assert.equal(typeof BackendClient.getCurrentLivePvpInvite, 'function', 'BackendC
 assert.equal(typeof BackendClient.getLivePvpInviteInbox, 'function', 'BackendClient should expose getLivePvpInviteInbox');
 assert.equal(typeof BackendClient.heartbeatLivePvpMatch, 'function', 'BackendClient should expose heartbeatLivePvpMatch');
 assert.equal(typeof BackendClient.submitLivePvpIntent, 'function', 'BackendClient should expose submitLivePvpIntent');
+assert.equal(typeof BackendClient.getLivePvpWebSocketUrl, 'function', 'BackendClient should expose getLivePvpWebSocketUrl');
+assert.equal(typeof BackendClient.connectLivePvpWebSocket, 'function', 'BackendClient should expose connectLivePvpWebSocket');
 
 const liveLoadout = {
   identitySlot: 'sword',
   label: '攻击测试谱',
   deck: Array.from({ length: 20 }, (_, index) => ({ id: index % 3 === 0 ? 'pvp_burst' : index % 3 === 1 ? 'pvp_strike' : 'pvp_guard', upgraded: false }))
 };
+BackendClient.loadServerSession = () => ({
+  token: 'token ws+/=',
+  user: { objectId: 'live-user-a', username: '甲' }
+});
+assert.equal(
+  BackendClient.getLivePvpWebSocketUrl(),
+  'ws://127.0.0.1:9000/api/pvp/live/ws?token=token%20ws%2B%2F%3D',
+  'live WebSocket URL should reuse server base URL, live path, and encoded session token',
+);
 const join = await BackendClient.joinLivePvpQueue({ displayName: '甲', loadout: liveLoadout });
 assert.equal(join.success, true, 'live queue join should forward success payload');
 assert.equal(calls.at(-1).path, '/api/pvp/live/queue/join', 'live queue join should use live queue endpoint');

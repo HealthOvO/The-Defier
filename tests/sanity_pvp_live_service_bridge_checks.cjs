@@ -104,6 +104,10 @@ function loadFile(ctx, filePath) {
         calls.push({ method: 'submitLivePvpIntent', matchId, intent });
         return { success: true, result: 'accepted', stateView: { stateVersion: 2 } };
       },
+      connectLivePvpWebSocket: (handlers) => {
+        calls.push({ method: 'connectLivePvpWebSocket', handlers });
+        return { send: () => true, close: () => true };
+      },
       reportPvpMatchResult: async () => {
         throw new Error('live pvp bridge must not call legacy reportPvpMatchResult');
       }
@@ -139,6 +143,7 @@ function loadFile(ctx, filePath) {
   assert(typeof PVPService.live.getInviteInbox === 'function', 'PVPService.live should expose getInviteInbox');
   assert(typeof PVPService.live.heartbeat === 'function', 'PVPService.live should expose heartbeat');
   assert(typeof PVPService.live.submitIntent === 'function', 'PVPService.live should expose submitIntent');
+  assert(typeof PVPService.live.connectRealtime === 'function', 'PVPService.live should expose connectRealtime');
   assert(!('reportResult' in PVPService.live), 'PVPService.live must not expose client-reported result API');
 
   const join = await PVPService.live.joinQueue({ displayName: '甲' });
@@ -201,6 +206,10 @@ function loadFile(ctx, filePath) {
   });
   assert(intent.success === true && intent.result === 'accepted', 'live intent bridge should forward intent result');
   assert(calls.at(-1).method === 'submitLivePvpIntent', 'live intent bridge should call BackendClient.submitLivePvpIntent');
+
+  const realtime = PVPService.live.connectRealtime({ onMessage: () => {} });
+  assert(realtime && typeof realtime.send === 'function', 'live realtime bridge should return websocket handle');
+  assert(calls.at(-1).method === 'connectLivePvpWebSocket', 'live realtime bridge should call BackendClient.connectLivePvpWebSocket');
   assert(!calls.some(call => call.method === 'reportPvpMatchResult'), 'live bridge should not call legacy result reporting');
 
   console.log('sanity_pvp_live_service_bridge_checks passed');
