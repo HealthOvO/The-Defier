@@ -1,5 +1,23 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-20: V10-S8Q live PVP same-version connection timeline monotonic merge
+  - 本轮完成
+    - `server/pvp-live/live-persistence.js` 的 active match upsert 不再把同 `stateVersion` / 同 `state_json` 的 incoming `connection_json` 整段覆盖到权威行；当当前行和 incoming 都是 active 时，写入时基于 SQLite 当前行做 `connectedAt` / `lastHeartbeatAt` / `reconnectedAt` 的 per-seat `MAX()` 合并。
+    - 该合并发生在 `ON CONFLICT DO UPDATE` 的 `connection_json` 赋值表达式里，而不是 JS pre-read 后的本地合并；读后写前若已有另一个进程推进了连接时间线，后到写入也不能把它回退。
+    - `tests/sanity_pvp_live_persistence_checks.cjs` 新增两类回归：同版本同状态的旧 heartbeat connection 保存不得回退已持久化时间线；测试内一次性拦截 `db.run` 模拟 pre-read / pre-write 之间的并发心跳推进，最终必须同时保留 incoming seat A 和并发 seat B 的更新。
+    - `tests/sanity_release_gate_coverage_checks.cjs` 固定连接时间线回归文案和 SQL-time merge 源码 marker。
+  - 已验证
+    - 红测：`node tests/sanity_pvp_live_persistence_checks.cjs` 在实现前失败于 `persistence CAS should not regress same-version active connection heartbeat timeline`。
+    - 红测：JS pre-read merge 版本继续失败于 `persistence CAS should keep concurrently advanced same-version active heartbeat timeline`，证明必须做写入时合并。
+    - 绿测：`node tests/sanity_pvp_live_persistence_checks.cjs`
+    - 绿测：`node tests/sanity_release_gate_coverage_checks.cjs`
+    - 语法检查：`node --check server/pvp-live/live-persistence.js`
+    - 全量：`npm run test:node`
+    - 构建：`npm run build:pages`
+    - 清洁检查：`git diff --check`
+  - 当前结论
+    - live PVP 已从 S8K 的 same-version active state 内容冲突保护，继续补到同版本同内容 heartbeat / connection 写入的时间线单调性：旧进程不能因为合法 heartbeat 保存把对手更新过的在线 / 重连时间戳覆盖回旧值。该切片仍不是完整 active match revision/CAS、Redis / 多实例强一致、跨进程 WS 主动 fanout、生产 smoke 或线上部署完成。
+
 - 2026-06-20: V10-S8P live PVP WS cross-process heartbeat state catch-up evidence
   - 本轮完成
     - `tests/sanity_pvp_live_ws_checks.cjs` 新增双 WS server 场景：`serverA` 和 `serverB` 各自挂载独立 `attachLivePvpWebSocket()`，模拟两个进程，背后共享一个 fake authority `stateVersion`。
@@ -92,7 +110,7 @@ Original prompt: 进入全自动审查与修复模式，按顺序审查并修复
   - 本轮完成
     - `server/pvp-live/live-persistence.js` 的 active match 保存现在会读取 persisted `state_json` 与 `state_version` 快照；当 incoming active state 与权威行处在同一 `stateVersion` 但 `state_json` 内容不同，返回 `saved=false / skipped=true / reason=conflicting_state_version`，不再静默覆盖权威 active match。
     - SQLite upsert 条件同步收紧为 active CAS：更高 `stateVersion` 才可覆盖；同版本只有 `state_json` 完全一致才允许更新 connection。若写入 no-op，会二次读取权威版本，版本已被其他进程推进时继续返回 `stale_state_version`。
-    - 同一 `stateVersion` 且 `state_json` 相同的保存仍允许通过，用于 heartbeat 这类只更新 `connection_json` 的合法写入。
+    - 同一 `stateVersion` 且 `state_json` 相同的保存仍允许通过，用于 heartbeat 这类只更新 `connection_json` 的合法写入；S8Q 已继续把该路径收紧为写入时单调合并连接时间线，不再整段回退覆盖。
     - `server/pvp-live/live-store.js` 把 `conflicting_state_version` 纳入现有权威回读 / `sync_required` 路径；玩家不会继续收到本地 dirty stateView。
     - `tests/sanity_pvp_live_persistence_checks.cjs` 新增行为回归：store heartbeat 遇到同版本冲突必须回读 authoritative persisted match；SQLite persistence 遇到同版本 active 内容冲突必须跳过并保留权威 HP / state；trigger 模拟 post-read/pre-write race 时必须保留 `stale_state_version` 口径。
     - `tests/sanity_release_gate_coverage_checks.cjs` 固定同版本冲突的测试文案、persistence 快照比较和 store 回源 marker。

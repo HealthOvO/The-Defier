@@ -61,6 +61,28 @@ function serializeConnection(connection) {
     return JSON.stringify(connection || {});
 }
 
+function makeConnectionTimestampSql(jsonExpression, jsonPath) {
+    return `CAST(COALESCE(json_extract(${jsonExpression}, '${jsonPath}'), 0) AS INTEGER)`;
+}
+
+function makeConnectionTimelineMaxSql(currentJsonExpression, incomingJsonExpression) {
+    const currentJson = `COALESCE(NULLIF(${currentJsonExpression}, ''), '{}')`;
+    const incomingJson = `COALESCE(NULLIF(${incomingJsonExpression}, ''), '{}')`;
+    let mergedJson = `json_patch(${currentJson}, ${incomingJson})`;
+    ['A', 'B'].forEach(seatId => {
+        ['connectedAt', 'lastHeartbeatAt', 'reconnectedAt'].forEach(field => {
+            const jsonPath = `$.seats.${seatId}.${field}`;
+            mergedJson = `json_set(${mergedJson}, '${jsonPath}', MAX(${makeConnectionTimestampSql(currentJson, jsonPath)}, ${makeConnectionTimestampSql(incomingJson, jsonPath)}))`;
+        });
+    });
+    return mergedJson;
+}
+
+const ACTIVE_CONNECTION_TIMELINE_SQL = makeConnectionTimelineMaxSql(
+    'pvp_live_matches.connection_json',
+    'excluded.connection_json'
+);
+
 function getStateVersion(state) {
     return Math.max(0, Math.floor(Number(state && state.stateVersion) || 0));
 }
@@ -522,7 +544,11 @@ function makeSqliteLivePvpPersistence() {
                     seat_b_user_id = excluded.seat_b_user_id,
                     state_version = excluded.state_version,
                     state_json = excluded.state_json,
-                    connection_json = excluded.connection_json,
+                    connection_json = CASE
+                        WHEN pvp_live_matches.status = 'active' AND excluded.status = 'active'
+                        THEN ${ACTIVE_CONNECTION_TIMELINE_SQL}
+                        ELSE excluded.connection_json
+                    END,
                     updated_at = excluded.updated_at,
                     finished_at = excluded.finished_at
                  WHERE

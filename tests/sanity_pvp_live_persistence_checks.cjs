@@ -1552,6 +1552,143 @@ async function readyBoth({ matchId, tokenA, tokenB, stateVersionA, prefix }) {
     opponentHpAfterIntent,
     'persistence CAS should keep the latest combat state when a same-version process saves later',
   );
+  const connectionTimelineBase = Math.max(1000, Number(activeMatchRow.created_at) || Date.now());
+  const newerConnection = {
+    reportVersion: 'pvp-live-connection-v1',
+    heartbeatIntervalMs: 2500,
+    heartbeatStaleMs: 8000,
+    reconnectGraceMs: 12000,
+    seats: {
+      A: {
+        seatId: 'A',
+        connectedAt: connectionTimelineBase,
+        lastHeartbeatAt: connectionTimelineBase + 5000,
+        reconnectedAt: connectionTimelineBase + 3000,
+      },
+      B: {
+        seatId: 'B',
+        connectedAt: connectionTimelineBase + 100,
+        lastHeartbeatAt: connectionTimelineBase + 4500,
+        reconnectedAt: connectionTimelineBase + 2500,
+      },
+    },
+  };
+  const newerConnectionSaveResult = await makeLivePvpPersistenceForTest().saveMatch({
+    matchId,
+    createdAt: Number(activeMatchRow.created_at) || Date.now(),
+    updatedAt: Date.now() + 3,
+    state: latestActiveState,
+    connection: newerConnection,
+    seatsByUserId: {
+      [userA.userId]: 'A',
+      [userB.userId]: 'B',
+    },
+  });
+  assert.equal(newerConnectionSaveResult?.saved, true, 'same-version active heartbeat connection save should be accepted');
+  const olderConnection = JSON.parse(JSON.stringify(newerConnection));
+  olderConnection.seats.A.lastHeartbeatAt = connectionTimelineBase + 1500;
+  olderConnection.seats.A.reconnectedAt = connectionTimelineBase + 1200;
+  olderConnection.seats.B.lastHeartbeatAt = connectionTimelineBase + 1200;
+  olderConnection.seats.B.reconnectedAt = connectionTimelineBase + 900;
+  const staleConnectionSaveResult = await makeLivePvpPersistenceForTest().saveMatch({
+    matchId,
+    createdAt: Number(activeMatchRow.created_at) || Date.now(),
+    updatedAt: Date.now() + 4,
+    state: latestActiveState,
+    connection: olderConnection,
+    seatsByUserId: {
+      [userA.userId]: 'A',
+      [userB.userId]: 'B',
+    },
+  });
+  assert.equal(staleConnectionSaveResult?.saved, true, 'same-version active stale heartbeat connection save should be accepted without regressing timeline');
+  const rowAfterStaleConnectionSave = await dbGet('SELECT connection_json FROM pvp_live_matches WHERE match_id = ?', [matchId]);
+  const connectionAfterStaleConnectionSave = JSON.parse(rowAfterStaleConnectionSave.connection_json);
+  assert.equal(
+    connectionAfterStaleConnectionSave.seats.A.lastHeartbeatAt,
+    newerConnection.seats.A.lastHeartbeatAt,
+    'persistence CAS should not regress same-version active connection heartbeat timeline',
+  );
+  assert.equal(
+    connectionAfterStaleConnectionSave.seats.B.reconnectedAt,
+    newerConnection.seats.B.reconnectedAt,
+    'persistence CAS should not regress same-version active reconnect timeline',
+  );
+  const raceConnection = JSON.parse(JSON.stringify(newerConnection));
+  raceConnection.seats.A.lastHeartbeatAt = connectionTimelineBase + 9000;
+  raceConnection.seats.A.reconnectedAt = connectionTimelineBase + 8500;
+  raceConnection.seats.B.lastHeartbeatAt = connectionTimelineBase + 1100;
+  raceConnection.seats.B.reconnectedAt = connectionTimelineBase + 800;
+  const racedSeatBLastHeartbeatAt = connectionTimelineBase + 12000;
+  const racedSeatBReconnectedAt = connectionTimelineBase + 11500;
+  const databaseModule = require('../server/db/database');
+  const originalDbRun = databaseModule.db.run;
+  let injectedConnectionRace = false;
+  databaseModule.db.run = function(sql, params, callback) {
+    const sqlText = String(sql || '');
+    if (
+      !injectedConnectionRace
+      && sqlText.includes('INSERT INTO pvp_live_matches')
+      && sqlText.includes('ON CONFLICT(match_id) DO UPDATE')
+    ) {
+      injectedConnectionRace = true;
+      const dbThis = this;
+      return originalDbRun.call(
+        dbThis,
+        `UPDATE pvp_live_matches
+            SET connection_json = json_set(
+                  COALESCE(NULLIF(connection_json, ''), '{}'),
+                  '$.seats.B.lastHeartbeatAt', ?,
+                  '$.seats.B.reconnectedAt', ?
+                )
+          WHERE match_id = ?`,
+        [racedSeatBLastHeartbeatAt, racedSeatBReconnectedAt, matchId],
+        (err) => {
+          if (err) {
+            if (typeof callback === 'function') callback(err);
+            return;
+          }
+          originalDbRun.call(dbThis, sql, params, callback);
+        },
+      );
+    }
+    return originalDbRun.apply(this, arguments);
+  };
+  let racedConnectionSaveResult;
+  try {
+    racedConnectionSaveResult = await makeLivePvpPersistenceForTest().saveMatch({
+      matchId,
+      createdAt: Number(activeMatchRow.created_at) || Date.now(),
+      updatedAt: Date.now() + 5,
+      state: latestActiveState,
+      connection: raceConnection,
+      seatsByUserId: {
+        [userA.userId]: 'A',
+        [userB.userId]: 'B',
+      },
+    });
+  } finally {
+    databaseModule.db.run = originalDbRun;
+  }
+  assert.equal(injectedConnectionRace, true, 'same-version active connection race test should inject a pre-write heartbeat update');
+  assert.equal(racedConnectionSaveResult?.saved, true, 'same-version active raced heartbeat connection save should be accepted without regressing concurrent timeline');
+  const rowAfterRacedConnectionSave = await dbGet('SELECT connection_json FROM pvp_live_matches WHERE match_id = ?', [matchId]);
+  const connectionAfterRacedConnectionSave = JSON.parse(rowAfterRacedConnectionSave.connection_json);
+  assert.equal(
+    connectionAfterRacedConnectionSave.seats.A.lastHeartbeatAt,
+    raceConnection.seats.A.lastHeartbeatAt,
+    'persistence CAS should keep incoming same-version active heartbeat timeline during a write race',
+  );
+  assert.equal(
+    connectionAfterRacedConnectionSave.seats.B.lastHeartbeatAt,
+    racedSeatBLastHeartbeatAt,
+    'persistence CAS should keep concurrently advanced same-version active heartbeat timeline',
+  );
+  assert.equal(
+    connectionAfterRacedConnectionSave.seats.B.reconnectedAt,
+    racedSeatBReconnectedAt,
+    'persistence CAS should keep concurrently advanced same-version active reconnect timeline',
+  );
   await dbRun('DROP TRIGGER IF EXISTS pvp_live_race_bump');
   await dbRun(`
     CREATE TRIGGER pvp_live_race_bump
