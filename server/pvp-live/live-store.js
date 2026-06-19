@@ -1087,6 +1087,8 @@ class LivePvpStore {
             const earnedReward = rewardTrack.slice().reverse().find(reward => gamesPlayed >= reward.targetGames) || rewardTrack[0];
             const upcomingReward = rewardTrack.find(reward => reward.targetGames > gamesPlayed) || earnedReward;
             const rewardRemaining = Math.max(0, upcomingReward.targetGames - gamesPlayed);
+            const honorClaim = result && result.seasonHonorClaim && typeof result.seasonHonorClaim === 'object' ? result.seasonHonorClaim : {};
+            const collectionReport = honorClaim.collectionReport && typeof honorClaim.collectionReport === 'object' ? honorClaim.collectionReport : null;
             return {
                 reportVersion: 'pvp-live-season-honor-v1',
                 seasonId: String(result && result.seasonId || 's1-genesis'),
@@ -1111,10 +1113,22 @@ class LivePvpStore {
                     rewardType: earnedReward.rewardType,
                     rewardName: earnedReward.rewardName,
                     rewardState: 'earned',
+                    collectionState: honorClaim.collectionState === 'newly_unlocked' ? 'newly_unlocked' : honorClaim.collectionState === 'owned' ? 'owned' : 'earned',
                     rewardImpact: 'cosmetic_only',
                     powerImpact: 'none',
                     sourceVisibility: 'server_authoritative_settlement',
                     usesHiddenInformation: false,
+                    unlockedAt: Math.max(0, Math.floor(Number(honorClaim.unlockedAt) || 0)),
+                    collectionSize: Math.max(0, Math.floor(Number(honorClaim.collectionSize) || 0)),
+                    collectionReport: collectionReport ? {
+                        reportVersion: 'pvp-live-season-honor-collection-v1',
+                        seasonId: String(collectionReport.seasonId || result && result.seasonId || 's1-genesis'),
+                        rewardImpact: 'cosmetic_only',
+                        powerImpact: 'none',
+                        totalUnlocked: Math.max(0, Math.floor(Number(collectionReport.totalUnlocked) || 0)),
+                        lastUnlockedRewardId: String(collectionReport.lastUnlockedRewardId || ''),
+                        boundary: '赛季荣誉收藏只保存外观成就，不授予卡牌、属性、资源、起手、匹配或战斗效果。'
+                    } : null,
                     unlockLine: `已点亮外观目标：${earnedReward.rewardName}`,
                     progressLine: rewardRemaining === 0
                         ? `本季 ${gamesPlayed} 场 · 最高外观档已达成`

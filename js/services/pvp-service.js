@@ -881,6 +881,7 @@ export const PVPService = {
       bestWinStreak: 0,
       purchases: {},
       ownedItems: {},
+      seasonHonorCollection: this.normalizeSeasonHonorCollection(null),
       equippedSkinId: null,
       equippedTitleId: null,
       transactionLog: [],
@@ -905,6 +906,7 @@ export const PVPService = {
         if (src.ownedItems[key]) ownedItems[key] = true;
       });
     }
+    const seasonHonorCollection = this.normalizeSeasonHonorCollection(src.seasonHonorCollection);
     const transactionLog = Array.isArray(src.transactionLog) ? src.transactionLog.filter(it => it && typeof it === 'object').slice(-40).map(it => ({
       type: it.type || 'misc',
       itemId: it.itemId || null,
@@ -930,12 +932,48 @@ export const PVPService = {
       bestWinStreak: Math.max(0, Math.floor(Number(src.bestWinStreak) || 0)),
       purchases,
       ownedItems,
+      seasonHonorCollection,
       equippedSkinId,
       equippedTitleId,
       transactionLog,
       matchHistory,
       lastRewardAt: Math.max(0, Math.floor(Number(src.lastRewardAt) || 0)),
       lastPurchaseAt: Math.max(0, Math.floor(Number(src.lastPurchaseAt) || 0))
+    };
+  },
+  normalizeSeasonHonorCollection(raw) {
+    const src = raw && typeof raw === 'object' ? raw : {};
+    const unlockedRewards = {};
+    if (src.unlockedRewards && typeof src.unlockedRewards === 'object') {
+      Object.keys(src.unlockedRewards).forEach(key => {
+        const entry = src.unlockedRewards[key];
+        if (!entry || typeof entry !== 'object') return;
+        const rewardId = String(entry.rewardId || key || '').trim();
+        if (!rewardId) return;
+        unlockedRewards[rewardId] = {
+          rewardId,
+          rewardType: String(entry.rewardType || 'cosmetic_badge'),
+          rewardName: String(entry.rewardName || '赛季荣誉外观'),
+          targetGames: Math.max(1, Math.floor(Number(entry.targetGames) || 1)),
+          source: 'live_ranked',
+          rewardImpact: 'cosmetic_only',
+          powerImpact: 'none',
+          unlockedAt: Math.max(0, Math.floor(Number(entry.unlockedAt) || 0))
+        };
+      });
+    }
+    const rewardIds = Object.keys(unlockedRewards);
+    const lastUnlockedRewardId = rewardIds.includes(src.lastUnlockedRewardId) ? String(src.lastUnlockedRewardId) : rewardIds[rewardIds.length - 1] || null;
+    return {
+      reportVersion: 'pvp-live-season-honor-collection-v1',
+      seasonId: String(src.seasonId || 's1-genesis'),
+      source: 'live_ranked',
+      rewardImpact: 'cosmetic_only',
+      powerImpact: 'none',
+      unlockedRewards,
+      totalUnlocked: rewardIds.length,
+      lastUnlockedRewardId,
+      boundary: '赛季荣誉收藏只保存外观成就，不授予卡牌、属性、资源、起手、匹配或战斗效果。'
     };
   },
   loadEconomyState() {

@@ -1,5 +1,22 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-19: V10-S7F live ranked 赛季荣誉收藏持久化
+  - 本轮完成
+    - `server/pvp-live/live-settlement.js` 在 live ranked 权威 settlement 事务内新增 `seasonHonorCollection`，首场 / 3 / 5 / 10 / 20 / 50 场荣誉外观按 `rankedGames` 幂等入库；重复 intent / 重复 settlement 复用 `pvp_live_match_settlements` gate，不重复发放或重复写日志。
+    - `seasonHonorCollection` 独立保存在 `pvp_economy.economy_data`，固定 `rewardImpact: cosmetic_only`、`powerImpact: none`；不写 `ownedItems`，不进入旧商店商品、卡牌、属性、资源、起手、匹配或战斗效果。
+    - `server/routes/pvp.js` 与 `js/services/pvp-service.js` 同步 economy 白名单，避免 `/api/pvp/rank`、`/api/pvp/economy` 或本地缓存同步时把荣誉收藏字段抹掉。
+    - `server/pvp-live/live-store.js` / `server/pvp-live/engine/state-view.js` 在 `cosmeticReward` 中回显 `collectionState` 和 `pvp-live-season-honor-collection-v1`；收藏真源也会通过已鉴权的 `/api/pvp/rank` / `/api/pvp/economy` 给本人同步，public replay、audit_safe、friendly 和 invalidated 不暴露收藏状态。
+    - `js/scenes/pvp-scene.js` / `css/pvp.css` 在现有 `data-live-season-honor-reward` 外观目标块内新增收藏状态行，DOM 标记 `data-live-season-honor-reward-state` 与 `data-live-season-honor-reward-collection`，不新开强度入口或装备页。
+  - 已验证
+    - 红测：`node tests/sanity_pvp_live_settlement_checks.cjs` 在实现前失败于 `collectionState` / `seasonHonorCollection` 缺失。
+    - 绿测：`node tests/sanity_pvp_live_settlement_checks.cjs`
+    - `node tests/sanity_pvp_live_route_checks.cjs`
+    - `node tests/sanity_pvp_live_replay_checks.cjs`
+    - `node tests/sanity_pvp_live_ui_contract_checks.cjs`
+    - `node tests/sanity_release_gate_coverage_checks.cjs`
+  - 当前结论
+    - live ranked 的长期目标现在不只是赛后展示，而是能把非强度荣誉外观安全持久化到服务端收藏，并在双方各自结算里显示“新入库 / 已入库”。完整装备展示页、多实例共享队列、跨进程 WS/队列共享、移动端真实后端 smoke、生产 smoke 和线上部署仍未封板。
+
 - 2026-06-19: V10-S7E live ranked 赛季荣誉外观目标
   - 本轮完成
     - `server/pvp-live/live-store.js` 在 live ranked 权威结算的 `seasonHonorReport` 下新增 `cosmeticReward`，版本为 `pvp-live-season-honor-reward-v1`，按本季 rankedGames 派生 1/3/5/10/20/50 场外观目标轨。

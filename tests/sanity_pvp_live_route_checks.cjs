@@ -55,6 +55,26 @@ function makeLoadout(identitySlot, pattern) {
 function makeRouteSettlementStub() {
     const seatUserId = (match, seatId) => Object.entries(match && match.seatsByUserId || {})
         .find(([, sourceSeat]) => sourceSeat === seatId)?.[0] || '';
+    const makeSeasonHonorClaim = () => ({
+        reportVersion: 'pvp-live-season-honor-claim-v1',
+        rewardId: 's1_genesis_honor_mark_1',
+        rewardType: 'cosmetic_badge',
+        rewardName: '开天见证徽记',
+        collectionState: 'newly_unlocked',
+        rewardImpact: 'cosmetic_only',
+        powerImpact: 'none',
+        unlockedAt: Date.now(),
+        collectionSize: 1,
+        collectionReport: {
+            reportVersion: 'pvp-live-season-honor-collection-v1',
+            seasonId: 's1-genesis',
+            rewardImpact: 'cosmetic_only',
+            powerImpact: 'none',
+            totalUnlocked: 1,
+            lastUnlockedRewardId: 's1_genesis_honor_mark_1',
+            boundary: '赛季荣誉收藏只保存外观成就，不授予卡牌、属性、资源、起手、匹配或战斗效果。'
+        }
+    });
     return {
         async settleMatch(match) {
             if (!match || !match.state || match.state.status !== 'finished' || match.state.mode === 'friendly') {
@@ -77,7 +97,9 @@ function makeRouteSettlementStub() {
                     oldScore: 1000,
                     newScore: 1024,
                     ratingDelta: 24,
-                    coinsAwarded: 38
+                    coinsAwarded: 38,
+                    rankedGames: 1,
+                    seasonHonorClaim: makeSeasonHonorClaim()
                 },
                 loser: {
                     userId: seatUserId(match, loserSeat),
@@ -85,7 +107,9 @@ function makeRouteSettlementStub() {
                     oldScore: 1000,
                     newScore: 988,
                     ratingDelta: -12,
-                    coinsAwarded: 12
+                    coinsAwarded: 12,
+                    rankedGames: 1,
+                    seasonHonorClaim: makeSeasonHonorClaim()
                 }
             };
         }
@@ -866,6 +890,8 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
         assert.equal(surrenderB.payload.stateView.postMatchReview?.settlementReport?.seasonHonorReport?.cosmeticReward?.reportVersion, 'pvp-live-season-honor-reward-v1', 'ranked surrender season honor should include cosmetic-only reward track');
         assert.equal(surrenderB.payload.stateView.postMatchReview?.settlementReport?.seasonHonorReport?.cosmeticReward?.rewardImpact, 'cosmetic_only', 'ranked season honor reward should be cosmetic only');
         assert.equal(surrenderB.payload.stateView.postMatchReview?.settlementReport?.seasonHonorReport?.cosmeticReward?.powerImpact, 'none', 'ranked season honor reward should not grant combat power');
+        assert.equal(surrenderB.payload.stateView.postMatchReview?.settlementReport?.seasonHonorReport?.cosmeticReward?.collectionState, 'newly_unlocked', 'ranked season honor reward should expose new collection unlock state');
+        assert.equal(surrenderB.payload.stateView.postMatchReview?.settlementReport?.seasonHonorReport?.cosmeticReward?.collectionReport?.reportVersion, 'pvp-live-season-honor-collection-v1', 'ranked season honor reward should include collection report');
 
         const rematchA = await request(baseUrl, `/api/pvp/live/matches/${joinB.payload.matchId}/rematch`, {
             method: 'POST',

@@ -660,6 +660,8 @@ async function writeReport() {
       seasonHonorPower: document.querySelector('[data-live-season-honor]')?.getAttribute('data-live-season-honor-power') || '',
       seasonHonorRewardText: document.querySelector('[data-live-season-honor-reward]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
       seasonHonorRewardImpact: document.querySelector('[data-live-season-honor-reward]')?.getAttribute('data-live-season-honor-reward-impact') || '',
+      seasonHonorRewardState: document.querySelector('[data-live-season-honor-reward]')?.getAttribute('data-live-season-honor-reward-state') || '',
+      seasonHonorRewardCollection: document.querySelector('[data-live-season-honor-reward]')?.getAttribute('data-live-season-honor-reward-collection') || '',
       reviewActionIds: Array.from(document.querySelectorAll('[data-live-post-review-action]')).map(button => button.getAttribute('data-live-post-review-action')),
       payload: window.PVPScene.getLiveSnapshot()?.postMatchReview || null,
       textPayload: JSON.parse(window.render_game_to_text()).pvp?.live?.postMatchReview || null,
@@ -702,21 +704,26 @@ async function writeReport() {
         && /不改变生命、伤害、抽牌、灵力、起手或匹配/.test(postMatchProbe.seasonHonorText)
         && postMatchProbe.seasonHonorPower === 'none'
         && /外观目标/.test(postMatchProbe.seasonHonorRewardText)
+        && /收藏状态/.test(postMatchProbe.seasonHonorRewardText)
         && /不授予卡牌、属性、资源、起手、匹配或战斗效果/.test(postMatchProbe.seasonHonorRewardText)
         && postMatchProbe.seasonHonorRewardImpact === 'cosmetic_only'
+        && postMatchProbe.seasonHonorRewardState === 'earned'
+        && postMatchProbe.seasonHonorRewardCollection === 'newly_unlocked'
         && postMatchProbe.payload?.settlementReport?.seasonHonorReport?.reportVersion === 'pvp-live-season-honor-v1'
         && postMatchProbe.payload?.settlementReport?.seasonHonorReport?.powerImpact === 'none'
         && postMatchProbe.payload?.settlementReport?.seasonHonorReport?.cosmeticReward?.reportVersion === 'pvp-live-season-honor-reward-v1'
         && postMatchProbe.payload?.settlementReport?.seasonHonorReport?.cosmeticReward?.rewardImpact === 'cosmetic_only'
         && postMatchProbe.payload?.settlementReport?.seasonHonorReport?.cosmeticReward?.powerImpact === 'none'
+        && postMatchProbe.payload?.settlementReport?.seasonHonorReport?.cosmeticReward?.collectionState === 'newly_unlocked'
+        && postMatchProbe.payload?.settlementReport?.seasonHonorReport?.cosmeticReward?.collectionReport?.reportVersion === 'pvp-live-season-honor-collection-v1'
         && postMatchProbe.textPayload?.settlementReport?.seasonHonorReport?.reportVersion === 'pvp-live-season-honor-v1'
         && postMatchProbe.textPayload?.settlementReport?.seasonHonorReport?.cosmeticReward?.reportVersion === 'pvp-live-season-honor-reward-v1',
       JSON.stringify({ finishedA, finishedB, postMatchProbe, postMatchParity }),
     );
     const publicReplayProbe = await requestLivePvpReplay(seatB.page, finishedB.matchId, { visibility: 'replay_public' });
-    publicReplayProbe.hasForbiddenReport = /postMatchReview|settlementReport|seasonHonorReport|cosmeticReward|viewerSeat/.test(JSON.stringify(publicReplayProbe.replay || {}));
+    publicReplayProbe.hasForbiddenReport = /postMatchReview|settlementReport|seasonHonorReport|cosmeticReward|seasonHonorCollection|collectionState|viewerSeat/.test(JSON.stringify(publicReplayProbe.replay || {}));
     const auditSafeReplayProbe = await requestLivePvpReplay(seatB.page, finishedB.matchId, { visibility: 'audit_safe' });
-    auditSafeReplayProbe.hasForbiddenReport = /postMatchReview|settlementReport|seasonHonorReport|cosmeticReward|viewerSeat/.test(JSON.stringify(auditSafeReplayProbe.replay || {}));
+    auditSafeReplayProbe.hasForbiddenReport = /postMatchReview|settlementReport|seasonHonorReport|cosmeticReward|seasonHonorCollection|collectionState|viewerSeat/.test(JSON.stringify(auditSafeReplayProbe.replay || {}));
     add(
       'real browser replay_public hides seat-specific settlement and season honor reports',
       publicReplayProbe?.success === true
@@ -727,6 +734,7 @@ async function writeReport() {
         && !publicReplayProbe.replay?.settlementReport
         && !publicReplayProbe.replay?.seasonHonorReport
         && !publicReplayProbe.replay?.cosmeticReward
+        && !publicReplayProbe.replay?.seasonHonorCollection
         && !publicReplayProbe.replay?.viewerSeat
         && publicReplayProbe.hasForbiddenReport === false,
       JSON.stringify(publicReplayProbe),
@@ -744,6 +752,7 @@ async function writeReport() {
         && !auditSafeReplayProbe.replay?.settlementReport
         && !auditSafeReplayProbe.replay?.seasonHonorReport
         && !auditSafeReplayProbe.replay?.cosmeticReward
+        && !auditSafeReplayProbe.replay?.seasonHonorCollection
         && !auditSafeReplayProbe.replay?.viewerSeat
         && auditSafeReplayProbe.hasForbiddenReport === false,
       JSON.stringify(auditSafeReplayProbe),

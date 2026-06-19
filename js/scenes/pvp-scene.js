@@ -1065,6 +1065,7 @@ export const PVPScene = {
     const reward = source && typeof source === 'object' ? source : null;
     if (!reward || reward.reportVersion !== 'pvp-live-season-honor-reward-v1') return null;
     const nextReward = reward.nextReward && typeof reward.nextReward === 'object' ? reward.nextReward : {};
+    const collectionReport = reward.collectionReport && typeof reward.collectionReport === 'object' ? reward.collectionReport : null;
     const rewardName = String(reward.rewardName || '赛季荣誉外观');
     return {
       reportVersion: 'pvp-live-season-honor-reward-v1',
@@ -1072,10 +1073,22 @@ export const PVPScene = {
       rewardType: String(reward.rewardType || 'cosmetic_badge'),
       rewardName,
       rewardState: reward.rewardState === 'preview' ? 'preview' : 'earned',
+      collectionState: reward.collectionState === 'newly_unlocked' ? 'newly_unlocked' : reward.collectionState === 'owned' ? 'owned' : 'earned',
       rewardImpact: String(reward.rewardImpact || 'cosmetic_only'),
       powerImpact: String(reward.powerImpact || 'none'),
       sourceVisibility: String(reward.sourceVisibility || 'server_authoritative_settlement'),
       usesHiddenInformation: !!reward.usesHiddenInformation,
+      unlockedAt: Math.max(0, Math.floor(Number(reward.unlockedAt) || 0)),
+      collectionSize: Math.max(0, Math.floor(Number(reward.collectionSize) || 0)),
+      collectionReport: collectionReport ? {
+        reportVersion: 'pvp-live-season-honor-collection-v1',
+        seasonId: String(collectionReport.seasonId || 's1-genesis'),
+        rewardImpact: String(collectionReport.rewardImpact || 'cosmetic_only'),
+        powerImpact: String(collectionReport.powerImpact || 'none'),
+        totalUnlocked: Math.max(0, Math.floor(Number(collectionReport.totalUnlocked) || 0)),
+        lastUnlockedRewardId: String(collectionReport.lastUnlockedRewardId || ''),
+        boundary: String(collectionReport.boundary || '赛季荣誉收藏只保存外观成就，不授予卡牌、属性、资源、起手、匹配或战斗效果。')
+      } : null,
       unlockLine: String(reward.unlockLine || `已点亮外观目标：${rewardName}`),
       progressLine: String(reward.progressLine || '本季外观目标已更新'),
       nextReward: {
@@ -1095,6 +1108,7 @@ export const PVPScene = {
     const deltaText = report.ratingDelta > 0 ? `+${report.ratingDelta}` : `${report.ratingDelta}`;
     const resultLabel = report.result === 'win' ? '胜局结算' : report.result === 'loss' ? '败局结算' : '终局结算';
     const honor = report.seasonHonorReport;
+    const getCollectionLabel = (state) => state === 'newly_unlocked' ? '新入库' : state === 'owned' ? '已入库' : '待入库';
     return `
       <div
         class="pvp-live-settlement-report"
@@ -1131,12 +1145,15 @@ export const PVPScene = {
                 class="pvp-live-season-honor-reward"
                 data-live-season-honor-reward
                 data-live-season-honor-reward-impact="${this.escapeHtml(honor.cosmeticReward.rewardImpact)}"
+                data-live-season-honor-reward-state="${this.escapeHtml(honor.cosmeticReward.rewardState)}"
+                data-live-season-honor-reward-collection="${this.escapeHtml(honor.cosmeticReward.collectionState)}"
               >
                 <div class="pvp-live-season-honor-reward-head">
                   <span>外观目标</span>
-                  <span>${this.escapeHtml(honor.cosmeticReward.rewardState === 'earned' ? '已点亮' : '预览')}</span>
+                  <span>${this.escapeHtml(honor.cosmeticReward.rewardState === 'earned' ? '已点亮' : '预览')} · ${this.escapeHtml(getCollectionLabel(honor.cosmeticReward.collectionState))}</span>
                 </div>
                 <div class="pvp-live-season-honor-reward-name">${this.escapeHtml(honor.cosmeticReward.rewardName)}</div>
+                <div class="pvp-live-season-honor-reward-collection">收藏状态：${this.escapeHtml(getCollectionLabel(honor.cosmeticReward.collectionState))} · 本季已入库 ${this.escapeHtml(honor.cosmeticReward.collectionSize)} 项</div>
                 <div class="pvp-live-season-honor-reward-progress">${this.escapeHtml(honor.cosmeticReward.unlockLine)} · ${this.escapeHtml(honor.cosmeticReward.progressLine)}</div>
                 <div class="pvp-live-season-honor-reward-next">${this.escapeHtml(honor.cosmeticReward.nextReward.label)}</div>
                 <div class="pvp-live-season-honor-reward-boundary">${this.escapeHtml(honor.cosmeticReward.boundary)}</div>

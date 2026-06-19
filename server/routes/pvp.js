@@ -8,6 +8,7 @@ const { getMaxAcceptedClientTimestamp, normalizeClientTimestamp } = require('../
 const router = express.Router();
 const SEASON_ID = 's1-genesis';
 const MATCH_TTL_MS = 10 * 60 * 1000;
+const SEASON_HONOR_COLLECTION_VERSION = 'pvp-live-season-honor-collection-v1';
 const PVP_SHOP_CATALOG = new Map([
     ['secret_manual_1', { id: 'secret_manual_1', type: 'card', name: '虚空破碎', price: 500, stock: 1 }],
     ['secret_manual_2', { id: 'secret_manual_2', type: 'card', name: '天道庇护', price: 300, stock: 1 }],
@@ -223,12 +224,49 @@ function defaultEconomy(userId) {
         bestWinStreak: 0,
         purchases: {},
         ownedItems: {},
+        seasonHonorCollection: normalizeSeasonHonorCollection(null),
         equippedSkinId: null,
         equippedTitleId: null,
         transactionLog: [],
         matchHistory: [],
         lastRewardAt: 0,
         lastPurchaseAt: 0
+    };
+}
+
+function normalizeSeasonHonorCollection(raw) {
+    const src = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
+    const unlockedRewards = {};
+    if (src.unlockedRewards && typeof src.unlockedRewards === 'object' && !Array.isArray(src.unlockedRewards)) {
+        Object.keys(src.unlockedRewards).forEach((key) => {
+            const entry = src.unlockedRewards[key];
+            if (!entry || typeof entry !== 'object') return;
+            const rewardId = String(entry.rewardId || key || '').trim();
+            if (!rewardId) return;
+            unlockedRewards[rewardId] = {
+                rewardId,
+                rewardType: String(entry.rewardType || 'cosmetic_badge'),
+                rewardName: String(entry.rewardName || '赛季荣誉外观'),
+                targetGames: Math.max(1, Math.floor(Number(entry.targetGames) || 1)),
+                source: 'live_ranked',
+                rewardImpact: 'cosmetic_only',
+                powerImpact: 'none',
+                unlockedAt: Math.max(0, Math.floor(Number(entry.unlockedAt) || 0))
+            };
+        });
+    }
+    const rewardIds = Object.keys(unlockedRewards);
+    const lastUnlockedRewardId = rewardIds.includes(src.lastUnlockedRewardId) ? String(src.lastUnlockedRewardId) : (rewardIds[rewardIds.length - 1] || null);
+    return {
+        reportVersion: SEASON_HONOR_COLLECTION_VERSION,
+        seasonId: String(src.seasonId || SEASON_ID),
+        source: 'live_ranked',
+        rewardImpact: 'cosmetic_only',
+        powerImpact: 'none',
+        unlockedRewards,
+        totalUnlocked: rewardIds.length,
+        lastUnlockedRewardId,
+        boundary: '赛季荣誉收藏只保存外观成就，不授予卡牌、属性、资源、起手、匹配或战斗效果。'
     };
 }
 
@@ -267,6 +305,7 @@ function normalizeEconomy(raw, userId) {
         bestWinStreak: Math.max(0, Math.floor(Number(src.bestWinStreak) || 0)),
         purchases,
         ownedItems,
+        seasonHonorCollection: normalizeSeasonHonorCollection(src.seasonHonorCollection),
         equippedSkinId: typeof src.equippedSkinId === 'string' ? src.equippedSkinId : null,
         equippedTitleId: typeof src.equippedTitleId === 'string' ? src.equippedTitleId : null,
         transactionLog,

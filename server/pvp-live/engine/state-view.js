@@ -772,6 +772,7 @@ function projectSeasonHonorReward(source) {
     const reward = source && typeof source === 'object' ? source : null;
     if (!reward || reward.reportVersion !== 'pvp-live-season-honor-reward-v1') return null;
     const nextReward = reward.nextReward && typeof reward.nextReward === 'object' ? reward.nextReward : {};
+    const collectionReport = reward.collectionReport && typeof reward.collectionReport === 'object' ? reward.collectionReport : null;
     const rewardName = String(reward.rewardName || '赛季荣誉外观');
     return {
         reportVersion: 'pvp-live-season-honor-reward-v1',
@@ -779,10 +780,22 @@ function projectSeasonHonorReward(source) {
         rewardType: String(reward.rewardType || 'cosmetic_badge'),
         rewardName,
         rewardState: reward.rewardState === 'preview' ? 'preview' : 'earned',
+        collectionState: reward.collectionState === 'newly_unlocked' ? 'newly_unlocked' : reward.collectionState === 'owned' ? 'owned' : 'earned',
         rewardImpact: 'cosmetic_only',
         powerImpact: 'none',
         sourceVisibility: 'server_authoritative_settlement',
         usesHiddenInformation: false,
+        unlockedAt: Math.max(0, Math.floor(Number(reward.unlockedAt) || 0)),
+        collectionSize: Math.max(0, Math.floor(Number(reward.collectionSize) || 0)),
+        collectionReport: collectionReport ? {
+            reportVersion: 'pvp-live-season-honor-collection-v1',
+            seasonId: String(collectionReport.seasonId || 's1-genesis'),
+            rewardImpact: 'cosmetic_only',
+            powerImpact: 'none',
+            totalUnlocked: Math.max(0, Math.floor(Number(collectionReport.totalUnlocked) || 0)),
+            lastUnlockedRewardId: String(collectionReport.lastUnlockedRewardId || ''),
+            boundary: '赛季荣誉收藏只保存外观成就，不授予卡牌、属性、资源、起手、匹配或战斗效果。'
+        } : null,
         unlockLine: String(reward.unlockLine || `已点亮外观目标：${rewardName}`),
         progressLine: String(reward.progressLine || '本季外观目标已更新'),
         nextReward: {

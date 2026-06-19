@@ -1,6 +1,15 @@
 const { db } = require('../db/database');
 
 const SEASON_ID = 's1-genesis';
+const SEASON_HONOR_COLLECTION_VERSION = 'pvp-live-season-honor-collection-v1';
+const SEASON_HONOR_REWARD_TRACK = [
+    { targetGames: 1, rewardId: 's1_genesis_honor_mark_1', rewardType: 'cosmetic_badge', rewardName: '开天见证徽记' },
+    { targetGames: 3, rewardId: 's1_genesis_honor_frame_3', rewardType: 'cosmetic_frame', rewardName: '三战问道边框' },
+    { targetGames: 5, rewardId: 's1_genesis_honor_title_5', rewardType: 'cosmetic_title', rewardName: '称号·真人论道新锋' },
+    { targetGames: 10, rewardId: 's1_genesis_honor_aura_10', rewardType: 'cosmetic_aura', rewardName: '开天十战辉光' },
+    { targetGames: 20, rewardId: 's1_genesis_honor_banner_20', rewardType: 'cosmetic_banner', rewardName: '二十战荣誉旗' },
+    { targetGames: 50, rewardId: 's1_genesis_honor_legend_50', rewardType: 'cosmetic_title', rewardName: '称号·开天不坠' }
+];
 
 function dbGet(sql, params = []) {
     return new Promise((resolve, reject) => {
@@ -82,12 +91,111 @@ function defaultEconomy(userId) {
         bestWinStreak: 0,
         purchases: {},
         ownedItems: {},
+        seasonHonorCollection: normalizeSeasonHonorCollection(null),
         equippedSkinId: null,
         equippedTitleId: null,
         transactionLog: [],
         matchHistory: [],
         lastRewardAt: 0,
         lastPurchaseAt: 0
+    };
+}
+
+function normalizeSeasonHonorCollection(raw) {
+    const src = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
+    const unlockedRewards = {};
+    if (src.unlockedRewards && typeof src.unlockedRewards === 'object' && !Array.isArray(src.unlockedRewards)) {
+        Object.keys(src.unlockedRewards).forEach((key) => {
+            const entry = src.unlockedRewards[key];
+            if (!entry || typeof entry !== 'object') return;
+            const rewardId = String(entry.rewardId || key || '').trim();
+            if (!rewardId) return;
+            unlockedRewards[rewardId] = {
+                rewardId,
+                rewardType: String(entry.rewardType || 'cosmetic_badge'),
+                rewardName: String(entry.rewardName || '赛季荣誉外观'),
+                targetGames: Math.max(1, Math.floor(Number(entry.targetGames) || 1)),
+                source: 'live_ranked',
+                rewardImpact: 'cosmetic_only',
+                powerImpact: 'none',
+                unlockedAt: Math.max(0, Math.floor(Number(entry.unlockedAt) || 0))
+            };
+        });
+    }
+    const rewardIds = Object.keys(unlockedRewards);
+    const lastUnlockedRewardId = rewardIds.includes(src.lastUnlockedRewardId) ? String(src.lastUnlockedRewardId) : (rewardIds[rewardIds.length - 1] || null);
+    return {
+        reportVersion: SEASON_HONOR_COLLECTION_VERSION,
+        seasonId: String(src.seasonId || SEASON_ID),
+        source: 'live_ranked',
+        rewardImpact: 'cosmetic_only',
+        powerImpact: 'none',
+        unlockedRewards,
+        totalUnlocked: rewardIds.length,
+        lastUnlockedRewardId,
+        boundary: '赛季荣誉收藏只保存外观成就，不授予卡牌、属性、资源、起手、匹配或战斗效果。'
+    };
+}
+
+function grantSeasonHonorCollection(economy, { gamesPlayed, now }) {
+    const collection = normalizeSeasonHonorCollection(economy && economy.seasonHonorCollection);
+    const played = Math.max(0, Math.floor(Number(gamesPlayed) || 0));
+    const newlyUnlocked = [];
+    SEASON_HONOR_REWARD_TRACK
+        .filter(reward => played >= reward.targetGames)
+        .forEach((reward) => {
+            if (collection.unlockedRewards[reward.rewardId]) return;
+            const entry = {
+                rewardId: reward.rewardId,
+                rewardType: reward.rewardType,
+                rewardName: reward.rewardName,
+                targetGames: reward.targetGames,
+                source: 'live_ranked',
+                rewardImpact: 'cosmetic_only',
+                powerImpact: 'none',
+                unlockedAt: now
+            };
+            collection.unlockedRewards[reward.rewardId] = entry;
+            newlyUnlocked.push(entry);
+        });
+    const rewardIds = Object.keys(collection.unlockedRewards);
+    if (newlyUnlocked.length > 0) {
+        collection.lastUnlockedRewardId = newlyUnlocked[newlyUnlocked.length - 1].rewardId;
+    } else if (!collection.lastUnlockedRewardId && rewardIds.length > 0) {
+        collection.lastUnlockedRewardId = rewardIds[rewardIds.length - 1];
+    }
+    collection.totalUnlocked = rewardIds.length;
+    const currentReward = SEASON_HONOR_REWARD_TRACK.slice().reverse().find(reward => played >= reward.targetGames) || null;
+    const currentEntry = currentReward ? collection.unlockedRewards[currentReward.rewardId] : null;
+    const currentNewUnlock = currentEntry && newlyUnlocked.some(reward => reward.rewardId === currentEntry.rewardId);
+    return {
+        economy: {
+            ...economy,
+            seasonHonorCollection: collection
+        },
+        collection,
+        newlyUnlocked,
+        currentEntry,
+        claim: currentEntry ? {
+            reportVersion: 'pvp-live-season-honor-claim-v1',
+            rewardId: currentEntry.rewardId,
+            rewardType: currentEntry.rewardType,
+            rewardName: currentEntry.rewardName,
+            collectionState: currentNewUnlock ? 'newly_unlocked' : 'owned',
+            rewardImpact: 'cosmetic_only',
+            powerImpact: 'none',
+            unlockedAt: currentEntry.unlockedAt,
+            collectionSize: collection.totalUnlocked,
+            collectionReport: {
+                reportVersion: SEASON_HONOR_COLLECTION_VERSION,
+                seasonId: collection.seasonId,
+                rewardImpact: 'cosmetic_only',
+                powerImpact: 'none',
+                totalUnlocked: collection.totalUnlocked,
+                lastUnlockedRewardId: collection.lastUnlockedRewardId,
+                boundary: collection.boundary
+            }
+        } : null
     };
 }
 
@@ -126,6 +234,7 @@ function normalizeEconomy(raw, userId) {
         bestWinStreak: Math.max(0, Math.floor(Number(src.bestWinStreak) || 0)),
         purchases,
         ownedItems,
+        seasonHonorCollection: normalizeSeasonHonorCollection(src.seasonHonorCollection),
         equippedSkinId: typeof src.equippedSkinId === 'string' ? src.equippedSkinId : null,
         equippedTitleId: typeof src.equippedTitleId === 'string' ? src.equippedTitleId : null,
         transactionLog,
@@ -296,6 +405,10 @@ async function settleParticipant({ user, opponentUser, rankRow, opponentRankRow,
         lastRewardAt: now
     };
     nextEconomyBase.bestWinStreak = Math.max(nextEconomyBase.bestWinStreak, nextEconomyBase.winStreak);
+    const honorCollectionGrant = grantSeasonHonorCollection(nextEconomyBase, {
+        gamesPlayed: wins + losses,
+        now
+    });
 
     const historyEntry = buildParticipantSummary({
         user,
@@ -309,11 +422,21 @@ async function settleParticipant({ user, opponentUser, rankRow, opponentRankRow,
         coinsAwarded,
         now
     });
-    let nextEconomy = appendEconomyLog(nextEconomyBase, {
+    let nextEconomy = appendEconomyLog(honorCollectionGrant.economy, {
         type: 'live_match_reward',
         coins: coinsAwarded,
         detail: didWin ? '实时论道胜场奖励' : '实时论道参战奖励',
         at: now
+    });
+    honorCollectionGrant.newlyUnlocked.forEach((reward) => {
+        nextEconomy = appendEconomyLog(nextEconomy, {
+            type: 'live_season_honor_cosmetic',
+            itemId: reward.rewardId,
+            itemName: reward.rewardName,
+            coins: 0,
+            detail: '赛季荣誉外观入库',
+            at: now
+        });
     });
     nextEconomy = appendMatchHistory(nextEconomy, historyEntry);
     await saveEconomy(user.id, nextEconomy);
@@ -336,7 +459,8 @@ async function settleParticipant({ user, opponentUser, rankRow, opponentRankRow,
         losses,
         rankedGames: wins + losses,
         seasonId: SEASON_ID,
-        seasonName: '开天赛季'
+        seasonName: '开天赛季',
+        seasonHonorClaim: honorCollectionGrant.claim
     };
 }
 

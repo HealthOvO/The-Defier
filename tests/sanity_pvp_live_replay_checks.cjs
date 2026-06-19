@@ -48,6 +48,26 @@ function makeLoadout(identitySlot, pattern) {
 function makeReplaySettlementStub() {
   const seatUserId = (match, seatId) => Object.entries(match && match.seatsByUserId || {})
     .find(([, sourceSeat]) => sourceSeat === seatId)?.[0] || '';
+  const makeSeasonHonorClaim = () => ({
+    reportVersion: 'pvp-live-season-honor-claim-v1',
+    rewardId: 's1_genesis_honor_mark_1',
+    rewardType: 'cosmetic_badge',
+    rewardName: '开天见证徽记',
+    collectionState: 'newly_unlocked',
+    rewardImpact: 'cosmetic_only',
+    powerImpact: 'none',
+    unlockedAt: Date.now(),
+    collectionSize: 1,
+    collectionReport: {
+      reportVersion: 'pvp-live-season-honor-collection-v1',
+      seasonId: 's1-genesis',
+      rewardImpact: 'cosmetic_only',
+      powerImpact: 'none',
+      totalUnlocked: 1,
+      lastUnlockedRewardId: 's1_genesis_honor_mark_1',
+      boundary: '赛季荣誉收藏只保存外观成就，不授予卡牌、属性、资源、起手、匹配或战斗效果。'
+    }
+  });
   return {
     async settleMatch(match) {
       if (!match || !match.state || match.state.status !== 'finished' || match.state.mode === 'friendly') {
@@ -69,7 +89,9 @@ function makeReplaySettlementStub() {
           oldScore: 1000,
           newScore: 1024,
           ratingDelta: 24,
-          coinsAwarded: 38
+          coinsAwarded: 38,
+          rankedGames: 1,
+          seasonHonorClaim: makeSeasonHonorClaim()
         },
         loser: {
           userId: seatUserId(match, loserSeat),
@@ -77,7 +99,9 @@ function makeReplaySettlementStub() {
           oldScore: 1000,
           newScore: 988,
           ratingDelta: -12,
-          coinsAwarded: 12
+          coinsAwarded: 12,
+          rankedGames: 1,
+          seasonHonorClaim: makeSeasonHonorClaim()
         }
       };
     }
@@ -232,6 +256,8 @@ function assertPublicReplayShape(replay, visibilityLayer) {
     assert.equal(selfReplay.payload.replay.postMatchReview?.settlementReport?.seasonHonorReport?.cosmeticReward?.reportVersion, 'pvp-live-season-honor-reward-v1', 'winner self replay should include own cosmetic honor reward track');
     assert.equal(selfReplay.payload.replay.postMatchReview?.settlementReport?.seasonHonorReport?.cosmeticReward?.rewardImpact, 'cosmetic_only', 'winner self replay honor reward should be cosmetic only');
     assert.equal(selfReplay.payload.replay.postMatchReview?.settlementReport?.seasonHonorReport?.cosmeticReward?.powerImpact, 'none', 'winner self replay honor reward should not grant combat power');
+    assert.equal(selfReplay.payload.replay.postMatchReview?.settlementReport?.seasonHonorReport?.cosmeticReward?.collectionState, 'newly_unlocked', 'winner self replay should include own honor collection unlock state');
+    assert.equal(selfReplay.payload.replay.postMatchReview?.settlementReport?.seasonHonorReport?.cosmeticReward?.collectionReport?.reportVersion, 'pvp-live-season-honor-collection-v1', 'winner self replay should include own honor collection report');
 
     const publicReplay = await request(baseUrl, `/api/pvp/live/matches/${joinB.payload.matchId}/replay?visibility=replay_public`, {
       token: tokenA
@@ -243,6 +269,7 @@ function assertPublicReplayShape(replay, visibilityLayer) {
     assert.equal(publicReplay.payload.replay.settlementReport, undefined, 'replay_public should not expose seat-specific settlement report');
     assert.equal(publicReplay.payload.replay.seasonHonorReport, undefined, 'replay_public should not expose seat-specific season honor progress');
     assert.equal(publicReplay.payload.replay.cosmeticReward, undefined, 'replay_public should not expose seat-specific cosmetic honor reward track');
+    assert.equal(publicReplay.payload.replay.seasonHonorCollection, undefined, 'replay_public should not expose seat-specific season honor collection');
     assert.ok(publicReplay.payload.replay.publicSummary?.finishReason === 'surrender', 'replay_public should include public finish summary');
 
     const auditReplay = await request(baseUrl, `/api/pvp/live/matches/${joinB.payload.matchId}/replay?visibility=audit_safe`, {
@@ -253,6 +280,7 @@ function assertPublicReplayShape(replay, visibilityLayer) {
     assert.ok(Array.isArray(auditReplay.payload.replay.fieldPaths) && auditReplay.payload.replay.fieldPaths.length > 0, 'audit_safe replay should expose field path summary');
     assert.equal(auditReplay.payload.replay.sourceVisibilityLayer, 'replay_public', 'audit_safe replay should derive from replay_public');
     assert.equal(auditReplay.payload.replay.cosmeticReward, undefined, 'audit_safe should not expose seat-specific cosmetic honor reward track');
+    assert.equal(auditReplay.payload.replay.seasonHonorCollection, undefined, 'audit_safe should not expose seat-specific season honor collection');
 
     const outsiderReplay = await request(baseUrl, `/api/pvp/live/matches/${joinB.payload.matchId}/replay`, {
       token: tokenC

@@ -359,9 +359,13 @@ function dbGet(sql, params = []) {
     assert.equal(surrenderB.payload.stateView.postMatchReview?.settlementReport?.seasonHonorReport?.cosmeticReward?.powerImpact, 'none', 'season honor reward must not grant combat power');
     assert.equal(surrenderB.payload.stateView.postMatchReview?.settlementReport?.seasonHonorReport?.cosmeticReward?.rewardState, 'earned', 'first ranked game should earn the first cosmetic honor marker');
     assert.ok(surrenderB.payload.stateView.postMatchReview?.settlementReport?.seasonHonorReport?.cosmeticReward?.nextReward?.remainingGames > 0, 'season honor reward should point to the next cosmetic target');
+    assert.equal(surrenderB.payload.stateView.postMatchReview?.settlementReport?.seasonHonorReport?.cosmeticReward?.collectionState, 'newly_unlocked', 'first ranked game should put the first cosmetic honor marker into the collection');
+    assert.equal(surrenderB.payload.stateView.postMatchReview?.settlementReport?.seasonHonorReport?.cosmeticReward?.collectionReport?.reportVersion, 'pvp-live-season-honor-collection-v1', 'season honor reward should expose a collection report');
+    assert.equal(surrenderB.payload.stateView.postMatchReview?.settlementReport?.seasonHonorReport?.cosmeticReward?.collectionReport?.powerImpact, 'none', 'season honor collection must not grant combat power');
 
     const rankAfterA = await request('/api/pvp/rank', { token: userA.token });
     const rankAfterB = await request('/api/pvp/rank', { token: userB.token });
+    const loserRewardId = surrenderB.payload.stateView.postMatchReview?.settlementReport?.seasonHonorReport?.cosmeticReward?.rewardId;
     assert.equal(rankAfterA.payload.rank.wins, 1, 'server-authoritative live settlement should add winner rank win');
     assert.equal(rankAfterA.payload.rank.losses, 0, 'winner should not receive a loss');
     assert.equal(rankAfterB.payload.rank.wins, 0, 'loser should not receive a win');
@@ -380,6 +384,13 @@ function dbGet(sql, params = []) {
     assert.equal(surrenderB.payload.stateView.postMatchReview?.settlementReport?.seasonHonorReport?.gamesPlayed, rankAfterB.payload.rank.wins + rankAfterB.payload.rank.losses, 'season honor progress should match authoritative ranked games');
     assert.ok(/不改变生命、伤害、抽牌、灵力、起手或匹配/.test(surrenderB.payload.stateView.postMatchReview?.settlementReport?.seasonHonorReport?.boundary || ''), 'season honor progress should state the non-power boundary');
     assert.ok(/不授予卡牌、属性、资源、起手、匹配或战斗效果/.test(surrenderB.payload.stateView.postMatchReview?.settlementReport?.seasonHonorReport?.cosmeticReward?.boundary || ''), 'season honor reward should state the cosmetic-only non-power boundary');
+    assert.equal(rankAfterB.payload.economy?.seasonHonorCollection?.reportVersion, 'pvp-live-season-honor-collection-v1', 'rank economy should persist season honor cosmetic collection');
+    assert.equal(rankAfterB.payload.economy?.seasonHonorCollection?.rewardImpact, 'cosmetic_only', 'season honor collection should stay cosmetic only');
+    assert.equal(rankAfterB.payload.economy?.seasonHonorCollection?.powerImpact, 'none', 'season honor collection should not grant combat power');
+    assert.equal(rankAfterB.payload.economy?.seasonHonorCollection?.unlockedRewards?.[loserRewardId]?.rewardId, loserRewardId, 'first honor cosmetic should be persisted by reward id');
+    assert.equal(rankAfterB.payload.economy?.seasonHonorCollection?.unlockedRewards?.[loserRewardId]?.source, 'live_ranked', 'persisted honor cosmetic should come from live ranked settlement');
+    assert.equal(rankAfterB.payload.economy?.seasonHonorCollection?.unlockedRewards?.[loserRewardId]?.powerImpact, 'none', 'persisted honor cosmetic should not grant combat power');
+    assert.equal(rankAfterB.payload.economy?.ownedItems?.[loserRewardId], undefined, 'season honor cosmetic collection should not unlock shop-owned battle items');
 
     const duplicateSurrender = await submitIntent(joinB.payload.matchId, userB.token, {
         intentId: 'live-settlement-surrender-b-1',
@@ -395,6 +406,8 @@ function dbGet(sql, params = []) {
     assert.equal(rankAfterDuplicateB.payload.rank.score, rankAfterB.payload.rank.score, 'duplicate live settlement must not subtract loser score twice');
     assert.equal(rankAfterDuplicateA.payload.wallet.coins, rankAfterA.payload.wallet.coins, 'duplicate live settlement must not pay winner twice');
     assert.equal(rankAfterDuplicateB.payload.wallet.coins, rankAfterB.payload.wallet.coins, 'duplicate live settlement must not pay loser twice');
+    assert.equal(Object.keys(rankAfterDuplicateB.payload.economy?.seasonHonorCollection?.unlockedRewards || {}).length, Object.keys(rankAfterB.payload.economy?.seasonHonorCollection?.unlockedRewards || {}).length, 'duplicate live settlement must not unlock honor cosmetics twice');
+    assert.equal((rankAfterDuplicateB.payload.economy?.transactionLog || []).filter(entry => entry.type === 'live_season_honor_cosmetic' && entry.itemId === loserRewardId).length, 1, 'duplicate live settlement must not append duplicate honor cosmetic logs');
 
     const settlementRow = await dbGet(
       'SELECT * FROM pvp_live_match_settlements WHERE match_id = ?',
