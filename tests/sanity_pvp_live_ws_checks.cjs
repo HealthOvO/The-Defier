@@ -3,7 +3,7 @@ const http = require('http');
 const express = require('../server/node_modules/express');
 const pvpLiveRoutes = require('../server/routes/pvp-live');
 const { generateToken } = require('../server/middleware/auth');
-const { attachLivePvpWebSocket } = require('../server/pvp-live/live-ws');
+const { attachLivePvpWebSocket, makeEventReplay } = require('../server/pvp-live/live-ws');
 
 function listen(server) {
   return new Promise((resolve, reject) => {
@@ -44,6 +44,40 @@ function makeLoadout(identitySlot, pattern) {
     label: `${identitySlot}-ws-测试谱`,
     deck
   };
+}
+
+function assertPublicArrayEventReplay() {
+  const replay = makeEventReplay([
+    {
+      eventType: 'connection_timeout',
+      sequence: 2,
+      actingSeat: '',
+      visibility: 'public',
+      payload: {
+        seatId: '',
+        disconnectedSeats: ['A', 'B'],
+        phase: 'setup',
+        elapsedMs: 30000,
+        cardId: 'hidden-card-id',
+      },
+    },
+    {
+      eventType: 'ready_timeout',
+      sequence: 3,
+      actingSeat: '',
+      visibility: 'public',
+      payload: {
+        unreadySeats: ['A', 'B'],
+        readyDeadlineAt: 123456,
+        elapsedMs: 10000,
+        hand: ['hidden'],
+      },
+    },
+  ], 1);
+  assert.deepEqual(replay[0].publicData.disconnectedSeats, ['A', 'B'], 'WS public replay should preserve public disconnected seat arrays');
+  assert.deepEqual(replay[1].publicData.unreadySeats, ['A', 'B'], 'WS public replay should preserve public ready-timeout seat arrays');
+  assert.equal(JSON.stringify(replay).includes('hidden-card-id'), false, 'WS public replay should still strip non-allowlisted ids');
+  assert.equal(JSON.stringify(replay).includes('hidden'), false, 'WS public replay should still strip hidden arrays');
 }
 
 function openSocket(url) {
@@ -757,6 +791,7 @@ async function runCrossProcessPassiveStateFanoutCheck() {
 }
 
 (async () => {
+  assertPublicArrayEventReplay();
   await runSyncRequiredBroadcastCheck();
   await runHeartbeatEventsReplayCheck();
   await runCrossProcessHeartbeatStateCatchupCheck();

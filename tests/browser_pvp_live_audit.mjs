@@ -486,6 +486,34 @@ async function safeElementScreenshot(page, selector, outputPath) {
           ? { nextSeat: 'B', summaryLine: '结束回合后行动权交给 B。' }
           : null,
       },
+      actionReceiptReport: stateVersion >= 4 ? {
+        reportVersion: 'pvp-live-action-receipt-v1',
+        sourceVisibility: 'authoritative_public_projection',
+        usesHiddenInformation: false,
+        rankedImpact: 'none',
+        viewerSeat: 'A',
+        actingSeat: 'A',
+        actionType: 'play_card',
+        latestSequence: 6,
+        cardName: '试探斩',
+        summaryLine: 'A 打出试探斩：预算后 8，破盾 3，生命伤害 5，B 剩余 45 血。',
+        damage: {
+          targetSeat: 'B',
+          rawDamage: 8,
+          budgetedDamage: 8,
+          preventedByBudget: 0,
+          blockedDamage: 3,
+          hpDamage: 5,
+          targetHpAfter: 45,
+        },
+        openingProtection: {
+          triggered: false,
+          protectedSeat: '',
+          minimumHp: 1,
+          preventedDamage: 0,
+        },
+        safeguards: ['public_events', 'public_block'],
+      } : null,
       duelMomentumReport: makeDuelMomentumReport(stateVersion, currentSeat, status),
       firstMatchGuide: makeFirstMatchGuide(status),
       loadoutExplorationReport: makeLoadoutExplorationReport(),
@@ -896,7 +924,7 @@ async function safeElementScreenshot(page, selector, outputPath) {
           ? {
               ...makeStateView(4, 'B', 'active'),
               recentEvents: [
-                { eventType: 'emote_sent', actingSeat: 'B', payload: { seatId: 'B', emoteId: 'thinking', label: '思考' } },
+                { eventType: 'emote_sent', actingSeat: 'B', publicData: { seatId: 'B', emoteId: 'thinking', label: '思考' } },
               ],
             }
           : String(window.__livePvpAuditTurnTimerMode || '') === 'low'
@@ -1361,6 +1389,7 @@ async function safeElementScreenshot(page, selector, outputPath) {
     realtimeStatus: document.querySelector('[data-live-realtime-status]')?.textContent || '',
     realtimeDataset: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-realtime-state') || '',
     openingSafeguard: document.querySelector('[data-live-opening-safeguard]')?.textContent || '',
+    actionReceipt: document.querySelector('[data-live-action-receipt]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
     duelMomentum: document.querySelector('[data-live-duel-momentum]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
     duelMomentumState: document.querySelector('[data-live-duel-momentum]')?.getAttribute('data-live-duel-momentum-state') || '',
     duelMomentumSource: document.querySelector('[data-live-duel-momentum]')?.getAttribute('data-live-duel-momentum-source') || '',
@@ -1852,6 +1881,10 @@ async function safeElementScreenshot(page, selector, outputPath) {
     currentSeat: document.querySelector('[data-live-current-seat]')?.textContent || '',
     turnTimer: document.querySelector('[data-live-turn-timer]')?.textContent || '',
     openingSafeguard: document.querySelector('[data-live-opening-safeguard]')?.textContent || '',
+    actionReceipt: document.querySelector('[data-live-action-receipt]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+    actionReceiptSource: document.querySelector('[data-live-action-receipt]')?.getAttribute('data-live-action-receipt-source') || '',
+    actionReceiptHidden: document.querySelector('[data-live-action-receipt]')?.getAttribute('data-live-action-receipt-hidden') || '',
+    actionReceiptSeq: document.querySelector('[data-live-action-receipt]')?.getAttribute('data-live-action-receipt-seq') || '',
     duelMomentum: document.querySelector('[data-live-duel-momentum]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
     duelMomentumState: document.querySelector('[data-live-duel-momentum]')?.getAttribute('data-live-duel-momentum-state') || '',
     events: document.querySelector('[data-live-event-log]')?.textContent || '',
@@ -1891,6 +1924,25 @@ async function safeElementScreenshot(page, selector, outputPath) {
       && actionProbe.payload?.openingSafeguardReport?.secondSeatBuffer?.block === 3
       && actionProbe.payload?.openingSafeguardReport?.counterplay?.grantedSeats?.includes('B')
       && !/payload|hand|deck|cardId|instanceId|loadoutSnapshot|reward|rating|elo/i.test(`${actionProbe.events} ${actionProbe.openingSafeguard} ${JSON.stringify(actionProbe.payload?.openingSafeguardReport || {})}`),
+    JSON.stringify(actionProbe),
+  );
+  add(
+    'live UI renders authoritative action receipt after opening card resolves',
+    /行动回执/.test(actionProbe.actionReceipt)
+      && /A/.test(actionProbe.actionReceipt)
+      && /试探斩/.test(actionProbe.actionReceipt)
+      && /预算后\s*8/.test(actionProbe.actionReceipt)
+      && /破盾\s*3/.test(actionProbe.actionReceipt)
+      && /生命伤害\s*5/.test(actionProbe.actionReceipt)
+      && /B\s*剩余\s*45\s*血/.test(actionProbe.actionReceipt)
+      && actionProbe.actionReceiptSource === 'authoritative_public_projection'
+      && actionProbe.actionReceiptHidden === 'false'
+      && actionProbe.actionReceiptSeq === '6'
+      && actionProbe.payload?.actionReceiptReport?.reportVersion === 'pvp-live-action-receipt-v1'
+      && actionProbe.payload?.actionReceiptReport?.sourceVisibility === 'authoritative_public_projection'
+      && actionProbe.payload?.actionReceiptReport?.usesHiddenInformation === false
+      && actionProbe.payload?.actionReceiptReport?.rankedImpact === 'none'
+      && !/payload|hand|deck|cardId|instanceId|loadoutSnapshot|reward|rating|elo/i.test(`${actionProbe.actionReceipt} ${JSON.stringify(actionProbe.payload?.actionReceiptReport || {})}`),
     JSON.stringify(actionProbe),
   );
   add(
@@ -3103,7 +3155,7 @@ async function safeElementScreenshot(page, selector, outputPath) {
         handCount: 3,
         ready: false,
       },
-      recentEvents: [{ eventType: 'match_invalidated', payload: { reason: 'ready_timeout' } }],
+      recentEvents: [{ eventType: 'match_invalidated', publicData: { reason: 'ready_timeout' } }],
     };
     window.PVPService.live.getCurrentMatch = async () => ({
       success: true,
@@ -3238,8 +3290,8 @@ async function safeElementScreenshot(page, selector, outputPath) {
         ready: true,
       },
       recentEvents: [
-        { eventType: 'turn_timeout', actingSeat: 'A', payload: { seatId: 'A', loserSeat: 'A', winnerSeat: 'B', finishReason: 'connection_timeout' } },
-        { eventType: 'match_finished', actingSeat: 'A', payload: { winnerSeat: 'B', loserSeat: 'A', finishReason: 'connection_timeout' } },
+        { eventType: 'turn_timeout', actingSeat: 'A', publicData: { seatId: 'A', loserSeat: 'A', winnerSeat: 'B', finishReason: 'connection_timeout' } },
+        { eventType: 'match_finished', actingSeat: 'A', publicData: { winnerSeat: 'B', loserSeat: 'A', finishReason: 'connection_timeout' } },
       ],
     };
     window.PVPService.live.getCurrentMatch = async () => ({

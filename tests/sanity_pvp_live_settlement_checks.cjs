@@ -25,6 +25,10 @@ function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+function eventPublicData(event) {
+  return event && (event.publicData || event.payload) || {};
+}
+
 async function assertTransientSettlementFailureRetriesBeforeRelease() {
   let settlementAttempts = 0;
   const savedStatuses = [];
@@ -637,7 +641,7 @@ function dbGet(sql, params = []) {
     assert.equal(timeoutReadC.status, 200, 'timeout read should return finished state after settlement');
     assert.equal(timeoutReadC.payload.stateView.status, 'finished', 'timeout should finish the live match');
     assert.ok(
-      timeoutReadC.payload.stateView.recentEvents.some(event => event.eventType === 'match_finished' && event.payload.finishReason === 'timeout'),
+      timeoutReadC.payload.stateView.recentEvents.some(event => event.eventType === 'match_finished' && eventPublicData(event).finishReason === 'timeout'),
       'timeout finish should expose match_finished timeout event',
     );
 
@@ -684,7 +688,7 @@ function dbGet(sql, params = []) {
     assert.equal(setupTimeoutReadE.status, 200, 'setup timeout read should return invalidated state before release');
     assert.equal(setupTimeoutReadE.payload.stateView.status, 'invalidated', 'setup timeout should invalidate before active battle starts');
     assert.ok(
-      setupTimeoutReadE.payload.stateView.recentEvents.some(event => event.eventType === 'match_invalidated' && event.payload.reason === 'ready_timeout'),
+      setupTimeoutReadE.payload.stateView.recentEvents.some(event => event.eventType === 'match_invalidated' && eventPublicData(event).reason === 'ready_timeout'),
       'setup timeout should expose match_invalidated ready_timeout event',
     );
 

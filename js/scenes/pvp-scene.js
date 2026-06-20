@@ -943,6 +943,87 @@ export const PVPScene = {
     const blockText = preview.blockGain > 0 ? `；自身获得 ${preview.blockGain} 护盾` : '';
     return `${preview.cardName || '术式'}：预算后 ${preview.budgetedDamage}，破盾 ${preview.blockedDamage}，生命伤害 ${preview.hpDamage}，${targetSeat} 预计 ${preview.targetHpAfter} 血${protectionText}${blockText}。`;
   },
+  getLiveActionReceiptReport(view) {
+    const report = view && view.actionReceiptReport && typeof view.actionReceiptReport === 'object'
+      ? view.actionReceiptReport
+      : null;
+    if (!report) return null;
+    const damage = report.damage && typeof report.damage === 'object' ? report.damage : {};
+    const protection = report.openingProtection && typeof report.openingProtection === 'object' ? report.openingProtection : {};
+    const blockGain = report.blockGain && typeof report.blockGain === 'object' ? report.blockGain : null;
+    const draw = report.draw && typeof report.draw === 'object' ? report.draw : {};
+    const counterplay = report.counterplay && typeof report.counterplay === 'object' ? report.counterplay : {};
+    return {
+      reportVersion: String(report.reportVersion || 'pvp-live-action-receipt-v1'),
+      sourceVisibility: String(report.sourceVisibility || 'authoritative_public_projection'),
+      usesHiddenInformation: report.usesHiddenInformation === true,
+      rankedImpact: String(report.rankedImpact || 'none'),
+      viewerSeat: String(report.viewerSeat || ''),
+      actingSeat: String(report.actingSeat || ''),
+      actionType: String(report.actionType || ''),
+      latestSequence: Number.isFinite(Number(report.latestSequence)) ? Math.floor(Number(report.latestSequence)) : null,
+      cardName: String(report.cardName || ''),
+      cost: Math.max(0, Math.floor(Number(report.cost) || 0)),
+      remainingEnergy: Math.max(0, Math.floor(Number(report.remainingEnergy) || 0)),
+      damage: {
+        targetSeat: String(damage.targetSeat || ''),
+        rawDamage: Math.max(0, Math.floor(Number(damage.rawDamage) || 0)),
+        budgetedDamage: Math.max(0, Math.floor(Number(damage.budgetedDamage) || 0)),
+        preventedByBudget: Math.max(0, Math.floor(Number(damage.preventedByBudget) || 0)),
+        blockedDamage: Math.max(0, Math.floor(Number(damage.blockedDamage) || 0)),
+        hpDamage: Math.max(0, Math.floor(Number(damage.hpDamage) || 0)),
+        targetHpAfter: Math.max(0, Math.floor(Number(damage.targetHpAfter) || 0))
+      },
+      openingProtection: {
+        triggered: protection.triggered === true,
+        protectedSeat: String(protection.protectedSeat || ''),
+        minimumHp: Math.max(0, Math.floor(Number(protection.minimumHp) || 0)),
+        preventedDamage: Math.max(0, Math.floor(Number(protection.preventedDamage) || 0)),
+        wouldHaveHp: Math.max(0, Math.floor(Number(protection.wouldHaveHp) || 0))
+      },
+      blockGain: blockGain ? {
+        seatId: String(blockGain.seatId || ''),
+        block: Math.max(0, Math.floor(Number(blockGain.block) || 0)),
+        totalBlock: Math.max(0, Math.floor(Number(blockGain.totalBlock) || 0))
+      } : null,
+      nextSeat: String(report.nextSeat || ''),
+      completedTurns: Math.max(0, Math.floor(Number(report.completedTurns) || 0)),
+      roundIndex: Math.max(0, Math.floor(Number(report.roundIndex) || 0)),
+      turnIndex: Math.max(0, Math.floor(Number(report.turnIndex) || 0)),
+      draw: {
+        seatId: String(draw.seatId || ''),
+        count: Math.max(0, Math.floor(Number(draw.count) || 0)),
+        capped: draw.capped === true
+      },
+      counterplay: {
+        granted: counterplay.granted === true,
+        seatId: String(counterplay.seatId || ''),
+        block: Math.max(0, Math.floor(Number(counterplay.block) || 0)),
+        totalBlock: Math.max(0, Math.floor(Number(counterplay.totalBlock) || 0)),
+        minimumHp: Math.max(0, Math.floor(Number(counterplay.minimumHp) || 0))
+      },
+      summaryLine: String(report.summaryLine || ''),
+      safeguards: Array.isArray(report.safeguards)
+        ? report.safeguards.map(item => String(item || '')).filter(Boolean).slice(0, 8)
+        : []
+    };
+  },
+  renderLiveActionReceiptReport(view) {
+    const report = this.getLiveActionReceiptReport(view);
+    if (!report) return '行动回执：等待首个权威行动';
+    const summary = report.summaryLine || (report.actionType === 'end_turn'
+      ? `${report.actingSeat || '--'} 结束回合：行动权交给 ${report.nextSeat || '--'}。`
+      : `${report.actingSeat || '--'} 已完成行动。`);
+    const source = report.sourceVisibility === 'authoritative_public_projection'
+      ? '权威公开投影'
+      : report.sourceVisibility === 'public_events' ? '公开事件' : report.sourceVisibility;
+    const hidden = report.usesHiddenInformation ? '含隐藏信息' : '不含隐藏信息';
+    return `
+      <span class="pvp-live-action-receipt-chip">行动回执</span>
+      <span class="pvp-live-action-receipt-line">${this.escapeHtml(summary)}</span>
+      <span class="pvp-live-action-receipt-chip">${this.escapeHtml(source)} · ${this.escapeHtml(hidden)} · ${this.escapeHtml(report.rankedImpact || 'none')}</span>
+    `;
+  },
   getLiveDuelMomentumReport(view) {
     const report = view && view.duelMomentumReport && typeof view.duelMomentumReport === 'object'
       ? view.duelMomentumReport
@@ -2642,6 +2723,7 @@ export const PVPScene = {
       realtimeReport: this.getLiveRealtimeReport(state),
       openingSafeguardReport: this.getLiveOpeningSafeguardReport(view),
       actionPreviewReport: this.getLiveActionPreviewReport(view),
+      actionReceiptReport: this.getLiveActionReceiptReport(view),
       duelMomentumReport: this.getLiveDuelMomentumReport(view),
       friendlySeries: this.getLiveFriendlySeries(view && view.friendlySeries ? view.friendlySeries : state.rematchReport),
       firstMatchGuide: this.getLiveFirstMatchGuide(view),
@@ -2800,6 +2882,14 @@ export const PVPScene = {
     const openingSafeguardEl = root.querySelector('[data-live-opening-safeguard]');
     if (openingSafeguardEl) {
       openingSafeguardEl.innerHTML = this.renderLiveOpeningSafeguardReport(view);
+    }
+    const actionReceiptEl = root.querySelector('[data-live-action-receipt]');
+    if (actionReceiptEl) {
+      const report = this.getLiveActionReceiptReport(view);
+      actionReceiptEl.setAttribute('data-live-action-receipt-source', report ? report.sourceVisibility : '');
+      actionReceiptEl.setAttribute('data-live-action-receipt-hidden', report ? String(report.usesHiddenInformation === true) : '');
+      actionReceiptEl.setAttribute('data-live-action-receipt-seq', report && report.latestSequence !== null ? String(report.latestSequence) : '');
+      actionReceiptEl.innerHTML = this.renderLiveActionReceiptReport(view);
     }
     const duelMomentumEl = root.querySelector('[data-live-duel-momentum]');
     if (duelMomentumEl) {

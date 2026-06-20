@@ -526,6 +526,11 @@ const layoutAudit = read('tests/browser_frontend_layout_audit.mjs');
   '预算后\\s*8',
   '生命伤害\\s*5',
   'B\\s*预计\\s*45\\s*血',
+  'pvp-live-action-receipt-v1',
+  'data-live-action-receipt',
+  'authoritative_public_projection',
+  'live UI renders authoritative action receipt after opening card resolves',
+  'B\\s*剩余\\s*45\\s*血',
   'live UI warns the acting player during the final 10 seconds without hiding action controls',
   'data-live-turn-timer-urgency',
   'live UI post-match practice handoff creates no-score drill scenario and opens replay-only playable challenge drill',
@@ -735,6 +740,7 @@ const layoutAudit = read('tests/browser_frontend_layout_audit.mjs');
   'real browser live match renders active duel momentum report',
   'real browser opening-window end turn confirmation blocks authoritative submit until second click',
   'real browser opening-window card confirmation blocks authoritative submit until second click',
+  'real browser opponent sees authoritative action receipt after accepted card',
   'real browser accepted card intent keeps public duel momentum readable without refresh',
   'real browser persists local social mute without ranked impact',
   "realSocialMutedProbe.payload?.preferenceScope === 'local_only'",
@@ -952,6 +958,9 @@ assert.ok(
   'forceStoreActiveTurnStartedAt',
   'pvp-live-turn-timing-v1',
   'deadlineAt: safeStartedAt + store.turnTimeoutMs',
+  "connection_timeout: ['seatId', 'disconnectedSeats', 'phase', 'elapsedMs']",
+  "ready_timeout: ['unreadySeats', 'readyDeadlineAt', 'elapsedMs']",
+  'Array.isArray(value)',
 ].forEach((needle) => {
   assert.ok(
     pvpLiveGoldenReplayRunner.includes(needle),
@@ -980,6 +989,8 @@ assert.ok(
   'audit_safe replay should derive from replay_public',
   'partial persisted event source should fall back to complete state events',
   'terminal replay should reject incomplete persisted events when state events are also incomplete',
+  'public replay should preserve public disconnected seat arrays',
+  'public replay should preserve public ready-timeout seat arrays',
 ].forEach((needle) => {
   assert.ok(
     pvpLiveReplayChecks.includes(needle),
@@ -994,6 +1005,9 @@ assert.ok(
   'isTerminalReplayState(match && match.state)',
   '!Array.isArray(replayEvents)',
   'getEventMaxSequence(stateEvents) > getEventMaxSequence(persistedEvents)',
+  "connection_timeout: ['seatId', 'disconnectedSeats', 'phase', 'elapsedMs']",
+  "ready_timeout: ['unreadySeats', 'readyDeadlineAt', 'elapsedMs']",
+  'Array.isArray(value)',
 ].forEach((needle) => {
   assert.ok(
     pvpLiveReplaySource.includes(needle),
@@ -1008,6 +1022,9 @@ assert.ok(
   "type: 'connected'",
   "type: 'state_sync'",
   "type: 'events_replay'",
+  "connection_timeout: ['seatId', 'disconnectedSeats', 'phase', 'elapsedMs']",
+  "ready_timeout: ['unreadySeats', 'readyDeadlineAt', 'elapsedMs']",
+  'Array.isArray(value)',
   "type: 'presence'",
   "type: 'intent_result'",
   "message.type === 'join_match'",
@@ -1063,6 +1080,8 @@ assert.ok(
   'WS heartbeat replay should still return presence before replay',
   'WS heartbeat should replay missed public events after lastSeenRevision',
   'WS heartbeat replay should only include missed public events',
+  'WS public replay should preserve public disconnected seat arrays',
+  'WS public replay should preserve public ready-timeout seat arrays',
   'legacy WS heartbeat without lastSeenRevision should not request events replay',
   'WS intent should return accepted intent_result',
   'WS accepted intent should push state_sync to the opponent seat',
@@ -1571,6 +1590,9 @@ assert.ok(
   'FROM pvp_live_state_signals',
   "async saveMatch(match, { liveWsSourceInstanceId = '' } = {})",
   'sourceInstanceId: liveWsSourceInstanceId',
+  "connection_timeout: ['seatId', 'disconnectedSeats', 'phase', 'elapsedMs']",
+  "ready_timeout: ['unreadySeats', 'readyDeadlineAt', 'elapsedMs']",
+  'Array.isArray(value)',
 ].forEach((needle) => {
   assert.ok(
     pvpLivePersistence.includes(needle),

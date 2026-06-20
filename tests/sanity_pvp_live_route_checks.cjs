@@ -40,6 +40,10 @@ async function submitIntent(baseUrl, token, matchId, body) {
     });
 }
 
+function eventPublicData(event) {
+    return event && (event.publicData || event.payload) || {};
+}
+
 function makeLoadout(identitySlot, pattern) {
     const deck = [];
     for (let index = 0; index < 20; index += 1) {
@@ -903,11 +907,11 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
         assert.equal(emoteA.payload.result, 'accepted', 'preset emote should be accepted');
         assert.equal(emoteA.payload.stateView.status, 'setup', 'preset emote should not change setup status');
         assert.equal(emoteA.payload.stateView.stateVersion, currentA.payload.stateView.stateVersion + 1, 'preset emote should advance public state version without starting combat');
-        assert.ok(emoteA.payload.events.some(event => event.eventType === 'emote_sent' && event.payload.emoteId === 'respect'), 'preset emote should return public emote event');
+        assert.ok(emoteA.payload.events.some(event => event.eventType === 'emote_sent' && eventPublicData(event).emoteId === 'respect'), 'preset emote should return public emote event');
         const emoteVisibleToB = await request(baseUrl, `/api/pvp/live/matches/${joinB.payload.matchId}`, {
             token: tokenB
         });
-        assert.ok(emoteVisibleToB.payload.stateView.recentEvents.some(event => event.eventType === 'emote_sent' && event.payload.seatId === 'A'), 'opponent should see preset emote in public event feed');
+        assert.ok(emoteVisibleToB.payload.stateView.recentEvents.some(event => event.eventType === 'emote_sent' && eventPublicData(event).seatId === 'A'), 'opponent should see preset emote in public event feed');
         const emoteRateLimitedA = await submitIntent(baseUrl, tokenA, joinB.payload.matchId, {
             intentId: 'route-intent-emote-a-2',
             intentType: 'emote',
@@ -1316,6 +1320,17 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
         assert.equal(protectedBurstA.payload.result, 'accepted', 'opening protected burst should be accepted');
         assert.equal(protectedBurstA.payload.stateView.status, 'active', 'opening protected burst should keep match active');
         assert.equal(protectedBurstA.payload.stateView.opponent.hp, 1, 'opening protected burst should leave unacted defender at 1 hp');
+        assert.equal(protectedBurstA.payload.stateView.actionReceiptReport?.reportVersion, 'pvp-live-action-receipt-v1', 'opening protected burst should return public action receipt');
+        assert.equal(protectedBurstA.payload.stateView.actionReceiptReport?.sourceVisibility, 'authoritative_public_projection', 'route action receipt should be a server authoritative public projection');
+        assert.equal(protectedBurstA.payload.stateView.actionReceiptReport?.usesHiddenInformation, false, 'route action receipt must not use hidden information');
+        assert.equal(protectedBurstA.payload.stateView.actionReceiptReport?.rankedImpact, 'none', 'route action receipt should not write ranked result');
+        assert.equal(protectedBurstA.payload.stateView.actionReceiptReport?.actionType, 'play_card', 'route action receipt should identify card action');
+        assert.equal(protectedBurstA.payload.stateView.actionReceiptReport?.openingProtection?.triggered, true, 'route action receipt should explain opening protection trigger');
+        assert.equal(protectedBurstA.payload.stateView.actionReceiptReport?.openingProtection?.protectedSeat, 'B', 'route action receipt should expose protected seat');
+        assert.equal(protectedBurstA.payload.stateView.actionReceiptReport?.openingProtection?.preventedDamage, 6, 'route action receipt should expose protected damage prevention');
+        assert.equal(protectedBurstA.payload.stateView.actionReceiptReport?.damage?.targetHpAfter, 1, 'route action receipt should expose protected target HP');
+        assert.ok(/护体/.test(protectedBurstA.payload.stateView.actionReceiptReport?.summaryLine || ''), 'route action receipt should give readable protection summary');
+        assert.ok(!/hand|deck|cardId|instanceId|sourceCardId|loadoutSnapshot|rating|elo|reward/i.test(JSON.stringify(protectedBurstA.payload.stateView.actionReceiptReport)), 'route action receipt must not expose hidden ids or hidden state');
         const routeProtectionEvent = protectedBurstA.payload.events.find(event => event.eventType === 'opening_protection_triggered');
         assert.ok(routeProtectionEvent && routeProtectionEvent.payload.protectedSeat === 'B', 'opening protected burst should return public protection event');
         assert.equal(routeProtectionEvent.payload.minimumHp, 1, 'opening protected burst should expose minimum hp');
@@ -1331,12 +1346,20 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
         assert.equal(protectedEndTurnA.payload.result, 'accepted', 'opening protected attacker should still end turn');
         assert.equal(protectedEndTurnA.payload.stateView.currentSeat, 'B', 'opening protected defender should receive the next action window');
         assert.equal(protectedEndTurnA.payload.stateView.opponent.block, 8, 'opening protected defender should receive counterplay buffer on first turn');
-        assert.ok(protectedEndTurnA.payload.events.some(event => event.eventType === 'opening_counterplay_granted' && event.payload.seatId === 'B' && event.payload.block === 8), 'opening protected defender should expose public counterplay buffer event');
+        assert.equal(protectedEndTurnA.payload.stateView.actionReceiptReport?.actionType, 'end_turn', 'route end-turn response should expose handoff action receipt');
+        assert.equal(protectedEndTurnA.payload.stateView.actionReceiptReport?.nextSeat, 'B', 'route end-turn receipt should expose next seat');
+        assert.equal(protectedEndTurnA.payload.stateView.actionReceiptReport?.draw?.count, 3, 'route end-turn receipt should expose public draw count');
+        assert.equal(protectedEndTurnA.payload.stateView.actionReceiptReport?.counterplay?.granted, true, 'route end-turn receipt should expose counterplay grant');
+        assert.equal(protectedEndTurnA.payload.stateView.actionReceiptReport?.counterplay?.block, 8, 'route end-turn receipt should expose counterplay block');
+        assert.ok(protectedEndTurnA.payload.events.some(event => event.eventType === 'opening_counterplay_granted' && eventPublicData(event).seatId === 'B' && eventPublicData(event).block === 8), 'opening protected defender should expose public counterplay buffer event');
         const protectedStateB = await request(baseUrl, `/api/pvp/live/matches/${joinProtectB.payload.matchId}`, {
             token: tokenB
         });
         assert.equal(protectedStateB.payload.stateView.self.block, 8, 'opening protected defender should read own counterplay block through route state view');
         assert.ok(protectedStateB.payload.stateView.recentEvents.some(event => event.eventType === 'opening_counterplay_granted'), 'opening protected defender should see counterplay evidence in recent events');
+        assert.equal(protectedStateB.payload.stateView.actionReceiptReport?.viewerSeat, 'B', 'route GET should scope action receipt to protected viewer');
+        assert.equal(protectedStateB.payload.stateView.actionReceiptReport?.actionType, 'end_turn', 'route GET should keep latest end-turn receipt');
+        assert.equal(protectedStateB.payload.stateView.actionReceiptReport?.counterplay?.seatId, 'B', 'route GET should keep public counterplay receipt');
         protectMatch.state.seats.A.hp = 10;
         const normalFinishB = await submitIntent(baseUrl, tokenB, joinProtectB.payload.matchId, {
             intentId: 'route-intent-opening-normal-finish-b',
@@ -1346,7 +1369,7 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
         });
         assert.equal(normalFinishB.payload.result, 'accepted', 'normal lethal after opponent turn should be accepted');
         assert.equal(normalFinishB.payload.stateView.status, 'finished', 'normal lethal after opponent turn should finish');
-        assert.ok(normalFinishB.payload.events.some(event => event.eventType === 'match_finished' && event.payload.winnerSeat === 'B'), 'normal lethal after opponent turn should emit match_finished');
+        assert.ok(normalFinishB.payload.events.some(event => event.eventType === 'match_finished' && eventPublicData(event).winnerSeat === 'B'), 'normal lethal after opponent turn should emit match_finished');
         assert.equal(normalFinishB.payload.stateView.postMatchReview?.reportVersion, 'pvp-live-post-match-review-v1', 'normal lethal should expose post-match review version');
         assert.equal(normalFinishB.payload.stateView.postMatchReview?.result, 'win', 'winning live seat should receive a win review');
         assert.equal(normalFinishB.payload.stateView.postMatchReview?.finishReason, 'lethal', 'normal lethal review should expose lethal finish reason');
@@ -1418,8 +1441,8 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
         assert.equal(setupDisconnectStateA.status, 200, 'connected setup participant should read connection invalidated state');
         assert.equal(setupDisconnectStateA.payload.stateView.status, 'invalidated', 'setup disconnect after grace should invalidate instead of awarding a win');
         assert.equal(setupDisconnectStateA.payload.stateView.postMatchReview, null, 'setup connection invalidation should not expose post-match review');
-        assert.ok(setupDisconnectStateA.payload.stateView.recentEvents.some(event => event.eventType === 'connection_timeout' && event.payload.seatId === 'B'), 'setup disconnect should emit public connection_timeout event for stale seat');
-        assert.ok(setupDisconnectStateA.payload.stateView.recentEvents.some(event => event.eventType === 'match_invalidated' && event.payload.reason === 'connection_timeout'), 'setup disconnect should invalidate with connection_timeout reason');
+        assert.ok(setupDisconnectStateA.payload.stateView.recentEvents.some(event => event.eventType === 'connection_timeout' && eventPublicData(event).seatId === 'B'), 'setup disconnect should emit public connection_timeout event for stale seat');
+        assert.ok(setupDisconnectStateA.payload.stateView.recentEvents.some(event => event.eventType === 'match_invalidated' && eventPublicData(event).reason === 'connection_timeout'), 'setup disconnect should invalidate with connection_timeout reason');
         const requeueAfterSetupDisconnect = await request(baseUrl, '/api/pvp/live/queue/join', {
             method: 'POST',
             token: tokenB,
@@ -1484,8 +1507,8 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
         assert.equal(doubleDisconnectStateA.status, 200, 'participant should read double-disconnect terminal state');
         assert.equal(doubleDisconnectStateA.payload.stateView.status, 'invalidated', 'both seats disconnected after grace should invalidate instead of awarding a win');
         assert.equal(doubleDisconnectStateA.payload.stateView.postMatchReview, null, 'double-disconnect invalidation should not expose post-match review');
-        assert.ok(doubleDisconnectStateA.payload.stateView.recentEvents.some(event => event.eventType === 'connection_timeout' && event.payload.disconnectedSeats?.length === 2), 'double disconnect should emit public connection_timeout event for both seats');
-        assert.ok(doubleDisconnectStateA.payload.stateView.recentEvents.some(event => event.eventType === 'match_invalidated' && event.payload.reason === 'connection_timeout'), 'double disconnect should invalidate with connection_timeout reason');
+        assert.ok(doubleDisconnectStateA.payload.stateView.recentEvents.some(event => event.eventType === 'connection_timeout' && eventPublicData(event).disconnectedSeats?.length === 2), 'double disconnect should emit public connection_timeout event for both seats');
+        assert.ok(doubleDisconnectStateA.payload.stateView.recentEvents.some(event => event.eventType === 'match_invalidated' && eventPublicData(event).reason === 'connection_timeout'), 'double disconnect should invalidate with connection_timeout reason');
         const requeueAfterDoubleDisconnect = await request(baseUrl, '/api/pvp/live/queue/join', {
             method: 'POST',
             token: tokenA,
@@ -1523,11 +1546,11 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
         });
         assert.equal(connectionTimeoutWinner.status, 200, 'opponent should read connection-timeout finished match');
         assert.equal(connectionTimeoutWinner.payload.stateView.status, 'finished', 'current actor disconnected after grace should finish the active match');
-        assert.ok(connectionTimeoutWinner.payload.stateView.recentEvents.some(event => event.eventType === 'turn_timeout' && event.payload.finishReason === 'connection_timeout'), 'connection timeout should emit public turn_timeout evidence with connection source');
-        assert.ok(connectionTimeoutWinner.payload.stateView.recentEvents.some(event => event.eventType === 'match_finished' && event.payload.finishReason === 'connection_timeout'), 'connection timeout should finish with connection_timeout reason');
+        assert.ok(connectionTimeoutWinner.payload.stateView.recentEvents.some(event => event.eventType === 'turn_timeout' && eventPublicData(event).finishReason === 'connection_timeout'), 'connection timeout should emit public turn_timeout evidence with connection source');
+        assert.ok(connectionTimeoutWinner.payload.stateView.recentEvents.some(event => event.eventType === 'match_finished' && eventPublicData(event).finishReason === 'connection_timeout'), 'connection timeout should finish with connection_timeout reason');
         assert.equal(connectionTimeoutWinner.payload.stateView.postMatchReview?.result, 'win', 'connection timeout winner should receive a win review');
         assert.equal(connectionTimeoutWinner.payload.stateView.postMatchReview?.finishReason, 'connection_timeout', 'connection timeout review should expose connection timeout reason');
-        assert.equal(connectionTimeoutWinner.payload.stateView.recentEvents.find(event => event.eventType === 'match_finished').payload.winnerSeat, winnerSeat, 'connection timeout should award the non-disconnected seat');
+        assert.equal(eventPublicData(connectionTimeoutWinner.payload.stateView.recentEvents.find(event => event.eventType === 'match_finished')).winnerSeat, winnerSeat, 'connection timeout should award the non-disconnected seat');
         const connectionTimeoutLoser = await request(baseUrl, `/api/pvp/live/matches/${joinConnectionTimeoutB.payload.matchId}`, {
             token: loserToken
         });
@@ -1561,8 +1584,8 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
         assert.equal(timeoutStateB.status, 200, 'opponent should receive timeout-finished match state');
         assert.equal(timeoutStateB.payload.stateView.status, 'finished', 'stale active live match should finish by timeout');
         assert.ok(timeoutStateB.payload.stateView.recentEvents.some(event => event.eventType === 'turn_timeout'), 'timeout finish should emit public timeout event');
-        assert.ok(timeoutStateB.payload.stateView.recentEvents.some(event => event.eventType === 'match_finished' && event.payload.finishReason === 'timeout'), 'timeout finish should emit match_finished timeout reason');
-        assert.equal(timeoutStateB.payload.stateView.recentEvents.find(event => event.eventType === 'match_finished').payload.winnerSeat, 'B', 'waiting opponent should win when current seat times out');
+        assert.ok(timeoutStateB.payload.stateView.recentEvents.some(event => event.eventType === 'match_finished' && eventPublicData(event).finishReason === 'timeout'), 'timeout finish should emit match_finished timeout reason');
+        assert.equal(eventPublicData(timeoutStateB.payload.stateView.recentEvents.find(event => event.eventType === 'match_finished')).winnerSeat, 'B', 'waiting opponent should win when current seat times out');
         assert.equal(timeoutStateB.payload.stateView.postMatchReview?.reportVersion, 'pvp-live-post-match-review-v1', 'timeout finish should expose post-match review version');
         assert.equal(timeoutStateB.payload.stateView.postMatchReview?.result, 'win', 'timeout winner should receive a win review');
         assert.equal(timeoutStateB.payload.stateView.postMatchReview?.finishReason, 'timeout', 'timeout review should expose timeout finish reason');
@@ -1612,7 +1635,7 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
         });
         assert.equal(round14DrawEnd.payload.result, 'accepted', 'round14 draw final end turn should be accepted through route');
         assert.equal(round14DrawEnd.payload.stateView.status, 'finished', 'round14 draw route should return finished state');
-        assert.ok(round14DrawEnd.payload.stateView.recentEvents.some(event => event.eventType === 'match_finished' && event.payload.finishReason === 'round14_draw'), 'round14 draw route should emit match_finished round14_draw');
+        assert.ok(round14DrawEnd.payload.stateView.recentEvents.some(event => event.eventType === 'match_finished' && eventPublicData(event).finishReason === 'round14_draw'), 'round14 draw route should emit match_finished round14_draw');
         assert.equal(round14DrawEnd.payload.stateView.postMatchReview?.result, 'draw', 'round14 draw route should expose draw review');
         assert.equal(round14DrawEnd.payload.stateView.postMatchReview?.winnerSeat, 'draw', 'round14 draw route should expose draw winner marker');
         assert.equal(round14DrawEnd.payload.stateView.postMatchReview?.loserSeat, '', 'round14 draw route should not invent a loser');
@@ -1660,7 +1683,7 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
         });
         assert.equal(round14ScoreEnd.payload.result, 'accepted', 'round14 score final end turn should be accepted through route');
         assert.equal(round14ScoreEnd.payload.stateView.status, 'finished', 'round14 score route should return finished state');
-        assert.ok(round14ScoreEnd.payload.stateView.recentEvents.some(event => event.eventType === 'match_finished' && event.payload.finishReason === 'round14_score'), 'round14 score route should emit match_finished round14_score');
+        assert.ok(round14ScoreEnd.payload.stateView.recentEvents.some(event => event.eventType === 'match_finished' && eventPublicData(event).finishReason === 'round14_score'), 'round14 score route should emit match_finished round14_score');
         const round14ScoreAView = await request(baseUrl, `/api/pvp/live/matches/${joinRound14ScoreB.payload.matchId}`, {
             token: tokenA
         });
@@ -1690,7 +1713,7 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
         assert.equal(setupTimeoutStateB.payload.stateView.status, 'invalidated', 'stale setup live match should invalidate instead of finishing as a win/loss');
         assert.equal(setupTimeoutStateB.payload.stateView.postMatchReview, null, 'invalidated setup timeout should not expose post-match review');
         assert.ok(setupTimeoutStateB.payload.stateView.recentEvents.some(event => event.eventType === 'ready_timeout'), 'setup timeout should emit public ready_timeout event');
-        assert.ok(setupTimeoutStateB.payload.stateView.recentEvents.some(event => event.eventType === 'match_invalidated' && event.payload.reason === 'ready_timeout'), 'setup timeout should emit match_invalidated ready_timeout reason');
+        assert.ok(setupTimeoutStateB.payload.stateView.recentEvents.some(event => event.eventType === 'match_invalidated' && eventPublicData(event).reason === 'ready_timeout'), 'setup timeout should emit match_invalidated ready_timeout reason');
         const staleSetupTicket = await request(baseUrl, `/api/pvp/live/queue/status/${joinSetupTimeoutA.payload.queueTicket}`, {
             token: tokenC
         });

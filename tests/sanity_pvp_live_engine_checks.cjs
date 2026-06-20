@@ -359,7 +359,7 @@ assert(setupEmote.state.status === 'setup', 'setup emote must not start or finis
 assert(setupEmote.state.stateVersion === baseState.stateVersion + 1, 'emote should advance public state version for persistence without starting combat');
 assert(setupEmote.events.length === 1 && setupEmote.events[0].eventType === 'emote_sent', 'emote should emit one public emote event');
 assert(setupEmote.events[0].payload.emoteId === 'respect', 'emote event should expose preset emote id');
-assert(projectStateView(setupEmote.state, 'B').recentEvents.some(e => e.eventType === 'emote_sent' && e.payload.seatId === 'A'), 'opponent view should see public preset emote event');
+assert(projectStateView(setupEmote.state, 'B').recentEvents.some(e => e.eventType === 'emote_sent' && (e.publicData || e.payload || {}).seatId === 'A'), 'opponent view should see public preset emote event');
 const setupEmoteRateLimited = reduceIntent(setupEmote.state, {
   intentId: 'intent-setup-emote-2',
   intentType: 'emote',
@@ -398,6 +398,35 @@ assert(burst.events.some(e => e.eventType === 'budget_clamped' && e.payload.prev
 assert(burst.events.every(e => e.eventType !== 'damage_budget_exceeded'), 'budget clamp must not use reject event name');
 assert(new Set(burst.events.map(e => e.sequence)).size === burst.events.length, 'events from one intent should have unique sequences');
 assert(burst.events.map(e => e.sequence).join(',') === [activeState.eventSeq + 1, activeState.eventSeq + 2, activeState.eventSeq + 3].join(','), 'first combat intent should emit ordered event sequences after setup events');
+const burstReceiptA = projectStateView(burst.state, 'A').actionReceiptReport;
+assert(burstReceiptA && burstReceiptA.reportVersion === 'pvp-live-action-receipt-v1', 'state view should expose latest public action receipt after a card resolves');
+assert(burstReceiptA.sourceVisibility === 'authoritative_public_projection', 'action receipt should be a server authoritative public projection');
+assert(burstReceiptA.usesHiddenInformation === false, 'action receipt must not use hidden information');
+assert(burstReceiptA.rankedImpact === 'none', 'action receipt must not write ranked result');
+assert(burstReceiptA.actionType === 'play_card' && burstReceiptA.actingSeat === 'A', 'action receipt should identify the resolved card action');
+assert(burstReceiptA.cardName === '破阵爆发', 'action receipt should expose the public played card name');
+assert(burstReceiptA.damage.rawDamage === 19, 'action receipt should expose raw public damage');
+assert(burstReceiptA.damage.budgetedDamage === 18, 'action receipt should expose budgeted damage');
+assert(burstReceiptA.damage.preventedByBudget === 1, 'action receipt should expose budget prevention');
+assert(burstReceiptA.damage.blockedDamage === 3, 'action receipt should expose public block absorption');
+assert(burstReceiptA.damage.hpDamage === 15, 'action receipt should expose HP damage');
+assert(burstReceiptA.damage.targetSeat === 'B' && burstReceiptA.damage.targetHpAfter === 35, 'action receipt should expose target HP after resolution');
+assert(/预算后 18/.test(burstReceiptA.summaryLine) && /破盾 3/.test(burstReceiptA.summaryLine) && /生命伤害 15/.test(burstReceiptA.summaryLine), 'action receipt should give a readable resolved damage line');
+assert(!/deck|loadoutSnapshot|rating|elo|reward|opponentHand|opponentDeck|cardInstanceId|sourceCardId/i.test(JSON.stringify(burstReceiptA)), 'action receipt must not leak hidden deck, rating, reward, or card instance ids');
+const burstReceiptB = projectStateView(burst.state, 'B').actionReceiptReport;
+assert(burstReceiptB && burstReceiptB.viewerSeat === 'B', 'opponent should receive the same public action receipt scoped to their viewer seat');
+assert(burstReceiptB.damage.hpDamage === 15 && burstReceiptB.damage.targetSeat === 'B', 'opponent receipt should preserve public resolved damage without hidden payloads');
+const unknownCardReceiptState = JSON.parse(JSON.stringify(burst.state));
+unknownCardReceiptState.events.forEach(event => {
+  if (!event || !event.payload) return;
+  if (event.eventType === 'card_played') event.payload.cardId = 'debug_unknown_internal_card_id';
+  if (['budget_clamped', 'opening_protection_triggered', 'damage_applied', 'block_gained'].includes(event.eventType)) {
+    event.payload.sourceCardId = 'debug_unknown_internal_card_id';
+  }
+});
+const unknownCardReceipt = projectStateView(unknownCardReceiptState, 'A').actionReceiptReport;
+assert(unknownCardReceipt.cardName === '术式', 'unknown card ids should fall back to a generic public card label');
+assert(!/debug_unknown_internal_card_id|cardId|sourceCardId/i.test(JSON.stringify(unknownCardReceipt)), 'unknown card fallback must not leak internal card ids');
 
 const duplicate = reduceIntent(burst.state, burstIntent);
 assert(duplicate.result === 'duplicate', 'same intent should return duplicate');
@@ -620,6 +649,14 @@ assert(openingProtectionEvent.payload.minimumHp === 1, 'opening protection event
 assert(openingProtectionEvent.payload.preventedDamage === 6, 'opening protection event should expose prevented lethal damage after public second-seat buffer');
 assert(openingProtectionEvent.payload.wouldHaveHp === 0, 'opening protection event should expose would-have hp');
 assert(!lethal.events.some(e => e.eventType === 'match_finished'), 'opening protection should not emit match_finished');
+const lethalReceiptB = projectStateView(lethal.state, 'B').actionReceiptReport;
+assert(lethalReceiptB && lethalReceiptB.actionType === 'play_card', 'opening protected lethal should expose public card action receipt');
+assert(lethalReceiptB.openingProtection.triggered === true, 'protected lethal receipt should explain opening protection trigger');
+assert(lethalReceiptB.openingProtection.protectedSeat === 'B', 'protected lethal receipt should expose protected seat');
+assert(lethalReceiptB.openingProtection.preventedDamage === 6, 'protected lethal receipt should expose prevented damage');
+assert(lethalReceiptB.damage.targetHpAfter === 1, 'protected lethal receipt should expose protected target HP');
+assert(/护体/.test(lethalReceiptB.summaryLine), 'protected lethal receipt should explain the 1 HP safeguard in readable text');
+assert(!/hand|deck|cardId|instanceId|loadoutSnapshot|rating|elo|reward/i.test(JSON.stringify(lethalReceiptB)), 'protected lethal receipt must remain public and no-impact');
 const secondOpeningStrike = reduceIntent(lethal.state, {
   intentId: 'intent-lethal-strike-2',
   intentType: 'play_card',
@@ -646,6 +683,13 @@ const protectedEndTurn = reduceIntent(lethal.state, {
 assert(protectedEndTurn.result === 'accepted' && protectedEndTurn.state.currentSeat === 'B', 'protected opening target should receive the next turn');
 assert(protectedEndTurn.state.seats.B.block === 8, 'opening protection should grant first-turn counterplay block');
 assert(protectedEndTurn.events.some(e => e.eventType === 'opening_counterplay_granted' && e.payload.seatId === 'B' && e.payload.block === 8), 'protected seat first turn should expose public counterplay event');
+const protectedEndReceiptB = projectStateView(protectedEndTurn.state, 'B').actionReceiptReport;
+assert(protectedEndReceiptB && protectedEndReceiptB.actionType === 'end_turn', 'state view should expose public end-turn action receipt');
+assert(protectedEndReceiptB.actingSeat === 'A' && protectedEndReceiptB.nextSeat === 'B', 'end-turn receipt should expose action handoff');
+assert(protectedEndReceiptB.draw.count === 3 && protectedEndReceiptB.draw.seatId === 'B', 'end-turn receipt should expose only public draw count');
+assert(protectedEndReceiptB.counterplay.granted === true && protectedEndReceiptB.counterplay.seatId === 'B' && protectedEndReceiptB.counterplay.block === 8, 'end-turn receipt should expose public counterplay grant');
+assert(/行动权交给 B/.test(protectedEndReceiptB.summaryLine) && /抽 3/.test(protectedEndReceiptB.summaryLine) && /反打缓冲 \+8/.test(protectedEndReceiptB.summaryLine), 'end-turn receipt should give a readable handoff and counterplay line');
+assert(!/hand|deck|cardId|instanceId|loadoutSnapshot|rating|elo|reward/i.test(JSON.stringify(protectedEndReceiptB)), 'end-turn receipt must remain public and no-impact');
 const protectedMomentumB = projectStateView(protectedEndTurn.state, 'B').duelMomentumReport;
 assert(protectedMomentumB.pressureState === 'reversal_window', 'protected defender should see an explicit reversal window');
 assert(protectedMomentumB.isViewerTurn === true, 'protected defender should see the counterplay window on their own turn');

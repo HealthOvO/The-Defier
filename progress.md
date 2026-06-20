@@ -1,5 +1,33 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-21: V10-S9Q live PVP authoritative action receipt
+  - 本轮完成
+    - `server/pvp-live/engine/state-view.js` 新增 `actionReceiptReport`，从服务端权威 `state.events` 投影最近一次公开行动结果；卡牌行动会合并预算压低、破盾、生命伤害、开局护体、自身护盾收益，结束回合会合并行动权交接、公开抽牌数量和反打缓冲。
+    - `actionReceiptReport` 固定 `reportVersion=pvp-live-action-receipt-v1`、`sourceVisibility=authoritative_public_projection`、`usesHiddenInformation=false`、`rankedImpact=none`；报告由服务端基于权威事件做公开投影，只暴露已公开的行动结果和牌名，不暴露 `cardId`、`cardInstanceId`、隐藏手牌、牌库、评分、奖励或结算写入。
+    - `projectStateView()` 的 `recentEvents` 改为 `sanitizePublicEvent()` 输出，继续保留公开事件时间线，但不再把 reducer 原始 payload 直接交给前端；WS / replay / persistence / golden runner 的公开事件 allowlist 也同步支持 `connection_timeout.disconnectedSeats` 与 `ready_timeout.unreadySeats` 数组字段，避免不同通道的公开事件 shape 分叉。
+    - `index.html` / `css/pvp.css` / `js/scenes/pvp-scene.js` 在 live PVP 状态卡中新增 `[data-live-action-receipt]`，位置放在开局保护报告和局势动量之间；DOM 同步写入 `data-live-action-receipt-source`、`data-live-action-receipt-hidden`、`data-live-action-receipt-seq`，玩家能在行动后立即看到“预算后、破盾、生命伤害、剩余血量、护体 / 反打缓冲”的权威回执。
+    - `tests/browser_pvp_live_audit.mjs` 与 `tests/browser_pvp_live_real_backend_smoke.mjs` 分别固定 fake UI 和真实双账号链路：出牌后双方必须看到权威行动回执，且回执文本和 snapshot / render_game_to_text payload 都不得泄露隐藏信息或写正式积分。
+  - 已验证
+    - 红测：`node tests/sanity_pvp_live_engine_checks.cjs` 在实现前失败于 active `stateView` 缺少 `actionReceiptReport`。
+    - 红测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs` 在实现前失败于 `PVPScene.getLiveActionReceiptReport` 不存在。
+    - 红测：`node tests/sanity_pvp_live_ui_contract_checks.cjs` 在 DOM 接入前失败于缺少 `data-live-action-receipt` marker。
+    - 绿测：`node --check server/pvp-live/engine/state-view.js`
+    - 绿测：`node --check js/scenes/pvp-scene.js`
+    - 绿测：`node tests/sanity_pvp_live_engine_checks.cjs`
+    - 绿测：`node tests/sanity_pvp_live_route_checks.cjs`
+    - 绿测：`node tests/sanity_pvp_live_ws_checks.cjs`
+    - 绿测：`node tests/sanity_pvp_live_replay_checks.cjs`
+    - 绿测：`node tests/sanity_pvp_live_settlement_checks.cjs`
+    - 绿测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs`
+    - 绿测：`node tests/sanity_pvp_live_ui_contract_checks.cjs`
+    - 绿测：`node tests/sanity_release_gate_coverage_checks.cjs`
+    - 绿测：`npm run test:node`
+    - 构建：`npm run build:pages`
+    - 浏览器审计：`node tests/browser_pvp_live_audit.mjs http://127.0.0.1:4173 output/pvp-live-action-receipt-audit-20260621`，74/74 findings、0 console error。
+    - 真实后端 smoke：`node tests/browser_pvp_live_real_backend_smoke.mjs http://127.0.0.1:4173 output/pvp-live-action-receipt-real-20260621`，47/47 findings、0 console error。
+  - 当前结论
+    - live PVP 现在完成了“行动前权威预期 + 行动后权威回执”的闭环：先手能提前知道为什么不能秒杀，出手后也能看到服务端实际怎样预算、破盾和保底；后手能看到自己受到的真实伤害、剩余血线、护体与反打缓冲来源。该切片继续不改变伤害、生命、抽牌、灵力、起手、匹配、正式积分、奖励、赛季验证或结算，只把公开结果讲清楚，降低双方对抗中的误解和挫败。
+
 - 2026-06-20: V10-S9P live PVP authoritative action preview
   - 本轮完成
     - `server/pvp-live/engine/state-view.js` 新增 viewer-scoped `actionPreviewReport`，在权威 `stateView` 内公开当前行动方可出牌的行动预览：原始伤害、首动预算后伤害、破盾、生命伤害、目标预计血量、开局护体是否会触发、自身护盾收益，以及结束回合是否会发放反打缓冲。

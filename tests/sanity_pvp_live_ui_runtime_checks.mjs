@@ -127,6 +127,48 @@ assert.equal(
   'live snapshot should preserve local realtime reconnect reason for UI diagnostics',
 );
 
+const normalizedActionReceipt = PVPScene.getLiveActionReceiptReport({
+  actionReceiptReport: {
+    reportVersion: 'pvp-live-action-receipt-v1',
+    sourceVisibility: 'authoritative_public_projection',
+    usesHiddenInformation: false,
+    rankedImpact: 'none',
+    viewerSeat: 'A',
+    actingSeat: 'A',
+    actionType: 'play_card',
+    cardName: '破阵爆发',
+    summaryLine: 'A 打出破阵爆发：预算后 18，破盾 3，生命伤害 15，B 剩余 35 血。',
+    damage: {
+      targetSeat: 'B',
+      rawDamage: 19,
+      budgetedDamage: 18,
+      preventedByBudget: 1,
+      blockedDamage: 3,
+      hpDamage: 15,
+      targetHpAfter: 35
+    },
+    openingProtection: {
+      triggered: false,
+      protectedSeat: '',
+      minimumHp: 1,
+      preventedDamage: 0
+    },
+    safeguards: ['public_events', 'first_action_budget', 'public_block']
+  }
+});
+assert.equal(normalizedActionReceipt.reportVersion, 'pvp-live-action-receipt-v1', 'live UI should normalize action receipt report');
+assert.equal(normalizedActionReceipt.damage.hpDamage, 15, 'live UI action receipt should preserve public HP damage');
+assert.equal(normalizedActionReceipt.damage.targetHpAfter, 35, 'live UI action receipt should preserve public target HP');
+assert.equal(normalizedActionReceipt.sourceVisibility, 'authoritative_public_projection', 'live UI action receipt should preserve authoritative public projection source');
+assert.equal(normalizedActionReceipt.usesHiddenInformation, false, 'live UI action receipt should preserve hidden-info boundary');
+const renderedActionReceipt = PVPScene.renderLiveActionReceiptReport({ actionReceiptReport: normalizedActionReceipt });
+assert.match(renderedActionReceipt, /行动回执/, 'live UI should render action receipt heading');
+assert.match(renderedActionReceipt, /预算后 18/, 'live UI action receipt should render budgeted damage');
+assert.match(renderedActionReceipt, /破盾 3/, 'live UI action receipt should render block absorption');
+assert.match(renderedActionReceipt, /生命伤害 15/, 'live UI action receipt should render HP damage');
+assert.match(renderedActionReceipt, /权威公开投影/, 'live UI action receipt should render accurate projection source');
+assert.doesNotMatch(renderedActionReceipt, /cardInstanceId|sourceCardId|deck|rating|reward/i, 'live UI action receipt rendering must not expose hidden ids or rewards');
+
 assert.equal(
   PVPScene.getLiveLastSeenEventRevision({
     stateView: { recentEvents: [{ eventType: 'battle_started', sequence: 2 }] },

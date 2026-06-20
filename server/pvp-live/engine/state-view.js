@@ -1,5 +1,5 @@
 const { cloneLoadoutSnapshot, publicLoadoutSummary } = require('../loadout');
-const { RULES } = require('./rules');
+const { RULES, getCardDefinition } = require('./rules');
 
 function publicCard(card) {
     return {
@@ -173,7 +173,7 @@ const PUBLIC_EVENT_DATA_KEYS = {
     player_surrendered: ['loserSeat', 'winnerSeat'],
     match_finished: ['winnerSeat', 'loserSeat', 'finishReason', 'scoreA', 'scoreB', 'scoreDelta', 'scoreThreshold', 'roundIndex'],
     turn_timeout: ['seatId', 'winnerSeat', 'loserSeat', 'finishReason'],
-    connection_timeout: ['seatId', 'phase', 'elapsedMs'],
+    connection_timeout: ['seatId', 'disconnectedSeats', 'phase', 'elapsedMs'],
     ready_timeout: ['unreadySeats', 'readyDeadlineAt', 'elapsedMs'],
     match_invalidated: ['reason'],
     automation_action: ['seatId', 'actionType', 'reason', 'automationCount'],
@@ -193,6 +193,8 @@ function sanitizePublicData(eventType, payload) {
             publicData[key] = value;
         } else if (typeof value === 'string') {
             publicData[key] = String(value).slice(0, 64);
+        } else if (Array.isArray(value)) {
+            publicData[key] = value.map(item => String(item || '')).filter(Boolean).slice(0, 4);
         }
     });
     return publicData;
@@ -1114,6 +1116,180 @@ function projectActionPreviewReport(state, seatId) {
     };
 }
 
+function getPublicEventPayload(event) {
+    return event && event.payload && typeof event.payload === 'object' ? event.payload : {};
+}
+
+function getPublicCardName(cardId) {
+    const definition = getCardDefinition(cardId);
+    return String(definition && definition.name || '术式');
+}
+
+function isCardResolutionEvent(event, cardId, actingSeat) {
+    if (!event || event.actingSeat !== actingSeat) return false;
+    if (!['budget_clamped', 'opening_protection_triggered', 'damage_applied', 'block_gained'].includes(String(event.eventType || ''))) return false;
+    const payload = getPublicEventPayload(event);
+    return String(payload.sourceCardId || '') === String(cardId || '');
+}
+
+function collectCardResolutionEvents(events, cardPlayedIndex, cardId, actingSeat) {
+    const collected = [];
+    for (let index = cardPlayedIndex - 1; index >= 0; index -= 1) {
+        const event = events[index];
+        if (!isCardResolutionEvent(event, cardId, actingSeat)) break;
+        collected.unshift(event);
+    }
+    return collected;
+}
+
+function projectCardActionReceipt(state, seatId, cardPlayedIndex) {
+    const events = Array.isArray(state && state.events) ? state.events : [];
+    const cardEvent = events[cardPlayedIndex];
+    const cardPayload = getPublicEventPayload(cardEvent);
+    const actingSeat = cardEvent && cardEvent.actingSeat === 'B' ? 'B' : 'A';
+    const cardId = String(cardPayload.cardId || '');
+    const resolutionEvents = collectCardResolutionEvents(events, cardPlayedIndex, cardId, actingSeat);
+    const findResolution = (eventType) => resolutionEvents.find(event => event.eventType === eventType) || null;
+    const budgetEvent = findResolution('budget_clamped');
+    const damageEvent = findResolution('damage_applied');
+    const protectionEvent = findResolution('opening_protection_triggered');
+    const blockEvent = findResolution('block_gained');
+    const budgetPayload = getPublicEventPayload(budgetEvent);
+    const damagePayload = getPublicEventPayload(damageEvent);
+    const protectionPayload = getPublicEventPayload(protectionEvent);
+    const blockPayload = getPublicEventPayload(blockEvent);
+    const rawDamage = normalizeCount(damagePayload.rawDamage || budgetPayload.rawDamage);
+    const budgetedDamage = normalizeCount(damagePayload.budgetedDamage || damagePayload.actualDamage || budgetPayload.actualDamage);
+    const preventedByBudget = normalizeCount(budgetPayload.preventedDamage);
+    const blockedDamage = normalizeCount(damagePayload.blockedDamage);
+    const hpDamage = normalizeCount(damagePayload.hpDamage);
+    const targetSeat = String(damagePayload.targetSeat || budgetPayload.targetSeat || protectionPayload.protectedSeat || '');
+    const targetHpAfter = normalizeCount(damagePayload.targetHp);
+    const blockGain = normalizeCount(blockPayload.block);
+    const cardName = getPublicCardName(cardId);
+    const damageLine = rawDamage > 0 || damageEvent
+        ? `预算后 ${budgetedDamage}，破盾 ${blockedDamage}，生命伤害 ${hpDamage}${targetSeat ? `，${targetSeat} 剩余 ${targetHpAfter} 血` : ''}`
+        : '不造成伤害';
+    const protectionTriggered = !!protectionEvent;
+    const protectionLine = protectionTriggered
+        ? `；护体保底 ${normalizeCount(protectionPayload.minimumHp) || 1} 血，挡下 ${normalizeCount(protectionPayload.preventedDamage)}`
+        : '';
+    const blockLine = blockGain > 0
+        ? `；自身护盾 +${blockGain}，当前 ${normalizeCount(blockPayload.totalBlock)}`
+        : '';
+    const safeguards = ['public_events'];
+    if (budgetEvent) safeguards.push('first_action_budget');
+    if (blockedDamage > 0) safeguards.push('public_block');
+    if (protectionTriggered) safeguards.push('opening_protection');
+    if (blockGain > 0) safeguards.push('self_block');
+    return {
+        reportVersion: 'pvp-live-action-receipt-v1',
+        sourceVisibility: 'authoritative_public_projection',
+        usesHiddenInformation: false,
+        rankedImpact: 'none',
+        viewerSeat: seatId === 'B' ? 'B' : 'A',
+        actingSeat,
+        actionType: 'play_card',
+        latestSequence: normalizeCount(cardEvent && cardEvent.sequence),
+        cardName,
+        cost: normalizeCount(cardPayload.cost),
+        remainingEnergy: normalizeCount(cardPayload.remainingEnergy),
+        damage: {
+            targetSeat,
+            rawDamage,
+            budgetedDamage,
+            preventedByBudget,
+            blockedDamage,
+            hpDamage,
+            targetHpAfter
+        },
+        openingProtection: {
+            triggered: protectionTriggered,
+            protectedSeat: String(protectionPayload.protectedSeat || ''),
+            minimumHp: normalizeCount(protectionPayload.minimumHp),
+            preventedDamage: normalizeCount(protectionPayload.preventedDamage),
+            wouldHaveHp: normalizeCount(protectionPayload.wouldHaveHp)
+        },
+        blockGain: blockGain > 0 ? {
+            seatId: String(blockPayload.seatId || actingSeat),
+            block: blockGain,
+            totalBlock: normalizeCount(blockPayload.totalBlock)
+        } : null,
+        summaryLine: `${actingSeat} 打出${cardName}：${damageLine}${protectionLine}${blockLine}。`,
+        safeguards: Array.from(new Set(safeguards))
+    };
+}
+
+function collectEndTurnResolutionEvents(events, turnEndedIndex) {
+    const collected = [];
+    for (let index = turnEndedIndex + 1; index < events.length; index += 1) {
+        const event = events[index];
+        if (!event) break;
+        if (event.eventType === 'card_played' || event.eventType === 'turn_ended') break;
+        if (['cards_drawn', 'opening_counterplay_granted'].includes(String(event.eventType || ''))) {
+            collected.push(event);
+        }
+    }
+    return collected;
+}
+
+function projectEndTurnActionReceipt(state, seatId, turnEndedIndex) {
+    const events = Array.isArray(state && state.events) ? state.events : [];
+    const turnEvent = events[turnEndedIndex];
+    const turnPayload = getPublicEventPayload(turnEvent);
+    const actingSeat = turnEvent && turnEvent.actingSeat === 'B' ? 'B' : 'A';
+    const resolutionEvents = collectEndTurnResolutionEvents(events, turnEndedIndex);
+    const drawEvent = resolutionEvents.find(event => event.eventType === 'cards_drawn') || null;
+    const counterplayEvent = resolutionEvents.find(event => event.eventType === 'opening_counterplay_granted') || null;
+    const drawPayload = getPublicEventPayload(drawEvent);
+    const counterplayPayload = getPublicEventPayload(counterplayEvent);
+    const nextSeat = String(turnPayload.nextSeat || '');
+    const drawCount = normalizeCount(drawPayload.count);
+    const counterplayBlock = normalizeCount(counterplayPayload.block);
+    const drawLine = drawEvent ? `，${String(drawPayload.seatId || nextSeat || '下家')} 抽 ${drawCount} 张` : '';
+    const counterplayLine = counterplayEvent ? `；反打缓冲 +${counterplayBlock} 给 ${String(counterplayPayload.seatId || nextSeat || '')}` : '';
+    const safeguards = ['public_events'];
+    if (counterplayEvent) safeguards.push('counterplay_granted');
+    return {
+        reportVersion: 'pvp-live-action-receipt-v1',
+        sourceVisibility: 'authoritative_public_projection',
+        usesHiddenInformation: false,
+        rankedImpact: 'none',
+        viewerSeat: seatId === 'B' ? 'B' : 'A',
+        actingSeat,
+        actionType: 'end_turn',
+        latestSequence: normalizeCount(turnEvent && turnEvent.sequence),
+        nextSeat,
+        completedTurns: normalizeCount(turnPayload.completedTurns),
+        roundIndex: normalizeCount(turnPayload.roundIndex),
+        turnIndex: normalizeCount(turnPayload.turnIndex),
+        draw: {
+            seatId: String(drawPayload.seatId || nextSeat || ''),
+            count: drawCount,
+            capped: drawPayload.capped === true
+        },
+        counterplay: {
+            granted: !!counterplayEvent,
+            seatId: String(counterplayPayload.seatId || ''),
+            block: counterplayBlock,
+            totalBlock: normalizeCount(counterplayPayload.totalBlock),
+            minimumHp: normalizeCount(counterplayPayload.minimumHp)
+        },
+        summaryLine: `${actingSeat} 结束回合：行动权交给 ${nextSeat || '下家'}${drawLine}${counterplayLine}。`,
+        safeguards: Array.from(new Set(safeguards))
+    };
+}
+
+function projectActionReceiptReport(state, seatId) {
+    const events = Array.isArray(state && state.events) ? state.events : [];
+    for (let index = events.length - 1; index >= 0; index -= 1) {
+        const eventType = String(events[index] && events[index].eventType || '');
+        if (eventType === 'card_played') return projectCardActionReceipt(state, seatId, index);
+        if (eventType === 'turn_ended') return projectEndTurnActionReceipt(state, seatId, index);
+    }
+    return null;
+}
+
 function projectOpeningSafeguardReport(state, seatId) {
     const firstSeat = state && state.setup && (state.setup.firstSeat === 'A' || state.setup.firstSeat === 'B')
         ? state.setup.firstSeat
@@ -1348,12 +1524,13 @@ function projectStateView(state, seatId) {
         loadoutExplorationReport: projectLoadoutExplorationReport(state.loadoutExplorationReport),
         openingSafeguardReport,
         actionPreviewReport: projectActionPreviewReport(state, seatId),
+        actionReceiptReport: projectActionReceiptReport(state, seatId),
         duelMomentumReport: projectDuelMomentumReport(state, seatId, openingSafeguardReport),
         settlementReport: projectSettlementReport(state, seatId),
         postMatchReview: projectPostMatchReview(state, seatId),
         self: projectSelfSeat(state.seats[seatId]),
         opponent: projectPublicSeat(state.seats[opponentSeatId]),
-        recentEvents: state.events.slice(-20)
+        recentEvents: state.events.slice(-20).map(sanitizePublicEvent)
     };
 }
 

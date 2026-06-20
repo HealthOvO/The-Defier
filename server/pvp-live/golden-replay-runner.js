@@ -29,9 +29,9 @@ const PUBLIC_EVENT_DATA_KEYS = Object.freeze({
     player_surrendered: ['loserSeat', 'winnerSeat'],
     match_finished: ['winnerSeat', 'loserSeat', 'finishReason', 'scoreA', 'scoreB', 'scoreDelta', 'scoreThreshold', 'roundIndex'],
     turn_timeout: ['seatId', 'winnerSeat', 'loserSeat', 'finishReason'],
-    connection_timeout: ['seatId', 'phase', 'elapsedMs'],
+    connection_timeout: ['seatId', 'disconnectedSeats', 'phase', 'elapsedMs'],
     emote_sent: ['seatId', 'emoteId', 'label'],
-    ready_timeout: ['elapsedMs'],
+    ready_timeout: ['unreadySeats', 'readyDeadlineAt', 'elapsedMs'],
     match_invalidated: ['reason'],
     automation_action: ['seatId', 'actionType', 'reason', 'automationCount']
 });
@@ -246,6 +246,8 @@ function sanitizeReplayPublicData(eventType, payload) {
             data[key] = value;
         } else if (typeof value === 'string') {
             data[key] = String(value).slice(0, 64);
+        } else if (Array.isArray(value)) {
+            data[key] = value.map(item => String(item || '')).filter(Boolean).slice(0, 4);
         }
         return data;
     }, {});

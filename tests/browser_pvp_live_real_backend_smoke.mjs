@@ -1062,6 +1062,46 @@ async function writeReport() {
         && afterPlayB.opponent?.handCount >= 0,
       JSON.stringify({ playA, afterPlayB }),
     );
+    const afterPlayReceiptProbe = await seatB.page.evaluate(() => {
+      const snapshot = window.PVPScene.getLiveSnapshot();
+      const textPayload = JSON.parse(window.render_game_to_text()).pvp?.live || null;
+      return {
+        text: document.querySelector('[data-live-action-receipt]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+        sourceAttr: document.querySelector('[data-live-action-receipt]')?.getAttribute('data-live-action-receipt-source') || '',
+        hiddenAttr: document.querySelector('[data-live-action-receipt]')?.getAttribute('data-live-action-receipt-hidden') || '',
+        seqAttr: document.querySelector('[data-live-action-receipt]')?.getAttribute('data-live-action-receipt-seq') || '',
+        payload: snapshot?.actionReceiptReport || null,
+        textPayload: textPayload?.actionReceiptReport || null,
+      };
+    });
+    add(
+      'real browser opponent sees authoritative action receipt after accepted card',
+      /行动回执/.test(afterPlayReceiptProbe.text)
+        && /预算后/.test(afterPlayReceiptProbe.text)
+        && /破盾/.test(afterPlayReceiptProbe.text)
+        && /生命伤害/.test(afterPlayReceiptProbe.text)
+        && afterPlayReceiptProbe.sourceAttr === 'authoritative_public_projection'
+        && afterPlayReceiptProbe.hiddenAttr === 'false'
+        && afterPlayReceiptProbe.payload?.reportVersion === 'pvp-live-action-receipt-v1'
+        && afterPlayReceiptProbe.payload?.sourceVisibility === 'authoritative_public_projection'
+        && afterPlayReceiptProbe.payload?.usesHiddenInformation === false
+        && afterPlayReceiptProbe.payload?.rankedImpact === 'none'
+        && Number(afterPlayReceiptProbe.seqAttr) === afterPlayReceiptProbe.payload?.latestSequence
+        && Number.isFinite(afterPlayReceiptProbe.payload?.latestSequence)
+        && afterPlayReceiptProbe.payload.latestSequence > 0
+        && afterPlayReceiptProbe.payload?.viewerSeat === 'B'
+        && afterPlayReceiptProbe.payload?.actingSeat === 'A'
+        && afterPlayReceiptProbe.payload?.actionType === 'play_card'
+        && Number.isFinite(afterPlayReceiptProbe.payload?.damage?.hpDamage)
+        && afterPlayReceiptProbe.payload.damage.hpDamage > 0
+        && afterPlayReceiptProbe.payload?.damage?.targetSeat === 'B'
+        && afterPlayReceiptProbe.textPayload?.reportVersion === 'pvp-live-action-receipt-v1'
+        && afterPlayReceiptProbe.textPayload?.sourceVisibility === afterPlayReceiptProbe.payload?.sourceVisibility
+        && afterPlayReceiptProbe.textPayload?.latestSequence === afterPlayReceiptProbe.payload?.latestSequence
+        && afterPlayReceiptProbe.textPayload?.summaryLine === afterPlayReceiptProbe.payload?.summaryLine
+        && !/hand|deck|cardId|instanceId|loadoutSnapshot|reward|rating|elo|opponentHand|opponentDeck/i.test(`${afterPlayReceiptProbe.text} ${JSON.stringify(afterPlayReceiptProbe.payload || {})}`),
+      JSON.stringify(afterPlayReceiptProbe),
+    );
     const afterPlayMomentumProbe = await seatB.page.evaluate(() => ({
       text: document.querySelector('[data-live-duel-momentum]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
       state: document.querySelector('[data-live-duel-momentum]')?.getAttribute('data-live-duel-momentum-state') || '',

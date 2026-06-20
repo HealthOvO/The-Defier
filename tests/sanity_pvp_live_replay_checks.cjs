@@ -45,6 +45,63 @@ function makeLoadout(identitySlot, pattern) {
   };
 }
 
+function assertPublicReplayArraySanitizer() {
+  const match = {
+    matchId: 'pvplm-replay-public-array',
+    state: {
+      ruleVersion: 'pvp-live-v1',
+      status: 'invalidated',
+      roundIndex: 1,
+      turnIndex: 1,
+      seats: {
+        A: { hp: 50 },
+        B: { hp: 50 },
+      },
+      events: [],
+    },
+  };
+  const replay = buildMatchReplay(match, 'A', 'replay_public', {
+    events: [
+      {
+        eventType: 'connection_timeout',
+        sequence: 1,
+        actingSeat: '',
+        visibility: 'public',
+        payload: {
+          seatId: '',
+          disconnectedSeats: ['A', 'B'],
+          phase: 'setup',
+          elapsedMs: 30000,
+          cardId: 'hidden-card-id',
+        },
+      },
+      {
+        eventType: 'ready_timeout',
+        sequence: 2,
+        actingSeat: '',
+        visibility: 'public',
+        payload: {
+          unreadySeats: ['A', 'B'],
+          readyDeadlineAt: 123456,
+          elapsedMs: 10000,
+          deck: ['hidden'],
+        },
+      },
+      {
+        eventType: 'match_invalidated',
+        sequence: 3,
+        actingSeat: '',
+        visibility: 'public',
+        payload: { reason: 'ready_timeout' },
+      },
+    ],
+  });
+  assert.deepEqual(replay.events[0].publicData.disconnectedSeats, ['A', 'B'], 'public replay should preserve public disconnected seat arrays');
+  assert.deepEqual(replay.events[1].publicData.unreadySeats, ['A', 'B'], 'public replay should preserve public ready-timeout seat arrays');
+  assert.equal(JSON.stringify(replay.events).includes('hidden-card-id'), false, 'public replay should still strip non-allowlisted ids');
+  assert.equal(JSON.stringify(replay.events).includes('hidden'), false, 'public replay should still strip hidden arrays');
+}
+
 function makeReplaySettlementStub() {
   const seatUserId = (match, seatId) => Object.entries(match && match.seatsByUserId || {})
     .find(([, sourceSeat]) => sourceSeat === seatId)?.[0] || '';
@@ -158,6 +215,7 @@ function assertPublicReplayShape(replay, visibilityLayer) {
 }
 
 (async () => {
+  assertPublicReplayArraySanitizer();
   pvpLiveRoutes.__livePvpStore.reset();
   pvpLiveRoutes.__attachServices({ settlement: makeReplaySettlementStub() });
 
