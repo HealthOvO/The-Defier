@@ -53,6 +53,7 @@ function loadFile(ctx, filePath) {
       this.observatoryArchiveState = null;
       this.startedRealm = 0;
       this.unlocks = [];
+      this.screenTransitions = [];
     },
     document: {
       getElementById: () => null,
@@ -101,6 +102,19 @@ function loadFile(ctx, filePath) {
   ctx.Game.prototype.startRealm = function (realm) {
     this.startedRealm = realm;
   };
+  ctx.Game.prototype.showScreen = function (screenId) {
+    this.currentScreen = screenId;
+    this.screenTransitions.push(screenId);
+  };
+  ctx.PVPScene = {
+    activeTab: '',
+    tabSwitches: [],
+    switchTab(tab) {
+      this.activeTab = String(tab || '');
+      this.tabSwitches.push(this.activeTab);
+    }
+  };
+  ctx.window.PVPScene = ctx.PVPScene;
 
   loadFile(ctx, path.join(root, 'js/data/challenge_rules.js'));
   loadFile(ctx, path.join(root, 'js/core/challenge_hub.js'));
@@ -440,6 +454,19 @@ function loadFile(ctx, filePath) {
   assert(game.getObservatoryArchiveSummary().totalRecords === archiveBeforePractice, 'practiceOnly finalize must not add observatory archive entries');
   assert(game.unlocks.length === unlocksBeforePractice, 'practiceOnly finalize must not add challenge or observatory unlocks');
   assert(verifications.length === 0, 'practiceOnly finalize must not write season verification results');
+  const practiceReturn = game.getPvpLivePracticeReturnReceipt();
+  assert(practiceReturn && practiceReturn.reportVersion === 'pvp-live-practice-return-v1', `practiceOnly finalize should expose a PVP return receipt, got ${JSON.stringify(practiceReturn)}`);
+  assert(practiceReturn.sourceMatchId === 'pvplm-sanity-practice', `PVP practice return should remember source match id, got ${JSON.stringify(practiceReturn)}`);
+  assert(practiceReturn.sourceRunId === 'pvp_live:pvplm-sanity-practice', `PVP practice return should expose source run id, got ${JSON.stringify(practiceReturn)}`);
+  assert(practiceReturn.completed === true && practiceReturn.reason === 'practice_complete', `PVP practice return should preserve completion reason, got ${JSON.stringify(practiceReturn)}`);
+  assert(practiceReturn.rankedImpact === 'none' && practiceReturn.usesHiddenInformation === false, `PVP practice return must stay no-score and public scoped, got ${JSON.stringify(practiceReturn)}`);
+  assert(practiceReturn.recommendedLoadoutId === 'shield' && /守势斗法谱/.test(practiceReturn.recommendedLoadoutLabel || ''), `PVP practice return should carry the recommended loadout label, got ${JSON.stringify(practiceReturn)}`);
+  assert(practiceReturn.nextActionType === 'pvp_live' && /继续真人排位/.test(practiceReturn.ctaLabel || ''), `PVP practice return should expose live PVP next action, got ${JSON.stringify(practiceReturn)}`);
+  const practiceReturnPayload = game.getChallengeHubPayload();
+  assert(practiceReturnPayload.pvpLivePracticeReturn?.reportVersion === 'pvp-live-practice-return-v1', `challenge payload should expose PVP practice return receipt, got ${JSON.stringify(practiceReturnPayload.pvpLivePracticeReturn)}`);
+  assert(game.openPvpLivePracticeReturn() === true, 'PVP practice return action should navigate back to live PVP');
+  assert(game.currentScreen === 'pvp-screen', `PVP practice return action should show pvp screen, got ${game.currentScreen}`);
+  assert(ctx.PVPScene.activeTab === 'live' && ctx.PVPScene.tabSwitches.includes('live'), `PVP practice return action should switch to live tab, got ${JSON.stringify(ctx.PVPScene.tabSwitches)}`);
 
   game.currentScreen = 'challenge-screen';
   game.challengeHubState = { tab: 'daily' };

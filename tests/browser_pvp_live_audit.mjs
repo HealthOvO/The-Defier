@@ -471,6 +471,20 @@ async function safeElementScreenshot(page, selector, outputPath) {
         },
         safeguards: ['server_authoritative', 'snapshot_locked', 'setup_ready_required', 'connection_health_gate'],
       },
+      openerAssignment: {
+        reportVersion: 'pvp-live-opener-assignment-v1',
+        sourceVisibility: 'server_authoritative_public_seed',
+        usesHiddenInformation: false,
+        rankedImpact: 'none',
+        firstSeat: 'A',
+        secondSeat: 'B',
+        viewerSeat: 'A',
+        opponentSeat: 'B',
+        viewerStarts: true,
+        seedTag: 'browser-live',
+        queueOrderBinding: false,
+        hostBinding: false,
+      },
       openingSafeguardReport: makeOpeningSafeguardReport(stateVersion, currentSeat, status),
       actionPreviewReport: {
         reportVersion: 'pvp-live-action-preview-v1',
@@ -1405,6 +1419,7 @@ async function safeElementScreenshot(page, selector, outputPath) {
     realtimeStatus: document.querySelector('[data-live-realtime-status]')?.textContent || '',
     realtimeDataset: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-realtime-state') || '',
     openingSafeguard: document.querySelector('[data-live-opening-safeguard]')?.textContent || '',
+    openerAssignment: document.querySelector('[data-live-opener-assignment]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
     actionReceipt: document.querySelector('[data-live-action-receipt]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
     duelMomentum: document.querySelector('[data-live-duel-momentum]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
     duelMomentumState: document.querySelector('[data-live-duel-momentum]')?.getAttribute('data-live-duel-momentum-state') || '',
@@ -1722,6 +1737,7 @@ async function safeElementScreenshot(page, selector, outputPath) {
     phase: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-phase') || '',
     firstGuide: document.querySelector('[data-live-first-guide]')?.textContent || '',
     openingSafeguard: document.querySelector('[data-live-opening-safeguard]')?.textContent || '',
+    openerAssignment: document.querySelector('[data-live-opener-assignment]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
     duelMomentum: document.querySelector('[data-live-duel-momentum]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
     duelMomentumState: document.querySelector('[data-live-duel-momentum]')?.getAttribute('data-live-duel-momentum-state') || '',
     turnTimer: document.querySelector('[data-live-turn-timer]')?.textContent || '',
@@ -1756,6 +1772,10 @@ async function safeElementScreenshot(page, selector, outputPath) {
       && /保底 1 血/.test(setupProbe.openingSafeguard)
       && /后手护盾/.test(setupProbe.openingSafeguard)
       && /B \+3/.test(setupProbe.openingSafeguard)
+      && /我方先手|对方先手/.test(setupProbe.openerAssignment)
+      && /服务端种子/.test(setupProbe.openerAssignment)
+      && /不绑定排队|不绑定房主/.test(setupProbe.openerAssignment)
+      && setupProbe.payload?.openerAssignment?.reportVersion === 'pvp-live-opener-assignment-v1'
       && setupProbe.payload?.openingSafeguardReport?.reportVersion === 'pvp-live-opening-safeguard-v1'
       && setupProbe.payload?.openingSafeguardReport?.damageBudget?.currentActionBudget === 18
       && setupProbe.payload?.openingSafeguardReport?.secondSeatBuffer?.seatId === 'B'

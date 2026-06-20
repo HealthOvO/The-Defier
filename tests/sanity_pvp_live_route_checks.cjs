@@ -466,6 +466,10 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
         assert.ok(invitedD.payload.stateView.firstMatchGuide?.safeguards?.includes('friendly_no_ranked_impact'), 'private invite guide should explain no-ranked-impact safeguard');
         assert.equal(invitedD.payload.stateView.matchQuality?.ratingDeltaBucket, 'friend_invite', 'private invite match quality should use friend invite bucket instead of exact rating');
         assert.ok(!/reward|elo/i.test(JSON.stringify(invitedD.payload.stateView.matchQuality || {})), 'private invite match quality should not leak reward or ELO promises');
+        assert.equal(invitedD.payload.stateView.openerAssignment?.reportVersion, 'pvp-live-opener-assignment-v1', 'private invite match should expose authoritative opener assignment');
+        assert.equal(invitedD.payload.stateView.openerAssignment?.firstSeat, invitedD.payload.stateView.setup?.firstSeat, 'private invite opener assignment should match setup firstSeat');
+        assert.equal(invitedD.payload.stateView.openerAssignment?.queueOrderBinding, false, 'private invite opener assignment must not be tied to queue order');
+        assert.equal(invitedD.payload.stateView.openerAssignment?.hostBinding, false, 'private invite opener assignment must not be tied to host seat');
 
         const inviteHostCurrent = await request(baseUrl, '/api/pvp/live/matches/current', {
             token: tokenC
@@ -809,6 +813,13 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
         assert.ok(joinB.payload.stateView.firstMatchGuide.safeguards.includes('opening_protection'), 'matched view first-match guide should explain opening protection');
         assert.ok(joinB.payload.stateView.firstMatchGuide.steps.some(step => step.id === 'setup_ready'), 'matched view first-match guide should explain setup ready step');
         assert.ok(!/reward|rating|elo/i.test(JSON.stringify(joinB.payload.stateView.firstMatchGuide)), 'matched view first-match guide should not imply hidden reward or rating compensation');
+        assert.equal(joinB.payload.stateView.openerAssignment?.reportVersion, 'pvp-live-opener-assignment-v1', 'matched view should expose authoritative opener assignment report');
+        assert.equal(joinB.payload.stateView.openerAssignment?.sourceVisibility, 'server_authoritative_public_seed', 'opener assignment should be server-authoritative and public-seed scoped');
+        assert.equal(joinB.payload.stateView.openerAssignment?.firstSeat, joinB.payload.stateView.setup?.firstSeat, 'opener assignment should match setup firstSeat');
+        assert.ok(['A', 'B'].includes(joinB.payload.stateView.openerAssignment?.firstSeat), 'opener assignment should expose a legal first seat');
+        assert.equal(joinB.payload.stateView.openerAssignment?.queueOrderBinding, false, 'opener assignment must not be bound to queue order');
+        assert.equal(joinB.payload.stateView.openerAssignment?.hostBinding, false, 'opener assignment must not be bound to invite host');
+        assert.ok(!/userId|loadout|hand|deck|rating|elo/i.test(JSON.stringify(joinB.payload.stateView.openerAssignment || {})), 'opener assignment should not leak hidden player data');
 
         const rejoinA = await request(baseUrl, '/api/pvp/live/queue/join', {
             method: 'POST',
@@ -953,18 +964,28 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
 
         const activeMainMatch = pvpLiveRoutes.__livePvpStore.matches.get(joinB.payload.matchId);
         forceActiveTurnStartedAt(activeMainMatch, Date.now() - 5000);
+        const firstSeat = readyMain.payload.stateView.currentSeat;
+        const secondSeat = firstSeat === 'A' ? 'B' : 'A';
+        const firstToken = firstSeat === 'A' ? tokenA : tokenB;
+        const secondToken = firstSeat === 'A' ? tokenB : tokenA;
+        const firstBurstCard = firstSeat === 'A' ? 'A-burst-1' : 'B-burst-1';
+        const secondStrikeCard = secondSeat === 'A' ? 'A-strike-1' : 'B-strike-1';
+        const firstDisplayName = firstSeat === 'A' ? '甲' : '乙';
+        const secondDisplayName = secondSeat === 'A' ? '甲' : '乙';
+        const firstLoadout = firstSeat === 'A' ? loadoutA : loadoutB;
+        const secondLoadout = secondSeat === 'A' ? loadoutA : loadoutB;
         const beforePlayTimerA = await request(baseUrl, `/api/pvp/live/matches/${joinB.payload.matchId}`, {
-            token: tokenA
+            token: firstToken
         });
         assertTurnTimer(beforePlayTimerA.payload.stateView.turnTimer, 'active', 'before live card play');
         const activeTurnStartedAt = beforePlayTimerA.payload.stateView.turnTimer.startedAt;
         const activeTurnDeadlineAt = beforePlayTimerA.payload.stateView.turnTimer.deadlineAt;
 
-        const playA = await submitIntent(baseUrl, tokenA, joinB.payload.matchId, {
+        const playA = await submitIntent(baseUrl, firstToken, joinB.payload.matchId, {
                 intentId: 'route-intent-burst-1',
                 intentType: 'play_card',
                 stateVersion: beforePlayTimerA.payload.stateView.stateVersion,
-                payload: { cardInstanceId: 'A-burst-1', targetSeat: 'B' }
+                payload: { cardInstanceId: firstBurstCard, targetSeat: secondSeat }
         });
         assert.equal(playA.status, 200, 'legal live PVP intent should return 200');
         assert.equal(playA.payload.result, 'accepted', 'legal live PVP intent should be accepted');
@@ -973,55 +994,55 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
         assert.equal(playA.payload.stateView.opponent.hp, 35, 'route should expose server-clamped opponent hp after public second-seat buffer');
         assert.ok(playA.payload.events.some(event => event.eventType === 'budget_clamped'), 'route should return clamp event');
 
-        const duplicateA = await submitIntent(baseUrl, tokenA, joinB.payload.matchId, {
+        const duplicateA = await submitIntent(baseUrl, firstToken, joinB.payload.matchId, {
                 intentId: 'route-intent-burst-1',
                 intentType: 'play_card',
                 stateVersion: readyMain.payload.stateView.stateVersion,
-                payload: { cardInstanceId: 'A-burst-1', targetSeat: 'B' }
+                payload: { cardInstanceId: firstBurstCard, targetSeat: secondSeat }
         });
         assert.equal(duplicateA.payload.result, 'duplicate', 'same live intent should be idempotent');
         assert.equal(duplicateA.payload.stateView.opponent.hp, 35, 'duplicate live intent must not damage twice');
 
-        const wrongSeatB = await submitIntent(baseUrl, tokenB, joinB.payload.matchId, {
+        const wrongSeatB = await submitIntent(baseUrl, secondToken, joinB.payload.matchId, {
                 intentId: 'route-intent-wrong-seat-1',
                 intentType: 'play_card',
                 stateVersion: playA.payload.stateView.stateVersion,
-                payload: { cardInstanceId: 'B-strike-1', targetSeat: 'A' }
+                payload: { cardInstanceId: secondStrikeCard, targetSeat: firstSeat }
         });
         assert.equal(wrongSeatB.payload.result, 'rejected', 'non-current live seat action should be rejected');
         assert.equal(wrongSeatB.payload.reason, 'not_current_turn', 'non-current live seat should receive not_current_turn reason');
 
-        const endTurnA = await submitIntent(baseUrl, tokenA, joinB.payload.matchId, {
+        const endTurnA = await submitIntent(baseUrl, firstToken, joinB.payload.matchId, {
                 intentId: 'route-intent-end-turn-1',
                 intentType: 'end_turn',
                 stateVersion: playA.payload.stateView.stateVersion,
                 payload: {}
         });
         assert.equal(endTurnA.payload.result, 'accepted', 'current live seat should end turn');
-        assert.equal(endTurnA.payload.stateView.currentSeat, 'B', 'end turn should switch current live seat');
+        assert.equal(endTurnA.payload.stateView.currentSeat, secondSeat, 'end turn should switch current live seat');
         assertTurnTimer(endTurnA.payload.stateView.turnTimer, 'active', 'end turn response');
-        assert.equal(endTurnA.payload.stateView.turnTimer.currentSeat, 'B', 'end turn timer should switch to next seat');
+        assert.equal(endTurnA.payload.stateView.turnTimer.currentSeat, secondSeat, 'end turn timer should switch to next seat');
         assert.ok(endTurnA.payload.stateView.turnTimer.startedAt > activeTurnStartedAt, 'end turn should start a fresh timer for next seat');
         assert.ok(endTurnA.payload.stateView.turnTimer.deadlineAt > activeTurnDeadlineAt, 'end turn should move deadline to next seat timer');
 
-        const staleAAfterEnd = await submitIntent(baseUrl, tokenA, joinB.payload.matchId, {
+        const staleAAfterEnd = await submitIntent(baseUrl, firstToken, joinB.payload.matchId, {
                 intentId: 'route-intent-a-after-end-1',
                 intentType: 'play_card',
                 stateVersion: endTurnA.payload.stateView.stateVersion,
-                payload: { cardInstanceId: 'A-strike-1', targetSeat: 'B' }
+                payload: { cardInstanceId: firstSeat === 'A' ? 'A-strike-1' : 'B-strike-1', targetSeat: secondSeat }
         });
-        assert.equal(staleAAfterEnd.payload.result, 'rejected', 'seat A should not act after ending turn');
-        assert.equal(staleAAfterEnd.payload.reason, 'not_current_turn', 'seat A after end turn should receive not_current_turn reason');
+        assert.equal(staleAAfterEnd.payload.result, 'rejected', 'first seat should not act after ending turn');
+        assert.equal(staleAAfterEnd.payload.reason, 'not_current_turn', 'first seat after end turn should receive not_current_turn reason');
 
         const stateB = await request(baseUrl, `/api/pvp/live/matches/${joinB.payload.matchId}`, {
-            token: tokenB
+            token: secondToken
         });
         assert.equal(stateB.status, 200, 'opponent should fetch live match state');
         assert.equal(stateB.payload.stateView.self.hp, 35, 'opponent self view should include own damaged hp after public second-seat buffer');
         assert.ok(Array.isArray(stateB.payload.stateView.self.hand), 'self view should expose own hand');
         assert.ok(!Array.isArray(stateB.payload.stateView.opponent.hand), 'opponent view must still hide hand after state update');
 
-        const surrenderB = await submitIntent(baseUrl, tokenB, joinB.payload.matchId, {
+        const surrenderB = await submitIntent(baseUrl, secondToken, joinB.payload.matchId, {
                 intentId: 'route-intent-surrender-b-1',
                 intentType: 'surrender',
                 stateVersion: endTurnA.payload.stateView.stateVersion,
@@ -1053,8 +1074,8 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
 
         const rematchA = await request(baseUrl, `/api/pvp/live/matches/${joinB.payload.matchId}/rematch`, {
             method: 'POST',
-            token: tokenA,
-            body: { displayName: '甲', loadout: loadoutA }
+            token: firstToken,
+            body: { displayName: firstDisplayName, loadout: firstLoadout }
         });
         assert.equal(rematchA.status, 200, 'winner should be able to request a friendly rematch from the finished live match');
         assert.equal(rematchA.payload.status, 'waiting_rematch', 'first friendly rematch request should wait for the original opponent');
@@ -1064,7 +1085,7 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
         assert.ok(!/reward|rating|elo/i.test(JSON.stringify(rematchA.payload.friendlySeries || {})), 'friendly rematch waiting report must not promise reward or exact rating compensation');
 
         const rematchStatusA = await request(baseUrl, `/api/pvp/live/matches/${joinB.payload.matchId}/rematch`, {
-            token: tokenA
+            token: firstToken
         });
         assert.equal(rematchStatusA.status, 200, 'friendly rematch requester should be able to read pending rematch status');
         assert.equal(rematchStatusA.payload.status, 'waiting_rematch', 'pending rematch status should remain waiting before opponent accepts');
@@ -1078,13 +1099,13 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
 
         const opponentCancelRematch = await request(baseUrl, `/api/pvp/live/matches/${joinB.payload.matchId}/rematch/cancel`, {
             method: 'POST',
-            token: tokenB
+            token: secondToken
         });
         assert.equal(opponentCancelRematch.status, 404, 'non-requesting opponent should not cancel a pending friendly rematch by surprise');
 
         const cancelledRematchA = await request(baseUrl, `/api/pvp/live/matches/${joinB.payload.matchId}/rematch/cancel`, {
             method: 'POST',
-            token: tokenA
+            token: firstToken
         });
         assert.equal(cancelledRematchA.status, 200, 'friendly rematch requester should be able to cancel pending rematch');
         assert.equal(cancelledRematchA.payload.status, 'cancelled', 'cancelled friendly rematch should return cancelled status');
@@ -1092,15 +1113,15 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
         assert.equal(cancelledRematchA.payload.friendlySeries?.status, 'cancelled', 'cancelled friendly rematch should project cancelled series status');
 
         const statusAfterCancel = await request(baseUrl, `/api/pvp/live/matches/${joinB.payload.matchId}/rematch`, {
-            token: tokenA
+            token: firstToken
         });
         assert.equal(statusAfterCancel.status, 404, 'cancelled friendly rematch should no longer expose a pending status');
         assert.equal(statusAfterCancel.payload.reason, 'no_pending_rematch', 'cancelled friendly rematch status should expose stable missing reason');
 
         const rematchBWait = await request(baseUrl, `/api/pvp/live/matches/${joinB.payload.matchId}/rematch`, {
             method: 'POST',
-            token: tokenB,
-            body: { displayName: '乙', loadout: loadoutB }
+            token: secondToken,
+            body: { displayName: secondDisplayName, loadout: secondLoadout }
         });
         assert.equal(rematchBWait.status, 200, 'opponent should be able to start a fresh rematch after requester cancellation');
         assert.equal(rematchBWait.payload.status, 'waiting_rematch', 'fresh rematch after cancellation should wait instead of matching stale cancelled request');
@@ -1114,8 +1135,8 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
 
         const rematchB = await request(baseUrl, `/api/pvp/live/matches/${joinB.payload.matchId}/rematch`, {
             method: 'POST',
-            token: tokenA,
-            body: { displayName: '甲', loadout: loadoutA }
+            token: firstToken,
+            body: { displayName: firstDisplayName, loadout: firstLoadout }
         });
         assert.equal(rematchB.status, 200, 'loser should be able to accept the friendly rematch');
         assert.equal(rematchB.payload.status, 'matched', 'second friendly rematch request should create a new live match');
@@ -1125,13 +1146,13 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
         assert.equal(rematchB.payload.stateView.friendlySeries?.sourceMatchId, joinB.payload.matchId, 'friendly rematch match should retain source match id');
         assert.equal(rematchB.payload.stateView.friendlySeries?.rankedImpact, 'none', 'friendly rematch match should not imply ranked impact');
         assert.equal(rematchB.payload.stateView.friendlySeries?.targetWins, 2, 'friendly rematch match should expose Bo3 target wins');
-        assert.deepEqual(rematchB.payload.stateView.friendlySeries?.scoreBySourceSeat, { A: 1, B: 0 }, 'friendly rematch match should carry source score into Bo3');
+        assert.deepEqual(rematchB.payload.stateView.friendlySeries?.scoreBySourceSeat, firstSeat === 'A' ? { A: 1, B: 0 } : { A: 0, B: 1 }, 'friendly rematch match should carry source score into Bo3');
         assert.equal(rematchB.payload.stateView.friendlySeries?.roundIndex, 2, 'friendly rematch match should be Bo3 round 2');
         assert.ok(rematchB.payload.stateView.firstMatchGuide?.safeguards?.includes('friendly_no_ranked_impact'), 'friendly rematch guide should explain no-ranked-impact safeguard');
         assert.ok(!/reward|rating|elo/i.test(JSON.stringify(rematchB.payload.stateView.friendlySeries || {})), 'friendly rematch match report must not promise reward or exact rating compensation');
 
         const currentAfterRematchA = await request(baseUrl, '/api/pvp/live/matches/current', {
-            token: tokenA
+            token: secondToken
         });
         assert.equal(currentAfterRematchA.status, 200, 'friendly rematch requester should recover accepted rematch through current match');
         assert.equal(currentAfterRematchA.payload.matchId, rematchB.payload.matchId, 'friendly rematch requester current match should point to the accepted friendly match');
@@ -1140,8 +1161,8 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
 
         const requeueAfterFinish = await request(baseUrl, '/api/pvp/live/queue/join', {
             method: 'POST',
-            token: tokenA,
-            body: { displayName: '甲' }
+            token: secondToken,
+            body: { displayName: secondDisplayName }
         });
         assert.equal(requeueAfterFinish.payload.status, 'matched', 'accepted friendly rematch should become the current live match instead of opening a parallel queue');
         assert.equal(requeueAfterFinish.payload.matchId, rematchB.payload.matchId, 'friendly rematch should be returned as the active live match');
@@ -1154,7 +1175,7 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
             stateVersionA: rematchB.payload.stateView.stateVersion,
             prefix: 'route-friendly-bo3'
         });
-        const friendlySurrenderA = await submitIntent(baseUrl, tokenA, rematchB.payload.matchId, {
+        const friendlySurrenderA = await submitIntent(baseUrl, firstToken, rematchB.payload.matchId, {
             intentId: 'route-friendly-bo3-surrender-a-1',
             intentType: 'surrender',
             stateVersion: friendlyReady.payload.stateView.stateVersion,
@@ -1180,6 +1201,7 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
             body: { displayName: '甲', loadout: loadoutA }
         });
         assert.equal(friendlyDrawMatch.status, 200, 'friendly draw setup should create a friendly match after both confirm');
+        const friendlyDrawSourceScore = friendlyDrawMatch.payload.stateView.friendlySeries?.scoreBySourceSeat;
         const friendlyDrawReady = await readyBoth(baseUrl, {
             matchId: friendlyDrawMatch.payload.matchId,
             tokenA,
@@ -1193,15 +1215,27 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
         friendlyDrawRuntimeMatch.state.currentSeat = 'B';
         friendlyDrawRuntimeMatch.state.seats.A.hp = 30;
         friendlyDrawRuntimeMatch.state.seats.B.hp = 30;
-        const friendlyRound14Draw = await submitIntent(baseUrl, tokenA, friendlyDrawMatch.payload.matchId, {
-            intentId: 'route-friendly-round14-draw-end-b',
+        const friendlyDrawViewTokenA = await request(baseUrl, `/api/pvp/live/matches/${friendlyDrawMatch.payload.matchId}`, {
+            token: tokenA
+        });
+        const friendlyDrawViewTokenB = await request(baseUrl, `/api/pvp/live/matches/${friendlyDrawMatch.payload.matchId}`, {
+            token: tokenB
+        });
+        const friendlyDrawTokenByRuntimeSeat = {
+            [friendlyDrawViewTokenA.payload.stateView.self.seatId]: tokenA,
+            [friendlyDrawViewTokenB.payload.stateView.self.seatId]: tokenB
+        };
+        const friendlyDrawEndSeat = friendlyDrawRuntimeMatch.state.currentSeat;
+        const friendlyDrawEndToken = friendlyDrawTokenByRuntimeSeat[friendlyDrawEndSeat];
+        const friendlyRound14Draw = await submitIntent(baseUrl, friendlyDrawEndToken, friendlyDrawMatch.payload.matchId, {
+            intentId: `route-friendly-round14-draw-end-${friendlyDrawEndSeat.toLowerCase()}`,
             intentType: 'end_turn',
             stateVersion: friendlyDrawReady.payload.stateView.stateVersion,
             payload: {}
         });
         assert.equal(friendlyRound14Draw.payload.result, 'accepted', 'friendly round14 draw final end turn should be accepted');
         assert.equal(friendlyRound14Draw.payload.stateView.postMatchReview?.result, 'draw', 'friendly round14 draw should expose draw review');
-        assert.deepEqual(friendlyRound14Draw.payload.stateView.postMatchReview?.friendlySeries?.scoreBySourceSeat, { A: 1, B: 0 }, 'friendly round14 draw should not award either Bo3 side');
+        assert.deepEqual(friendlyRound14Draw.payload.stateView.postMatchReview?.friendlySeries?.scoreBySourceSeat, friendlyDrawSourceScore, 'friendly round14 draw should not award either Bo3 side');
         assert.equal(friendlyRound14Draw.payload.stateView.postMatchReview?.friendlySeries?.canRequestNextRound, true, 'friendly round14 draw should keep next-round rematch available');
         assert.ok(friendlyRound14Draw.payload.stateView.postMatchReview?.nextActions?.some(action => action.id === 'friendly_rematch'), 'friendly round14 draw review should expose next-round rematch action');
 
@@ -1286,30 +1320,38 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
             stateVersionA: joinProtectB.payload.stateView.stateVersion,
             prefix: 'route-opening-protection'
         });
-        const routePreviewA = await request(baseUrl, `/api/pvp/live/matches/${joinProtectB.payload.matchId}`, {
-            token: tokenA
+        const protectFirstSeat = readyProtect.payload.stateView.currentSeat;
+        const protectSecondSeat = protectFirstSeat === 'A' ? 'B' : 'A';
+        const protectFirstToken = protectFirstSeat === 'A' ? tokenA : tokenB;
+        const protectSecondToken = protectSecondSeat === 'A' ? tokenA : tokenB;
+        const protectFirstBurstCard = `${protectFirstSeat}-burst-1`;
+        const protectSecondBurstCard = `${protectSecondSeat}-burst-1`;
+        const routePreviewFirst = await request(baseUrl, `/api/pvp/live/matches/${joinProtectB.payload.matchId}`, {
+            token: protectFirstToken
         });
-        assert.equal(routePreviewA.payload.stateView.actionPreviewReport?.reportVersion, 'pvp-live-action-preview-v1', 'route state view should expose authoritative action preview report');
-        assert.equal(routePreviewA.payload.stateView.actionPreviewReport?.sourceVisibility, 'viewer_public_state', 'route action preview should be viewer-scoped public state');
-        assert.equal(routePreviewA.payload.stateView.actionPreviewReport?.usesHiddenInformation, false, 'route action preview must not use hidden information');
-        assert.equal(routePreviewA.payload.stateView.actionPreviewReport?.rankedImpact, 'none', 'route action preview should not write ranked result');
-        const routeBurstPreview = routePreviewA.payload.stateView.actionPreviewReport?.playableCards?.find(card => card.cardInstanceId === 'A-burst-1');
-        assert.ok(routeBurstPreview, 'route action preview should include A-burst-1 for acting seat A');
+        assert.equal(routePreviewFirst.payload.stateView.actionPreviewReport?.reportVersion, 'pvp-live-action-preview-v1', 'route state view should expose authoritative action preview report');
+        assert.equal(routePreviewFirst.payload.stateView.actionPreviewReport?.sourceVisibility, 'viewer_public_state', 'route action preview should be viewer-scoped public state');
+        assert.equal(routePreviewFirst.payload.stateView.actionPreviewReport?.usesHiddenInformation, false, 'route action preview must not use hidden information');
+        assert.equal(routePreviewFirst.payload.stateView.actionPreviewReport?.rankedImpact, 'none', 'route action preview should not write ranked result');
+        assert.equal(routePreviewFirst.payload.stateView.actionPreviewReport?.viewerSeat, protectFirstSeat, 'route acting preview should be scoped to first seat viewer');
+        assert.equal(routePreviewFirst.payload.stateView.actionPreviewReport?.currentSeat, protectFirstSeat, 'route acting preview should identify dynamic first actor');
+        const routeBurstPreview = routePreviewFirst.payload.stateView.actionPreviewReport?.playableCards?.find(card => card.cardInstanceId === protectFirstBurstCard);
+        assert.ok(routeBurstPreview, `route action preview should include ${protectFirstBurstCard} for acting first seat`);
         assert.equal(routeBurstPreview.damageBudget, 18, 'route action preview should expose first-action budget');
         assert.equal(routeBurstPreview.blockedDamage, 3, 'route action preview should account for public second-seat shield');
         assert.equal(routeBurstPreview.targetHpAfter, 35, 'route action preview should expose expected target HP');
-        const routePreviewB = await request(baseUrl, `/api/pvp/live/matches/${joinProtectB.payload.matchId}`, {
-            token: tokenB
+        const routePreviewSecond = await request(baseUrl, `/api/pvp/live/matches/${joinProtectB.payload.matchId}`, {
+            token: protectSecondToken
         });
-        assert.equal(routePreviewB.payload.stateView.actionPreviewReport?.reportVersion, 'pvp-live-action-preview-v1', 'route non-acting state view should still expose preview report envelope');
-        assert.equal(routePreviewB.payload.stateView.actionPreviewReport?.viewerSeat, 'B', 'route non-acting preview should be scoped to viewer B');
-        assert.equal(routePreviewB.payload.stateView.actionPreviewReport?.currentSeat, 'A', 'route non-acting preview should identify current actor');
-        assert.equal(routePreviewB.payload.stateView.actionPreviewReport?.isViewerTurn, false, 'route non-acting preview should not mark viewer turn');
-        assert.deepEqual(routePreviewB.payload.stateView.actionPreviewReport?.playableCards, [], 'route non-acting preview must not expose acting seat card projections');
-        assert.equal(routePreviewB.payload.stateView.actionPreviewReport?.endTurn, null, 'route non-acting preview must not expose actionable end-turn projection');
-        const blockedTestForce = await request(baseUrl, `/api/pvp/live/test/matches/${joinProtectB.payload.matchId}/seats/B`, {
+        assert.equal(routePreviewSecond.payload.stateView.actionPreviewReport?.reportVersion, 'pvp-live-action-preview-v1', 'route non-acting state view should still expose preview report envelope');
+        assert.equal(routePreviewSecond.payload.stateView.actionPreviewReport?.viewerSeat, protectSecondSeat, 'route non-acting preview should be scoped to second-seat viewer');
+        assert.equal(routePreviewSecond.payload.stateView.actionPreviewReport?.currentSeat, protectFirstSeat, 'route non-acting preview should identify current actor');
+        assert.equal(routePreviewSecond.payload.stateView.actionPreviewReport?.isViewerTurn, false, 'route non-acting preview should not mark viewer turn');
+        assert.deepEqual(routePreviewSecond.payload.stateView.actionPreviewReport?.playableCards, [], 'route non-acting preview must not expose acting seat card projections');
+        assert.equal(routePreviewSecond.payload.stateView.actionPreviewReport?.endTurn, null, 'route non-acting preview must not expose actionable end-turn projection');
+        const blockedTestForce = await request(baseUrl, `/api/pvp/live/test/matches/${joinProtectB.payload.matchId}/seats/${protectSecondSeat}`, {
             method: 'POST',
-            token: tokenA,
+            token: protectFirstToken,
             body: { hp: 10, testMatchScope: routeTestMatchScope }
         });
         assert.equal(blockedTestForce.status, 404, 'live PVP test-only state route should stay unavailable outside DEFIER_PVP_TEST_MODE');
@@ -1317,9 +1359,9 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
         const previousProdTestMode = process.env.DEFIER_PVP_TEST_MODE;
         process.env.NODE_ENV = 'production';
         process.env.DEFIER_PVP_TEST_MODE = '1';
-        const blockedProductionTestForce = await request(baseUrl, `/api/pvp/live/test/matches/${joinProtectB.payload.matchId}/seats/B`, {
+        const blockedProductionTestForce = await request(baseUrl, `/api/pvp/live/test/matches/${joinProtectB.payload.matchId}/seats/${protectSecondSeat}`, {
             method: 'POST',
-            token: tokenA,
+            token: protectFirstToken,
             body: { hp: 10, testMatchScope: routeTestMatchScope }
         });
         if (previousProdMode === undefined) delete process.env.NODE_ENV;
@@ -1329,118 +1371,118 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
         assert.equal(blockedProductionTestForce.status, 404, 'live PVP test-only state route should stay unavailable in production even when test mode is set');
         const previousTestMode = process.env.DEFIER_PVP_TEST_MODE;
         process.env.DEFIER_PVP_TEST_MODE = '1';
-        const blockedMissingScopeForce = await request(baseUrl, `/api/pvp/live/test/matches/${joinProtectB.payload.matchId}/seats/B`, {
+        const blockedMissingScopeForce = await request(baseUrl, `/api/pvp/live/test/matches/${joinProtectB.payload.matchId}/seats/${protectSecondSeat}`, {
             method: 'POST',
-            token: tokenA,
+            token: protectFirstToken,
             body: { hp: 10 }
         });
-        const routeForceProtectedB = await request(baseUrl, `/api/pvp/live/test/matches/${joinProtectB.payload.matchId}/seats/B`, {
+        const routeForceProtectedSecond = await request(baseUrl, `/api/pvp/live/test/matches/${joinProtectB.payload.matchId}/seats/${protectSecondSeat}`, {
             method: 'POST',
-            token: tokenA,
+            token: protectFirstToken,
             body: { hp: 10, testMatchScope: routeTestMatchScope }
         });
         if (previousTestMode === undefined) delete process.env.DEFIER_PVP_TEST_MODE;
         else process.env.DEFIER_PVP_TEST_MODE = previousTestMode;
         assert.equal(blockedMissingScopeForce.status, 404, 'live PVP test-only state route should reject scoped test matches without matching testMatchScope');
-        assert.equal(routeForceProtectedB.status, 200, 'live PVP test-only state route should allow authenticated participants in DEFIER_PVP_TEST_MODE');
-        assert.equal(routeForceProtectedB.payload.targetSeatId, 'B', 'live PVP test-only state route should identify the forced public seat');
-        assert.equal(routeForceProtectedB.payload.stateView.opponent.hp, 10, 'live PVP test-only state route should return the updated public opponent hp');
-        assert.ok(routeForceProtectedB.payload.stateView.recentEvents.some(event => event.eventType === 'test_state_forced' && event.publicData?.scope === routeTestMatchScope), 'live PVP test-only state route should expose a public scoped setup event');
-        const routeLethalPreviewA = await request(baseUrl, `/api/pvp/live/matches/${joinProtectB.payload.matchId}`, {
-            token: tokenA
+        assert.equal(routeForceProtectedSecond.status, 200, 'live PVP test-only state route should allow authenticated participants in DEFIER_PVP_TEST_MODE');
+        assert.equal(routeForceProtectedSecond.payload.targetSeatId, protectSecondSeat, 'live PVP test-only state route should identify the forced public seat');
+        assert.equal(routeForceProtectedSecond.payload.stateView.opponent.hp, 10, 'live PVP test-only state route should return the updated public opponent hp');
+        assert.ok(routeForceProtectedSecond.payload.stateView.recentEvents.some(event => event.eventType === 'test_state_forced' && event.publicData?.scope === routeTestMatchScope), 'live PVP test-only state route should expose a public scoped setup event');
+        const routeLethalPreviewFirst = await request(baseUrl, `/api/pvp/live/matches/${joinProtectB.payload.matchId}`, {
+            token: protectFirstToken
         });
-        const routeProtectedPreview = routeLethalPreviewA.payload.stateView.actionPreviewReport?.playableCards?.find(card => card.cardInstanceId === 'A-burst-1');
+        const routeProtectedPreview = routeLethalPreviewFirst.payload.stateView.actionPreviewReport?.playableCards?.find(card => card.cardInstanceId === protectFirstBurstCard);
         assert.equal(routeProtectedPreview?.openingProtection?.willTrigger, true, 'route action preview should predict opening protection for protected lethal');
         assert.equal(routeProtectedPreview?.openingProtection?.preventedDamage, 6, 'route action preview should expose protected lethal prevented damage');
         assert.equal(routeProtectedPreview?.targetHpAfter, 1, 'route action preview should expose protected target HP');
-        const protectedBurstA = await submitIntent(baseUrl, tokenA, joinProtectB.payload.matchId, {
-            intentId: 'route-intent-opening-protected-burst-a',
+        const protectedBurstFirst = await submitIntent(baseUrl, protectFirstToken, joinProtectB.payload.matchId, {
+            intentId: `route-intent-opening-protected-burst-${protectFirstSeat.toLowerCase()}`,
             intentType: 'play_card',
-            stateVersion: routeForceProtectedB.payload.stateView.stateVersion,
-            payload: { cardInstanceId: 'A-burst-1', targetSeat: 'B' }
+            stateVersion: routeForceProtectedSecond.payload.stateView.stateVersion,
+            payload: { cardInstanceId: protectFirstBurstCard, targetSeat: protectSecondSeat }
         });
-        assert.equal(protectedBurstA.payload.result, 'accepted', 'opening protected burst should be accepted');
-        assert.equal(protectedBurstA.payload.stateView.status, 'active', 'opening protected burst should keep match active');
-        assert.equal(protectedBurstA.payload.stateView.opponent.hp, 1, 'opening protected burst should leave unacted defender at 1 hp');
-        assert.equal(protectedBurstA.payload.stateView.actionReceiptReport?.reportVersion, 'pvp-live-action-receipt-v1', 'opening protected burst should return public action receipt');
-        assert.equal(protectedBurstA.payload.stateView.actionReceiptReport?.sourceVisibility, 'authoritative_public_projection', 'route action receipt should be a server authoritative public projection');
-        assert.equal(protectedBurstA.payload.stateView.actionReceiptReport?.usesHiddenInformation, false, 'route action receipt must not use hidden information');
-        assert.equal(protectedBurstA.payload.stateView.actionReceiptReport?.rankedImpact, 'none', 'route action receipt should not write ranked result');
-        assert.equal(protectedBurstA.payload.stateView.actionReceiptReport?.actionType, 'play_card', 'route action receipt should identify card action');
-        assert.equal(protectedBurstA.payload.stateView.actionReceiptReport?.openingProtection?.triggered, true, 'route action receipt should explain opening protection trigger');
-        assert.equal(protectedBurstA.payload.stateView.actionReceiptReport?.openingProtection?.protectedSeat, 'B', 'route action receipt should expose protected seat');
-        assert.equal(protectedBurstA.payload.stateView.actionReceiptReport?.openingProtection?.preventedDamage, 6, 'route action receipt should expose protected damage prevention');
-        assert.equal(protectedBurstA.payload.stateView.actionReceiptReport?.damage?.targetHpAfter, 1, 'route action receipt should expose protected target HP');
-        assert.ok(/护体/.test(protectedBurstA.payload.stateView.actionReceiptReport?.summaryLine || ''), 'route action receipt should give readable protection summary');
-        assert.ok(!/hand|deck|cardId|instanceId|sourceCardId|loadoutSnapshot|rating|elo|reward/i.test(JSON.stringify(protectedBurstA.payload.stateView.actionReceiptReport)), 'route action receipt must not expose hidden ids or hidden state');
-        const routeProtectionEvent = protectedBurstA.payload.events.find(event => event.eventType === 'opening_protection_triggered');
-        assert.ok(routeProtectionEvent && routeProtectionEvent.payload.protectedSeat === 'B', 'opening protected burst should return public protection event');
+        assert.equal(protectedBurstFirst.payload.result, 'accepted', 'opening protected burst should be accepted');
+        assert.equal(protectedBurstFirst.payload.stateView.status, 'active', 'opening protected burst should keep match active');
+        assert.equal(protectedBurstFirst.payload.stateView.opponent.hp, 1, 'opening protected burst should leave unacted defender at 1 hp');
+        assert.equal(protectedBurstFirst.payload.stateView.actionReceiptReport?.reportVersion, 'pvp-live-action-receipt-v1', 'opening protected burst should return public action receipt');
+        assert.equal(protectedBurstFirst.payload.stateView.actionReceiptReport?.sourceVisibility, 'authoritative_public_projection', 'route action receipt should be a server authoritative public projection');
+        assert.equal(protectedBurstFirst.payload.stateView.actionReceiptReport?.usesHiddenInformation, false, 'route action receipt must not use hidden information');
+        assert.equal(protectedBurstFirst.payload.stateView.actionReceiptReport?.rankedImpact, 'none', 'route action receipt should not write ranked result');
+        assert.equal(protectedBurstFirst.payload.stateView.actionReceiptReport?.actionType, 'play_card', 'route action receipt should identify card action');
+        assert.equal(protectedBurstFirst.payload.stateView.actionReceiptReport?.openingProtection?.triggered, true, 'route action receipt should explain opening protection trigger');
+        assert.equal(protectedBurstFirst.payload.stateView.actionReceiptReport?.openingProtection?.protectedSeat, protectSecondSeat, 'route action receipt should expose protected seat');
+        assert.equal(protectedBurstFirst.payload.stateView.actionReceiptReport?.openingProtection?.preventedDamage, 6, 'route action receipt should expose protected damage prevention');
+        assert.equal(protectedBurstFirst.payload.stateView.actionReceiptReport?.damage?.targetHpAfter, 1, 'route action receipt should expose protected target HP');
+        assert.ok(/护体/.test(protectedBurstFirst.payload.stateView.actionReceiptReport?.summaryLine || ''), 'route action receipt should give readable protection summary');
+        assert.ok(!/hand|deck|cardId|instanceId|sourceCardId|loadoutSnapshot|rating|elo|reward/i.test(JSON.stringify(protectedBurstFirst.payload.stateView.actionReceiptReport)), 'route action receipt must not expose hidden ids or hidden state');
+        const routeProtectionEvent = protectedBurstFirst.payload.events.find(event => event.eventType === 'opening_protection_triggered');
+        assert.ok(routeProtectionEvent && routeProtectionEvent.payload.protectedSeat === protectSecondSeat, 'opening protected burst should return public protection event');
         assert.equal(routeProtectionEvent.payload.minimumHp, 1, 'opening protected burst should expose minimum hp');
         assert.equal(routeProtectionEvent.payload.preventedDamage, 6, 'opening protected burst should expose prevented lethal damage after public second-seat buffer');
         assert.equal(routeProtectionEvent.payload.wouldHaveHp, 0, 'opening protected burst should expose would-have hp');
-        assert.ok(!protectedBurstA.payload.events.some(event => event.eventType === 'match_finished'), 'opening protected burst should not return match_finished');
-        const protectedEndTurnA = await submitIntent(baseUrl, tokenA, joinProtectB.payload.matchId, {
-            intentId: 'route-intent-opening-protected-end-a',
+        assert.ok(!protectedBurstFirst.payload.events.some(event => event.eventType === 'match_finished'), 'opening protected burst should not return match_finished');
+        const protectedEndTurnFirst = await submitIntent(baseUrl, protectFirstToken, joinProtectB.payload.matchId, {
+            intentId: `route-intent-opening-protected-end-${protectFirstSeat.toLowerCase()}`,
             intentType: 'end_turn',
-            stateVersion: protectedBurstA.payload.stateView.stateVersion,
+            stateVersion: protectedBurstFirst.payload.stateView.stateVersion,
             payload: {}
         });
-        assert.equal(protectedEndTurnA.payload.result, 'accepted', 'opening protected attacker should still end turn');
-        assert.equal(protectedEndTurnA.payload.stateView.currentSeat, 'B', 'opening protected defender should receive the next action window');
-        assert.equal(protectedEndTurnA.payload.stateView.opponent.block, 8, 'opening protected defender should receive counterplay buffer on first turn');
-        assert.equal(protectedEndTurnA.payload.stateView.actionReceiptReport?.actionType, 'end_turn', 'route end-turn response should expose handoff action receipt');
-        assert.equal(protectedEndTurnA.payload.stateView.actionReceiptReport?.nextSeat, 'B', 'route end-turn receipt should expose next seat');
-        assert.equal(protectedEndTurnA.payload.stateView.actionReceiptReport?.draw?.count, 3, 'route end-turn receipt should expose public draw count');
-        assert.equal(protectedEndTurnA.payload.stateView.actionReceiptReport?.counterplay?.granted, true, 'route end-turn receipt should expose counterplay grant');
-        assert.equal(protectedEndTurnA.payload.stateView.actionReceiptReport?.counterplay?.block, 8, 'route end-turn receipt should expose counterplay block');
-        assert.ok(protectedEndTurnA.payload.events.some(event => event.eventType === 'opening_counterplay_granted' && eventPublicData(event).seatId === 'B' && eventPublicData(event).block === 8), 'opening protected defender should expose public counterplay buffer event');
-        const protectedStateB = await request(baseUrl, `/api/pvp/live/matches/${joinProtectB.payload.matchId}`, {
-            token: tokenB
+        assert.equal(protectedEndTurnFirst.payload.result, 'accepted', 'opening protected attacker should still end turn');
+        assert.equal(protectedEndTurnFirst.payload.stateView.currentSeat, protectSecondSeat, 'opening protected defender should receive the next action window');
+        assert.equal(protectedEndTurnFirst.payload.stateView.opponent.block, 8, 'opening protected defender should receive counterplay buffer on first turn');
+        assert.equal(protectedEndTurnFirst.payload.stateView.actionReceiptReport?.actionType, 'end_turn', 'route end-turn response should expose handoff action receipt');
+        assert.equal(protectedEndTurnFirst.payload.stateView.actionReceiptReport?.nextSeat, protectSecondSeat, 'route end-turn receipt should expose next seat');
+        assert.equal(protectedEndTurnFirst.payload.stateView.actionReceiptReport?.draw?.count, 3, 'route end-turn receipt should expose public draw count');
+        assert.equal(protectedEndTurnFirst.payload.stateView.actionReceiptReport?.counterplay?.granted, true, 'route end-turn receipt should expose counterplay grant');
+        assert.equal(protectedEndTurnFirst.payload.stateView.actionReceiptReport?.counterplay?.block, 8, 'route end-turn receipt should expose counterplay block');
+        assert.ok(protectedEndTurnFirst.payload.events.some(event => event.eventType === 'opening_counterplay_granted' && eventPublicData(event).seatId === protectSecondSeat && eventPublicData(event).block === 8), 'opening protected defender should expose public counterplay buffer event');
+        const protectedStateSecond = await request(baseUrl, `/api/pvp/live/matches/${joinProtectB.payload.matchId}`, {
+            token: protectSecondToken
         });
-        assert.equal(protectedStateB.payload.stateView.self.block, 8, 'opening protected defender should read own counterplay block through route state view');
-        assert.ok(protectedStateB.payload.stateView.recentEvents.some(event => event.eventType === 'opening_counterplay_granted'), 'opening protected defender should see counterplay evidence in recent events');
-        assert.equal(protectedStateB.payload.stateView.actionReceiptReport?.viewerSeat, 'B', 'route GET should scope action receipt to protected viewer');
-        assert.equal(protectedStateB.payload.stateView.actionReceiptReport?.actionType, 'end_turn', 'route GET should keep latest end-turn receipt');
-        assert.equal(protectedStateB.payload.stateView.actionReceiptReport?.counterplay?.seatId, 'B', 'route GET should keep public counterplay receipt');
+        assert.equal(protectedStateSecond.payload.stateView.self.block, 8, 'opening protected defender should read own counterplay block through route state view');
+        assert.ok(protectedStateSecond.payload.stateView.recentEvents.some(event => event.eventType === 'opening_counterplay_granted'), 'opening protected defender should see counterplay evidence in recent events');
+        assert.equal(protectedStateSecond.payload.stateView.actionReceiptReport?.viewerSeat, protectSecondSeat, 'route GET should scope action receipt to protected viewer');
+        assert.equal(protectedStateSecond.payload.stateView.actionReceiptReport?.actionType, 'end_turn', 'route GET should keep latest end-turn receipt');
+        assert.equal(protectedStateSecond.payload.stateView.actionReceiptReport?.counterplay?.seatId, protectSecondSeat, 'route GET should keep public counterplay receipt');
         const previousFinishTestMode = process.env.DEFIER_PVP_TEST_MODE;
         process.env.DEFIER_PVP_TEST_MODE = '1';
-        const routeForceFinishA = await request(baseUrl, `/api/pvp/live/test/matches/${joinProtectB.payload.matchId}/seats/A`, {
+        const routeForceFinishFirst = await request(baseUrl, `/api/pvp/live/test/matches/${joinProtectB.payload.matchId}/seats/${protectFirstSeat}`, {
             method: 'POST',
-            token: tokenB,
+            token: protectSecondToken,
             body: { hp: 10, testMatchScope: routeTestMatchScope }
         });
         if (previousFinishTestMode === undefined) delete process.env.DEFIER_PVP_TEST_MODE;
         else process.env.DEFIER_PVP_TEST_MODE = previousFinishTestMode;
-        assert.equal(routeForceFinishA.status, 200, 'live PVP test-only state route should support protected defender follow-up setup');
-        assert.equal(routeForceFinishA.payload.stateView.opponent.hp, 10, 'live PVP test-only state route should return lowered opponent hp for protected defender');
-        const normalFinishB = await submitIntent(baseUrl, tokenB, joinProtectB.payload.matchId, {
-            intentId: 'route-intent-opening-normal-finish-b',
+        assert.equal(routeForceFinishFirst.status, 200, 'live PVP test-only state route should support protected defender follow-up setup');
+        assert.equal(routeForceFinishFirst.payload.stateView.opponent.hp, 10, 'live PVP test-only state route should return lowered opponent hp for protected defender');
+        const normalFinishSecond = await submitIntent(baseUrl, protectSecondToken, joinProtectB.payload.matchId, {
+            intentId: `route-intent-opening-normal-finish-${protectSecondSeat.toLowerCase()}`,
             intentType: 'play_card',
-            stateVersion: routeForceFinishA.payload.stateView.stateVersion,
-            payload: { cardInstanceId: 'B-burst-1', targetSeat: 'A' }
+            stateVersion: routeForceFinishFirst.payload.stateView.stateVersion,
+            payload: { cardInstanceId: protectSecondBurstCard, targetSeat: protectFirstSeat }
         });
-        assert.equal(normalFinishB.payload.result, 'accepted', 'normal lethal after opponent turn should be accepted');
-        assert.equal(normalFinishB.payload.stateView.status, 'finished', 'normal lethal after opponent turn should finish');
-        assert.ok(normalFinishB.payload.events.some(event => event.eventType === 'match_finished' && eventPublicData(event).winnerSeat === 'B'), 'normal lethal after opponent turn should emit match_finished');
-        assert.equal(normalFinishB.payload.stateView.postMatchReview?.reportVersion, 'pvp-live-post-match-review-v1', 'normal lethal should expose post-match review version');
-        assert.equal(normalFinishB.payload.stateView.postMatchReview?.result, 'win', 'winning live seat should receive a win review');
-        assert.equal(normalFinishB.payload.stateView.postMatchReview?.finishReason, 'lethal', 'normal lethal review should expose lethal finish reason');
-        assert.ok(normalFinishB.payload.stateView.postMatchReview?.evidence?.some(event => event.eventType === 'damage_applied'), 'normal lethal review should cite public damage evidence');
-        assert.equal(normalFinishB.payload.stateView.postMatchReview?.loadoutRecommendation?.recommendedPresetId, 'sword', 'normal lethal winner should be recommended the pressure MVP preset');
-        assert.equal(normalFinishB.payload.stateView.postMatchReview?.settlementReport?.reportVersion, 'pvp-live-settlement-report-v1', 'normal lethal winner should receive settlement report');
-        assert.equal(normalFinishB.payload.stateView.postMatchReview?.settlementReport?.result, 'win', 'normal lethal winner settlement should be winner-scoped');
-        assert.ok(normalFinishB.payload.stateView.postMatchReview?.settlementReport?.ratingDelta > 0, 'normal lethal winner should see positive score delta');
-        assert.ok(normalFinishB.payload.stateView.postMatchReview?.settlementReport?.coinsAwarded > 0, 'normal lethal winner should see coin reward');
-        const normalFinishLoserA = await request(baseUrl, `/api/pvp/live/matches/${joinProtectB.payload.matchId}`, {
-            token: tokenA
+        assert.equal(normalFinishSecond.payload.result, 'accepted', 'normal lethal after opponent turn should be accepted');
+        assert.equal(normalFinishSecond.payload.stateView.status, 'finished', 'normal lethal after opponent turn should finish');
+        assert.ok(normalFinishSecond.payload.events.some(event => event.eventType === 'match_finished' && eventPublicData(event).winnerSeat === protectSecondSeat), 'normal lethal after opponent turn should emit match_finished');
+        assert.equal(normalFinishSecond.payload.stateView.postMatchReview?.reportVersion, 'pvp-live-post-match-review-v1', 'normal lethal should expose post-match review version');
+        assert.equal(normalFinishSecond.payload.stateView.postMatchReview?.result, 'win', 'winning live seat should receive a win review');
+        assert.equal(normalFinishSecond.payload.stateView.postMatchReview?.finishReason, 'lethal', 'normal lethal review should expose lethal finish reason');
+        assert.ok(normalFinishSecond.payload.stateView.postMatchReview?.evidence?.some(event => event.eventType === 'damage_applied'), 'normal lethal review should cite public damage evidence');
+        assert.equal(normalFinishSecond.payload.stateView.postMatchReview?.loadoutRecommendation?.recommendedPresetId, 'sword', 'normal lethal winner should be recommended the pressure MVP preset');
+        assert.equal(normalFinishSecond.payload.stateView.postMatchReview?.settlementReport?.reportVersion, 'pvp-live-settlement-report-v1', 'normal lethal winner should receive settlement report');
+        assert.equal(normalFinishSecond.payload.stateView.postMatchReview?.settlementReport?.result, 'win', 'normal lethal winner settlement should be winner-scoped');
+        assert.ok(normalFinishSecond.payload.stateView.postMatchReview?.settlementReport?.ratingDelta > 0, 'normal lethal winner should see positive score delta');
+        assert.ok(normalFinishSecond.payload.stateView.postMatchReview?.settlementReport?.coinsAwarded > 0, 'normal lethal winner should see coin reward');
+        const normalFinishLoserFirst = await request(baseUrl, `/api/pvp/live/matches/${joinProtectB.payload.matchId}`, {
+            token: protectFirstToken
         });
-        assert.equal(normalFinishLoserA.status, 200, 'normal lethal loser should still be able to read terminal match state');
-        assert.equal(normalFinishLoserA.payload.stateView.postMatchReview?.result, 'loss', 'normal lethal loser should receive a loss review');
-        assert.equal(normalFinishLoserA.payload.stateView.postMatchReview?.finishReason, 'lethal', 'normal lethal loser review should expose lethal finish reason');
-        assert.ok(normalFinishLoserA.payload.stateView.postMatchReview?.suggestions?.length >= 1, 'normal lethal loser review should include learning suggestions');
-        assert.equal(normalFinishLoserA.payload.stateView.postMatchReview?.settlementReport?.result, 'loss', 'normal lethal loser settlement should be loser-scoped');
-        assert.ok(normalFinishLoserA.payload.stateView.postMatchReview?.settlementReport?.ratingDelta < 0, 'normal lethal loser should see negative score delta');
-        const loserLoadoutRecommendation = normalFinishLoserA.payload.stateView.postMatchReview?.loadoutRecommendation;
+        assert.equal(normalFinishLoserFirst.status, 200, 'normal lethal loser should still be able to read terminal match state');
+        assert.equal(normalFinishLoserFirst.payload.stateView.postMatchReview?.result, 'loss', 'normal lethal loser should receive a loss review');
+        assert.equal(normalFinishLoserFirst.payload.stateView.postMatchReview?.finishReason, 'lethal', 'normal lethal loser review should expose lethal finish reason');
+        assert.ok(normalFinishLoserFirst.payload.stateView.postMatchReview?.suggestions?.length >= 1, 'normal lethal loser review should include learning suggestions');
+        assert.equal(normalFinishLoserFirst.payload.stateView.postMatchReview?.settlementReport?.result, 'loss', 'normal lethal loser settlement should be loser-scoped');
+        assert.ok(normalFinishLoserFirst.payload.stateView.postMatchReview?.settlementReport?.ratingDelta < 0, 'normal lethal loser should see negative score delta');
+        const loserLoadoutRecommendation = normalFinishLoserFirst.payload.stateView.postMatchReview?.loadoutRecommendation;
         assert.equal(loserLoadoutRecommendation?.reportVersion, 'pvp-live-loadout-recommendation-v1', 'normal lethal loser review should expose a loadout recommendation report');
         assert.equal(loserLoadoutRecommendation?.recommendedPresetId, 'shield', 'normal lethal loser should be recommended the defensive MVP preset');
         assert.equal(loserLoadoutRecommendation?.sourceVisibility, 'public_events_and_public_content', 'loadout recommendation should be based on public replay and public content only');
@@ -1631,37 +1673,41 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
             token: tokenB,
             body: { displayName: '乙' }
         });
-        await readyBoth(baseUrl, {
+        const readyTimeout = await readyBoth(baseUrl, {
             matchId: joinTimeoutB.payload.matchId,
             tokenA,
             tokenB,
             stateVersionA: joinTimeoutB.payload.stateView.stateVersion,
             prefix: 'route-timeout'
         });
+        const timeoutActingSeat = readyTimeout.payload.stateView.currentSeat;
+        const timeoutWinningSeat = timeoutActingSeat === 'A' ? 'B' : 'A';
+        const timeoutWinnerToken = timeoutWinningSeat === 'A' ? tokenA : tokenB;
+        const timeoutLoserToken = timeoutActingSeat === 'A' ? tokenA : tokenB;
         const timeoutMatch = pvpLiveRoutes.__livePvpStore.matches.get(joinTimeoutB.payload.matchId);
         forceActiveTurnStartedAt(timeoutMatch, Date.now() - 10 * 60 * 1000);
-        const timeoutStateB = await request(baseUrl, `/api/pvp/live/matches/${joinTimeoutB.payload.matchId}`, {
-            token: tokenB
+        const timeoutStateWinner = await request(baseUrl, `/api/pvp/live/matches/${joinTimeoutB.payload.matchId}`, {
+            token: timeoutWinnerToken
         });
-        assert.equal(timeoutStateB.status, 200, 'opponent should receive timeout-finished match state');
-        assert.equal(timeoutStateB.payload.stateView.status, 'finished', 'stale active live match should finish by timeout');
-        assert.ok(timeoutStateB.payload.stateView.recentEvents.some(event => event.eventType === 'turn_timeout'), 'timeout finish should emit public timeout event');
-        assert.ok(timeoutStateB.payload.stateView.recentEvents.some(event => event.eventType === 'match_finished' && eventPublicData(event).finishReason === 'timeout'), 'timeout finish should emit match_finished timeout reason');
-        assert.equal(eventPublicData(timeoutStateB.payload.stateView.recentEvents.find(event => event.eventType === 'match_finished')).winnerSeat, 'B', 'waiting opponent should win when current seat times out');
-        assert.equal(timeoutStateB.payload.stateView.postMatchReview?.reportVersion, 'pvp-live-post-match-review-v1', 'timeout finish should expose post-match review version');
-        assert.equal(timeoutStateB.payload.stateView.postMatchReview?.result, 'win', 'timeout winner should receive a win review');
-        assert.equal(timeoutStateB.payload.stateView.postMatchReview?.finishReason, 'timeout', 'timeout review should expose timeout finish reason');
-        const timeoutStateLoserA = await request(baseUrl, `/api/pvp/live/matches/${joinTimeoutB.payload.matchId}`, {
-            token: tokenA
+        assert.equal(timeoutStateWinner.status, 200, 'opponent should receive timeout-finished match state');
+        assert.equal(timeoutStateWinner.payload.stateView.status, 'finished', 'stale active live match should finish by timeout');
+        assert.ok(timeoutStateWinner.payload.stateView.recentEvents.some(event => event.eventType === 'turn_timeout'), 'timeout finish should emit public timeout event');
+        assert.ok(timeoutStateWinner.payload.stateView.recentEvents.some(event => event.eventType === 'match_finished' && eventPublicData(event).finishReason === 'timeout'), 'timeout finish should emit match_finished timeout reason');
+        assert.equal(eventPublicData(timeoutStateWinner.payload.stateView.recentEvents.find(event => event.eventType === 'match_finished')).winnerSeat, timeoutWinningSeat, 'waiting opponent should win when current seat times out');
+        assert.equal(timeoutStateWinner.payload.stateView.postMatchReview?.reportVersion, 'pvp-live-post-match-review-v1', 'timeout finish should expose post-match review version');
+        assert.equal(timeoutStateWinner.payload.stateView.postMatchReview?.result, 'win', 'timeout winner should receive a win review');
+        assert.equal(timeoutStateWinner.payload.stateView.postMatchReview?.finishReason, 'timeout', 'timeout review should expose timeout finish reason');
+        const timeoutStateLoser = await request(baseUrl, `/api/pvp/live/matches/${joinTimeoutB.payload.matchId}`, {
+            token: timeoutLoserToken
         });
-        assert.equal(timeoutStateLoserA.status, 200, 'timeout loser should still be able to read terminal match state');
-        assert.equal(timeoutStateLoserA.payload.stateView.postMatchReview?.result, 'loss', 'timeout loser should receive a loss review');
-        assert.equal(timeoutStateLoserA.payload.stateView.postMatchReview?.finishReason, 'timeout', 'timeout loser review should expose timeout finish reason');
-        assert.ok(timeoutStateLoserA.payload.stateView.postMatchReview?.suggestions?.some(line => /超时|关键回合/.test(line)), 'timeout loser review should include timeout learning suggestions');
+        assert.equal(timeoutStateLoser.status, 200, 'timeout loser should still be able to read terminal match state');
+        assert.equal(timeoutStateLoser.payload.stateView.postMatchReview?.result, 'loss', 'timeout loser should receive a loss review');
+        assert.equal(timeoutStateLoser.payload.stateView.postMatchReview?.finishReason, 'timeout', 'timeout loser review should expose timeout finish reason');
+        assert.ok(timeoutStateLoser.payload.stateView.postMatchReview?.suggestions?.some(line => /超时|关键回合/.test(line)), 'timeout loser review should include timeout learning suggestions');
         const requeueAfterTimeout = await request(baseUrl, '/api/pvp/live/queue/join', {
             method: 'POST',
-            token: tokenA,
-            body: { displayName: '甲' }
+            token: timeoutLoserToken,
+            body: { displayName: timeoutActingSeat === 'A' ? '甲' : '乙' }
         });
         assert.equal(requeueAfterTimeout.payload.status, 'waiting', 'timed-out live match should release player for a new queue');
 

@@ -72,6 +72,29 @@ function projectMatchQuality(matchQuality) {
     };
 }
 
+function projectOpenerAssignment(openerAssignment, seatId, setup = null) {
+    const source = openerAssignment && typeof openerAssignment === 'object' ? openerAssignment : {};
+    const firstSeat = source.firstSeat === 'B' || setup && setup.firstSeat === 'B' ? 'B' : 'A';
+    const secondSeat = firstSeat === 'A' ? 'B' : 'A';
+    const viewerSeat = seatId === 'B' ? 'B' : 'A';
+    return {
+        reportVersion: 'pvp-live-opener-assignment-v1',
+        sourceVisibility: String(source.sourceVisibility || 'server_authoritative_public_seed'),
+        usesHiddenInformation: false,
+        rankedImpact: 'none',
+        firstSeat,
+        secondSeat,
+        viewerSeat,
+        opponentSeat: viewerSeat === 'A' ? 'B' : 'A',
+        viewerStarts: viewerSeat === firstSeat,
+        policy: String(source.policy || 'server_seeded_fair_opener'),
+        seedTag: String(source.seedTag || '').slice(0, 24),
+        queueOrderBinding: false,
+        hostBinding: false,
+        boundaryLine: String(source.boundaryLine || '先后手由服务端公开种子分配，不绑定排队顺序或房主身份。')
+    };
+}
+
 function projectFirstMatchGuide(firstMatchGuide, status = 'setup') {
     const report = firstMatchGuide && typeof firstMatchGuide === 'object' ? firstMatchGuide : {};
     const nextActionByStatus = report.nextActionByStatus && typeof report.nextActionByStatus === 'object'
@@ -1580,6 +1603,7 @@ function projectStateView(state, seatId) {
             mulliganLimit: Math.max(0, Math.floor(Number(state.setup.mulliganLimit) || 0))
         } : null,
         matchQuality: projectMatchQuality(state.matchQuality),
+        openerAssignment: projectOpenerAssignment(state.openerAssignment, seatId, state.setup),
         friendlySeries: projectFriendlySeries(state.friendlySeries, state.status),
         firstMatchGuide: projectFirstMatchGuide(state.firstMatchGuide, state.status),
         loadoutExplorationReport: projectLoadoutExplorationReport(state.loadoutExplorationReport),

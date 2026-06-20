@@ -912,9 +912,41 @@ export const PVPScene = {
       rankedImpact: String(report.rankedImpact || 'none')
     };
   },
+  getLiveOpenerAssignment(view) {
+    const report = view && view.openerAssignment && typeof view.openerAssignment === 'object' ? view.openerAssignment : null;
+    if (!report) return null;
+    const firstSeat = report.firstSeat === 'B' ? 'B' : 'A';
+    const secondSeat = firstSeat === 'A' ? 'B' : 'A';
+    const viewerSeat = report.viewerSeat === 'B' ? 'B' : 'A';
+    return {
+      reportVersion: String(report.reportVersion || 'pvp-live-opener-assignment-v1'),
+      sourceVisibility: String(report.sourceVisibility || 'server_authoritative_public_seed'),
+      usesHiddenInformation: report.usesHiddenInformation === true,
+      rankedImpact: String(report.rankedImpact || 'none'),
+      firstSeat,
+      secondSeat,
+      viewerSeat,
+      opponentSeat: viewerSeat === 'A' ? 'B' : 'A',
+      viewerStarts: viewerSeat === firstSeat,
+      policy: String(report.policy || 'server_seeded_fair_opener'),
+      seedTag: String(report.seedTag || '').slice(0, 24),
+      queueOrderBinding: report.queueOrderBinding === true,
+      hostBinding: report.hostBinding === true,
+      boundaryLine: String(report.boundaryLine || '先后手由服务端公开种子分配，不绑定排队顺序或房主身份。')
+    };
+  },
   renderLiveOpeningSafeguardReport(view) {
     const report = this.getLiveOpeningSafeguardReport(view);
     if (!report) return '公平保护：等待权威状态';
+    const opener = this.getLiveOpenerAssignment(view);
+    const openerFirstSeat = opener && (opener.firstSeat === 'A' || opener.firstSeat === 'B') ? opener.firstSeat : report.firstSeat;
+    const openerViewerSeat = opener && (opener.viewerSeat === 'A' || opener.viewerSeat === 'B') ? opener.viewerSeat : report.viewerSeat;
+    const openerPerspective = openerFirstSeat && openerViewerSeat
+      ? openerFirstSeat === openerViewerSeat ? '我方先手' : '对方先手'
+      : '先手待同步';
+    const openerBoundary = opener
+      ? `${openerPerspective} · 服务端种子 · 不绑定排队/不绑定房主`
+      : `${openerPerspective} · 等待服务端分配`;
     const currentSeat = report.damageBudget.currentSeat || report.currentSeat || '--';
     const currentBudget = report.damageBudget.currentActionBudget;
     const currentBudgetText = currentBudget === null
@@ -934,6 +966,7 @@ export const PVPScene = {
       ? `待发放 ${report.counterplay.pendingSeats.join('/')}`
       : report.counterplay.grantedSeats.length ? `已发放 ${report.counterplay.grantedSeats.join('/')}` : '待触发';
     return `
+      <span class="pvp-live-opening-safeguard-chip" data-live-opener-assignment>${this.escapeHtml(openerBoundary)}</span>
       <span class="pvp-live-opening-safeguard-chip">首动预算 · ${this.escapeHtml(currentBudgetText)}</span>
       <span class="pvp-live-opening-safeguard-chip">先手 ${this.escapeHtml(report.firstSeat || 'A')} ${report.damageBudget.firstSeat} / 后手 ${this.escapeHtml(report.secondSeat || 'B')} ${report.damageBudget.secondSeat}</span>
       <span class="pvp-live-opening-safeguard-chip" data-live-opening-second-seat-buffer>后手护盾 · ${this.escapeHtml(secondSeatBufferText)}</span>
@@ -2915,6 +2948,7 @@ export const PVPScene = {
       lastRealtimeSyncAt: Math.max(0, Math.floor(Number(state.lastRealtimeSyncAt) || 0)),
       realtimeReport: this.getLiveRealtimeReport(state),
       openingSafeguardReport: this.getLiveOpeningSafeguardReport(view),
+      openerAssignment: this.getLiveOpenerAssignment(view),
       actionPreviewReport: this.getLiveActionPreviewReport(view),
       actionReceiptReport: this.getLiveActionReceiptReport(view),
       duelMomentumReport: this.getLiveDuelMomentumReport(view),

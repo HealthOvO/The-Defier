@@ -44,6 +44,10 @@ function makeLoadout(identitySlot, pattern) {
   };
 }
 
+function otherSeatId(seatId) {
+  return seatId === 'A' ? 'B' : 'A';
+}
+
 function startServer(port, label) {
   const child = spawn(process.execPath, ['server/app.js'], {
     cwd: ROOT_DIR,
@@ -465,68 +469,74 @@ async function pollMatchedQueueStatus(baseUrl, queueTicket, token) {
       'cross-process duplicate fanout should throttle repeated same-version duplicate_action signals across backend processes',
     );
 
-    sendJson(socketA, {
+    const terminalLoserSeat = intentResultB.stateView?.currentSeat || activeFanoutA.stateView?.currentSeat || 'A';
+    const terminalWinnerSeat = otherSeatId(terminalLoserSeat);
+    const terminalLoserSocket = terminalLoserSeat === 'A' ? socketA : socketB;
+    const terminalWinnerSocket = terminalWinnerSeat === 'A' ? socketA : socketB;
+    const terminalLoserState = terminalLoserSeat === 'A' ? activeFanoutA.stateView : activeFanoutB.stateView;
+    const terminalLoserIntentId = `cross-process-surrender-${terminalLoserSeat.toLowerCase()}`;
+    sendJson(terminalLoserSocket, {
       type: 'intent',
       matchId,
       intent: {
-        intentId: 'cross-process-surrender-a',
+        intentId: terminalLoserIntentId,
         intentType: 'surrender',
-        stateVersion: activeFanoutA.stateView.stateVersion,
+        stateVersion: terminalLoserState.stateVersion,
         payload: {},
       },
     });
-    const surrenderResultA = await waitForMessage(
-      socketA,
-      message => message.type === 'intent_result' && message.intentId === 'cross-process-surrender-a',
-      'cross-process terminal WS fanout surrender intent_result A',
+    const surrenderResultLoser = await waitForMessage(
+      terminalLoserSocket,
+      message => message.type === 'intent_result' && message.intentId === terminalLoserIntentId,
+      `cross-process terminal WS fanout surrender intent_result ${terminalLoserSeat}`,
     );
-    assert.equal(surrenderResultA.result, 'accepted', 'terminal surrender intent should be accepted on the origin process');
-    assert.equal(surrenderResultA.stateView?.status, 'finished', 'terminal surrender should finish the origin process state');
-    assert.equal(surrenderResultA.stateView?.postMatchReview?.result, 'loss', 'origin surrender view should include a losing post-match review');
-    assert.equal(surrenderResultA.stateView?.postMatchReview?.finishReason, 'surrender', 'origin terminal review should record surrender finish reason');
-    assert.equal(surrenderResultA.stateView?.settlementReport?.reportVersion, 'pvp-live-settlement-report-v1', 'origin terminal view should include official ranked settlement');
-    const terminalVersion = surrenderResultA.stateView.stateVersion;
-    const localTerminalA = await waitForMessage(
-      socketA,
+    assert.equal(surrenderResultLoser.result, 'accepted', 'terminal surrender intent should be accepted on the origin process');
+    assert.equal(surrenderResultLoser.stateView?.status, 'finished', 'terminal surrender should finish the origin process state');
+    assert.equal(surrenderResultLoser.stateView?.postMatchReview?.result, 'loss', 'origin surrender view should include a losing post-match review');
+    assert.equal(surrenderResultLoser.stateView?.postMatchReview?.finishReason, 'surrender', 'origin terminal review should record surrender finish reason');
+    assert.equal(surrenderResultLoser.stateView?.settlementReport?.reportVersion, 'pvp-live-settlement-report-v1', 'origin terminal view should include official ranked settlement');
+    const terminalVersion = surrenderResultLoser.stateView.stateVersion;
+    const localTerminalLoser = await waitForMessage(
+      terminalLoserSocket,
       message => message.type === 'state_sync'
         && message.matchId === matchId
         && message.stateView?.status === 'finished'
         && message.stateView?.stateVersion >= terminalVersion,
-      'cross-process terminal WS fanout local finished state_sync A',
+      `cross-process terminal WS fanout local finished state_sync ${terminalLoserSeat}`,
     );
-    const remoteTerminalB = await waitForMessage(
-      socketB,
+    const remoteTerminalWinner = await waitForMessage(
+      terminalWinnerSocket,
       message => message.type === 'state_sync'
         && message.matchId === matchId
         && message.stateView?.status === 'finished'
         && message.stateView?.stateVersion >= terminalVersion,
-      'cross-process terminal WS fanout remote finished state_sync B',
+      `cross-process terminal WS fanout remote finished state_sync ${terminalWinnerSeat}`,
     );
-    assert.equal(localTerminalA.seatId, 'A', 'cross-process terminal local state_sync should keep loser seat scope');
-    assert.equal(remoteTerminalB.seatId, 'B', 'cross-process terminal fanout should keep remote winner seat scope');
-    assert.equal(remoteTerminalB.stateView?.postMatchReview?.result, 'win', 'remote terminal fanout should deliver winner post-match review without heartbeat');
-    assert.equal(remoteTerminalB.stateView?.postMatchReview?.finishReason, 'surrender', 'remote terminal fanout should deliver surrender finish reason');
-    assert.equal(remoteTerminalB.stateView?.postMatchReview?.settlementReport?.result, 'win', 'remote terminal review should carry winner settlement projection');
-    assert.equal(remoteTerminalB.stateView?.settlementReport?.reportVersion, 'pvp-live-settlement-report-v1', 'remote terminal fanout should include official ranked settlement projection');
+    assert.equal(localTerminalLoser.seatId, terminalLoserSeat, 'cross-process terminal local state_sync should keep loser seat scope');
+    assert.equal(remoteTerminalWinner.seatId, terminalWinnerSeat, 'cross-process terminal fanout should keep remote winner seat scope');
+    assert.equal(remoteTerminalWinner.stateView?.postMatchReview?.result, 'win', 'remote terminal fanout should deliver winner post-match review without heartbeat');
+    assert.equal(remoteTerminalWinner.stateView?.postMatchReview?.finishReason, 'surrender', 'remote terminal fanout should deliver surrender finish reason');
+    assert.equal(remoteTerminalWinner.stateView?.postMatchReview?.settlementReport?.result, 'win', 'remote terminal review should carry winner settlement projection');
+    assert.equal(remoteTerminalWinner.stateView?.settlementReport?.reportVersion, 'pvp-live-settlement-report-v1', 'remote terminal fanout should include official ranked settlement projection');
     assert.ok(
-      remoteTerminalB.stateView.recentEvents.some(event => event && event.eventType === 'match_finished'),
+      remoteTerminalWinner.stateView.recentEvents.some(event => event && event.eventType === 'match_finished'),
       'cross-process terminal fanout should include the finished public event in recent state',
     );
 
-    sendJson(socketB, { type: 'heartbeat', matchId, lastSeenRevision: lastSeenBeforeTerminal });
+    sendJson(terminalWinnerSocket, { type: 'heartbeat', matchId, lastSeenRevision: lastSeenBeforeTerminal });
     await waitForMessage(
-      socketB,
+      terminalWinnerSocket,
       message => message.type === 'presence' && message.matchId === matchId,
-      'cross-process terminal heartbeat presence B',
+      `cross-process terminal heartbeat presence ${terminalWinnerSeat}`,
     );
-    const terminalReplayB = await waitForMessage(
-      socketB,
+    const terminalReplayWinner = await waitForMessage(
+      terminalWinnerSocket,
       message => message.type === 'events_replay' && message.matchId === matchId,
-      'cross-process terminal heartbeat events_replay B',
+      `cross-process terminal heartbeat events_replay ${terminalWinnerSeat}`,
     );
-    const replayTypesB = new Set((terminalReplayB.events || []).map(event => event && event.eventType));
-    assert.ok(replayTypesB.has('player_surrendered'), 'cross-process terminal heartbeat replay should include player_surrendered');
-    assert.ok(replayTypesB.has('match_finished'), 'cross-process terminal heartbeat replay should include match_finished');
+    const replayTypesWinner = new Set((terminalReplayWinner.events || []).map(event => event && event.eventType));
+    assert.ok(replayTypesWinner.has('player_surrendered'), 'cross-process terminal heartbeat replay should include player_surrendered');
+    assert.ok(replayTypesWinner.has('match_finished'), 'cross-process terminal heartbeat replay should include match_finished');
 
     console.log('sanity_pvp_live_cross_process_ws_fanout_checks passed');
   } finally {

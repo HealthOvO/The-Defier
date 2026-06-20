@@ -1708,10 +1708,23 @@ async function readyBoth({ matchId, tokenA, tokenB, stateVersionA, prefix }) {
       prefix: 'persist'
     });
 
+    let stateVersionForPersistPlay = ready.payload.stateView.stateVersion;
+    if (ready.payload.stateView.currentSeat !== 'A') {
+      const handoffToA = await submitIntent(matchId, userB.token, {
+        intentId: 'persist-handoff-b-1',
+        intentType: 'end_turn',
+        stateVersion: stateVersionForPersistPlay,
+        payload: {},
+      });
+      assert.equal(handoffToA.payload.result, 'accepted', 'pre-restart handoff should let seat A become the persistence actor');
+      assert.equal(handoffToA.payload.stateView.currentSeat, 'A', 'pre-restart handoff should pass action to seat A');
+      stateVersionForPersistPlay = handoffToA.payload.stateView.stateVersion;
+    }
+
     const playA = await submitIntent(matchId, userA.token, {
         intentId: 'persist-play-a-1',
         intentType: 'play_card',
-        stateVersion: ready.payload.stateView.stateVersion,
+        stateVersion: stateVersionForPersistPlay,
         payload: { cardInstanceId: 'A-strike-1', targetSeat: 'B' },
     });
     assert.equal(playA.payload.result, 'accepted', 'pre-restart live intent should be accepted');

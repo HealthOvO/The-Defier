@@ -311,8 +311,62 @@ const challengeHubMethods = Object.create(null);
       daily: normalizeChallengeArchivePresetSlots(),
       weekly: normalizeChallengeArchivePresetSlots(),
       global: normalizeChallengeArchivePresetSlots()
-    }
+    },
+    pvpLivePracticeReturn: null
   });
+  const normalizePvpLiveDrillSource = (source = null) => {
+    const src = source && typeof source === 'object' ? source : {};
+    const sourceMatchId = String(src.sourceMatchId || '').trim();
+    if (!sourceMatchId) return null;
+    const sourceRunId = String(src.sourceRunId || `pvp_live:${sourceMatchId}`).trim();
+    const result = ['win', 'loss', 'draw'].includes(String(src.result || '')) ? String(src.result || '') : 'finished';
+    const finishReason = String(src.finishReason || '').trim();
+    return {
+      sourceMatchId,
+      sourceRunId: sourceRunId || `pvp_live:${sourceMatchId}`,
+      result,
+      finishReason,
+      recommendedLoadoutId: String(src.recommendedLoadoutId || '').trim(),
+      recommendedLoadoutLabel: String(src.recommendedLoadoutLabel || '推荐斗法谱').trim() || '推荐斗法谱',
+      themeKey: String(src.themeKey || '').trim(),
+      themeLabel: String(src.themeLabel || '').trim(),
+      trainingAdvice: String(src.trainingAdvice || '').trim(),
+      drillObjective: String(src.drillObjective || '').trim(),
+      trainingTags: Array.isArray(src.trainingTags) ? src.trainingTags.map(tag => String(tag || '').trim()).filter(Boolean).slice(0, 4) : []
+    };
+  };
+  const normalizePvpLivePracticeReturnReceipt = (source = null) => {
+    const src = source && typeof source === 'object' ? source : {};
+    const sourceMatchId = String(src.sourceMatchId || '').trim();
+    if (!sourceMatchId) return null;
+    const completed = !!src.completed;
+    const recommendedLoadoutLabel = String(src.recommendedLoadoutLabel || '推荐斗法谱').trim() || '推荐斗法谱';
+    return {
+      reportVersion: 'pvp-live-practice-return-v1',
+      sourceMatchId,
+      sourceRunId: String(src.sourceRunId || `pvp_live:${sourceMatchId}`).trim() || `pvp_live:${sourceMatchId}`,
+      completed,
+      reason: String(src.reason || '').trim(),
+      result: ['win', 'loss', 'draw', 'finished'].includes(String(src.result || '')) ? String(src.result || '') : 'finished',
+      finishReason: String(src.finishReason || '').trim(),
+      recommendedLoadoutId: String(src.recommendedLoadoutId || '').trim(),
+      recommendedLoadoutLabel,
+      themeKey: String(src.themeKey || '').trim(),
+      themeLabel: String(src.themeLabel || '').trim(),
+      trainingAdvice: String(src.trainingAdvice || '').trim(),
+      drillObjective: String(src.drillObjective || '').trim(),
+      trainingTags: Array.isArray(src.trainingTags) ? src.trainingTags.map(tag => String(tag || '').trim()).filter(Boolean).slice(0, 4) : [],
+      rankedImpact: 'none',
+      usesHiddenInformation: false,
+      nextActionType: 'pvp_live',
+      actionValue: 'live',
+      ctaLabel: '继续真人排位',
+      summaryLine: completed
+        ? `真人 PVP 练习已完成，可带着${recommendedLoadoutLabel}回到 live 队列。`
+        : `真人 PVP 练习已中断，可先调整${recommendedLoadoutLabel}再回到 live 队列。`,
+      updatedAt: clampInt(src.updatedAt, 0)
+    };
+  };
   const normalizeChallengeHubState = (rawState = null) => {
     const source = rawState && typeof rawState === 'object' ? rawState : {};
     const archiveFilters = source.archiveFilters && typeof source.archiveFilters === 'object' ? source.archiveFilters : {};
@@ -332,7 +386,8 @@ const challengeHubMethods = Object.create(null);
         daily: normalizeChallengeArchivePresetSlots(archivePresets.daily),
         weekly: normalizeChallengeArchivePresetSlots(archivePresets.weekly),
         global: normalizeChallengeArchivePresetSlots(archivePresets.global)
-      }
+      },
+      pvpLivePracticeReturn: normalizePvpLivePracticeReturnReceipt(source.pvpLivePracticeReturn)
     };
   };
   const serializeChallengeArchiveFilterState = (state = null) => JSON.stringify(normalizeChallengeArchiveFilterState(state || createChallengeArchiveFilterState()));
@@ -2286,7 +2341,20 @@ const challengeHubMethods = Object.create(null);
       leaderboard: [],
       replayOnly: true,
       practiceOnly: true,
-      archiveEntryId: `pvp_live:${matchId}`
+      archiveEntryId: `pvp_live:${matchId}`,
+      pvpLiveDrillSource: normalizePvpLiveDrillSource({
+        sourceMatchId: matchId,
+        sourceRunId: `pvp_live:${matchId}`,
+        result: source.result,
+        finishReason: source.finishReason,
+        recommendedLoadoutId: source.recommendedLoadoutId,
+        recommendedLoadoutLabel: source.recommendedLoadoutLabel,
+        themeKey: source.themeKey,
+        themeLabel: source.themeLabel,
+        trainingAdvice: source.trainingAdvice,
+        drillObjective: source.drillObjective,
+        trainingTags
+      })
     };
   };
   challengeHubMethods.beginPvpLiveDrillScenario = function (scenario = null) {
@@ -2440,6 +2508,7 @@ const challengeHubMethods = Object.create(null);
       silentSync: true
     });
     const trainingFocus = this.getObservatoryTrainingFocus();
+    const pvpLivePracticeReturn = this.getPvpLivePracticeReturnReceipt();
     const archiveFilters = this.buildChallengeArchiveFilterBundle(bundle);
     const comparison = this.buildObservatoryThemeComparison({
       mode: bundle.mode,
@@ -2869,6 +2938,16 @@ const challengeHubMethods = Object.create(null);
                         ${!trainingFocus?.themeKey || trainingFocusViewActive ? 'disabled' : ''}
                         >${trainingFocusViewActive ? '当前训练视角' : '按建议筛留痕'}</button>
                 </section>
+                ${pvpLivePracticeReturn ? `<section class="codex-side-card" data-pvp-live-practice-return>
+                    <span class="codex-side-kicker">真人 PVP 回流</span>
+                    <h3>${escapeHtml(pvpLivePracticeReturn.completed ? '练习完成，回到 live 队列' : '练习中断，可回真人队列')}</h3>
+                    <p>${escapeHtml(pvpLivePracticeReturn.summaryLine)}</p>
+                    <p class="collection-muted">${escapeHtml(`来源战局：${pvpLivePracticeReturn.sourceMatchId} · 推荐谱：${pvpLivePracticeReturn.recommendedLoadoutLabel} · 正式积分不变`)}</p>
+                    <button type="button" class="collection-inline-btn"
+                        data-challenge-action="open-pvp-live-practice-return"
+                        data-pvp-live-practice-return-action="true"
+                        >${escapeHtml(pvpLivePracticeReturn.ctaLabel || '继续真人排位')}</button>
+                </section>` : ''}
                 <section class="codex-side-card">
                     <span class="codex-side-kicker">观星留痕</span>
                     <h3>回放档案</h3>
@@ -3118,10 +3197,16 @@ const challengeHubMethods = Object.create(null);
       }
     }, '__challengeRecordChangeDelegatesBound');
     bindRootClick(sideEl, button => {
-      if (button.dataset.challengeAction !== 'apply-training-focus') return;
-      const mode = String(button.dataset.challengeMode || '');
-      if (mode) {
-        this.applyObservatoryTrainingFocus(mode);
+      const action = String(button.dataset.challengeAction || '');
+      if (action === 'apply-training-focus') {
+        const mode = String(button.dataset.challengeMode || '');
+        if (mode) {
+          this.applyObservatoryTrainingFocus(mode);
+        }
+        return;
+      }
+      if (action === 'open-pvp-live-practice-return') {
+        this.openPvpLivePracticeReturn();
       }
     }, '__challengeSideDelegatesBound');
     bindRootClick(launchEl, button => {
@@ -3262,6 +3347,7 @@ const challengeHubMethods = Object.create(null);
       replayOnly: !!source.replayOnly,
       practiceOnly: !!source.practiceOnly,
       archiveEntryId: String(source.archiveEntryId || ''),
+      pvpLiveDrillSource: normalizePvpLiveDrillSource(source.pvpLiveDrillSource),
       archiveInsight: source.archiveInsight && hasChallengeArchiveInsight(source.archiveInsight) ? normalizeChallengeArchiveInsight(source.archiveInsight) : null,
       progress: {
         battleWins: clampInt(source.progress?.battleWins, 0),
@@ -3303,6 +3389,7 @@ const challengeHubMethods = Object.create(null);
       replayOnly: !!bundle.replayOnly,
       practiceOnly: !!bundle.practiceOnly,
       archiveEntryId: String(bundle.archiveEntryId || ''),
+      pvpLiveDrillSource: normalizePvpLiveDrillSource(bundle.pvpLiveDrillSource),
       archiveInsight: bundle.archiveInsight && hasChallengeArchiveInsight(bundle.archiveInsight) ? normalizeChallengeArchiveInsight(bundle.archiveInsight) : null,
       progress: {
         battleWins: 0,
@@ -3515,6 +3602,50 @@ const challengeHubMethods = Object.create(null);
     }
     return entry;
   };
+  challengeHubMethods.setPvpLivePracticeReturnReceipt = function (run = null, options = {}) {
+    const source = normalizePvpLiveDrillSource(run?.pvpLiveDrillSource);
+    const fallbackMatchId = String(run?.archiveEntryId || '').replace(/^pvp_live:/, '').trim();
+    const sourceMatchId = source?.sourceMatchId || fallbackMatchId;
+    if (!run?.practiceOnly || !sourceMatchId || !String(run?.archiveEntryId || '').startsWith('pvp_live:')) return null;
+    this.ensureChallengeHubBootState();
+    const receipt = normalizePvpLivePracticeReturnReceipt({
+      ...(source || {}),
+      sourceMatchId,
+      sourceRunId: source?.sourceRunId || `pvp_live:${sourceMatchId}`,
+      completed: !!options.completed,
+      reason: String(options.reason || ''),
+      updatedAt: Date.now()
+    });
+    if (!receipt) return null;
+    this.challengeHubState.pvpLivePracticeReturn = receipt;
+    this.persistChallengeHubState();
+    return receipt;
+  };
+  challengeHubMethods.getPvpLivePracticeReturnReceipt = function () {
+    this.ensureChallengeHubBootState();
+    const receipt = normalizePvpLivePracticeReturnReceipt(this.challengeHubState?.pvpLivePracticeReturn);
+    if (!receipt) return null;
+    this.challengeHubState.pvpLivePracticeReturn = receipt;
+    return receipt;
+  };
+  challengeHubMethods.openPvpLivePracticeReturn = function () {
+    const receipt = this.getPvpLivePracticeReturnReceipt();
+    if (!receipt) return false;
+    if (typeof this.showScreen === 'function') {
+      this.showScreen('pvp-screen');
+    }
+    const scene = typeof PVPScene !== 'undefined' && PVPScene ? PVPScene : typeof window !== 'undefined' && window.PVPScene ? window.PVPScene : null;
+    if (scene && typeof scene.switchTab === 'function') {
+      scene.switchTab('live');
+    }
+    if (scene && typeof scene.onShow === 'function') {
+      scene.onShow();
+    }
+    if (typeof Utils !== 'undefined' && Utils && typeof Utils.showBattleLog === 'function') {
+      Utils.showBattleLog(`${receipt.summaryLine} 本次训练不写正式积分。`);
+    }
+    return true;
+  };
   challengeHubMethods.finalizeActiveChallengeRun = function (options = {}) {
     if (!this.activeChallengeRun) return null;
     const run = this.activeChallengeRun;
@@ -3558,6 +3689,9 @@ const challengeHubMethods = Object.create(null);
         anchorSection: 'challenge',
         priority: 2
       });
+    }
+    if (run.practiceOnly) {
+      this.setPvpLivePracticeReturnReceipt(run, options);
     }
     if (!run.replayOnly && !run.practiceOnly && options.completed && typeof this.recordCollectionUnlock === 'function') {
       this.recordCollectionUnlock('challenge', {
@@ -3951,6 +4085,7 @@ const challengeHubMethods = Object.create(null);
         dangerProfile: serializeChallengeDangerProfile(activeRunDangerProfile),
         archiveInsight: serializeChallengeArchiveInsight(activeRunArchiveInsight)
       } : null,
+      pvpLivePracticeReturn: this.getPvpLivePracticeReturnReceipt(),
       hub: hubBundle ? {
         activeTab: tab,
         ruleName: hubBundle.rule?.name || '',

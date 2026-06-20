@@ -22,6 +22,7 @@ const browserDongfuAudit = read('tests/browser_dongfu_audit.mjs');
 const browserEventBranchAudit = read('tests/browser_event_branch_audit.mjs');
 const browserRunPathEventAudit = read('tests/browser_run_path_event_audit.mjs');
 const browserMobileAudit = read('tests/browser_mobile_layout_audit.mjs');
+const browserChallengeAudit = read('tests/browser_challenge_audit.mjs');
 const challengeMobileAudit = read('tests/browser_challenge_mobile_flow_audit.mjs');
 const browserChapterFlowAudit = read('tests/browser_chapter_flow_audit.mjs');
 const browserRunPathRewardAudit = read('tests/browser_run_path_reward_audit.mjs');
@@ -69,6 +70,10 @@ const shopManager = read('js/managers/ShopManager.js');
 const coreUtils = read('js/core/utils.js');
 const gameSource = read('js/game.js');
 const shopView = read('js/views/ShopView.js');
+const openerAssignmentSource = pvpLiveStore.slice(
+  pvpLiveStore.indexOf('function makeAuthoritativeOpenerAssignment'),
+  pvpLiveStore.indexOf('function normalizeInviteCode')
+);
 [
   'routes/pvp.js',
   'routes/ghosts.js',
@@ -528,6 +533,11 @@ const layoutAudit = read('tests/browser_frontend_layout_audit.mjs');
   '生命伤害\\s*5',
   'B\\s*预计\\s*45\\s*血',
   'pvp-live-action-receipt-v1',
+  'pvp-live-opener-assignment-v1',
+  'data-live-opener-assignment',
+  '服务端种子',
+  '不绑定排队',
+  '不绑定房主',
   'data-live-action-receipt',
   'data-live-action-receipt-type',
   'data-live-action-receipt-acting',
@@ -710,8 +720,11 @@ const layoutAudit = read('tests/browser_frontend_layout_audit.mjs');
   'hasPracticePlan',
   'if (hasPracticePlan && !practicePlan) return null;',
   'pvp-live-practice-plan-v1',
+  'pvp-live-practice-return-v1',
   '节奏脚本',
   '体验复查',
+  'data-pvp-live-practice-return',
+  'open-pvp-live-practice-return',
   'practicePlan: clone(practicePlan)',
 ].forEach((needle) => {
   assert.ok(
@@ -728,6 +741,8 @@ const layoutAudit = read('tests/browser_frontend_layout_audit.mjs');
   'pending PVP drill should carry a structured practice plan',
   'beginPvpLiveDrillScenario must reject invalid supplied practice plans',
   'PVP drill archive insight should surface the tempo script',
+  'practiceOnly finalize should expose a PVP return receipt',
+  'PVP practice return action should navigate back to live PVP',
 ].forEach((needle) => {
   assert.ok(
     observatoryArchiveChecks.includes(needle),
@@ -755,6 +770,11 @@ const layoutAudit = read('tests/browser_frontend_layout_audit.mjs');
   'real browser live match updates first-match guide after setup',
   'real browser state exposes snapshot_locked without leaking opponent hidden data',
   'real browser setup ready flow reaches active on both seats',
+  'real browser exposes server-authoritative opener assignment without queue or host binding',
+  'real browser mirrors opener assignment on the second seat without queue or host binding',
+  'activeFirstSeat',
+  'activeSecondSeat',
+  'secondSeatClient.page',
   'real browser live match renders authoritative active action countdown',
   'real browser test-mode match can enter protected lethal opening state',
   'TEST_MATCH_SCOPE',
@@ -774,8 +794,8 @@ const layoutAudit = read('tests/browser_frontend_layout_audit.mjs');
   "realSocialMutedProbe.payload?.rankedImpact === 'none'",
   "realSocialMutedProbe.textPayload?.rankedImpact === 'none'",
   'real browser accepted card intent auto-pushes opponent state without manual refresh',
-  'waitForLiveSnapshot(seatB.page, previousHp',
-  'waitForLiveSnapshot(seatB.page, expectedVersion',
+  'waitForLiveSnapshot(secondSeatClient.page, previousVersion',
+  'waitForLiveSnapshot(secondSeatClient.page, ({ expectedSeat, expectedVersion })',
   'real browser end turn switches authoritative action countdown to opponent',
   'real browser protected defender can spend the +8 counterplay window on a real action',
   "protectedCounterplayActionProbe.after?.actionReceiptReport?.actionType === 'play_card'",
@@ -845,6 +865,46 @@ assert.ok(
 );
 
 [
+  'const serverSeed = crypto.randomBytes(16).toString(\'hex\');',
+  'pvp-live-opener-v1',
+  'server_seeded_fair_opener',
+  'queueOrderBinding: false',
+  'hostBinding: false',
+].forEach((needle) => {
+  assert.ok(
+    openerAssignmentSource.includes(needle),
+    `live PVP opener assignment should pin public-seed source marker: ${needle}`,
+  );
+});
+[
+  'playerA.userId',
+  'playerB.userId',
+  'loadoutSnapshot',
+  'rating',
+  'elo',
+].forEach((needle) => {
+  assert.ok(
+    !openerAssignmentSource.includes(needle),
+    `live PVP opener assignment seed source must not depend on hidden/private marker: ${needle}`,
+  );
+});
+
+[
+  'challenge hub browser renders PVP live practice-return card with no-score boundary',
+  'challenge hub practice-return CTA opens the live PVP tab without auto-queueing',
+  'data-pvp-live-practice-return',
+  'data-pvp-live-practice-return-action="true"',
+  'pvp-live-practice-return-v1',
+  '正式积分不变',
+  "window.PVPScene?.activeTab || ''",
+].forEach((needle) => {
+  assert.ok(
+    browserChallengeAudit.includes(needle),
+    `challenge browser audit should pin PVP practice-return marker: ${needle}`,
+  );
+});
+
+[
   'seat A should start with a server-locked loadout snapshot',
   'self view should expose own locked loadout hash',
   'opponent view should expose only public locked loadout hash',
@@ -869,6 +929,7 @@ assert.ok(
   'state view should expose active opening safeguard report',
   'opening safeguard report should expose current first-action budget',
   'opening safeguard report should expose public second-seat buffer',
+  'createInitialLiveState should accept authoritative firstSeat B without test-only mutation',
   'state view should expose public duel momentum report',
   'duel momentum report should come from public state',
   'duel momentum report must not use hidden information',
@@ -1368,6 +1429,8 @@ assert.ok(
   'invalidated setup timeout should not expose post-match review',
   'setup timeout should emit match_invalidated ready_timeout reason',
   'invalidated setup timeout should release player for a new queue without settlement',
+  'matched view should expose authoritative opener assignment report',
+  'private invite match should expose authoritative opener assignment',
 ].forEach((needle) => {
   assert.ok(
     pvpLiveRouteChecks.includes(needle),
@@ -2216,6 +2279,7 @@ assert.ok(
   'live UI should keep lost-ack social intent pending before manual refresh',
   'manual live refresh should read authoritative match state while an intent is pending',
   'live UI should unlock pending realtime intents after manual authoritative refresh',
+  'opening safeguard should render the authoritative opener assignment chip',
 ].forEach((needle) => {
   assert.ok(
     pvpLiveUiRuntimeChecks.includes(needle),

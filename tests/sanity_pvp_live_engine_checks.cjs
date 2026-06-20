@@ -525,10 +525,10 @@ const mirroredBudgetSetupState = createInitialLiveState({
   seats: [
     { seatId: 'A', userId: 'u-a', displayName: '甲' },
     { seatId: 'B', userId: 'u-b', displayName: '乙' }
-  ]
+  ],
+  firstSeat: 'B'
 });
-mirroredBudgetSetupState.setup.firstSeat = 'B';
-mirroredBudgetSetupState.currentSeat = 'B';
+assert(mirroredBudgetSetupState.setup.firstSeat === 'B' && mirroredBudgetSetupState.currentSeat === 'B', 'createInitialLiveState should accept authoritative firstSeat B without test-only mutation');
 const mirroredBudgetReadyA = reduceIntent(mirroredBudgetSetupState, {
   intentId: 'intent-mirrored-budget-ready-a',
   intentType: 'ready',

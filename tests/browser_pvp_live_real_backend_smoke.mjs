@@ -41,6 +41,14 @@ function liveCardSelector(cardInstanceId) {
   return `[data-live-card="${cssAttributeValue(cardInstanceId)}"]`;
 }
 
+function otherSeatId(seatId) {
+  return seatId === 'A' ? 'B' : 'A';
+}
+
+function seatSlug(seatId) {
+  return `seat-${String(seatId || '').toLowerCase()}`;
+}
+
 function recordConsoleError(text) {
   const message = String(text || '');
   if (/ERR_CONNECTION_(CLOSED|RESET)/.test(message)) return;
@@ -883,13 +891,81 @@ async function writeReport() {
     const seatBReadyTouchActionable = await clickLiveControl(seatB.page, '[data-live-action="ready"]', 'seat-b-ready-live');
     const activeA = await waitForLivePhase(seatA.page, 'active');
     const activeB = await waitForLivePhase(seatB.page, 'active');
+    const activeFirstSeat = activeA.openerAssignment?.firstSeat || activeA.setup?.firstSeat || activeA.currentSeat;
+    const activeSecondSeat = activeA.openerAssignment?.secondSeat || otherSeatId(activeFirstSeat);
+    const seatById = { A: seatA, B: seatB };
+    const activeById = { A: activeA, B: activeB };
+    const firstSeatClient = seatById[activeFirstSeat];
+    const secondSeatClient = seatById[activeSecondSeat];
+    const activeFirstSnapshot = activeById[activeFirstSeat];
+    const activeSecondSnapshot = activeById[activeSecondSeat];
+    if (!firstSeatClient || !secondSeatClient || !['A', 'B'].includes(activeFirstSeat) || !['A', 'B'].includes(activeSecondSeat)) {
+      throw new Error(`invalid authoritative opener assignment: ${JSON.stringify({ activeFirstSeat, activeSecondSeat, activeA, activeB })}`);
+    }
     add(
       'real browser setup ready flow reaches active on both seats',
       activeA.phase === 'active'
         && activeB.phase === 'active'
-        && activeA.currentSeat === 'A'
-        && activeB.currentSeat === 'A',
-      JSON.stringify({ activeA, activeB, seatAReadyTouchActionable, seatBReadyTouchActionable }),
+        && activeA.currentSeat === activeFirstSeat
+        && activeB.currentSeat === activeFirstSeat
+        && activeA.openerAssignment?.reportVersion === 'pvp-live-opener-assignment-v1'
+        && activeA.openerAssignment?.firstSeat === activeFirstSeat
+        && activeA.openerAssignment?.secondSeat === activeSecondSeat
+        && activeA.openerAssignment?.queueOrderBinding === false
+        && activeA.openerAssignment?.hostBinding === false
+        && activeB.openerAssignment?.firstSeat === activeFirstSeat
+        && activeB.openerAssignment?.secondSeat === activeSecondSeat,
+      JSON.stringify({ activeFirstSeat, activeSecondSeat, activeA, activeB, seatAReadyTouchActionable, seatBReadyTouchActionable }),
+    );
+    const openerAssignmentProbe = await firstSeatClient.page.evaluate(() => {
+      const textPayload = JSON.parse(window.render_game_to_text()).pvp?.live || null;
+      return {
+        text: document.querySelector('[data-live-opener-assignment]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+        payload: window.PVPScene.getLiveSnapshot()?.openerAssignment || null,
+        textPayload: textPayload?.openerAssignment || null,
+      };
+    });
+    add(
+      'real browser exposes server-authoritative opener assignment without queue or host binding',
+      /我方先手|对方先手/.test(openerAssignmentProbe.text)
+        && /服务端种子/.test(openerAssignmentProbe.text)
+        && /不绑定排队|不绑定房主/.test(openerAssignmentProbe.text)
+        && openerAssignmentProbe.payload?.reportVersion === 'pvp-live-opener-assignment-v1'
+        && openerAssignmentProbe.payload?.sourceVisibility === 'server_authoritative_public_seed'
+        && openerAssignmentProbe.payload?.firstSeat === activeFirstSeat
+        && openerAssignmentProbe.payload?.secondSeat === activeSecondSeat
+        && openerAssignmentProbe.payload?.queueOrderBinding === false
+        && openerAssignmentProbe.payload?.hostBinding === false
+        && openerAssignmentProbe.payload?.usesHiddenInformation === false
+        && openerAssignmentProbe.textPayload?.reportVersion === 'pvp-live-opener-assignment-v1'
+        && !/userId|hand|deck|loadoutSnapshot|rating|elo/i.test(JSON.stringify(openerAssignmentProbe)),
+      JSON.stringify({ activeFirstSeat, activeSecondSeat, openerAssignmentProbe }),
+    );
+    const mirroredOpenerAssignmentProbe = await secondSeatClient.page.evaluate(() => {
+      const textPayload = JSON.parse(window.render_game_to_text()).pvp?.live || null;
+      return {
+        text: document.querySelector('[data-live-opener-assignment]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+        payload: window.PVPScene.getLiveSnapshot()?.openerAssignment || null,
+        textPayload: textPayload?.openerAssignment || null,
+      };
+    });
+    add(
+      'real browser mirrors opener assignment on the second seat without queue or host binding',
+      /我方先手|对方先手/.test(mirroredOpenerAssignmentProbe.text)
+        && /服务端种子/.test(mirroredOpenerAssignmentProbe.text)
+        && /不绑定排队|不绑定房主/.test(mirroredOpenerAssignmentProbe.text)
+        && mirroredOpenerAssignmentProbe.payload?.reportVersion === 'pvp-live-opener-assignment-v1'
+        && mirroredOpenerAssignmentProbe.payload?.sourceVisibility === 'server_authoritative_public_seed'
+        && mirroredOpenerAssignmentProbe.payload?.firstSeat === activeFirstSeat
+        && mirroredOpenerAssignmentProbe.payload?.secondSeat === activeSecondSeat
+        && mirroredOpenerAssignmentProbe.payload?.viewerSeat === activeSecondSeat
+        && mirroredOpenerAssignmentProbe.payload?.viewerStarts === (activeSecondSeat === activeFirstSeat)
+        && mirroredOpenerAssignmentProbe.payload?.queueOrderBinding === false
+        && mirroredOpenerAssignmentProbe.payload?.hostBinding === false
+        && mirroredOpenerAssignmentProbe.payload?.usesHiddenInformation === false
+        && mirroredOpenerAssignmentProbe.textPayload?.reportVersion === 'pvp-live-opener-assignment-v1'
+        && !/userId|hand|deck|loadoutSnapshot|rating|elo/i.test(JSON.stringify(mirroredOpenerAssignmentProbe)),
+      JSON.stringify({ activeFirstSeat, activeSecondSeat, mirroredOpenerAssignmentProbe }),
     );
     add(
       'real mobile browser setup ready uses touch-tap controls before active phase',
@@ -900,24 +976,24 @@ async function writeReport() {
           && activeB.phase === 'active'),
       JSON.stringify({ seatAReadyTouchActionable, seatBReadyTouchActionable, activeA, activeB }),
     );
-    const activeTimerProbe = await seatA.page.evaluate(() => ({
+    const activeTimerProbe = await firstSeatClient.page.evaluate(() => ({
       text: document.querySelector('[data-live-turn-timer]')?.textContent || '',
       payload: window.PVPScene.getLiveSnapshot()?.turnTimer || null,
     }));
     add(
       'real browser live match renders authoritative active action countdown',
       /行动倒计时/.test(activeTimerProbe.text)
-        && /A/.test(activeTimerProbe.text)
+        && new RegExp(activeFirstSeat).test(activeTimerProbe.text)
         && activeTimerProbe.payload?.reportVersion === 'pvp-live-turn-timer-v1'
         && activeTimerProbe.payload?.phase === 'active'
-        && activeTimerProbe.payload?.currentSeat === 'A'
+        && activeTimerProbe.payload?.currentSeat === activeFirstSeat
         && activeTimerProbe.payload?.isViewerTurn === true,
-      JSON.stringify(activeTimerProbe),
+      JSON.stringify({ activeFirstSeat, activeTimerProbe }),
     );
-    const forceOpeningProtectionProbe = await seatA.page.evaluate(async () => {
+    const forceOpeningProtectionProbe = await firstSeatClient.page.evaluate(async secondSeat => {
       const BackendClient = window.__THE_DEFIER_SERVICES__?.BackendClient;
       const before = window.PVPScene.getLiveSnapshot();
-      const response = await BackendClient.requestServer(`/api/pvp/live/test/matches/${before.matchId}/seats/B`, {
+      const response = await BackendClient.requestServer(`/api/pvp/live/test/matches/${before.matchId}/seats/${secondSeat}`, {
         method: 'POST',
         data: { hp: 10, testMatchScope: window.__DEFIER_PVP_REAL_TEST_SCOPE }
       });
@@ -927,22 +1003,22 @@ async function writeReport() {
         response,
         snapshot: window.PVPScene.getLiveSnapshot(),
       };
-    });
-    await seatB.page.evaluate(async () => {
+    }, activeSecondSeat);
+    await secondSeatClient.page.evaluate(async () => {
       await window.PVPScene.refreshLiveMatch();
     });
-    await seatB.page.waitForTimeout(300);
-    const protectedOpeningB = await getLiveSnapshot(seatB.page);
+    await secondSeatClient.page.waitForTimeout(300);
+    const protectedOpeningSecond = await getLiveSnapshot(secondSeatClient.page);
     add(
       'real browser test-mode match can enter protected lethal opening state',
       forceOpeningProtectionProbe.response?.success === true
         && forceOpeningProtectionProbe.response?.stateView?.opponent?.hp === 10
         && forceOpeningProtectionProbe.response?.stateView?.recentEvents?.some(event => event.eventType === 'test_state_forced' && event.publicData?.scope === TEST_MATCH_SCOPE)
         && forceOpeningProtectionProbe.snapshot?.opponent?.hp === 10
-        && protectedOpeningB?.self?.hp === 10,
-      JSON.stringify({ forceOpeningProtectionProbe, protectedOpeningB }),
+        && protectedOpeningSecond?.self?.hp === 10,
+      JSON.stringify({ activeFirstSeat, activeSecondSeat, forceOpeningProtectionProbe, protectedOpeningSecond }),
     );
-    const activeOpeningPreviewProbe = await seatA.page.evaluate(() => {
+    const activeOpeningPreviewProbe = await firstSeatClient.page.evaluate(() => {
       const snapshot = window.PVPScene.getLiveSnapshot();
       const textPayload = JSON.parse(window.render_game_to_text()).pvp?.live || null;
       return {
@@ -955,9 +1031,9 @@ async function writeReport() {
     add(
       'real browser live match previews protected lethal opening without hidden opponent payloads',
       /首动预算/.test(activeOpeningPreviewProbe.openingText)
-        && /当前 A/.test(activeOpeningPreviewProbe.openingText)
+        && new RegExp(`当前\\s*${activeFirstSeat}`).test(activeOpeningPreviewProbe.openingText)
         && /后手护盾/.test(activeOpeningPreviewProbe.openingText)
-        && /B \+3/.test(activeOpeningPreviewProbe.openingText)
+        && new RegExp(`${activeSecondSeat}\\s*\\+3`).test(activeOpeningPreviewProbe.openingText)
         && activeOpeningPreviewProbe.actionPreview?.reportVersion === 'pvp-live-action-preview-v1'
         && activeOpeningPreviewProbe.actionPreview?.sourceVisibility === 'viewer_public_state'
         && activeOpeningPreviewProbe.actionPreview?.usesHiddenInformation === false
@@ -969,9 +1045,9 @@ async function writeReport() {
         && activeOpeningCardPreview?.openingProtection?.preventedDamage === 6
         && activeOpeningPreviewProbe.textActionPreview?.reportVersion === 'pvp-live-action-preview-v1'
         && !/deck|loadoutSnapshot|reward|rating|elo|opponentHand|opponentDeck/i.test(JSON.stringify(activeOpeningPreviewProbe.actionPreview || {})),
-      JSON.stringify(activeOpeningPreviewProbe),
+      JSON.stringify({ activeFirstSeat, activeSecondSeat, activeOpeningPreviewProbe }),
     );
-    const nonActingActionPreviewProbe = await seatB.page.evaluate(() => {
+    const nonActingActionPreviewProbe = await secondSeatClient.page.evaluate(() => {
       const snapshot = window.PVPScene.getLiveSnapshot();
       const textPayload = JSON.parse(window.render_game_to_text()).pvp?.live || null;
       return {
@@ -982,8 +1058,8 @@ async function writeReport() {
     add(
       'real browser non-acting seat receives no playable action preview payload',
       nonActingActionPreviewProbe.actionPreview?.reportVersion === 'pvp-live-action-preview-v1'
-        && nonActingActionPreviewProbe.actionPreview?.viewerSeat === 'B'
-        && nonActingActionPreviewProbe.actionPreview?.currentSeat === 'A'
+        && nonActingActionPreviewProbe.actionPreview?.viewerSeat === activeSecondSeat
+        && nonActingActionPreviewProbe.actionPreview?.currentSeat === activeFirstSeat
         && nonActingActionPreviewProbe.actionPreview?.isViewerTurn === false
         && Array.isArray(nonActingActionPreviewProbe.actionPreview?.playableCards)
         && nonActingActionPreviewProbe.actionPreview.playableCards.length === 0
@@ -991,9 +1067,9 @@ async function writeReport() {
         && nonActingActionPreviewProbe.textActionPreview?.reportVersion === 'pvp-live-action-preview-v1'
         && nonActingActionPreviewProbe.textActionPreview?.playableCards?.length === 0
         && !/cardInstanceId|cardName|rawDamage|budgetedDamage|opponentHand|opponentDeck|deck|loadoutSnapshot|reward|rating|elo/i.test(JSON.stringify(nonActingActionPreviewProbe.actionPreview || {})),
-      JSON.stringify(nonActingActionPreviewProbe),
+      JSON.stringify({ activeFirstSeat, activeSecondSeat, nonActingActionPreviewProbe }),
     );
-    const activeMomentumProbe = await seatA.page.evaluate(() => ({
+    const activeMomentumProbe = await firstSeatClient.page.evaluate(() => ({
       text: document.querySelector('[data-live-duel-momentum]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
       state: document.querySelector('[data-live-duel-momentum]')?.getAttribute('data-live-duel-momentum-state') || '',
       source: document.querySelector('[data-live-duel-momentum]')?.getAttribute('data-live-duel-momentum-source') || '',
@@ -1017,7 +1093,7 @@ async function writeReport() {
         && !/payload|hand|deck|cardId|instanceId|loadoutSnapshot|reward|rating|elo/i.test(`${activeMomentumProbe.text} ${JSON.stringify(activeMomentumProbe.payload || {})}`),
       JSON.stringify(activeMomentumProbe),
     );
-    const activeGuideProbe = await seatA.page.evaluate(() => ({
+    const activeGuideProbe = await firstSeatClient.page.evaluate(() => ({
       text: document.querySelector('[data-live-first-guide]')?.textContent || '',
       payload: window.PVPScene.getLiveSnapshot()?.firstMatchGuide || null,
     }));
@@ -1028,10 +1104,10 @@ async function writeReport() {
       JSON.stringify(activeGuideProbe),
     );
 
-    const realOpeningEndTurnBefore = await getLiveSnapshot(seatA.page);
-    const openingEndTurnTouchActionable = await clickLiveControl(seatA.page, '[data-live-action="end-turn"]', 'seat-a-opening-end-turn-confirm');
-    await seatA.page.waitForTimeout(300);
-    const realOpeningEndTurnConfirmProbe = await seatA.page.evaluate(before => {
+    const realOpeningEndTurnBefore = await getLiveSnapshot(firstSeatClient.page);
+    const openingEndTurnTouchActionable = await clickLiveControl(firstSeatClient.page, '[data-live-action="end-turn"]', `${seatSlug(activeFirstSeat)}-opening-end-turn-confirm`);
+    await firstSeatClient.page.waitForTimeout(300);
+    const realOpeningEndTurnConfirmProbe = await firstSeatClient.page.evaluate(before => {
       const after = window.PVPScene.getLiveSnapshot();
       return {
         before,
@@ -1047,12 +1123,12 @@ async function writeReport() {
         && realOpeningEndTurnConfirmProbe.after?.currentSeat === realOpeningEndTurnConfirmProbe.before?.currentSeat
         && realOpeningEndTurnConfirmProbe.after?.stateVersion === realOpeningEndTurnConfirmProbe.before?.stateVersion
         && /再次点击确认结束回合/.test(realOpeningEndTurnConfirmProbe.hint)
-        && /交给\s*B/.test(realOpeningEndTurnConfirmProbe.hint)
+        && new RegExp(`交给\\s*${activeSecondSeat}`).test(realOpeningEndTurnConfirmProbe.hint)
         && /首动预算\s*18/.test(realOpeningEndTurnConfirmProbe.hint)
-        && /后手护盾\s*B\s*\+3/.test(realOpeningEndTurnConfirmProbe.hint)
+        && new RegExp(`后手护盾\\s*${activeSecondSeat}\\s*\\+3`).test(realOpeningEndTurnConfirmProbe.hint)
         && /反打缓冲\s*\+8/.test(realOpeningEndTurnConfirmProbe.hint)
         && /确认结束/.test(realOpeningEndTurnConfirmProbe.endTurnText),
-      JSON.stringify({ realOpeningEndTurnConfirmProbe, openingEndTurnTouchActionable }),
+      JSON.stringify({ activeFirstSeat, activeSecondSeat, realOpeningEndTurnConfirmProbe, openingEndTurnTouchActionable }),
     );
 
     const realSocialSubmitProbe = await seatB.page.evaluate(async () => {
@@ -1119,18 +1195,23 @@ async function writeReport() {
       JSON.stringify({ realSocialSubmitProbe, realSocialUnmutedProbe, realSocialMutedProbe, socialMuteTouchActionable }),
     );
 
-    const openingCardBeforeProbe = await seatA.page.evaluate(() => {
+    const openingCardBeforeProbe = await firstSeatClient.page.evaluate(() => {
       const before = window.PVPScene.getLiveSnapshot();
       const state = window.PVPScene.getLiveSession().getState();
-      const card = state.stateView?.self?.hand?.[0];
-      if (!card?.instanceId) throw new Error('seat A has no playable card');
-      const preview = before?.actionPreviewReport?.playableCards?.find(item => item.cardInstanceId === card.instanceId) || null;
+      const hand = Array.isArray(state.stateView?.self?.hand) ? state.stateView.self.hand : [];
+      const previews = Array.isArray(before?.actionPreviewReport?.playableCards) ? before.actionPreviewReport.playableCards : [];
+      const preview = previews.find(item => item?.openingProtection?.willTrigger)
+        || previews.find(item => Number(item?.hpDamage || 0) > 0)
+        || previews[0]
+        || null;
+      const card = hand.find(item => item?.instanceId && item.instanceId === preview?.cardInstanceId) || hand[0];
+      if (!card?.instanceId) throw new Error('acting seat has no playable card');
       return { before, card, preview };
     });
     const openingCardSelector = liveCardSelector(openingCardBeforeProbe.card.instanceId);
-    const openingCardConfirmTouchActionable = await clickLiveControl(seatA.page, openingCardSelector, 'seat-a-opening-card-confirm');
-    await seatA.page.waitForTimeout(300);
-    const realOpeningCardConfirmProbe = await seatA.page.evaluate(({ before, card, preview }) => {
+    const openingCardConfirmTouchActionable = await clickLiveControl(firstSeatClient.page, openingCardSelector, `${seatSlug(activeFirstSeat)}-opening-card-confirm`);
+    await firstSeatClient.page.waitForTimeout(300);
+    const realOpeningCardConfirmProbe = await firstSeatClient.page.evaluate(({ before, card, preview }) => {
       const after = window.PVPScene.getLiveSnapshot();
       return {
         before,
@@ -1160,7 +1241,7 @@ async function writeReport() {
         && /再次点击确认出牌/.test(realOpeningCardConfirmProbe.hint)
         && /首动预算\s*18/.test(realOpeningCardConfirmProbe.hint)
         && /保底\s*1\s*血/.test(realOpeningCardConfirmProbe.hint)
-        && /后手护盾\s*B\s*\+3/.test(realOpeningCardConfirmProbe.hint)
+        && new RegExp(`后手护盾\\s*${activeSecondSeat}\\s*\\+3`).test(realOpeningCardConfirmProbe.hint)
         && /反打缓冲\s*\+8/.test(realOpeningCardConfirmProbe.hint)
         && new RegExp(`预算后\\s*${confirmedCardPreview.budgetedDamage}`).test(confirmedHint)
         && new RegExp(`破盾\\s*${confirmedCardPreview.blockedDamage}`).test(confirmedHint)
@@ -1168,26 +1249,26 @@ async function writeReport() {
         && new RegExp(`${confirmedCardPreview.targetSeat}\\s*预计\\s*${confirmedCardPreview.targetHpAfter}\\s*血`).test(confirmedHint)
         && /confirming/.test(realOpeningCardConfirmProbe.cardClass)
         && /确认/.test(realOpeningCardConfirmProbe.cardText),
-      JSON.stringify({ realOpeningCardConfirmProbe, openingCardConfirmTouchActionable }),
+      JSON.stringify({ activeFirstSeat, activeSecondSeat, realOpeningCardConfirmProbe, openingCardConfirmTouchActionable }),
     );
 
-    const acceptedCardTouchActionable = await clickLiveControl(seatA.page, openingCardSelector, 'seat-a-opening-card-submit');
-    const playA = await waitForLiveSnapshot(seatA.page, expectedVersion => {
+    const acceptedCardTouchActionable = await clickLiveControl(firstSeatClient.page, openingCardSelector, `${seatSlug(activeFirstSeat)}-opening-card-submit`);
+    const playFirst = await waitForLiveSnapshot(firstSeatClient.page, expectedVersion => {
       const snapshot = window.PVPScene?.getLiveSnapshot?.();
       return Number(snapshot?.stateVersion || 0) > expectedVersion;
-    }, activeA.stateVersion);
-    const afterPlayB = await waitForLiveSnapshot(seatB.page, previousHp => {
+    }, activeFirstSnapshot.stateVersion);
+    const afterPlaySecond = await waitForLiveSnapshot(secondSeatClient.page, previousVersion => {
       const snapshot = window.PVPScene?.getLiveSnapshot?.();
-      return snapshot?.self?.hp <= 1 && Number(snapshot?.stateVersion || 0) > Number(previousHp || 0);
-    }, protectedOpeningB.stateVersion);
+      return snapshot?.self?.hp <= 1 && Number(snapshot?.stateVersion || 0) > Number(previousVersion || 0);
+    }, protectedOpeningSecond.stateVersion);
     add(
       'real browser accepted card intent auto-pushes opponent state without manual refresh',
-      playA.stateVersion > activeA.stateVersion
-        && afterPlayB.self?.hp < activeB.self?.hp
-        && afterPlayB.opponent?.handCount >= 0,
-      JSON.stringify({ playA, afterPlayB, acceptedCardTouchActionable }),
+      playFirst.stateVersion > activeFirstSnapshot.stateVersion
+        && afterPlaySecond.self?.hp < activeSecondSnapshot.self?.hp
+        && afterPlaySecond.opponent?.handCount >= 0,
+      JSON.stringify({ activeFirstSeat, activeSecondSeat, playFirst, afterPlaySecond, acceptedCardTouchActionable }),
     );
-    const afterPlayReceiptProbe = await seatB.page.evaluate(() => {
+    const afterPlayReceiptProbe = await secondSeatClient.page.evaluate(() => {
       const snapshot = window.PVPScene.getLiveSnapshot();
       const textPayload = JSON.parse(window.render_game_to_text()).pvp?.live || null;
       return {
@@ -1215,15 +1296,15 @@ async function writeReport() {
         && Number(afterPlayReceiptProbe.seqAttr) === afterPlayReceiptProbe.payload?.latestSequence
         && Number.isFinite(afterPlayReceiptProbe.payload?.latestSequence)
         && afterPlayReceiptProbe.payload.latestSequence > 0
-        && afterPlayReceiptProbe.payload?.viewerSeat === 'B'
-        && afterPlayReceiptProbe.payload?.actingSeat === 'A'
+        && afterPlayReceiptProbe.payload?.viewerSeat === activeSecondSeat
+        && afterPlayReceiptProbe.payload?.actingSeat === activeFirstSeat
         && afterPlayReceiptProbe.payload?.actionType === 'play_card'
         && Number.isFinite(afterPlayReceiptProbe.payload?.damage?.hpDamage)
         && afterPlayReceiptProbe.payload.damage.hpDamage > 0
-        && afterPlayReceiptProbe.payload?.damage?.targetSeat === 'B'
+        && afterPlayReceiptProbe.payload?.damage?.targetSeat === activeSecondSeat
         && afterPlayReceiptProbe.payload?.damage?.targetHpAfter === 1
         && afterPlayReceiptProbe.payload?.openingProtection?.triggered === true
-        && afterPlayReceiptProbe.payload?.openingProtection?.protectedSeat === 'B'
+        && afterPlayReceiptProbe.payload?.openingProtection?.protectedSeat === activeSecondSeat
         && afterPlayReceiptProbe.payload?.openingProtection?.minimumHp === 1
         && afterPlayReceiptProbe.payload?.openingProtection?.preventedDamage === 6
         && afterPlayReceiptProbe.textPayload?.reportVersion === 'pvp-live-action-receipt-v1'
@@ -1231,9 +1312,9 @@ async function writeReport() {
         && afterPlayReceiptProbe.textPayload?.latestSequence === afterPlayReceiptProbe.payload?.latestSequence
         && afterPlayReceiptProbe.textPayload?.summaryLine === afterPlayReceiptProbe.payload?.summaryLine
         && !/hand|deck|cardId|instanceId|loadoutSnapshot|reward|rating|elo|opponentHand|opponentDeck/i.test(`${afterPlayReceiptProbe.text} ${JSON.stringify(afterPlayReceiptProbe.payload || {})}`),
-      JSON.stringify(afterPlayReceiptProbe),
+      JSON.stringify({ activeFirstSeat, activeSecondSeat, afterPlayReceiptProbe }),
     );
-    const afterPlayMomentumProbe = await seatB.page.evaluate(() => ({
+    const afterPlayMomentumProbe = await secondSeatClient.page.evaluate(() => ({
       text: document.querySelector('[data-live-duel-momentum]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
       state: document.querySelector('[data-live-duel-momentum]')?.getAttribute('data-live-duel-momentum-state') || '',
       payload: window.PVPScene.getLiveSnapshot()?.duelMomentumReport || null,
@@ -1243,18 +1324,18 @@ async function writeReport() {
       /局势/.test(afterPlayMomentumProbe.text)
         && /行动窗口|反打窗口|护体/.test(afterPlayMomentumProbe.text)
         && afterPlayMomentumProbe.payload?.reportVersion === 'pvp-live-duel-momentum-v1'
-        && afterPlayMomentumProbe.payload?.viewerSeat === 'B'
+        && afterPlayMomentumProbe.payload?.viewerSeat === activeSecondSeat
         && afterPlayMomentumProbe.payload?.sourceVisibility === 'public_state'
         && afterPlayMomentumProbe.payload?.usesHiddenInformation === false
         && afterPlayMomentumProbe.payload?.rankedImpact === 'none'
         && !/payload|hand|deck|cardId|instanceId|loadoutSnapshot|reward|rating|elo/i.test(`${afterPlayMomentumProbe.text} ${JSON.stringify(afterPlayMomentumProbe.payload || {})}`),
-      JSON.stringify(afterPlayMomentumProbe),
+      JSON.stringify({ activeFirstSeat, activeSecondSeat, afterPlayMomentumProbe }),
     );
 
-    await waitForLiveActionUnlocked(seatA.page, 'seat-a-after-play-before-end-turn');
-    const endTurnAfterPlayTouchActionable = await clickLiveControl(seatA.page, '[data-live-action="end-turn"]', 'seat-a-end-turn-after-play');
-    await seatA.page.waitForTimeout(300);
-    const endTurnAfterPlayConfirmProbe = await seatA.page.evaluate(() => {
+    await waitForLiveActionUnlocked(firstSeatClient.page, `${seatSlug(activeFirstSeat)}-after-play-before-end-turn`);
+    const endTurnAfterPlayTouchActionable = await clickLiveControl(firstSeatClient.page, '[data-live-action="end-turn"]', `${seatSlug(activeFirstSeat)}-end-turn-after-play`);
+    await firstSeatClient.page.waitForTimeout(300);
+    const endTurnAfterPlayConfirmProbe = await firstSeatClient.page.evaluate(() => {
       return {
         snapshot: window.PVPScene.getLiveSnapshot(),
         hint: document.querySelector('[data-live-last-error]')?.textContent || '',
@@ -1262,18 +1343,18 @@ async function writeReport() {
       };
     });
     let endTurnAfterPlaySecondTouchActionable = null;
-    if (endTurnAfterPlayConfirmProbe.snapshot?.currentSeat !== 'B') {
-      endTurnAfterPlaySecondTouchActionable = await clickLiveControl(seatA.page, '[data-live-action="end-turn"]', 'seat-a-end-turn-after-play-submit');
+    if (endTurnAfterPlayConfirmProbe.snapshot?.currentSeat !== activeSecondSeat) {
+      endTurnAfterPlaySecondTouchActionable = await clickLiveControl(firstSeatClient.page, '[data-live-action="end-turn"]', `${seatSlug(activeFirstSeat)}-end-turn-after-play-submit`);
     }
-    const afterEndTurnB = await waitForLiveSnapshot(seatB.page, expectedVersion => {
+    const afterEndTurnSecond = await waitForLiveSnapshot(secondSeatClient.page, ({ expectedSeat, expectedVersion }) => {
       const snapshot = window.PVPScene?.getLiveSnapshot?.();
-      return snapshot?.currentSeat === 'B' && Number(snapshot?.stateVersion || 0) > expectedVersion;
-    }, afterPlayB.stateVersion || activeB.stateVersion);
-    const seatBTimerProbe = await seatB.page.evaluate(() => ({
+      return snapshot?.currentSeat === expectedSeat && Number(snapshot?.stateVersion || 0) > Number(expectedVersion || 0);
+    }, { expectedSeat: activeSecondSeat, expectedVersion: afterPlaySecond.stateVersion || activeSecondSnapshot.stateVersion });
+    const secondSeatTimerProbe = await secondSeatClient.page.evaluate(() => ({
       text: document.querySelector('[data-live-turn-timer]')?.textContent || '',
       payload: window.PVPScene.getLiveSnapshot()?.turnTimer || null,
     }));
-    const afterEndTurnReceiptProbe = await seatB.page.evaluate(() => {
+    const afterEndTurnReceiptProbe = await secondSeatClient.page.evaluate(() => {
       const snapshot = window.PVPScene.getLiveSnapshot();
       const textPayload = JSON.parse(window.render_game_to_text()).pvp?.live || null;
       const receiptEl = document.querySelector('[data-live-action-receipt]');
@@ -1291,33 +1372,33 @@ async function writeReport() {
     });
     add(
       'real browser end turn switches authoritative action countdown to opponent',
-      afterEndTurnB.currentSeat === 'B'
-        && /行动倒计时/.test(seatBTimerProbe.text)
-        && /B/.test(seatBTimerProbe.text)
-        && seatBTimerProbe.payload?.currentSeat === 'B'
-        && seatBTimerProbe.payload?.isViewerTurn === true,
-      JSON.stringify({ endTurnAfterPlayConfirmProbe, afterEndTurnB, seatBTimerProbe, endTurnAfterPlayTouchActionable, endTurnAfterPlaySecondTouchActionable }),
+      afterEndTurnSecond.currentSeat === activeSecondSeat
+        && /行动倒计时/.test(secondSeatTimerProbe.text)
+        && new RegExp(activeSecondSeat).test(secondSeatTimerProbe.text)
+        && secondSeatTimerProbe.payload?.currentSeat === activeSecondSeat
+        && secondSeatTimerProbe.payload?.isViewerTurn === true,
+      JSON.stringify({ activeFirstSeat, activeSecondSeat, endTurnAfterPlayConfirmProbe, afterEndTurnSecond, secondSeatTimerProbe, endTurnAfterPlayTouchActionable, endTurnAfterPlaySecondTouchActionable }),
     );
     add(
       'real browser end turn renders authoritative handoff receipt',
       /交权回执/.test(afterEndTurnReceiptProbe.text)
-        && /行动权交给\s*B/.test(afterEndTurnReceiptProbe.text)
+        && new RegExp(`行动权交给\\s*${activeSecondSeat}`).test(afterEndTurnReceiptProbe.text)
         && /抽\s*\d+\s*张/.test(afterEndTurnReceiptProbe.text)
         && afterEndTurnReceiptProbe.typeAttr === 'end_turn'
-        && afterEndTurnReceiptProbe.actorAttr === 'A'
-        && afterEndTurnReceiptProbe.nextSeatAttr === 'B'
+        && afterEndTurnReceiptProbe.actorAttr === activeFirstSeat
+        && afterEndTurnReceiptProbe.nextSeatAttr === activeSecondSeat
         && afterEndTurnReceiptProbe.sourceAttr === 'authoritative_public_projection'
         && afterEndTurnReceiptProbe.hiddenAttr === 'false'
         && afterEndTurnReceiptProbe.payload?.reportVersion === 'pvp-live-action-receipt-v1'
         && afterEndTurnReceiptProbe.payload?.sourceVisibility === 'authoritative_public_projection'
         && afterEndTurnReceiptProbe.payload?.usesHiddenInformation === false
         && afterEndTurnReceiptProbe.payload?.rankedImpact === 'none'
-        && afterEndTurnReceiptProbe.payload?.viewerSeat === 'B'
-        && afterEndTurnReceiptProbe.payload?.actingSeat === 'A'
+        && afterEndTurnReceiptProbe.payload?.viewerSeat === activeSecondSeat
+        && afterEndTurnReceiptProbe.payload?.actingSeat === activeFirstSeat
         && afterEndTurnReceiptProbe.payload?.actionType === 'end_turn'
-        && afterEndTurnReceiptProbe.payload?.nextSeat === 'B'
+        && afterEndTurnReceiptProbe.payload?.nextSeat === activeSecondSeat
         && afterEndTurnReceiptProbe.payload?.counterplay?.granted === true
-        && afterEndTurnReceiptProbe.payload?.counterplay?.seatId === 'B'
+        && afterEndTurnReceiptProbe.payload?.counterplay?.seatId === activeSecondSeat
         && afterEndTurnReceiptProbe.payload?.counterplay?.block === 8
         && /反打缓冲\s*\+8/.test(afterEndTurnReceiptProbe.text)
         && Number(afterEndTurnReceiptProbe.seqAttr) === afterEndTurnReceiptProbe.payload?.latestSequence
@@ -1329,9 +1410,9 @@ async function writeReport() {
         && afterEndTurnReceiptProbe.textPayload?.latestSequence === afterEndTurnReceiptProbe.payload?.latestSequence
         && afterEndTurnReceiptProbe.textPayload?.summaryLine === afterEndTurnReceiptProbe.payload?.summaryLine
         && !/hand|deck|cardId|instanceId|loadoutSnapshot|reward|rating|elo|opponentHand|opponentDeck/i.test(`${afterEndTurnReceiptProbe.text} ${JSON.stringify(afterEndTurnReceiptProbe.payload || {})}`),
-      JSON.stringify(afterEndTurnReceiptProbe),
+      JSON.stringify({ activeFirstSeat, activeSecondSeat, afterEndTurnReceiptProbe }),
     );
-    const protectedCounterplayBeforeProbe = await seatB.page.evaluate(() => {
+    const protectedCounterplayBeforeProbe = await secondSeatClient.page.evaluate(() => {
       const before = window.PVPScene.getLiveSnapshot();
       const sessionState = window.PVPScene.getLiveSession().getState();
       const playable = before?.actionPreviewReport?.playableCards?.[0] || null;
@@ -1351,15 +1432,15 @@ async function writeReport() {
       throw new Error(`missing protected counterplay card: ${JSON.stringify(protectedCounterplayBeforeProbe)}`);
     }
     const protectedCounterplaySelector = liveCardSelector(protectedCounterplayBeforeProbe.cardInstanceId);
-    const protectedCounterplayFirstTouchActionable = await clickLiveControl(seatB.page, protectedCounterplaySelector, 'seat-b-protected-counterplay-card-confirm');
-    await seatB.page.waitForTimeout(250);
-    const protectedCounterplayConfirming = await getLiveSnapshot(seatB.page);
+    const protectedCounterplayFirstTouchActionable = await clickLiveControl(secondSeatClient.page, protectedCounterplaySelector, `${seatSlug(activeSecondSeat)}-protected-counterplay-card-confirm`);
+    await secondSeatClient.page.waitForTimeout(250);
+    const protectedCounterplayConfirming = await getLiveSnapshot(secondSeatClient.page);
     let protectedCounterplaySecondTouchActionable = null;
     if (protectedCounterplayConfirming?.stateVersion === protectedCounterplayBeforeProbe.before?.stateVersion) {
-      protectedCounterplaySecondTouchActionable = await clickLiveControl(seatB.page, protectedCounterplaySelector, 'seat-b-protected-counterplay-card-submit');
+      protectedCounterplaySecondTouchActionable = await clickLiveControl(secondSeatClient.page, protectedCounterplaySelector, `${seatSlug(activeSecondSeat)}-protected-counterplay-card-submit`);
     }
-    await seatB.page.waitForTimeout(500);
-    const protectedCounterplayActionProbe = await seatB.page.evaluate(({ before, playable, fallbackCard, cardInstanceId, confirming }) => {
+    await secondSeatClient.page.waitForTimeout(500);
+    const protectedCounterplayActionProbe = await secondSeatClient.page.evaluate(({ before, playable, fallbackCard, cardInstanceId, confirming }) => {
       const after = window.PVPScene.getLiveSnapshot();
       const receiptEl = document.querySelector('[data-live-action-receipt]');
       return {
@@ -1382,13 +1463,13 @@ async function writeReport() {
       cardInstanceId: protectedCounterplayBeforeProbe.cardInstanceId,
       confirming: protectedCounterplayConfirming,
     });
-    const afterProtectedCounterplayA = await waitForLiveSnapshot(seatA.page, expectedVersion => {
+    const afterProtectedCounterplayFirst = await waitForLiveSnapshot(firstSeatClient.page, expectedVersion => {
       const snapshot = window.PVPScene?.getLiveSnapshot?.();
       return Number(snapshot?.stateVersion || 0) > expectedVersion;
-    }, afterEndTurnB.stateVersion);
+    }, afterEndTurnSecond.stateVersion);
     add(
       'real browser protected defender can spend the +8 counterplay window on a real action',
-      protectedCounterplayActionProbe.before?.currentSeat === 'B'
+      protectedCounterplayActionProbe.before?.currentSeat === activeSecondSeat
         && protectedCounterplayActionProbe.before?.self?.hp === 1
         && protectedCounterplayActionProbe.before?.self?.block >= 8
         && protectedCounterplayActionProbe.before?.duelMomentumReport?.pressureState === 'reversal_window'
@@ -1397,23 +1478,25 @@ async function writeReport() {
         && !!protectedCounterplayActionProbe.cardInstanceId
         && !protectedCounterplayActionProbe.error
         && protectedCounterplayActionProbe.after?.stateVersion > protectedCounterplayActionProbe.before?.stateVersion
-        && protectedCounterplayActionProbe.after?.actionReceiptReport?.actingSeat === 'B'
+        && protectedCounterplayActionProbe.after?.actionReceiptReport?.actingSeat === activeSecondSeat
         && protectedCounterplayActionProbe.after?.actionReceiptReport?.actionType === 'play_card'
         && protectedCounterplayActionProbe.receiptType === 'play_card'
-        && afterProtectedCounterplayA.stateVersion === protectedCounterplayActionProbe.after?.stateVersion
-        && afterProtectedCounterplayA.currentSeat === protectedCounterplayActionProbe.after?.currentSeat
+        && afterProtectedCounterplayFirst.stateVersion === protectedCounterplayActionProbe.after?.stateVersion
+        && afterProtectedCounterplayFirst.currentSeat === protectedCounterplayActionProbe.after?.currentSeat
         && !/hand|deck|cardId|instanceId|loadoutSnapshot|reward|rating|elo|opponentHand|opponentDeck/i.test(`${protectedCounterplayActionProbe.receiptText} ${protectedCounterplayActionProbe.momentumText} ${JSON.stringify(protectedCounterplayActionProbe.after?.actionReceiptReport || {})}`),
       JSON.stringify({
+        activeFirstSeat,
+        activeSecondSeat,
         protectedCounterplayActionProbe,
-        afterProtectedCounterplayA,
+        afterProtectedCounterplayFirst,
         protectedCounterplayFirstTouchActionable,
         protectedCounterplaySecondTouchActionable,
       }),
     );
 
-    const surrenderTouchActionable = await clickLiveControl(seatB.page, '[data-live-action="surrender"]', 'seat-b-surrender-confirm');
-    await seatB.page.waitForTimeout(200);
-    const realSurrenderConfirmProbe = await seatB.page.evaluate(() => {
+    const surrenderTouchActionable = await clickLiveControl(secondSeatClient.page, '[data-live-action="surrender"]', `${seatSlug(activeSecondSeat)}-surrender-confirm`);
+    await secondSeatClient.page.waitForTimeout(200);
+    const realSurrenderConfirmProbe = await secondSeatClient.page.evaluate(() => {
       return {
         phase: window.PVPScene.getLiveSnapshot()?.phase || '',
         hint: document.querySelector('[data-live-last-error]')?.textContent || '',
@@ -1456,10 +1539,14 @@ async function writeReport() {
         surrenderTouchActionable,
       }),
     );
-    await clickLiveControl(seatB.page, '[data-live-action="surrender"]', 'seat-b-surrender-submit');
-    const finishedB = await waitForLivePhase(seatB.page, 'finished');
-    const finishedA = await waitForLivePhase(seatA.page, 'finished');
-    const postMatchProbe = await seatB.page.evaluate(() => ({
+    const loserClient = secondSeatClient;
+    const winnerClient = firstSeatClient;
+    const loserSeat = activeSecondSeat;
+    const winnerSeat = activeFirstSeat;
+    await clickLiveControl(loserClient.page, '[data-live-action="surrender"]', `${seatSlug(loserSeat)}-surrender-submit`);
+    const finishedLoser = await waitForLivePhase(loserClient.page, 'finished');
+    const finishedWinner = await waitForLivePhase(winnerClient.page, 'finished');
+    const postMatchProbe = await loserClient.page.evaluate(() => ({
       text: document.querySelector('[data-live-post-match-review]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
       keyTurnText: document.querySelector('[data-live-key-turn-replay]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
       keyTurnSource: document.querySelector('[data-live-key-turn-replay]')?.getAttribute('data-live-key-turn-source') || '',
@@ -1497,8 +1584,8 @@ async function writeReport() {
     } : null;
     add(
       'real browser live match renders public post-match review after surrender',
-      finishedB.phase === 'finished'
-        && finishedA.phase === 'finished'
+      finishedLoser.phase === 'finished'
+        && finishedWinner.phase === 'finished'
         && /复盘/.test(postMatchProbe.text)
         && /认输/.test(postMatchProbe.text)
         && /查看权威事件/.test(postMatchProbe.text)
@@ -1507,6 +1594,8 @@ async function writeReport() {
         && postMatchProbe.payload?.reportVersion === 'pvp-live-post-match-review-v1'
         && postMatchProbe.payload?.result === 'loss'
         && postMatchProbe.payload?.finishReason === 'surrender'
+        && postMatchProbe.payload?.loserSeat === loserSeat
+        && postMatchProbe.payload?.winnerSeat === winnerSeat
         && postMatchProbe.textPayload?.reportVersion === 'pvp-live-post-match-review-v1'
         && postMatchParity?.result === true
         && postMatchParity?.finishReason === true
@@ -1539,14 +1628,14 @@ async function writeReport() {
         && postMatchProbe.payload?.settlementReport?.seasonHonorReport?.cosmeticReward?.collectionReport?.reportVersion === 'pvp-live-season-honor-collection-v1'
         && postMatchProbe.textPayload?.settlementReport?.seasonHonorReport?.reportVersion === 'pvp-live-season-honor-v1'
         && postMatchProbe.textPayload?.settlementReport?.seasonHonorReport?.cosmeticReward?.reportVersion === 'pvp-live-season-honor-reward-v1',
-      JSON.stringify({ finishedA, finishedB, postMatchProbe, postMatchParity }),
+      JSON.stringify({ winnerSeat, loserSeat, finishedWinner, finishedLoser, postMatchProbe, postMatchParity }),
     );
     if (isMobileViewport) {
-      await seatB.page.evaluate(() => {
+      await loserClient.page.evaluate(() => {
         document.querySelector('[data-live-post-match-review]')?.scrollIntoView({ block: 'start', inline: 'nearest' });
       });
-      await seatB.page.waitForTimeout(180);
-      const mobileRealLayoutProbe = await seatB.page.evaluate(() => {
+      await loserClient.page.waitForTimeout(180);
+      const mobileRealLayoutProbe = await loserClient.page.evaluate(() => {
         const toRect = (el) => {
           if (!el) return null;
           const rect = el.getBoundingClientRect();
@@ -1666,9 +1755,9 @@ async function writeReport() {
         JSON.stringify(mobileRealLayoutProbe),
       );
     }
-    const publicReplayProbe = await requestLivePvpReplay(seatB.page, finishedB.matchId, { visibility: 'replay_public' });
+    const publicReplayProbe = await requestLivePvpReplay(loserClient.page, finishedLoser.matchId, { visibility: 'replay_public' });
     publicReplayProbe.hasForbiddenReport = /postMatchReview|fairnessReceipt|settlementReport|seasonHonorReport|cosmeticReward|seasonHonorCollection|collectionState|viewerSeat/.test(JSON.stringify(publicReplayProbe.replay || {}));
-    const auditSafeReplayProbe = await requestLivePvpReplay(seatB.page, finishedB.matchId, { visibility: 'audit_safe' });
+    const auditSafeReplayProbe = await requestLivePvpReplay(loserClient.page, finishedLoser.matchId, { visibility: 'audit_safe' });
     auditSafeReplayProbe.hasForbiddenReport = /postMatchReview|fairnessReceipt|settlementReport|seasonHonorReport|cosmeticReward|seasonHonorCollection|collectionState|viewerSeat/.test(JSON.stringify(auditSafeReplayProbe.replay || {}));
     add(
       'real browser replay_public hides seat-specific settlement and season honor reports',
@@ -1720,7 +1809,7 @@ async function writeReport() {
         && (postMatchProbe.payload?.fairnessReceipt?.evidenceSummary || []).length >= 3
         && postMatchParity?.fairnessReceipt === true
         && !/payload|hand|deck|cardId|instanceId|loadoutSnapshot|reward|rating|elo/i.test(`${postMatchProbe.fairnessText} ${JSON.stringify(postMatchProbe.payload?.fairnessReceipt || {})}`),
-      JSON.stringify({ finishedA, finishedB, postMatchProbe, postMatchParity }),
+      JSON.stringify({ winnerSeat, loserSeat, finishedWinner, finishedLoser, postMatchProbe, postMatchParity }),
     );
     add(
       'real browser live match renders key-turn replay from public post-match events',
@@ -1736,7 +1825,7 @@ async function writeReport() {
         && (postMatchProbe.payload?.keyTurnReplay?.turns || []).some(turn => turn.eventType === 'match_finished' || turn.eventType === 'player_surrendered')
         && postMatchParity?.keyTurns === true
         && !/payload|hand|deck|cardId|instanceId|loadoutSnapshot/i.test(JSON.stringify(postMatchProbe.payload?.keyTurnReplay || {})),
-      JSON.stringify({ finishedA, finishedB, postMatchProbe, postMatchParity }),
+      JSON.stringify({ winnerSeat, loserSeat, finishedWinner, finishedLoser, postMatchProbe, postMatchParity }),
     );
     add(
       'real browser live match renders experience report from public post-match events',
@@ -1755,10 +1844,10 @@ async function writeReport() {
         && (postMatchProbe.payload?.experienceReport?.fairnessChecks || []).every(item => Array.isArray(item.linkedEvidence) && item.linkedEvidence.length >= 1)
         && postMatchParity?.experienceChecks === true
         && !/payload|hand|deck|cardId|instanceId|loadoutSnapshot|reward|rating|elo/i.test(JSON.stringify(postMatchProbe.payload?.experienceReport || {})),
-      JSON.stringify({ finishedA, finishedB, postMatchProbe, postMatchParity }),
+      JSON.stringify({ winnerSeat, loserSeat, finishedWinner, finishedLoser, postMatchProbe, postMatchParity }),
     );
 
-    const postActionProbe = await seatB.page.evaluate(async () => {
+    const postActionProbe = await loserClient.page.evaluate(async () => {
       document.querySelector('[data-live-experience-check="decision_windows"]')?.click();
       await new Promise(resolve => setTimeout(resolve, 100));
       const experienceFocus = {
@@ -1865,13 +1954,13 @@ async function writeReport() {
         && /对局结束/.test(postActionProbe.focusedEvents)
         && /默认斗法谱/.test(postActionProbe.selectedLoadout)
         && postActionProbe.loadoutDisabled.every(value => value === false)
-        && postActionProbe.focus?.sourceRunId === `pvp_live:${finishedB.matchId}`
+        && postActionProbe.focus?.sourceRunId === `pvp_live:${finishedLoser.matchId}`
         && /真人 PVP|首败|复盘/.test(postActionProbe.focus?.trainingAdvice || '')
         && /真人 PVP|问道练习|不计/.test(postActionProbe.bannerText || '')
         && /公开事件|不写正式积分|隐藏/.test(postActionProbe.insightText || '')
         && /回放命盘/.test(postActionProbe.confirmText || '')
         && postActionProbe.drillScenario?.reportVersion === 'pvp-live-drill-scenario-v1'
-        && postActionProbe.drillScenario?.sourceMatchId === finishedB.matchId
+        && postActionProbe.drillScenario?.sourceMatchId === finishedLoser.matchId
         && postActionProbe.drillScenario?.sourceVisibility === 'replay_self'
         && postActionProbe.drillScenario?.usesHiddenInformation === false
         && postActionProbe.drillScenario?.rankedImpact === 'none'
@@ -1888,13 +1977,13 @@ async function writeReport() {
       JSON.stringify(postActionProbe),
     );
 
-    await seatB.page.reload({ waitUntil: 'domcontentloaded' });
-    await seatB.page.waitForFunction(
+    await loserClient.page.reload({ waitUntil: 'domcontentloaded' });
+    await loserClient.page.waitForFunction(
       () => !!window.game && !!window.PVPScene && typeof window.render_game_to_text === 'function',
       null,
       { timeout: 15000 },
     );
-    await seatB.page.evaluate(async () => {
+    await loserClient.page.evaluate(async () => {
       window.game.showScreen('pvp-screen');
       window.PVPScene.activeTab = 'live';
       document.querySelectorAll('.rune-tab').forEach(btn => btn.classList.remove('active'));
@@ -1906,9 +1995,9 @@ async function writeReport() {
       document.getElementById('tab-live')?.classList.add('active');
       await window.PVPScene.loadLivePanel();
     });
-    await dismissBlockingModals(seatB.page);
-    const restoredPostMatch = await waitForLivePhase(seatB.page, 'finished');
-    const reloadPostMatchProbe = await seatB.page.evaluate(() => ({
+    await dismissBlockingModals(loserClient.page);
+    const restoredPostMatch = await waitForLivePhase(loserClient.page, 'finished');
+    const reloadPostMatchProbe = await loserClient.page.evaluate(() => ({
       phase: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-phase') || '',
       reviewText: document.querySelector('[data-live-post-match-review]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
       payload: window.PVPScene.getLiveSnapshot()?.postMatchReview || null,
@@ -1920,9 +2009,9 @@ async function writeReport() {
     add(
       'real browser post-match review survives full page refresh through stored terminal match id',
       restoredPostMatch.phase === 'finished'
-        && restoredPostMatch.matchId === finishedB.matchId
+        && restoredPostMatch.matchId === finishedLoser.matchId
         && reloadPostMatchProbe.phase === 'finished'
-        && reloadPostMatchProbe.storedMatchIds.includes(finishedB.matchId)
+        && reloadPostMatchProbe.storedMatchIds.includes(finishedLoser.matchId)
         && /复盘/.test(reloadPostMatchProbe.reviewText)
         && /查看权威事件/.test(reloadPostMatchProbe.reviewText)
         && reloadPostMatchProbe.payload?.reportVersion === 'pvp-live-post-match-review-v1'
@@ -1930,9 +2019,9 @@ async function writeReport() {
       JSON.stringify({ restoredPostMatch, reloadPostMatchProbe }),
     );
 
-    const seatBFriendlyRematchActionable = await clickLiveControl(seatB.page, '[data-live-post-review-action="friendly_rematch"]', 'seat-b-friendly-rematch');
-    await seatB.page.waitForTimeout(200);
-    const friendlyRematchProbe = await seatB.page.evaluate(() => ({
+    const loserFriendlyRematchActionable = await clickLiveControl(loserClient.page, '[data-live-post-review-action="friendly_rematch"]', `${seatSlug(loserSeat)}-friendly-rematch`);
+    await loserClient.page.waitForTimeout(200);
+    const friendlyRematchProbe = await loserClient.page.evaluate(() => ({
       phase: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-phase') || '',
       hint: document.querySelector('[data-live-last-error]')?.textContent || '',
       friendlyText: document.querySelector('[data-live-friendly-series]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
@@ -1945,14 +2034,14 @@ async function writeReport() {
         && /换边再战/.test(friendlyRematchProbe.friendlyText)
         && /不写正式积分/.test(friendlyRematchProbe.friendlyText)
         && friendlyRematchProbe.snapshot?.reportVersion === 'pvp-live-friendly-series-v1'
-        && friendlyRematchProbe.snapshot?.sourceMatchId === finishedB.matchId
-        && (!isMobileViewport || seatBFriendlyRematchActionable?.ok === true)
+        && friendlyRematchProbe.snapshot?.sourceMatchId === finishedLoser.matchId
+        && (!isMobileViewport || loserFriendlyRematchActionable?.ok === true)
         && friendlyRematchProbe.snapshot?.rankedImpact === 'none',
-      JSON.stringify({ friendlyRematchProbe, seatBFriendlyRematchActionable }),
+      JSON.stringify({ friendlyRematchProbe, loserFriendlyRematchActionable }),
     );
-    const seatBCancelRematchActionable = await clickLiveControl(seatB.page, '[data-live-action="cancel-rematch"]', 'seat-b-cancel-friendly-rematch');
-    await seatB.page.waitForTimeout(200);
-    const cancelledRematchProbe = await seatB.page.evaluate(() => {
+    const loserCancelRematchActionable = await clickLiveControl(loserClient.page, '[data-live-action="cancel-rematch"]', `${seatSlug(loserSeat)}-cancel-friendly-rematch`);
+    await loserClient.page.waitForTimeout(200);
+    const cancelledRematchProbe = await loserClient.page.evaluate(() => {
       const series = document.querySelector('[data-live-friendly-series]');
       const actions = Object.fromEntries(Array.from(document.querySelectorAll('[data-live-post-review-action]')).map(button => [button.getAttribute('data-live-post-review-action'), button.disabled]));
       return {
@@ -1978,14 +2067,14 @@ async function writeReport() {
         && cancelledRematchProbe.actions?.friendly_rematch === false
         && cancelledRematchProbe.actions?.queue_again === false
         && cancelledRematchProbe.snapshot?.rankedImpact === 'none'
-        && (!isMobileViewport || seatBCancelRematchActionable?.ok === true),
-      JSON.stringify({ cancelledRematchProbe, seatBCancelRematchActionable }),
+        && (!isMobileViewport || loserCancelRematchActionable?.ok === true),
+      JSON.stringify({ cancelledRematchProbe, loserCancelRematchActionable }),
     );
 
-    await dismissBlockingModals(seatB.page);
-    const seatBRematchAfterCancelActionable = await clickLiveControl(seatB.page, '[data-live-post-review-action="friendly_rematch"]', 'seat-b-friendly-rematch-after-cancel');
-    await seatB.page.waitForTimeout(500);
-    const rematchRetryProbe = await seatB.page.evaluate(() => {
+    await dismissBlockingModals(loserClient.page);
+    const loserRematchAfterCancelActionable = await clickLiveControl(loserClient.page, '[data-live-post-review-action="friendly_rematch"]', `${seatSlug(loserSeat)}-friendly-rematch-after-cancel`);
+    await loserClient.page.waitForTimeout(500);
+    const rematchRetryProbe = await loserClient.page.evaluate(() => {
       const sessionState = window.PVPScene?.getLiveSession?.()?.getState?.() || null;
       const snapshot = window.PVPScene?.getLiveSnapshot?.() || null;
       const series = document.querySelector('[data-live-friendly-series]');
@@ -2009,25 +2098,25 @@ async function writeReport() {
         && rematchRetryProbe.status === 'waiting_rematch'
         && rematchRetryProbe.confirmationCount === '1'
         && /等待本局对手确认/.test(rematchRetryProbe.hint)
-        && (!isMobileViewport || seatBRematchAfterCancelActionable?.ok === true),
-      JSON.stringify({ rematchRetryProbe, seatBRematchAfterCancelActionable }),
+        && (!isMobileViewport || loserRematchAfterCancelActionable?.ok === true),
+      JSON.stringify({ rematchRetryProbe, loserRematchAfterCancelActionable }),
     );
     if (rematchRetryProbe.phase !== 'waiting_rematch') {
       throw new Error(`friendly rematch retry did not enter waiting_rematch: ${JSON.stringify(rematchRetryProbe)}`);
     }
-    await clickLiveControl(seatA.page, '[data-live-post-review-action="friendly_rematch"]', 'seat-a-friendly-rematch');
-    await seatB.page.waitForFunction(() => {
+    await clickLiveControl(winnerClient.page, '[data-live-post-review-action="friendly_rematch"]', `${seatSlug(winnerSeat)}-friendly-rematch`);
+    await loserClient.page.waitForFunction(() => {
       const snapshot = window.PVPScene?.getLiveSnapshot?.();
       return snapshot?.phase === 'setup' && snapshot?.mode === 'friendly';
     }, null, { timeout: 8000 });
-    await seatA.page.waitForFunction(() => {
+    await winnerClient.page.waitForFunction(() => {
       const snapshot = window.PVPScene?.getLiveSnapshot?.();
       return snapshot?.phase === 'setup' && snapshot?.mode === 'friendly';
     }, null, { timeout: 8000 });
     const friendlyAcceptedProbe = {
-      requester: await getLiveSnapshot(seatB.page),
-      accepter: await getLiveSnapshot(seatA.page),
-      requesterDom: await seatB.page.evaluate(() => ({
+      requester: await getLiveSnapshot(loserClient.page),
+      accepter: await getLiveSnapshot(winnerClient.page),
+      requesterDom: await loserClient.page.evaluate(() => ({
         phase: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-phase') || '',
         matchId: document.querySelector('[data-live-match-id]')?.textContent || '',
         summary: document.querySelector('[data-live-summary]')?.textContent || '',
@@ -2041,40 +2130,40 @@ async function writeReport() {
         && friendlyAcceptedProbe.accepter.phase === 'setup'
         && friendlyAcceptedProbe.accepter.mode === 'friendly'
         && friendlyAcceptedProbe.requester.matchId === friendlyAcceptedProbe.accepter.matchId
-        && friendlyAcceptedProbe.requester.matchId !== finishedB.matchId
-        && friendlyAcceptedProbe.requester.friendlySeries?.sourceMatchId === finishedB.matchId
+        && friendlyAcceptedProbe.requester.matchId !== finishedLoser.matchId
+        && friendlyAcceptedProbe.requester.friendlySeries?.sourceMatchId === finishedLoser.matchId
         && friendlyAcceptedProbe.requester.friendlySeries?.rankedImpact === 'none'
         && /友谊再战/.test(friendlyAcceptedProbe.requesterDom.summary)
         && /换边再战/.test(friendlyAcceptedProbe.requesterDom.friendlyText),
       JSON.stringify(friendlyAcceptedProbe),
     );
 
-    await ensureLiveRealtime(seatA.page);
-    await ensureLiveRealtime(seatB.page);
-    await seatA.page.evaluate(async () => {
+    await ensureLiveRealtime(winnerClient.page);
+    await ensureLiveRealtime(loserClient.page);
+    await winnerClient.page.evaluate(async () => {
       await window.PVPScene.readyLiveMatch();
     });
-    await waitForLiveSnapshot(seatB.page, () => {
+    await waitForLiveSnapshot(loserClient.page, () => {
       const snapshot = window.PVPScene?.getLiveSnapshot?.();
       return snapshot?.phase === 'setup' && snapshot?.opponent?.ready === true;
     });
-    await seatB.page.evaluate(async () => {
+    await loserClient.page.evaluate(async () => {
       await window.PVPScene.readyLiveMatch();
     });
-    await waitForLivePhase(seatA.page, 'active');
-    await waitForLivePhase(seatB.page, 'active');
-    await seatB.page.evaluate(async () => {
+    await waitForLivePhase(winnerClient.page, 'active');
+    await waitForLivePhase(loserClient.page, 'active');
+    await loserClient.page.evaluate(async () => {
       await window.PVPScene.surrenderLiveMatch();
       await window.PVPScene.surrenderLiveMatch();
     });
-    await waitForLivePhase(seatB.page, 'finished');
-    await waitForLivePhase(seatA.page, 'finished');
+    await waitForLivePhase(loserClient.page, 'finished');
+    await waitForLivePhase(winnerClient.page, 'finished');
 
-    await seatB.page.evaluate(async () => {
+    await loserClient.page.evaluate(async () => {
       await window.PVPScene.handleLivePostReviewAction('queue_again');
     });
-    await seatB.page.waitForFunction(() => window.PVPScene.getLiveSnapshot()?.phase === 'waiting', null, { timeout: 8000 });
-    const postRequeueProbe = await seatB.page.evaluate(() => ({
+    await loserClient.page.waitForFunction(() => window.PVPScene.getLiveSnapshot()?.phase === 'waiting', null, { timeout: 8000 });
+    const postRequeueProbe = await loserClient.page.evaluate(() => ({
       phase: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-phase') || '',
       ticket: document.querySelector('[data-live-queue-ticket]')?.textContent || '',
       reviewHidden: document.querySelector('[data-live-post-match-review]')?.hidden ?? false,
@@ -2091,10 +2180,10 @@ async function writeReport() {
       JSON.stringify(postRequeueProbe),
     );
 
-    await seatB.page.evaluate(async () => {
+    await loserClient.page.evaluate(async () => {
       await window.PVPScene.cancelLiveQueue();
     });
-    await waitForLivePhase(seatB.page, 'idle', 8000);
+    await waitForLivePhase(loserClient.page, 'idle', 8000);
 
     const seatC = await preparePage(browser, `live_real_c_${runId}`, '丙');
     const seatD = await preparePage(browser, `live_real_d_${runId}`, '丁');

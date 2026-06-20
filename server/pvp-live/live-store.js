@@ -27,6 +27,35 @@ function makeInviteCode() {
     return `TD${crypto.randomBytes(3).toString('hex').toUpperCase()}`;
 }
 
+function makeAuthoritativeOpenerAssignment({ matchId, playerA, playerB, mode = 'ranked', friendlySeries = null } = {}) {
+    const seriesTag = friendlySeries && typeof friendlySeries === 'object'
+        ? `${friendlySeries.seriesId || ''}:${friendlySeries.roundIndex || ''}:${friendlySeries.sourceMatchId || ''}`
+        : '';
+    const serverSeed = crypto.randomBytes(16).toString('hex');
+    const seedInput = [
+        'pvp-live-opener-v1',
+        String(matchId || ''),
+        String(mode || 'ranked'),
+        seriesTag,
+        serverSeed
+    ].join('|');
+    const digest = crypto.createHash('sha256').update(seedInput).digest('hex');
+    const firstSeat = parseInt(digest.slice(0, 2), 16) % 2 === 0 ? 'A' : 'B';
+    return {
+        reportVersion: 'pvp-live-opener-assignment-v1',
+        sourceVisibility: 'server_authoritative_public_seed',
+        usesHiddenInformation: false,
+        rankedImpact: 'none',
+        firstSeat,
+        secondSeat: firstSeat === 'A' ? 'B' : 'A',
+        policy: 'server_seeded_fair_opener',
+        seedTag: digest.slice(0, 12),
+        queueOrderBinding: false,
+        hostBinding: false,
+        boundaryLine: '先后手由服务端公开种子分配，不绑定排队顺序或房主身份。'
+    };
+}
+
 function normalizeInviteCode(inviteCode) {
     return String(inviteCode || '')
         .trim()
@@ -1862,11 +1891,20 @@ class LivePvpStore {
         const matchId = makeId('pvplm');
         const mode = options && options.mode === 'friendly' ? 'friendly' : 'ranked';
         const testMatchScope = normalizeLivePvpTestMatchScope(options && options.testMatchScope);
+        const openerAssignment = makeAuthoritativeOpenerAssignment({
+            matchId,
+            playerA,
+            playerB,
+            mode,
+            friendlySeries: mode === 'friendly' ? options.friendlySeries : null
+        });
         const state = createInitialLiveState({
             matchId,
             matchQuality: makeMatchQualityReport(qualityInput),
             mode,
             friendlySeries: mode === 'friendly' ? options.friendlySeries : null,
+            firstSeat: openerAssignment.firstSeat,
+            openerAssignment,
             seats: [
                 { seatId: 'A', userId: playerA.userId, displayName: playerA.displayName, loadoutSnapshot: playerA.loadoutSnapshot },
                 { seatId: 'B', userId: playerB.userId, displayName: playerB.displayName, loadoutSnapshot: playerB.loadoutSnapshot }

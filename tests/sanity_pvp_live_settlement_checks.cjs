@@ -626,13 +626,19 @@ function dbGet(sql, params = []) {
     });
     assert.equal(joinD.payload.status, 'matched', 'second timeout settlement user should match');
 
-    await readyBoth({
+    const readyTimeout = await readyBoth({
       matchId: joinD.payload.matchId,
       tokenA: userC.token,
       tokenB: userD.token,
       stateVersionA: joinD.payload.stateView.stateVersion,
       prefix: 'settle-timeout'
     });
+    const timeoutLoserUser = readyTimeout.payload.stateView.currentSeat === 'A' ? userC : userD;
+    const timeoutWinnerUser = timeoutLoserUser === userC ? userD : userC;
+    const initialRankByUserId = {
+      [userC.userId]: initialRankC,
+      [userD.userId]: initialRankD,
+    };
 
     await sleep(2150);
     const timeoutReadC = await request('/api/pvp/live/matches/current', {
@@ -647,21 +653,29 @@ function dbGet(sql, params = []) {
 
     const rankAfterTimeoutC = await request('/api/pvp/rank', { token: userC.token });
     const rankAfterTimeoutD = await request('/api/pvp/rank', { token: userD.token });
-    assert.equal(rankAfterTimeoutC.payload.rank.losses, 1, 'timeout loser should receive authoritative live rank loss');
-    assert.equal(rankAfterTimeoutD.payload.rank.wins, 1, 'timeout winner should receive authoritative live rank win');
-    assert.ok(rankAfterTimeoutC.payload.rank.score < initialRankC.payload.rank.score, 'timeout loser score should decrease');
-    assert.ok(rankAfterTimeoutD.payload.rank.score > initialRankD.payload.rank.score, 'timeout winner score should increase');
-    assert.equal(rankAfterTimeoutC.payload.wallet.totalMatches, 1, 'timeout loser economy should count live match');
-    assert.equal(rankAfterTimeoutD.payload.wallet.totalMatches, 1, 'timeout winner economy should count live match');
-    assert.ok(rankAfterTimeoutD.payload.wallet.coins > initialRankD.payload.wallet.coins, 'timeout winner should receive live settlement reward');
+    const rankAfterTimeoutByUserId = {
+      [userC.userId]: rankAfterTimeoutC,
+      [userD.userId]: rankAfterTimeoutD,
+    };
+    const timeoutLoserRank = rankAfterTimeoutByUserId[timeoutLoserUser.userId];
+    const timeoutWinnerRank = rankAfterTimeoutByUserId[timeoutWinnerUser.userId];
+    const timeoutLoserInitialRank = initialRankByUserId[timeoutLoserUser.userId];
+    const timeoutWinnerInitialRank = initialRankByUserId[timeoutWinnerUser.userId];
+    assert.equal(timeoutLoserRank.payload.rank.losses, 1, 'timeout loser should receive authoritative live rank loss');
+    assert.equal(timeoutWinnerRank.payload.rank.wins, 1, 'timeout winner should receive authoritative live rank win');
+    assert.ok(timeoutLoserRank.payload.rank.score < timeoutLoserInitialRank.payload.rank.score, 'timeout loser score should decrease');
+    assert.ok(timeoutWinnerRank.payload.rank.score > timeoutWinnerInitialRank.payload.rank.score, 'timeout winner score should increase');
+    assert.equal(timeoutLoserRank.payload.wallet.totalMatches, 1, 'timeout loser economy should count live match');
+    assert.equal(timeoutWinnerRank.payload.wallet.totalMatches, 1, 'timeout winner economy should count live match');
+    assert.ok(timeoutWinnerRank.payload.wallet.coins > timeoutWinnerInitialRank.payload.wallet.coins, 'timeout winner should receive live settlement reward');
 
     const timeoutSettlementRow = await dbGet(
       'SELECT * FROM pvp_live_match_settlements WHERE match_id = ?',
       [joinD.payload.matchId],
     );
     assert.ok(timeoutSettlementRow, 'timeout live settlement should write the settlement gate');
-    assert.equal(timeoutSettlementRow.winner_user_id, userD.userId, 'timeout settlement gate should persist winner user id');
-    assert.equal(timeoutSettlementRow.loser_user_id, userC.userId, 'timeout settlement gate should persist loser user id');
+    assert.equal(timeoutSettlementRow.winner_user_id, timeoutWinnerUser.userId, 'timeout settlement gate should persist winner user id');
+    assert.equal(timeoutSettlementRow.loser_user_id, timeoutLoserUser.userId, 'timeout settlement gate should persist loser user id');
     assert.equal(timeoutSettlementRow.finish_reason, 'timeout', 'timeout settlement gate should persist timeout finish reason');
 
     const userE = await registerUser('live_setup_timeout_a');

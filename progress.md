@@ -1,5 +1,24 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-21: V10-S9W live PVP opener assignment and practice-return loop
+  - 本轮完成
+    - `server/pvp-live/live-store.js` 在创建真人匹配和好友约战时生成服务端权威先后手分配：用 match / mode / 友谊赛轮次标签和服务端随机种子派生公开种子摘要，决定 `firstSeat / secondSeat`，并明确 `queueOrderBinding=false`、`hostBinding=false`，先手不再默认绑定排队顺序、房主身份或玩家私密标识。
+    - `server/pvp-live/engine/state.js` / `server/pvp-live/engine/state-view.js` 将 `openerAssignment` 写入权威 state 和 viewer-scoped `stateView`，保持 `usesHiddenInformation=false`、`rankedImpact=none`，只暴露公开种子摘要、双方相对先后手和边界文案，不泄露 userId、手牌、牌库、斗法谱快照、rating 或 ELO。
+    - `js/scenes/pvp-scene.js` 在开局保护报告旁新增 `[data-live-opener-assignment]` 公平凭证，玩家能看到“我方先手/对方先手 · 服务端种子 · 不绑定排队/不绑定房主”，并在 `getLiveSnapshot()` / 文本渲染中同步可审计 payload。
+    - `js/core/challenge_hub.js` 为从 live PVP 赛后复盘进入的问道练习新增 `pvp-live-practice-return-v1` 回执：练习结束后在挑战侧栏显示推荐谱来源、正式积分边界和“继续真人排位”入口，点击回到 `pvp` 的 live tab，不自动提交正式排队。
+    - 测试同步覆盖动态先后手：engine / route / persistence / settlement / cross-process fanout / UI runtime / fake browser audit / real backend smoke 都按运行时 `firstSeat / secondSeat` 推导行动方、胜负方和结算断言，不再假设固定 A 先手。
+  - 已验证
+    - 绿测：`node tests/sanity_pvp_live_route_checks.cjs`
+    - 绿测：`node tests/sanity_release_gate_coverage_checks.cjs`
+    - 构建：`npm run build:pages`
+    - 浏览器审计：`node tests/browser_pvp_live_audit.mjs http://127.0.0.1:4173 output/pvp-live-opener-assignment-fake`，82/82 findings、0 console error。
+    - 挑战浏览器审计：`node tests/browser_challenge_audit.mjs http://127.0.0.1:4173 output/challenge-pvp-practice-return-final`，新增证明练习回排卡片真实渲染并能点击回到 live PVP tab。
+    - 真实后端 smoke：`node tests/browser_pvp_live_real_backend_smoke.mjs http://127.0.0.1:4173 output/pvp-live-opener-assignment-real-desktop-final`，56/56 findings、0 console error。
+    - 移动端真实后端 smoke：`BROWSER_PVP_LIVE_REAL_VIEWPORT=mobile BROWSER_PVP_LIVE_REAL_REQUIRE_MOBILE=1 node tests/browser_pvp_live_real_backend_smoke.mjs http://127.0.0.1:4173 output/pvp-live-opener-assignment-real-mobile-final2`，57/57 findings、0 console error。
+    - 全量 Node 门禁：`npm run test:node`，All node checks passed。
+  - 当前结论
+    - live PVP 现在补上了“谁先手为什么公平”的可见解释：先后手由服务端公开种子决定，不跟谁先排队、谁建房、谁是 A 席绑定；双方能在开局保护报告旁看到同一套边界。赛后练习也不再是断开的旁路，玩家可先按公开推荐谱练一局，再从挑战侧栏回到真人排位，继续保持正式排位由玩家明确点击触发，避免练习、约战和正式积分混线。
+
 - 2026-06-21: V10-S9V live PVP post-match recommendation carryover receipts
   - 本轮完成
     - `js/scenes/pvp-scene.js` 新增 `resolveLivePostReviewLoadoutPreset()` / `formatLivePostReviewLoadoutResolution()`，把赛后 `practice / queue_again / friendly_rematch` 三个入口统一到同一套“下一步实际使用哪套斗法谱”的解析与回执语义。

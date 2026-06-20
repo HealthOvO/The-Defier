@@ -74,6 +74,24 @@ function normalizeSeat(rawSeat, fallbackSeatId) {
     };
 }
 
+function normalizeOpenerAssignment(source = {}, firstSeat = 'A') {
+    const resolvedFirstSeat = firstSeat === 'B' || source.firstSeat === 'B' ? 'B' : 'A';
+    const secondSeat = resolvedFirstSeat === 'A' ? 'B' : 'A';
+    return {
+        reportVersion: 'pvp-live-opener-assignment-v1',
+        sourceVisibility: String(source.sourceVisibility || 'server_authoritative_public_seed'),
+        usesHiddenInformation: false,
+        rankedImpact: 'none',
+        firstSeat: resolvedFirstSeat,
+        secondSeat,
+        policy: String(source.policy || 'server_seeded_fair_opener'),
+        seedTag: String(source.seedTag || '').slice(0, 24),
+        queueOrderBinding: false,
+        hostBinding: false,
+        boundaryLine: String(source.boundaryLine || '先后手由服务端公开种子分配，不绑定排队顺序或房主身份。')
+    };
+}
+
 function makeSnapshotLockedEvent(matchId, seats) {
     return {
         eventId: `${matchId}-evt-1`,
@@ -306,7 +324,7 @@ function createFirstMatchGuide({ mode = 'ranked' } = {}) {
     };
 }
 
-function createInitialLiveState({ matchId, seats, matchQuality, mode = 'ranked', friendlySeries = null } = {}) {
+function createInitialLiveState({ matchId, seats, matchQuality, mode = 'ranked', friendlySeries = null, firstSeat = 'A', openerAssignment = null } = {}) {
     if (!matchId || typeof matchId !== 'string') {
         throw new Error('createInitialLiveState requires a matchId');
     }
@@ -321,6 +339,7 @@ function createInitialLiveState({ matchId, seats, matchQuality, mode = 'ranked',
 
     const now = Date.now();
     const safeMode = normalizeMode(mode);
+    const openingFirstSeat = openerAssignment && openerAssignment.firstSeat === 'B' ? 'B' : firstSeat === 'B' ? 'B' : 'A';
     return {
         matchId,
         ruleVersion: RULE_VERSION,
@@ -331,15 +350,16 @@ function createInitialLiveState({ matchId, seats, matchQuality, mode = 'ranked',
         eventSeq: 1,
         roundIndex: 1,
         turnIndex: 1,
-        currentSeat: 'A',
+        currentSeat: openingFirstSeat,
         setup: {
             startedAt: now,
             readyDeadlineAt: now + RULES.setupReadyTimeoutMs,
-            firstSeat: 'A',
+            firstSeat: openingFirstSeat,
             mulliganLimit: 2
         },
         seats: normalizedSeats,
         matchQuality: normalizeMatchQuality(matchQuality),
+        openerAssignment: normalizeOpenerAssignment(openerAssignment || {}, openingFirstSeat),
         friendlySeries: safeMode === 'friendly' ? normalizeFriendlySeries(friendlySeries) : null,
         firstMatchGuide: createFirstMatchGuide({ mode: safeMode }),
         loadoutExplorationReport: buildLoadoutExplorationReport(),

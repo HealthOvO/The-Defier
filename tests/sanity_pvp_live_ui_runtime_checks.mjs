@@ -613,6 +613,20 @@ let openingActionState = {
       usesHiddenInformation: false,
       rankedImpact: 'none'
     },
+    openerAssignment: {
+      reportVersion: 'pvp-live-opener-assignment-v1',
+      sourceVisibility: 'server_authoritative_public_seed',
+      usesHiddenInformation: false,
+      rankedImpact: 'none',
+      firstSeat: 'A',
+      secondSeat: 'B',
+      viewerSeat: 'A',
+      opponentSeat: 'B',
+      viewerStarts: true,
+      seedTag: 'seed-a',
+      queueOrderBinding: false,
+      hostBinding: false
+    },
     actionPreviewReport: {
       reportVersion: 'pvp-live-action-preview-v1',
       sourceVisibility: 'viewer_public_state',
@@ -658,6 +672,40 @@ let openingActionState = {
     }
   }
 };
+const mirroredOpenerText = PVPScene.renderLiveOpeningSafeguardReport({
+  openerAssignment: {
+    reportVersion: 'pvp-live-opener-assignment-v1',
+    sourceVisibility: 'server_authoritative_public_seed',
+    firstSeat: 'B',
+    secondSeat: 'A',
+    viewerSeat: 'A',
+    opponentSeat: 'B',
+    viewerStarts: false,
+    seedTag: 'seed-b',
+    queueOrderBinding: false,
+    hostBinding: false
+  },
+  openingSafeguardReport: {
+    ...openingActionState.stateView.openingSafeguardReport,
+    currentSeat: 'B',
+    viewerSeat: 'A',
+    firstSeat: 'B',
+    secondSeat: 'A',
+    damageBudget: {
+      ...openingActionState.stateView.openingSafeguardReport.damageBudget,
+      currentSeat: 'B',
+      currentActionBudget: 18
+    },
+    secondSeatBuffer: {
+      ...openingActionState.stateView.openingSafeguardReport.secondSeatBuffer,
+      seatId: 'A'
+    }
+  }
+});
+assert.match(mirroredOpenerText, /data-live-opener-assignment/, 'opening safeguard should render the authoritative opener assignment chip');
+assert.match(mirroredOpenerText, /对方先手/, 'opening safeguard should translate first seat into viewer/opponent wording');
+assert.match(mirroredOpenerText, /服务端种子/, 'opening safeguard should explain that opener assignment is server seeded');
+assert.match(mirroredOpenerText, /不绑定排队|不绑定房主/, 'opening safeguard should show opener assignment is not queue or host bound');
 const openingActionIntents = [];
 PVPScene.liveIntentInFlight = null;
 PVPScene.liveOpeningActionConfirm = null;
