@@ -173,6 +173,20 @@ assert(viewA.openingSafeguardReport.damageBudget.firstSeat === 18, 'opening safe
 assert(viewA.openingSafeguardReport.damageBudget.secondSeat === 22, 'opening safeguard report should expose second-seat damage budget');
 assert(viewA.openingSafeguardReport.openingProtection.minimumHp === 1, 'opening safeguard report should expose opening protection minimum hp');
 assert(!/hand|deck|cardId|instanceId|loadoutSnapshot|rating|elo/i.test(JSON.stringify(viewA.openingSafeguardReport)), 'opening safeguard report must not leak hidden cards or hidden rating');
+assert(viewA.duelMomentumReport && viewA.duelMomentumReport.reportVersion === 'pvp-live-duel-momentum-v1', 'state view should expose public duel momentum report');
+assert(viewA.duelMomentumReport.sourceVisibility === 'public_state', 'duel momentum report should come from public state');
+assert(viewA.duelMomentumReport.usesHiddenInformation === false, 'duel momentum report must not use hidden information');
+assert(viewA.duelMomentumReport.rankedImpact === 'none', 'duel momentum report should not write ranked result');
+assert(viewA.duelMomentumReport.viewerSeat === 'A' && viewA.duelMomentumReport.opponentSeat === 'B', 'duel momentum report should expose viewer and opponent seats');
+assert(/局势/.test(viewA.duelMomentumReport.summaryLine), 'duel momentum report should provide a readable board-state summary');
+assert(/反打窗口|行动窗口/.test(viewA.duelMomentumReport.counterplayLine), 'duel momentum report should explain counterplay or action windows');
+assert(viewA.duelMomentumReport.safeguards.includes('opening_protection'), 'duel momentum report should surface opening protection safeguard');
+assert(!/hand|deck|cardId|instanceId|loadoutSnapshot|rating|elo|reward/i.test(JSON.stringify(viewA.duelMomentumReport)), 'duel momentum report must not leak hidden cards or hidden rating/reward');
+const invalidatedViewA = projectStateView({ ...baseState, status: 'invalidated', phase: 'invalidated' }, 'A');
+assert(invalidatedViewA.duelMomentumReport.pressureState === 'invalidated', 'invalidated duel momentum should not show an actionable pressure state');
+assert(/无效局/.test(invalidatedViewA.duelMomentumReport.summaryLine), 'invalidated duel momentum should explain no-start terminal state');
+assert(/不计正式积分/.test(invalidatedViewA.duelMomentumReport.counterplayLine), 'invalidated duel momentum should keep no-score boundary readable');
+assert(invalidatedViewA.duelMomentumReport.safeguards.includes('invalidated_no_score'), 'invalidated duel momentum should expose invalidated no-score safeguard');
 assert(viewA.self.ready === false && viewA.opponent.ready === false, 'state view should expose public ready status');
 assert(viewA.self.loadoutHash === baseState.seats.A.loadoutSnapshot.loadoutHash, 'self view should expose own locked loadout hash');
 assert(viewA.opponent.loadoutHash === baseState.seats.B.loadoutSnapshot.loadoutHash, 'opponent view should expose only public locked loadout hash');
@@ -291,6 +305,11 @@ assert(activeViewA.openingSafeguardReport.damageBudget.currentSeat === 'A', 'ope
 assert(activeViewA.openingSafeguardReport.damageBudget.currentActionBudget === 18, 'opening safeguard report should expose current first-action budget');
 assert(activeViewA.openingSafeguardReport.openingProtection.protectedSeats.includes('B'), 'opening protection should visibly protect the non-acting seat at battle start');
 assert(activeViewA.openingSafeguardReport.secondSeatBuffer.block === 3 && activeViewA.openingSafeguardReport.secondSeatBuffer.seatId === 'B', 'opening safeguard report should expose public second-seat buffer');
+assert(activeViewA.duelMomentumReport.pressureState === 'opening_window', 'active duel momentum should identify opening window at battle start');
+assert(activeViewA.duelMomentumReport.currentSeat === 'A' && activeViewA.duelMomentumReport.isViewerTurn === true, 'active duel momentum should expose current public action seat');
+assert(/护体/.test(activeViewA.duelMomentumReport.summaryLine), 'active duel momentum should mention active opening protection');
+assert(/反打窗口/.test(activeViewA.duelMomentumReport.counterplayLine), 'active duel momentum should keep counterplay window readable');
+assert(activeViewA.duelMomentumReport.safeguards.includes('second_seat_buffer'), 'active duel momentum should surface second-seat buffer safeguard');
 assert(activeState.seats.B.block === 3, 'second seat should start active combat with public opening buffer block');
 assert(activeState.events.some(e => e.eventType === 'opening_second_seat_buffer_granted' && e.payload.seatId === 'B' && e.payload.block === 3), 'battle start should emit public second-seat buffer event');
 
@@ -586,6 +605,12 @@ const protectedEndTurn = reduceIntent(lethal.state, {
 assert(protectedEndTurn.result === 'accepted' && protectedEndTurn.state.currentSeat === 'B', 'protected opening target should receive the next turn');
 assert(protectedEndTurn.state.seats.B.block === 8, 'opening protection should grant first-turn counterplay block');
 assert(protectedEndTurn.events.some(e => e.eventType === 'opening_counterplay_granted' && e.payload.seatId === 'B' && e.payload.block === 8), 'protected seat first turn should expose public counterplay event');
+const protectedMomentumB = projectStateView(protectedEndTurn.state, 'B').duelMomentumReport;
+assert(protectedMomentumB.pressureState === 'reversal_window', 'protected defender should see an explicit reversal window');
+assert(protectedMomentumB.isViewerTurn === true, 'protected defender should see the counterplay window on their own turn');
+assert(protectedMomentumB.safeguards.includes('counterplay_granted'), 'protected defender duel momentum should expose granted counterplay safeguard');
+assert(/你的反打窗口/.test(protectedMomentumB.counterplayLine), 'protected defender duel momentum should say the counterplay window is theirs');
+assert(!/hand|deck|cardId|instanceId|loadoutSnapshot|rating|elo|reward/i.test(JSON.stringify(protectedMomentumB)), 'protected defender duel momentum must remain public and no-impact');
 protectedEndTurn.state.seats.A.hp = 10;
 const normalLethal = reduceIntent(protectedEndTurn.state, {
   intentId: 'intent-normal-lethal',
@@ -597,6 +622,11 @@ const normalLethal = reduceIntent(protectedEndTurn.state, {
   payload: { cardInstanceId: protectedEndTurn.state.seats.B.hand[0].instanceId, targetSeat: 'A' }
 });
 assert(normalLethal.result === 'accepted' && normalLethal.state.status === 'finished', 'normal lethal should still finish after the target already had a turn');
+const finishedMomentumA = projectStateView(normalLethal.state, 'A').duelMomentumReport;
+assert(finishedMomentumA.pressureState === 'finished', 'finished duel momentum should expose closed finished state');
+assert(/对局已结束/.test(finishedMomentumA.summaryLine), 'finished duel momentum should explain the match is over');
+assert(/赛后复盘/.test(finishedMomentumA.counterplayLine), 'finished duel momentum should route players to post-match review');
+assert(!/hand|deck|cardId|instanceId|loadoutSnapshot|rating|elo|reward/i.test(JSON.stringify(finishedMomentumA)), 'finished duel momentum must remain public and no-impact');
 assertPostMatchReview(normalLethal.stateView.postMatchReview, {
   result: 'win',
   winnerSeat: 'B',

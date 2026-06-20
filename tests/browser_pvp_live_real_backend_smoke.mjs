@@ -759,6 +759,30 @@ async function writeReport() {
         && activeTimerProbe.payload?.isViewerTurn === true,
       JSON.stringify(activeTimerProbe),
     );
+    const activeMomentumProbe = await seatA.page.evaluate(() => ({
+      text: document.querySelector('[data-live-duel-momentum]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+      state: document.querySelector('[data-live-duel-momentum]')?.getAttribute('data-live-duel-momentum-state') || '',
+      source: document.querySelector('[data-live-duel-momentum]')?.getAttribute('data-live-duel-momentum-source') || '',
+      hidden: document.querySelector('[data-live-duel-momentum]')?.getAttribute('data-live-duel-momentum-hidden') || '',
+      payload: window.PVPScene.getLiveSnapshot()?.duelMomentumReport || null,
+      textPayload: JSON.parse(window.render_game_to_text()).pvp?.live?.duelMomentumReport || null,
+    }));
+    add(
+      'real browser live match renders active duel momentum report',
+      /局势/.test(activeMomentumProbe.text)
+        && /开局护体|行动窗口/.test(activeMomentumProbe.text)
+        && /反打窗口|行动窗口/.test(activeMomentumProbe.text)
+        && activeMomentumProbe.state === 'opening_window'
+        && activeMomentumProbe.source === 'public_state'
+        && activeMomentumProbe.hidden === 'false'
+        && activeMomentumProbe.payload?.reportVersion === 'pvp-live-duel-momentum-v1'
+        && activeMomentumProbe.payload?.sourceVisibility === 'public_state'
+        && activeMomentumProbe.payload?.usesHiddenInformation === false
+        && activeMomentumProbe.payload?.rankedImpact === 'none'
+        && activeMomentumProbe.textPayload?.reportVersion === 'pvp-live-duel-momentum-v1'
+        && !/payload|hand|deck|cardId|instanceId|loadoutSnapshot|reward|rating|elo/i.test(`${activeMomentumProbe.text} ${JSON.stringify(activeMomentumProbe.payload || {})}`),
+      JSON.stringify(activeMomentumProbe),
+    );
     const activeGuideProbe = await seatA.page.evaluate(() => ({
       text: document.querySelector('[data-live-first-guide]')?.textContent || '',
       payload: window.PVPScene.getLiveSnapshot()?.firstMatchGuide || null,
@@ -854,6 +878,23 @@ async function writeReport() {
         && afterPlayB.self?.hp < activeB.self?.hp
         && afterPlayB.opponent?.handCount >= 0,
       JSON.stringify({ playA, afterPlayB }),
+    );
+    const afterPlayMomentumProbe = await seatB.page.evaluate(() => ({
+      text: document.querySelector('[data-live-duel-momentum]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+      state: document.querySelector('[data-live-duel-momentum]')?.getAttribute('data-live-duel-momentum-state') || '',
+      payload: window.PVPScene.getLiveSnapshot()?.duelMomentumReport || null,
+    }));
+    add(
+      'real browser accepted card intent keeps public duel momentum readable without refresh',
+      /局势/.test(afterPlayMomentumProbe.text)
+        && /行动窗口|反打窗口|护体/.test(afterPlayMomentumProbe.text)
+        && afterPlayMomentumProbe.payload?.reportVersion === 'pvp-live-duel-momentum-v1'
+        && afterPlayMomentumProbe.payload?.viewerSeat === 'B'
+        && afterPlayMomentumProbe.payload?.sourceVisibility === 'public_state'
+        && afterPlayMomentumProbe.payload?.usesHiddenInformation === false
+        && afterPlayMomentumProbe.payload?.rankedImpact === 'none'
+        && !/payload|hand|deck|cardId|instanceId|loadoutSnapshot|reward|rating|elo/i.test(`${afterPlayMomentumProbe.text} ${JSON.stringify(afterPlayMomentumProbe.payload || {})}`),
+      JSON.stringify(afterPlayMomentumProbe),
     );
 
     await seatA.page.evaluate(async () => {

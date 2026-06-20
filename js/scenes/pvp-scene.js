@@ -506,6 +506,12 @@ export const PVPScene = {
     const state = session && typeof session.getState === 'function' ? session.getState() : null;
     if (!state || !state.matchId || !this.shouldLiveHeartbeat(state.phase)) return;
     await this.sendLiveHeartbeat({ resumeRealtime: true });
+    const win = typeof window !== 'undefined' ? window : null;
+    const schedule = win && typeof win.setTimeout === 'function' ? win.setTimeout.bind(win) : setTimeout;
+    schedule(() => {
+      this.liveRealtimeRenderQueued = false;
+      this.renderLivePanel();
+    }, 0);
   },
   queueLiveRealtimeRender() {
     if (this.liveRealtimeRenderQueued) return;
@@ -800,6 +806,54 @@ export const PVPScene = {
       <span class="pvp-live-opening-safeguard-chip" data-live-opening-second-seat-buffer>后手护盾 · ${this.escapeHtml(secondSeatBufferText)}</span>
       <span class="pvp-live-opening-safeguard-chip">开局护体 · ${this.escapeHtml(protectionText)}</span>
       <span class="pvp-live-opening-safeguard-chip">反打缓冲 · 护盾 ${report.counterplay.block} · ${this.escapeHtml(counterplaySeats)}</span>
+    `;
+  },
+  getLiveDuelMomentumReport(view) {
+    const report = view && view.duelMomentumReport && typeof view.duelMomentumReport === 'object'
+      ? view.duelMomentumReport
+      : null;
+    if (!report) return null;
+    return {
+      reportVersion: String(report.reportVersion || 'pvp-live-duel-momentum-v1'),
+      sourceVisibility: String(report.sourceVisibility || 'public_state'),
+      usesHiddenInformation: report.usesHiddenInformation === true,
+      rankedImpact: String(report.rankedImpact || 'none'),
+      viewerSeat: String(report.viewerSeat || ''),
+      opponentSeat: String(report.opponentSeat || ''),
+      currentSeat: String(report.currentSeat || ''),
+      isViewerTurn: !!report.isViewerTurn,
+      viewerHpPct: Math.max(0, Math.min(100, Math.floor(Number(report.viewerHpPct) || 0))),
+      opponentHpPct: Math.max(0, Math.min(100, Math.floor(Number(report.opponentHpPct) || 0))),
+      hpDelta: Math.floor(Number(report.hpDelta) || 0),
+      pressureState: String(report.pressureState || 'unknown'),
+      pressureLabel: String(report.pressureLabel || '局势观察'),
+      agencyLabel: String(report.agencyLabel || ''),
+      summaryLine: String(report.summaryLine || '局势：等待权威状态。'),
+      counterplayLine: String(report.counterplayLine || '行动窗口：等待权威状态。'),
+      safeguards: Array.isArray(report.safeguards)
+        ? report.safeguards.map(item => String(item || '')).filter(Boolean).slice(0, 8)
+        : []
+    };
+  },
+  renderLiveDuelMomentumReport(view) {
+    const report = this.getLiveDuelMomentumReport(view);
+    if (!report) return '局势：等待权威状态';
+    const visibilityText = report.usesHiddenInformation ? '含隐藏信息' : '公开状态';
+    const rankedText = report.rankedImpact === 'none' ? '不写正式积分' : report.rankedImpact;
+    const hpText = `血线 ${report.viewerSeat || '--'} ${report.viewerHpPct}% / ${report.opponentSeat || '--'} ${report.opponentHpPct}%`;
+    return `
+      <div class="pvp-live-duel-momentum-line">
+        <span class="pvp-live-duel-momentum-chip">${this.escapeHtml(report.pressureLabel)}</span>
+        <span>${this.escapeHtml(report.summaryLine)}</span>
+      </div>
+      <div class="pvp-live-duel-momentum-line">
+        <span class="pvp-live-duel-momentum-chip">${this.escapeHtml(report.agencyLabel || '行动窗口')}</span>
+        <span>${this.escapeHtml(report.counterplayLine)}</span>
+      </div>
+      <div class="pvp-live-duel-momentum-line compact">
+        <span>${this.escapeHtml(hpText)}</span>
+        <span>${this.escapeHtml(visibilityText)} · ${this.escapeHtml(rankedText)}</span>
+      </div>
     `;
   },
   getLiveFirstMatchGuide(view) {
@@ -2240,6 +2294,7 @@ export const PVPScene = {
       lastRealtimeSyncAt: Math.max(0, Math.floor(Number(state.lastRealtimeSyncAt) || 0)),
       realtimeReport: this.getLiveRealtimeReport(state),
       openingSafeguardReport: this.getLiveOpeningSafeguardReport(view),
+      duelMomentumReport: this.getLiveDuelMomentumReport(view),
       friendlySeries: this.getLiveFriendlySeries(view && view.friendlySeries ? view.friendlySeries : state.rematchReport),
       firstMatchGuide: this.getLiveFirstMatchGuide(view),
       loadoutExplorationReport: this.getLiveLoadoutExplorationReport(view),
@@ -2376,6 +2431,14 @@ export const PVPScene = {
     const openingSafeguardEl = root.querySelector('[data-live-opening-safeguard]');
     if (openingSafeguardEl) {
       openingSafeguardEl.innerHTML = this.renderLiveOpeningSafeguardReport(view);
+    }
+    const duelMomentumEl = root.querySelector('[data-live-duel-momentum]');
+    if (duelMomentumEl) {
+      const report = this.getLiveDuelMomentumReport(view);
+      duelMomentumEl.setAttribute('data-live-duel-momentum-state', report ? report.pressureState : 'idle');
+      duelMomentumEl.setAttribute('data-live-duel-momentum-source', report ? report.sourceVisibility : '');
+      duelMomentumEl.setAttribute('data-live-duel-momentum-hidden', report ? String(report.usesHiddenInformation === true) : '');
+      duelMomentumEl.innerHTML = this.renderLiveDuelMomentumReport(view);
     }
     setText('[data-live-social-status]', this.liveSocialMuted
       ? '社交：已静音对手表情 · 本地偏好 · 不写正式积分'

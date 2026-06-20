@@ -293,6 +293,113 @@ async function safeElementScreenshot(page, selector, outputPath) {
         },
       };
     };
+    const makeOpeningSafeguardReport = (stateVersion = 1, currentSeat = 'A', status = 'setup') => {
+      const active = status === 'active';
+      const setup = status === 'setup';
+      return {
+        reportVersion: 'pvp-live-opening-safeguard-v1',
+        status: active ? 'armed' : setup ? 'preview' : 'closed',
+        currentSeat,
+        viewerSeat: 'A',
+        firstSeat: 'A',
+        secondSeat: 'B',
+        damageBudget: {
+          firstSeat: 18,
+          secondSeat: 22,
+          secondAction: 28,
+          currentSeat,
+          currentActionBudget: active ? currentSeat === 'A' ? 18 : 22 : null,
+        },
+        openingProtection: {
+          minimumHp: 1,
+          protectedSeats: active ? ['B'] : setup ? ['A', 'B'] : [],
+          active,
+          summary: '未完成首个回合的席位不会被开局伤害直接终结。',
+        },
+        secondSeatBuffer: {
+          block: 3,
+          seatId: 'B',
+          active,
+          summary: '后手开局获得 3 点公开护盾，抵消先动节奏差。',
+        },
+        counterplay: {
+          block: 8,
+          pendingSeats: [],
+          grantedSeats: active && stateVersion >= 4 ? ['B'] : [],
+          summary: '护体后首个行动窗口会获得 8 点护盾缓冲。',
+        },
+        sourceVisibility: 'public_state',
+        usesHiddenInformation: false,
+        rankedImpact: 'none',
+      };
+    };
+    const makeDuelMomentumReport = (stateVersion = 1, currentSeat = 'A', status = 'setup') => {
+      const active = status === 'active';
+      const counterplayGranted = active && stateVersion >= 4;
+      const viewerTurn = active && currentSeat === 'A';
+      const opponentHp = stateVersion > 1 ? 42 : 50;
+      if (status !== 'setup' && status !== 'active') {
+        const pressureState = status === 'finished' ? 'finished' : status === 'invalidated' ? 'invalidated' : 'closed';
+        return {
+          reportVersion: 'pvp-live-duel-momentum-v1',
+          sourceVisibility: 'public_state',
+          usesHiddenInformation: false,
+          rankedImpact: 'none',
+          viewerSeat: 'A',
+          opponentSeat: 'B',
+          currentSeat,
+          isViewerTurn: false,
+          viewerHpPct: 100,
+          opponentHpPct: Math.round((opponentHp / 50) * 100),
+          hpDelta: 50 - opponentHp,
+          pressureState,
+          pressureLabel: pressureState === 'finished' ? '对局结束' : pressureState === 'invalidated' ? '无效局' : '局势关闭',
+          agencyLabel: pressureState === 'finished' ? '对局结束' : pressureState === 'invalidated' ? '无效局' : '局势关闭',
+          summaryLine: pressureState === 'finished'
+            ? '局势：对局已结束，行动窗口已关闭。'
+            : pressureState === 'invalidated'
+              ? '局势：无效局，本局未开战成功，不计正式积分。'
+              : '局势：当前没有可行动窗口。',
+          counterplayLine: pressureState === 'finished'
+            ? '行动窗口：本局已进入赛后复盘。'
+            : pressureState === 'invalidated'
+              ? '行动窗口：无效局不计正式积分，不产生先手击杀或奖励。'
+              : '行动窗口：等待新的真人对局。',
+          safeguards: pressureState === 'invalidated' ? ['invalidated_no_score'] : [],
+        };
+      }
+      return {
+        reportVersion: 'pvp-live-duel-momentum-v1',
+        sourceVisibility: 'public_state',
+        usesHiddenInformation: false,
+        rankedImpact: 'none',
+        viewerSeat: 'A',
+        opponentSeat: 'B',
+        currentSeat,
+        isViewerTurn: viewerTurn,
+        viewerHpPct: 100,
+        opponentHpPct: Math.round((opponentHp / 50) * 100),
+        hpDelta: 50 - opponentHp,
+        pressureState: counterplayGranted ? 'reversal_window' : active ? 'opening_window' : 'setup',
+        pressureLabel: counterplayGranted ? '对手反打窗口' : active ? '开局护体窗口' : '准备观察',
+        agencyLabel: !active ? '准备阶段' : viewerTurn ? '你的行动窗口' : '等待对手行动',
+        summaryLine: counterplayGranted
+          ? '局势：B 已进入反打窗口，A 看到公开缓冲已发放。'
+          : active
+            ? '局势：开局护体仍在，A 正在行动；B 仍有行动窗口。'
+            : '局势：双方仍在准备，先看锁谱和调息。'
+        ,
+        counterplayLine: counterplayGranted
+          ? '反打窗口：B 已获得公开缓冲，等待其首个行动选择。'
+          : active
+            ? '反打窗口：B 若被护体保住，会在首个行动窗口获得缓冲。'
+            : '行动窗口：准备完成后才进入出牌，先手不能在准备阶段秒杀。'
+        ,
+        safeguards: counterplayGranted
+          ? ['opening_protection', 'second_seat_buffer', 'counterplay_granted']
+          : ['opening_protection', 'second_seat_buffer', 'counterplay_window_pending'],
+      };
+    };
     const makeStateView = (stateVersion = 1, currentSeat = 'A', status = 'setup') => ({
       matchId: 'pvplm-browser-live',
       ruleVersion: 'pvp-live-v1',
@@ -308,42 +415,8 @@ async function safeElementScreenshot(page, selector, outputPath) {
         candidatePoolSize: 2,
         safeguards: ['server_authoritative', 'snapshot_locked', 'setup_ready_required'],
       },
-      openingSafeguardReport: {
-        reportVersion: 'pvp-live-opening-safeguard-v1',
-        status: status === 'active' ? 'armed' : 'preview',
-        currentSeat,
-        viewerSeat: 'A',
-        firstSeat: 'A',
-        secondSeat: 'B',
-        damageBudget: {
-          firstSeat: 18,
-          secondSeat: 22,
-          secondAction: 28,
-          currentSeat,
-          currentActionBudget: currentSeat === 'A' ? 18 : 22,
-        },
-        openingProtection: {
-          minimumHp: 1,
-          protectedSeats: status === 'active' ? ['B'] : ['A', 'B'],
-          active: status === 'active',
-          summary: '未完成首个回合的席位不会被开局伤害直接终结。',
-        },
-        secondSeatBuffer: {
-          block: 3,
-          seatId: 'B',
-          active: status === 'active',
-          summary: '后手开局获得 3 点公开护盾，抵消先动节奏差。',
-        },
-        counterplay: {
-          block: 8,
-          pendingSeats: status === 'active' && stateVersion === 4 ? [] : [],
-          grantedSeats: status === 'active' && stateVersion >= 4 ? ['B'] : [],
-          summary: '护体后首个行动窗口会获得 8 点护盾缓冲。',
-        },
-        sourceVisibility: 'public_state',
-        usesHiddenInformation: false,
-        rankedImpact: 'none',
-      },
+      openingSafeguardReport: makeOpeningSafeguardReport(stateVersion, currentSeat, status),
+      duelMomentumReport: makeDuelMomentumReport(stateVersion, currentSeat, status),
       firstMatchGuide: makeFirstMatchGuide(status),
       loadoutExplorationReport: makeLoadoutExplorationReport(),
       postMatchReview: makePostMatchReview(status),
@@ -1057,6 +1130,10 @@ async function safeElementScreenshot(page, selector, outputPath) {
     realtimeStatus: document.querySelector('[data-live-realtime-status]')?.textContent || '',
     realtimeDataset: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-realtime-state') || '',
     openingSafeguard: document.querySelector('[data-live-opening-safeguard]')?.textContent || '',
+    duelMomentum: document.querySelector('[data-live-duel-momentum]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+    duelMomentumState: document.querySelector('[data-live-duel-momentum]')?.getAttribute('data-live-duel-momentum-state') || '',
+    duelMomentumSource: document.querySelector('[data-live-duel-momentum]')?.getAttribute('data-live-duel-momentum-source') || '',
+    duelMomentumHidden: document.querySelector('[data-live-duel-momentum]')?.getAttribute('data-live-duel-momentum-hidden') || '',
     firstGuide: document.querySelector('[data-live-first-guide]')?.textContent || '',
     loadoutExplorationText: document.querySelector('[data-live-loadout-exploration]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
     loadoutExplorationSource: document.querySelector('[data-live-loadout-exploration]')?.getAttribute('data-live-loadout-exploration-source') || '',
@@ -1170,6 +1247,12 @@ async function safeElementScreenshot(page, selector, outputPath) {
     await delay(0);
     window.dispatchEvent(new Event('pageshow'));
     await delay(160);
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+      const realtimeState = document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-realtime-state') || '';
+      const realtimeStatus = document.querySelector('[data-live-realtime-status]')?.textContent || '';
+      if (realtimeState === 'connected' && /实时通道已连接/.test(realtimeStatus)) break;
+      await delay(50);
+    }
 
     const probe = {
       beforeResumeStatus,
@@ -1294,6 +1377,20 @@ async function safeElementScreenshot(page, selector, outputPath) {
       && !/payload|hand|deck|cardId|instanceId|loadoutSnapshot|rating|elo/i.test(JSON.stringify(matchedProbe.payload?.loadoutExplorationReport || {})),
     JSON.stringify(matchedProbe),
   );
+  add(
+    'live UI renders public duel momentum report without hidden payloads',
+    /局势/.test(matchedProbe.duelMomentum)
+      && /行动窗口|反打窗口/.test(matchedProbe.duelMomentum)
+      && matchedProbe.duelMomentumState === 'setup'
+      && matchedProbe.duelMomentumSource === 'public_state'
+      && matchedProbe.duelMomentumHidden === 'false'
+      && matchedProbe.payload?.duelMomentumReport?.reportVersion === 'pvp-live-duel-momentum-v1'
+      && matchedProbe.payload?.duelMomentumReport?.sourceVisibility === 'public_state'
+      && matchedProbe.payload?.duelMomentumReport?.usesHiddenInformation === false
+      && matchedProbe.payload?.duelMomentumReport?.rankedImpact === 'none'
+      && !/payload|hand|deck|cardId|instanceId|loadoutSnapshot|reward|rating|elo/i.test(`${matchedProbe.duelMomentum} ${JSON.stringify(matchedProbe.payload?.duelMomentumReport || {})}`),
+    JSON.stringify(matchedProbe),
+  );
 
   await page.evaluate(() => document.querySelector('[data-live-mulligan-card]')?.click());
   await page.evaluate(() => document.querySelector('[data-live-action="confirm-mulligan"]')?.click());
@@ -1304,6 +1401,8 @@ async function safeElementScreenshot(page, selector, outputPath) {
     phase: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-phase') || '',
     firstGuide: document.querySelector('[data-live-first-guide]')?.textContent || '',
     openingSafeguard: document.querySelector('[data-live-opening-safeguard]')?.textContent || '',
+    duelMomentum: document.querySelector('[data-live-duel-momentum]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+    duelMomentumState: document.querySelector('[data-live-duel-momentum]')?.getAttribute('data-live-duel-momentum-state') || '',
     turnTimer: document.querySelector('[data-live-turn-timer]')?.textContent || '',
     presetDisabled: Array.from(document.querySelectorAll('[data-live-loadout-preset]')).map(button => button.disabled),
     calls: window.__livePvpAuditCalls,
@@ -1345,6 +1444,20 @@ async function safeElementScreenshot(page, selector, outputPath) {
       && !/payload|hand|deck|cardId|instanceId|loadoutSnapshot|reward|rating|elo/i.test(`${setupProbe.openingSafeguard} ${JSON.stringify(setupProbe.payload?.openingSafeguardReport || {})}`),
     JSON.stringify(setupProbe),
   );
+  add(
+    'live UI renders active duel momentum opening window without hidden payloads',
+    setupProbe.phase === 'active'
+      && /局势/.test(setupProbe.duelMomentum)
+      && /开局护体/.test(setupProbe.duelMomentum)
+      && /行动窗口/.test(setupProbe.duelMomentum)
+      && /反打窗口/.test(setupProbe.duelMomentum)
+      && setupProbe.duelMomentumState === 'opening_window'
+      && setupProbe.payload?.duelMomentumReport?.pressureState === 'opening_window'
+      && setupProbe.payload?.duelMomentumReport?.safeguards?.includes('second_seat_buffer')
+      && setupProbe.payload?.duelMomentumReport?.usesHiddenInformation === false
+      && !/payload|hand|deck|cardId|instanceId|loadoutSnapshot|reward|rating|elo/i.test(`${setupProbe.duelMomentum} ${JSON.stringify(setupProbe.payload?.duelMomentumReport || {})}`),
+    JSON.stringify(setupProbe),
+  );
 
   const liveCardClicked = await page.evaluate(() => {
     const card = document.querySelector('[data-live-card]');
@@ -1359,6 +1472,8 @@ async function safeElementScreenshot(page, selector, outputPath) {
     currentSeat: document.querySelector('[data-live-current-seat]')?.textContent || '',
     turnTimer: document.querySelector('[data-live-turn-timer]')?.textContent || '',
     openingSafeguard: document.querySelector('[data-live-opening-safeguard]')?.textContent || '',
+    duelMomentum: document.querySelector('[data-live-duel-momentum]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+    duelMomentumState: document.querySelector('[data-live-duel-momentum]')?.getAttribute('data-live-duel-momentum-state') || '',
     events: document.querySelector('[data-live-event-log]')?.textContent || '',
     payload: JSON.parse(window.render_game_to_text()).pvp?.live || null,
     calls: window.__livePvpAuditCalls,
@@ -1396,6 +1511,18 @@ async function safeElementScreenshot(page, selector, outputPath) {
       && actionProbe.payload?.openingSafeguardReport?.secondSeatBuffer?.block === 3
       && actionProbe.payload?.openingSafeguardReport?.counterplay?.grantedSeats?.includes('B')
       && !/payload|hand|deck|cardId|instanceId|loadoutSnapshot|reward|rating|elo/i.test(`${actionProbe.events} ${actionProbe.openingSafeguard} ${JSON.stringify(actionProbe.payload?.openingSafeguardReport || {})}`),
+    JSON.stringify(actionProbe),
+  );
+  add(
+    'live UI keeps duel momentum counterplay window readable after protection',
+    /局势/.test(actionProbe.duelMomentum)
+      && /反打窗口/.test(actionProbe.duelMomentum)
+      && /公开缓冲|首个行动/.test(actionProbe.duelMomentum)
+      && actionProbe.duelMomentumState === 'reversal_window'
+      && actionProbe.payload?.duelMomentumReport?.pressureState === 'reversal_window'
+      && actionProbe.payload?.duelMomentumReport?.safeguards?.includes('counterplay_granted')
+      && actionProbe.payload?.duelMomentumReport?.usesHiddenInformation === false
+      && !/payload|hand|deck|cardId|instanceId|loadoutSnapshot|reward|rating|elo/i.test(`${actionProbe.duelMomentum} ${JSON.stringify(actionProbe.payload?.duelMomentumReport || {})}`),
     JSON.stringify(actionProbe),
   );
 
@@ -2360,6 +2487,61 @@ async function safeElementScreenshot(page, selector, outputPath) {
         reviewActions: [{ id: 'queue_again', label: '继续真人排位' }],
       },
       setup: null,
+      openingSafeguardReport: {
+        reportVersion: 'pvp-live-opening-safeguard-v1',
+        status: 'closed',
+        currentSeat: 'A',
+        viewerSeat: 'A',
+        firstSeat: 'A',
+        secondSeat: 'B',
+        damageBudget: {
+          firstSeat: 18,
+          secondSeat: 22,
+          secondAction: 28,
+          currentSeat: 'A',
+          currentActionBudget: null,
+        },
+        openingProtection: {
+          minimumHp: 1,
+          protectedSeats: [],
+          active: false,
+          summary: '未完成首个回合的席位不会被开局伤害直接终结。',
+        },
+        secondSeatBuffer: {
+          block: 3,
+          seatId: 'B',
+          active: false,
+          summary: '后手开局获得 3 点公开护盾，抵消先动节奏差。',
+        },
+        counterplay: {
+          block: 8,
+          pendingSeats: [],
+          grantedSeats: [],
+          summary: '护体后反打缓冲会在受保护方首个行动窗口发放。',
+        },
+        sourceVisibility: 'public_state',
+        usesHiddenInformation: false,
+        rankedImpact: 'none',
+      },
+      duelMomentumReport: {
+        reportVersion: 'pvp-live-duel-momentum-v1',
+        sourceVisibility: 'public_state',
+        usesHiddenInformation: false,
+        rankedImpact: 'none',
+        viewerSeat: 'A',
+        opponentSeat: 'B',
+        currentSeat: 'A',
+        isViewerTurn: false,
+        viewerHpPct: 100,
+        opponentHpPct: 100,
+        hpDelta: 0,
+        pressureState: 'invalidated',
+        pressureLabel: '无效局',
+        agencyLabel: '无效局',
+        summaryLine: '局势：无效局，本局未开战成功，不计正式积分。',
+        counterplayLine: '行动窗口：无效局不计正式积分，不产生先手击杀或奖励。',
+        safeguards: ['invalidated_no_score'],
+      },
       stateVersion: 9,
       roundIndex: 1,
       turnIndex: 1,
@@ -2430,7 +2612,10 @@ async function safeElementScreenshot(page, selector, outputPath) {
       && invalidatedProbe.buttons['refresh-match'] === true
       && invalidatedProbe.buttons.surrender === true
       && invalidatedProbe.buttons['end-turn'] === true
-      && invalidatedProbe.payload?.phase === 'invalidated',
+      && invalidatedProbe.payload?.phase === 'invalidated'
+      && invalidatedProbe.payload?.openingSafeguardReport?.status === 'closed'
+      && invalidatedProbe.payload?.duelMomentumReport?.pressureState === 'invalidated'
+      && /不计正式积分/.test(invalidatedProbe.payload?.duelMomentumReport?.counterplayLine || ''),
     JSON.stringify(invalidatedProbe),
   );
 

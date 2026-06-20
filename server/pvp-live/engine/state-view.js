@@ -991,11 +991,150 @@ function projectOpeningSafeguardReport(state, seatId) {
     };
 }
 
+function getHpPct(seat) {
+    const hp = Math.max(0, Math.floor(Number(seat && seat.hp) || 0));
+    const maxHp = Math.max(1, Math.floor(Number(seat && seat.maxHp) || 1));
+    return Math.max(0, Math.min(100, Math.round((hp / maxHp) * 100)));
+}
+
+function projectDuelMomentumReport(state, seatId, openingSafeguardReport = null) {
+    const viewerSeat = seatId === 'B' ? 'B' : 'A';
+    const opponentSeat = viewerSeat === 'A' ? 'B' : 'A';
+    const viewer = state && state.seats ? state.seats[viewerSeat] : null;
+    const opponent = state && state.seats ? state.seats[opponentSeat] : null;
+    const status = String(state && state.status || 'setup');
+    const currentSeat = state && state.currentSeat === 'B' ? 'B' : 'A';
+    const isActive = status === 'active';
+    const isViewerTurn = isActive && currentSeat === viewerSeat;
+    if (status !== 'setup' && status !== 'active') {
+        const pressureState = status === 'finished' ? 'finished' : status === 'invalidated' ? 'invalidated' : 'closed';
+        const pressureLabel = pressureState === 'finished' ? '对局结束' : pressureState === 'invalidated' ? '无效局' : '局势关闭';
+        const summaryLine = pressureState === 'finished'
+            ? '局势：对局已结束，行动窗口已关闭。'
+            : pressureState === 'invalidated'
+                ? '局势：无效局，本局未开战成功，不计正式积分。'
+                : '局势：当前没有可行动窗口。';
+        const counterplayLine = pressureState === 'finished'
+            ? '行动窗口：本局已进入赛后复盘。'
+            : pressureState === 'invalidated'
+                ? '行动窗口：无效局不计正式积分，不产生先手击杀或奖励。'
+                : '行动窗口：等待新的真人对局。';
+        return {
+            reportVersion: 'pvp-live-duel-momentum-v1',
+            sourceVisibility: 'public_state',
+            usesHiddenInformation: false,
+            rankedImpact: 'none',
+            viewerSeat,
+            opponentSeat,
+            currentSeat,
+            isViewerTurn: false,
+            viewerHpPct: getHpPct(viewer),
+            opponentHpPct: getHpPct(opponent),
+            hpDelta: Math.max(0, Math.floor(Number(viewer && viewer.hp) || 0)) - Math.max(0, Math.floor(Number(opponent && opponent.hp) || 0)),
+            pressureState,
+            pressureLabel,
+            agencyLabel: pressureLabel,
+            summaryLine,
+            counterplayLine,
+            safeguards: pressureState === 'invalidated' ? ['invalidated_no_score'] : []
+        };
+    }
+    const report = openingSafeguardReport || projectOpeningSafeguardReport(state, viewerSeat);
+    const protection = report.openingProtection && typeof report.openingProtection === 'object' ? report.openingProtection : {};
+    const buffer = report.secondSeatBuffer && typeof report.secondSeatBuffer === 'object' ? report.secondSeatBuffer : {};
+    const counterplay = report.counterplay && typeof report.counterplay === 'object' ? report.counterplay : {};
+    const protectedSeats = Array.isArray(protection.protectedSeats)
+        ? protection.protectedSeats.filter(item => item === 'A' || item === 'B')
+        : [];
+    const grantedSeats = Array.isArray(counterplay.grantedSeats)
+        ? counterplay.grantedSeats.filter(item => item === 'A' || item === 'B')
+        : [];
+    const pendingSeats = Array.isArray(counterplay.pendingSeats)
+        ? counterplay.pendingSeats.filter(item => item === 'A' || item === 'B')
+        : [];
+    const viewerHp = Math.max(0, Math.floor(Number(viewer && viewer.hp) || 0));
+    const opponentHp = Math.max(0, Math.floor(Number(opponent && opponent.hp) || 0));
+    const hpDelta = viewerHp - opponentHp;
+    const openingProtectionActive = !!protection.active && protectedSeats.length > 0;
+    const currentSeatHasCounterplay = grantedSeats.includes(currentSeat);
+    const viewerHasCounterplay = grantedSeats.includes(viewerSeat);
+    const opponentHasCounterplay = grantedSeats.includes(opponentSeat);
+    const viewerProtected = protectedSeats.includes(viewerSeat);
+    const opponentProtected = protectedSeats.includes(opponentSeat);
+    const safeguards = [];
+    if (openingProtectionActive || status === 'setup') safeguards.push('opening_protection');
+    if (Math.max(0, Math.floor(Number(buffer.block) || 0)) > 0) safeguards.push('second_seat_buffer');
+    if (grantedSeats.length > 0) safeguards.push('counterplay_granted');
+    if (pendingSeats.length > 0 || openingProtectionActive && grantedSeats.length === 0) safeguards.push('counterplay_window_pending');
+    if (status === 'setup') safeguards.push('setup_ready_required');
+    const pressureState = status === 'setup'
+        ? 'setup'
+        : currentSeatHasCounterplay || viewerHasCounterplay || opponentHasCounterplay
+            ? 'reversal_window'
+            : openingProtectionActive
+                ? 'opening_window'
+                : Math.abs(hpDelta) <= 5 ? 'balanced' : hpDelta > 5 ? 'viewer_advantage' : 'opponent_advantage';
+    const pressureLabel = pressureState === 'setup'
+        ? '准备观察'
+        : pressureState === 'reversal_window'
+            ? currentSeat === viewerSeat ? '你的反打窗口' : `${currentSeat} 的反打窗口`
+            : pressureState === 'opening_window'
+                ? '开局护体窗口'
+                : pressureState === 'viewer_advantage' ? '你方血线领先' : pressureState === 'opponent_advantage' ? '对方血线领先' : '血线均衡';
+    const agencyLabel = status === 'setup'
+        ? '准备阶段'
+        : status === 'finished' ? '对局结束' : isViewerTurn ? '你的行动窗口' : `等待 ${currentSeat} 行动`;
+    const summaryLine = pressureState === 'setup'
+        ? '局势：双方仍在锁谱调息，完成准备后才进入行动窗口。'
+        : pressureState === 'reversal_window'
+            ? currentSeat === viewerSeat
+                ? '局势：你的反打窗口已打开，公开缓冲已发放。'
+                : `局势：${currentSeat} 的反打窗口已打开，公开缓冲已发放。`
+            : pressureState === 'opening_window'
+                ? isViewerTurn
+                    ? '局势：你的开局行动窗口，对手仍有开局护体。'
+                    : '局势：对手行动中，开局护体仍保护未行动席位。'
+                : hpDelta > 5 ? '局势：你方血线领先，继续保留下一手行动窗口。' : hpDelta < -5 ? '局势：对方血线领先，优先寻找反打窗口。' : '局势：血线接近，行动窗口仍在双方之间轮转。';
+    const counterplayLine = pressureState === 'setup'
+        ? '行动窗口：准备完成后才进入出牌，先手不能在准备阶段秒杀。'
+        : pressureState === 'reversal_window'
+            ? currentSeat === viewerSeat
+                ? '反打窗口：你的反打窗口已生效，先处理护盾缓冲后的首个选择。'
+                : `反打窗口：${currentSeat} 已获得公开缓冲，等待其首个行动选择。`
+            : openingProtectionActive
+                ? viewerProtected && !isViewerTurn
+                    ? '反打窗口：若你被护体保住，首个行动窗口会获得缓冲。'
+                    : opponentProtected
+                        ? '反打窗口：对方若被护体保住，会在首个行动窗口获得缓冲。'
+                        : '反打窗口：护体保护仍在，等待受保护方首个行动窗口。'
+                : isViewerTurn ? '行动窗口：轮到你行动，按公开血线与护盾选择节奏。' : '行动窗口：等待对手行动，保留下一手反打判断。';
+    return {
+        reportVersion: 'pvp-live-duel-momentum-v1',
+        sourceVisibility: 'public_state',
+        usesHiddenInformation: false,
+        rankedImpact: 'none',
+        viewerSeat,
+        opponentSeat,
+        currentSeat,
+        isViewerTurn,
+        viewerHpPct: getHpPct(viewer),
+        opponentHpPct: getHpPct(opponent),
+        hpDelta,
+        pressureState,
+        pressureLabel,
+        agencyLabel,
+        summaryLine,
+        counterplayLine,
+        safeguards: Array.from(new Set(safeguards)).slice(0, 8)
+    };
+}
+
 function projectStateView(state, seatId) {
     if (!state || !state.seats || !state.seats[seatId]) {
         throw new Error(`Cannot project live PVP state for seat: ${seatId}`);
     }
     const opponentSeatId = seatId === 'A' ? 'B' : 'A';
+    const openingSafeguardReport = projectOpeningSafeguardReport(state, seatId);
     return {
         matchId: state.matchId,
         ruleVersion: state.ruleVersion,
@@ -1015,7 +1154,8 @@ function projectStateView(state, seatId) {
         friendlySeries: projectFriendlySeries(state.friendlySeries, state.status),
         firstMatchGuide: projectFirstMatchGuide(state.firstMatchGuide, state.status),
         loadoutExplorationReport: projectLoadoutExplorationReport(state.loadoutExplorationReport),
-        openingSafeguardReport: projectOpeningSafeguardReport(state, seatId),
+        openingSafeguardReport,
+        duelMomentumReport: projectDuelMomentumReport(state, seatId, openingSafeguardReport),
         settlementReport: projectSettlementReport(state, seatId),
         postMatchReview: projectPostMatchReview(state, seatId),
         self: projectSelfSeat(state.seats[seatId]),

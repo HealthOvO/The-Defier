@@ -1,5 +1,35 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-20: V10-S9F live PVP duel momentum HUD
+  - 本轮完成
+    - `server/pvp-live/engine/state-view.js` 新增 `pvp-live-duel-momentum-v1` 投影，把公开血线百分比、当前行动席位、开局护体窗口、后手护盾、反打缓冲状态和行动窗口解释整理成 `duelMomentumReport`。
+    - 该报告固定 `sourceVisibility: public_state`、`usesHiddenInformation: false`、`rankedImpact: none`，只读取双方公开 seat 状态和既有 `openingSafeguardReport`，不读取隐藏手牌、牌库、完整斗法谱、原始事件 payload、rating / ELO 或奖励信息。
+    - `js/scenes/pvp-scene.js` 新增 `getLiveDuelMomentumReport()` / `renderLiveDuelMomentumReport()`，并把报告接入 `PVPScene.getLiveSnapshot()`、`render_game_to_text()` 和 live 面板 DOM。
+    - live 面板新增 `data-live-duel-momentum` 持续 HUD，展示“局势 / 行动窗口 / 反打窗口 / 公开状态 / 不写正式积分”，让双方在 active 对局中不用只靠事件日志理解“为什么先手不能秒杀、为什么护体后还有反打窗口”。
+    - 同轮修正前后台恢复后的实时状态渲染 race：hidden 状态下可能已排队的 `requestAnimationFrame` 会吞掉后续 `connected` 发布，`handleLiveForegroundResume()` 现在在恢复 heartbeat 后追加一次 0ms forced render，确保 `data-live-realtime-state` 与 session payload 一致。
+    - `tests/sanity_pvp_live_engine_checks.cjs` 覆盖 setup、active opening window、护体后 B 的 `reversal_window`、invalidated no-score 和 finished post-review closed state，并用隐藏信息扫描固定报告不会泄露手牌、牌库、实例 id、rating / ELO 或奖励。
+    - `tests/browser_pvp_live_audit.mjs` 新增 fake browser HUD 断言：matched setup、active opening window、护体后反打窗口和 invalidated terminal 四段都必须在 DOM / payload / `render_game_to_text()` 中可见且不泄露隐藏信息；同轮前景恢复审计会等待 DOM 同步到 `connected`，并覆盖 payload 已更新但 UI 尚未渲染的时序窗口。
+    - `tests/browser_pvp_live_real_backend_smoke.mjs` 新增真实后端双账号断言，验证 active 对局里真实服务端投影、前端 session、DOM 和 `render_game_to_text()` 都能读到公开局势报告；A 出牌后，B 无需手动 refresh 也能继续看到公开局势 / 行动窗口提示。
+    - `tests/sanity_pvp_live_ui_contract_checks.cjs`、`tests/sanity_release_gate_coverage_checks.cjs` 固定 DOM、CSS、PVPScene 方法、fake browser finding、real backend smoke finding 和引擎 marker，防止后续把这层解释误删或误接到正式奖励 / rating / hidden info。
+  - 已验证
+    - 红测：`node tests/sanity_pvp_live_engine_checks.cjs` 在实现前失败于 `state view should expose public duel momentum report`。
+    - 红测：`node tests/sanity_pvp_live_ui_contract_checks.cjs` 在 DOM 接入前失败于 `index live PVP tab should include marker: data-live-duel-momentum`。
+    - 绿测：`node tests/sanity_pvp_live_engine_checks.cjs`
+    - 绿测：`node tests/sanity_pvp_live_ui_contract_checks.cjs`
+    - 绿测：`node tests/sanity_release_gate_coverage_checks.cjs`
+    - 语法检查：`node --check server/pvp-live/engine/state-view.js`
+    - 语法检查：`node --check js/scenes/pvp-scene.js`
+    - 语法检查：`node --check tests/browser_pvp_live_audit.mjs`
+    - 语法检查：`node --check tests/browser_pvp_live_real_backend_smoke.mjs`
+    - 构建：`npm run build:pages`
+    - 浏览器审计：`node tests/browser_pvp_live_audit.mjs http://127.0.0.1:4173 output/pvp-live-duel-momentum-audit-final`，60/60 findings、0 console error。
+    - 真实后端 smoke：`node tests/browser_pvp_live_real_backend_smoke.mjs http://127.0.0.1:4173 output/pvp-live-duel-momentum-real-final`，37/37 findings、0 console error。
+    - 同步检查：`node tests/sanity_intro_progress_sync_checks.cjs`
+    - 全量 Node：`npm run test:node`
+    - 清洁检查：`git diff --check`
+  - 当前结论
+    - live PVP 现在不仅有服务端公平规则，还能把“当前谁在行动、谁还受护体、反打窗口是否出现、双方血线压力如何”持续投给双方 UI，降低先手压迫和护体减伤带来的理解成本。该切片仍不改变伤害、生命、抽牌、灵力、起手、匹配、正式积分、奖励、赛季验证或结算，也不是后台保活、举报系统、多实例强一致、生产 smoke 或线上部署封板。
+
 - 2026-06-20: V10-S9E live PVP local social comfort preference
   - 本轮完成
     - `js/scenes/pvp-scene.js` 新增 `pvp-live-social-preferences-v1` 本地偏好读写，玩家静音对手预设表情后会写入 localStorage，重新进入 live 面板或恢复 snapshot 时仍保持本机静音。
