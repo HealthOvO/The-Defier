@@ -1287,6 +1287,110 @@ export const PVPScene = {
       </div>
     `;
   },
+  getLiveIntentSignalReport(view) {
+    const report = view && view.intentSignalReport && typeof view.intentSignalReport === 'object'
+      ? view.intentSignalReport
+      : null;
+    if (!report) return null;
+    const threat = report.threat && typeof report.threat === 'object' ? report.threat : {};
+    const responseWindow = report.responseWindow && typeof report.responseWindow === 'object' ? report.responseWindow : {};
+    return {
+      reportVersion: String(report.reportVersion || 'pvp-live-intent-signal-v1'),
+      sourceVisibility: String(report.sourceVisibility || 'public_state_and_public_content'),
+      usesHiddenInformation: report.usesHiddenInformation === true,
+      rankedImpact: String(report.rankedImpact || 'none'),
+      viewerSeat: String(report.viewerSeat || ''),
+      opponentSeat: String(report.opponentSeat || ''),
+      currentSeat: String(report.currentSeat || ''),
+      isViewerTurn: !!report.isViewerTurn,
+      signalState: String(report.signalState || 'closed'),
+      signalLabel: String(report.signalLabel || '读牌观察'),
+      intentLine: String(report.intentLine || '读牌：等待公开行动窗口。'),
+      responseLine: String(report.responseLine || '反制窗口：等待权威状态。'),
+      threat: {
+        actorSeat: String(threat.actorSeat || ''),
+        targetSeat: String(threat.targetSeat || ''),
+        actorEnergy: Math.max(0, Math.floor(Number(threat.actorEnergy) || 0)),
+        publicRawDamageCeiling: Math.max(0, Math.floor(Number(threat.publicRawDamageCeiling) || 0)),
+        publicDamageCeiling: Math.max(0, Math.floor(Number(threat.publicDamageCeiling) || 0)),
+        publicBlockCeiling: Math.max(0, Math.floor(Number(threat.publicBlockCeiling) || 0)),
+        damageBudget: threat.damageBudget === null || threat.damageBudget === undefined
+          ? null
+          : Math.max(0, Math.floor(Number(threat.damageBudget) || 0)),
+        blockedByCurrentBlock: Math.max(0, Math.floor(Number(threat.blockedByCurrentBlock) || 0)),
+        targetHpBefore: Math.max(0, Math.floor(Number(threat.targetHpBefore) || 0)),
+        targetHpAfter: Math.max(0, Math.floor(Number(threat.targetHpAfter) || 0)),
+        targetBlock: Math.max(0, Math.floor(Number(threat.targetBlock) || 0)),
+        openingProtectionWouldTrigger: threat.openingProtectionWouldTrigger === true
+      },
+      responseWindow: {
+        defenderSeat: String(responseWindow.defenderSeat || ''),
+        hasOpeningProtection: responseWindow.hasOpeningProtection === true,
+        hasPendingCounterplay: responseWindow.hasPendingCounterplay === true,
+        counterplayBlock: Math.max(0, Math.floor(Number(responseWindow.counterplayBlock) || 0)),
+        defenderBlock: Math.max(0, Math.floor(Number(responseWindow.defenderBlock) || 0)),
+        defenderHp: Math.max(0, Math.floor(Number(responseWindow.defenderHp) || 0))
+      },
+      safeguards: Array.isArray(report.safeguards)
+        ? report.safeguards.map(item => String(item || '')).filter(Boolean).slice(0, 8)
+        : []
+    };
+  },
+  renderLiveIntentSignalReport(view) {
+    const report = this.getLiveIntentSignalReport(view);
+    if (!report) return '读牌：等待公开意图';
+    const visibilityText = report.usesHiddenInformation ? '含隐藏信息' : '不含隐藏信息';
+    const rankedText = report.rankedImpact === 'none' ? '不写正式积分' : report.rankedImpact;
+    const budgetText = report.threat.damageBudget === null
+      ? '无额外预算'
+      : `预算 ${report.threat.damageBudget}`;
+    const ceilingText = `公开上限 ${report.threat.publicDamageCeiling} / ${budgetText} / ${report.threat.targetSeat || '--'} 预计 ${report.threat.targetHpAfter} 血`;
+    return `
+      <div class="pvp-live-intent-signal-line">
+        <span class="pvp-live-intent-signal-chip">${this.escapeHtml(report.signalLabel)}</span>
+        <span>${this.escapeHtml(report.intentLine)}</span>
+      </div>
+      <div class="pvp-live-intent-signal-line">
+        <span class="pvp-live-intent-signal-chip">反制窗口</span>
+        <span>${this.escapeHtml(report.responseLine)}</span>
+      </div>
+      <div class="pvp-live-intent-signal-line compact">
+        <span>${this.escapeHtml(ceilingText)}</span>
+        <span>${this.escapeHtml(report.sourceVisibility)} · ${this.escapeHtml(visibilityText)} · ${this.escapeHtml(rankedText)}</span>
+      </div>
+    `;
+  },
+  getLivePublicStatuses(seat) {
+    const statuses = Array.isArray(seat && seat.publicStatuses) ? seat.publicStatuses : [];
+    return statuses.slice(0, 6).map(status => ({
+      statusId: String(status && status.statusId || ''),
+      label: String(status && status.label || '公开状态'),
+      sourceSeat: String(status && status.sourceSeat || ''),
+      stacks: Math.max(1, Math.floor(Number(status && status.stacks) || 1)),
+      earliestConsumeTurnIndex: Math.max(0, Math.floor(Number(status && status.earliestConsumeTurnIndex) || 0)),
+      expiresAtTurnIndex: Math.max(0, Math.floor(Number(status && status.expiresAtTurnIndex) || 0)),
+      responseWindow: String(status && status.responseWindow || ''),
+      summary: String(status && status.summary || '')
+    })).filter(status => status.statusId && status.label);
+  },
+  renderLivePublicStatuses(seat) {
+    const statuses = this.getLivePublicStatuses(seat);
+    if (!statuses.length) return '<span class="pvp-live-public-status-empty">状态：无公开状态</span>';
+    return statuses.map(status => {
+      const stackText = status.stacks > 1 ? ` x${status.stacks}` : '';
+      const windowText = status.responseWindow === 'defender_turn_before_payoff'
+        ? `反制窗口后可兑现`
+        : status.earliestConsumeTurnIndex > 0 ? `第 ${status.earliestConsumeTurnIndex} 手后可兑现` : '公开可见';
+      const summary = status.summary || `${status.label}：${windowText}`;
+      return `
+        <span class="pvp-live-public-status" data-live-public-status="${this.escapeHtml(status.statusId)}">
+          <span class="pvp-live-public-status-label">${this.escapeHtml(status.label)}${this.escapeHtml(stackText)}</span>
+          <span class="pvp-live-public-status-window">${this.escapeHtml(windowText)}</span>
+          <span class="pvp-live-public-status-summary">${this.escapeHtml(summary)}</span>
+        </span>
+      `;
+    }).join('');
+  },
   getLiveFirstMatchGuide(view) {
     const report = view && view.firstMatchGuide && typeof view.firstMatchGuide === 'object' ? view.firstMatchGuide : null;
     if (!report) return null;
@@ -2787,6 +2891,8 @@ export const PVPScene = {
       opening_counterplay_granted: '反打缓冲发放',
       budget_clamped: '首动伤害压制',
       damage_applied: '伤害结算',
+      status_applied: '公开状态施加',
+      status_consumed: '公开状态兑现',
       block_gained: '护盾结算',
       card_played: '术式打出',
       turn_ended: '回合交替',
@@ -2829,6 +2935,16 @@ export const PVPScene = {
       const hpDamage = Math.max(0, Math.floor(Number(payload.hpDamage) || 0));
       const targetHp = Math.max(0, Math.floor(Number(payload.targetHp) || 0));
       detail = `${targetSeat ? `目标 ${targetSeat}` : '目标'} · 生命伤害 ${hpDamage} · 剩余 ${targetHp}`;
+    } else if (type === 'status_applied') {
+      const label = String(payload.label || '公开状态');
+      const seatId = String(payload.seatId || '');
+      const earliest = Math.max(0, Math.floor(Number(payload.earliestConsumeTurnIndex) || 0));
+      detail = `${seatId ? `目标 ${seatId}` : '目标'} · ${label} · 反制窗口后可兑现${earliest ? ` · 最早第 ${earliest} 手` : ''}`;
+    } else if (type === 'status_consumed') {
+      const label = String(payload.label || '公开状态');
+      const seatId = String(payload.seatId || '');
+      const damageBonus = Math.max(0, Math.floor(Number(payload.damageBonus) || 0));
+      detail = `${seatId ? `目标 ${seatId}` : '目标'} · 消耗${label} · 额外伤害 +${damageBonus}`;
     } else if (type === 'match_invalidated' && payload.reason) {
       detail = `原因：${String(payload.reason)}`;
     } else if (type === 'match_finished') {
@@ -3062,6 +3178,7 @@ export const PVPScene = {
       actionPreviewReport: this.getLiveActionPreviewReport(view),
       actionReceiptReport: this.getLiveActionReceiptReport(view),
       duelMomentumReport: this.getLiveDuelMomentumReport(view),
+      intentSignalReport: this.getLiveIntentSignalReport(view),
       friendlySeries: this.getLiveFriendlySeries(view && view.friendlySeries ? view.friendlySeries : state.rematchReport),
       firstMatchGuide: this.getLiveFirstMatchGuide(view),
       loadoutExplorationReport: this.getLiveLoadoutExplorationReport(view),
@@ -3107,6 +3224,7 @@ export const PVPScene = {
         ready: !!view.self.ready,
         mulliganUsed: !!view.self.mulliganUsed,
         handCount: Array.isArray(view.self.hand) ? view.self.hand.length : Math.max(0, Math.floor(Number(view.self.handCount) || 0)),
+        publicStatuses: this.getLivePublicStatuses(view.self),
         loadout: this.getLiveLoadoutSummary(view.self)
       } : null,
       opponent: view && view.opponent ? {
@@ -3119,6 +3237,7 @@ export const PVPScene = {
         ready: !!view.opponent.ready,
         mulliganUsed: !!view.opponent.mulliganUsed,
         handCount: Math.max(0, Math.floor(Number(view.opponent.handCount) || 0)),
+        publicStatuses: this.getLivePublicStatuses(view.opponent),
         loadout: this.getLiveLoadoutSummary(view.opponent)
       } : null
     };
@@ -3248,6 +3367,15 @@ export const PVPScene = {
       duelMomentumEl.setAttribute('data-live-duel-momentum-hidden', report ? String(report.usesHiddenInformation === true) : '');
       duelMomentumEl.innerHTML = this.renderLiveDuelMomentumReport(view);
     }
+    const intentSignalEl = root.querySelector('[data-live-intent-signal]');
+    if (intentSignalEl) {
+      const report = this.getLiveIntentSignalReport(view);
+      intentSignalEl.setAttribute('data-live-intent-signal-state', report ? report.signalState : 'idle');
+      intentSignalEl.setAttribute('data-live-intent-signal-source', report ? report.sourceVisibility : '');
+      intentSignalEl.setAttribute('data-live-intent-signal-hidden', report ? String(report.usesHiddenInformation === true) : '');
+      intentSignalEl.setAttribute('data-live-intent-signal-current-seat', report ? report.currentSeat : '');
+      intentSignalEl.innerHTML = this.renderLiveIntentSignalReport(view);
+    }
     setText('[data-live-social-status]', this.liveSocialMuted
       ? '社交：已静音对手表情 · 本地偏好 · 不写正式积分'
       : '社交：预设表情 · 无自由文本 · 本地偏好');
@@ -3308,6 +3436,10 @@ export const PVPScene = {
     setText('[data-live-opponent-seat]', opponent && opponent.seatId ? opponent.seatId : '--');
     setText('[data-live-self-stats]', self ? `生命 ${self.hp}/${self.maxHp} · 灵力 ${self.energy}/${self.maxEnergy} · 护盾 ${self.block || 0} · ${self.ready ? '已准备' : '未准备'}${self.mulliganUsed ? ' · 已调息' : ''}` : '等待权威状态');
     setText('[data-live-opponent-stats]', opponent ? `生命 ${opponent.hp}/${opponent.maxHp} · 灵力 ${opponent.energy}/${opponent.maxEnergy} · 手牌 ${opponent.handCount} · ${opponent.ready ? '已准备' : '未准备'}` : '仅显示公开信息');
+    const selfStatusesEl = root.querySelector('[data-live-self-statuses]');
+    if (selfStatusesEl) selfStatusesEl.innerHTML = self ? this.renderLivePublicStatuses(self) : '状态：无公开状态';
+    const opponentStatusesEl = root.querySelector('[data-live-opponent-statuses]');
+    if (opponentStatusesEl) opponentStatusesEl.innerHTML = opponent ? this.renderLivePublicStatuses(opponent) : '状态：无公开状态';
     setText('[data-live-self-loadout]', self ? `斗法谱：${this.formatLiveLoadoutSummary(self, '未锁定')}` : '斗法谱：--');
     setText('[data-live-opponent-loadout]', opponent ? `公开谱：${this.formatLiveLoadoutSummary(opponent, '仅显示公开摘要')}` : '公开谱：--');
     setText('[data-live-opponent-hand]', opponent ? `手牌：${Math.max(0, Number(opponent.handCount) || 0)} 张（隐藏）` : '手牌：--');

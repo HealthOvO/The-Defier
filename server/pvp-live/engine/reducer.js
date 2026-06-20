@@ -112,6 +112,83 @@ function getCardTags(card) {
     return Array.isArray(definition && definition.tags) ? definition.tags : [];
 }
 
+function makePublicStatus(status) {
+    return {
+        statusId: String(status.statusId || ''),
+        label: String(status.label || ''),
+        seatId: status.seatId === 'B' ? 'B' : 'A',
+        sourceSeat: status.sourceSeat === 'B' ? 'B' : 'A',
+        stacks: Math.max(1, Math.floor(Number(status.stacks) || 1)),
+        appliedTurnIndex: normalizeCount(status.appliedTurnIndex),
+        earliestConsumeTurnIndex: normalizeCount(status.earliestConsumeTurnIndex),
+        expiresAtTurnIndex: normalizeCount(status.expiresAtTurnIndex),
+        responseWindow: String(status.responseWindow || ''),
+        summary: String(status.summary || '').slice(0, 120)
+    };
+}
+
+function applyPublicSetupStatus(state, intent, card, events) {
+    if (!card || card.cardId !== 'punctureMark') return null;
+    const targetSeat = intent.payload && intent.payload.targetSeat === 'A' ? 'A' : intent.payload && intent.payload.targetSeat === 'B' ? 'B' : '';
+    const target = targetSeat && state.seats[targetSeat];
+    if (!target || state.status !== 'active') return null;
+    const currentTurn = normalizeCount(state.turnIndex);
+    const status = makePublicStatus({
+        statusId: 'vulnerable_mark',
+        label: '破绽',
+        seatId: targetSeat,
+        sourceSeat: intent.seatId,
+        stacks: 1,
+        appliedTurnIndex: currentTurn,
+        earliestConsumeTurnIndex: currentTurn + 2,
+        expiresAtTurnIndex: currentTurn + 4,
+        responseWindow: 'defender_turn_before_payoff',
+        summary: '破绽已公开；防守方至少拥有一个行动窗口后才可被兑现。'
+    });
+    target.publicStatuses = Array.isArray(target.publicStatuses) ? target.publicStatuses.filter(item => item && item.statusId !== status.statusId) : [];
+    target.publicStatuses.push(status);
+    appendEvent(state, events, 'status_applied', intent, {
+        statusId: status.statusId,
+        label: status.label,
+        seatId: status.seatId,
+        sourceSeat: status.sourceSeat,
+        stacks: status.stacks,
+        appliedTurnIndex: status.appliedTurnIndex,
+        earliestConsumeTurnIndex: status.earliestConsumeTurnIndex,
+        expiresAtTurnIndex: status.expiresAtTurnIndex,
+        responseWindow: status.responseWindow
+    });
+    return status;
+}
+
+function consumePublicPayoffStatus(state, intent, card, events) {
+    if (!card || card.cardId !== 'exposedCircuit') return { damageBonus: 0, consumed: null };
+    const targetSeat = intent.payload && intent.payload.targetSeat === 'A' ? 'A' : intent.payload && intent.payload.targetSeat === 'B' ? 'B' : '';
+    const target = targetSeat && state.seats[targetSeat];
+    if (!target || !Array.isArray(target.publicStatuses)) return { damageBonus: 0, consumed: null };
+    const currentTurn = normalizeCount(state.turnIndex);
+    const statusIndex = target.publicStatuses.findIndex(status => {
+        if (!status || status.statusId !== 'vulnerable_mark') return false;
+        if (status.sourceSeat !== intent.seatId) return false;
+        if (currentTurn < normalizeCount(status.earliestConsumeTurnIndex)) return false;
+        if (normalizeCount(status.expiresAtTurnIndex) > 0 && currentTurn > normalizeCount(status.expiresAtTurnIndex)) return false;
+        return true;
+    });
+    if (statusIndex < 0) return { damageBonus: 0, consumed: null };
+    const [status] = target.publicStatuses.splice(statusIndex, 1);
+    const damageBonus = 6;
+    ensureLongGameStats(state.seats[intent.seatId]).publicSetupConversions += 1;
+    appendEvent(state, events, 'status_consumed', intent, {
+        statusId: status.statusId,
+        label: status.label,
+        seatId: targetSeat,
+        sourceSeat: intent.seatId,
+        damageBonus,
+        consumedTurnIndex: currentTurn
+    });
+    return { damageBonus, consumed: status };
+}
+
 function ensureLongGameStats(seat) {
     if (!seat.longGameStats || typeof seat.longGameStats !== 'object') {
         seat.longGameStats = {};
@@ -380,11 +457,16 @@ function reducePlayCard(state, intent, fingerprint) {
     const tags = getCardTags(card);
     if (tags.includes('setup')) nextActor.playedSetupThisTurn = true;
 
-    const damageError = applyDamage(newState, intent, card, events);
+    const payoff = consumePublicPayoffStatus(newState, intent, card, events);
+    const resolvedCard = payoff.damageBonus > 0
+        ? { ...card, damage: Math.max(0, Math.floor(Number(card.damage) || 0)) + payoff.damageBonus }
+        : card;
+    const damageError = applyDamage(newState, intent, resolvedCard, events);
     if (damageError) {
         return reject(state, intent, damageError);
     }
     applyBlock(newState, intent, card, events);
+    applyPublicSetupStatus(newState, intent, card, events);
     if (nextActor.playedSetupThisTurn && !nextActor.setupConvertedThisTurn && !tags.includes('setup') && ((card.damage || 0) > 0 || (card.block || 0) > 0)) {
         ensureLongGameStats(nextActor).publicSetupConversions += 1;
         nextActor.setupConvertedThisTurn = true;

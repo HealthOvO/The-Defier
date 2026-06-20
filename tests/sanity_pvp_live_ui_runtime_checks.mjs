@@ -715,9 +715,47 @@ let openingActionState = {
       usesHiddenInformation: false,
       rankedImpact: 'none'
     },
+    intentSignalReport: {
+      reportVersion: 'pvp-live-intent-signal-v1',
+      sourceVisibility: 'public_state_and_public_content',
+      usesHiddenInformation: false,
+      rankedImpact: 'none',
+      viewerSeat: 'A',
+      opponentSeat: 'B',
+      currentSeat: 'A',
+      isViewerTurn: true,
+      signalState: 'opening_pressure',
+      signalLabel: '公开压迫',
+      intentLine: '读牌：A 当前 3 能量，公开牌池上限可造成 15 点生命压力；B 预计保留 35 血。',
+      responseLine: '反制窗口：B 仍有开局护体与反打缓冲，先手不能直接终结。',
+      threat: {
+        actorSeat: 'A',
+        targetSeat: 'B',
+        actorEnergy: 3,
+        publicDamageCeiling: 15,
+        targetHpBefore: 50,
+        targetHpAfter: 35,
+        targetBlock: 3,
+        openingProtectionWouldTrigger: false
+      },
+      responseWindow: {
+        defenderSeat: 'B',
+        hasOpeningProtection: true,
+        hasPendingCounterplay: true,
+        counterplayBlock: 8
+      },
+      safeguards: ['public_card_catalog_only', 'private_card_projection_blocked', 'opening_protection']
+    },
     opponent: { seatId: 'B' },
     self: {
       seatId: 'A',
+      publicStatuses: [{
+        statusId: 'vulnerable_mark',
+        label: '破绽',
+        sourceSeat: 'B',
+        earliestConsumeTurnIndex: 33,
+        summary: '破绽已公开；防守方至少拥有一个行动窗口后才可被兑现。'
+      }],
       hand: [{ instanceId: 'A-strike-opening', cardId: 'pvp_strike', name: '试探斩' }]
     }
   }
@@ -795,6 +833,16 @@ assert.match(PVPScene.liveInlineHint, /B\s*预计\s*45\s*血/, 'opening-window c
 await PVPScene.submitLiveCard('A-strike-opening');
 assert.equal(openingActionIntents.length, 1, 'second opening-window card click should submit exactly one play_card intent');
 assert.equal(openingActionIntents[0].intentType, 'play_card', 'confirmed opening-window card click should keep the authoritative play_card intent');
+const renderedIntentSignal = PVPScene.renderLiveIntentSignalReport(openingActionState.stateView);
+assert.match(renderedIntentSignal, /公开压迫/, 'live UI should render public intent signal label');
+assert.match(renderedIntentSignal, /公开牌池上限/, 'live UI intent signal should frame pressure as public card catalog information');
+assert.match(renderedIntentSignal, /反制窗口/, 'live UI intent signal should show the counterplay window');
+assert.match(renderedIntentSignal, /不含隐藏信息/, 'live UI intent signal should expose no-hidden-information boundary');
+assert.doesNotMatch(renderedIntentSignal, /cardInstanceId|loadoutSnapshot|rating|elo|reward/i, 'live UI intent signal must not render hidden payload markers');
+const renderedPublicStatuses = PVPScene.renderLivePublicStatuses(openingActionState.stateView.self);
+assert.match(renderedPublicStatuses, /破绽/, 'live UI should render public tactical status labels');
+assert.match(renderedPublicStatuses, /反制窗口|可兑现/, 'live UI public status should explain the response/payoff window');
+assert.doesNotMatch(renderedPublicStatuses, /hand|deck|cardId|instanceId|loadoutSnapshot|rating|elo|reward/i, 'live UI public status chips must not render hidden payload markers');
 
 openingActionState = {
   ...openingActionState,

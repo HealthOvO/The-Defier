@@ -265,6 +265,7 @@
                         <div class="pvp-live-opening-safeguard" data-live-opening-safeguard>公平保护：等待权威状态</div>
                         <div class="pvp-live-action-receipt" data-live-action-receipt data-live-action-receipt-source="" data-live-action-receipt-hidden="" data-live-action-receipt-seq="" data-live-action-receipt-type="" data-live-action-receipt-acting="" data-live-action-receipt-next-seat="">行动回执：等待首个权威行动</div>
                         <div class="pvp-live-duel-momentum" data-live-duel-momentum data-live-duel-momentum-state="idle" data-live-duel-momentum-source="" data-live-duel-momentum-hidden="">局势：等待权威状态</div>
+                        <div class="pvp-live-intent-signal" data-live-intent-signal data-live-intent-signal-state="idle" data-live-intent-signal-source="" data-live-intent-signal-hidden="" data-live-intent-signal-current-seat="">读牌：等待公开意图</div>
                         <div class="pvp-live-social-panel" data-live-social-panel>
                             <div class="pvp-live-emote-row">
                                 <button class="pvp-live-emote-button" data-live-emote="respect" onclick="PVPScene.submitLiveEmote('respect')" disabled>抱拳</button>
@@ -305,19 +306,21 @@
                             <section class="pvp-live-seat-panel" data-live-self>
                                 <div class="pvp-live-seat-head">
                                     <span class="pvp-live-seat-title">我方席位</span>
-                                    <span class="pvp-live-seat-badge" data-live-self-seat>--</span>
-                                </div>
-                                <div class="pvp-live-statline" data-live-self-stats>等待权威状态</div>
-                                <div class="pvp-live-loadout" data-live-self-loadout>斗法谱：--</div>
-                                <div class="pvp-live-card-row" data-live-hand></div>
-                            </section>
+                                <span class="pvp-live-seat-badge" data-live-self-seat>--</span>
+                            </div>
+                            <div class="pvp-live-statline" data-live-self-stats>等待权威状态</div>
+                            <div class="pvp-live-public-statuses" data-live-self-statuses>状态：无公开状态</div>
+                            <div class="pvp-live-loadout" data-live-self-loadout>斗法谱：--</div>
+                            <div class="pvp-live-card-row" data-live-hand></div>
+                        </section>
                             <section class="pvp-live-seat-panel" data-live-opponent>
                                 <div class="pvp-live-seat-head">
                                     <span class="pvp-live-seat-title">对方席位</span>
-                                    <span class="pvp-live-seat-badge" data-live-opponent-seat>--</span>
-                                </div>
-                                <div class="pvp-live-statline" data-live-opponent-stats>仅显示公开信息</div>
-                                <div class="pvp-live-loadout" data-live-opponent-loadout>公开谱：--</div>
+                                <span class="pvp-live-seat-badge" data-live-opponent-seat>--</span>
+                            </div>
+                            <div class="pvp-live-statline" data-live-opponent-stats>仅显示公开信息</div>
+                            <div class="pvp-live-public-statuses" data-live-opponent-statuses>状态：无公开状态</div>
+                            <div class="pvp-live-loadout" data-live-opponent-loadout>公开谱：--</div>
                                 <div class="pvp-live-hidden-hand" data-live-opponent-hand>手牌：--</div>
                             </section>
                         </div>

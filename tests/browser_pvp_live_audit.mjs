@@ -451,6 +451,93 @@ async function safeElementScreenshot(page, selector, outputPath) {
           : ['opening_protection', 'second_seat_buffer', 'counterplay_window_pending'],
       };
     };
+    const makeIntentSignalReport = (stateVersion = 1, currentSeat = 'A', status = 'setup') => {
+      const active = status === 'active';
+      const targetSeat = currentSeat === 'A' ? 'B' : 'A';
+      if (status !== 'setup' && status !== 'active') {
+        const signalState = status === 'finished' ? 'finished' : status === 'invalidated' ? 'invalidated' : 'closed';
+        return {
+          reportVersion: 'pvp-live-intent-signal-v1',
+          sourceVisibility: 'public_state_and_public_content',
+          usesHiddenInformation: false,
+          rankedImpact: 'none',
+          viewerSeat: 'A',
+          opponentSeat: 'B',
+          currentSeat,
+          isViewerTurn: false,
+          signalState,
+          signalLabel: signalState === 'invalidated' ? '无效局' : signalState === 'finished' ? '对局结束' : '读牌关闭',
+          intentLine: signalState === 'invalidated' ? '读牌：本局无效，不产生正式积分压力。' : '读牌：当前没有公开行动窗口。',
+          responseLine: signalState === 'invalidated' ? '反制窗口：无效局不会产生先手击杀、奖励或正式扣分。' : '反制窗口：等待新的真人行动窗口。',
+          threat: {
+            actorSeat: currentSeat,
+            targetSeat,
+            actorEnergy: 3,
+            publicRawDamageCeiling: 0,
+            publicDamageCeiling: 0,
+            publicBlockCeiling: 0,
+            damageBudget: null,
+            blockedByCurrentBlock: 0,
+            targetHpBefore: 50,
+            targetHpAfter: 50,
+            targetBlock: 0,
+            openingProtectionWouldTrigger: false,
+          },
+          responseWindow: {
+            defenderSeat: targetSeat,
+            hasOpeningProtection: false,
+            hasPendingCounterplay: false,
+            counterplayBlock: 0,
+            defenderBlock: 0,
+            defenderHp: 50,
+          },
+          safeguards: ['public_card_catalog_only', 'private_card_projection_blocked'],
+        };
+      }
+      return {
+        reportVersion: 'pvp-live-intent-signal-v1',
+        sourceVisibility: 'public_state_and_public_content',
+        usesHiddenInformation: false,
+        rankedImpact: 'none',
+        viewerSeat: 'A',
+        opponentSeat: 'B',
+        currentSeat,
+        isViewerTurn: active && currentSeat === 'A',
+        signalState: active ? 'opening_pressure' : 'setup_read',
+        signalLabel: active ? '公开压迫' : '准备读牌',
+        intentLine: active
+          ? '读牌：A 当前 3 能量，公开牌池上限可造成 15 点生命压力；B 预计保留 35 血。'
+          : '读牌：双方仍在准备，公开牌池上限只在开战后进入行动窗口。',
+        responseLine: active
+          ? '反制窗口：B 仍有开局护体与反打缓冲，先手不能直接终结。'
+          : '反制窗口：准备完成前不能出牌，先手不能在准备阶段秒杀。',
+        threat: {
+          actorSeat: currentSeat,
+          targetSeat,
+          actorEnergy: 3,
+          publicRawDamageCeiling: active ? 18 : 0,
+          publicDamageCeiling: active ? 15 : 0,
+          publicBlockCeiling: active ? 10 : 0,
+          damageBudget: active ? 18 : null,
+          blockedByCurrentBlock: active ? 3 : 0,
+          targetHpBefore: 50,
+          targetHpAfter: active ? 35 : 50,
+          targetBlock: active ? 3 : 0,
+          openingProtectionWouldTrigger: false,
+        },
+        responseWindow: {
+          defenderSeat: targetSeat,
+          hasOpeningProtection: active,
+          hasPendingCounterplay: active,
+          counterplayBlock: active ? 8 : 0,
+          defenderBlock: active ? 3 : 0,
+          defenderHp: 50,
+        },
+        safeguards: active
+          ? ['public_card_catalog_only', 'private_card_projection_blocked', 'opening_protection', 'counterplay_window_pending']
+          : ['public_card_catalog_only', 'private_card_projection_blocked', 'setup_ready_required', 'opening_protection'],
+      };
+    };
     const makeStateView = (stateVersion = 1, currentSeat = 'A', status = 'setup') => ({
       matchId: 'pvplm-browser-live',
       ruleVersion: 'pvp-live-v1',
@@ -548,6 +635,7 @@ async function safeElementScreenshot(page, selector, outputPath) {
         safeguards: ['public_events', 'public_block'],
       } : null,
       duelMomentumReport: makeDuelMomentumReport(stateVersion, currentSeat, status),
+      intentSignalReport: makeIntentSignalReport(stateVersion, currentSeat, status),
       firstMatchGuide: makeFirstMatchGuide(status),
       loadoutExplorationReport: makeLoadoutExplorationReport(),
       postMatchReview: makePostMatchReview(status),
@@ -1433,6 +1521,10 @@ async function safeElementScreenshot(page, selector, outputPath) {
     duelMomentumState: document.querySelector('[data-live-duel-momentum]')?.getAttribute('data-live-duel-momentum-state') || '',
     duelMomentumSource: document.querySelector('[data-live-duel-momentum]')?.getAttribute('data-live-duel-momentum-source') || '',
     duelMomentumHidden: document.querySelector('[data-live-duel-momentum]')?.getAttribute('data-live-duel-momentum-hidden') || '',
+    intentSignal: document.querySelector('[data-live-intent-signal]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+    intentSignalState: document.querySelector('[data-live-intent-signal]')?.getAttribute('data-live-intent-signal-state') || '',
+    intentSignalSource: document.querySelector('[data-live-intent-signal]')?.getAttribute('data-live-intent-signal-source') || '',
+    intentSignalHidden: document.querySelector('[data-live-intent-signal]')?.getAttribute('data-live-intent-signal-hidden') || '',
     firstGuide: document.querySelector('[data-live-first-guide]')?.textContent || '',
     loadoutExplorationText: document.querySelector('[data-live-loadout-exploration]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
     loadoutExplorationSource: document.querySelector('[data-live-loadout-exploration]')?.getAttribute('data-live-loadout-exploration-source') || '',
@@ -1850,6 +1942,22 @@ async function safeElementScreenshot(page, selector, outputPath) {
       && !/payload|hand|deck|cardId|instanceId|loadoutSnapshot|reward|rating|elo/i.test(`${matchedProbe.duelMomentum} ${JSON.stringify(matchedProbe.payload?.duelMomentumReport || {})}`),
     JSON.stringify(matchedProbe),
   );
+  add(
+    'live UI renders public intent signal report without hidden payloads',
+    /读牌/.test(matchedProbe.intentSignal)
+      && /公开牌池上限|准备/.test(matchedProbe.intentSignal)
+      && /反制窗口/.test(matchedProbe.intentSignal)
+      && matchedProbe.intentSignalState === 'setup_read'
+      && matchedProbe.intentSignalSource === 'public_state_and_public_content'
+      && matchedProbe.intentSignalHidden === 'false'
+      && matchedProbe.payload?.intentSignalReport?.reportVersion === 'pvp-live-intent-signal-v1'
+      && matchedProbe.payload?.intentSignalReport?.sourceVisibility === 'public_state_and_public_content'
+      && matchedProbe.payload?.intentSignalReport?.usesHiddenInformation === false
+      && matchedProbe.payload?.intentSignalReport?.rankedImpact === 'none'
+      && matchedProbe.payload?.intentSignalReport?.safeguards?.includes('private_card_projection_blocked')
+      && !/payload|hand|deck|cardId|instanceId|loadoutSnapshot|reward|rating|elo/i.test(`${matchedProbe.intentSignal} ${JSON.stringify(matchedProbe.payload?.intentSignalReport || {})}`),
+    JSON.stringify(matchedProbe),
+  );
 
   await page.evaluate(() => document.querySelector('[data-live-mulligan-card]')?.click());
   await page.evaluate(() => document.querySelector('[data-live-action="confirm-mulligan"]')?.click());
@@ -1863,6 +1971,9 @@ async function safeElementScreenshot(page, selector, outputPath) {
     openerAssignment: document.querySelector('[data-live-opener-assignment]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
     duelMomentum: document.querySelector('[data-live-duel-momentum]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
     duelMomentumState: document.querySelector('[data-live-duel-momentum]')?.getAttribute('data-live-duel-momentum-state') || '',
+    intentSignal: document.querySelector('[data-live-intent-signal]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+    intentSignalState: document.querySelector('[data-live-intent-signal]')?.getAttribute('data-live-intent-signal-state') || '',
+    intentSignalHidden: document.querySelector('[data-live-intent-signal]')?.getAttribute('data-live-intent-signal-hidden') || '',
     turnTimer: document.querySelector('[data-live-turn-timer]')?.textContent || '',
     presetDisabled: Array.from(document.querySelectorAll('[data-live-loadout-preset]')).map(button => button.disabled),
     calls: window.__livePvpAuditCalls,
@@ -1936,6 +2047,24 @@ async function safeElementScreenshot(page, selector, outputPath) {
       && setupProbe.payload?.duelMomentumReport?.safeguards?.includes('second_seat_buffer')
       && setupProbe.payload?.duelMomentumReport?.usesHiddenInformation === false
       && !/payload|hand|deck|cardId|instanceId|loadoutSnapshot|reward|rating|elo/i.test(`${setupProbe.duelMomentum} ${JSON.stringify(setupProbe.payload?.duelMomentumReport || {})}`),
+    JSON.stringify(setupProbe),
+  );
+  add(
+    'live UI renders active public intent signal opening window without hidden payloads',
+    setupProbe.phase === 'active'
+      && /公开压迫/.test(setupProbe.intentSignal)
+      && /公开牌池上限/.test(setupProbe.intentSignal)
+      && /反制窗口/.test(setupProbe.intentSignal)
+      && /不含隐藏信息/.test(setupProbe.intentSignal)
+      && setupProbe.intentSignalState === 'opening_pressure'
+      && setupProbe.intentSignalHidden === 'false'
+      && setupProbe.payload?.intentSignalReport?.reportVersion === 'pvp-live-intent-signal-v1'
+      && setupProbe.payload?.intentSignalReport?.signalState === 'opening_pressure'
+      && setupProbe.payload?.intentSignalReport?.threat?.publicDamageCeiling === 15
+      && setupProbe.payload?.intentSignalReport?.responseWindow?.hasOpeningProtection === true
+      && setupProbe.payload?.intentSignalReport?.responseWindow?.hasPendingCounterplay === true
+      && setupProbe.payload?.intentSignalReport?.usesHiddenInformation === false
+      && !/payload|hand|deck|cardId|instanceId|loadoutSnapshot|reward|rating|elo/i.test(`${setupProbe.intentSignal} ${JSON.stringify(setupProbe.payload?.intentSignalReport || {})}`),
     JSON.stringify(setupProbe),
   );
   const lowTimerProbe = await page.evaluate(() => {

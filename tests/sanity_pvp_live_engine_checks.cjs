@@ -331,6 +331,18 @@ assert(activeViewA.duelMomentumReport.currentSeat === 'A' && activeViewA.duelMom
 assert(/护体/.test(activeViewA.duelMomentumReport.summaryLine), 'active duel momentum should mention active opening protection');
 assert(/反打窗口/.test(activeViewA.duelMomentumReport.counterplayLine), 'active duel momentum should keep counterplay window readable');
 assert(activeViewA.duelMomentumReport.safeguards.includes('second_seat_buffer'), 'active duel momentum should surface second-seat buffer safeguard');
+assert(activeViewA.intentSignalReport && activeViewA.intentSignalReport.reportVersion === 'pvp-live-intent-signal-v1', 'active state view should expose public intent signal report');
+assert(activeViewA.intentSignalReport.sourceVisibility === 'public_state_and_public_content', 'intent signal should use public board state and public card content only');
+assert(activeViewA.intentSignalReport.usesHiddenInformation === false, 'intent signal must not use hidden hand or deck information');
+assert(activeViewA.intentSignalReport.rankedImpact === 'none', 'intent signal should not write ranked result');
+assert(activeViewA.intentSignalReport.viewerSeat === 'A' && activeViewA.intentSignalReport.currentSeat === 'A', 'intent signal should identify viewer and current public actor');
+assert(activeViewA.intentSignalReport.isViewerTurn === true, 'intent signal should mark the acting viewer turn');
+assert(activeViewA.intentSignalReport.threat.publicDamageCeiling >= 15, 'intent signal should expose a public damage ceiling after block/protection');
+assert(activeViewA.intentSignalReport.threat.targetHpAfter >= 1, 'intent signal should keep opening protection readable instead of promising a first-click kill');
+assert(/公开牌池|公开上限/.test(activeViewA.intentSignalReport.intentLine), 'intent signal should frame pressure as a public-content read, not a hidden-hand read');
+assert(/反制窗口|护体|缓冲/.test(activeViewA.intentSignalReport.responseLine), 'intent signal should name the defender counterplay window');
+assert(activeViewA.intentSignalReport.safeguards.includes('private_card_projection_blocked'), 'intent signal should carry the hidden-card safeguard');
+assert(!/hand|deck|cardInstanceId|loadoutSnapshot|rating|elo|reward/i.test(JSON.stringify(activeViewA.intentSignalReport)), 'intent signal must not leak hands, decks, rating, or reward data');
 assert(activeViewA.actionPreviewReport && activeViewA.actionPreviewReport.reportVersion === 'pvp-live-action-preview-v1', 'active state view should expose viewer-scoped action preview report');
 assert(activeViewA.actionPreviewReport.sourceVisibility === 'viewer_public_state', 'action preview should be scoped to viewer public state');
 assert(activeViewA.actionPreviewReport.usesHiddenInformation === false, 'action preview must not use hidden information');
@@ -350,8 +362,97 @@ assert(!/deck|loadoutSnapshot|rating|elo|reward|opponentHand|opponentDeck/i.test
 const activeViewB = projectStateView(activeState, 'B');
 assert(activeViewB.actionPreviewReport && activeViewB.actionPreviewReport.isViewerTurn === false, 'non-current viewer should receive a non-actionable preview boundary');
 assert(activeViewB.actionPreviewReport.playableCards.length === 0, 'non-current viewer preview must not expose opponent playable card projections');
+assert(activeViewB.intentSignalReport && activeViewB.intentSignalReport.isViewerTurn === false, 'non-current viewer should still receive a public intent read');
+assert(activeViewB.intentSignalReport.threat.actorSeat === 'A', 'non-current viewer intent read should identify the public acting seat');
+assert(/等待|观察|反制/.test(activeViewB.intentSignalReport.responseLine), 'non-current viewer intent read should focus on waiting and counterplay');
+assert(!/hand|deck|cardInstanceId|loadoutSnapshot|rating|elo|reward/i.test(JSON.stringify(activeViewB.intentSignalReport)), 'non-current intent signal must not expose opponent hidden card projections');
 assert(activeState.seats.B.block === 3, 'second seat should start active combat with public opening buffer block');
 assert(activeState.events.some(e => e.eventType === 'opening_second_seat_buffer_granted' && e.payload.seatId === 'B' && e.payload.block === 3), 'battle start should emit public second-seat buffer event');
+
+const setupDeck = ['punctureMark', 'exposedCircuit', 'pvp_guard'];
+const tacticalDeck = setupDeck.concat(Array.from({ length: 17 }, (_, index) => index % 2 === 0 ? 'pvp_strike' : 'pvp_guard')).map(id => ({ id, upgraded: false }));
+const tacticalState = createReadyLiveState('pvpm-public-status-test');
+tacticalState.seats.A.hand = tacticalDeck.slice(0, 3).map((entry, index) => ({
+  instanceId: `A-${entry.id}-${index + 1}`,
+  cardId: entry.id,
+  name: RULES.cards[entry.id].name,
+  cost: RULES.cards[entry.id].cost,
+  damage: RULES.cards[entry.id].damage || 0,
+  block: RULES.cards[entry.id].block || 0
+}));
+tacticalState.seats.A.deck = tacticalDeck.slice(3).map((entry, index) => ({
+  instanceId: `A-${entry.id}-${index + 4}`,
+  cardId: entry.id,
+  name: RULES.cards[entry.id].name,
+  cost: RULES.cards[entry.id].cost,
+  damage: RULES.cards[entry.id].damage || 0,
+  block: RULES.cards[entry.id].block || 0
+}));
+const punctureMark = reduceIntent(tacticalState, {
+  intentId: 'intent-public-status-mark-1',
+  intentType: 'play_card',
+  matchId: 'pvpm-public-status-test',
+  seatId: 'A',
+  ruleVersion: RULE_VERSION,
+  stateVersion: tacticalState.stateVersion,
+  payload: { cardInstanceId: 'A-punctureMark-1', targetSeat: 'B' }
+});
+assert(punctureMark.result === 'accepted', 'public setup card should be accepted');
+assert(punctureMark.events.some(e => e.eventType === 'status_applied' && e.payload.statusId === 'vulnerable_mark' && e.payload.seatId === 'B'), 'public setup card should emit status_applied evidence');
+assert(punctureMark.state.seats.B.publicStatuses.some(status => status.statusId === 'vulnerable_mark'), 'public setup card should attach a visible status to the target');
+const markedViewB = projectStateView(punctureMark.state, 'B');
+assert(markedViewB.self.publicStatuses.some(status => status.statusId === 'vulnerable_mark' && status.earliestConsumeTurnIndex > punctureMark.state.turnIndex), 'defender should see a public response window before payoff can consume the mark');
+assert(markedViewB.recentEvents.some(event => event.eventType === 'status_applied' && (event.publicData || {}).statusId === 'vulnerable_mark'), 'defender should see public status_applied event evidence');
+assert(!/hand|deck|cardId|instanceId|loadoutSnapshot|rating|elo|reward/i.test(JSON.stringify(markedViewB.self.publicStatuses)), 'public status view must not leak hidden hand, deck, rating, or card ids');
+const sameWindowPayoff = reduceIntent(punctureMark.state, {
+  intentId: 'intent-public-status-same-window-payoff-1',
+  intentType: 'play_card',
+  matchId: 'pvpm-public-status-test',
+  seatId: 'A',
+  ruleVersion: RULE_VERSION,
+  stateVersion: punctureMark.state.stateVersion,
+  payload: { cardInstanceId: 'A-exposedCircuit-2', targetSeat: 'B' }
+});
+assert(sameWindowPayoff.result === 'accepted', 'same-window payoff card should still resolve as a normal card');
+assert(!sameWindowPayoff.events.some(e => e.eventType === 'status_consumed'), 'same-window payoff must not consume the public mark before defender response');
+assert(sameWindowPayoff.state.seats.B.publicStatuses.some(status => status.statusId === 'vulnerable_mark'), 'same-window payoff should leave the public mark visible for response');
+const markEndTurn = reduceIntent(punctureMark.state, {
+  intentId: 'intent-public-status-a-end-1',
+  intentType: 'end_turn',
+  matchId: 'pvpm-public-status-test',
+  seatId: 'A',
+  ruleVersion: RULE_VERSION,
+  stateVersion: punctureMark.state.stateVersion,
+  payload: {}
+});
+const defenderResponseTurn = projectStateView(markEndTurn.state, 'B');
+assert(defenderResponseTurn.self.publicStatuses.some(status => status.statusId === 'vulnerable_mark'), 'defender response turn should keep the public mark visible');
+assert(/破绽|反制/.test(defenderResponseTurn.duelMomentumReport.counterplayLine) || defenderResponseTurn.self.publicStatuses.length > 0, 'defender response turn should be readable as a response window');
+const defenderEndTurn = reduceIntent(markEndTurn.state, {
+  intentId: 'intent-public-status-b-end-1',
+  intentType: 'end_turn',
+  matchId: 'pvpm-public-status-test',
+  seatId: 'B',
+  ruleVersion: RULE_VERSION,
+  stateVersion: markEndTurn.state.stateVersion,
+  payload: {}
+});
+const delayedPayoff = reduceIntent(defenderEndTurn.state, {
+  intentId: 'intent-public-status-delayed-payoff-1',
+  intentType: 'play_card',
+  matchId: 'pvpm-public-status-test',
+  seatId: 'A',
+  ruleVersion: RULE_VERSION,
+  stateVersion: defenderEndTurn.state.stateVersion,
+  payload: { cardInstanceId: 'A-exposedCircuit-2', targetSeat: 'B' }
+});
+assert(delayedPayoff.result === 'accepted', 'delayed payoff should resolve after defender response window');
+assert(delayedPayoff.events.some(e => e.eventType === 'status_consumed' && e.payload.statusId === 'vulnerable_mark' && e.payload.damageBonus > 0), 'delayed payoff should consume the public mark for a visible bonus');
+assert(!delayedPayoff.state.seats.B.publicStatuses.some(status => status.statusId === 'vulnerable_mark'), 'consumed mark should be removed from target public statuses');
+const delayedReceipt = projectStateView(delayedPayoff.state, 'A').actionReceiptReport;
+assert(delayedReceipt.statusEffects && delayedReceipt.statusEffects.consumed.some(status => status.statusId === 'vulnerable_mark'), 'payoff receipt should explain consumed public status');
+assert(/破绽|额外/.test(delayedReceipt.summaryLine), 'payoff receipt should include a readable public status payoff line');
+assert(!/hand|deck|cardId|instanceId|loadoutSnapshot|rating|elo|reward/i.test(JSON.stringify(delayedReceipt)), 'payoff receipt must not leak hidden hand, deck, rating, or reward data');
 
 const setupEmote = reduceIntent(baseState, {
   intentId: 'intent-setup-emote-1',

@@ -17,6 +17,8 @@ const PUBLIC_EVENT_DATA_KEYS = Object.freeze({
     opening_protection_triggered: ['protectedSeat', 'minimumHp', 'preventedDamage', 'wouldHaveHp'],
     budget_clamped: ['rawDamage', 'actualDamage', 'preventedDamage', 'targetSeat'],
     damage_applied: ['actualDamage', 'budgetedDamage', 'blockedDamage', 'hpDamage', 'targetSeat', 'targetHp'],
+    status_applied: ['statusId', 'label', 'seatId', 'sourceSeat', 'stacks', 'appliedTurnIndex', 'earliestConsumeTurnIndex', 'expiresAtTurnIndex', 'responseWindow'],
+    status_consumed: ['statusId', 'label', 'seatId', 'sourceSeat', 'damageBonus', 'consumedTurnIndex'],
     player_surrendered: ['loserSeat', 'winnerSeat'],
     match_finished: ['winnerSeat', 'loserSeat', 'finishReason', 'scoreA', 'scoreB', 'scoreDelta', 'scoreThreshold', 'roundIndex'],
     turn_timeout: ['seatId', 'winnerSeat', 'loserSeat', 'finishReason'],

@@ -932,6 +932,49 @@
     overflow-wrap: anywhere;
 }
 
+.pvp-live-intent-signal {
+    margin-top: 8px;
+    display: grid;
+    gap: 6px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    border: 1px solid rgba(116, 198, 255, 0.22);
+    background: rgba(116, 198, 255, 0.07);
+    color: rgba(226, 245, 255, 0.94);
+    font-size: 0.74rem;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+}
+
+.pvp-live-intent-signal-line {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    min-width: 0;
+}
+
+.pvp-live-intent-signal-line > span:last-child {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.pvp-live-intent-signal-line.compact {
+    color: rgba(226, 245, 255, 0.76);
+    font-size: 0.68rem;
+}
+
+.pvp-live-intent-signal-chip {
+    flex: 0 0 auto;
+    max-width: 42%;
+    padding: 3px 6px;
+    border-radius: 8px;
+    border: 1px solid rgba(116, 198, 255, 0.2);
+    background: rgba(255, 255, 255, 0.05);
+    color: rgba(232, 248, 255, 0.96);
+    font-weight: 800;
+    overflow-wrap: anywhere;
+}
+
 .pvp-live-social-panel {
     margin-top: 8px;
     padding: 8px;
@@ -2058,6 +2101,48 @@
     background: rgba(72, 133, 190, 0.08);
     color: rgba(215, 235, 255, 0.88);
     overflow-wrap: anywhere;
+}
+
+.pvp-live-public-statuses {
+    margin-top: 8px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    min-height: 22px;
+    color: rgba(228, 241, 255, 0.82);
+    font-size: 0.7rem;
+    line-height: 1.28;
+    overflow-wrap: anywhere;
+}
+
+.pvp-live-public-status,
+.pvp-live-public-status-empty {
+    min-width: 0;
+    padding: 3px 5px;
+    border-radius: 8px;
+    border: 1px solid rgba(116, 198, 255, 0.18);
+    background: rgba(116, 198, 255, 0.07);
+}
+
+.pvp-live-public-status {
+    display: inline-flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 4px;
+}
+
+.pvp-live-public-status-label {
+    color: rgba(234, 248, 255, 0.96);
+    font-weight: 800;
+}
+
+.pvp-live-public-status-window {
+    color: rgba(219, 239, 255, 0.86);
+    font-weight: 700;
+}
+
+.pvp-live-public-status-summary {
+    color: rgba(219, 239, 255, 0.72);
 }
 
 .pvp-live-card-row {
@@ -4223,8 +4308,8 @@ input:checked+.seal-slider .seal-face.on {
     }
 
     .pvp-live-status-card {
-        padding-top: 8px;
-        padding-bottom: 8px;
+        padding-top: 5px;
+        padding-bottom: 5px;
     }
 
     .pvp-live-quality {
@@ -4321,6 +4406,27 @@ input:checked+.seal-slider .seal-face.on {
     }
 
     .pvp-live-duel-momentum-chip {
+        max-width: 38%;
+        padding: 2px 4px;
+    }
+
+    .pvp-live-intent-signal {
+        margin-top: 3px;
+        padding: 4px 5px;
+        gap: 3px;
+        font-size: 0.6rem;
+        line-height: 1.14;
+    }
+
+    .pvp-live-intent-signal-line {
+        gap: 4px;
+    }
+
+    .pvp-live-intent-signal-line.compact {
+        font-size: 0.56rem;
+    }
+
+    .pvp-live-intent-signal-chip {
         max-width: 38%;
         padding: 2px 4px;
     }
@@ -4436,6 +4542,18 @@ input:checked+.seal-slider .seal-face.on {
 
     .pvp-live-loadout-selector .pvp-live-seat-badge {
         max-width: 100%;
+    }
+
+    .pvp-live-public-statuses {
+        margin-top: 5px;
+        gap: 3px;
+        font-size: 0.6rem;
+        line-height: 1.14;
+    }
+
+    .pvp-live-public-status,
+    .pvp-live-public-status-empty {
+        padding: 2px 4px;
     }
 
     .pvp-live-shell {

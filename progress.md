@@ -1,5 +1,25 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-21: V10-S9Z live PVP public intent and setup payoff
+  - 本轮完成
+    - `server/pvp-live/engine/state-view.js` 新增 `pvp-live-intent-signal-v1` 公开读牌报告：只基于公开牌面、公开牌库内容、当前灵力、格挡、开局保护和已公开反制窗口推导伤害上限，固定 `sourceVisibility=public_state_and_public_content`、`usesHiddenInformation=false`、`rankedImpact=none`，不读取隐藏手牌、牌库顺序、抽牌结果、rating 或任何正式匹配私密信息。
+    - `js/scenes/pvp-scene.js`、`index.html`、`css/pvp.css` 接入 `[data-live-intent-signal]`：真人 PVP 面板会显示“对手公开威胁 / 当前防线 / 可反制窗口”，让玩家在出牌前能理解风险，而不是被先手爆发或未知伤害突然秒杀。
+    - `server/pvp-live/engine/reducer.js` 新增公开破绽与兑现链：`punctureMark` 给目标挂 `vulnerable_mark`，公开事件为 `status_applied`；同窗口不能立刻兑现，必须经过至少一轮响应窗口；`exposedCircuit` 之后才能消耗该破绽，公开事件为 `status_consumed`，并获得 `+6` 额外伤害。
+    - live PVP 状态投影、回放、持久化、WS 公开事件白名单同步纳入 `status_applied` / `status_consumed`，`actionReceiptReport` 会明确写出“挂上破绽”或“消耗破绽，额外伤害 +6”，双方看到的是同一套公开状态，不泄露隐藏信息。
+    - UI 新增我方 / 对手公开状态条：`[data-live-self-statuses]`、`[data-live-opponent-statuses]` 和 `[data-live-public-status]` chip 会显示破绽层数、来源和响应窗口；事件日志也能读懂破绽挂载与兑现。
+    - 测试门禁覆盖公开读牌和破绽兑现：engine 断言同窗口不能消费、响应窗口后才能消费、隐藏信息不进入状态；UI runtime / contract / browser audit / release gate 固定 DOM、payload、文案和 release marker，防止后续退回“只看选择器、不看双方体验”的弱覆盖。
+  - 已验证
+    - 红测：`node tests/sanity_pvp_live_engine_checks.cjs` 在实现前失败于缺少公开破绽状态与延迟兑现。
+    - 绿测：`node tests/sanity_pvp_live_engine_checks.cjs`
+    - 绿测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs`
+    - 绿测：`node tests/sanity_pvp_live_ui_contract_checks.cjs`
+    - 绿测：`node tests/sanity_release_gate_coverage_checks.cjs`
+    - 构建：`npm run build:pages`
+    - 浏览器审计：`node tests/browser_pvp_live_audit.mjs http://127.0.0.1:4173 output/web-pvp-live-audit`，86/86 findings、0 failed。
+    - 全量 Node 门禁：`npm run test:node`，All node checks passed。
+  - 当前结论
+    - live PVP 现在向“真人对抗也要能读、能防、能反打”推进了一步：对手下一轮的公开威胁被翻译成可读信号，进攻方可以先布局破绽，防守方有清晰响应窗口，兑现伤害必须经过公开状态和延迟窗口，不再鼓励先手立刻秒杀。这一片仍不改正式积分、奖励、匹配、隐藏手牌或牌库私密性，只把双方体验的交互层和可审计门禁补上。
+
 - 2026-06-21: V10-S9Y live PVP active disconnect backend proof
   - 本轮完成
     - `server/pvp-live/live-store.js` 扩展现有非生产 `forceSeatStateForTest()`：在 `DEFIER_PVP_TEST_MODE=1` 且 `testMatchScope` 匹配时允许注入 `heartbeatElapsedMs`，通过回写 `lastHeartbeatAt` 构造 online / grace / disconnected 派生输入；不直接写连接 status，仍由 `makeConnectionSeatReport()` 和服务端 sweep 规则计算真实状态。

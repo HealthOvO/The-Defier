@@ -193,6 +193,8 @@ const PUBLIC_EVENT_DATA_KEYS = {
     opening_protection_triggered: ['protectedSeat', 'minimumHp', 'preventedDamage', 'wouldHaveHp'],
     budget_clamped: ['rawDamage', 'actualDamage', 'preventedDamage', 'targetSeat'],
     damage_applied: ['actualDamage', 'budgetedDamage', 'blockedDamage', 'hpDamage', 'targetSeat', 'targetHp'],
+    status_applied: ['statusId', 'label', 'seatId', 'sourceSeat', 'stacks', 'appliedTurnIndex', 'earliestConsumeTurnIndex', 'expiresAtTurnIndex', 'responseWindow'],
+    status_consumed: ['statusId', 'label', 'seatId', 'sourceSeat', 'damageBonus', 'consumedTurnIndex'],
     player_surrendered: ['loserSeat', 'winnerSeat'],
     match_finished: ['winnerSeat', 'loserSeat', 'finishReason', 'scoreA', 'scoreB', 'scoreDelta', 'scoreThreshold', 'roundIndex'],
     turn_timeout: ['seatId', 'winnerSeat', 'loserSeat', 'finishReason'],
@@ -251,6 +253,8 @@ function collectReviewEvidence(events, finishSequence) {
         'opening_protection_triggered',
         'budget_clamped',
         'damage_applied',
+        'status_applied',
+        'status_consumed',
         'connection_timeout',
         'ready_timeout',
         'match_invalidated',
@@ -542,7 +546,7 @@ function getSeatWindowSummary(evidence) {
             addSeatWindow(getEventSeat(event, 'nextSeat'), event);
             return;
         }
-        if (['card_played', 'block_gained', 'opening_second_seat_buffer_granted', 'opening_counterplay_granted', 'budget_clamped', 'damage_applied', 'opening_protection_triggered'].includes(event.eventType)) {
+        if (['card_played', 'block_gained', 'opening_second_seat_buffer_granted', 'opening_counterplay_granted', 'budget_clamped', 'damage_applied', 'opening_protection_triggered', 'status_applied', 'status_consumed'].includes(event.eventType)) {
             addSeatWindow(event.actingSeat ? String(event.actingSeat) : '', event);
         }
     });
@@ -1211,7 +1215,9 @@ function getPublicCardName(cardId) {
 
 function isCardResolutionEvent(event, cardId, actingSeat) {
     if (!event || event.actingSeat !== actingSeat) return false;
-    if (!['budget_clamped', 'opening_protection_triggered', 'damage_applied', 'block_gained'].includes(String(event.eventType || ''))) return false;
+    if (!['budget_clamped', 'opening_protection_triggered', 'damage_applied', 'block_gained', 'status_applied', 'status_consumed'].includes(String(event.eventType || ''))) return false;
+    if (event.eventType === 'status_applied') return String(cardId || '') === 'punctureMark';
+    if (event.eventType === 'status_consumed') return String(cardId || '') === 'exposedCircuit';
     const payload = getPublicEventPayload(event);
     return String(payload.sourceCardId || '') === String(cardId || '');
 }
@@ -1238,10 +1244,14 @@ function projectCardActionReceipt(state, seatId, cardPlayedIndex) {
     const damageEvent = findResolution('damage_applied');
     const protectionEvent = findResolution('opening_protection_triggered');
     const blockEvent = findResolution('block_gained');
+    const statusAppliedEvent = findResolution('status_applied');
+    const statusConsumedEvent = findResolution('status_consumed');
     const budgetPayload = getPublicEventPayload(budgetEvent);
     const damagePayload = getPublicEventPayload(damageEvent);
     const protectionPayload = getPublicEventPayload(protectionEvent);
     const blockPayload = getPublicEventPayload(blockEvent);
+    const statusAppliedPayload = getPublicEventPayload(statusAppliedEvent);
+    const statusConsumedPayload = getPublicEventPayload(statusConsumedEvent);
     const rawDamage = normalizeCount(damagePayload.rawDamage || budgetPayload.rawDamage);
     const budgetedDamage = normalizeCount(damagePayload.budgetedDamage || damagePayload.actualDamage || budgetPayload.actualDamage);
     const preventedByBudget = normalizeCount(budgetPayload.preventedDamage);
@@ -1261,11 +1271,35 @@ function projectCardActionReceipt(state, seatId, cardPlayedIndex) {
     const blockLine = blockGain > 0
         ? `；自身护盾 +${blockGain}，当前 ${normalizeCount(blockPayload.totalBlock)}`
         : '';
+    const statusApplied = statusAppliedEvent ? {
+        statusId: String(statusAppliedPayload.statusId || ''),
+        label: String(statusAppliedPayload.label || ''),
+        seatId: String(statusAppliedPayload.seatId || ''),
+        sourceSeat: String(statusAppliedPayload.sourceSeat || actingSeat),
+        stacks: normalizeCount(statusAppliedPayload.stacks),
+        earliestConsumeTurnIndex: normalizeCount(statusAppliedPayload.earliestConsumeTurnIndex),
+        responseWindow: String(statusAppliedPayload.responseWindow || '')
+    } : null;
+    const statusConsumed = statusConsumedEvent ? {
+        statusId: String(statusConsumedPayload.statusId || ''),
+        label: String(statusConsumedPayload.label || ''),
+        seatId: String(statusConsumedPayload.seatId || ''),
+        sourceSeat: String(statusConsumedPayload.sourceSeat || actingSeat),
+        damageBonus: normalizeCount(statusConsumedPayload.damageBonus),
+        consumedTurnIndex: normalizeCount(statusConsumedPayload.consumedTurnIndex)
+    } : null;
+    const statusLine = statusApplied
+        ? `；给 ${statusApplied.seatId || targetSeat || '目标'} 挂上${statusApplied.label || '公开状态'}，保留反制窗口`
+        : statusConsumed
+            ? `；消耗${statusConsumed.label || '公开状态'}，额外伤害 +${statusConsumed.damageBonus}`
+            : '';
     const safeguards = ['public_events'];
     if (budgetEvent) safeguards.push('first_action_budget');
     if (blockedDamage > 0) safeguards.push('public_block');
     if (protectionTriggered) safeguards.push('opening_protection');
     if (blockGain > 0) safeguards.push('self_block');
+    if (statusApplied) safeguards.push('public_status_applied');
+    if (statusConsumed) safeguards.push('public_status_consumed');
     return {
         reportVersion: 'pvp-live-action-receipt-v1',
         sourceVisibility: 'authoritative_public_projection',
@@ -1299,7 +1333,11 @@ function projectCardActionReceipt(state, seatId, cardPlayedIndex) {
             block: blockGain,
             totalBlock: normalizeCount(blockPayload.totalBlock)
         } : null,
-        summaryLine: `${actingSeat} 打出${cardName}：${damageLine}${protectionLine}${blockLine}。`,
+        statusEffects: {
+            applied: statusApplied ? [statusApplied] : [],
+            consumed: statusConsumed ? [statusConsumed] : []
+        },
+        summaryLine: `${actingSeat} 打出${cardName}：${damageLine}${protectionLine}${blockLine}${statusLine}。`,
         safeguards: Array.from(new Set(safeguards))
     };
 }
@@ -1581,6 +1619,182 @@ function projectDuelMomentumReport(state, seatId, openingSafeguardReport = null)
     };
 }
 
+function getPublicCardCeilings(energy) {
+    const availableEnergy = Math.max(0, Math.floor(Number(energy) || 0));
+    return Object.values(RULES.cards || {}).reduce((summary, card) => {
+        if (!card || Math.max(0, Math.floor(Number(card.cost) || 0)) > availableEnergy) return summary;
+        const damage = Math.max(0, Math.floor(Number(card.damage) || 0));
+        const block = Math.max(0, Math.floor(Number(card.block) || 0));
+        return {
+            maxDamage: Math.max(summary.maxDamage, damage),
+            maxBlock: Math.max(summary.maxBlock, block),
+            affordableCount: summary.affordableCount + 1
+        };
+    }, { maxDamage: 0, maxBlock: 0, affordableCount: 0 });
+}
+
+function projectIntentSignalReport(state, seatId, openingSafeguardReport = null) {
+    const viewerSeat = seatId === 'B' ? 'B' : 'A';
+    const opponentSeat = viewerSeat === 'A' ? 'B' : 'A';
+    const status = String(state && state.status || 'setup');
+    const currentSeat = state && state.currentSeat === 'B' ? 'B' : 'A';
+    const isViewerTurn = status === 'active' && currentSeat === viewerSeat;
+    const actorSeat = currentSeat;
+    const targetSeat = actorSeat === 'A' ? 'B' : 'A';
+    const actor = state && state.seats ? state.seats[actorSeat] : null;
+    const target = state && state.seats ? state.seats[targetSeat] : null;
+    const baseReport = {
+        reportVersion: 'pvp-live-intent-signal-v1',
+        sourceVisibility: 'public_state_and_public_content',
+        usesHiddenInformation: false,
+        rankedImpact: 'none',
+        viewerSeat,
+        opponentSeat,
+        currentSeat,
+        isViewerTurn,
+        signalState: 'closed',
+        signalLabel: '读牌关闭',
+        intentLine: '读牌：当前没有公开行动窗口。',
+        responseLine: '反制窗口：等待新的真人行动窗口。',
+        threat: {
+            actorSeat,
+            targetSeat,
+            actorEnergy: Math.max(0, Math.floor(Number(actor && actor.energy) || 0)),
+            publicRawDamageCeiling: 0,
+            publicDamageCeiling: 0,
+            publicBlockCeiling: 0,
+            damageBudget: null,
+            blockedByCurrentBlock: 0,
+            targetHpBefore: Math.max(0, Math.floor(Number(target && target.hp) || 0)),
+            targetHpAfter: Math.max(0, Math.floor(Number(target && target.hp) || 0)),
+            targetBlock: Math.max(0, Math.floor(Number(target && target.block) || 0)),
+            openingProtectionWouldTrigger: false
+        },
+        responseWindow: {
+            defenderSeat: targetSeat,
+            hasOpeningProtection: false,
+            hasPendingCounterplay: false,
+            counterplayBlock: 0,
+            defenderBlock: Math.max(0, Math.floor(Number(target && target.block) || 0)),
+            defenderHp: Math.max(0, Math.floor(Number(target && target.hp) || 0))
+        },
+        safeguards: ['public_card_catalog_only', 'private_card_projection_blocked']
+    };
+    if (status === 'setup') {
+        return {
+            ...baseReport,
+            signalState: 'setup_read',
+            signalLabel: '准备读牌',
+            intentLine: '读牌：双方仍在准备，公开牌池上限只在开战后进入行动窗口。',
+            responseLine: '反制窗口：准备完成前不能出牌，先手不能在准备阶段秒杀。',
+            safeguards: Array.from(new Set([...baseReport.safeguards, 'setup_ready_required', 'opening_protection']))
+        };
+    }
+    if (status !== 'active' || !actor || !target) {
+        const signalState = status === 'finished' ? 'finished' : status === 'invalidated' ? 'invalidated' : 'closed';
+        return {
+            ...baseReport,
+            signalState,
+            signalLabel: signalState === 'finished' ? '对局结束' : signalState === 'invalidated' ? '无效局' : '读牌关闭',
+            intentLine: signalState === 'finished'
+                ? '读牌：对局已结束，公开意图窗口关闭。'
+                : signalState === 'invalidated'
+                    ? '读牌：本局无效，不产生正式积分压力。'
+                    : '读牌：当前没有公开行动窗口。',
+            responseLine: signalState === 'invalidated'
+                ? '反制窗口：无效局不会产生先手击杀、奖励或正式扣分。'
+                : '反制窗口：等待新的真人行动窗口。'
+        };
+    }
+    const openingReport = openingSafeguardReport || projectOpeningSafeguardReport(state, viewerSeat);
+    const protection = openingReport.openingProtection && typeof openingReport.openingProtection === 'object' ? openingReport.openingProtection : {};
+    const counterplay = openingReport.counterplay && typeof openingReport.counterplay === 'object' ? openingReport.counterplay : {};
+    const protectedSeats = Array.isArray(protection.protectedSeats) ? protection.protectedSeats.filter(item => item === 'A' || item === 'B') : [];
+    const pendingSeats = Array.isArray(counterplay.pendingSeats) ? counterplay.pendingSeats.filter(item => item === 'A' || item === 'B') : [];
+    const ceilings = getPublicCardCeilings(actor.energy);
+    const damageBudget = getActionDamageBudget(state, actor);
+    const budgetedDamage = damageBudget === null ? ceilings.maxDamage : Math.min(ceilings.maxDamage, damageBudget);
+    const blockedByCurrentBlock = Math.min(Math.max(0, Math.floor(Number(target.block) || 0)), budgetedDamage);
+    const hpDamageBeforeProtection = Math.max(0, budgetedDamage - blockedByCurrentBlock);
+    const targetHpBefore = Math.max(0, Math.floor(Number(target.hp) || 0));
+    const minimumHp = Math.max(0, Math.floor(Number(protection.minimumHp) || Number(RULES.openingProtection && RULES.openingProtection.minimumHp) || 0));
+    const targetProtected = !!protection.active && protectedSeats.includes(targetSeat);
+    const openingProtectionWouldTrigger = targetProtected && minimumHp > 0 && targetHpBefore - hpDamageBeforeProtection < minimumHp;
+    const protectedHp = Math.min(Math.max(0, Math.floor(Number(target.maxHp || RULES.startingHp) || 0)), minimumHp);
+    const publicDamageCeiling = openingProtectionWouldTrigger
+        ? Math.max(0, targetHpBefore - protectedHp)
+        : hpDamageBeforeProtection;
+    const targetHpAfter = openingProtectionWouldTrigger
+        ? protectedHp
+        : Math.max(0, targetHpBefore - hpDamageBeforeProtection);
+    const counterplayBlock = Math.max(0, Math.floor(Number(counterplay.block) || 0));
+    const hasPendingCounterplay = pendingSeats.includes(targetSeat) || !!target.openingCounterplayPending;
+    const safeguards = ['public_card_catalog_only', 'private_card_projection_blocked', 'public_board_state'];
+    if (damageBudget !== null) safeguards.push('first_action_budget');
+    if (blockedByCurrentBlock > 0) safeguards.push('public_block');
+    if (targetProtected || openingProtectionWouldTrigger) safeguards.push('opening_protection');
+    if (hasPendingCounterplay) safeguards.push('counterplay_window_pending');
+    let signalState = 'tempo_probe';
+    if (openingProtectionWouldTrigger) {
+        signalState = 'protected_lethal_read';
+    } else if (targetHpAfter <= 0) {
+        signalState = 'lethal_pressure';
+    } else if (targetProtected || status === 'active' && protectedSeats.length > 0) {
+        signalState = 'opening_pressure';
+    } else if (publicDamageCeiling >= 12 || targetHpAfter <= 15) {
+        signalState = 'burst_pressure';
+    } else if (ceilings.maxBlock >= 8 && publicDamageCeiling <= 8) {
+        signalState = 'guard_pressure';
+    }
+    const signalLabel = signalState === 'protected_lethal_read'
+        ? '护体读秒'
+        : signalState === 'lethal_pressure'
+            ? '斩杀压力'
+            : signalState === 'opening_pressure'
+                ? '公开压迫'
+                : signalState === 'burst_pressure'
+                    ? '爆发压力'
+                    : signalState === 'guard_pressure' ? '防守蓄势' : '节奏试探';
+    const intentLine = `读牌：${actorSeat} 当前 ${Math.max(0, Math.floor(Number(actor.energy) || 0))} 能量，公开牌池上限可造成 ${publicDamageCeiling} 点生命压力；${targetSeat} 预计保留 ${targetHpAfter} 血。`;
+    const responseLine = openingProtectionWouldTrigger
+        ? `反制窗口：${targetSeat} 会被开局护体保到 ${targetHpAfter} 血，并在首个行动窗口获得缓冲。`
+        : targetProtected || hasPendingCounterplay
+            ? `反制窗口：${targetSeat} 仍有开局护体与反打缓冲，先手不能直接终结。`
+            : isViewerTurn
+                ? `反制窗口：若交权给 ${targetSeat}，对手会按公开血线与护盾寻找反打。`
+                : `反制窗口：等待 ${actorSeat} 行动，观察公开上限后保留下一手反制判断。`;
+    return {
+        ...baseReport,
+        signalState,
+        signalLabel,
+        intentLine,
+        responseLine,
+        threat: {
+            actorSeat,
+            targetSeat,
+            actorEnergy: Math.max(0, Math.floor(Number(actor.energy) || 0)),
+            publicRawDamageCeiling: ceilings.maxDamage,
+            publicDamageCeiling,
+            publicBlockCeiling: ceilings.maxBlock,
+            damageBudget,
+            blockedByCurrentBlock,
+            targetHpBefore,
+            targetHpAfter,
+            targetBlock: Math.max(0, Math.floor(Number(target.block) || 0)),
+            openingProtectionWouldTrigger
+        },
+        responseWindow: {
+            defenderSeat: targetSeat,
+            hasOpeningProtection: targetProtected,
+            hasPendingCounterplay,
+            counterplayBlock: hasPendingCounterplay || targetProtected ? counterplayBlock : 0,
+            defenderBlock: Math.max(0, Math.floor(Number(target.block) || 0)),
+            defenderHp: targetHpBefore
+        },
+        safeguards: Array.from(new Set(safeguards)).slice(0, 8)
+    };
+}
+
 function projectStateView(state, seatId) {
     if (!state || !state.seats || !state.seats[seatId]) {
         throw new Error(`Cannot project live PVP state for seat: ${seatId}`);
@@ -1611,6 +1825,7 @@ function projectStateView(state, seatId) {
         actionPreviewReport: projectActionPreviewReport(state, seatId),
         actionReceiptReport: projectActionReceiptReport(state, seatId),
         duelMomentumReport: projectDuelMomentumReport(state, seatId, openingSafeguardReport),
+        intentSignalReport: projectIntentSignalReport(state, seatId, openingSafeguardReport),
         settlementReport: projectSettlementReport(state, seatId),
         postMatchReview: projectPostMatchReview(state, seatId),
         self: projectSelfSeat(state.seats[seatId]),
