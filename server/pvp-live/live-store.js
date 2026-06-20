@@ -1278,6 +1278,20 @@ class LivePvpStore {
         };
     }
 
+    makeAuthoritativeDuplicateIntentResult(authoritative, intent, saveResult) {
+        if (!authoritative || !authoritative.match || !authoritative.match.state || !intent) return null;
+        const processedIntents = authoritative.match.state.processedIntents || {};
+        if (!processedIntents[`${intent.seatId}:${intent.intentId}`]) return null;
+        const duplicateResult = reduceIntent(authoritative.match.state, intent);
+        if (duplicateResult.result !== 'duplicate' && duplicateResult.reason !== 'duplicate_action_conflict') return null;
+        return {
+            ...duplicateResult,
+            state: authoritative.match.state,
+            stateView: authoritative.stateView || duplicateResult.stateView,
+            saveResult
+        };
+    }
+
     async loadMatchEvents(matchId) {
         if (!this.persistence || typeof this.persistence.loadMatchEvents !== 'function') return [];
         return this.persistence.loadMatchEvents(matchId);
@@ -2423,7 +2437,10 @@ class LivePvpStore {
                 const completion = await this.completeFinishedMatch(match, { liveWsSourceInstanceId });
                 if (this.isStaleStateSaveResult(completion && completion.saveResult)) {
                     const authoritative = await this.rehydrateAuthoritativeMatchForUser(userId, match.matchId);
-                    return this.makeStaleStateSyncResult(authoritative, completion.saveResult);
+                    return (!match.state.settlementReport
+                        ? this.makeAuthoritativeDuplicateIntentResult(authoritative, intent, completion.saveResult)
+                        : null)
+                        || this.makeStaleStateSyncResult(authoritative, completion.saveResult);
                 }
                 acceptedSaveResult = completion && completion.saveResult || null;
                 if (completion && completion.match && completion.match.state) {
@@ -2434,7 +2451,8 @@ class LivePvpStore {
                 acceptedSaveResult = saveResult;
                 if (this.isStaleStateSaveResult(saveResult)) {
                     const authoritative = await this.rehydrateAuthoritativeMatchForUser(userId, match.matchId);
-                    return this.makeStaleStateSyncResult(authoritative, saveResult);
+                    return this.makeAuthoritativeDuplicateIntentResult(authoritative, intent, saveResult)
+                        || this.makeStaleStateSyncResult(authoritative, saveResult);
                 }
             }
         } else if (match.state && this.isTerminalStatus(match.state.status)) {

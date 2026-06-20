@@ -520,6 +520,7 @@ export function createPvpLiveSession({
         serverTime: Math.max(0, Math.floor(Number(message.serverTime) || 0)),
         updatedAt: now()
       };
+      const isIdempotentDuplicate = result === 'duplicate' && intentResult.reason === 'duplicate_action';
       const next = publish({
         phase: resolved.accepted ? normalizePhaseFromView(stateView, 'active') : state.phase,
         matchId: resolved.accepted ? String(message.matchId || state.matchId || stateView && stateView.matchId || '') : state.matchId,
@@ -529,7 +530,7 @@ export function createPvpLiveSession({
         rematchReport: state.rematchReport || null,
         lastEvents: resolveAuthoritativeEvents(message.events, stateView, resolved.accepted),
         lastRealtimeIntentResult: intentResult,
-        lastError: result === 'accepted'
+        lastError: result === 'accepted' || isIdempotentDuplicate
           ? null
           : { reason: message.reason || result || 'intent_result', message: message.message || '实时论道行动需要处理' }
       });

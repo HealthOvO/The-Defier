@@ -609,6 +609,125 @@ async function readyBoth({ matchId, tokenA, tokenB, stateVersionA, prefix }) {
   assert.equal(intentResult?.stateView?.opponent?.hp, 29, 'intent stale sync should return the latest persisted combat state');
   assert.equal(intentStore.matches.get(intentStaleMatchId)?.state?.stateVersion, 6, 'intent stale reload should refresh the in-memory match cache');
 
+  const duplicateStaleIntentMatchId = 'pvplm-store-stale-duplicate-intent';
+  const duplicateStaleIntentNow = 1700000022000;
+  const duplicateStaleIntentId = 'store-stale-duplicate-ready-a';
+  const duplicateStaleLocalMatch = makeStoreStaleMatch({
+    matchId: duplicateStaleIntentMatchId,
+    stateVersion: 1,
+    now: duplicateStaleIntentNow,
+  });
+  const duplicateStaleAuthoritativeMatch = makeStoreStaleMatch({
+    matchId: duplicateStaleIntentMatchId,
+    stateVersion: 6,
+    now: duplicateStaleIntentNow,
+  });
+  duplicateStaleAuthoritativeMatch.state.seats.A.ready = true;
+  duplicateStaleAuthoritativeMatch.state.processedIntents[`A:${duplicateStaleIntentId}`] = {
+    fingerprint: JSON.stringify({ intentType: 'ready', payload: { clientNonce: 'same' } }),
+    stateVersion: 6,
+    events: [],
+  };
+  let duplicateStaleAuthoritativeLoads = 0;
+  const duplicateStaleStore = createLivePvpStore({
+    now: () => duplicateStaleIntentNow,
+    persistence: {
+      async saveMatch(match) {
+        assert.equal(match.matchId, duplicateStaleIntentMatchId, 'stale duplicate intent should still try the local accepted save first');
+        return {
+          saved: false,
+          skipped: true,
+          reason: 'stale_state_version',
+          stateVersion: match.state.stateVersion,
+          persistedStateVersion: duplicateStaleAuthoritativeMatch.state.stateVersion,
+        };
+      },
+      async loadMatchForUser(userId, matchId) {
+        duplicateStaleAuthoritativeLoads += 1;
+        assert.equal(userId, 'store-stale-a', 'stale duplicate reload should use the acting user id');
+        assert.equal(matchId, duplicateStaleIntentMatchId, 'stale duplicate reload should keep the match id');
+        return cloneJson(duplicateStaleAuthoritativeLoads === 1 ? duplicateStaleLocalMatch : duplicateStaleAuthoritativeMatch);
+      },
+      async saveMatchEvents() {
+        throw new Error('stale duplicate intent should not append events after skipped persistence');
+      },
+    },
+  });
+  duplicateStaleStore.matches.set(duplicateStaleIntentMatchId, duplicateStaleLocalMatch);
+  duplicateStaleStore.activeMatchByUserId.set('store-stale-a', duplicateStaleIntentMatchId);
+  duplicateStaleStore.activeMatchByUserId.set('store-stale-b', duplicateStaleIntentMatchId);
+  const duplicateStaleResult = await duplicateStaleStore.submitIntent('store-stale-a', duplicateStaleIntentMatchId, {
+    intentId: duplicateStaleIntentId,
+    intentType: 'ready',
+    stateVersion: 1,
+    payload: { clientNonce: 'same' },
+  });
+  assert.equal(duplicateStaleAuthoritativeLoads, 2, 'stale duplicate intent should reload authoritative state after route-level pre-read');
+  assert.equal(duplicateStaleResult?.result, 'duplicate', 'stale duplicate intent already processed by authoritative state should return duplicate');
+  assert.equal(duplicateStaleResult?.reason, 'duplicate_action', 'stale duplicate intent should keep reducer duplicate reason');
+  assert.equal(duplicateStaleResult?.stateView?.stateVersion, 6, 'stale duplicate intent should return authoritative duplicate stateView');
+  assert.equal(duplicateStaleStore.matches.get(duplicateStaleIntentMatchId)?.state?.stateVersion, 6, 'stale duplicate intent should refresh local cache with authoritative state');
+
+  const conflictStaleIntentMatchId = 'pvplm-store-stale-conflict-intent';
+  const conflictStaleIntentNow = 1700000023000;
+  const conflictStaleIntentId = 'store-stale-conflict-ready-a';
+  const conflictStaleLocalMatch = makeStoreStaleMatch({
+    matchId: conflictStaleIntentMatchId,
+    stateVersion: 1,
+    now: conflictStaleIntentNow,
+  });
+  const conflictStaleAuthoritativeMatch = makeStoreStaleMatch({
+    matchId: conflictStaleIntentMatchId,
+    stateVersion: 6,
+    now: conflictStaleIntentNow,
+  });
+  conflictStaleAuthoritativeMatch.state.seats.A.ready = true;
+  conflictStaleAuthoritativeMatch.state.processedIntents[`A:${conflictStaleIntentId}`] = {
+    fingerprint: JSON.stringify({ intentType: 'ready', payload: { clientNonce: 'original' } }),
+    stateVersion: 6,
+    events: [],
+  };
+  let conflictStaleAuthoritativeLoads = 0;
+  const conflictStaleStore = createLivePvpStore({
+    now: () => conflictStaleIntentNow,
+    persistence: {
+      async saveMatch(match) {
+        assert.equal(match.matchId, conflictStaleIntentMatchId, 'stale conflict intent should still try the local accepted save first');
+        return {
+          saved: false,
+          skipped: true,
+          reason: 'conflicting_state_version',
+          stateVersion: match.state.stateVersion,
+          persistedStateVersion: conflictStaleAuthoritativeMatch.state.stateVersion,
+        };
+      },
+      async loadMatchForUser(userId, matchId) {
+        conflictStaleAuthoritativeLoads += 1;
+        assert.equal(userId, 'store-stale-a', 'stale conflict reload should use the acting user id');
+        assert.equal(matchId, conflictStaleIntentMatchId, 'stale conflict reload should keep the match id');
+        return cloneJson(conflictStaleAuthoritativeLoads === 1 ? conflictStaleLocalMatch : conflictStaleAuthoritativeMatch);
+      },
+      async saveMatchEvents() {
+        throw new Error('stale conflict intent should not append events after skipped persistence');
+      },
+    },
+  });
+  conflictStaleStore.matches.set(conflictStaleIntentMatchId, conflictStaleLocalMatch);
+  conflictStaleStore.activeMatchByUserId.set('store-stale-a', conflictStaleIntentMatchId);
+  conflictStaleStore.activeMatchByUserId.set('store-stale-b', conflictStaleIntentMatchId);
+  const conflictStaleResult = await conflictStaleStore.submitIntent('store-stale-a', conflictStaleIntentMatchId, {
+    intentId: conflictStaleIntentId,
+    intentType: 'ready',
+    stateVersion: 1,
+    payload: { clientNonce: 'changed' },
+  });
+  assert.equal(conflictStaleAuthoritativeLoads, 2, 'stale conflict intent should reload authoritative state after route-level pre-read');
+  assert.equal(conflictStaleResult?.result, 'rejected', 'stale conflict intent should keep reducer rejected result');
+  assert.equal(conflictStaleResult?.reason, 'duplicate_action_conflict', 'stale conflict intent should return authoritative duplicate conflict instead of generic sync');
+  assert.equal(conflictStaleResult?.saveResult?.reason, 'conflicting_state_version', 'stale conflict intent should preserve persistence conflict reason on the replay result');
+  assert.equal(conflictStaleResult?.stateView?.stateVersion, 6, 'stale conflict intent should return authoritative conflict stateView');
+  assert.equal(conflictStaleStore.matches.get(conflictStaleIntentMatchId)?.state?.stateVersion, 6, 'stale conflict intent should refresh local cache with authoritative state');
+
   const terminalIntentStaleMatchId = 'pvplm-store-stale-terminal-intent';
   const terminalIntentNow = 1700000025000;
   const terminalLocalMatch = activateStoreMatch(makeStoreStaleMatch({

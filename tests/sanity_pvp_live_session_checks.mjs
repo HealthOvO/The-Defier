@@ -1213,6 +1213,26 @@ assert.equal(realtimeSession.getState().lastRealtimeIntentResult.result, 'accept
 assert.equal(realtimeSession.getState().lastRealtimeIntentResult.matchId, 'pvplm-ws-session', 'intent_result WS message should expose the acknowledged match id');
 
 realtimeHandlers.onMessage({
+  type: 'intent_result',
+  matchId: 'pvplm-ws-session',
+  intentId: 'ws-intent-session-duplicate',
+  result: 'duplicate',
+  reason: 'duplicate_action',
+  events: [],
+  stateView: {
+    matchId: 'pvplm-ws-session',
+    status: 'active',
+    stateVersion: 9,
+    currentSeat: 'B',
+    self: { seatId: 'A', hand: [] },
+    opponent: { seatId: 'B', handCount: 3 }
+  }
+});
+assert.equal(realtimeSession.getState().lastRealtimeIntentResult.result, 'duplicate', 'duplicate intent_result WS message should expose the authoritative duplicate result');
+assert.equal(realtimeSession.getState().lastRealtimeIntentResult.reason, 'duplicate_action', 'duplicate intent_result WS message should expose the reducer duplicate reason');
+assert.equal(realtimeSession.getState().lastError, null, 'duplicate intent_result WS message should not surface an idempotent replay as a realtime error');
+
+realtimeHandlers.onMessage({
   type: 'state_sync',
   matchId: 'pvplm-ws-session',
   seatId: 'A',
