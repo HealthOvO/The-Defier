@@ -471,6 +471,7 @@ async function writeReport() {
         && longWaitPracticeProbe.drillScenario?.sourceVisibility === 'replay_self'
         && longWaitPracticeProbe.drillScenario?.usesHiddenInformation === false
         && longWaitPracticeProbe.drillScenario?.rankedImpact === 'none'
+        && !Object.prototype.hasOwnProperty.call(longWaitPracticeProbe.drillScenario || {}, 'practicePlan')
         && longWaitPracticeProbe.drillScenario?.waitingReport?.longWait === true
         && (longWaitPracticeProbe.drillScenario?.trainingTags || []).includes('长等待练习')
         && !/reward|rating|elo/i.test(JSON.stringify(longWaitPracticeProbe.drillScenario || {}))
@@ -1166,6 +1167,11 @@ async function writeReport() {
         && postActionProbe.drillScenario?.sourceVisibility === 'replay_self'
         && postActionProbe.drillScenario?.usesHiddenInformation === false
         && postActionProbe.drillScenario?.rankedImpact === 'none'
+        && postActionProbe.drillScenario?.practicePlan?.reportVersion === 'pvp-live-practice-plan-v1'
+        && postActionProbe.drillScenario?.practicePlan?.sourceVisibility === 'public_events'
+        && postActionProbe.drillScenario?.practicePlan?.usesHiddenInformation === false
+        && postActionProbe.drillScenario?.practicePlan?.rankedImpact === 'none'
+        && !/payload|hand|deck|cardId|instanceId|cardInstanceId|loadoutSnapshot|rawPayload|token/i.test(JSON.stringify(postActionProbe.drillScenario?.practicePlan || {}))
         && /关键回合/.test(postActionProbe.keyTurnFocus?.hint || '')
         && postActionProbe.keyTurnFocus?.eventsPanelFocused === 'key_turns'
         && postActionProbe.keyTurnFocus?.keyTurnFocused === 'key_turns'

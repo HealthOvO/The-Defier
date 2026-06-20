@@ -24,6 +24,8 @@ const browserMobileAudit = read('tests/browser_mobile_layout_audit.mjs');
 const challengeMobileAudit = read('tests/browser_challenge_mobile_flow_audit.mjs');
 const browserChapterFlowAudit = read('tests/browser_chapter_flow_audit.mjs');
 const browserRunPathRewardAudit = read('tests/browser_run_path_reward_audit.mjs');
+const challengeHub = read('js/core/challenge_hub.js');
+const observatoryArchiveChecks = read('tests/sanity_observatory_archive_checks.cjs');
 const mapPathSynergyChecks = read('tests/sanity_map_path_synergy_checks.cjs');
 const codexSanctumChecks = read('tests/sanity_codex_sanctum_checks.cjs');
 const seasonBoardChecks = read('tests/sanity_season_board_system_checks.cjs');
@@ -58,6 +60,7 @@ const pvpLiveClientChecks = read('tests/sanity_pvp_live_client_checks.mjs');
 const pvpLiveServiceBridgeChecks = read('tests/sanity_pvp_live_service_bridge_checks.cjs');
 const pvpLiveSessionChecks = read('tests/sanity_pvp_live_session_checks.mjs');
 const pvpLiveSessionSource = read('js/services/pvp-live-session.js');
+const pvpSceneSource = read('js/scenes/pvp-scene.js');
 const pvpLiveUiContractChecks = read('tests/sanity_pvp_live_ui_contract_checks.cjs');
 const pvpLiveUiRuntimeChecks = read('tests/sanity_pvp_live_ui_runtime_checks.mjs');
 const runNodeChecks = read('tests/run_node_checks.sh');
@@ -531,6 +534,16 @@ const layoutAudit = read('tests/browser_frontend_layout_audit.mjs');
   "friendlyCompleteProbe.snapshot?.winnerSourceSeat === 'A'",
   "!friendlyCompleteProbe.actionIds.includes('friendly_rematch')",
   'pvp-live-drill-scenario-v1',
+  'pvp-live-practice-plan-v1',
+  "postReviewPracticeProbe.drillScenario?.practicePlan?.reportVersion === 'pvp-live-practice-plan-v1'",
+  "postReviewPracticeProbe.drillScenario?.practicePlan?.sourceVisibility === 'public_events'",
+  'postReviewPracticeProbe.drillScenario?.practicePlan?.usesHiddenInformation === false',
+  "postReviewPracticeProbe.drillScenario?.practicePlan?.rankedImpact === 'none'",
+  'live UI post-match practice plan rejects unsafe source reports',
+  'unsafePracticePlanProbe.unsafeScenario === null',
+  'unsafePracticePlanProbe.missingMetadataScenario === null',
+  '!/payload|hand|deck|cardId|instanceId|cardInstanceId|loadoutSnapshot|rawPayload|token/i.test(JSON.stringify(postReviewPracticeProbe.drillScenario?.practicePlan || {}))',
+  "!Object.prototype.hasOwnProperty.call(practiceHintProbe.drillScenario || {}, 'practicePlan')",
   'practiceOnly',
   'sourceVisibility',
   'usesHiddenInformation',
@@ -590,6 +603,54 @@ const layoutAudit = read('tests/browser_frontend_layout_audit.mjs');
   assert.ok(
     browserPvpLiveAudit.includes(needle),
     `live PVP browser audit should pin UI wiring marker: ${needle}`,
+  );
+});
+
+[
+  'buildLivePostReviewPracticePlan(',
+  'hasUnsafeLivePostReviewPracticeSource(',
+  'isExplicitLivePublicNoImpactReport(',
+  'Object.prototype.hasOwnProperty.call(source, \'sourceVisibility\')',
+  'pvp-live-practice-plan-v1',
+  'sourceVisibility: \'public_events\'',
+  'usesHiddenInformation: false',
+  'rankedImpact: \'none\'',
+  'tempoScript',
+  'fairnessFocus',
+].forEach((needle) => {
+  assert.ok(
+    pvpSceneSource.includes(needle),
+    `PVPScene should pin post-match practice plan marker: ${needle}`,
+  );
+});
+
+[
+  'normalizePracticePlan',
+  'hasPracticePlan',
+  'if (hasPracticePlan && !practicePlan) return null;',
+  'pvp-live-practice-plan-v1',
+  '节奏脚本',
+  '体验复查',
+  'practicePlan: clone(practicePlan)',
+].forEach((needle) => {
+  assert.ok(
+    challengeHub.includes(needle),
+    `challenge hub should pin PVP live practice plan marker: ${needle}`,
+  );
+});
+
+[
+  "reportVersion: 'pvp-live-practice-plan-v1'",
+  "sourceVisibility: 'public_events'",
+  'tempoScript',
+  'fairnessFocus',
+  'pending PVP drill should carry a structured practice plan',
+  'beginPvpLiveDrillScenario must reject invalid supplied practice plans',
+  'PVP drill archive insight should surface the tempo script',
+].forEach((needle) => {
+  assert.ok(
+    observatoryArchiveChecks.includes(needle),
+    `observatory archive sanity should pin PVP live practice plan marker: ${needle}`,
   );
 });
 
@@ -1646,6 +1707,7 @@ assert.ok(
   "longWaitPracticeProbe.drillScenario?.sourceVisibility === 'replay_self'",
   'longWaitPracticeProbe.drillScenario?.usesHiddenInformation === false',
   "longWaitPracticeProbe.drillScenario?.rankedImpact === 'none'",
+  "!Object.prototype.hasOwnProperty.call(longWaitPracticeProbe.drillScenario || {}, 'practicePlan')",
   'invalidatedNoSeasonHonorProbe',
   "!invalidatedNoSeasonHonorProbe.snapshot?.postMatchReview",
   "!invalidatedNoSeasonHonorProbe.textPayload?.postMatchReview",

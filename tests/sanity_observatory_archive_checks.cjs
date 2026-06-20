@@ -338,7 +338,59 @@ function loadFile(ctx, filePath) {
     trainingTags: ['真人 PVP', '首败复盘', '不计积分', '稳守续航'],
     publicEventTypes: ['snapshot_locked', 'player_ready', 'battle_started', 'match_finished'],
     sourceEventSequences: [1, 2, 4, 9],
+    practicePlan: {
+      reportVersion: 'pvp-live-practice-plan-v1',
+      sourceVisibility: 'public_events',
+      usesHiddenInformation: false,
+      rankedImpact: 'none',
+      objectiveLine: '按公开关键回合复刻防守、调息和终局判断。',
+      coachLine: '先守住首轮，再找反打窗口。',
+      guardrailLine: '训练计划只读公开事件，不读取隐藏手牌或牌库。',
+      tempoScript: [
+        {
+          id: 'opening',
+          label: '开局窗口',
+          sequence: 4,
+          eventType: 'battle_started',
+          actingSeat: 'A',
+          severity: 'setup',
+          lesson: '确认先后手和初始护体。',
+          drillPrompt: '先检查开局护体，再决定是否调息。'
+        },
+        {
+          id: 'terminal',
+          label: '终局窗口',
+          sequence: 9,
+          eventType: 'match_finished',
+          actingSeat: 'B',
+          severity: 'terminal',
+          lesson: '复盘终局前是否还有防守动作。',
+          drillPrompt: '复刻终局前一拍，避免提前放弃行动窗口。'
+        }
+      ],
+      fairnessFocus: [
+        {
+          id: 'decision_windows',
+          label: '公开决策窗口',
+          status: 'watch',
+          detail: '公开窗口偏短，练习时优先补足第二行动窗口。'
+        }
+      ]
+    },
   };
+  const invalidPlanScenario = {
+    ...drillScenario,
+    sourceMatchId: 'pvplm-sanity-invalid-practice',
+    practicePlan: {
+      ...drillScenario.practicePlan,
+      usesHiddenInformation: true,
+      guardrailLine: 'invalid plan tries to relabel hidden practice data'
+    }
+  };
+  const invalidPlanStarted = game.beginPvpLiveDrillScenario(invalidPlanScenario);
+  assert(invalidPlanStarted === false, 'beginPvpLiveDrillScenario must reject invalid supplied practice plans');
+  assert(game.pendingChallengeStart === null, 'invalid supplied PVP practice plan must not create pending challenge start');
+
   const practiceStarted = game.beginPvpLiveDrillScenario(drillScenario);
   assert(practiceStarted === true, 'beginPvpLiveDrillScenario should start a pending no-score practice drill');
   assert(game.pendingChallengeStart && game.pendingChallengeStart.replayOnly === true, 'pending PVP drill should reuse replay-only challenge start');
@@ -346,6 +398,13 @@ function loadFile(ctx, filePath) {
   assert(game.pendingChallengeStart.bundleSnapshot && game.pendingChallengeStart.bundleSnapshot.practiceOnly === true, 'pending PVP drill bundle should carry practiceOnly');
   assert(game.pendingChallengeStart.archiveEntryId === 'pvp_live:pvplm-sanity-practice', `pending PVP drill should remember source match, got ${game.pendingChallengeStart.archiveEntryId}`);
   assert(/真人 PVP/.test(game.pendingChallengeStart.archiveInsight?.title || ''), `pending PVP drill should carry PVP insight, got ${JSON.stringify(game.pendingChallengeStart.archiveInsight)}`);
+  assert(game.pendingChallengeStart.bundleSnapshot?.meta?.practicePlan?.reportVersion === 'pvp-live-practice-plan-v1', `pending PVP drill should carry a structured practice plan, got ${JSON.stringify(game.pendingChallengeStart.bundleSnapshot?.meta)}`);
+  assert(game.pendingChallengeStart.bundleSnapshot.meta.practicePlan.sourceVisibility === 'public_events', 'PVP drill practice plan should stay public-event scoped');
+  assert(game.pendingChallengeStart.bundleSnapshot.meta.practicePlan.usesHiddenInformation === false, 'PVP drill practice plan must not use hidden information');
+  assert(game.pendingChallengeStart.bundleSnapshot.meta.practicePlan.rankedImpact === 'none', 'PVP drill practice plan must not affect ranked state');
+  assert(game.pendingChallengeStart.bundleSnapshot.meta.practicePlan.tempoScript.length === 2, 'PVP drill practice plan should preserve key-turn tempo script');
+  assert(game.pendingChallengeStart.bundleSnapshot.meta.practicePlan.fairnessFocus.some(item => item.id === 'decision_windows'), 'PVP drill practice plan should preserve fairness focus');
+  assert(/节奏脚本/.test(game.pendingChallengeStart.archiveInsight?.focusLines?.join(' ') || ''), `PVP drill archive insight should surface the tempo script, got ${JSON.stringify(game.pendingChallengeStart.archiveInsight)}`);
 
   const progressBeforePractice = JSON.stringify(game.challengeProgressState);
   const archiveBeforePractice = game.getObservatoryArchiveSummary().totalRecords;

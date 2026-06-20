@@ -983,6 +983,7 @@ async function safeElementScreenshot(page, selector, outputPath) {
       && practiceHintProbe.drillScenario?.sourceVisibility === 'replay_self'
       && practiceHintProbe.drillScenario?.usesHiddenInformation === false
       && practiceHintProbe.drillScenario?.rankedImpact === 'none'
+      && !Object.prototype.hasOwnProperty.call(practiceHintProbe.drillScenario || {}, 'practicePlan')
       && practiceHintProbe.drillScenario?.waitingReport?.longWait === true
       && (practiceHintProbe.drillScenario?.trainingTags || []).includes('长等待练习')
       && (practiceHintProbe.drillScenario?.publicEventTypes || []).includes('queue_long_wait')
@@ -1750,11 +1751,106 @@ async function safeElementScreenshot(page, selector, outputPath) {
       && postReviewPracticeProbe.drillScenario?.sourceVisibility === 'replay_self'
       && postReviewPracticeProbe.drillScenario?.usesHiddenInformation === false
       && postReviewPracticeProbe.drillScenario?.rankedImpact === 'none'
+      && postReviewPracticeProbe.drillScenario?.practicePlan?.reportVersion === 'pvp-live-practice-plan-v1'
+      && postReviewPracticeProbe.drillScenario?.practicePlan?.sourceVisibility === 'public_events'
+      && postReviewPracticeProbe.drillScenario?.practicePlan?.usesHiddenInformation === false
+      && postReviewPracticeProbe.drillScenario?.practicePlan?.rankedImpact === 'none'
+      && (postReviewPracticeProbe.drillScenario?.practicePlan?.tempoScript || []).some(item => item.eventType === 'battle_started')
+      && (postReviewPracticeProbe.drillScenario?.practicePlan?.fairnessFocus || []).some(item => item.id === 'decision_windows')
+      && !/payload|hand|deck|cardId|instanceId|cardInstanceId|loadoutSnapshot|rawPayload|token/i.test(JSON.stringify(postReviewPracticeProbe.drillScenario?.practicePlan || {}))
       && (postReviewPracticeProbe.drillScenario?.trainingTags || []).includes('首败复盘')
       && (postReviewPracticeProbe.drillScenario?.publicEventTypes || []).includes('battle_started')
       && !/reward|rating|elo/i.test(JSON.stringify(postReviewPracticeProbe.drillScenario || {}))
       && !/findOpponent|reportMatchResult|GhostEnemy|startPVPBattle|didWin|matchTicket/.test(JSON.stringify(postReviewPracticeProbe.calls)),
     JSON.stringify(postReviewPracticeProbe),
+  );
+
+  const unsafePracticePlanProbe = await page.evaluate(() => {
+    const safeReplay = {
+      reportVersion: 'pvp-live-key-turn-replay-v1',
+      sourceVisibility: 'public_events',
+      usesHiddenInformation: false,
+      rankedImpact: 'none',
+      turns: [
+        { id: 'opening', label: '开局窗口', sequence: 4, eventType: 'battle_started', actingSeat: 'A', severity: 'setup', lesson: '确认先后手和第一拍资源。' },
+      ],
+    };
+    const safeExperience = {
+      reportVersion: 'pvp-live-experience-report-v1',
+      sourceVisibility: 'public_events',
+      usesHiddenInformation: false,
+      rankedImpact: 'none',
+      fairnessChecks: [
+        { id: 'decision_windows', label: '公开决策窗口', passed: false, detail: '第二行动窗口需要复查。' },
+      ],
+    };
+    const unsafeKeyTurnReview = {
+      reportVersion: 'pvp-live-post-match-review-v1',
+      title: '异常复盘',
+      result: 'loss',
+      finishReason: 'surrender',
+      evidence: [{ eventType: 'battle_started', sequence: 1, actingSeat: 'A', publicData: { firstSeat: 'A' } }],
+      keyTurnReplay: {
+        ...safeReplay,
+        sourceVisibility: 'private_state',
+        usesHiddenInformation: true,
+        turns: [
+          { id: 'hidden_opening', label: '隐藏开局', sequence: 4, eventType: 'battle_started', actingSeat: 'A', severity: 'setup', lesson: 'This should not be relabeled as public practice data.' },
+        ],
+      },
+      experienceReport: safeExperience,
+      nextActions: [{ id: 'practice', label: '问道练习' }],
+    };
+    const unsafeExperienceReview = {
+      ...unsafeKeyTurnReview,
+      keyTurnReplay: safeReplay,
+      experienceReport: {
+        ...safeExperience,
+        sourceVisibility: 'private_state',
+        usesHiddenInformation: true,
+      },
+    };
+    const missingMetadataReview = {
+      ...unsafeKeyTurnReview,
+      keyTurnReplay: {
+        reportVersion: 'pvp-live-key-turn-replay-v1',
+        turns: safeReplay.turns,
+      },
+      experienceReport: {
+        reportVersion: 'pvp-live-experience-report-v1',
+        sourceVisibility: 'public_events',
+        usesHiddenInformation: false,
+        fairnessChecks: safeExperience.fairnessChecks,
+      },
+    };
+    return {
+      unsafeKeyTurnPlan: window.PVPScene.buildLivePostReviewPracticePlan(unsafeKeyTurnReview),
+      unsafeExperiencePlan: window.PVPScene.buildLivePostReviewPracticePlan(unsafeExperienceReview),
+      missingMetadataPlan: window.PVPScene.buildLivePostReviewPracticePlan(missingMetadataReview),
+      missingMetadataScenario: window.PVPScene.buildLivePostReviewDrillScenario({
+        matchId: 'pvplm-browser-missing-practice-meta',
+        stateView: {
+          matchId: 'pvplm-browser-missing-practice-meta',
+          postMatchReview: missingMetadataReview,
+        },
+      }),
+      unsafeScenario: window.PVPScene.buildLivePostReviewDrillScenario({
+        matchId: 'pvplm-browser-unsafe-practice',
+        stateView: {
+          matchId: 'pvplm-browser-unsafe-practice',
+          postMatchReview: unsafeKeyTurnReview,
+        },
+      }),
+    };
+  });
+  add(
+    'live UI post-match practice plan rejects unsafe source reports',
+    unsafePracticePlanProbe.unsafeKeyTurnPlan === null
+      && unsafePracticePlanProbe.unsafeExperiencePlan === null
+      && unsafePracticePlanProbe.missingMetadataPlan === null
+      && unsafePracticePlanProbe.missingMetadataScenario === null
+      && unsafePracticePlanProbe.unsafeScenario === null,
+    JSON.stringify(unsafePracticePlanProbe),
   );
 
   await page.click('#confirm-character-btn', { timeout: 5000, force: true });

@@ -21,6 +21,8 @@
 
 S9C 补充后，live ranked 的赛季荣誉已经从“赛后即时点亮 / 收藏持久化”推进到“洞府长期陈列”：前端 `pvp-live-season-honor-showcase-v1` 会只读展示本季正式场次、胜负、已入库数量、最近解锁、下一档荣誉和剩余正式场次，并固定 `rewardImpact: cosmetic_only` / `powerImpact: none` / `sourceVisibility: self_only_ranked_economy`。该陈列只属于当前赛季，旧赛季 `seasonHonorCollection` 不得混入本季洞府展示；它不输出 `ownedItems`、`equippedTitleId` 或 `equippedSkinId`，不进入装备系统，不授予卡牌、属性、资源、起手、匹配或战斗效果；仅本人洞府只读可见，public replay / audit_safe 仍不得暴露 seat-scoped season honor collection。
 
+S9D 补充后，赛后问道练习不再只是把玩家送进一个泛化无奖励挑战，而会从已净化的 `keyTurnReplay` 与 `experienceReport` 生成 `pvp-live-practice-plan-v1`：训练计划只读公开关键回合、公开体验检查和本人赛后复盘，携带节奏脚本、体验复查焦点、练习目标和教练提示，并随 `pvp-live-drill-scenario-v1` 进入 challenge hub 的 replay-only / practice-only 命盘。该计划固定 `sourceVisibility: public_events`、`usesHiddenInformation: false`、`rankedImpact: none`，不读取隐藏手牌、牌库或原始事件明细；若上游复盘来源不是公开事件 / 无隐藏 / 无积分影响，则不生成练习命盘，不写正式积分、奖励、匹配或赛季验证。
+
 S8J 补充后，timeout、connection-timeout、invalidated 和 GET read path 的 terminal stale save 也会回源 authoritative persisted match，不再把旧进程本地 dirty terminal `stateView` 继续发给玩家；该结论仍只覆盖 lower-version stale save，不代表 route-level unified rehydrate 或同版本并发 CAS 封板。
 
 S8K 补充后，active match 的 same-version content conflict 已有最小 CAS guard：同一 `stateVersion` 但 `state_json` 内容不一致的后到 active 保存会返回 `conflicting_state_version` 并被 store 回读 authoritative persisted match；同版本同内容的 heartbeat / connection 保存仍允许通过。若 upsert no-op 是因为另一进程已把权威行推进到更高版本，则会二次读取并保持 `stale_state_version` 口径。S8Q 已继续把同版本同内容的 connection 保存收紧为写入时单调合并，不允许旧 `connection_json` 整段覆盖回退时间线。该结论只覆盖 active match 内容冲突和连接时间线单调性，不代表 route-level unified rehydrate、Redis / 多实例强一致队列、跨进程 WS fanout、生产 smoke 或线上部署完成。

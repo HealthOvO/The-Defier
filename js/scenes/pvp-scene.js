@@ -1466,6 +1466,7 @@ export const PVPScene = {
       sourceVisibility: String(report.sourceVisibility || 'public_events'),
       usesHiddenInformation: report.usesHiddenInformation === true,
       rankedImpact: String(report.rankedImpact || 'none'),
+      explicitSourceSafety: this.isExplicitLivePublicNoImpactReport(report),
       nonGameRisk: String(report.nonGameRisk || 'watch'),
       nonGameRiskReasons: Array.isArray(report.nonGameRiskReasons) ? report.nonGameRiskReasons.map(item => String(item || '')).filter(Boolean).slice(0, 6) : [],
       agencyLabel: String(report.agencyLabel || '公开窗口待复查'),
@@ -1506,6 +1507,7 @@ export const PVPScene = {
       sourceVisibility: String(report.sourceVisibility || 'public_events'),
       usesHiddenInformation: report.usesHiddenInformation === true,
       rankedImpact: String(report.rankedImpact || 'none'),
+      explicitSourceSafety: this.isExplicitLivePublicNoImpactReport(report),
       summary: String(report.summary || ''),
       recommendedAction: String(report.recommendedAction || ''),
       turns: turns.slice(0, 3).map(turn => ({
@@ -1583,6 +1585,98 @@ export const PVPScene = {
         </div>
       </div>
     `;
+  },
+  isLivePublicNoImpactReport(report = null) {
+    const source = report && typeof report === 'object' ? report : null;
+    return !!source
+      && source.sourceVisibility === 'public_events'
+      && source.usesHiddenInformation === false
+      && source.rankedImpact === 'none';
+  },
+  getRawLivePostReviewPracticeReport(source = null, key = '') {
+    const root = source && typeof source === 'object' ? source : null;
+    if (!root || !key) return null;
+    const nested = root[key] && typeof root[key] === 'object' ? root[key] : null;
+    if (nested && nested[key] && typeof nested[key] === 'object') return nested[key];
+    return nested;
+  },
+  isExplicitLivePublicNoImpactReport(report = null) {
+    const source = report && typeof report === 'object' ? report : null;
+    if (source && Object.prototype.hasOwnProperty.call(source, 'explicitSourceSafety')) {
+      return source.explicitSourceSafety === true
+        && source.sourceVisibility === 'public_events'
+        && source.usesHiddenInformation === false
+        && source.rankedImpact === 'none';
+    }
+    return !!source
+      && Object.prototype.hasOwnProperty.call(source, 'sourceVisibility')
+      && Object.prototype.hasOwnProperty.call(source, 'usesHiddenInformation')
+      && Object.prototype.hasOwnProperty.call(source, 'rankedImpact')
+      && source.sourceVisibility === 'public_events'
+      && source.usesHiddenInformation === false
+      && source.rankedImpact === 'none';
+  },
+  hasUnsafeLivePostReviewPracticeSource(review = null) {
+    const source = review && typeof review === 'object' ? review : null;
+    if (!source) return true;
+    const hasReplay = !!source.keyTurnReplay;
+    const hasExperience = !!source.experienceReport;
+    const replay = hasReplay ? this.getRawLivePostReviewPracticeReport(source, 'keyTurnReplay') : null;
+    const experience = hasExperience ? this.getRawLivePostReviewPracticeReport(source, 'experienceReport') : null;
+    return (hasReplay && !this.isExplicitLivePublicNoImpactReport(replay))
+      || (hasExperience && !this.isExplicitLivePublicNoImpactReport(experience));
+  },
+  buildLivePostReviewPracticePlan(review = null) {
+    const source = review && typeof review === 'object' ? review : null;
+    if (!source) return null;
+    if (this.hasUnsafeLivePostReviewPracticeSource(source)) return null;
+    const replay = source.keyTurnReplay ? this.getLiveKeyTurnReplay(source.keyTurnReplay) : null;
+    const experience = source.experienceReport ? this.getLiveExperienceReport(source.experienceReport) : null;
+    const turns = Array.isArray(replay && replay.turns) ? replay.turns : [];
+    const checks = Array.isArray(experience && experience.fairnessChecks) ? experience.fairnessChecks : [];
+    const tempoScript = turns.slice(0, 3).map(turn => {
+      const eventType = String(turn.eventType || '');
+      const severity = String(turn.severity || 'tempo');
+      const prompt = eventType === 'battle_started'
+        ? '先复刻开局读题：确认先后手、护体和第一拍资源。'
+        : eventType === 'match_finished' || eventType === 'player_surrendered'
+          ? '复刻终局前一拍：确认是否还有防守、调息或反打窗口。'
+          : severity === 'pressure'
+            ? '复刻压力窗口：先保留低费响应，再决定是否抢节奏。'
+            : '复刻公开关键回合：只按公开事件练操作顺序。';
+      return {
+        id: String(turn.id || eventType || 'tempo_window'),
+        label: String(turn.label || '关键窗口'),
+        sequence: Number.isFinite(Number(turn.sequence)) ? Math.floor(Number(turn.sequence)) : null,
+        eventType,
+        actingSeat: String(turn.actingSeat || ''),
+        severity,
+        lesson: String(turn.lesson || ''),
+        drillPrompt: prompt
+      };
+    }).filter(item => item.id && item.eventType && item.lesson);
+    const focusChecks = checks.filter(check => check && (check.passed !== true || ['decision_windows', 'first_action_budget', 'opening_protection'].includes(String(check.id || ''))));
+    const fairnessFocus = (focusChecks.length ? focusChecks : checks).slice(0, 3).map(check => ({
+      id: String(check.id || ''),
+      label: String(check.label || ''),
+      status: check.passed === true ? 'passed' : 'watch',
+      detail: String(check.detail || '')
+    })).filter(item => item.id && item.label && item.detail);
+    if (tempoScript.length === 0 && fairnessFocus.length === 0) return null;
+    const resultLabel = source.result === 'loss' ? '首败' : source.result === 'win' ? '胜局' : '终局';
+    return {
+      reportVersion: 'pvp-live-practice-plan-v1',
+      sourceVisibility: 'public_events',
+      usesHiddenInformation: false,
+      rankedImpact: 'none',
+      objectiveLine: `${resultLabel}练习：按公开关键回合复刻节奏，不写正式积分。`,
+      coachLine: experience && experience.nonGameRisk === 'watch'
+        ? '先补足可读行动窗口，再回真人排位验证。'
+        : '先复刻本局有效节奏，再尝试同谱稳定打出。',
+      guardrailLine: '训练计划只读公开事件和本人赛后复盘，不读取隐藏手牌、牌库或原始事件明细。',
+      tempoScript,
+      fairnessFocus
+    };
   },
   getLiveSeasonGoalSeasonId(view) {
     const seasonId = String(view && view.matchQuality && view.matchQuality.seasonId || '').trim();
@@ -1772,6 +1866,7 @@ export const PVPScene = {
     const sourceState = state && typeof state === 'object' ? state : this.getLiveSession().getState();
     const view = sourceState && sourceState.stateView ? sourceState.stateView : null;
     const review = this.getLivePostMatchReview(view);
+    const rawReview = view && view.postMatchReview && typeof view.postMatchReview === 'object' ? view.postMatchReview : review;
     const matchId = String((sourceState && sourceState.matchId) || (view && view.matchId) || '').trim();
     if (!matchId || !review) return null;
     const theme = review.finishReason === 'timeout'
@@ -1788,6 +1883,8 @@ export const PVPScene = {
       .filter(sequence => sequence !== null);
     const resultLabel = review.result === 'loss' ? '首败' : review.result === 'win' ? '胜局' : '终局';
     const trainingAdvice = `真人 PVP ${resultLabel}复盘：${theme.advice}`;
+    if (this.hasUnsafeLivePostReviewPracticeSource(rawReview)) return null;
+    const practicePlan = this.buildLivePostReviewPracticePlan(review);
     return {
       reportVersion: 'pvp-live-drill-scenario-v1',
       sourceMatchId: matchId,
@@ -1804,7 +1901,8 @@ export const PVPScene = {
       drillObjective: `${recommendedLoadout.label}：围绕 ${theme.label} 复刻本局公开失误窗口，不写正式积分。`,
       trainingTags: ['真人 PVP', resultLabel === '首败' ? '首败复盘' : '赛后复盘', '不计积分', theme.label],
       publicEventTypes,
-      sourceEventSequences
+      sourceEventSequences,
+      ...(practicePlan ? { practicePlan } : {})
     };
   },
   async commitLivePostReviewPracticeHandoff() {

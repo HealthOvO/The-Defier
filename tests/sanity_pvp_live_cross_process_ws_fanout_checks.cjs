@@ -11,6 +11,7 @@ const PORT_A = BASE_PORT;
 const PORT_B = BASE_PORT + 1;
 const DB_PATH = process.env.PVP_LIVE_WS_FANOUT_DB_PATH
   || path.join(os.tmpdir(), `the-defier-pvp-live-ws-fanout-${process.pid}.sqlite`);
+const WS_MESSAGE_TIMEOUT_MS = Math.max(7000, Math.floor(Number(process.env.PVP_LIVE_WS_FANOUT_MESSAGE_TIMEOUT_MS) || 15000));
 const JWT_SECRET = 'ws-fanout-jwt-secret-32-characters';
 const HMAC_SECRET = 'ws-fanout-hmac-secret-32-characters';
 
@@ -178,8 +179,9 @@ function waitForMessage(ws, predicate, label) {
     }
     const timer = setTimeout(() => {
       cleanup();
-      reject(new Error(`ws message timeout: ${label}`));
-    }, 7000);
+      const queuedTypes = (ws.__defierMessageQueue || []).map(message => `${message && message.type || 'unknown'}:${message && message.matchId || ''}`).join(', ');
+      reject(new Error(`ws message timeout: ${label}; queued=[${queuedTypes}]`));
+    }, WS_MESSAGE_TIMEOUT_MS);
     function cleanup() {
       clearTimeout(timer);
       ws.removeEventListener('close', onClose);

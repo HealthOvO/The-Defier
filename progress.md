@@ -1,5 +1,32 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-20: V10-S9D live PVP post-review practice plan
+  - 本轮完成
+    - `js/scenes/pvp-scene.js` 新增 `buildLivePostReviewPracticePlan()`，把已净化的 `keyTurnReplay` / `experienceReport` 转成 `pvp-live-practice-plan-v1`，包含公开节奏脚本、体验复查焦点、练习目标、教练提示和隐藏信息边界。
+    - `buildLivePostReviewDrillScenario()` 会把 practice plan 写入 `pvp-live-drill-scenario-v1`；训练计划固定 `sourceVisibility: public_events`、`usesHiddenInformation: false`、`rankedImpact: none`，不读取隐藏手牌、牌库或原始事件明细，也不写正式积分。
+    - 赛后练习现在 fail closed：上游 `keyTurnReplay` / `experienceReport` 必须显式声明 `public_events / false / none` 三项安全标记；只要缺失标记、非公开来源、隐藏信息或非 none 的积分影响，就不生成 practice plan / drill scenario；ChallengeHub 收到非法 `practicePlan` 也会拒绝启动，而不是降级成泛化练习。
+    - `js/core/challenge_hub.js` 的 PVP live drill bundle 会校验并携带 practice plan，把“节奏脚本 / 体验复查”写进 replay-only / practice-only 命盘的 `meta.practicePlan` 与归档洞察，玩家从赛后练习进入的是有明确复盘目标的训练，而不是泛化挑战。
+    - `tests/sanity_observatory_archive_checks.cjs` 覆盖 challenge hub 对 practice plan 的消费、归档展示和非法 plan 拒绝；`tests/browser_pvp_live_audit.mjs` 覆盖真实页面赛后练习按钮生成带 practice plan 的 no-score drill scenario、隐藏字段 / token 扫描、缺失安全标记拒绝和非法来源拒绝；`tests/browser_pvp_live_real_backend_smoke.mjs` 同步加入真实后端路径的 practice plan 安全断言，并确认长等待无 plan 练习仍可启动；`tests/sanity_release_gate_coverage_checks.cjs` 固定源码和审计 marker。
+    - `tests/sanity_pvp_live_cross_process_ws_fanout_checks.cjs` 将 WS 消息等待改为可配置 15s，并在超时输出队列消息类型；这是为完整 Node 门禁中的跨进程 WS 计时型偶发失败补诊断和稳定等待，不改生产逻辑。
+  - 已验证
+    - 红测：`node tests/sanity_observatory_archive_checks.cjs` 在实现前失败于 `pending PVP drill should carry a structured practice plan`；补非法 plan 后失败于 `beginPvpLiveDrillScenario must reject invalid supplied practice plans`。
+    - 绿测：`node tests/sanity_observatory_archive_checks.cjs`
+    - 绿测：`node tests/sanity_pvp_live_ui_contract_checks.cjs`
+    - 绿测：`node tests/sanity_release_gate_coverage_checks.cjs`
+    - 绿测：`node tests/sanity_intro_progress_sync_checks.cjs`
+    - 浏览器审计：`node tests/browser_pvp_live_audit.mjs http://127.0.0.1:4173 output/pvp-live-practice-plan-audit`，56/56 findings、0 console error。
+    - 构建：`npm run build:pages`
+    - 语法检查：`node --check js/scenes/pvp-scene.js`
+    - 语法检查：`node --check js/core/challenge_hub.js`
+    - 语法检查：`node --check tests/browser_pvp_live_audit.mjs`
+    - 语法检查：`node --check tests/browser_pvp_live_real_backend_smoke.mjs`
+    - 语法检查：`node --check tests/sanity_observatory_archive_checks.cjs`
+    - 语法检查：`node --check tests/sanity_release_gate_coverage_checks.cjs`
+    - 语法检查：`node --check tests/sanity_pvp_live_cross_process_ws_fanout_checks.cjs`
+    - 完整门禁：`npm run test:node`
+  - 当前结论
+    - live PVP 的赛后练习现在能把“关键回合复盘 / 双方体验诊断”落成可执行训练脚本，帮助玩家知道下一局该练哪一拍；该切片仍只做 replay-only / practice-only 训练，不提供奖励、积分、战力、匹配或赛季验证收益，也不是完整 AI 复刻对手 tempo 或线上部署完成。
+
 - 2026-06-20: V10-S9C live PVP persistent season honor showcase
   - 本轮完成
     - `js/services/pvp-service.js` 新增 `seasonHonorRewardTrack`、`getSeasonHonorRewardTrack()`、`normalizeSeasonHonorRewardEntry()` 与 `getSeasonHonorShowcase()`，把首场 / 3 / 5 / 10 / 20 / 50 场赛季荣誉整理成只读陈列模型。

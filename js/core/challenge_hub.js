@@ -2179,6 +2179,42 @@ const challengeHubMethods = Object.create(null);
     if (source.sourceVisibility !== 'replay_self' || source.usesHiddenInformation !== false || source.rankedImpact !== 'none') return null;
     const matchId = String(source.sourceMatchId || '').trim();
     if (!matchId) return null;
+    const normalizePracticePlan = (plan = null) => {
+      const src = plan && typeof plan === 'object' ? plan : null;
+      if (!src || src.reportVersion !== 'pvp-live-practice-plan-v1') return null;
+      if (src.sourceVisibility !== 'public_events' || src.usesHiddenInformation !== false || src.rankedImpact !== 'none') return null;
+      const tempoScript = Array.isArray(src.tempoScript) ? src.tempoScript.slice(0, 3).map(item => ({
+        id: String(item && item.id || ''),
+        label: String(item && item.label || ''),
+        sequence: Number.isFinite(Number(item && item.sequence)) ? Math.floor(Number(item.sequence)) : null,
+        eventType: String(item && item.eventType || ''),
+        actingSeat: String(item && item.actingSeat || ''),
+        severity: String(item && item.severity || 'tempo'),
+        lesson: String(item && item.lesson || ''),
+        drillPrompt: String(item && item.drillPrompt || '')
+      })).filter(item => item.id && item.label && item.eventType && item.lesson) : [];
+      const fairnessFocus = Array.isArray(src.fairnessFocus) ? src.fairnessFocus.slice(0, 3).map(item => ({
+        id: String(item && item.id || ''),
+        label: String(item && item.label || ''),
+        status: String(item && item.status || 'watch'),
+        detail: String(item && item.detail || '')
+      })).filter(item => item.id && item.label && item.detail) : [];
+      if (tempoScript.length === 0 && fairnessFocus.length === 0) return null;
+      return {
+        reportVersion: 'pvp-live-practice-plan-v1',
+        sourceVisibility: 'public_events',
+        usesHiddenInformation: false,
+        rankedImpact: 'none',
+        objectiveLine: String(src.objectiveLine || '按公开关键回合复刻节奏，不写正式积分。'),
+        coachLine: String(src.coachLine || '先复刻公开关键窗口，再回真人排位验证。'),
+        guardrailLine: String(src.guardrailLine || '训练计划只读公开事件，不读取隐藏手牌或牌库。'),
+        tempoScript,
+        fairnessFocus
+      };
+    };
+    const hasPracticePlan = Object.prototype.hasOwnProperty.call(source, 'practicePlan');
+    const practicePlan = hasPracticePlan ? normalizePracticePlan(source.practicePlan) : null;
+    if (hasPracticePlan && !practicePlan) return null;
     const themeKey = ['assault', 'bulwark', 'oracle', 'tempo'].includes(source.themeKey) ? source.themeKey : 'bulwark';
     const themeRuleMap = {
       assault: 'daily_ember_break',
@@ -2193,6 +2229,12 @@ const challengeHubMethods = Object.create(null);
     const publicEventTypes = normalizeTagList(Array.isArray(source.publicEventTypes) ? source.publicEventTypes : [], 4);
     const eventLine = publicEventTypes.length ? publicEventTypes.join(' / ') : '公开事件';
     const resultLabel = source.result === 'loss' ? '首败' : source.result === 'win' ? '胜局' : '终局';
+    const tempoLine = practicePlan && practicePlan.tempoScript.length
+      ? `节奏脚本：${practicePlan.tempoScript.map(item => `${item.label}#${item.sequence !== null ? item.sequence : '-'}`).join(' / ')}`
+      : '';
+    const focusLine = practicePlan && practicePlan.fairnessFocus.length
+      ? `体验复查：${practicePlan.fairnessFocus.map(item => `${item.label}·${item.status}`).join(' / ')}`
+      : '';
     const rule = normalizeChallengeRuleSnapshot({
       ...clone(baseRule),
       id: `pvp_live_drill_${shortHash.toLowerCase()}`,
@@ -2211,13 +2253,15 @@ const challengeHubMethods = Object.create(null);
       focusLines: [
         String(source.drillObjective || '按公开事件复刻本局失误窗口。'),
         `公开事件：${eventLine}`,
+        tempoLine,
+        focusLine,
         '不写正式积分，不读取隐藏手牌或牌库。'
-      ],
+      ].filter(Boolean),
       preferredNodeLine: themeMeta?.preferredNodes?.length ? buildChallengePreferredNodeLine(themeMeta.preferredNodes) : '',
       reasonLabel: '真人 PVP 赛后',
       trainingTags: normalizeTagList(trainingTags.length ? trainingTags : ['真人 PVP', '问道练习'], 3),
-      coachBrief: '先按公开轨迹复盘关键窗口，再用观星回放开一局不计奖励的练习。',
-      drillObjective: String(source.drillObjective || '复刻公开失误窗口，不写正式积分。')
+      coachBrief: practicePlan?.coachLine || '先按公开轨迹复盘关键窗口，再用观星回放开一局不计奖励的练习。',
+      drillObjective: practicePlan?.objectiveLine || String(source.drillObjective || '复刻公开失误窗口，不写正式积分。')
     });
     const rotationKey = `pvp-live-drill-${shortHash.toLowerCase()}`;
     return {
@@ -2228,7 +2272,8 @@ const challengeHubMethods = Object.create(null);
         title: '真人 PVP · 问道练习',
         subtitle: '基于赛后公开事件生成的无奖励练习命盘，不读取隐藏信息，不写正式积分。',
         label: '真人练习',
-        accentClass: 'daily'
+        accentClass: 'daily',
+        ...(practicePlan ? { practicePlan: clone(practicePlan) } : {})
       },
       rule,
       themeMeta,
