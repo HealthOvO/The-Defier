@@ -35,6 +35,10 @@ function serializeSnapshot(snapshot) {
     return JSON.stringify(snapshot || {});
 }
 
+function serializeQueueConnectionHealth(report) {
+    return JSON.stringify(report && typeof report === 'object' ? report : {});
+}
+
 function normalizeRatingScore(value) {
     const numeric = Number(value);
     return Math.max(0, Math.min(9999, Math.floor(Number.isFinite(numeric) ? numeric : 1000)));
@@ -346,6 +350,18 @@ function parseSnapshot(row) {
     }
 }
 
+function parseQueueConnectionHealth(row) {
+    if (!row || !row.connection_health_json) return null;
+    try {
+        const parsed = JSON.parse(row.connection_health_json);
+        return parsed && typeof parsed === 'object' && parsed.reportVersion === 'pvp-live-queue-connection-health-v1'
+            ? parsed
+            : null;
+    } catch (error) {
+        return null;
+    }
+}
+
 function makeQueueEntryFromRow(row) {
     const loadoutSnapshot = parseSnapshot(row);
     if (!row || !row.queue_ticket || !row.user_id || !loadoutSnapshot || !loadoutSnapshot.loadoutHash) return null;
@@ -360,7 +376,8 @@ function makeQueueEntryFromRow(row) {
         player: {
             userId: row.user_id,
             displayName: row.display_name || row.user_id,
-            loadoutSnapshot
+            loadoutSnapshot,
+            connectionHealth: parseQueueConnectionHealth(row) || undefined
         },
         ratingSnapshot,
         wideMatchConsent: Number(row.wide_match_consent) === 1,
@@ -432,10 +449,11 @@ function makeSqliteLivePvpPersistence() {
             const createdAt = Math.max(0, Math.floor(Number(queueEntry.createdAt) || Date.now()));
             const ratingSnapshot = normalizeRatingSnapshot(queueEntry.ratingSnapshot);
             const wideMatchConsent = queueEntry.wideMatchConsent === true ? 1 : 0;
+            const connectionHealthJson = serializeQueueConnectionHealth(queueEntry.player.connectionHealth);
             await dbRun(
                 `INSERT INTO pvp_live_queue_tickets
-                    (queue_ticket, user_id, display_name, loadout_snapshot_json, rating_score, rating_bucket, rating_season_id, rating_provisional, wide_match_consent, created_at)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    (queue_ticket, user_id, display_name, loadout_snapshot_json, rating_score, rating_bucket, rating_season_id, rating_provisional, wide_match_consent, connection_health_json, created_at)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                  ON CONFLICT(user_id) DO UPDATE SET
                     queue_ticket = excluded.queue_ticket,
                     display_name = excluded.display_name,
@@ -445,6 +463,7 @@ function makeSqliteLivePvpPersistence() {
                     rating_season_id = excluded.rating_season_id,
                     rating_provisional = excluded.rating_provisional,
                     wide_match_consent = excluded.wide_match_consent,
+                    connection_health_json = excluded.connection_health_json,
                     created_at = excluded.created_at`,
                 [
                     queueEntry.queueTicket,
@@ -456,6 +475,7 @@ function makeSqliteLivePvpPersistence() {
                     ratingSnapshot.seasonId,
                     ratingSnapshot.provisional ? 1 : 0,
                     wideMatchConsent,
+                    connectionHealthJson,
                     createdAt
                 ]
             );

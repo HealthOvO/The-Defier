@@ -149,11 +149,16 @@ function makeMatchQualityReport({
     expansionStage = 'mvp_open_pool',
     ratingDeltaBucket = 'unrated_mvp',
     tag = 'good',
-    wideMatchReason = ''
+    wideMatchReason = '',
+    connectionHealthSummary = null
 } = {}) {
     const safeSafeguards = Array.isArray(safeguards) && safeguards.length > 0
         ? safeguards.map(item => String(item || '')).filter(Boolean).slice(0, 8)
         : ['server_authoritative', 'snapshot_locked', 'setup_ready_required', 'first_action_budget'];
+    const healthSummary = normalizeConnectionHealthSummary(connectionHealthSummary);
+    const healthSafeguards = healthSummary
+        ? Array.from(new Set([...safeSafeguards, 'connection_health_gate'])).slice(0, 10)
+        : safeSafeguards;
     return {
         reportVersion: 'pvp-live-match-quality-v1',
         tag: tag === 'expanded' || tag === 'wide_but_accepted' || tag === 'rejected' ? tag : 'good',
@@ -167,9 +172,63 @@ function makeMatchQualityReport({
             B: Math.max(0, Math.floor(Number(waitMs.B) || 0))
         },
         candidatePoolSize: Math.max(1, Math.floor(Number(candidatePoolSize) || 2)),
-        connectionHealth: 'not_measured',
+        connectionHealth: healthSummary ? healthSummary.status : 'not_measured',
+        connectionHealthSummary: healthSummary,
         wideMatchReason: String(wideMatchReason || '').slice(0, 80),
-        safeguards: safeSafeguards
+        safeguards: healthSafeguards
+    };
+}
+
+function normalizeConnectionHealthSummary(summary) {
+    if (!summary || typeof summary !== 'object') return null;
+    const status = ['pass', 'risky', 'blocked'].includes(summary.status) ? summary.status : '';
+    if (!status) return null;
+    return {
+        reportVersion: 'pvp-live-queue-connection-health-v1',
+        status,
+        sampleTag: String(summary.sampleTag || 'client_preflight').slice(0, 40)
+    };
+}
+
+function makeQueueConnectionHealthReport(probe = null) {
+    const source = probe && typeof probe === 'object' && !Array.isArray(probe) ? probe : null;
+    if (!source) return null;
+    const explicitStatus = String(source.status || '').trim().toLowerCase();
+    const sampleWindowMs = Math.max(0, Math.floor(Number(source.sampleWindowMs) || 0));
+    const missedHeartbeatCount = Math.max(0, Math.floor(Number(source.missedHeartbeatCount) || 0));
+    const reconnectCount = Math.max(0, Math.floor(Number(source.reconnectCount ?? source.recentReconnectCount) || 0));
+    const rttP95Ms = Math.max(0, Math.floor(Number(source.rttP95Ms ?? source.rttP95) || 0));
+    const reasons = [];
+    if (missedHeartbeatCount >= 2) reasons.push('missed_heartbeat');
+    if (reconnectCount > 0) reasons.push('recent_reconnect');
+    if (rttP95Ms > 2500) reasons.push('high_rtt');
+    if (explicitStatus === 'blocked' || explicitStatus === 'risky') reasons.push(`client_${explicitStatus}`);
+    const status = explicitStatus === 'blocked' || reasons.length > 0 ? 'blocked' : explicitStatus === 'risky' ? 'risky' : 'pass';
+    const report = {
+        reportVersion: 'pvp-live-queue-connection-health-v1',
+        status,
+        sampleTag: String(source.sampleTag || 'client_preflight').slice(0, 40),
+        sampleWindowMs,
+        reasons: Array.from(new Set(reasons)).slice(0, 6),
+        actions: status === 'pass' ? [] : [
+            { id: 'retry_connection_check', label: '重试检测', detail: '重新检测连接稳定性后再进入正式真人排位。' },
+            { id: 'practice', label: '问道练习', detail: '练习不写正式积分。' }
+        ]
+    };
+    return report;
+}
+
+function makeMatchConnectionHealthSummary(playerA, playerB) {
+    const reports = [playerA && playerA.connectionHealth, playerB && playerB.connectionHealth]
+        .map(report => normalizeConnectionHealthSummary(report));
+    if (reports.length < 2 || reports.some(report => !report)) return null;
+    const blocked = reports.find(report => report.status === 'blocked');
+    const risky = reports.find(report => report.status === 'risky');
+    const status = blocked ? 'blocked' : risky ? 'risky' : 'pass';
+    return {
+        reportVersion: 'pvp-live-queue-connection-health-v1',
+        status,
+        sampleTag: reports.every(report => report.sampleTag === 'client_preflight') ? 'client_preflight' : 'mixed_preflight'
     };
 }
 
@@ -407,6 +466,9 @@ class LivePvpStore {
             if (queueEntry.wideMatchConsent === true) {
                 existing.wideMatchConsent = true;
             }
+            if (!existing.player.connectionHealth && queueEntry.player.connectionHealth) {
+                existing.player.connectionHealth = queueEntry.player.connectionHealth;
+            }
             return existing;
         }
         const duplicateUserTicket = this.waitingQueue.find(entry => entry.player && entry.player.userId === queueEntry.player.userId);
@@ -416,6 +478,9 @@ class LivePvpStore {
             }
             if (queueEntry.wideMatchConsent === true) {
                 duplicateUserTicket.wideMatchConsent = true;
+            }
+            if (!duplicateUserTicket.player.connectionHealth && queueEntry.player.connectionHealth) {
+                duplicateUserTicket.player.connectionHealth = queueEntry.player.connectionHealth;
             }
             return duplicateUserTicket;
         }
@@ -907,7 +972,11 @@ class LivePvpStore {
             waitMs: {
                 A: Math.max(0, matchedAt - opponentCreatedAt),
                 B: Math.max(0, matchedAt - requesterCreatedAt)
-            }
+            },
+            connectionHealthSummary: makeMatchConnectionHealthSummary(
+                opponentTicket && opponentTicket.player,
+                requesterEntry && requesterEntry.player
+            )
         };
     }
 
@@ -1013,6 +1082,15 @@ class LivePvpStore {
 
     async joinQueue(playerInput) {
         const identity = normalizePlayerIdentity(playerInput);
+        const connectionHealth = makeQueueConnectionHealthReport(playerInput && playerInput.connectionHealthProbe);
+        if (connectionHealth && connectionHealth.status !== 'pass') {
+            return {
+                status: 'blocked',
+                reason: 'connection_health_failed',
+                message: '当前连接不适合进入正式真人排位，请重试检测或先进入问道练习。',
+                connectionHealth
+            };
+        }
         const existingInvite = await this.hydrateInviteRoomForHost(identity.userId);
         if (existingInvite) {
             if (!await this.deleteIfInviteExpired(existingInvite)) {
@@ -1050,6 +1128,10 @@ class LivePvpStore {
                 existingTicket.wideMatchConsent = true;
                 await this.saveQueueEntry(existingTicket);
             }
+            if (connectionHealth && !existingTicket.player.connectionHealth) {
+                existingTicket.player.connectionHealth = connectionHealth;
+                await this.saveQueueEntry(existingTicket);
+            }
             if (existingTicket.wideMatchConsent === true) {
                 await this.hydrateWaitingQueueEntriesExceptUser(identity.userId);
                 const selectedOpponent = await this.selectQueueOpponent(existingTicket);
@@ -1075,6 +1157,7 @@ class LivePvpStore {
         }
 
         const player = normalizePlayer(playerInput, this.now);
+        if (connectionHealth) player.connectionHealth = connectionHealth;
         const requesterEntry = {
             queueTicket: '',
             player,

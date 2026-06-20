@@ -63,6 +63,21 @@ export const PVPService = {
       }
       return await client.joinLivePvpQueue(options);
     },
+    async measureConnectionHealth() {
+      const client = this.getClient();
+      if (!client || typeof client.measureLivePvpConnectionHealth !== 'function') {
+        return {
+          reportVersion: 'pvp-live-queue-connection-health-v1',
+          status: 'pass',
+          sampleTag: 'local_fallback',
+          sampleWindowMs: 0,
+          missedHeartbeatCount: 0,
+          reconnectCount: 0,
+          rttP95Ms: 0
+        };
+      }
+      return await client.measureLivePvpConnectionHealth();
+    },
     async cancelQueue(queueTicket = '') {
       const client = this.getClient();
       if (!client || typeof client.cancelLivePvpQueue !== 'function') {

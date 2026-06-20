@@ -802,6 +802,9 @@ export const BackendClient = {
       if (options.loadout && typeof options.loadout === 'object' && !Array.isArray(options.loadout)) {
         data.loadout = this.cloneData(options.loadout);
       }
+      if (options.connectionHealthProbe && typeof options.connectionHealthProbe === 'object' && !Array.isArray(options.connectionHealthProbe)) {
+        data.connectionHealthProbe = this.cloneData(options.connectionHealthProbe);
+      }
       if (options.wideMatchConsent === true) {
         data.wideMatchConsent = true;
       }
@@ -814,11 +817,49 @@ export const BackendClient = {
         message: '实时论道入队返回异常'
       };
     } catch (error) {
+      const payload = error && error.payload && typeof error.payload === 'object' ? error.payload : null;
+      const connectionHealth = payload && payload.connectionHealth && typeof payload.connectionHealth === 'object'
+        ? this.cloneData(payload.connectionHealth)
+        : error && error.connectionHealth && typeof error.connectionHealth === 'object'
+          ? this.cloneData(error.connectionHealth)
+          : undefined;
       return {
         success: false,
         error,
-        reason: error && error.reason || undefined,
-        message: error.message || '实时论道入队失败'
+        reason: error && error.reason || payload && payload.reason || undefined,
+        message: error && error.message || payload && payload.message || '实时论道入队失败',
+        ...(connectionHealth ? { connectionHealth } : {})
+      };
+    }
+  },
+  async measureLivePvpConnectionHealth() {
+    const startedAt = Date.now();
+    try {
+      const result = await this.requestServer('/api/health', {
+        method: 'GET',
+        auth: false
+      });
+      const elapsedMs = Math.max(0, Date.now() - startedAt);
+      const ok = !!(result && (result.status === 'ok' || result.success !== false));
+      return {
+        reportVersion: 'pvp-live-queue-connection-health-v1',
+        status: ok ? 'pass' : 'blocked',
+        sampleTag: 'client_preflight',
+        sampleWindowMs: elapsedMs,
+        missedHeartbeatCount: ok ? 0 : 2,
+        reconnectCount: ok ? 0 : 1,
+        rttP95Ms: elapsedMs
+      };
+    } catch (error) {
+      const elapsedMs = Math.max(0, Date.now() - startedAt);
+      return {
+        reportVersion: 'pvp-live-queue-connection-health-v1',
+        status: 'blocked',
+        sampleTag: 'client_preflight',
+        sampleWindowMs: elapsedMs,
+        missedHeartbeatCount: 2,
+        reconnectCount: 1,
+        rttP95Ms: Math.max(3000, elapsedMs)
       };
     }
   },

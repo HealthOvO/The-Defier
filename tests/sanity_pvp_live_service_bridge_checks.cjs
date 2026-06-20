@@ -104,6 +104,18 @@ function loadFile(ctx, filePath) {
           ]
         };
       },
+      measureLivePvpConnectionHealth: async () => {
+        calls.push({ method: 'measureLivePvpConnectionHealth' });
+        return {
+          reportVersion: 'pvp-live-queue-connection-health-v1',
+          status: 'pass',
+          sampleTag: 'client_preflight',
+          sampleWindowMs: 1,
+          missedHeartbeatCount: 0,
+          reconnectCount: 0,
+          rttP95Ms: 20
+        };
+      },
       heartbeatLivePvpMatch: async (matchId) => {
         calls.push({ method: 'heartbeatLivePvpMatch', matchId });
         return { success: true, matchId, stateView: { connectionReport: { reportVersion: 'pvp-live-connection-v1' } } };
@@ -151,6 +163,7 @@ function loadFile(ctx, filePath) {
   assert(typeof PVPService.live.cancelInvite === 'function', 'PVPService.live should expose cancelInvite');
   assert(typeof PVPService.live.getCurrentInvite === 'function', 'PVPService.live should expose getCurrentInvite');
   assert(typeof PVPService.live.getInviteInbox === 'function', 'PVPService.live should expose getInviteInbox');
+  assert(typeof PVPService.live.measureConnectionHealth === 'function', 'PVPService.live should expose measureConnectionHealth');
   assert(typeof PVPService.live.heartbeat === 'function', 'PVPService.live should expose heartbeat');
   assert(typeof PVPService.live.submitIntent === 'function', 'PVPService.live should expose submitIntent');
   assert(typeof PVPService.live.connectRealtime === 'function', 'PVPService.live should expose connectRealtime');
@@ -212,6 +225,10 @@ function loadFile(ctx, filePath) {
   const inviteInbox = await PVPService.live.getInviteInbox();
   assert(inviteInbox.success === true && inviteInbox.status === 'invite_inbox', 'live invite inbox bridge should forward targeted invite inbox state');
   assert(calls.at(-1).method === 'getLivePvpInviteInbox', 'live invite inbox bridge should call BackendClient.getLivePvpInviteInbox');
+
+  const measuredHealth = await PVPService.live.measureConnectionHealth();
+  assert(measuredHealth.status === 'pass', 'live connection health bridge should forward preflight result');
+  assert(calls.at(-1).method === 'measureLivePvpConnectionHealth', 'live connection health bridge should call BackendClient.measureLivePvpConnectionHealth');
 
   const heartbeat = await PVPService.live.heartbeat('pvplm-test');
   assert(heartbeat.success === true && heartbeat.stateView.connectionReport.reportVersion === 'pvp-live-connection-v1', 'live heartbeat bridge should forward connection report');

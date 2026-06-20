@@ -129,10 +129,16 @@ router.post('/queue/join', authenticate, asyncHandler(async (req, res) => {
         userId: req.user.id,
         displayName: getDisplayName(req),
         loadout: req.body && req.body.loadout,
-        wideMatchConsent: req.body && req.body.wideMatchConsent
+        wideMatchConsent: req.body && req.body.wideMatchConsent,
+        connectionHealthProbe: req.body && req.body.connectionHealthProbe
     });
     if (result && result.status === 'blocked') {
-        return res.status(409).json({ success: false, reason: result.reason, message: result.message || '当前无法进入公共匹配' });
+        return res.status(409).json({
+            success: false,
+            reason: result.reason,
+            message: result.message || '当前无法进入公共匹配',
+            connectionHealth: result.connectionHealth || null
+        });
     }
     res.json({ success: true, ...result });
 }));

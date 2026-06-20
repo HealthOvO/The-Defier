@@ -970,6 +970,31 @@ assert.equal(failedRequeue.stateView, null, 'failed queue again after finished s
 assert.equal(failedRequeue.lastError.reason, 'queue_join_failed', 'failed queue again should preserve join failure reason');
 assert.ok(failedRequeueStorage.values().includes('pvplm-finished-stale'), 'failed queue again should preserve terminal recovery anchor for refresh retry');
 
+const blockedConnectionSession = createPvpLiveSession({
+  liveService: {
+    joinQueue: async () => ({
+      success: false,
+      reason: 'connection_health_failed',
+      message: '当前连接不适合进入正式真人排位，请重试检测或先进入问道练习。',
+      connectionHealth: {
+        reportVersion: 'pvp-live-queue-connection-health-v1',
+        status: 'blocked',
+        sampleTag: 'client_preflight',
+        reasons: ['missed_heartbeat', 'high_rtt'],
+        actions: [
+          { id: 'retry_connection_check', label: '重试检测' },
+          { id: 'practice', label: '问道练习', detail: '练习不写正式积分。' },
+        ],
+      },
+    })
+  }
+});
+const blockedConnection = await blockedConnectionSession.joinQueue({ displayName: '甲' });
+assert.equal(blockedConnection.phase, 'idle', 'connection health block should leave session in idle phase');
+assert.equal(blockedConnection.lastError.reason, 'connection_health_failed', 'connection health block should preserve stable reason');
+assert.equal(blockedConnection.lastError.connectionHealth?.status, 'blocked', 'connection health block should retain structured health report');
+assert.ok(blockedConnection.lastError.connectionHealth?.actions?.some(action => action.id === 'practice' && /不写正式积分/.test(action.detail)), 'connection health block should retain no-score practice action');
+
 const successfulRequeueStorage = createMemoryStorage([
   ['theDefierPvpLiveLastTerminalMatchV1', 'pvplm-finished-stale']
 ]);

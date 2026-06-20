@@ -48,6 +48,7 @@ assert.equal(typeof BackendClient.joinLivePvpInvite, 'function', 'BackendClient 
 assert.equal(typeof BackendClient.cancelLivePvpInvite, 'function', 'BackendClient should expose cancelLivePvpInvite');
 assert.equal(typeof BackendClient.getCurrentLivePvpInvite, 'function', 'BackendClient should expose getCurrentLivePvpInvite');
 assert.equal(typeof BackendClient.getLivePvpInviteInbox, 'function', 'BackendClient should expose getLivePvpInviteInbox');
+assert.equal(typeof BackendClient.measureLivePvpConnectionHealth, 'function', 'BackendClient should expose live PVP connection health preflight');
 assert.equal(typeof BackendClient.heartbeatLivePvpMatch, 'function', 'BackendClient should expose heartbeatLivePvpMatch');
 assert.equal(typeof BackendClient.submitLivePvpIntent, 'function', 'BackendClient should expose submitLivePvpIntent');
 assert.equal(typeof BackendClient.getLivePvpWebSocketUrl, 'function', 'BackendClient should expose getLivePvpWebSocketUrl');
@@ -77,6 +78,56 @@ assert.notEqual(calls.at(-1).options.data.loadout, liveLoadout, 'live queue join
 const wideConsentJoin = await BackendClient.joinLivePvpQueue({ displayName: '甲', loadout: liveLoadout, wideMatchConsent: true });
 assert.equal(wideConsentJoin.success, true, 'live queue join should accept explicit wide match consent');
 assert.equal(calls.at(-1).options.data.wideMatchConsent, true, 'live queue join should forward explicit wide match consent only when selected');
+
+const connectionHealthProbe = {
+  sampleWindowMs: 60000,
+  missedHeartbeatCount: 0,
+  reconnectCount: 0,
+  rttP95Ms: 640,
+};
+const healthProbeJoin = await BackendClient.joinLivePvpQueue({ displayName: '甲', connectionHealthProbe });
+assert.equal(healthProbeJoin.success, true, 'live queue join should accept connection health probe');
+assert.deepEqual(calls.at(-1).options.data.connectionHealthProbe, connectionHealthProbe, 'live queue join should forward queue connection health probe');
+assert.notEqual(calls.at(-1).options.data.connectionHealthProbe, connectionHealthProbe, 'live queue join should clone connection health probe before sending');
+
+const originalQueueRequestServer = BackendClient.requestServer;
+BackendClient.requestServer = async (path, options = {}) => {
+  calls.push({ path, options });
+  const error = new Error('当前连接不适合进入正式真人排位，请重试检测或先进入问道练习。');
+  error.reason = 'connection_health_failed';
+  error.payload = {
+    success: false,
+    reason: 'connection_health_failed',
+    message: error.message,
+    connectionHealth: {
+      reportVersion: 'pvp-live-queue-connection-health-v1',
+      status: 'blocked',
+      sampleTag: 'client_preflight',
+      reasons: ['missed_heartbeat', 'high_rtt'],
+      actions: [
+        { id: 'retry_connection_check', label: '重试检测' },
+        { id: 'practice', label: '问道练习', detail: '练习不写正式积分。' }
+      ]
+    }
+  };
+  throw error;
+};
+const blockedHealthJoin = await BackendClient.joinLivePvpQueue({ displayName: '甲', connectionHealthProbe });
+assert.equal(blockedHealthJoin.success, false, 'live queue join should surface blocked connection health failure');
+assert.equal(blockedHealthJoin.reason, 'connection_health_failed', 'blocked connection health join should preserve stable reason');
+assert.equal(blockedHealthJoin.connectionHealth?.status, 'blocked', 'blocked connection health join should preserve backend health report');
+assert.ok(blockedHealthJoin.connectionHealth?.actions?.some(action => action.id === 'practice'), 'blocked connection health join should preserve practice action');
+BackendClient.requestServer = originalQueueRequestServer;
+
+const measuredHealth = await BackendClient.measureLivePvpConnectionHealth();
+assert.equal(measuredHealth.reportVersion, 'pvp-live-queue-connection-health-v1', 'live connection preflight should return stable report version');
+assert.equal(measuredHealth.status, 'pass', 'live connection preflight should pass when health endpoint responds');
+assert.equal(measuredHealth.sampleTag, 'client_preflight', 'live connection preflight should expose client preflight tag');
+assert.equal(measuredHealth.missedHeartbeatCount, 0, 'live connection preflight should not invent missed heartbeats on success');
+assert.equal(measuredHealth.reconnectCount, 0, 'live connection preflight should not invent reconnects on success');
+assert.ok(measuredHealth.rttP95Ms >= 0, 'live connection preflight should expose bounded RTT summary');
+assert.equal(calls.at(-1).path, '/api/health', 'live connection preflight should call backend health endpoint');
+assert.equal(calls.at(-1).options.auth, false, 'live connection preflight should not require auth headers');
 
 const longName = `  ${'甲'.repeat(48)}  `;
 const trimmed = await BackendClient.joinLivePvpQueue({ displayName: longName });

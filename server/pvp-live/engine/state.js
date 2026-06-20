@@ -97,6 +97,13 @@ function normalizeMatchQuality(input = {}) {
     const safeguards = Array.isArray(input.safeguards) && input.safeguards.length > 0
         ? input.safeguards
         : ['server_authoritative', 'snapshot_locked', 'setup_ready_required', 'first_action_budget'];
+    const connectionHealthSummary = input.connectionHealthSummary && typeof input.connectionHealthSummary === 'object'
+        ? {
+            reportVersion: String(input.connectionHealthSummary.reportVersion || 'pvp-live-queue-connection-health-v1'),
+            status: String(input.connectionHealthSummary.status || input.connectionHealth || 'not_measured'),
+            sampleTag: String(input.connectionHealthSummary.sampleTag || '')
+        }
+        : null;
     return {
         reportVersion: 'pvp-live-match-quality-v1',
         tag: input.tag === 'expanded' || input.tag === 'wide_but_accepted' || input.tag === 'rejected' ? input.tag : 'good',
@@ -111,8 +118,9 @@ function normalizeMatchQuality(input = {}) {
         },
         candidatePoolSize: Math.max(1, Math.floor(Number(input.candidatePoolSize) || 2)),
         connectionHealth: typeof input.connectionHealth === 'string' && input.connectionHealth ? input.connectionHealth : 'not_measured',
+        connectionHealthSummary,
         wideMatchReason: typeof input.wideMatchReason === 'string' ? input.wideMatchReason : '',
-        safeguards: safeguards.map(item => String(item || '')).filter(Boolean).slice(0, 8)
+        safeguards: safeguards.map(item => String(item || '')).filter(Boolean).slice(0, 10)
     };
 }
 

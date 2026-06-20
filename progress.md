@@ -1,5 +1,43 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-20: V10-S9J live PVP ranked connection health gate
+  - 本轮完成
+    - `server/pvp-live/live-store.js` 为正式排位 `/api/pvp/live/queue/join` 增加 `pvp-live-queue-connection-health-v1` 入场报告：客户端探测缺失会降级为 `not_measured`，高 RTT / 失败探测 / 明确 risky 或 blocked 会在入队前返回稳定 `connection_health_failed`，并附带 `retry_connection_check` 与 `practice` 行动建议，不让弱网高风险用户先进入正式队列再破坏双方体验。
+    - 入队成功的连接健康摘要会写入排队票据和 SQLite `pvp_live_queue_tickets.connection_health_json`，重启恢复后仍能参与匹配质量投影；只有公开排位入队消费该门禁，好友邀请、友谊再战、心跳宽限、断线结算、奖励、赛季验证和旧镜像 PVP 均不改规则。
+    - `matchQuality` 新增 `connectionHealth`、`connectionHealthSummary` 与 `connection_health_gate` safeguard，只有双方都带合法探测且通过时才显示“连接健康通过”；混合旧客户端 / 未探测票据会显示 `not_measured`，不夸大为通过。公开摘要只保留 `status` 与 `sampleTag`，不向双方展示原始 RTT、失败次数、重连次数、采样窗口、原因列表或隐藏评分。
+    - `js/services/backend-client.js` 新增 `measureLivePvpConnectionHealth()`，在排位前以未鉴权 `/api/health` 做轻量往返探测；`PVPService.live.measureConnectionHealth()`、`PVPScene.buildLiveQueueConnectionHealthProbe()` 和 `joinLiveQueue()` 串起前端预检与入队 payload。
+    - `PVPScene.formatLiveMatchQuality()` 增加连接健康标签，`BackendClient.joinLivePvpQueue()` 与 `pvp-live-session` 在真实 409 / blocked join 失败时保留结构化 `connectionHealth`，`PVPScene.getLiveSnapshot()` 只把脱敏的 status / reasons / actions 投给文本 payload，方便 UI 后续做重试 / 练习入口而不是只显示泛化失败。
+    - route / persistence / client / service / session / UI runtime / UI contract / browser audit / real backend smoke / release coverage 测试均固定该门禁：高风险入队返回 409，真实 409 透传 blocked 报告，混合未探测票据不误报 pass，正常入队写入并恢复连接健康摘要，真实浏览器双账号匹配后能看到 `connectionHealth=pass` 和 `connection_health_gate`。
+  - 已验证
+    - 红测：`node tests/sanity_pvp_live_route_checks.cjs` 在实现前失败于高风险连接仍能入队，期望 409、实际 200。
+    - 红测：`node tests/sanity_pvp_live_client_checks.mjs` 在实现前失败于 `connectionHealthProbe` 未随 `joinLivePvpQueue()` 转发，且缺少 `measureLivePvpConnectionHealth()`。
+    - 红测：`node tests/sanity_pvp_live_session_checks.mjs` 在实现前失败于 blocked join 的 `lastError.connectionHealth` 缺失。
+    - 红测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs` 在实现前失败于匹配质量文案缺少“连接健康通过”。
+    - 红测：`node tests/sanity_pvp_live_service_bridge_checks.cjs` 在实现前失败于 live service 没有连接健康测量桥接。
+    - 红测：`node tests/sanity_pvp_live_ui_contract_checks.cjs` 在实现前失败于 UI 入队缺少 `connectionHealthProbe` 合约 marker。
+    - 巡检后红测：`node tests/sanity_pvp_live_client_checks.mjs` 失败于真实 409 路径丢失 `connectionHealth`。
+    - 巡检后红测：`node tests/sanity_pvp_live_route_checks.cjs` 失败于“旧客户端未探测 + 新客户端通过”被误报为 `connectionHealth=pass`。
+    - 绿测：`node tests/sanity_pvp_live_client_checks.mjs`
+    - 绿测：`node tests/sanity_pvp_live_service_bridge_checks.cjs`
+    - 绿测：`node tests/sanity_pvp_live_ui_contract_checks.cjs`
+    - 绿测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs`
+    - 绿测：`node tests/sanity_pvp_live_route_checks.cjs`
+    - 绿测：`node tests/sanity_pvp_live_persistence_checks.cjs`
+    - 绿测：`node tests/sanity_release_gate_coverage_checks.cjs`
+    - 语法检查：`node --check server/pvp-live/live-store.js`
+    - 语法检查：`node --check server/routes/pvp-live.js`
+    - 语法检查：`node --check server/pvp-live/live-persistence.js`
+    - 语法检查：`node --check server/db/database.js`
+    - 语法检查：`node --check js/services/backend-client.js`
+    - 语法检查：`node --check js/services/pvp-service.js`
+    - 语法检查：`node --check js/scenes/pvp-scene.js`
+    - 构建：`npm run build:pages`
+    - 浏览器审计：`node tests/browser_pvp_live_audit.mjs http://127.0.0.1:4173 output/pvp-live-connection-health-gate-audit-final4`，67/67 findings、0 console error。
+    - 真实后端 smoke：`node tests/browser_pvp_live_real_backend_smoke.mjs http://127.0.0.1:4173 output/pvp-live-connection-health-gate-real-final2`，41/41 findings、0 console error。
+    - 全量 Node：`npm run test:node`
+  - 当前结论
+    - 正式真人排位现在有最小可执行的连接健康入场证明：高风险连接会被挡在队列外并给出重试 / 练习路径，正常连接会随队列、重启恢复和匹配质量报告一路留痕，减少“匹配成功后立刻弱网掉线”对双方体验的破坏。该切片仍不改变伤害、生命、抽牌、灵力、起手、匹配评分、正式积分、奖励、赛季验证或结算；完整生产监控、更多地区样本、专门弱网 UI CTA、线上部署和多实例一致性仍未封板。
+
 - 2026-06-20: V10-S9I live PVP local reconnect recovery UX
   - 本轮完成
     - `js/scenes/pvp-scene.js` 收口本机连接状态文案：`viewer=grace` 时不再只显示“我方重连宽限 Xs”，而是明确“切回页面将自动恢复权威连接”，同时继续与准备/行动倒计时分离；`viewer=disconnected` 时改为“刷新同步权威结果；若仍在可恢复窗口会自动重连，否则按 `connection_timeout` 结算”，避免对已经超出宽限的本机断线过度承诺。

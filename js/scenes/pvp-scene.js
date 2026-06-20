@@ -586,6 +586,33 @@ export const PVPScene = {
       deck: this.buildLiveLoadoutDeck(preset.pattern)
     };
   },
+  async buildLiveQueueConnectionHealthProbe() {
+    try {
+      const report = PVPService && PVPService.live && typeof PVPService.live.measureConnectionHealth === 'function'
+        ? await PVPService.live.measureConnectionHealth()
+        : null;
+      if (report && report.reportVersion === 'pvp-live-queue-connection-health-v1') {
+        return {
+          sampleWindowMs: Math.max(0, Math.floor(Number(report.sampleWindowMs) || 0)),
+          missedHeartbeatCount: Math.max(0, Math.floor(Number(report.missedHeartbeatCount) || 0)),
+          reconnectCount: Math.max(0, Math.floor(Number(report.reconnectCount) || 0)),
+          rttP95Ms: Math.max(0, Math.floor(Number(report.rttP95Ms) || 0)),
+          sampleTag: String(report.sampleTag || 'client_preflight'),
+          status: String(report.status || 'pass')
+        };
+      }
+    } catch (error) {
+      // Fall through to a conservative blocked probe so formal queue entry can be refused by authority.
+    }
+    return {
+      sampleWindowMs: 0,
+      missedHeartbeatCount: 2,
+      reconnectCount: 1,
+      rttP95Ms: 3000,
+      sampleTag: 'client_preflight',
+      status: 'blocked'
+    };
+  },
   getLiveMatchQuality(view) {
     const report = view && view.matchQuality && typeof view.matchQuality === 'object' ? view.matchQuality : null;
     if (!report) return null;
@@ -601,8 +628,22 @@ export const PVPScene = {
         B: Math.max(0, Math.floor(Number(waitMs.B) || 0))
       },
       connectionHealth: String(report.connectionHealth || 'not_measured'),
+      connectionHealthSummary: report.connectionHealthSummary && typeof report.connectionHealthSummary === 'object' ? {
+        status: String(report.connectionHealthSummary.status || report.connectionHealth || 'not_measured'),
+        sampleTag: String(report.connectionHealthSummary.sampleTag || '')
+      } : null,
       safeguards: Array.isArray(report.safeguards) ? report.safeguards.map(item => String(item || '')).filter(Boolean).slice(0, 8) : []
     };
+  },
+  formatLiveMatchConnectionHealth(report) {
+    const status = String(report && report.connectionHealth || report && report.connectionHealthSummary && report.connectionHealthSummary.status || 'not_measured');
+    const labels = {
+      pass: '连接健康通过',
+      risky: '连接需重试',
+      blocked: '连接已阻断',
+      not_measured: '连接未测'
+    };
+    return labels[status] || `连接${status}`;
   },
   formatLiveMatchQuality(view) {
     const report = this.getLiveMatchQuality(view);
@@ -615,7 +656,8 @@ export const PVPScene = {
     };
     const tag = labels[report.tag] || report.tag;
     const maxWaitSec = Math.ceil(Math.max(report.waitMs.A, report.waitMs.B) / 1000);
-    return `匹配质量：${tag} · ${report.expansionStage} · ${report.ratingDeltaBucket} · 等待 ${maxWaitSec}s`;
+    const connectionHealth = this.formatLiveMatchConnectionHealth(report);
+    return `匹配质量：${tag} · ${report.expansionStage} · ${report.ratingDeltaBucket} · ${connectionHealth} · 等待 ${maxWaitSec}s`;
   },
   getLiveTurnTimer(view) {
     const timer = view && view.turnTimer && typeof view.turnTimer === 'object' ? view.turnTimer : null;
@@ -2408,7 +2450,24 @@ export const PVPScene = {
       inviteInbox: Array.isArray(state.inviteInbox) ? state.inviteInbox.slice(0, 20) : [],
       lastError: state.lastError ? {
         reason: String(state.lastError.reason || ''),
-        message: String(state.lastError.message || '')
+        message: String(state.lastError.message || ''),
+        ...(state.lastError.connectionHealth && typeof state.lastError.connectionHealth === 'object' ? {
+          connectionHealth: {
+            reportVersion: String(state.lastError.connectionHealth.reportVersion || 'pvp-live-queue-connection-health-v1'),
+            status: String(state.lastError.connectionHealth.status || 'blocked'),
+            sampleTag: String(state.lastError.connectionHealth.sampleTag || 'client_preflight'),
+            reasons: Array.isArray(state.lastError.connectionHealth.reasons)
+              ? state.lastError.connectionHealth.reasons.map(item => String(item || '')).filter(Boolean).slice(0, 6)
+              : [],
+            actions: Array.isArray(state.lastError.connectionHealth.actions)
+              ? state.lastError.connectionHealth.actions.slice(0, 4).map(action => ({
+                id: String(action && action.id || ''),
+                label: String(action && action.label || ''),
+                detail: String(action && action.detail || '')
+              })).filter(action => action.id && action.label)
+              : []
+          }
+        } : {})
       } : null,
       lastEvents: Array.isArray(state.lastEvents) ? state.lastEvents.slice(0, 8).map(event => ({
         eventType: String(event && event.eventType || ''),
@@ -3013,9 +3072,11 @@ export const PVPScene = {
     const gameRef = this.getGameRef();
     const displayName = gameRef && gameRef.player && gameRef.player.name ? gameRef.player.name : '无名修士';
     const selectedPreset = this.getLiveSelectedLoadoutPreset();
+    const connectionHealthProbe = await this.buildLiveQueueConnectionHealthProbe();
     await session.joinQueue({
       displayName,
       loadout: this.getLiveQueueLoadoutCandidate(selectedPreset.id),
+      connectionHealthProbe,
       ...(options && options.wideMatchConsent === true ? { wideMatchConsent: true } : {})
     });
     this.liveLongWaitPollUntil = 0;

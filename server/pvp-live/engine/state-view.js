@@ -45,6 +45,13 @@ function projectSelfSeat(seat) {
 function projectMatchQuality(matchQuality) {
     const report = matchQuality && typeof matchQuality === 'object' ? matchQuality : {};
     const waitMs = report.waitMs && typeof report.waitMs === 'object' ? report.waitMs : {};
+    const connectionHealthSummary = report.connectionHealthSummary && typeof report.connectionHealthSummary === 'object'
+        ? {
+            reportVersion: String(report.connectionHealthSummary.reportVersion || 'pvp-live-queue-connection-health-v1'),
+            status: String(report.connectionHealthSummary.status || report.connectionHealth || 'not_measured'),
+            sampleTag: String(report.connectionHealthSummary.sampleTag || '')
+        }
+        : null;
     return {
         reportVersion: String(report.reportVersion || 'pvp-live-match-quality-v1'),
         tag: String(report.tag || 'good'),
@@ -59,8 +66,9 @@ function projectMatchQuality(matchQuality) {
         },
         candidatePoolSize: Math.max(1, Math.floor(Number(report.candidatePoolSize) || 1)),
         connectionHealth: String(report.connectionHealth || 'not_measured'),
+        connectionHealthSummary,
         wideMatchReason: String(report.wideMatchReason || ''),
-        safeguards: Array.isArray(report.safeguards) ? report.safeguards.map(item => String(item || '')).filter(Boolean).slice(0, 8) : []
+        safeguards: Array.isArray(report.safeguards) ? report.safeguards.map(item => String(item || '')).filter(Boolean).slice(0, 10) : []
     };
 }
 

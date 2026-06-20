@@ -444,7 +444,15 @@ async function safeElementScreenshot(page, selector, outputPath) {
         ratingDeltaBucket: 'unrated_mvp',
         waitMs: { A: 3200, B: 0 },
         candidatePoolSize: 2,
-        safeguards: ['server_authoritative', 'snapshot_locked', 'setup_ready_required'],
+        connectionHealth: 'pass',
+        connectionHealthSummary: {
+          reportVersion: 'pvp-live-queue-connection-health-v1',
+          status: 'pass',
+          sampleTag: 'client_preflight',
+          sampleWindowMs: 1,
+          reasons: [],
+        },
+        safeguards: ['server_authoritative', 'snapshot_locked', 'setup_ready_required', 'connection_health_gate'],
       },
       openingSafeguardReport: makeOpeningSafeguardReport(stateVersion, currentSeat, status),
       duelMomentumReport: makeDuelMomentumReport(stateVersion, currentSeat, status),
@@ -636,8 +644,49 @@ async function safeElementScreenshot(page, selector, outputPath) {
         };
       },
       joinQueue: async (options = {}) => {
-        push({ method: 'joinQueue', options });
+        const healthMode = String(window.__livePvpAuditConnectionHealthMode || '');
+        push({ method: 'joinQueue', options, healthMode });
+        if (healthMode === 'blocked') {
+          return {
+            success: false,
+            reason: 'connection_health_failed',
+            message: '当前连接不适合进入正式真人排位，请重试检测或先进入问道练习。',
+            connectionHealth: {
+              reportVersion: 'pvp-live-queue-connection-health-v1',
+              status: 'blocked',
+              sampleTag: 'client_preflight',
+              reasons: ['missed_heartbeat', 'high_rtt'],
+              actions: [
+                { id: 'retry_connection_check', label: '重试检测' },
+                { id: 'practice', label: '问道练习', detail: '练习不写正式积分。' },
+              ],
+            },
+          };
+        }
         return { success: true, status: 'waiting', queueTicket: 'pvplq-browser-live' };
+      },
+      measureConnectionHealth: async () => {
+        push({ method: 'measureConnectionHealth' });
+        if (String(window.__livePvpAuditConnectionHealthMode || '') === 'blocked') {
+          return {
+            reportVersion: 'pvp-live-queue-connection-health-v1',
+            status: 'blocked',
+            sampleTag: 'client_preflight',
+            sampleWindowMs: 60000,
+            missedHeartbeatCount: 2,
+            reconnectCount: 1,
+            rttP95Ms: 3000,
+          };
+        }
+        return {
+          reportVersion: 'pvp-live-queue-connection-health-v1',
+          status: 'pass',
+          sampleTag: 'client_preflight',
+          sampleWindowMs: 1,
+          missedHeartbeatCount: 0,
+          reconnectCount: 0,
+          rttP95Ms: 18,
+        };
       },
       cancelQueue: async (queueTicket) => {
         const mode = String(window.__livePvpAuditCancelQueueMode || '');
@@ -1024,6 +1073,35 @@ async function safeElementScreenshot(page, selector, outputPath) {
   );
   await page.click('[data-live-loadout-preset="sword"]', { timeout: 5000, force: true });
   await page.waitForTimeout(100);
+
+  await page.evaluate(() => {
+    window.__livePvpAuditCalls = [];
+    window.__livePvpAuditConnectionHealthMode = 'blocked';
+  });
+  await page.click('[data-live-action="join-queue"]', { timeout: 5000, force: true });
+  await page.waitForTimeout(200);
+  const blockedHealthProbe = await page.evaluate(() => ({
+    phase: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-phase') || '',
+    lastError: document.querySelector('[data-live-last-error]')?.textContent || '',
+    payload: JSON.parse(window.render_game_to_text()).pvp?.live || null,
+    calls: window.__livePvpAuditCalls,
+  }));
+  add(
+    'live UI blocks risky ranked entry and keeps connection health retry practice actions',
+    blockedHealthProbe.phase === 'idle'
+      && /连接不适合进入正式真人排位/.test(blockedHealthProbe.lastError)
+      && blockedHealthProbe.payload?.lastError?.reason === 'connection_health_failed'
+      && blockedHealthProbe.payload?.lastError?.connectionHealth?.status === 'blocked'
+      && blockedHealthProbe.payload?.lastError?.connectionHealth?.actions?.some(action => action.id === 'retry_connection_check')
+      && blockedHealthProbe.payload?.lastError?.connectionHealth?.actions?.some(action => action.id === 'practice' && /不写正式积分/.test(action.detail))
+      && blockedHealthProbe.calls.some(call => call.method === 'measureConnectionHealth')
+      && blockedHealthProbe.calls.some(call => call.method === 'joinQueue' && call.options?.connectionHealthProbe?.status === 'blocked'),
+    JSON.stringify(blockedHealthProbe),
+  );
+  await page.evaluate(() => {
+    window.__livePvpAuditCalls = [];
+    window.__livePvpAuditConnectionHealthMode = '';
+  });
   await page.click('[data-live-action="join-queue"]', { timeout: 5000, force: true });
   await page.waitForTimeout(200);
 
@@ -1041,6 +1119,15 @@ async function safeElementScreenshot(page, selector, outputPath) {
     /破阵斗法谱/.test(waitingProbe.selectedLoadout)
       && waitingProbe.selectedPreset === 'sword'
       && waitingProbe.calls.some(call => call.method === 'joinQueue' && call.options?.loadout?.identitySlot === 'sword' && call.options?.loadout?.deck?.length === 20),
+    JSON.stringify(waitingProbe),
+  );
+  add(
+    'live UI sends ranked entry connection health preflight with queue join',
+    waitingProbe.calls.some(call => call.method === 'measureConnectionHealth')
+      && waitingProbe.calls.some(call => call.method === 'joinQueue'
+        && call.options?.connectionHealthProbe?.sampleTag === 'client_preflight'
+        && call.options?.connectionHealthProbe?.status === 'pass'
+        && call.options?.connectionHealthProbe?.missedHeartbeatCount === 0),
     JSON.stringify(waitingProbe),
   );
   add(
@@ -1428,9 +1515,12 @@ async function safeElementScreenshot(page, selector, outputPath) {
     /匹配质量：良好/.test(matchedProbe.matchQuality)
       && /mvp_open_pool/.test(matchedProbe.matchQuality)
       && /unrated_mvp/.test(matchedProbe.matchQuality)
+      && /连接健康通过/.test(matchedProbe.matchQuality)
       && matchedProbe.payload?.matchQuality?.reportVersion === 'pvp-live-match-quality-v1'
       && matchedProbe.payload?.matchQuality?.tag === 'good'
       && matchedProbe.payload?.matchQuality?.ratingDeltaBucket === 'unrated_mvp'
+      && matchedProbe.payload?.matchQuality?.connectionHealth === 'pass'
+      && matchedProbe.payload?.matchQuality?.connectionHealthSummary?.sampleTag === 'client_preflight'
       && !/rating":|score":|elo/i.test(JSON.stringify(matchedProbe.payload?.matchQuality || {})),
     JSON.stringify(matchedProbe),
   );
@@ -3141,6 +3231,15 @@ async function safeElementScreenshot(page, selector, outputPath) {
         push({ method: 'joinQueue', options });
         return { success: true, status: 'waiting', queueTicket: 'pvplq-browser-live-mobile' };
       },
+      measureConnectionHealth: async () => ({
+        reportVersion: 'pvp-live-queue-connection-health-v1',
+        status: 'pass',
+        sampleTag: 'client_preflight',
+        sampleWindowMs: 1,
+        missedHeartbeatCount: 0,
+        reconnectCount: 0,
+        rttP95Ms: 22,
+      }),
       cancelQueue: async (queueTicket) => {
         push({ method: 'cancelQueue', queueTicket });
         return { success: true, status: 'cancelled', queueTicket };

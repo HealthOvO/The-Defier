@@ -637,12 +637,78 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
         });
         assert.equal(noGhostDurableMatch.status, 404, 'failed invite join should not leave an unpersisted current match');
 
+        const blockedHealthJoin = await request(baseUrl, '/api/pvp/live/queue/join', {
+            method: 'POST',
+            token: tokenI,
+            body: {
+                displayName: '壬',
+                loadout: loadoutA,
+                connectionHealthProbe: {
+                    sampleWindowMs: 60000,
+                    missedHeartbeatCount: 2,
+                    reconnectCount: 1,
+                    rttP95Ms: 2800
+                }
+            }
+        });
+        assert.equal(blockedHealthJoin.status, 409, 'high-risk connection should not enter ranked live queue');
+        assert.equal(blockedHealthJoin.payload.reason, 'connection_health_failed', 'high-risk connection block should expose stable reason');
+        assert.equal(blockedHealthJoin.payload.connectionHealth?.reportVersion, 'pvp-live-queue-connection-health-v1', 'blocked queue join should expose connection health report');
+        assert.equal(blockedHealthJoin.payload.connectionHealth?.status, 'blocked', 'blocked queue join should classify connection health as blocked');
+        assert.ok(blockedHealthJoin.payload.connectionHealth?.reasons?.includes('missed_heartbeat'), 'blocked queue join should explain missed heartbeat risk');
+        assert.ok(blockedHealthJoin.payload.connectionHealth?.reasons?.includes('recent_reconnect'), 'blocked queue join should explain recent reconnect risk');
+        assert.ok(blockedHealthJoin.payload.connectionHealth?.reasons?.includes('high_rtt'), 'blocked queue join should explain high RTT risk');
+        assert.ok(blockedHealthJoin.payload.connectionHealth?.actions?.some(action => action.id === 'retry_connection_check'), 'blocked queue join should offer retry action');
+        assert.ok(blockedHealthJoin.payload.connectionHealth?.actions?.some(action => action.id === 'practice' && /不写正式积分/.test(action.detail)), 'blocked queue join should offer no-score practice instead of ghost fallback');
+
+        pvpLiveRoutes.__livePvpStore.reset();
+
+        const legacyNoProbeJoin = await request(baseUrl, '/api/pvp/live/queue/join', {
+            method: 'POST',
+            token: tokenI,
+            body: {
+                displayName: '壬',
+                loadout: loadoutA
+            }
+        });
+        assert.equal(legacyNoProbeJoin.status, 200, 'legacy client without connection probe should still enter waiting queue');
+        assert.equal(legacyNoProbeJoin.payload.status, 'waiting', 'legacy no-probe player should wait for real opponent');
+
+        const mixedProbeJoin = await request(baseUrl, '/api/pvp/live/queue/join', {
+            method: 'POST',
+            token: tokenK,
+            body: {
+                displayName: '子',
+                loadout: loadoutB,
+                connectionHealthProbe: {
+                    sampleWindowMs: 60000,
+                    missedHeartbeatCount: 0,
+                    reconnectCount: 0,
+                    rttP95Ms: 520
+                }
+            }
+        });
+        assert.equal(mixedProbeJoin.status, 200, 'measured opponent should match legacy no-probe ticket');
+        assert.equal(mixedProbeJoin.payload.status, 'matched', 'mixed measured/no-probe pair should still create a real-player match');
+        assert.equal(mixedProbeJoin.payload.stateView.matchQuality.connectionHealth, 'not_measured', 'mixed measured/no-probe pair must not overstate connection health as passed');
+        assert.equal(mixedProbeJoin.payload.stateView.matchQuality.connectionHealthSummary, null, 'mixed measured/no-probe pair should not expose a pass summary');
+        assert.ok(!mixedProbeJoin.payload.stateView.matchQuality.safeguards.includes('connection_health_gate'), 'mixed measured/no-probe pair should not claim connection health gate safeguard');
+
         pvpLiveRoutes.__livePvpStore.reset();
 
         const joinA = await request(baseUrl, '/api/pvp/live/queue/join', {
             method: 'POST',
             token: tokenA,
-            body: { displayName: '甲', loadout: loadoutA }
+            body: {
+                displayName: '甲',
+                loadout: loadoutA,
+                connectionHealthProbe: {
+                    sampleWindowMs: 60000,
+                    missedHeartbeatCount: 0,
+                    reconnectCount: 0,
+                    rttP95Ms: 480
+                }
+            }
         });
         assert.equal(joinA.status, 200, 'first queue join should return 200');
         assert.equal(joinA.payload.status, 'waiting', 'first queue join should wait');
@@ -702,7 +768,16 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
         const joinB = await request(baseUrl, '/api/pvp/live/queue/join', {
             method: 'POST',
             token: tokenB,
-            body: { displayName: '乙', loadout: loadoutB }
+            body: {
+                displayName: '乙',
+                loadout: loadoutB,
+                connectionHealthProbe: {
+                    sampleWindowMs: 60000,
+                    missedHeartbeatCount: 0,
+                    reconnectCount: 0,
+                    rttP95Ms: 520
+                }
+            }
         });
         assert.equal(joinB.status, 200, 'second queue join should return 200');
         assert.equal(joinB.payload.status, 'matched', 'second queue join should match');
@@ -721,6 +796,11 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
         assert.equal(joinB.payload.stateView.matchQuality.expansionStage, 'mvp_open_pool', 'matched view should expose MVP open-pool expansion stage');
         assert.equal(joinB.payload.stateView.matchQuality.ratingDeltaBucket, 'unrated_mvp', 'matched view should bucket rating delta instead of exposing exact hidden rating');
         assert.ok(joinB.payload.stateView.matchQuality.waitMs.B >= 0, 'matched view should expose own queue wait in match quality report');
+        assert.equal(joinB.payload.stateView.matchQuality.connectionHealth, 'pass', 'matched view should expose passed connection health instead of not_measured');
+        assert.equal(joinB.payload.stateView.matchQuality.connectionHealthSummary?.status, 'pass', 'matched view should expose connection health summary status');
+        assert.equal(joinB.payload.stateView.matchQuality.connectionHealthSummary?.sampleTag, 'client_preflight', 'matched view should expose preflight sample tag without network detail leakage');
+        assert.ok(joinB.payload.stateView.matchQuality.safeguards.includes('connection_health_gate'), 'matched view should record connection health gate safeguard');
+        assert.ok(!/rttP95Ms|missedHeartbeatCount|reconnectCount|sampleWindowMs|reasons/.test(JSON.stringify(joinB.payload.stateView.matchQuality)), 'matched view should not leak raw connection probe details');
         assert.equal(joinB.payload.stateView.firstMatchGuide.reportVersion, 'pvp-live-first-match-guide-v1', 'matched view should expose first-match guide report version');
         assert.ok(joinB.payload.stateView.firstMatchGuide.safeguards.includes('opening_protection'), 'matched view first-match guide should explain opening protection');
         assert.ok(joinB.payload.stateView.firstMatchGuide.steps.some(step => step.id === 'setup_ready'), 'matched view first-match guide should explain setup ready step');

@@ -577,6 +577,9 @@ async function writeReport() {
         && matchedA.matchQuality?.tag === 'good'
         && matchedA.matchQuality?.expansionStage === 'mvp_open_pool'
         && matchedA.matchQuality?.ratingDeltaBucket === 'unrated_mvp'
+        && matchedA.matchQuality?.connectionHealth === 'pass'
+        && matchedA.matchQuality?.connectionHealthSummary?.sampleTag === 'client_preflight'
+        && (matchedA.matchQuality?.safeguards || []).includes('connection_health_gate')
         && !/rating":|score":|elo/i.test(JSON.stringify(matchedA.matchQuality || {})),
       JSON.stringify(matchedA.matchQuality),
     );

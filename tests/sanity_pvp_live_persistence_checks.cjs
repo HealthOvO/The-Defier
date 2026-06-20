@@ -1384,7 +1384,16 @@ async function readyBoth({ matchId, tokenA, tokenB, stateVersionA, prefix }) {
     const joinA = await request('/api/pvp/live/queue/join', {
       method: 'POST',
       token: waitingUserA.token,
-      body: { displayName: '候甲', loadout: waitingLoadoutA },
+      body: {
+        displayName: '候甲',
+        loadout: waitingLoadoutA,
+        connectionHealthProbe: {
+          sampleWindowMs: 60000,
+          missedHeartbeatCount: 0,
+          reconnectCount: 0,
+          rttP95Ms: 610,
+        },
+      },
     });
     assert.equal(joinA.payload.status, 'waiting', 'first waiting queue restart user should wait');
     assert.equal(joinA.payload.loadoutSummary.identitySlot, 'waiting-sword', 'waiting queue should expose locked identity before restart');
@@ -1418,12 +1427,23 @@ async function readyBoth({ matchId, tokenA, tokenB, stateVersionA, prefix }) {
     const joinB = await request('/api/pvp/live/queue/join', {
       method: 'POST',
       token: waitingUserB.token,
-      body: { displayName: '候乙', loadout: waitingLoadoutB },
+      body: {
+        displayName: '候乙',
+        loadout: waitingLoadoutB,
+        connectionHealthProbe: {
+          sampleWindowMs: 60000,
+          missedHeartbeatCount: 0,
+          reconnectCount: 0,
+          rttP95Ms: 740,
+        },
+      },
     });
     assert.equal(joinB.payload.status, 'matched', 'restarted waiting queue should match second user after backend restart');
     assert.equal(joinB.payload.stateView.self.loadoutSummary.identitySlot, 'waiting-shield', 'second user should keep own locked waiting restart loadout');
     assert.equal(joinB.payload.stateView.opponent.loadoutHash, waitingUserA.loadoutHash, 'second user should see restarted waiting opponent locked hash');
     assert.ok(!joinB.payload.stateView.opponent.loadoutSnapshot, 'restarted waiting queue match must not leak opponent snapshot');
+    assert.equal(joinB.payload.stateView.matchQuality.connectionHealth, 'pass', 'restarted waiting queue match should preserve connection health gate result');
+    assert.equal(joinB.payload.stateView.matchQuality.connectionHealthSummary?.sampleTag, 'client_preflight', 'restarted waiting queue match should retain preflight connection health summary');
 
     const pollA = await request(`/api/pvp/live/queue/status/${encodeURIComponent(waitingUserA.queueTicket)}`, {
       token: waitingUserA.token,
