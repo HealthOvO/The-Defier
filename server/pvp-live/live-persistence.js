@@ -113,17 +113,63 @@ async function appendLiveWsSignalRow({
 } = {}) {
     const id = String(matchId || '').trim();
     if (!id) return null;
+    const safeSignalType = String(signalType || 'state_sync').trim().slice(0, 40) || 'state_sync';
+    const safeStateVersion = Math.max(0, Math.floor(Number(stateVersion) || 0));
+    const safeReason = String(reason || 'match_saved').trim().slice(0, 64) || 'match_saved';
+    const safeSourceInstanceId = String(sourceInstanceId || '').trim().slice(0, 96);
+    const safeCreatedAt = Math.max(0, Math.floor(Number(createdAt) || Date.now()));
+    const shouldDedupeSignal = safeReason === 'sync_required' || safeReason === 'duplicate_action';
+    if (shouldDedupeSignal) {
+        const result = await dbRun(
+            `INSERT INTO pvp_live_state_signals
+                (match_id, signal_type, state_version, reason, source_instance_id, created_at)
+             SELECT ?, ?, ?, ?, ?, ?
+              WHERE NOT EXISTS (
+                    SELECT 1
+                      FROM pvp_live_state_signals
+                     WHERE match_id = ?
+                       AND signal_type = ?
+                       AND state_version = ?
+                       AND reason = ?
+                     LIMIT 1
+              )`,
+            [
+                id,
+                safeSignalType,
+                safeStateVersion,
+                safeReason,
+                safeSourceInstanceId,
+                safeCreatedAt,
+                id,
+                safeSignalType,
+                safeStateVersion,
+                safeReason
+            ]
+        );
+        if (!result || result.changes === 0) return null;
+        const signalId = Math.max(0, Math.floor(Number(result.lastID) || 0));
+        return {
+            signalId,
+            id: signalId,
+            matchId: id,
+            signalType: safeSignalType,
+            stateVersion: safeStateVersion,
+            reason: safeReason,
+            sourceInstanceId: safeSourceInstanceId,
+            createdAt: safeCreatedAt
+        };
+    }
     const result = await dbRun(
         `INSERT INTO pvp_live_state_signals
             (match_id, signal_type, state_version, reason, source_instance_id, created_at)
          VALUES (?, ?, ?, ?, ?, ?)`,
         [
             id,
-            String(signalType || 'state_sync').trim().slice(0, 40) || 'state_sync',
-            Math.max(0, Math.floor(Number(stateVersion) || 0)),
-            String(reason || 'match_saved').trim().slice(0, 64) || 'match_saved',
-            String(sourceInstanceId || '').trim().slice(0, 96),
-            Math.max(0, Math.floor(Number(createdAt) || Date.now()))
+            safeSignalType,
+            safeStateVersion,
+            safeReason,
+            safeSourceInstanceId,
+            safeCreatedAt
         ]
     );
     const signalId = Math.max(0, Math.floor(Number(result && result.lastID) || 0));
@@ -131,11 +177,11 @@ async function appendLiveWsSignalRow({
         signalId,
         id: signalId,
         matchId: id,
-        signalType: String(signalType || 'state_sync').trim().slice(0, 40) || 'state_sync',
-        stateVersion: Math.max(0, Math.floor(Number(stateVersion) || 0)),
-        reason: String(reason || 'match_saved').trim().slice(0, 64) || 'match_saved',
-        sourceInstanceId: String(sourceInstanceId || '').trim().slice(0, 96),
-        createdAt: Math.max(0, Math.floor(Number(createdAt) || Date.now()))
+        signalType: safeSignalType,
+        stateVersion: safeStateVersion,
+        reason: safeReason,
+        sourceInstanceId: safeSourceInstanceId,
+        createdAt: safeCreatedAt
     };
 }
 

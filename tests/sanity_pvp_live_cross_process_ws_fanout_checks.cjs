@@ -3,6 +3,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
+const sqlite3 = require('../server/node_modules/sqlite3').verbose();
 
 const ROOT_DIR = path.resolve(__dirname, '..');
 const BASE_PORT = Number(process.env.PVP_LIVE_WS_FANOUT_PORT || (9300 + (process.pid % 1000) * 2));
@@ -17,6 +18,17 @@ function removeDbFiles() {
   for (const suffix of ['', '-wal', '-shm']) {
     fs.rmSync(`${DB_PATH}${suffix}`, { force: true });
   }
+}
+
+function dbGet(sql, params = []) {
+  const db = new sqlite3.Database(DB_PATH);
+  return new Promise((resolve, reject) => {
+    db.get(sql, params, (err, row) => {
+      db.close();
+      if (err) reject(err);
+      else resolve(row || null);
+    });
+  });
 }
 
 function makeLoadout(identitySlot, pattern) {
@@ -248,6 +260,7 @@ async function pollMatchedQueueStatus(baseUrl, queueTicket, token) {
   let serverB = null;
   let socketA = null;
   let socketB = null;
+  let socketBDuplicateOnA = null;
   try {
     await waitForHealth(serverA);
     serverB = startServer(PORT_B, 'process-b');
@@ -366,6 +379,90 @@ async function pollMatchedQueueStatus(baseUrl, queueTicket, token) {
     assert.equal(activeFanoutB.seatId, 'B', 'cross-process active fanout should keep the local starter seat scope');
     const lastSeenBeforeTerminal = maxRecentEventSequence(activeFanoutB.stateView);
 
+    sendJson(socketB, {
+      type: 'intent',
+      matchId,
+      intent: {
+        intentId: 'cross-process-ready-b',
+        intentType: 'ready',
+        stateVersion: remoteFanoutB.stateView.stateVersion,
+        payload: {},
+      },
+    });
+    const duplicateReadyB = await waitForMessage(
+      socketB,
+      message => message.type === 'intent_result' && message.intentId === 'cross-process-ready-b' && message.result === 'duplicate',
+      'cross-process duplicate WS fanout duplicate intent_result B',
+    );
+    assert.equal(duplicateReadyB.reason, 'duplicate_action', 'cross-process duplicate replay should keep reducer duplicate reason');
+    const duplicateVersion = duplicateReadyB.stateView.stateVersion;
+    const duplicateRemoteStateA = await waitForMessage(
+      socketA,
+      message => message.type === 'state_sync'
+        && message.matchId === matchId
+        && message.stateView?.status === 'active'
+        && message.stateView?.stateVersion === duplicateVersion,
+      'cross-process duplicate WS fanout remote state_sync A',
+    );
+    assert.equal(duplicateRemoteStateA.seatId, 'A', 'cross-process duplicate fanout should refresh the remote opponent seat scope');
+    const firstDuplicateSignalRow = await dbGet(
+      `SELECT COUNT(*) AS total
+         FROM pvp_live_state_signals
+        WHERE match_id = ?
+          AND state_version = ?
+          AND reason = 'duplicate_action'`,
+      [matchId, duplicateVersion],
+    );
+    assert.equal(
+      firstDuplicateSignalRow?.total,
+      1,
+      'cross-process duplicate replay should write one durable duplicate_action signal',
+    );
+
+    socketBDuplicateOnA = await openSocket(`${wsBaseUrlA}/api/pvp/live/ws?token=${encodeURIComponent(userB.token)}`);
+    await waitForMessage(socketBDuplicateOnA, message => message.type === 'connected', 'cross-process duplicate second socket connected B-on-A');
+    sendJson(socketBDuplicateOnA, { type: 'join_match', matchId, lastSeenRevision: lastSeenBeforeTerminal });
+    await waitForMessage(
+      socketBDuplicateOnA,
+      message => message.type === 'state_sync' && message.matchId === matchId && message.seatId === 'B',
+      'cross-process duplicate second socket state_sync B-on-A',
+    );
+    await waitForMessage(
+      socketBDuplicateOnA,
+      message => message.type === 'events_replay' && message.matchId === matchId,
+      'cross-process duplicate second socket events_replay B-on-A',
+    );
+    sendJson(socketBDuplicateOnA, {
+      type: 'intent',
+      matchId,
+      intent: {
+        intentId: 'cross-process-ready-b',
+        intentType: 'ready',
+        stateVersion: remoteFanoutB.stateView.stateVersion,
+        payload: {},
+      },
+    });
+    const secondProcessDuplicateReadyB = await waitForMessage(
+      socketBDuplicateOnA,
+      message => message.type === 'intent_result' && message.intentId === 'cross-process-ready-b' && message.result === 'duplicate',
+      'cross-process duplicate WS fanout second-process duplicate intent_result B',
+    );
+    assert.equal(secondProcessDuplicateReadyB.reason, 'duplicate_action', 'second-process duplicate replay should keep reducer duplicate reason');
+    await new Promise(resolve => setTimeout(resolve, 300));
+    const repeatedDuplicateSignalRow = await dbGet(
+      `SELECT COUNT(*) AS total
+         FROM pvp_live_state_signals
+        WHERE match_id = ?
+          AND state_version = ?
+          AND reason = 'duplicate_action'`,
+      [matchId, duplicateVersion],
+    );
+    assert.equal(
+      repeatedDuplicateSignalRow?.total,
+      1,
+      'cross-process duplicate fanout should throttle repeated same-version duplicate_action signals across backend processes',
+    );
+
     sendJson(socketA, {
       type: 'intent',
       matchId,
@@ -433,6 +530,7 @@ async function pollMatchedQueueStatus(baseUrl, queueTicket, token) {
   } finally {
     if (socketA) socketA.close();
     if (socketB) socketB.close();
+    if (socketBDuplicateOnA) socketBDuplicateOnA.close();
     await stopServer(serverB);
     await stopServer(serverA);
     removeDbFiles();

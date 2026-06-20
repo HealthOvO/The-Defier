@@ -1,5 +1,17 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-20: V10-S9A live PVP cross-process duplicate WS signal dedupe
+  - 本轮完成
+    - `tests/sanity_pvp_live_cross_process_ws_fanout_checks.cjs` 在真实双 `server/app.js` / 共享 SQLite harness 里补齐 duplicate_action 场景：A/B 分别连到不同进程，B ready 正常 accepted 后，B 原样重放同一 `intentId` 会收到 `duplicate / duplicate_action`，A 不发 heartbeat 也会通过另一进程收到同版本权威 `state_sync`。
+    - 同一测试继续打开 B 的第二条 WS 连接到另一个后端进程，再次重放同一 duplicate intent，固定同一 match / stateVersion / reason 的 `duplicate_action` durable signal 只能保留 1 条，防止弱网、多标签页或重连落到不同进程时写出重复跨进程 fanout 噪声。
+    - `server/pvp-live/live-persistence.js` 的 `appendLiveWsSignalRow()` 现在对 `sync_required` 和 `duplicate_action` 使用 SQLite `INSERT ... WHERE NOT EXISTS`，按 `match_id / signal_type / state_version / reason` 做共享去重；普通 `match_saved` 状态推进信号仍保留逐次追加，避免误吞真实版本推进。
+    - `tests/sanity_release_gate_coverage_checks.cjs` 固定跨进程 duplicate 行为 marker 和 shared signal dedupe 源码 marker。
+  - 已验证
+    - 红测：`node tests/sanity_pvp_live_cross_process_ws_fanout_checks.cjs` 在实现前失败于 `cross-process duplicate fanout should throttle repeated same-version duplicate_action signals across backend processes`，actual 为 2、expected 为 1。
+    - 绿测：`node tests/sanity_pvp_live_cross_process_ws_fanout_checks.cjs`
+  - 当前结论
+    - live PVP 的 duplicate_action 幂等重放已从单进程双方同步，继续推进到真实双进程 SQLite-backed fanout 证据：弱网重复包即使落到不同后端进程，也不会给同一权威版本写出多条 duplicate_action signal，远端对手也不必等 heartbeat 才刷新权威视图。该切片仍不是 Redis / 多实例强一致、生产 API smoke 或线上部署完成。
+
 - 2026-06-20: V10-S8Z live PVP WS duplicate peer fanout
   - 本轮完成
     - `server/pvp-live/live-ws.js` 现在把 `intent_result=duplicate / duplicate_action` 且带 authoritative `stateView` 的幂等回执纳入 `state_sync` fanout：发起方收到 duplicate 回执后，同一 WS server 上的双方都会马上收到 seat-scoped 权威 `state_sync`。
