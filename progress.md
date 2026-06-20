@@ -1,5 +1,23 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-20: V10-S8X live PVP terminal settlement re-entry guard
+  - 本轮完成
+    - `server/pvp-live/live-store.js` 的 `completeFinishedMatch()` 现在在 finished state 已带 `pvp-live-settlement-report-v1` 时，只保存 / release 终局状态并直接返回，不再二次调用 settlement provider。
+    - 这条保护覆盖重复终局 intent、重连后重复 release、读路径再次触发 terminal completion 等重入窗口：已有权威结算报告的对局不会再走正式结算 provider，即使底层 settlement DB 本身也有幂等保护，store 层也先截断重复结算入口。
+    - `tests/sanity_pvp_live_persistence_checks.cjs` 新增 already-reported terminal 红测：已有 settlement report 的 finished match 必须只保存一次、release 双方 active map，且 `settleMatch()` 调用次数为 0。
+    - `tests/sanity_release_gate_coverage_checks.cjs` 固定 already-reported terminal 行为 marker 和 `completeFinishedMatch()` 的 report-version 早返回源码 marker。
+  - 已验证
+    - 红测：`node tests/sanity_pvp_live_persistence_checks.cjs` 在实现前失败于 `already-reported terminal completion should not call settlement provider again`，actual 为 1、expected 为 0。
+    - 绿测：`node tests/sanity_pvp_live_persistence_checks.cjs`
+    - 绿测：`node tests/sanity_release_gate_coverage_checks.cjs`
+    - 语法检查：`node --check server/pvp-live/live-store.js`
+    - 语法检查：`node --check tests/sanity_pvp_live_persistence_checks.cjs`
+    - 全量：`npm run test:node`
+    - 构建：`npm run build:pages`
+    - 清洁检查：`git diff --check`
+  - 当前结论
+    - live PVP 的终局幂等从“重复结算不重复写账”进一步收紧到“已有正式结算报告后不再重入 settlement provider”：重复投降、重连重放或读路径重入更难造成正式赛季积分 / 天道币 / 荣誉收藏的二次处理窗口。该切片仍不是完整 active match revision/CAS、Redis / 多实例强一致、生产 API smoke 或线上部署完成。
+
 - 2026-06-20: V10-S8W live PVP cross-process terminal WS fanout evidence
   - 本轮完成
     - `tests/sanity_pvp_live_cross_process_ws_fanout_checks.cjs` 在既有双真实 `server/app.js` / 共享 SQLite harness 中继续推进到完整开战：A/B 分别连到不同进程，B ready 后 A 通过 WS 投降。

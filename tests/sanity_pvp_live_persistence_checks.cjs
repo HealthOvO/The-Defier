@@ -674,6 +674,65 @@ async function readyBoth({ matchId, tokenA, tokenB, stateVersionA, prefix }) {
   assert.equal(terminalIntentStore.matches.get(terminalIntentStaleMatchId)?.state?.status, 'active', 'terminal intent stale reload should replace the local dirty finished cache');
   assert.equal(terminalIntentStore.activeMatchByUserId.get('store-stale-a'), terminalIntentStaleMatchId, 'terminal intent stale reload should keep active map on authoritative active match');
 
+  const alreadyReportedTerminalMatchId = 'pvplm-store-terminal-already-reported';
+  const alreadyReportedTerminalNow = 1700000026200;
+  const alreadyReportedTerminalMatch = activateStoreMatch(makeStoreStaleMatch({
+    matchId: alreadyReportedTerminalMatchId,
+    stateVersion: 9,
+    now: alreadyReportedTerminalNow,
+  }), { stateVersion: 9, now: alreadyReportedTerminalNow });
+  alreadyReportedTerminalMatch.state.status = 'finished';
+  alreadyReportedTerminalMatch.state.phase = 'finished';
+  alreadyReportedTerminalMatch.state.finishReason = 'surrender';
+  alreadyReportedTerminalMatch.state.winnerSeat = 'B';
+  alreadyReportedTerminalMatch.state.loserSeat = 'A';
+  alreadyReportedTerminalMatch.state.events.push({
+    eventId: 'already-reported-finished',
+    eventType: 'match_finished',
+    sequence: alreadyReportedTerminalMatch.state.eventSeq + 1,
+    payload: { winnerSeat: 'B', loserSeat: 'A', finishReason: 'surrender' },
+    visibility: 'public',
+  });
+  alreadyReportedTerminalMatch.state.eventSeq += 1;
+  alreadyReportedTerminalMatch.state.settlementReport = {
+    reportVersion: 'pvp-live-settlement-report-v1',
+    finishReason: 'surrender',
+    settledAt: alreadyReportedTerminalNow,
+    participants: {
+      A: { result: 'loss', didWin: false, ratingDelta: -12, coinsAwarded: 8 },
+      B: { result: 'win', didWin: true, ratingDelta: 24, coinsAwarded: 20 },
+    },
+  };
+  let alreadyReportedTerminalSaveCalls = 0;
+  let alreadyReportedTerminalSettlementCalls = 0;
+  const alreadyReportedTerminalStore = createLivePvpStore({
+    now: () => alreadyReportedTerminalNow,
+    persistence: {
+      async saveMatch(match) {
+        alreadyReportedTerminalSaveCalls += 1;
+        assert.equal(match.matchId, alreadyReportedTerminalMatchId, 'already-reported terminal save should target the finished match');
+        assert.equal(match.state.settlementReport?.reportVersion, 'pvp-live-settlement-report-v1', 'already-reported terminal save should keep the authoritative report');
+        return { saved: true, skipped: false, reason: 'saved' };
+      },
+      async saveMatchEvents() {},
+    },
+    settlement: {
+      async settleMatch() {
+        alreadyReportedTerminalSettlementCalls += 1;
+        return { settled: true };
+      },
+    },
+  });
+  alreadyReportedTerminalStore.matches.set(alreadyReportedTerminalMatchId, alreadyReportedTerminalMatch);
+  alreadyReportedTerminalStore.activeMatchByUserId.set('store-stale-a', alreadyReportedTerminalMatchId);
+  alreadyReportedTerminalStore.activeMatchByUserId.set('store-stale-b', alreadyReportedTerminalMatchId);
+  const alreadyReportedCompletion = await alreadyReportedTerminalStore.completeFinishedMatch(alreadyReportedTerminalMatch);
+  assert.equal(alreadyReportedCompletion?.completed, true, 'already-reported terminal completion should still release the finished match');
+  assert.equal(alreadyReportedTerminalSaveCalls, 1, 'already-reported terminal completion should persist/release once');
+  assert.equal(alreadyReportedTerminalSettlementCalls, 0, 'already-reported terminal completion should not call settlement provider again');
+  assert.equal(alreadyReportedTerminalStore.activeMatchByUserId.has('store-stale-a'), false, 'already-reported terminal completion should release viewer active map');
+  assert.equal(alreadyReportedTerminalStore.activeMatchByUserId.has('store-stale-b'), false, 'already-reported terminal completion should release opponent active map');
+
   const settlementReportStaleMatchId = 'pvplm-store-stale-settlement-report';
   const settlementReportNow = 1700000026500;
   const settlementReportLocalMatch = activateStoreMatch(makeStoreStaleMatch({

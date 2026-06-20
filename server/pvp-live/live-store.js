@@ -1481,6 +1481,10 @@ class LivePvpStore {
         if (initialSaveResult && initialSaveResult.saved === false) {
             return { completed: false, saveResult: initialSaveResult };
         }
+        if (match.state.settlementReport && match.state.settlementReport.reportVersion === 'pvp-live-settlement-report-v1') {
+            this.releaseMatch(match);
+            return { completed: true, saveResult: initialSaveResult };
+        }
         const settlementResult = await this.settleFinishedMatch(match);
         let settlementSaveResult = null;
         if (this.attachSettlementReport(match, settlementResult)) {
