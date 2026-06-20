@@ -1371,22 +1371,34 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
         assert.equal(blockedProductionTestForce.status, 404, 'live PVP test-only state route should stay unavailable in production even when test mode is set');
         const previousTestMode = process.env.DEFIER_PVP_TEST_MODE;
         process.env.DEFIER_PVP_TEST_MODE = '1';
+        const routeDisconnectedHeartbeatElapsedMs = pvpLiveRoutes.__livePvpStore.heartbeatStaleMs + pvpLiveRoutes.__livePvpStore.reconnectGraceMs + 1000;
         const blockedMissingScopeForce = await request(baseUrl, `/api/pvp/live/test/matches/${joinProtectB.payload.matchId}/seats/${protectSecondSeat}`, {
             method: 'POST',
             token: protectFirstToken,
             body: { hp: 10 }
         });
+        const routeForceConnectionDisconnected = await request(baseUrl, `/api/pvp/live/test/matches/${joinProtectB.payload.matchId}/seats/${protectSecondSeat}`, {
+            method: 'POST',
+            token: protectFirstToken,
+            body: { heartbeatElapsedMs: routeDisconnectedHeartbeatElapsedMs, testMatchScope: routeTestMatchScope }
+        });
         const routeForceProtectedSecond = await request(baseUrl, `/api/pvp/live/test/matches/${joinProtectB.payload.matchId}/seats/${protectSecondSeat}`, {
             method: 'POST',
             token: protectFirstToken,
-            body: { hp: 10, testMatchScope: routeTestMatchScope }
+            body: { hp: 10, heartbeatElapsedMs: 0, testMatchScope: routeTestMatchScope }
         });
         if (previousTestMode === undefined) delete process.env.DEFIER_PVP_TEST_MODE;
         else process.env.DEFIER_PVP_TEST_MODE = previousTestMode;
         assert.equal(blockedMissingScopeForce.status, 404, 'live PVP test-only state route should reject scoped test matches without matching testMatchScope');
+        assert.equal(routeForceConnectionDisconnected.status, 200, 'live PVP test-only state route should support scoped heartbeat elapsed injection');
+        assert.equal(routeForceConnectionDisconnected.payload.stateView.status, 'active', 'active non-turn heartbeat elapsed injection should keep match active');
+        assert.equal(routeForceConnectionDisconnected.payload.stateView.currentSeat, protectFirstSeat, 'active non-turn heartbeat elapsed injection should not steal the current action window');
+        assert.equal(routeForceConnectionDisconnected.payload.stateView.connectionReport?.opponent?.status, 'disconnected', 'active non-turn heartbeat elapsed injection should mark the public opponent disconnected for the actor');
+        assert.ok(routeForceConnectionDisconnected.payload.stateView.recentEvents.some(event => event.eventType === 'test_state_forced' && (event.publicData?.fields || []).includes('heartbeatElapsedMs')), 'live PVP test-only state route should expose public heartbeatElapsedMs test evidence');
         assert.equal(routeForceProtectedSecond.status, 200, 'live PVP test-only state route should allow authenticated participants in DEFIER_PVP_TEST_MODE');
         assert.equal(routeForceProtectedSecond.payload.targetSeatId, protectSecondSeat, 'live PVP test-only state route should identify the forced public seat');
         assert.equal(routeForceProtectedSecond.payload.stateView.opponent.hp, 10, 'live PVP test-only state route should return the updated public opponent hp');
+        assert.equal(routeForceProtectedSecond.payload.stateView.connectionReport?.opponent?.status, 'online', 'live PVP test-only state route should restore forced connection status before follow-up combat checks');
         assert.ok(routeForceProtectedSecond.payload.stateView.recentEvents.some(event => event.eventType === 'test_state_forced' && event.publicData?.scope === routeTestMatchScope), 'live PVP test-only state route should expose a public scoped setup event');
         const routeLethalPreviewFirst = await request(baseUrl, `/api/pvp/live/matches/${joinProtectB.payload.matchId}`, {
             token: protectFirstToken
@@ -1583,6 +1595,23 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
         assert.equal(nonBlockingRead.status, 200, 'current actor should still read active match when non-current opponent is disconnected');
         assert.equal(nonBlockingRead.payload.stateView.status, 'active', 'non-current disconnected seat should not auto-finish before becoming the action owner');
         assert.equal(nonBlockingRead.payload.stateView.connectionReport.opponent.status, 'disconnected', 'current actor should still see non-current opponent disconnected');
+        const nonBlockingHandoff = await submitIntent(baseUrl, currentToken, joinNonBlockingDisconnectB.payload.matchId, {
+            intentId: `route-nonblocking-disconnect-end-turn-${currentSeat.toLowerCase()}`,
+            intentType: 'end_turn',
+            stateVersion: nonBlockingRead.payload.stateView.stateVersion,
+            payload: {}
+        });
+        assert.equal(nonBlockingHandoff.payload.result, 'accepted', 'current actor should still submit end_turn while non-current opponent is disconnected');
+        assert.equal(nonBlockingHandoff.payload.stateView.status, 'active', 'handoff to disconnected opponent should not finish inside the accepted end_turn response');
+        assert.equal(nonBlockingHandoff.payload.stateView.currentSeat, nonCurrentSeat, 'handoff should move the action window to the disconnected seat');
+        const nonBlockingTimeoutRead = await request(baseUrl, `/api/pvp/live/matches/${joinNonBlockingDisconnectB.payload.matchId}`, {
+            token: currentToken
+        });
+        assert.equal(nonBlockingTimeoutRead.status, 200, 'previous actor should read connection-timeout finish after handing action to disconnected opponent');
+        assert.equal(nonBlockingTimeoutRead.payload.stateView.status, 'finished', 'disconnected seat should only lose after becoming the action owner');
+        assert.ok(nonBlockingTimeoutRead.payload.stateView.recentEvents.some(event => event.eventType === 'turn_timeout' && eventPublicData(event).seatId === nonCurrentSeat && eventPublicData(event).finishReason === 'connection_timeout'), 'handoff connection timeout should emit public turn_timeout for the disconnected action owner');
+        assert.ok(nonBlockingTimeoutRead.payload.stateView.recentEvents.some(event => event.eventType === 'match_finished' && eventPublicData(event).winnerSeat === currentSeat && eventPublicData(event).finishReason === 'connection_timeout'), 'handoff connection timeout should award the previous active seat only after authority passes');
+        assert.equal(nonBlockingTimeoutRead.payload.stateView.postMatchReview?.finishReason, 'connection_timeout', 'handoff connection timeout review should expose connection timeout reason');
 
         pvpLiveRoutes.__livePvpStore.reset();
         const joinDoubleDisconnectA = await request(baseUrl, '/api/pvp/live/queue/join', {

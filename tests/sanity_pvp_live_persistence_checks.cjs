@@ -1915,6 +1915,54 @@ async function readyBoth({ matchId, tokenA, tokenB, stateVersionA, prefix }) {
     newerConnection.seats.B.reconnectedAt,
     'persistence CAS should not regress same-version active reconnect timeline',
   );
+  const forcedSnapshotSaveResult = await makeLivePvpPersistenceForTest().saveMatch({
+    matchId,
+    createdAt: Number(activeMatchRow.created_at) || Date.now(),
+    updatedAt: Date.now() + 5,
+    state: latestActiveState,
+    connection: olderConnection,
+    seatsByUserId: {
+      [userA.userId]: 'A',
+      [userB.userId]: 'B',
+    },
+  }, { forceConnectionSnapshot: true });
+  assert.equal(forcedSnapshotSaveResult?.saved, true, 'test-only forced connection snapshot save should be accepted');
+  const rowAfterForcedConnectionSnapshot = await dbGet('SELECT connection_json FROM pvp_live_matches WHERE match_id = ?', [matchId]);
+  const connectionAfterForcedConnectionSnapshot = JSON.parse(rowAfterForcedConnectionSnapshot.connection_json);
+  assert.equal(
+    connectionAfterForcedConnectionSnapshot.seats.A.lastHeartbeatAt,
+    olderConnection.seats.A.lastHeartbeatAt,
+    'test-only forced connection snapshot should overwrite active heartbeat timeline',
+  );
+  assert.equal(
+    connectionAfterForcedConnectionSnapshot.seats.B.reconnectedAt,
+    olderConnection.seats.B.reconnectedAt,
+    'test-only forced connection snapshot should overwrite active reconnect timeline',
+  );
+  const restoredConnectionSaveResult = await makeLivePvpPersistenceForTest().saveMatch({
+    matchId,
+    createdAt: Number(activeMatchRow.created_at) || Date.now(),
+    updatedAt: Date.now() + 6,
+    state: latestActiveState,
+    connection: newerConnection,
+    seatsByUserId: {
+      [userA.userId]: 'A',
+      [userB.userId]: 'B',
+    },
+  });
+  assert.equal(restoredConnectionSaveResult?.saved, true, 'same-version active heartbeat connection restore should be accepted after forced snapshot test');
+  const rowAfterForcedConnectionRestore = await dbGet('SELECT connection_json FROM pvp_live_matches WHERE match_id = ?', [matchId]);
+  const connectionAfterForcedConnectionRestore = JSON.parse(rowAfterForcedConnectionRestore.connection_json);
+  assert.equal(
+    connectionAfterForcedConnectionRestore.seats.A.lastHeartbeatAt,
+    newerConnection.seats.A.lastHeartbeatAt,
+    'persistence CAS should restore newer heartbeat timeline after test-only forced snapshot',
+  );
+  assert.equal(
+    connectionAfterForcedConnectionRestore.seats.B.reconnectedAt,
+    newerConnection.seats.B.reconnectedAt,
+    'persistence CAS should restore newer reconnect timeline after test-only forced snapshot',
+  );
   const raceConnection = JSON.parse(JSON.stringify(newerConnection));
   raceConnection.seats.A.lastHeartbeatAt = connectionTimelineBase + 9000;
   raceConnection.seats.A.reconnectedAt = connectionTimelineBase + 8500;

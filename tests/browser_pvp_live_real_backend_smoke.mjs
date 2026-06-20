@@ -998,34 +998,118 @@ async function writeReport() {
         && activeTimerProbe.payload?.isViewerTurn === true,
       JSON.stringify({ activeFirstSeat, activeTimerProbe }),
     );
-    const forceOpeningProtectionProbe = await firstSeatClient.page.evaluate(async secondSeat => {
-      const BackendClient = window.__THE_DEFIER_SERVICES__?.BackendClient;
-      const before = window.PVPScene.getLiveSnapshot();
-      const response = await BackendClient.requestServer(`/api/pvp/live/test/matches/${before.matchId}/seats/${secondSeat}`, {
-        method: 'POST',
-        data: { hp: 10, testMatchScope: window.__DEFIER_PVP_REAL_TEST_SCOPE }
-      });
-      await window.PVPScene.refreshLiveMatch();
-      await new Promise(resolve => setTimeout(resolve, 300));
-      return {
-        response,
-        snapshot: window.PVPScene.getLiveSnapshot(),
-      };
-    }, activeSecondSeat);
-    await secondSeatClient.page.evaluate(async () => {
-      await window.PVPScene.refreshLiveMatch();
+    let protectedOpeningSecond = activeSecondSnapshot;
+    await secondSeatClient.page.evaluate(() => {
+      window.PVPScene.__realSmokeStartLiveHeartbeat = window.PVPScene.startLiveHeartbeat;
+      window.PVPScene.__realSmokeSendLiveHeartbeat = window.PVPScene.sendLiveHeartbeat;
+      window.PVPScene.startLiveHeartbeat = () => {};
+      window.PVPScene.sendLiveHeartbeat = async () => {};
+      window.PVPScene.stopLiveHeartbeat();
+      window.PVPScene.stopLiveRealtime();
     });
-    await secondSeatClient.page.waitForTimeout(300);
-    const protectedOpeningSecond = await getLiveSnapshot(secondSeatClient.page);
-    add(
-      'real browser test-mode match can enter protected lethal opening state',
-      forceOpeningProtectionProbe.response?.success === true
-        && forceOpeningProtectionProbe.response?.stateView?.opponent?.hp === 10
-        && forceOpeningProtectionProbe.response?.stateView?.recentEvents?.some(event => event.eventType === 'test_state_forced' && event.publicData?.scope === TEST_MATCH_SCOPE)
-        && forceOpeningProtectionProbe.snapshot?.opponent?.hp === 10
-        && protectedOpeningSecond?.self?.hp === 10,
-      JSON.stringify({ activeFirstSeat, activeSecondSeat, forceOpeningProtectionProbe, protectedOpeningSecond }),
-    );
+    try {
+      await secondSeatClient.page.waitForTimeout(500);
+      const activeNonTurnDisconnectProbe = await firstSeatClient.page.evaluate(async secondSeat => {
+        const BackendClient = window.__THE_DEFIER_SERVICES__?.BackendClient;
+        const before = window.PVPScene.getLiveSnapshot();
+        const heartbeatElapsedMs = Math.max(0, Number(before?.connectionReport?.heartbeatStaleMs || 1000))
+          + Math.max(0, Number(before?.connectionReport?.graceMs || 60000))
+          + 1000;
+        const response = await BackendClient.requestServer(`/api/pvp/live/test/matches/${before.matchId}/seats/${secondSeat}`, {
+          method: 'POST',
+          data: { heartbeatElapsedMs, testMatchScope: window.__DEFIER_PVP_REAL_TEST_SCOPE }
+        });
+        await window.PVPScene.refreshLiveMatch();
+        await new Promise(resolve => setTimeout(resolve, 300));
+        const snapshot = window.PVPScene.getLiveSnapshot();
+        const textPayload = JSON.parse(window.render_game_to_text()).pvp?.live || null;
+        const tempoEl = document.querySelector('[data-live-connection-tempo]');
+        return {
+          before,
+          response,
+          snapshot,
+          connectionText: document.querySelector('[data-live-connection-status]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+          connectionTempo: tempoEl?.textContent?.replace(/\s+/g, ' ').trim() || '',
+          connectionTempoState: tempoEl?.getAttribute('data-live-connection-tempo-state') || '',
+          connectionTempoActor: tempoEl?.getAttribute('data-live-connection-tempo-actor') || '',
+          connectionTempoSeverity: tempoEl?.getAttribute('data-live-connection-tempo-severity') || '',
+          connectionTempoCta: tempoEl?.querySelector('[data-live-action="refresh-match"]')?.textContent?.trim() || '',
+          timerText: document.querySelector('[data-live-turn-timer]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+          heartbeatElapsedMs,
+          textConnectionTempo: textPayload?.connectionTempoReport || null,
+        };
+      }, activeSecondSeat);
+      add(
+        'real browser active non-turn opponent disconnect keeps current actor actionable',
+        activeNonTurnDisconnectProbe.response?.success === true
+          && activeNonTurnDisconnectProbe.response?.stateView?.status === 'active'
+          && activeNonTurnDisconnectProbe.response?.stateView?.currentSeat === activeFirstSeat
+          && activeNonTurnDisconnectProbe.response?.stateView?.connectionReport?.opponent?.status === 'disconnected'
+          && activeNonTurnDisconnectProbe.response?.stateView?.recentEvents?.some(event => event.eventType === 'test_state_forced' && (event.publicData?.fields || []).includes('heartbeatElapsedMs') && event.publicData?.scope === TEST_MATCH_SCOPE)
+          && activeNonTurnDisconnectProbe.snapshot?.status === 'active'
+          && activeNonTurnDisconnectProbe.snapshot?.currentSeat === activeFirstSeat
+          && activeNonTurnDisconnectProbe.snapshot?.connectionReport?.opponent?.status === 'disconnected'
+          && activeNonTurnDisconnectProbe.snapshot?.connectionTempoReport?.reportVersion === 'pvp-live-connection-tempo-v1'
+          && activeNonTurnDisconnectProbe.snapshot?.connectionTempoReport?.tempoState === 'opponent_non_turn_disconnected'
+          && activeNonTurnDisconnectProbe.snapshot?.connectionTempoReport?.affectedSeat === activeSecondSeat
+          && activeNonTurnDisconnectProbe.snapshot?.connectionTempoReport?.usesHiddenInformation === false
+          && activeNonTurnDisconnectProbe.textConnectionTempo?.tempoState === 'opponent_non_turn_disconnected'
+          && /对方断线/.test(activeNonTurnDisconnectProbe.connectionText)
+          && /对局继续|当前行动仍可提交|轮到对手/.test(`${activeNonTurnDisconnectProbe.connectionText} ${activeNonTurnDisconnectProbe.connectionTempo}`)
+          && !/等待权威超时结算/.test(`${activeNonTurnDisconnectProbe.connectionText} ${activeNonTurnDisconnectProbe.connectionTempo}`)
+          && activeNonTurnDisconnectProbe.connectionTempoState === 'opponent_non_turn_disconnected'
+          && activeNonTurnDisconnectProbe.connectionTempoActor === activeSecondSeat
+          && !activeNonTurnDisconnectProbe.connectionTempoCta
+          && /行动倒计时/.test(activeNonTurnDisconnectProbe.timerText),
+        JSON.stringify({ activeFirstSeat, activeSecondSeat, activeNonTurnDisconnectProbe }),
+      );
+      const forceOpeningProtectionProbe = await firstSeatClient.page.evaluate(async secondSeat => {
+        const BackendClient = window.__THE_DEFIER_SERVICES__?.BackendClient;
+        const before = window.PVPScene.getLiveSnapshot();
+        const response = await BackendClient.requestServer(`/api/pvp/live/test/matches/${before.matchId}/seats/${secondSeat}`, {
+          method: 'POST',
+          data: { hp: 10, heartbeatElapsedMs: 0, testMatchScope: window.__DEFIER_PVP_REAL_TEST_SCOPE }
+        });
+        await window.PVPScene.refreshLiveMatch();
+        await new Promise(resolve => setTimeout(resolve, 300));
+        return {
+          response,
+          snapshot: window.PVPScene.getLiveSnapshot(),
+        };
+      }, activeSecondSeat);
+      await secondSeatClient.page.evaluate(async () => {
+        await window.PVPScene.refreshLiveMatch();
+      });
+      await secondSeatClient.page.waitForTimeout(300);
+      protectedOpeningSecond = await getLiveSnapshot(secondSeatClient.page);
+      add(
+        'real browser test-mode match can enter protected lethal opening state',
+        forceOpeningProtectionProbe.response?.success === true
+          && forceOpeningProtectionProbe.response?.stateView?.opponent?.hp === 10
+          && forceOpeningProtectionProbe.response?.stateView?.connectionReport?.opponent?.status === 'online'
+          && forceOpeningProtectionProbe.response?.stateView?.recentEvents?.some(event => event.eventType === 'test_state_forced' && event.publicData?.scope === TEST_MATCH_SCOPE)
+          && forceOpeningProtectionProbe.snapshot?.opponent?.hp === 10
+          && forceOpeningProtectionProbe.snapshot?.connectionReport?.opponent?.status === 'online'
+          && protectedOpeningSecond?.self?.hp === 10,
+        JSON.stringify({ activeFirstSeat, activeSecondSeat, forceOpeningProtectionProbe, protectedOpeningSecond }),
+      );
+    } finally {
+      await secondSeatClient.page.evaluate(async () => {
+        if (window.PVPScene.__realSmokeStartLiveHeartbeat) {
+          window.PVPScene.startLiveHeartbeat = window.PVPScene.__realSmokeStartLiveHeartbeat;
+          delete window.PVPScene.__realSmokeStartLiveHeartbeat;
+        }
+        if (window.PVPScene.__realSmokeSendLiveHeartbeat) {
+          window.PVPScene.sendLiveHeartbeat = window.PVPScene.__realSmokeSendLiveHeartbeat;
+          delete window.PVPScene.__realSmokeSendLiveHeartbeat;
+        }
+        window.PVPScene.activeTab = 'live';
+        window.PVPScene.startLiveHeartbeat();
+        await window.PVPScene.handleLiveForegroundResume();
+        await window.PVPScene.refreshLiveMatch();
+      });
+      await ensureLiveRealtime(secondSeatClient.page);
+    }
     const activeOpeningPreviewProbe = await firstSeatClient.page.evaluate(() => {
       const snapshot = window.PVPScene.getLiveSnapshot();
       const textPayload = JSON.parse(window.render_game_to_text()).pvp?.live || null;
@@ -2062,7 +2146,23 @@ async function writeReport() {
       JSON.stringify({ friendlyRematchProbe, loserFriendlyRematchActionable }),
     );
     const loserCancelRematchActionable = await clickLiveControl(loserClient.page, '[data-live-action="cancel-rematch"]', `${seatSlug(loserSeat)}-cancel-friendly-rematch`);
-    await loserClient.page.waitForTimeout(200);
+    await loserClient.page.waitForTimeout(300);
+    await loserClient.page.evaluate(async () => {
+      const snapshot = window.PVPScene?.getLiveSnapshot?.() || null;
+      const cancelButtonVisible = !!document.querySelector('[data-live-action="cancel-rematch"]');
+      if (snapshot?.phase === 'waiting_rematch' && cancelButtonVisible && typeof window.PVPScene?.cancelLiveRematch === 'function') {
+        await window.PVPScene.cancelLiveRematch();
+      }
+    });
+    await waitForLiveSnapshot(loserClient.page, () => {
+      const snapshot = window.PVPScene?.getLiveSnapshot?.() || null;
+      const rootPhase = document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-phase') || '';
+      const series = document.querySelector('[data-live-friendly-series]');
+      return snapshot?.phase === 'finished'
+        && rootPhase === 'finished'
+        && series?.getAttribute('data-live-friendly-series-status') === 'cancelled'
+        && !document.querySelector('[data-live-action="cancel-rematch"]');
+    }, null, 15000);
     const cancelledRematchProbe = await loserClient.page.evaluate(() => {
       const series = document.querySelector('[data-live-friendly-series]');
       const actions = Object.fromEntries(Array.from(document.querySelectorAll('[data-live-post-review-action]')).map(button => [button.getAttribute('data-live-post-review-action'), button.disabled]));

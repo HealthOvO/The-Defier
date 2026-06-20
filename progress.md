@@ -1,5 +1,30 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-21: V10-S9Y live PVP active disconnect backend proof
+  - 本轮完成
+    - `server/pvp-live/live-store.js` 扩展现有非生产 `forceSeatStateForTest()`：在 `DEFIER_PVP_TEST_MODE=1` 且 `testMatchScope` 匹配时允许注入 `heartbeatElapsedMs`，通过回写 `lastHeartbeatAt` 构造 online / grace / disconnected 派生输入；不直接写连接 status，仍由 `makeConnectionSeatReport()` 和服务端 sweep 规则计算真实状态。
+    - `server/pvp-live/live-persistence.js` 为 test-only backdate 补 `forceConnectionSnapshot` 保存选项；生产默认 active 连接时间线仍用 `ACTIVE_CONNECTION_TIMELINE_SQL` 的 max heartbeat 合并，防止旧写覆盖新心跳，只有测试注入需要证明过期心跳时才显式保存连接快照。
+    - `tests/sanity_pvp_live_route_checks.cjs` 补上 active 断线整链合同：非当前行动方超过重连宽限时，当前行动方读取仍保持 `active`、可提交 `end_turn`；只有行动权交给断线方后的下一次权威读取，才 `turn_timeout + match_finished(connection_timeout)`，赢家是交权前的在线行动方。
+    - `tests/browser_pvp_live_real_backend_smoke.mjs` 在真实双账号、真实后端、真实持久层 smoke 中新增 active 非行动方断线探针：先停断线方 heartbeat/realtime，再用 scoped test route 注入过期心跳，验证 UI / snapshot / `render_game_to_text()` 都显示 `opponent_non_turn_disconnected`，文案明确“对局继续，当前行动仍可提交”，且不提前展示“等待权威超时结算”。
+    - 同步加固真实 smoke 编排：恢复断线方 online 后重启 heartbeat/realtime，停心跳探针使用 `try/finally` 确保失败时也恢复 monkey-patch，继续原有开局保护、反打、结算和友谊再战链；移动端取消低压力再战后等待复盘状态恢复，避免触控测试在按钮尚未解禁时抢点。
+    - `tests/sanity_pvp_live_persistence_checks.cjs` 增加行为级 SQLite 断言：默认同版本 active 保存不会回退心跳时间线；只有 `forceConnectionSnapshot: true` 的 test-only 保存能显式覆盖连接快照，随后普通保存仍可恢复更近心跳。
+    - `tests/sanity_release_gate_coverage_checks.cjs` 增加 route / browser smoke / persistence / store marker，防止后续删除 `heartbeatElapsedMs` 注入、交权后才 `connection_timeout`、或 test-only persistence 覆盖选项。
+  - 已验证
+    - 红测：`node tests/sanity_pvp_live_route_checks.cjs` 在实现前失败于测试入口无法把 active 非行动方投影为断线。
+    - 绿测：`node --check server/pvp-live/live-store.js`
+    - 绿测：`node --check server/pvp-live/live-persistence.js`
+    - 绿测：`node --check tests/browser_pvp_live_real_backend_smoke.mjs`
+    - 绿测：`node tests/sanity_pvp_live_route_checks.cjs`
+    - 绿测：`node tests/sanity_pvp_live_persistence_checks.cjs`
+    - 绿测：`node tests/sanity_release_gate_coverage_checks.cjs`
+    - 构建：`npm run build:pages`
+    - 真实后端 smoke：`node tests/browser_pvp_live_real_backend_smoke.mjs http://127.0.0.1:4173 output/pvp-live-real-active-disconnect-desktop`，57/57 findings、0 console error。
+    - 移动端真实后端 smoke：`BROWSER_PVP_LIVE_REAL_VIEWPORT=mobile BROWSER_PVP_LIVE_REAL_REQUIRE_MOBILE=1 node tests/browser_pvp_live_real_backend_smoke.mjs http://127.0.0.1:4173 output/pvp-live-real-active-disconnect-mobile`，58/58 findings、0 console error。
+    - 全量 Node 门禁：`npm run test:node`，All node checks passed。
+    - Challenger 只读封板巡检：未发现 blocker；指出 smoke 失败恢复和 `forceConnectionSnapshot=true` 行为级断言两个低风险点，本轮已补齐。
+  - 当前结论
+    - live PVP 的 active 弱网体验现在有真实后端证据：对手掉线但还没轮到他时，在线玩家不会被抢判、不会被前端误导、也不会失去当前行动；只有断线席真正成为当前行动方并仍未恢复，服务端才发布 `connection_timeout` 终局。这一片继续不改伤害、生命、抽牌、灵力、起手、匹配、正式积分或奖励，只把“双方都能理解且不被误判”的真人 PVP 体验打实。
+
 - 2026-06-21: V10-S9X live PVP connection tempo report
   - 本轮完成
     - `js/scenes/pvp-scene.js` 新增 `pvp-live-connection-tempo-v1` 公开连接节奏报告，并接入 `getLiveSnapshot()`、连接状态文案和 live PVP 面板；报告固定 `sourceVisibility=public_connection_report`、`usesHiddenInformation=false`、`rankedImpact=none`，只基于双方公开心跳状态、当前阶段和当前行动席位推导。

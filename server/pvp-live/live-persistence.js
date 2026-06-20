@@ -618,7 +618,7 @@ function makeSqliteLivePvpPersistence() {
             });
             return rows.map(makeQueueEntryFromRow).filter(Boolean);
         },
-        async saveMatch(match, { liveWsSourceInstanceId = '' } = {}) {
+        async saveMatch(match, { liveWsSourceInstanceId = '', forceConnectionSnapshot = false } = {}) {
             if (!match || !match.state || !match.matchId || !match.state.seats) return { saved: false, skipped: true, reason: 'invalid_match' };
             const seatA = match.state.seats.A;
             const seatB = match.state.seats.B;
@@ -655,6 +655,13 @@ function makeSqliteLivePvpPersistence() {
             const now = Math.max(0, Math.floor(Number(match.updatedAt) || Date.now()));
             const createdAt = Math.max(0, Math.floor(Number(match.createdAt) || now));
             const finishedAt = status === 'finished' || status === 'invalidated' ? now : 0;
+            const connectionAssignmentSql = forceConnectionSnapshot
+                ? 'excluded.connection_json'
+                : `CASE
+                        WHEN pvp_live_matches.status = 'active' AND excluded.status = 'active'
+                        THEN ${ACTIVE_CONNECTION_TIMELINE_SQL}
+                        ELSE excluded.connection_json
+                    END`;
             const writeResult = await dbRun(
                 `INSERT INTO pvp_live_matches
                     (match_id, status, seat_a_user_id, seat_b_user_id, state_version, state_json, connection_json, created_at, updated_at, finished_at)
@@ -665,11 +672,7 @@ function makeSqliteLivePvpPersistence() {
                     seat_b_user_id = excluded.seat_b_user_id,
                     state_version = excluded.state_version,
                     state_json = excluded.state_json,
-                    connection_json = CASE
-                        WHEN pvp_live_matches.status = 'active' AND excluded.status = 'active'
-                        THEN ${ACTIVE_CONNECTION_TIMELINE_SQL}
-                        ELSE excluded.connection_json
-                    END,
+                    connection_json = ${connectionAssignmentSql},
                     updated_at = excluded.updated_at,
                     finished_at = excluded.finished_at
                  WHERE

@@ -1348,9 +1348,9 @@ class LivePvpStore {
         };
     }
 
-    async saveMatch(match, { liveWsSourceInstanceId = '' } = {}) {
+    async saveMatch(match, { liveWsSourceInstanceId = '', forceConnectionSnapshot = false } = {}) {
         if (!this.persistence || typeof this.persistence.saveMatch !== 'function') return { saved: true, skipped: false, reason: 'no_persistence' };
-        const result = await this.persistence.saveMatch(match, { liveWsSourceInstanceId });
+        const result = await this.persistence.saveMatch(match, { liveWsSourceInstanceId, forceConnectionSnapshot });
         const saveResult = result && typeof result === 'object' ? result : { saved: true, skipped: false, reason: 'legacy_persistence' };
         if (saveResult.saved === false) return saveResult;
         if (typeof this.persistence.saveMatchEvents === 'function' && match && match.state && Array.isArray(match.state.events)) {
@@ -2712,6 +2712,21 @@ class LivePvpStore {
             targetSeat.energy = Math.max(0, Math.min(maxEnergy, Math.floor(Number(patch.energy) || 0)));
             changedFields.push('energy');
         }
+        if (Object.prototype.hasOwnProperty.call(patch, 'heartbeatElapsedMs')) {
+            const connection = this.ensureMatchConnection(match);
+            const targetConnectionSeat = connection && connection.seats ? connection.seats[safeTargetSeatId] : null;
+            if (targetConnectionSeat) {
+                const now = this.now();
+                const elapsedMs = Math.max(0, Math.min(
+                    24 * 60 * 60 * 1000,
+                    Math.floor(Number(patch.heartbeatElapsedMs) || 0)
+                ));
+                targetConnectionSeat.lastHeartbeatAt = Math.max(1, now - elapsedMs);
+                if (!targetConnectionSeat.connectedAt) targetConnectionSeat.connectedAt = now;
+                if (elapsedMs <= this.heartbeatStaleMs) targetConnectionSeat.reconnectedAt = now;
+                changedFields.push('heartbeatElapsedMs');
+            }
+        }
 
         const event = this.makeStoreEvent(match, 'test_state_forced', seatId, {
             targetSeatId: safeTargetSeatId,
@@ -2722,7 +2737,9 @@ class LivePvpStore {
         match.state.events.push(event);
         match.state.stateVersion += 1;
         match.updatedAt = this.now();
-        const saveResult = await this.saveMatch(match);
+        const saveResult = await this.saveMatch(match, {
+            forceConnectionSnapshot: changedFields.includes('heartbeatElapsedMs')
+        });
         if (this.isStaleStateSaveResult(saveResult)) {
             const authoritative = await this.rehydrateAuthoritativeMatchForUser(userId, match.matchId);
             return authoritative ? { ...authoritative, targetSeatId: safeTargetSeatId, saveResult } : null;
