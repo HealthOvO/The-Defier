@@ -1941,6 +1941,12 @@
     box-shadow: 0 0 0 1px rgba(243, 194, 107, 0.35), 0 10px 24px rgba(243, 194, 107, 0.16);
 }
 
+.pvp-live-card.confirming {
+    border-color: rgba(255, 209, 122, 0.9);
+    background: rgba(255, 191, 92, 0.14);
+    box-shadow: 0 0 0 1px rgba(255, 209, 122, 0.28);
+}
+
 .pvp-live-card-name,
 .pvp-live-card-meta {
     display: block;

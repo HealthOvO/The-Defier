@@ -1728,6 +1728,34 @@ async function safeElementScreenshot(page, selector, outputPath) {
     JSON.stringify(lowTimerProbe),
   );
 
+  const openingEndTurnConfirmProbe = await page.evaluate(async () => {
+    const callStart = window.__livePvpAuditCalls.length;
+    await window.PVPScene?.endLiveTurn?.();
+    const snapshot = window.PVPScene?.getLiveSnapshot?.() || {};
+    return {
+      phase: snapshot.phase || '',
+      currentSeat: snapshot.currentSeat || '',
+      stateVersion: snapshot.stateVersion || 0,
+      hint: document.querySelector('[data-live-last-error]')?.textContent || '',
+      endTurnText: document.querySelector('[data-live-action="end-turn"]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+      calls: window.__livePvpAuditCalls.slice(callStart),
+    };
+  });
+  add(
+    'live UI requires a second click before opening-window end turn submits',
+    openingEndTurnConfirmProbe.phase === 'active'
+      && openingEndTurnConfirmProbe.currentSeat === 'A'
+      && /再次点击确认结束回合/.test(openingEndTurnConfirmProbe.hint)
+      && /确认结束/.test(openingEndTurnConfirmProbe.endTurnText)
+      && !/end_turn/.test(JSON.stringify(openingEndTurnConfirmProbe.calls)),
+    JSON.stringify(openingEndTurnConfirmProbe),
+  );
+  await page.evaluate(() => {
+    window.PVPScene?.clearLiveOpeningActionConfirm?.();
+    window.PVPScene.liveInlineHint = '';
+    window.PVPScene?.renderLivePanel?.();
+    window.__livePvpAuditOpeningCardCallStart = window.__livePvpAuditCalls.length;
+  });
   const liveCardClicked = await page.evaluate(() => {
     const card = document.querySelector('[data-live-card]');
     if (!card) return false;
@@ -1735,6 +1763,31 @@ async function safeElementScreenshot(page, selector, outputPath) {
     return true;
   });
   if (!liveCardClicked) throw new Error('expected a playable live card button');
+  await page.waitForTimeout(200);
+  const openingCardConfirmProbe = await page.evaluate(() => ({
+    phase: window.PVPScene?.getLiveSnapshot?.()?.phase || '',
+    currentSeat: window.PVPScene?.getLiveSnapshot?.()?.currentSeat || '',
+    stateVersion: window.PVPScene?.getLiveSnapshot?.()?.stateVersion || 0,
+    hint: document.querySelector('[data-live-last-error]')?.textContent || '',
+    cardClass: document.querySelector('[data-live-card]')?.className || '',
+    cardText: document.querySelector('[data-live-card]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+    calls: window.__livePvpAuditCalls.slice(window.__livePvpAuditOpeningCardCallStart || 0),
+  }));
+  add(
+    'live UI requires a second click before opening-window card intent submits',
+    openingCardConfirmProbe.phase === 'active'
+      && openingCardConfirmProbe.currentSeat === 'A'
+      && /再次点击确认出牌/.test(openingCardConfirmProbe.hint)
+      && /confirming/.test(openingCardConfirmProbe.cardClass)
+      && /确认/.test(openingCardConfirmProbe.cardText)
+      && !/play_card/.test(JSON.stringify(openingCardConfirmProbe.calls)),
+    JSON.stringify(openingCardConfirmProbe),
+  );
+  await page.evaluate(() => {
+    const card = document.querySelector('[data-live-card]');
+    if (!card) throw new Error('expected a playable live card button for confirmation click');
+    card.click();
+  });
   await page.waitForTimeout(200);
   const actionProbe = await page.evaluate(() => ({
     stateVersion: document.querySelector('[data-live-state-version]')?.textContent || '',
@@ -1748,7 +1801,7 @@ async function safeElementScreenshot(page, selector, outputPath) {
     calls: window.__livePvpAuditCalls,
   }));
   add(
-    'live UI submits card intent through live service',
+    'live UI submits opening-window card intent through live service only after confirmation',
     /4/.test(actionProbe.stateVersion)
       && /B/.test(actionProbe.currentSeat)
       && /B/.test(actionProbe.turnTimer)

@@ -97,6 +97,10 @@ const liveBrowserAudit = read('tests/browser_pvp_live_audit.mjs');
   'renderLivePanel()',
   'formatLiveRealtimeStatus(',
   'getLiveTurnTimerUrgency(',
+  'isLiveOpeningActionConfirmRequired(',
+  'isLiveOpeningActionConfirmArmed(',
+  'armLiveOpeningActionConfirm(',
+  'clearLiveOpeningActionConfirm(',
   'buildLiveQueueConnectionHealthProbe(',
   'isLiveSurrenderConfirmArmed(',
   'armLiveSurrenderConfirm(',
@@ -384,6 +388,34 @@ assert.ok(scene.includes('wideMatchConsent: true'), 'live wide match consent act
 const submitLiveCardBody = methodBody(scene, 'submitLiveCard');
 assert.ok(submitLiveCardBody.includes('view.opponent') && submitLiveCardBody.includes("state.seatId === 'B'"), 'submitLiveCard should target the opponent seat from live state, not hard-code seat B');
 assert.ok(!submitLiveCardBody.includes("targetSeat: 'B'"), 'submitLiveCard must not hard-code targetSeat to B');
+[
+  'isLiveOpeningActionConfirmRequired',
+  'isLiveOpeningActionConfirmArmed',
+  'armLiveOpeningActionConfirm',
+  '再次点击确认出牌',
+  "intentType: 'play_card'",
+].forEach((needle) => {
+  assert.ok(submitLiveCardBody.includes(needle), `submitLiveCard should require opening-window local confirmation before play_card intent: ${needle}`);
+});
+assert.ok(
+  submitLiveCardBody.indexOf('armLiveOpeningActionConfirm') < submitLiveCardBody.indexOf("intentType: 'play_card'"),
+  'submitLiveCard should arm opening confirmation before submitting play_card',
+);
+
+const endLiveTurnBody = methodBody(scene, 'endLiveTurn');
+[
+  'isLiveOpeningActionConfirmRequired',
+  'isLiveOpeningActionConfirmArmed',
+  'armLiveOpeningActionConfirm',
+  '再次点击确认结束回合',
+  "intentType: 'end_turn'",
+].forEach((needle) => {
+  assert.ok(endLiveTurnBody.includes(needle), `endLiveTurn should require opening-window local confirmation before end_turn intent: ${needle}`);
+});
+assert.ok(
+  endLiveTurnBody.indexOf('armLiveOpeningActionConfirm') < endLiveTurnBody.indexOf("intentType: 'end_turn'"),
+  'endLiveTurn should arm opening confirmation before submitting end_turn',
+);
 
 const surrenderLiveMatchBody = methodBody(scene, 'surrenderLiveMatch');
 [

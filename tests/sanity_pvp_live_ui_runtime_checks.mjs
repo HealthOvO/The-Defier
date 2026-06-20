@@ -491,6 +491,103 @@ PVPScene.activeTab = 'live';
 
 PVPScene.stopLiveHeartbeat();
 
+let openingActionState = {
+  phase: 'active',
+  matchId: 'pvpm-ui-runtime-opening-confirm',
+  seatId: 'A',
+  realtimeStatus: 'closed',
+  stateView: {
+    matchId: 'pvpm-ui-runtime-opening-confirm',
+    status: 'active',
+    stateVersion: 31,
+    currentSeat: 'A',
+    openingSafeguardReport: {
+      reportVersion: 'pvp-live-opening-safeguard-v1',
+      status: 'armed',
+      currentSeat: 'A',
+      viewerSeat: 'A',
+      openingProtection: { active: true },
+      sourceVisibility: 'public_state',
+      usesHiddenInformation: false,
+      rankedImpact: 'none'
+    },
+    duelMomentumReport: {
+      reportVersion: 'pvp-live-duel-momentum-v1',
+      pressureState: 'opening_window',
+      sourceVisibility: 'public_state',
+      usesHiddenInformation: false,
+      rankedImpact: 'none'
+    },
+    opponent: { seatId: 'B' },
+    self: {
+      seatId: 'A',
+      hand: [{ instanceId: 'A-strike-opening', cardId: 'pvp_strike' }]
+    }
+  }
+};
+const openingActionIntents = [];
+PVPScene.liveIntentInFlight = null;
+PVPScene.liveOpeningActionConfirm = null;
+PVPScene.liveInlineHint = '';
+PVPScene.startLiveRealtime = () => {};
+PVPScene.renderLivePanel = () => {};
+PVPScene.getLiveSession = () => ({
+  getState: () => openingActionState,
+  submitIntent: async (intent) => {
+    openingActionIntents.push(intent);
+    openingActionState = {
+      ...openingActionState,
+      stateView: {
+        ...openingActionState.stateView,
+        stateVersion: openingActionState.stateView.stateVersion + 1,
+        currentSeat: intent.intentType === 'end_turn' ? 'B' : openingActionState.stateView.currentSeat,
+        duelMomentumReport: {
+          ...openingActionState.stateView.duelMomentumReport,
+          pressureState: 'reversal_window'
+        }
+      }
+    };
+    return openingActionState;
+  }
+});
+await PVPScene.submitLiveCard('A-strike-opening');
+assert.equal(openingActionIntents.length, 0, 'first opening-window card click should only arm confirmation and must not submit play_card');
+assert.match(PVPScene.liveInlineHint, /再次点击确认出牌/, 'opening-window card confirmation should explain the second click before submitting');
+await PVPScene.submitLiveCard('A-strike-opening');
+assert.equal(openingActionIntents.length, 1, 'second opening-window card click should submit exactly one play_card intent');
+assert.equal(openingActionIntents[0].intentType, 'play_card', 'confirmed opening-window card click should keep the authoritative play_card intent');
+
+openingActionState = {
+  ...openingActionState,
+  stateView: {
+    ...openingActionState.stateView,
+    stateVersion: 41,
+    currentSeat: 'A',
+    duelMomentumReport: {
+      ...openingActionState.stateView.duelMomentumReport,
+      pressureState: 'opening_window'
+    }
+  }
+};
+openingActionIntents.length = 0;
+PVPScene.liveOpeningActionConfirm = null;
+PVPScene.liveInlineHint = '';
+await PVPScene.endLiveTurn();
+assert.equal(openingActionIntents.length, 0, 'first opening-window end-turn click should only arm confirmation and must not submit end_turn');
+assert.match(PVPScene.liveInlineHint, /再次点击确认结束回合/, 'opening-window end-turn confirmation should explain the second click before ending the turn');
+openingActionState = {
+  ...openingActionState,
+  stateView: {
+    ...openingActionState.stateView,
+    stateVersion: 42
+  }
+};
+await PVPScene.endLiveTurn();
+assert.equal(openingActionIntents.length, 0, 'opening-window confirmation should not survive an authoritative stateVersion advance');
+await PVPScene.endLiveTurn();
+assert.equal(openingActionIntents.length, 1, 'fresh second opening-window end-turn click should submit exactly one end_turn intent');
+assert.equal(openingActionIntents[0].intentType, 'end_turn', 'confirmed opening-window end-turn should keep the authoritative end_turn intent');
+
 let intentState = {
   phase: 'active',
   matchId: 'pvpm-ui-runtime-intent-lock',

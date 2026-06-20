@@ -33,6 +33,8 @@ export const PVPScene = {
   liveRealtimeRenderQueued: false,
   liveIntentSeq: 0,
   liveIntentInFlight: { action: null, social: null },
+  liveOpeningActionConfirm: null,
+  liveOpeningActionConfirmMs: 6000,
   liveSurrenderConfirmUntil: 0,
   liveSurrenderConfirmMs: 6000,
   liveMulliganSelection: new Set(),
@@ -2808,12 +2810,15 @@ export const PVPScene = {
         const intentLocked = this.isLiveIntentInFlight(state);
         const canAct = phase === 'active' && view && view.currentSeat === state.seatId && !intentLocked;
         const canSelectMulligan = phase === 'setup' && self && !self.mulliganUsed && !intentLocked;
-        handEl.innerHTML = cards.map(card => `
-          <button class="pvp-live-card ${this.liveMulliganSelection.has(card.instanceId) ? 'selected' : ''}" ${canSelectMulligan ? `data-live-mulligan-card="${this.escapeHtml(card.instanceId || '')}" onclick="PVPScene.toggleLiveMulliganCard('${this.escapeHtml(card.instanceId || '')}')"` : `data-live-card="${this.escapeHtml(card.instanceId || '')}" onclick="PVPScene.submitLiveCard('${this.escapeHtml(card.instanceId || '')}')"`} ${canAct || canSelectMulligan ? '' : 'disabled'}>
+        handEl.innerHTML = cards.map(card => {
+          const cardConfirming = !canSelectMulligan && this.isLiveOpeningActionConfirmArmed(state, 'play_card', { cardInstanceId: card.instanceId || '' });
+          return `
+          <button class="pvp-live-card ${this.liveMulliganSelection.has(card.instanceId) ? 'selected' : ''} ${cardConfirming ? 'confirming' : ''}" ${canSelectMulligan ? `data-live-mulligan-card="${this.escapeHtml(card.instanceId || '')}" onclick="PVPScene.toggleLiveMulliganCard('${this.escapeHtml(card.instanceId || '')}')"` : `data-live-card="${this.escapeHtml(card.instanceId || '')}" onclick="PVPScene.submitLiveCard('${this.escapeHtml(card.instanceId || '')}')"`} ${canAct || canSelectMulligan ? '' : 'disabled'}>
             <span class="pvp-live-card-name">${this.escapeHtml(card.name || card.cardId || '术式')}</span>
-            <span class="pvp-live-card-meta">耗 ${this.escapeHtml(card.cost || 0)} · 伤 ${this.escapeHtml(card.damage || 0)} · 护 ${this.escapeHtml(card.block || 0)}</span>
+            <span class="pvp-live-card-meta">耗 ${this.escapeHtml(card.cost || 0)} · 伤 ${this.escapeHtml(card.damage || 0)} · 护 ${this.escapeHtml(card.block || 0)}${cardConfirming ? ' · 确认' : ''}</span>
           </button>
-        `).join('');
+        `;
+        }).join('');
       }
     }
 
@@ -2861,8 +2866,12 @@ export const PVPScene = {
     if (!(phase === 'active' || phase === 'sync_required')) {
       this.clearLiveSurrenderConfirm();
     }
+    if (phase !== 'active' || !this.isLiveOpeningActionConfirmArmed(state, this.liveOpeningActionConfirm?.actionType || '', this.liveOpeningActionConfirm?.payload || {})) {
+      this.clearLiveOpeningActionConfirm();
+    }
     const entrySafeguardBlocked = phase === 'idle' && this.isLiveEntrySafeguardBlocked(state);
     const surrenderConfirmArmed = this.isLiveSurrenderConfirmArmed(state);
+    const endTurnConfirmArmed = this.isLiveOpeningActionConfirmArmed(state, 'end_turn', {});
     const intentLocked = this.isLiveIntentInFlight(null, 'action');
     const socialIntentLocked = this.isLiveIntentInFlight(null, 'social');
     const setDisabled = (action, disabled) => {
@@ -2882,6 +2891,7 @@ export const PVPScene = {
     setDisabled('practice-live', !(entrySafeguardBlocked && this.hasLiveEntrySafeguardAction(state, 'practice')) && !(phase === 'waiting' && this.getLiveWaitingReport(state)?.longWait));
     setDisabled('refresh-match', phase === 'queueing' || phase === 'idle' || phase === 'finished' || phase === 'invalidated');
     setButtonText('join-queue', entrySafeguardBlocked && this.hasLiveEntrySafeguardAction(state, 'retry_connection_check') ? '重试检测' : '入队');
+    setButtonText('end-turn', endTurnConfirmArmed ? '确认结束' : '结束回合');
     setButtonText('surrender', surrenderConfirmArmed ? '确认认输' : '认输');
     setDisabled('confirm-mulligan', intentLocked || !(phase === 'setup' && self && !self.mulliganUsed));
     setDisabled('ready', intentLocked || !(phase === 'setup' && self && !self.ready));
@@ -3023,6 +3033,9 @@ export const PVPScene = {
     if (String(intent.intentType || '') !== 'surrender') {
       this.clearLiveSurrenderConfirm();
     }
+    if (String(intent.intentType || '') !== 'emote') {
+      this.clearLiveOpeningActionConfirm();
+    }
     const lockKey = this.getLiveIntentLockKey(intent.intentType);
     const pendingIntent = this.resolveLiveIntentInFlight(state, lockKey);
     if (pendingIntent) {
@@ -3111,6 +3124,72 @@ export const PVPScene = {
   },
   clearLiveSurrenderConfirm() {
     this.liveSurrenderConfirmUntil = 0;
+  },
+  clearLiveOpeningActionConfirm() {
+    this.liveOpeningActionConfirm = null;
+  },
+  getLiveOpeningActionConfirmContext(state = null, actionType = '', payload = {}) {
+    const source = state && typeof state === 'object' ? state : this.getLiveSession().getState();
+    const view = source && source.stateView && typeof source.stateView === 'object' ? source.stateView : null;
+    if (!source || !view || !source.matchId || source.phase !== 'active') return null;
+    const currentSeat = String(view.currentSeat || '');
+    const viewerSeat = String(source.seatId || '');
+    if (!viewerSeat || currentSeat !== viewerSeat) return null;
+    const action = String(actionType || '');
+    if (!(action === 'play_card' || action === 'end_turn')) return null;
+    const momentum = this.getLiveDuelMomentumReport(view);
+    const opening = this.getLiveOpeningSafeguardReport(view);
+    const pressureState = String(momentum && momentum.pressureState || '');
+    const openingActive = !!(opening && opening.openingProtection && opening.openingProtection.active);
+    if (pressureState !== 'opening_window' && !openingActive) return null;
+    const actionPayload = payload && typeof payload === 'object' ? { ...payload } : {};
+    const cardInstanceId = String(actionPayload.cardInstanceId || '');
+    if (action === 'play_card') {
+      const hand = view.self && Array.isArray(view.self.hand) ? view.self.hand : [];
+      if (!cardInstanceId || !hand.some(card => String(card && card.instanceId || '') === cardInstanceId)) return null;
+    }
+    const stateVersion = this.getLiveStateVersion(source);
+    return {
+      actionType: action,
+      payload: action === 'play_card' ? { cardInstanceId } : {},
+      matchId: String(source.matchId || view.matchId || ''),
+      seatId: viewerSeat,
+      currentSeat,
+      stateVersion,
+      pressureState: pressureState || (openingActive ? 'opening_window' : ''),
+      key: [
+        String(source.matchId || view.matchId || ''),
+        viewerSeat,
+        currentSeat,
+        stateVersion,
+        action,
+        cardInstanceId
+      ].join(':')
+    };
+  },
+  isLiveOpeningActionConfirmRequired(state = null, actionType = '', payload = {}) {
+    return !!this.getLiveOpeningActionConfirmContext(state, actionType, payload);
+  },
+  isLiveOpeningActionConfirmArmed(state = null, actionType = '', payload = {}) {
+    const context = this.getLiveOpeningActionConfirmContext(state, actionType, payload);
+    const confirm = this.liveOpeningActionConfirm && typeof this.liveOpeningActionConfirm === 'object'
+      ? this.liveOpeningActionConfirm
+      : null;
+    if (!context || !confirm || confirm.key !== context.key) return false;
+    return Date.now() <= Math.max(0, Math.floor(Number(confirm.until) || 0));
+  },
+  armLiveOpeningActionConfirm(state = null, actionType = '', payload = {}, message = '再次点击确认行动；当前仍处于开局保护窗口。') {
+    const context = this.getLiveOpeningActionConfirmContext(state, actionType, payload);
+    if (!context) return false;
+    this.liveOpeningActionConfirm = {
+      ...context,
+      until: Date.now() + Math.max(1000, Math.floor(Number(this.liveOpeningActionConfirmMs) || 6000))
+    };
+    this.liveInlineHint = message;
+    if (typeof document !== 'undefined' && typeof document.getElementById === 'function' && typeof Utils !== 'undefined' && Utils && typeof Utils.showBattleLog === 'function') {
+      Utils.showBattleLog(this.liveInlineHint);
+    }
+    return true;
   },
   isLiveSurrenderConfirmArmed(state = null) {
     const source = state && typeof state === 'object' ? state : this.getLiveSession().getState();
@@ -3539,13 +3618,19 @@ export const PVPScene = {
       : state && state.seatId === 'B'
         ? 'A'
         : 'B';
+    const payload = {
+      cardInstanceId,
+      targetSeat
+    };
+    if (this.isLiveOpeningActionConfirmRequired(state, 'play_card', payload) && !this.isLiveOpeningActionConfirmArmed(state, 'play_card', payload)) {
+      this.armLiveOpeningActionConfirm(state, 'play_card', payload, '再次点击确认出牌；当前仍处于开局保护窗口，首动预算、开局护体和反打缓冲会影响这一拍。');
+      this.renderLivePanel();
+      return state;
+    }
     await this.submitLiveIntent({
       intentId: this.makeLiveIntentId('play-card'),
       intentType: 'play_card',
-      payload: {
-        cardInstanceId,
-        targetSeat
-      }
+      payload
     });
     this.renderLivePanel();
   },
@@ -3578,6 +3663,13 @@ export const PVPScene = {
     this.renderLivePanel();
   },
   async endLiveTurn() {
+    const session = this.getLiveSession();
+    const state = session && typeof session.getState === 'function' ? session.getState() : null;
+    if (this.isLiveOpeningActionConfirmRequired(state, 'end_turn', {}) && !this.isLiveOpeningActionConfirmArmed(state, 'end_turn', {})) {
+      this.armLiveOpeningActionConfirm(state, 'end_turn', {}, '再次点击确认结束回合；当前仍处于开局保护窗口，确认后才会把行动权交给对手。');
+      this.renderLivePanel();
+      return state;
+    }
     await this.submitLiveIntent({
       intentId: this.makeLiveIntentId('end-turn'),
       intentType: 'end_turn',

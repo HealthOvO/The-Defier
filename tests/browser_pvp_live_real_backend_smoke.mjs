@@ -853,6 +853,29 @@ async function writeReport() {
       JSON.stringify(activeGuideProbe),
     );
 
+    const realOpeningEndTurnConfirmProbe = await seatA.page.evaluate(async () => {
+      const before = window.PVPScene.getLiveSnapshot();
+      await window.PVPScene.endLiveTurn();
+      await new Promise(resolve => setTimeout(resolve, 300));
+      const after = window.PVPScene.getLiveSnapshot();
+      return {
+        before,
+        after,
+        hint: document.querySelector('[data-live-last-error]')?.textContent || '',
+        endTurnText: document.querySelector('[data-live-action="end-turn"]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+      };
+    });
+    add(
+      'real browser opening-window end turn confirmation blocks authoritative submit until second click',
+      realOpeningEndTurnConfirmProbe.before?.phase === 'active'
+        && realOpeningEndTurnConfirmProbe.after?.phase === 'active'
+        && realOpeningEndTurnConfirmProbe.after?.currentSeat === realOpeningEndTurnConfirmProbe.before?.currentSeat
+        && realOpeningEndTurnConfirmProbe.after?.stateVersion === realOpeningEndTurnConfirmProbe.before?.stateVersion
+        && /再次点击确认结束回合/.test(realOpeningEndTurnConfirmProbe.hint)
+        && /确认结束/.test(realOpeningEndTurnConfirmProbe.endTurnText),
+      JSON.stringify(realOpeningEndTurnConfirmProbe),
+    );
+
     const realSocialSubmitProbe = await seatB.page.evaluate(async () => {
       await window.PVPScene.submitLiveEmote('thinking');
       await new Promise(resolve => setTimeout(resolve, 300));
@@ -917,6 +940,35 @@ async function writeReport() {
       JSON.stringify({ realSocialSubmitProbe, realSocialUnmutedProbe, realSocialMutedProbe }),
     );
 
+    const realOpeningCardConfirmProbe = await seatA.page.evaluate(async () => {
+      const before = window.PVPScene.getLiveSnapshot();
+      const state = window.PVPScene.getLiveSession().getState();
+      const card = state.stateView?.self?.hand?.[0];
+      if (!card?.instanceId) throw new Error('seat A has no playable card');
+      await window.PVPScene.submitLiveCard(card.instanceId);
+      await new Promise(resolve => setTimeout(resolve, 300));
+      const after = window.PVPScene.getLiveSnapshot();
+      return {
+        before,
+        after,
+        hint: document.querySelector('[data-live-last-error]')?.textContent || '',
+        cardClass: document.querySelector('[data-live-card]')?.className || '',
+        cardText: document.querySelector('[data-live-card]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+      };
+    });
+    add(
+      'real browser opening-window card confirmation blocks authoritative submit until second click',
+      realOpeningCardConfirmProbe.before?.phase === 'active'
+        && realOpeningCardConfirmProbe.after?.phase === 'active'
+        && realOpeningCardConfirmProbe.after?.currentSeat === realOpeningCardConfirmProbe.before?.currentSeat
+        && realOpeningCardConfirmProbe.after?.stateVersion === realOpeningCardConfirmProbe.before?.stateVersion
+        && realOpeningCardConfirmProbe.after?.opponent?.hp === realOpeningCardConfirmProbe.before?.opponent?.hp
+        && /再次点击确认出牌/.test(realOpeningCardConfirmProbe.hint)
+        && /confirming/.test(realOpeningCardConfirmProbe.cardClass)
+        && /确认/.test(realOpeningCardConfirmProbe.cardText),
+      JSON.stringify(realOpeningCardConfirmProbe),
+    );
+
     await seatA.page.evaluate(async () => {
       const state = window.PVPScene.getLiveSession().getState();
       const card = state.stateView?.self?.hand?.[0];
@@ -956,9 +1008,20 @@ async function writeReport() {
       JSON.stringify(afterPlayMomentumProbe),
     );
 
-    await seatA.page.evaluate(async () => {
+    const endTurnAfterPlayConfirmProbe = await seatA.page.evaluate(async () => {
       await window.PVPScene.endLiveTurn();
+      await new Promise(resolve => setTimeout(resolve, 300));
+      return {
+        snapshot: window.PVPScene.getLiveSnapshot(),
+        hint: document.querySelector('[data-live-last-error]')?.textContent || '',
+        endTurnText: document.querySelector('[data-live-action="end-turn"]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+      };
     });
+    if (endTurnAfterPlayConfirmProbe.snapshot?.currentSeat !== 'B') {
+      await seatA.page.evaluate(async () => {
+        await window.PVPScene.endLiveTurn();
+      });
+    }
     const afterEndTurnB = await waitForLiveSnapshot(seatB.page, expectedVersion => {
       const snapshot = window.PVPScene?.getLiveSnapshot?.();
       return snapshot?.currentSeat === 'B' && Number(snapshot?.stateVersion || 0) > expectedVersion;
@@ -974,7 +1037,7 @@ async function writeReport() {
         && /B/.test(seatBTimerProbe.text)
         && seatBTimerProbe.payload?.currentSeat === 'B'
         && seatBTimerProbe.payload?.isViewerTurn === true,
-      JSON.stringify({ afterEndTurnB, seatBTimerProbe }),
+      JSON.stringify({ endTurnAfterPlayConfirmProbe, afterEndTurnB, seatBTimerProbe }),
     );
 
     const realSurrenderConfirmProbe = await seatB.page.evaluate(async () => {

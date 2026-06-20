@@ -1,5 +1,29 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-20: V10-S9N live PVP opening action confirmation
+  - 本轮完成
+    - `js/scenes/pvp-scene.js` 新增 `liveOpeningActionConfirm` 本地确认态，专门保护 live PVP `opening_window` 内的 `play_card` 与 `end_turn`：第一次点击只显示确认提示并高亮对应卡牌 / 切换结束回合按钮文案，第二次点击才提交既有权威 intent。
+    - 确认 key 绑定 `matchId + seatId + currentSeat + stateVersion + action + cardInstanceId`，因此状态版本推进、换回合、离开 active、换牌或目标卡不在手牌时都会自动失效；手动刷新、真实提交、非表情正式 intent 也会清理旧确认，避免把上一拍的确认带到下一拍。
+    - 该切片只消费服务端公开 `openingSafeguardReport` / `duelMomentumReport.pressureState=opening_window`，不在前端重算伤害、护体、预算或反打规则；确认后仍提交原有 `play_card` / `end_turn`，不改 WS / HTTP fallback、服务端结算、积分、奖励或赛季验证。
+    - `css/pvp.css` 增加 `.pvp-live-card.confirming` 轻量视觉状态，卡牌 meta 增加“确认”标记；结束回合按钮在确认窗口内显示“确认结束”，不新增遮挡式弹窗，保持高压对局中可快速二击。
+    - `tests/sanity_pvp_live_ui_runtime_checks.mjs` 固定出牌 / 结束回合首击不提交、二击才提交，并验证状态版本推进会让旧确认失效；`tests/browser_pvp_live_audit.mjs` 固定 fake UI 的卡牌与结束回合确认态；`tests/browser_pvp_live_real_backend_smoke.mjs` 固定真实双账号链路下第一击不推进权威状态、第二击才让服务端接受动作。
+    - `tests/sanity_pvp_live_ui_contract_checks.cjs` 与 `tests/sanity_release_gate_coverage_checks.cjs` 固定 helper、文案、fake audit finding 和 real backend finding，防止 opening-window 高频操作回退成一击即发。
+  - 已验证
+    - 红测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs` 在实现前失败于第一次 opening-window 出牌已经提交 `play_card` intent。
+    - 红测：`node tests/sanity_pvp_live_ui_contract_checks.cjs` 在实现前失败于缺少 `isLiveOpeningActionConfirmRequired(` 合约 marker。
+    - 红测：`node tests/sanity_release_gate_coverage_checks.cjs` 在实现前失败于缺少 real / fake opening action confirmation 门禁 marker。
+    - 绿测：`node --check js/scenes/pvp-scene.js`
+    - 绿测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs`
+    - 绿测：`node tests/sanity_pvp_live_ui_contract_checks.cjs`
+    - 绿测：`node tests/sanity_release_gate_coverage_checks.cjs`
+    - 语法检查：`node --check tests/browser_pvp_live_audit.mjs && node --check tests/browser_pvp_live_real_backend_smoke.mjs`
+    - 构建：`npm run build:pages`
+    - 全量 Node：`npm run test:node`
+    - 浏览器审计：`node tests/browser_pvp_live_audit.mjs http://127.0.0.1:4173 output/pvp-live-opening-action-confirm-audit-2`，72/72 findings、0 console error。
+    - 真实后端 smoke：`node tests/browser_pvp_live_real_backend_smoke.mjs http://127.0.0.1:4173 output/pvp-live-opening-action-confirm-real-2`，44/44 findings、0 console error。
+  - 当前结论
+    - live PVP 开局窗口里的两个最高频动作不再一击即发，玩家刚进入正式局时误点卡牌或误点结束回合不会立刻交出权威行动；确认态仍保持轻量二击，不拖慢熟练玩家节奏。该切片继续坚持“前端只做交互保护，服务端仍是规则与结算权威”；下一步更适合打磨行动前预期管理，例如在确认提示里进一步解释首动预算 / 护体 / 反打缓冲会如何影响本拍结果。
+
 - 2026-06-20: V10-S9M live PVP final 10s action warning
   - 本轮完成
     - `js/scenes/pvp-scene.js` 为 live PVP active 回合倒计时增加最后 10 秒提示：己方行动窗口显示“最后 10 秒，请确认行动”，对手行动窗口显示“对手思考中，剩余时间不多”，让双方都能明确感知低时间压力，而不是突然超时或误以为界面卡住。
