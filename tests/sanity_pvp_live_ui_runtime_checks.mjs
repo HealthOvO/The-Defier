@@ -204,6 +204,37 @@ assert.match(renderedCardDrawReceipt, /抽滤 1 张/, 'live UI action receipt sh
 assert.match(renderedCardDrawReceipt, /data-live-card-cycle="public_card_cycle"/, 'live UI card cycle receipt should expose a stable public-card-cycle marker');
 assert.doesNotMatch(renderedCardDrawReceipt, /sourceCardId|cardId|instanceId|draw_tag|rating|reward/i, 'live UI card cycle receipt rendering must not expose hidden ids, effect tags, or rewards');
 
+const normalizedGuardStanceReceipt = PVPScene.getLiveActionReceiptReport({
+  actionReceiptReport: {
+    reportVersion: 'pvp-live-action-receipt-v1',
+    sourceVisibility: 'authoritative_public_projection',
+    usesHiddenInformation: false,
+    rankedImpact: 'none',
+    viewerSeat: 'A',
+    actingSeat: 'A',
+    actionType: 'play_card',
+    latestSequence: 13,
+    cardName: '护体诀',
+    statusEffects: {
+      applied: [{
+        statusId: 'guard_stance',
+        label: '守势',
+        seatId: 'A',
+        sourceSeat: 'A',
+        mitigationAmount: 2,
+        responseWindow: 'next_incoming_attack'
+      }]
+    },
+    summaryLine: 'A 打出护体诀：不造成伤害；自身护盾 +7；进入守势，下次生命伤害 -2。',
+    safeguards: ['public_events', 'self_block', 'public_guard_stance']
+  }
+});
+assert.equal(normalizedGuardStanceReceipt.statusEffects.applied[0].mitigationAmount, 2, 'live UI should preserve public guard stance mitigation amount');
+const renderedGuardStanceReceipt = PVPScene.renderLiveActionReceiptReport({ actionReceiptReport: normalizedGuardStanceReceipt });
+assert.match(renderedGuardStanceReceipt, /守势|减伤/, 'live UI action receipt should render public guard stance setup');
+assert.match(renderedGuardStanceReceipt, /data-live-guard-stance="public_guard_stance"/, 'live UI guard stance receipt should expose a stable marker');
+assert.doesNotMatch(renderedGuardStanceReceipt, /sourceCardId|cardId|instanceId|hand|deck|rating|reward/i, 'live UI guard stance receipt rendering must not expose hidden ids or rewards');
+
 const normalizedEndTurnReceipt = PVPScene.getLiveActionReceiptReport({
   actionReceiptReport: {
     reportVersion: 'pvp-live-action-receipt-v1',
@@ -918,6 +949,47 @@ const mitigatedEvent = PVPScene.formatLiveEvent({
   }
 });
 assert.match(mitigatedEvent.detail, /稳住破绽|阻止后续兑现/, 'live UI event log should explain public status mitigation');
+const guardStanceMitigatedReceipt = PVPScene.getLiveActionReceiptReport({
+  actionReceiptReport: {
+    reportVersion: 'pvp-live-action-receipt-v1',
+    sourceVisibility: 'authoritative_public_projection',
+    usesHiddenInformation: false,
+    rankedImpact: 'none',
+    viewerSeat: 'A',
+    actingSeat: 'B',
+    actionType: 'play_card',
+    latestSequence: 50,
+    cardName: '破阵爆发',
+    statusEffects: {
+      mitigated: [{
+        statusId: 'guard_stance',
+        label: '守势',
+        seatId: 'A',
+        sourceSeat: 'A',
+        mitigatedBySeat: 'A',
+        preventedDamage: 2,
+        mitigation: 'guard_stance_damage_reduction'
+      }]
+    },
+    summaryLine: 'B 打出破阵爆发：预算后 19，破盾 7，生命伤害 10，A 剩余 40 血；守势减伤 2。',
+    safeguards: ['public_events', 'public_guard_stance_mitigated']
+  }
+});
+assert.equal(guardStanceMitigatedReceipt.statusEffects.mitigated[0].preventedDamage, 2, 'live UI should preserve guard stance prevented damage');
+assert.match(PVPScene.renderLiveActionReceiptReport({ actionReceiptReport: guardStanceMitigatedReceipt }), /守势减伤 2|生命伤害 10/, 'live UI damage receipt should explain guard stance damage reduction');
+const guardStanceMitigatedEvent = PVPScene.formatLiveEvent({
+  eventType: 'status_mitigated',
+  actingSeat: 'B',
+  publicData: {
+    statusId: 'guard_stance',
+    label: '守势',
+    seatId: 'A',
+    mitigatedBySeat: 'A',
+    preventedDamage: 2,
+    mitigation: 'guard_stance_damage_reduction'
+  }
+});
+assert.match(guardStanceMitigatedEvent.detail, /守势减伤 2|挡下 2/, 'live UI event log should explain public guard stance damage reduction');
 const cardCycleEvent = PVPScene.formatLiveEvent({
   eventType: 'card_cycled',
   actingSeat: 'A',

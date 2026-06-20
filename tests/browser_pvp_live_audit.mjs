@@ -2312,6 +2312,76 @@ async function safeElementScreenshot(page, selector, outputPath) {
       && !/payload|hand|deck|cardId|instanceId|loadoutSnapshot|reward|rating|elo|sourceCardId/i.test(`${mitigationFormatProbe.event?.detail || ''} ${mitigationFormatProbe.receipt || ''}`),
     JSON.stringify(mitigationFormatProbe),
   );
+  const guardStanceFormatProbe = await page.evaluate(() => {
+    const appliedEvent = window.PVPScene.formatLiveEvent({
+      eventType: 'status_applied',
+      actingSeat: 'A',
+      publicData: {
+        statusId: 'guard_stance',
+        label: '守势',
+        seatId: 'A',
+        sourceSeat: 'A',
+        stacks: 1,
+        mitigationAmount: 2,
+        responseWindow: 'next_incoming_attack',
+      },
+    });
+    const mitigatedEvent = window.PVPScene.formatLiveEvent({
+      eventType: 'status_mitigated',
+      actingSeat: 'B',
+      publicData: {
+        statusId: 'guard_stance',
+        label: '守势',
+        seatId: 'A',
+        sourceSeat: 'A',
+        mitigatedBySeat: 'A',
+        preventedDamage: 2,
+        mitigation: 'guard_stance_damage_reduction',
+      },
+    });
+    const receipt = window.PVPScene.renderLiveActionReceiptReport({
+      actionReceiptReport: {
+        reportVersion: 'pvp-live-action-receipt-v1',
+        sourceVisibility: 'authoritative_public_projection',
+        usesHiddenInformation: false,
+        rankedImpact: 'none',
+        viewerSeat: 'A',
+        actingSeat: 'B',
+        actionType: 'play_card',
+        latestSequence: 50,
+        cardName: '破阵爆发',
+        statusEffects: {
+          mitigated: [{
+            statusId: 'guard_stance',
+            label: '守势',
+            seatId: 'A',
+            sourceSeat: 'A',
+            mitigatedBySeat: 'A',
+            preventedDamage: 2,
+            mitigation: 'guard_stance_damage_reduction',
+          }],
+        },
+        summaryLine: 'B 打出破阵爆发：预算后 19，破盾 7，生命伤害 10，A 剩余 40 血；守势减伤 2。',
+        safeguards: ['public_events', 'public_guard_stance_mitigated'],
+      },
+    });
+    return {
+      appliedEvent,
+      mitigatedEvent,
+      receipt,
+    };
+  });
+  add(
+    'live UI formats public guard stance event and receipt',
+    /guard_stance/.test('guard_stance')
+      && /公开守势|公开状态施加/.test(guardStanceFormatProbe.appliedEvent?.label || '')
+      && /生命伤害 -2|守势/.test(guardStanceFormatProbe.appliedEvent?.detail || '')
+      && /守势减伤 2/.test(guardStanceFormatProbe.mitigatedEvent?.detail || '')
+      && /data-live-guard-stance="public_guard_stance"/.test(guardStanceFormatProbe.receipt || '')
+      && /守势减伤 2/.test(guardStanceFormatProbe.receipt || '')
+      && !/payload|hand|deck|cardId|instanceId|loadoutSnapshot|reward|rating|elo|sourceCardId/i.test(`${guardStanceFormatProbe.appliedEvent?.detail || ''} ${guardStanceFormatProbe.mitigatedEvent?.detail || ''} ${guardStanceFormatProbe.receipt || ''}`),
+    JSON.stringify(guardStanceFormatProbe),
+  );
   const cardCycleFormatProbe = await page.evaluate(() => {
     const event = window.PVPScene.formatLiveEvent({
       eventType: 'card_cycled',

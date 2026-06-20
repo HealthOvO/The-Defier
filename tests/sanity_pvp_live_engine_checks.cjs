@@ -411,6 +411,57 @@ assert(drawReceipt.cardDraw && drawReceipt.cardDraw.count === 1 && drawReceipt.c
 assert(/抽滤|抽\s*1/.test(drawReceipt.summaryLine), 'action receipt summary should include readable card draw feedback');
 assert(!/sourceCardId|effect|instanceId|A-drawn|loadoutSnapshot|rating|elo|reward/i.test(JSON.stringify(drawReceipt.cardDraw)), 'card draw receipt must not leak drawn card identity, effect tags, or ranked/reward data');
 
+const guardStanceState = createReadyLiveState('pvpm-guard-stance-test');
+guardStanceState.seats.A.hand = [makeLiveCard('A-pvp_guard-stance-1', 'pvp_guard')];
+guardStanceState.seats.B.hand = [makeLiveCard('B-pvp_burst-stance-1', 'pvp_burst')];
+const guardStance = reduceIntent(guardStanceState, {
+  intentId: 'intent-guard-stance-a-1',
+  intentType: 'play_card',
+  matchId: 'pvpm-guard-stance-test',
+  seatId: 'A',
+  ruleVersion: RULE_VERSION,
+  stateVersion: guardStanceState.stateVersion,
+  payload: { cardInstanceId: 'A-pvp_guard-stance-1', targetSeat: 'B' }
+});
+assert(guardStance.result === 'accepted', 'paid guard card should resolve before applying a public guard stance');
+assert(guardStance.events.some(e => e.eventType === 'status_applied' && e.payload.statusId === 'guard_stance' && e.payload.seatId === 'A' && e.payload.mitigationAmount === 2), 'paid guard card should emit public guard_stance setup evidence');
+assert(guardStance.state.seats.A.publicStatuses.some(status => status.statusId === 'guard_stance' && status.mitigationAmount === 2), 'paid guard card should attach one public guard stance to the defender');
+const guardStanceViewB = projectStateView(guardStance.state, 'B');
+const publicGuardStanceEvent = guardStanceViewB.recentEvents.find(event => event.eventType === 'status_applied' && (event.publicData || {}).statusId === 'guard_stance');
+assert(publicGuardStanceEvent, 'opponent should see public guard_stance setup evidence');
+assert(JSON.stringify(Object.keys(publicGuardStanceEvent.publicData || {}).sort()) === JSON.stringify(['appliedTurnIndex', 'earliestConsumeTurnIndex', 'expiresAtTurnIndex', 'label', 'mitigationAmount', 'responseWindow', 'seatId', 'sourceSeat', 'stacks', 'statusId']), 'public guard stance setup event should expose only public status fields');
+assert(!/sourceCardId|cardId|instanceId|hand|deck|loadoutSnapshot|rating|elo|reward/i.test(JSON.stringify(publicGuardStanceEvent)), 'public guard stance event must not leak hidden card, hand, deck, rating, or reward data');
+const guardStanceReceipt = projectStateView(guardStance.state, 'A').actionReceiptReport;
+assert(guardStanceReceipt.statusEffects && guardStanceReceipt.statusEffects.applied.some(status => status.statusId === 'guard_stance' && status.mitigationAmount === 2), 'guard action receipt should explain public guard stance setup');
+assert(/守势|减伤/.test(guardStanceReceipt.summaryLine), 'guard action receipt should include readable guard stance feedback');
+const guardStanceEndTurn = reduceIntent(guardStance.state, {
+  intentId: 'intent-guard-stance-a-end-1',
+  intentType: 'end_turn',
+  matchId: 'pvpm-guard-stance-test',
+  seatId: 'A',
+  ruleVersion: RULE_VERSION,
+  stateVersion: guardStance.state.stateVersion,
+  payload: {}
+});
+const guardStanceHit = reduceIntent(guardStanceEndTurn.state, {
+  intentId: 'intent-guard-stance-b-burst-1',
+  intentType: 'play_card',
+  matchId: 'pvpm-guard-stance-test',
+  seatId: 'B',
+  ruleVersion: RULE_VERSION,
+  stateVersion: guardStanceEndTurn.state.stateVersion,
+  payload: { cardInstanceId: 'B-pvp_burst-stance-1', targetSeat: 'A' }
+});
+assert(guardStanceHit.result === 'accepted', 'opponent attack should resolve against public guard stance');
+assert(guardStanceHit.events.some(e => e.eventType === 'status_mitigated' && e.payload.statusId === 'guard_stance' && e.payload.preventedDamage === 2 && e.payload.mitigation === 'guard_stance_damage_reduction'), 'guard stance should emit public damage reduction evidence');
+assert(guardStanceHit.events.some(e => e.eventType === 'damage_applied' && e.payload.blockedDamage === 7 && e.payload.hpDamage === 10 && e.payload.targetHp === 40), 'guard stance should reduce only post-block life damage by two');
+assert(!guardStanceHit.state.seats.A.publicStatuses.some(status => status.statusId === 'guard_stance'), 'guard stance should be consumed after reducing incoming life damage');
+const guardStanceHitViewA = projectStateView(guardStanceHit.state, 'A');
+assert(guardStanceHitViewA.recentEvents.some(event => event.eventType === 'status_mitigated' && (event.publicData || {}).statusId === 'guard_stance' && (event.publicData || {}).preventedDamage === 2), 'defender should see public guard stance damage reduction evidence');
+assert(guardStanceHitViewA.actionReceiptReport.statusEffects && guardStanceHitViewA.actionReceiptReport.statusEffects.mitigated.some(status => status.statusId === 'guard_stance' && status.preventedDamage === 2), 'damage receipt should preserve guard stance mitigation');
+assert(/守势|减伤/.test(guardStanceHitViewA.actionReceiptReport.summaryLine), 'damage receipt should explain guard stance damage reduction');
+assert(!/sourceCardId|cardId|instanceId|loadoutSnapshot|rating|elo|reward/i.test(JSON.stringify(guardStanceHitViewA.actionReceiptReport.statusEffects)), 'guard stance receipt must not leak hidden ids, rating, or reward data');
+
 const cappedDrawState = createReadyLiveState('pvpm-card-draw-cap-test');
 cappedDrawState.seats.A.hand = [
   makeLiveCard('A-surgeStep-cap-1', 'surgeStep'),

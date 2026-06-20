@@ -1027,6 +1027,25 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
         assert.equal(routeDraw.payload.stateView.actionReceiptReport?.cardDraw?.count, 1, 'route action receipt should preserve public card cycle count');
         assert.ok(!/sourceCardId|effect|cardId|instanceId|hidden-draw|pvp_strike|hand":\[|deck":\[|rating|reward/i.test(JSON.stringify(routeDraw.payload.stateView.actionReceiptReport?.cardDraw || {})), 'route cardDraw receipt must not leak internal card identity, effect tags, hand, deck, rating, or rewards');
 
+        const routeGuardStanceMatch = pvpLiveRoutes.__livePvpStore.matches.get(joinB.payload.matchId);
+        const routeGuardStanceSeat = routeGuardStanceMatch.state.seats[firstSeat];
+        routeGuardStanceSeat.energy = Math.max(routeGuardStanceSeat.energy, RULES.cards.pvp_guard.cost);
+        routeGuardStanceSeat.hand = [makeRouteLiveCard(`${firstSeat}-guard-stance-route-1`, 'pvp_guard')];
+        const routeGuardStance = await submitIntent(baseUrl, firstToken, joinB.payload.matchId, {
+                intentId: 'route-intent-guard-stance-1',
+                intentType: 'play_card',
+                stateVersion: routeDraw.payload.stateView.stateVersion,
+                payload: { cardInstanceId: `${firstSeat}-guard-stance-route-1`, targetSeat: secondSeat }
+        });
+        assert.equal(routeGuardStance.payload.result, 'accepted', 'route guard card should resolve as a normal paid play_card intent');
+        const routeGuardStanceEvent = routeGuardStance.payload.events.find(event => event.eventType === 'status_applied' && event.publicData?.statusId === 'guard_stance');
+        assert.ok(routeGuardStanceEvent, 'HTTP play_card response should include public guard_stance event');
+        assert.deepEqual(Object.keys(routeGuardStanceEvent.publicData || {}).sort(), ['appliedTurnIndex', 'earliestConsumeTurnIndex', 'expiresAtTurnIndex', 'label', 'mitigationAmount', 'responseWindow', 'seatId', 'sourceSeat', 'stacks', 'statusId'], 'HTTP guard_stance event should expose only public status fields');
+        assert.equal(routeGuardStanceEvent.publicData.mitigationAmount, 2, 'HTTP guard_stance event should expose the public damage reduction amount');
+        assert.ok(!Object.prototype.hasOwnProperty.call(routeGuardStanceEvent, 'payload'), 'HTTP guard_stance event must not return raw reducer payload');
+        assert.ok(!/sourceCardId|cardId|instanceId|hand":\[|deck":\[|rating|reward/i.test(JSON.stringify(routeGuardStanceEvent)), 'HTTP guard_stance event must not leak internal card identity, hand, deck, rating, or rewards');
+        assert.ok(routeGuardStance.payload.stateView.actionReceiptReport?.statusEffects?.applied?.some(status => status.statusId === 'guard_stance' && status.mitigationAmount === 2), 'route guard receipt should preserve public guard stance setup');
+
         const duplicateA = await submitIntent(baseUrl, firstToken, joinB.payload.matchId, {
                 intentId: 'route-intent-burst-1',
                 intentType: 'play_card',
@@ -1039,7 +1058,7 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
         const wrongSeatB = await submitIntent(baseUrl, secondToken, joinB.payload.matchId, {
                 intentId: 'route-intent-wrong-seat-1',
                 intentType: 'play_card',
-                stateVersion: routeDraw.payload.stateView.stateVersion,
+                stateVersion: routeGuardStance.payload.stateView.stateVersion,
                 payload: { cardInstanceId: secondStrikeCard, targetSeat: firstSeat }
         });
         assert.equal(wrongSeatB.payload.result, 'rejected', 'non-current live seat action should be rejected');
@@ -1048,7 +1067,7 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
         const endTurnA = await submitIntent(baseUrl, firstToken, joinB.payload.matchId, {
                 intentId: 'route-intent-end-turn-1',
                 intentType: 'end_turn',
-                stateVersion: routeDraw.payload.stateView.stateVersion,
+                stateVersion: routeGuardStance.payload.stateView.stateVersion,
                 payload: {}
         });
         assert.equal(endTurnA.payload.result, 'accepted', 'current live seat should end turn');

@@ -21,6 +21,9 @@ const RULES = Object.freeze({
     openingSecondSeatBuffer: Object.freeze({
         block: 3
     }),
+    guardStance: Object.freeze({
+        reduction: 2
+    }),
     longGame: Object.freeze({
         maxRounds: 14,
         scoreThreshold: 5,

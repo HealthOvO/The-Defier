@@ -1194,6 +1194,8 @@ export const PVPScene = {
       sourceSeat: String(status.sourceSeat || ''),
       mitigatedBySeat: String(status.mitigatedBySeat || ''),
       damageBonus: Math.max(0, Math.floor(Number(status.damageBonus) || 0)),
+      mitigationAmount: Math.max(0, Math.floor(Number(status.mitigationAmount) || 0)),
+      preventedDamage: Math.max(0, Math.floor(Number(status.preventedDamage) || 0)),
       mitigatedTurnIndex: Math.max(0, Math.floor(Number(status.mitigatedTurnIndex) || 0)),
       consumedTurnIndex: Math.max(0, Math.floor(Number(status.consumedTurnIndex) || 0)),
       responseWindow: String(status.responseWindow || ''),
@@ -1280,6 +1282,13 @@ export const PVPScene = {
     const mitigationChip = report.statusEffects && Array.isArray(report.statusEffects.mitigated) && report.statusEffects.mitigated.length > 0
       ? '<span class="pvp-live-action-receipt-chip" data-live-public-status-mitigation="public_status_mitigated">公开状态缓解</span>'
       : '';
+    const guardStanceStatus = report.statusEffects && (
+      (Array.isArray(report.statusEffects.applied) && report.statusEffects.applied.some(status => status.statusId === 'guard_stance'))
+      || (Array.isArray(report.statusEffects.mitigated) && report.statusEffects.mitigated.some(status => status.statusId === 'guard_stance'))
+    );
+    const guardStanceChip = guardStanceStatus
+      ? '<span class="pvp-live-action-receipt-chip" data-live-guard-stance="public_guard_stance">公开守势</span>'
+      : '';
     const cardDrawChip = report.cardDraw
       ? `<span class="pvp-live-action-receipt-chip" data-live-card-cycle="public_card_cycle">${this.escapeHtml(report.cardDraw.capped ? '抽滤已满' : report.cardDraw.count > 0 ? `抽滤 +${report.cardDraw.count}` : '抽滤暂停')}</span>`
       : '';
@@ -1287,6 +1296,7 @@ export const PVPScene = {
       <span class="pvp-live-action-receipt-chip">${this.escapeHtml(receiptLabel)}</span>
       <span class="pvp-live-action-receipt-line">${this.escapeHtml(summary)}</span>
       ${mitigationChip}
+      ${guardStanceChip}
       ${cardDrawChip}
       <span class="pvp-live-action-receipt-chip">${this.escapeHtml(source)} · ${this.escapeHtml(hidden)} · ${this.escapeHtml(report.rankedImpact || 'none')}</span>
     `;
@@ -1419,6 +1429,7 @@ export const PVPScene = {
       label: String(status && status.label || '公开状态'),
       sourceSeat: String(status && status.sourceSeat || ''),
       stacks: Math.max(1, Math.floor(Number(status && status.stacks) || 1)),
+      mitigationAmount: Math.max(0, Math.floor(Number(status && status.mitigationAmount) || 0)),
       earliestConsumeTurnIndex: Math.max(0, Math.floor(Number(status && status.earliestConsumeTurnIndex) || 0)),
       expiresAtTurnIndex: Math.max(0, Math.floor(Number(status && status.expiresAtTurnIndex) || 0)),
       responseWindow: String(status && status.responseWindow || ''),
@@ -1432,6 +1443,8 @@ export const PVPScene = {
       const stackText = status.stacks > 1 ? ` x${status.stacks}` : '';
       const windowText = status.responseWindow === 'defender_turn_before_payoff'
         ? `反制窗口后可兑现`
+        : status.responseWindow === 'next_incoming_attack'
+          ? `下次受击减伤`
         : status.earliestConsumeTurnIndex > 0 ? `第 ${status.earliestConsumeTurnIndex} 手后可兑现` : '公开可见';
       const summary = status.summary || `${status.label}：${windowText}`;
       return `
@@ -2993,7 +3006,12 @@ export const PVPScene = {
       const label = String(payload.label || '公开状态');
       const seatId = String(payload.seatId || '');
       const earliest = Math.max(0, Math.floor(Number(payload.earliestConsumeTurnIndex) || 0));
-      detail = `${seatId ? `目标 ${seatId}` : '目标'} · ${label} · 反制窗口后可兑现${earliest ? ` · 最早第 ${earliest} 手` : ''}`;
+      if (payload.statusId === 'guard_stance') {
+        const mitigationAmount = Math.max(0, Math.floor(Number(payload.mitigationAmount) || 0));
+        detail = `${seatId || '行动方'} · ${label} · 下次生命伤害 -${mitigationAmount}`;
+      } else {
+        detail = `${seatId ? `目标 ${seatId}` : '目标'} · ${label} · 反制窗口后可兑现${earliest ? ` · 最早第 ${earliest} 手` : ''}`;
+      }
     } else if (type === 'status_consumed') {
       const label = String(payload.label || '公开状态');
       const seatId = String(payload.seatId || '');
@@ -3003,7 +3021,12 @@ export const PVPScene = {
       const label = String(payload.label || '公开状态');
       const seatId = String(payload.seatId || '');
       const mitigatedBySeat = String(payload.mitigatedBySeat || event.actingSeat || '');
-      detail = `${seatId ? `目标 ${seatId}` : '目标'} · ${mitigatedBySeat ? `${mitigatedBySeat} ` : ''}稳住${label} · 阻止后续兑现`;
+      if (payload.statusId === 'guard_stance' || payload.mitigation === 'guard_stance_damage_reduction') {
+        const preventedDamage = Math.max(0, Math.floor(Number(payload.preventedDamage) || 0));
+        detail = `${seatId ? `目标 ${seatId}` : '目标'} · ${label}减伤 ${preventedDamage}`;
+      } else {
+        detail = `${seatId ? `目标 ${seatId}` : '目标'} · ${mitigatedBySeat ? `${mitigatedBySeat} ` : ''}稳住${label} · 阻止后续兑现`;
+      }
     } else if (type === 'card_cycled') {
       const seatId = String(payload.seatId || event.actingSeat || '');
       const count = Math.max(0, Math.floor(Number(payload.count) || 0));

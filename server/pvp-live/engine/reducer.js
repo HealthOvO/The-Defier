@@ -113,7 +113,7 @@ function getCardTags(card) {
 }
 
 function makePublicStatus(status) {
-    return {
+    const publicStatus = {
         statusId: String(status.statusId || ''),
         label: String(status.label || ''),
         seatId: status.seatId === 'B' ? 'B' : 'A',
@@ -125,6 +125,9 @@ function makePublicStatus(status) {
         responseWindow: String(status.responseWindow || ''),
         summary: String(status.summary || '').slice(0, 120)
     };
+    const mitigationAmount = normalizeCount(status.mitigationAmount);
+    if (mitigationAmount > 0) publicStatus.mitigationAmount = mitigationAmount;
+    return publicStatus;
 }
 
 function applyPublicSetupStatus(state, intent, card, events) {
@@ -218,6 +221,91 @@ function mitigatePublicResponseStatus(state, intent, card, events) {
         mitigation: 'guard_response'
     });
     return status;
+}
+
+function getGuardStanceReduction() {
+    return Math.max(0, Math.floor(Number(RULES.guardStance && RULES.guardStance.reduction) || 0));
+}
+
+function applyGuardStanceStatus(state, intent, card, events) {
+    const tags = getCardTags(card);
+    const block = Math.max(0, Math.floor(Number(card && card.block) || 0));
+    if ((!tags.includes('guard') && !tags.includes('defense')) || block <= 0) return null;
+    if (state.status !== 'active') return null;
+    const actor = state && state.seats && state.seats[intent.seatId];
+    const mitigationAmount = getGuardStanceReduction();
+    if (!actor || mitigationAmount <= 0) return null;
+    const currentTurn = normalizeCount(state.turnIndex);
+    const status = makePublicStatus({
+        statusId: 'guard_stance',
+        label: '守势',
+        seatId: intent.seatId,
+        sourceSeat: intent.seatId,
+        stacks: 1,
+        mitigationAmount,
+        appliedTurnIndex: currentTurn,
+        earliestConsumeTurnIndex: currentTurn + 1,
+        expiresAtTurnIndex: currentTurn + 2,
+        responseWindow: 'next_incoming_attack',
+        summary: `守势公开：下次受到生命伤害时先减 ${mitigationAmount}；触发后消失。`
+    });
+    actor.publicStatuses = Array.isArray(actor.publicStatuses)
+        ? actor.publicStatuses.filter(item => item && item.statusId !== status.statusId)
+        : [];
+    actor.publicStatuses.push(status);
+    appendEvent(state, events, 'status_applied', intent, {
+        sourceCardId: card.cardId,
+        statusId: status.statusId,
+        label: status.label,
+        seatId: status.seatId,
+        sourceSeat: status.sourceSeat,
+        stacks: status.stacks,
+        mitigationAmount: status.mitigationAmount,
+        appliedTurnIndex: status.appliedTurnIndex,
+        earliestConsumeTurnIndex: status.earliestConsumeTurnIndex,
+        expiresAtTurnIndex: status.expiresAtTurnIndex,
+        responseWindow: status.responseWindow
+    });
+    return status;
+}
+
+function consumeGuardStanceDamageReduction(state, intent, card, target, targetSeat, hpDamage, events) {
+    if (!target || hpDamage <= 0 || !Array.isArray(target.publicStatuses)) {
+        return { hpDamage, preventedDamage: 0, consumed: null };
+    }
+    const currentTurn = normalizeCount(state.turnIndex);
+    const statusIndex = target.publicStatuses.findIndex(status => {
+        if (!status || status.statusId !== 'guard_stance') return false;
+        if (status.seatId !== targetSeat) return false;
+        if (normalizeCount(status.expiresAtTurnIndex) > 0 && currentTurn > normalizeCount(status.expiresAtTurnIndex)) return false;
+        return true;
+    });
+    if (statusIndex < 0) return { hpDamage, preventedDamage: 0, consumed: null };
+    const [status] = target.publicStatuses.splice(statusIndex, 1);
+    const reduction = Math.max(0, Math.floor(Number(status.mitigationAmount) || getGuardStanceReduction()));
+    const preventedDamage = Math.min(reduction, hpDamage);
+    if (preventedDamage <= 0) {
+        target.publicStatuses.push(status);
+        return { hpDamage, preventedDamage: 0, consumed: null };
+    }
+    ensureLongGameStats(target).preventedOrRecoveredDamage += preventedDamage;
+    appendEvent(state, events, 'status_mitigated', intent, {
+        sourceCardId: card.cardId,
+        statusId: status.statusId,
+        label: status.label,
+        seatId: targetSeat,
+        sourceSeat: status.sourceSeat,
+        mitigatedBySeat: targetSeat,
+        mitigatedTurnIndex: currentTurn,
+        responseWindow: status.responseWindow,
+        mitigation: 'guard_stance_damage_reduction',
+        preventedDamage
+    });
+    return {
+        hpDamage: hpDamage - preventedDamage,
+        preventedDamage,
+        consumed: status
+    };
 }
 
 function ensureLongGameStats(seat) {
@@ -431,6 +519,8 @@ function applyDamage(state, intent, card, events) {
     target.block -= blockedDamage;
     ensureLongGameStats(target).preventedOrRecoveredDamage += blockedDamage;
     let hpDamage = actualDamage - blockedDamage;
+    const guardStanceMitigation = consumeGuardStanceDamageReduction(state, intent, card, target, targetSeat, hpDamage, events);
+    hpDamage = guardStanceMitigation.hpDamage;
     let targetHp = Math.max(0, target.hp - hpDamage);
     if (shouldTriggerOpeningProtection(target, targetHp)) {
         const minimumHp = getOpeningProtectionMinimumHp();
@@ -521,6 +611,7 @@ function reducePlayCard(state, intent, fingerprint) {
     }
     applyBlock(newState, intent, card, events);
     mitigatePublicResponseStatus(newState, intent, card, events);
+    applyGuardStanceStatus(newState, intent, card, events);
     applyPublicSetupStatus(newState, intent, card, events);
     applyCardDrawEffect(newState, intent, card, events);
     if (nextActor.playedSetupThisTurn && !nextActor.setupConvertedThisTurn && !tags.includes('setup') && ((card.damage || 0) > 0 || (card.block || 0) > 0)) {

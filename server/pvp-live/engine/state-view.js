@@ -194,9 +194,9 @@ const PUBLIC_EVENT_DATA_KEYS = {
     opening_protection_triggered: ['protectedSeat', 'minimumHp', 'preventedDamage', 'wouldHaveHp'],
     budget_clamped: ['rawDamage', 'actualDamage', 'preventedDamage', 'targetSeat'],
     damage_applied: ['actualDamage', 'budgetedDamage', 'blockedDamage', 'hpDamage', 'targetSeat', 'targetHp'],
-    status_applied: ['statusId', 'label', 'seatId', 'sourceSeat', 'stacks', 'appliedTurnIndex', 'earliestConsumeTurnIndex', 'expiresAtTurnIndex', 'responseWindow'],
+    status_applied: ['statusId', 'label', 'seatId', 'sourceSeat', 'stacks', 'mitigationAmount', 'appliedTurnIndex', 'earliestConsumeTurnIndex', 'expiresAtTurnIndex', 'responseWindow'],
     status_consumed: ['statusId', 'label', 'seatId', 'sourceSeat', 'damageBonus', 'consumedTurnIndex'],
-    status_mitigated: ['statusId', 'label', 'seatId', 'sourceSeat', 'mitigatedBySeat', 'mitigatedTurnIndex', 'responseWindow', 'mitigation'],
+    status_mitigated: ['statusId', 'label', 'seatId', 'sourceSeat', 'mitigatedBySeat', 'mitigatedTurnIndex', 'responseWindow', 'mitigation', 'preventedDamage'],
     player_surrendered: ['loserSeat', 'winnerSeat'],
     match_finished: ['winnerSeat', 'loserSeat', 'finishReason', 'scoreA', 'scoreB', 'scoreDelta', 'scoreThreshold', 'roundIndex'],
     turn_timeout: ['seatId', 'winnerSeat', 'loserSeat', 'finishReason'],
@@ -1268,9 +1268,13 @@ function getPublicCardName(cardId) {
 function isCardResolutionEvent(event, cardId, actingSeat) {
     if (!event || event.actingSeat !== actingSeat) return false;
     if (!['budget_clamped', 'opening_protection_triggered', 'damage_applied', 'block_gained', 'card_cycled', 'status_applied', 'status_consumed', 'status_mitigated'].includes(String(event.eventType || ''))) return false;
-    if (event.eventType === 'status_applied') return String(cardId || '') === 'punctureMark';
-    if (event.eventType === 'status_consumed') return String(cardId || '') === 'exposedCircuit';
     const payload = getPublicEventPayload(event);
+    if (event.eventType === 'status_applied') {
+        return payload.sourceCardId
+            ? String(payload.sourceCardId || '') === String(cardId || '')
+            : String(cardId || '') === 'punctureMark';
+    }
+    if (event.eventType === 'status_consumed') return String(cardId || '') === 'exposedCircuit';
     return String(payload.sourceCardId || '') === String(cardId || '');
 }
 
@@ -1345,6 +1349,7 @@ function projectCardActionReceipt(state, seatId, cardPlayedIndex) {
         seatId: String(statusAppliedPayload.seatId || ''),
         sourceSeat: String(statusAppliedPayload.sourceSeat || actingSeat),
         stacks: normalizeCount(statusAppliedPayload.stacks),
+        mitigationAmount: normalizeCount(statusAppliedPayload.mitigationAmount),
         earliestConsumeTurnIndex: normalizeCount(statusAppliedPayload.earliestConsumeTurnIndex),
         responseWindow: String(statusAppliedPayload.responseWindow || '')
     } : null;
@@ -1364,14 +1369,19 @@ function projectCardActionReceipt(state, seatId, cardPlayedIndex) {
         mitigatedBySeat: String(statusMitigatedPayload.mitigatedBySeat || actingSeat),
         mitigatedTurnIndex: normalizeCount(statusMitigatedPayload.mitigatedTurnIndex),
         responseWindow: String(statusMitigatedPayload.responseWindow || ''),
-        mitigation: String(statusMitigatedPayload.mitigation || '')
+        mitigation: String(statusMitigatedPayload.mitigation || ''),
+        preventedDamage: normalizeCount(statusMitigatedPayload.preventedDamage)
     } : null;
     const statusLine = statusApplied
-        ? `；给 ${statusApplied.seatId || targetSeat || '目标'} 挂上${statusApplied.label || '公开状态'}，保留反制窗口`
+        ? statusApplied.statusId === 'guard_stance'
+            ? `；进入${statusApplied.label || '守势'}，下次生命伤害 -${statusApplied.mitigationAmount || 0}`
+            : `；给 ${statusApplied.seatId || targetSeat || '目标'} 挂上${statusApplied.label || '公开状态'}，保留反制窗口`
         : statusConsumed
             ? `；消耗${statusConsumed.label || '公开状态'}，额外伤害 +${statusConsumed.damageBonus}`
             : statusMitigated
-                ? `；稳住${statusMitigated.label || '公开状态'}，阻止后续兑现`
+                ? statusMitigated.statusId === 'guard_stance'
+                    ? `；${statusMitigated.label || '守势'}减伤 ${statusMitigated.preventedDamage || 0}`
+                    : `；稳住${statusMitigated.label || '公开状态'}，阻止后续兑现`
                 : '';
     const safeguards = ['public_events'];
     if (budgetEvent) safeguards.push('first_action_budget');
@@ -1379,9 +1389,9 @@ function projectCardActionReceipt(state, seatId, cardPlayedIndex) {
     if (protectionTriggered) safeguards.push('opening_protection');
     if (blockGain > 0) safeguards.push('self_block');
     if (cardDraw) safeguards.push('public_card_cycle');
-    if (statusApplied) safeguards.push('public_status_applied');
+    if (statusApplied) safeguards.push(statusApplied.statusId === 'guard_stance' ? 'public_guard_stance' : 'public_status_applied');
     if (statusConsumed) safeguards.push('public_status_consumed');
-    if (statusMitigated) safeguards.push('public_status_mitigated');
+    if (statusMitigated) safeguards.push(statusMitigated.statusId === 'guard_stance' ? 'public_guard_stance_mitigated' : 'public_status_mitigated');
     return {
         reportVersion: 'pvp-live-action-receipt-v1',
         sourceVisibility: 'authoritative_public_projection',
