@@ -1,5 +1,26 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-20: V10-S9O live PVP opening action preview
+  - 本轮完成
+    - `js/scenes/pvp-scene.js` 新增 `formatLiveOpeningActionConfirmMessage()`，把 live PVP `opening_window` 的第一次出牌 / 结束回合点击从泛化二次确认，升级为可读的公开规则预期提示。
+    - 出牌确认现在会展示当前术式、目标席位、首动预算、开局护体保底血量、后手公开护盾和反打缓冲；结束回合确认会额外说明行动权将交给哪个公开席位，避免玩家误以为“点一下就交权”或不了解本拍为什么不会先手秒杀。
+    - 该切片只消费服务端公开 `openingSafeguardReport` 与当前 `stateView`，不在前端重算伤害、护体、预算、反打或胜负；第二次确认后仍提交原有 `play_card` / `end_turn` 权威 intent，不改 WS / HTTP fallback、服务端结算、积分、奖励、赛季验证或匹配规则。
+    - `tests/sanity_pvp_live_ui_runtime_checks.mjs` 固定确认提示必须包含 `首动预算 18`、`保底 1 血`、`后手护盾 B +3`、`反打缓冲 +8`，结束回合还必须包含 `交给 B`。
+    - `tests/browser_pvp_live_audit.mjs` 与 `tests/browser_pvp_live_real_backend_smoke.mjs` 在 fake UI 和真实双账号链路中同时固定上述公开预期 marker；`tests/sanity_pvp_live_ui_contract_checks.cjs` 与 `tests/sanity_release_gate_coverage_checks.cjs` 固定 helper 和 release gate marker，防止确认文案退回空泛提示。
+  - 已验证
+    - 红测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs` 在实现前失败于 opening-window 出牌确认缺少 `首动预算 18`。
+    - 红测：`node tests/sanity_pvp_live_ui_contract_checks.cjs` 在实现前失败于缺少 `formatLiveOpeningActionConfirmMessage(` 合约 marker。
+    - 绿测：`node --check js/scenes/pvp-scene.js`
+    - 绿测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs`
+    - 绿测：`node tests/sanity_pvp_live_ui_contract_checks.cjs`
+    - 绿测：`node tests/sanity_release_gate_coverage_checks.cjs`
+    - 构建：`npm run build:pages`
+    - 全量 Node：`npm run test:node`
+    - 浏览器审计：`node tests/browser_pvp_live_audit.mjs http://127.0.0.1:4173 output/pvp-live-opening-preview-audit`，72/72 findings、0 console error。
+    - 真实后端 smoke：`node tests/browser_pvp_live_real_backend_smoke.mjs http://127.0.0.1:4173 output/pvp-live-opening-preview-real`，44/44 findings、0 console error。
+  - 当前结论
+    - live PVP 开局保护窗口现在不仅防误触，还能在行动前明确告诉玩家“这一下会被哪些公开安全阈值约束、后手有什么反打空间”。这能降低先手玩家对伤害被压低的困惑，也让后手玩家看到自己仍有护体、护盾和反打缓冲，继续朝“真实 PVP、双方体验都高、避免先手秒杀”的方向打磨。
+
 - 2026-06-20: V10-S9N live PVP opening action confirmation
   - 本轮完成
     - `js/scenes/pvp-scene.js` 新增 `liveOpeningActionConfirm` 本地确认态，专门保护 live PVP `opening_window` 内的 `play_card` 与 `end_turn`：第一次点击只显示确认提示并高亮对应卡牌 / 切换结束回合按钮文案，第二次点击才提交既有权威 intent。

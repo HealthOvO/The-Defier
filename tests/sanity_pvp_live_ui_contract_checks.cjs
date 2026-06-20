@@ -99,6 +99,7 @@ const liveBrowserAudit = read('tests/browser_pvp_live_audit.mjs');
   'getLiveTurnTimerUrgency(',
   'isLiveOpeningActionConfirmRequired(',
   'isLiveOpeningActionConfirmArmed(',
+  'formatLiveOpeningActionConfirmMessage(',
   'armLiveOpeningActionConfirm(',
   'clearLiveOpeningActionConfirm(',
   'buildLiveQueueConnectionHealthProbe(',
@@ -391,8 +392,8 @@ assert.ok(!submitLiveCardBody.includes("targetSeat: 'B'"), 'submitLiveCard must 
 [
   'isLiveOpeningActionConfirmRequired',
   'isLiveOpeningActionConfirmArmed',
+  'formatLiveOpeningActionConfirmMessage',
   'armLiveOpeningActionConfirm',
-  '再次点击确认出牌',
   "intentType: 'play_card'",
 ].forEach((needle) => {
   assert.ok(submitLiveCardBody.includes(needle), `submitLiveCard should require opening-window local confirmation before play_card intent: ${needle}`);
@@ -406,8 +407,8 @@ const endLiveTurnBody = methodBody(scene, 'endLiveTurn');
 [
   'isLiveOpeningActionConfirmRequired',
   'isLiveOpeningActionConfirmArmed',
+  'formatLiveOpeningActionConfirmMessage',
   'armLiveOpeningActionConfirm',
-  '再次点击确认结束回合',
   "intentType: 'end_turn'",
 ].forEach((needle) => {
   assert.ok(endLiveTurnBody.includes(needle), `endLiveTurn should require opening-window local confirmation before end_turn intent: ${needle}`);

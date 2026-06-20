@@ -1746,6 +1746,10 @@ async function safeElementScreenshot(page, selector, outputPath) {
     openingEndTurnConfirmProbe.phase === 'active'
       && openingEndTurnConfirmProbe.currentSeat === 'A'
       && /再次点击确认结束回合/.test(openingEndTurnConfirmProbe.hint)
+      && /交给\s*B/.test(openingEndTurnConfirmProbe.hint)
+      && /首动预算\s*18/.test(openingEndTurnConfirmProbe.hint)
+      && /后手护盾\s*B\s*\+3/.test(openingEndTurnConfirmProbe.hint)
+      && /反打缓冲\s*\+8/.test(openingEndTurnConfirmProbe.hint)
       && /确认结束/.test(openingEndTurnConfirmProbe.endTurnText)
       && !/end_turn/.test(JSON.stringify(openingEndTurnConfirmProbe.calls)),
     JSON.stringify(openingEndTurnConfirmProbe),
@@ -1778,6 +1782,10 @@ async function safeElementScreenshot(page, selector, outputPath) {
     openingCardConfirmProbe.phase === 'active'
       && openingCardConfirmProbe.currentSeat === 'A'
       && /再次点击确认出牌/.test(openingCardConfirmProbe.hint)
+      && /首动预算\s*18/.test(openingCardConfirmProbe.hint)
+      && /保底\s*1\s*血/.test(openingCardConfirmProbe.hint)
+      && /后手护盾\s*B\s*\+3/.test(openingCardConfirmProbe.hint)
+      && /反打缓冲\s*\+8/.test(openingCardConfirmProbe.hint)
       && /confirming/.test(openingCardConfirmProbe.cardClass)
       && /确认/.test(openingCardConfirmProbe.cardText)
       && !/play_card/.test(JSON.stringify(openingCardConfirmProbe.calls)),

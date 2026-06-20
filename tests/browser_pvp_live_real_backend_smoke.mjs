@@ -872,6 +872,10 @@ async function writeReport() {
         && realOpeningEndTurnConfirmProbe.after?.currentSeat === realOpeningEndTurnConfirmProbe.before?.currentSeat
         && realOpeningEndTurnConfirmProbe.after?.stateVersion === realOpeningEndTurnConfirmProbe.before?.stateVersion
         && /再次点击确认结束回合/.test(realOpeningEndTurnConfirmProbe.hint)
+        && /交给\s*B/.test(realOpeningEndTurnConfirmProbe.hint)
+        && /首动预算\s*18/.test(realOpeningEndTurnConfirmProbe.hint)
+        && /后手护盾\s*B\s*\+3/.test(realOpeningEndTurnConfirmProbe.hint)
+        && /反打缓冲\s*\+8/.test(realOpeningEndTurnConfirmProbe.hint)
         && /确认结束/.test(realOpeningEndTurnConfirmProbe.endTurnText),
       JSON.stringify(realOpeningEndTurnConfirmProbe),
     );
@@ -964,6 +968,10 @@ async function writeReport() {
         && realOpeningCardConfirmProbe.after?.stateVersion === realOpeningCardConfirmProbe.before?.stateVersion
         && realOpeningCardConfirmProbe.after?.opponent?.hp === realOpeningCardConfirmProbe.before?.opponent?.hp
         && /再次点击确认出牌/.test(realOpeningCardConfirmProbe.hint)
+        && /首动预算\s*18/.test(realOpeningCardConfirmProbe.hint)
+        && /保底\s*1\s*血/.test(realOpeningCardConfirmProbe.hint)
+        && /后手护盾\s*B\s*\+3/.test(realOpeningCardConfirmProbe.hint)
+        && /反打缓冲\s*\+8/.test(realOpeningCardConfirmProbe.hint)
         && /confirming/.test(realOpeningCardConfirmProbe.cardClass)
         && /确认/.test(realOpeningCardConfirmProbe.cardText),
       JSON.stringify(realOpeningCardConfirmProbe),

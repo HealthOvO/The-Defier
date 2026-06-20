@@ -3170,6 +3170,45 @@ export const PVPScene = {
   isLiveOpeningActionConfirmRequired(state = null, actionType = '', payload = {}) {
     return !!this.getLiveOpeningActionConfirmContext(state, actionType, payload);
   },
+  formatLiveOpeningActionConfirmMessage(state = null, actionType = '', payload = {}) {
+    const context = this.getLiveOpeningActionConfirmContext(state, actionType, payload);
+    const session = this.getLiveSession();
+    const source = state && typeof state === 'object'
+      ? state
+      : session && typeof session.getState === 'function' ? session.getState() : null;
+    const view = source && source.stateView && typeof source.stateView === 'object' ? source.stateView : null;
+    const opening = this.getLiveOpeningSafeguardReport(view);
+    if (!context || !opening) return '再次点击确认行动；当前仍处于开局保护窗口。';
+    const currentBudget = opening.damageBudget.currentActionBudget;
+    const budgetText = currentBudget === null
+      ? '首动预算等待权威状态'
+      : `首动预算 ${currentBudget}`;
+    const protectedSeats = opening.openingProtection.protectedSeats.length
+      ? opening.openingProtection.protectedSeats.join('/')
+      : '待观察';
+    const protectionText = `开局护体保护 ${protectedSeats} · 保底 ${opening.openingProtection.minimumHp} 血`;
+    const secondSeat = opening.secondSeatBuffer.seatId || opening.secondSeat || '后手';
+    const shieldText = opening.secondSeatBuffer.block > 0
+      ? `后手护盾 ${secondSeat} +${opening.secondSeatBuffer.block}`
+      : '后手护盾未启用';
+    const counterplayText = opening.counterplay.block > 0
+      ? `反打缓冲 +${opening.counterplay.block}`
+      : '反打缓冲待观察';
+    const publicRulesText = `公开预期：${budgetText}，${protectionText}，${shieldText}，${counterplayText}。`;
+    if (String(actionType || '') === 'end_turn') {
+      const nextSeat = view && view.opponent && view.opponent.seatId
+        ? view.opponent.seatId
+        : context.currentSeat === 'A' ? 'B' : 'A';
+      return `再次点击确认结束回合；确认后行动权交给 ${nextSeat}。${publicRulesText}`;
+    }
+    const cardInstanceId = String(payload && payload.cardInstanceId || context.payload && context.payload.cardInstanceId || '');
+    const hand = view && view.self && Array.isArray(view.self.hand) ? view.self.hand : [];
+    const card = hand.find(item => String(item && item.instanceId || '') === cardInstanceId) || null;
+    const cardName = card && (card.name || card.cardId) ? String(card.name || card.cardId) : '当前术式';
+    const targetSeat = String(payload && payload.targetSeat || view && view.opponent && view.opponent.seatId || '');
+    const targetText = targetSeat ? `，目标 ${targetSeat}` : '';
+    return `再次点击确认出牌；${cardName}${targetText}。${publicRulesText}`;
+  },
   isLiveOpeningActionConfirmArmed(state = null, actionType = '', payload = {}) {
     const context = this.getLiveOpeningActionConfirmContext(state, actionType, payload);
     const confirm = this.liveOpeningActionConfirm && typeof this.liveOpeningActionConfirm === 'object'
@@ -3623,7 +3662,7 @@ export const PVPScene = {
       targetSeat
     };
     if (this.isLiveOpeningActionConfirmRequired(state, 'play_card', payload) && !this.isLiveOpeningActionConfirmArmed(state, 'play_card', payload)) {
-      this.armLiveOpeningActionConfirm(state, 'play_card', payload, '再次点击确认出牌；当前仍处于开局保护窗口，首动预算、开局护体和反打缓冲会影响这一拍。');
+      this.armLiveOpeningActionConfirm(state, 'play_card', payload, this.formatLiveOpeningActionConfirmMessage(state, 'play_card', payload));
       this.renderLivePanel();
       return state;
     }
@@ -3666,7 +3705,7 @@ export const PVPScene = {
     const session = this.getLiveSession();
     const state = session && typeof session.getState === 'function' ? session.getState() : null;
     if (this.isLiveOpeningActionConfirmRequired(state, 'end_turn', {}) && !this.isLiveOpeningActionConfirmArmed(state, 'end_turn', {})) {
-      this.armLiveOpeningActionConfirm(state, 'end_turn', {}, '再次点击确认结束回合；当前仍处于开局保护窗口，确认后才会把行动权交给对手。');
+      this.armLiveOpeningActionConfirm(state, 'end_turn', {}, this.formatLiveOpeningActionConfirmMessage(state, 'end_turn', {}));
       this.renderLivePanel();
       return state;
     }

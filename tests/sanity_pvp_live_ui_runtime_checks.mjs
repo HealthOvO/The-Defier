@@ -506,7 +506,30 @@ let openingActionState = {
       status: 'armed',
       currentSeat: 'A',
       viewerSeat: 'A',
-      openingProtection: { active: true },
+      firstSeat: 'A',
+      secondSeat: 'B',
+      damageBudget: {
+        firstSeat: 18,
+        secondSeat: 22,
+        secondAction: 28,
+        currentSeat: 'A',
+        currentActionBudget: 18
+      },
+      openingProtection: {
+        minimumHp: 1,
+        protectedSeats: ['B'],
+        active: true
+      },
+      secondSeatBuffer: {
+        block: 3,
+        seatId: 'B',
+        active: true
+      },
+      counterplay: {
+        block: 8,
+        pendingSeats: ['B'],
+        grantedSeats: []
+      },
       sourceVisibility: 'public_state',
       usesHiddenInformation: false,
       rankedImpact: 'none'
@@ -521,7 +544,7 @@ let openingActionState = {
     opponent: { seatId: 'B' },
     self: {
       seatId: 'A',
-      hand: [{ instanceId: 'A-strike-opening', cardId: 'pvp_strike' }]
+      hand: [{ instanceId: 'A-strike-opening', cardId: 'pvp_strike', name: '试探斩' }]
     }
   }
 };
@@ -553,6 +576,10 @@ PVPScene.getLiveSession = () => ({
 await PVPScene.submitLiveCard('A-strike-opening');
 assert.equal(openingActionIntents.length, 0, 'first opening-window card click should only arm confirmation and must not submit play_card');
 assert.match(PVPScene.liveInlineHint, /再次点击确认出牌/, 'opening-window card confirmation should explain the second click before submitting');
+assert.match(PVPScene.liveInlineHint, /首动预算\s*18/, 'opening-window card confirmation should name the current public first-action budget');
+assert.match(PVPScene.liveInlineHint, /保底\s*1\s*血/, 'opening-window card confirmation should name opening protection minimum HP');
+assert.match(PVPScene.liveInlineHint, /后手护盾\s*B\s*\+3/, 'opening-window card confirmation should name the second-seat public shield');
+assert.match(PVPScene.liveInlineHint, /反打缓冲\s*\+8/, 'opening-window card confirmation should name the counterplay buffer before commit');
 await PVPScene.submitLiveCard('A-strike-opening');
 assert.equal(openingActionIntents.length, 1, 'second opening-window card click should submit exactly one play_card intent');
 assert.equal(openingActionIntents[0].intentType, 'play_card', 'confirmed opening-window card click should keep the authoritative play_card intent');
@@ -575,6 +602,10 @@ PVPScene.liveInlineHint = '';
 await PVPScene.endLiveTurn();
 assert.equal(openingActionIntents.length, 0, 'first opening-window end-turn click should only arm confirmation and must not submit end_turn');
 assert.match(PVPScene.liveInlineHint, /再次点击确认结束回合/, 'opening-window end-turn confirmation should explain the second click before ending the turn');
+assert.match(PVPScene.liveInlineHint, /交给\s*B/, 'opening-window end-turn confirmation should name the next public action seat');
+assert.match(PVPScene.liveInlineHint, /首动预算\s*18/, 'opening-window end-turn confirmation should keep the public budget visible');
+assert.match(PVPScene.liveInlineHint, /后手护盾\s*B\s*\+3/, 'opening-window end-turn confirmation should name the second-seat public shield');
+assert.match(PVPScene.liveInlineHint, /反打缓冲\s*\+8/, 'opening-window end-turn confirmation should name the counterplay buffer');
 openingActionState = {
   ...openingActionState,
   stateView: {
