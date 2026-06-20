@@ -33,6 +33,14 @@ function add(name, pass, detail = '') {
   findings.push({ name, pass, detail });
 }
 
+function cssAttributeValue(value) {
+  return String(value || '').replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+}
+
+function liveCardSelector(cardInstanceId) {
+  return `[data-live-card="${cssAttributeValue(cardInstanceId)}"]`;
+}
+
 function recordConsoleError(text) {
   const message = String(text || '');
   if (/ERR_CONNECTION_(CLOSED|RESET)/.test(message)) return;
@@ -211,6 +219,14 @@ async function getLiveSessionProbe(page) {
   });
 }
 
+async function dismissBlockingModals(page) {
+  await page.evaluate(() => {
+    ['auth-modal', 'save-slots-modal', 'generic-confirm-modal', 'save-conflict-modal'].forEach(id => {
+      document.getElementById(id)?.classList.remove('active');
+    });
+  });
+}
+
 async function waitForLivePhase(page, phase, timeoutMs = 10000) {
   await page.waitForFunction(
     expected => window.PVPScene?.getLiveSnapshot?.()?.phase === expected,
@@ -266,51 +282,13 @@ async function ensureLiveRealtime(page, timeoutMs = 10000) {
 async function assertMobileActionable(page, selector, label) {
   if (!isMobileViewport) return null;
   return await page.evaluate(({ targetSelector, targetLabel }) => {
-    const target = document.querySelector(targetSelector);
-    if (!target) {
+    const targets = Array.from(document.querySelectorAll(targetSelector));
+    if (targets.length === 0) {
       return { ok: false, label: targetLabel, selector: targetSelector, reason: 'missing' };
     }
-    target.scrollIntoView({ block: 'center', inline: 'nearest' });
-    const rect = target.getBoundingClientRect();
-    const x = Math.min(window.innerWidth - 1, Math.max(1, rect.left + rect.width / 2));
-    const y = Math.min(window.innerHeight - 1, Math.max(1, rect.top + rect.height / 2));
-    const hit = document.elementFromPoint(x, y);
-    const ok = !target.disabled
-      && rect.width > 0
-      && rect.height >= 32
-      && rect.left >= 0
-      && rect.right <= window.innerWidth + 2
-      && rect.top >= 0
-      && rect.bottom <= window.innerHeight + 2
-      && (hit === target || target.contains(hit));
-    return {
-      ok,
-      label: targetLabel,
-      selector: targetSelector,
-      disabled: !!target.disabled,
-      rect: {
-        left: Math.round(rect.left),
-        right: Math.round(rect.right),
-        top: Math.round(rect.top),
-        bottom: Math.round(rect.bottom),
-        width: Math.round(rect.width),
-        height: Math.round(rect.height),
-      },
-      viewport: { width: window.innerWidth, height: window.innerHeight },
-      hitTag: hit?.tagName || '',
-      hitText: hit?.textContent?.replace(/\s+/g, ' ').trim().slice(0, 60) || '',
-    };
-  }, { targetSelector: selector, targetLabel: label });
-}
-
-async function clickLiveControl(page, selector, label) {
-  await page.waitForSelector(selector, { timeout: 5000 });
-  if (isMobileViewport) {
-    const actionability = await page.evaluate(({ targetSelector, targetLabel }) => {
-      const target = document.querySelector(targetSelector);
-      if (!target) {
-        return { ok: false, label: targetLabel, selector: targetSelector, reason: 'missing' };
-      }
+    let fallback = null;
+    for (let index = 0; index < targets.length; index += 1) {
+      const target = targets[index];
       target.scrollIntoView({ block: 'center', inline: 'nearest' });
       const rect = target.getBoundingClientRect();
       const x = Math.min(window.innerWidth - 1, Math.max(1, rect.left + rect.width / 2));
@@ -328,6 +306,8 @@ async function clickLiveControl(page, selector, label) {
         ok,
         label: targetLabel,
         selector: targetSelector,
+        candidateIndex: index,
+        candidateCount: targets.length,
         disabled: !!target.disabled,
         rect: {
           left: Math.round(rect.left),
@@ -338,15 +318,79 @@ async function clickLiveControl(page, selector, label) {
           height: Math.round(rect.height),
         },
         viewport: { width: window.innerWidth, height: window.innerHeight },
+        tapPoint: { x: Math.round(x), y: Math.round(y) },
         hitTag: hit?.tagName || '',
         hitText: hit?.textContent?.replace(/\s+/g, ' ').trim().slice(0, 60) || '',
       };
-      if (ok) target.click();
-      return report;
-    }, { targetSelector: selector, targetLabel: label });
+      if (ok) return report;
+      if (!fallback) fallback = report;
+    }
+    return fallback;
+  }, { targetSelector: selector, targetLabel: label });
+}
+
+async function clickLiveControl(page, selector, label) {
+  await page.waitForSelector(selector, { timeout: 5000 });
+  if (isMobileViewport) {
+    const deadline = Date.now() + 5000;
+    let actionability = null;
+    do {
+      actionability = await page.evaluate(({ targetSelector, targetLabel }) => {
+        const targets = Array.from(document.querySelectorAll(targetSelector));
+        if (targets.length === 0) {
+          return { ok: false, label: targetLabel, selector: targetSelector, reason: 'missing' };
+        }
+        let fallback = null;
+        for (let index = 0; index < targets.length; index += 1) {
+          const target = targets[index];
+          target.scrollIntoView({ block: 'center', inline: 'nearest' });
+          const rect = target.getBoundingClientRect();
+          const x = Math.min(window.innerWidth - 1, Math.max(1, rect.left + rect.width / 2));
+          const y = Math.min(window.innerHeight - 1, Math.max(1, rect.top + rect.height / 2));
+          const hit = document.elementFromPoint(x, y);
+          const ok = !target.disabled
+            && rect.width > 0
+            && rect.height >= 32
+            && rect.left >= 0
+            && rect.right <= window.innerWidth + 2
+            && rect.top >= 0
+            && rect.bottom <= window.innerHeight + 2
+            && (hit === target || target.contains(hit));
+          const report = {
+            ok,
+            label: targetLabel,
+            selector: targetSelector,
+            candidateIndex: index,
+            candidateCount: targets.length,
+            disabled: !!target.disabled,
+            rect: {
+              left: Math.round(rect.left),
+              right: Math.round(rect.right),
+              top: Math.round(rect.top),
+              bottom: Math.round(rect.bottom),
+              width: Math.round(rect.width),
+              height: Math.round(rect.height),
+            },
+            viewport: { width: window.innerWidth, height: window.innerHeight },
+            tapPoint: { x: Math.round(x), y: Math.round(y) },
+            hitTag: hit?.tagName || '',
+            hitText: hit?.textContent?.replace(/\s+/g, ' ').trim().slice(0, 60) || '',
+          };
+          if (ok) {
+            return report;
+          }
+          if (!fallback) fallback = report;
+        }
+        return fallback;
+      }, { targetSelector: selector, targetLabel: label });
+      if (actionability.ok) break;
+      await page.waitForTimeout(100);
+    } while (Date.now() < deadline);
     if (!actionability.ok) {
       throw new Error(`mobile live control is not actionable: ${JSON.stringify(actionability)}`);
     }
+    await page.waitForTimeout(80);
+    await page.touchscreen.tap(actionability.tapPoint.x, actionability.tapPoint.y);
     return actionability;
   }
   await page.click(selector, { timeout: 5000, force: true });
@@ -784,9 +828,7 @@ async function writeReport() {
       A: await getLiveSessionProbe(seatA.page),
       B: await getLiveSessionProbe(seatB.page),
     };
-    await seatA.page.evaluate(async () => {
-      await window.PVPScene.readyLiveMatch();
-    });
+    const seatAReadyTouchActionable = await clickLiveControl(seatA.page, '[data-live-action="ready"]', 'seat-a-ready-live');
     try {
       await waitForLiveSnapshot(seatB.page, () => {
         const snapshot = window.PVPScene?.getLiveSnapshot?.();
@@ -807,9 +849,7 @@ async function writeReport() {
       );
       throw error;
     }
-    await seatB.page.evaluate(async () => {
-      await window.PVPScene.readyLiveMatch();
-    });
+    const seatBReadyTouchActionable = await clickLiveControl(seatB.page, '[data-live-action="ready"]', 'seat-b-ready-live');
     const activeA = await waitForLivePhase(seatA.page, 'active');
     const activeB = await waitForLivePhase(seatB.page, 'active');
     add(
@@ -818,7 +858,16 @@ async function writeReport() {
         && activeB.phase === 'active'
         && activeA.currentSeat === 'A'
         && activeB.currentSeat === 'A',
-      JSON.stringify({ activeA, activeB }),
+      JSON.stringify({ activeA, activeB, seatAReadyTouchActionable, seatBReadyTouchActionable }),
+    );
+    add(
+      'real mobile browser setup ready uses touch-tap controls before active phase',
+      !isMobileViewport
+        || (seatAReadyTouchActionable?.ok === true
+          && seatBReadyTouchActionable?.ok === true
+          && activeA.phase === 'active'
+          && activeB.phase === 'active'),
+      JSON.stringify({ seatAReadyTouchActionable, seatBReadyTouchActionable, activeA, activeB }),
     );
     const activeTimerProbe = await seatA.page.evaluate(() => ({
       text: document.querySelector('[data-live-turn-timer]')?.textContent || '',
@@ -948,10 +997,10 @@ async function writeReport() {
       JSON.stringify(activeGuideProbe),
     );
 
-    const realOpeningEndTurnConfirmProbe = await seatA.page.evaluate(async () => {
-      const before = window.PVPScene.getLiveSnapshot();
-      await window.PVPScene.endLiveTurn();
-      await new Promise(resolve => setTimeout(resolve, 300));
+    const realOpeningEndTurnBefore = await getLiveSnapshot(seatA.page);
+    const openingEndTurnTouchActionable = await clickLiveControl(seatA.page, '[data-live-action="end-turn"]', 'seat-a-opening-end-turn-confirm');
+    await seatA.page.waitForTimeout(300);
+    const realOpeningEndTurnConfirmProbe = await seatA.page.evaluate(before => {
       const after = window.PVPScene.getLiveSnapshot();
       return {
         before,
@@ -959,7 +1008,7 @@ async function writeReport() {
         hint: document.querySelector('[data-live-last-error]')?.textContent || '',
         endTurnText: document.querySelector('[data-live-action="end-turn"]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
       };
-    });
+    }, realOpeningEndTurnBefore);
     add(
       'real browser opening-window end turn confirmation blocks authoritative submit until second click',
       realOpeningEndTurnConfirmProbe.before?.phase === 'active'
@@ -972,7 +1021,7 @@ async function writeReport() {
         && /后手护盾\s*B\s*\+3/.test(realOpeningEndTurnConfirmProbe.hint)
         && /反打缓冲\s*\+8/.test(realOpeningEndTurnConfirmProbe.hint)
         && /确认结束/.test(realOpeningEndTurnConfirmProbe.endTurnText),
-      JSON.stringify(realOpeningEndTurnConfirmProbe),
+      JSON.stringify({ realOpeningEndTurnConfirmProbe, openingEndTurnTouchActionable }),
     );
 
     const realSocialSubmitProbe = await seatB.page.evaluate(async () => {
@@ -997,7 +1046,7 @@ async function writeReport() {
       snapshot: window.PVPScene.getLiveSnapshot() || null,
       sessionState: window.PVPScene.getLiveSession().getState(),
     }));
-    await seatA.page.click('[data-live-action="toggle-social-mute"]', { timeout: 5000, force: true });
+    const socialMuteTouchActionable = await clickLiveControl(seatA.page, '[data-live-action="toggle-social-mute"]', 'seat-a-toggle-social-mute');
     await seatA.page.waitForFunction(
       () => /已静音/.test(document.querySelector('[data-live-social-status]')?.textContent || ''),
       null,
@@ -1036,17 +1085,21 @@ async function writeReport() {
         && realSocialMutedProbe.payload?.persistence === 'local_storage'
         && realSocialMutedProbe.textPayload?.rankedImpact === 'none'
         && !/reward|rating|elo|settlement|matchTicket/i.test(JSON.stringify(realSocialMutedProbe)),
-      JSON.stringify({ realSocialSubmitProbe, realSocialUnmutedProbe, realSocialMutedProbe }),
+      JSON.stringify({ realSocialSubmitProbe, realSocialUnmutedProbe, realSocialMutedProbe, socialMuteTouchActionable }),
     );
 
-    const realOpeningCardConfirmProbe = await seatA.page.evaluate(async () => {
+    const openingCardBeforeProbe = await seatA.page.evaluate(() => {
       const before = window.PVPScene.getLiveSnapshot();
       const state = window.PVPScene.getLiveSession().getState();
       const card = state.stateView?.self?.hand?.[0];
       if (!card?.instanceId) throw new Error('seat A has no playable card');
       const preview = before?.actionPreviewReport?.playableCards?.find(item => item.cardInstanceId === card.instanceId) || null;
-      await window.PVPScene.submitLiveCard(card.instanceId);
-      await new Promise(resolve => setTimeout(resolve, 300));
+      return { before, card, preview };
+    });
+    const openingCardSelector = liveCardSelector(openingCardBeforeProbe.card.instanceId);
+    const openingCardConfirmTouchActionable = await clickLiveControl(seatA.page, openingCardSelector, 'seat-a-opening-card-confirm');
+    await seatA.page.waitForTimeout(300);
+    const realOpeningCardConfirmProbe = await seatA.page.evaluate(({ before, card, preview }) => {
       const after = window.PVPScene.getLiveSnapshot();
       return {
         before,
@@ -1057,7 +1110,7 @@ async function writeReport() {
         cardClass: document.querySelector('[data-live-card]')?.className || '',
         cardText: document.querySelector('[data-live-card]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
       };
-    });
+    }, openingCardBeforeProbe);
     const confirmedCardPreview = realOpeningCardConfirmProbe.preview || {};
     const confirmedHint = realOpeningCardConfirmProbe.hint || '';
     add(
@@ -1084,15 +1137,10 @@ async function writeReport() {
         && new RegExp(`${confirmedCardPreview.targetSeat}\\s*预计\\s*${confirmedCardPreview.targetHpAfter}\\s*血`).test(confirmedHint)
         && /confirming/.test(realOpeningCardConfirmProbe.cardClass)
         && /确认/.test(realOpeningCardConfirmProbe.cardText),
-      JSON.stringify(realOpeningCardConfirmProbe),
+      JSON.stringify({ realOpeningCardConfirmProbe, openingCardConfirmTouchActionable }),
     );
 
-    await seatA.page.evaluate(async () => {
-      const state = window.PVPScene.getLiveSession().getState();
-      const card = state.stateView?.self?.hand?.[0];
-      if (!card?.instanceId) throw new Error('seat A has no playable card');
-      await window.PVPScene.submitLiveCard(card.instanceId);
-    });
+    const acceptedCardTouchActionable = await clickLiveControl(seatA.page, openingCardSelector, 'seat-a-opening-card-submit');
     const playA = await waitForLiveSnapshot(seatA.page, expectedVersion => {
       const snapshot = window.PVPScene?.getLiveSnapshot?.();
       return Number(snapshot?.stateVersion || 0) > expectedVersion;
@@ -1106,7 +1154,7 @@ async function writeReport() {
       playA.stateVersion > activeA.stateVersion
         && afterPlayB.self?.hp < activeB.self?.hp
         && afterPlayB.opponent?.handCount >= 0,
-      JSON.stringify({ playA, afterPlayB }),
+      JSON.stringify({ playA, afterPlayB, acceptedCardTouchActionable }),
     );
     const afterPlayReceiptProbe = await seatB.page.evaluate(() => {
       const snapshot = window.PVPScene.getLiveSnapshot();
@@ -1172,19 +1220,18 @@ async function writeReport() {
       JSON.stringify(afterPlayMomentumProbe),
     );
 
-    const endTurnAfterPlayConfirmProbe = await seatA.page.evaluate(async () => {
-      await window.PVPScene.endLiveTurn();
-      await new Promise(resolve => setTimeout(resolve, 300));
+    const endTurnAfterPlayTouchActionable = await clickLiveControl(seatA.page, '[data-live-action="end-turn"]', 'seat-a-end-turn-after-play');
+    await seatA.page.waitForTimeout(300);
+    const endTurnAfterPlayConfirmProbe = await seatA.page.evaluate(() => {
       return {
         snapshot: window.PVPScene.getLiveSnapshot(),
         hint: document.querySelector('[data-live-last-error]')?.textContent || '',
         endTurnText: document.querySelector('[data-live-action="end-turn"]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
       };
     });
+    let endTurnAfterPlaySecondTouchActionable = null;
     if (endTurnAfterPlayConfirmProbe.snapshot?.currentSeat !== 'B') {
-      await seatA.page.evaluate(async () => {
-        await window.PVPScene.endLiveTurn();
-      });
+      endTurnAfterPlaySecondTouchActionable = await clickLiveControl(seatA.page, '[data-live-action="end-turn"]', 'seat-a-end-turn-after-play-submit');
     }
     const afterEndTurnB = await waitForLiveSnapshot(seatB.page, expectedVersion => {
       const snapshot = window.PVPScene?.getLiveSnapshot?.();
@@ -1217,7 +1264,7 @@ async function writeReport() {
         && /B/.test(seatBTimerProbe.text)
         && seatBTimerProbe.payload?.currentSeat === 'B'
         && seatBTimerProbe.payload?.isViewerTurn === true,
-      JSON.stringify({ endTurnAfterPlayConfirmProbe, afterEndTurnB, seatBTimerProbe }),
+      JSON.stringify({ endTurnAfterPlayConfirmProbe, afterEndTurnB, seatBTimerProbe, endTurnAfterPlayTouchActionable, endTurnAfterPlaySecondTouchActionable }),
     );
     add(
       'real browser end turn renders authoritative handoff receipt',
@@ -1252,7 +1299,7 @@ async function writeReport() {
         && !/hand|deck|cardId|instanceId|loadoutSnapshot|reward|rating|elo|opponentHand|opponentDeck/i.test(`${afterEndTurnReceiptProbe.text} ${JSON.stringify(afterEndTurnReceiptProbe.payload || {})}`),
       JSON.stringify(afterEndTurnReceiptProbe),
     );
-    const protectedCounterplayActionProbe = await seatB.page.evaluate(async () => {
+    const protectedCounterplayBeforeProbe = await seatB.page.evaluate(() => {
       const before = window.PVPScene.getLiveSnapshot();
       const sessionState = window.PVPScene.getLiveSession().getState();
       const playable = before?.actionPreviewReport?.playableCards?.[0] || null;
@@ -1261,19 +1308,26 @@ async function writeReport() {
       if (!cardInstanceId) {
         return {
           before,
-          after: before,
           playable,
           fallbackCard,
           error: 'missing_playable_card'
         };
       }
-      await window.PVPScene.submitLiveCard(cardInstanceId);
-      await new Promise(resolve => setTimeout(resolve, 250));
-      const confirming = window.PVPScene.getLiveSnapshot();
-      if (confirming?.stateVersion === before?.stateVersion) {
-        await window.PVPScene.submitLiveCard(cardInstanceId);
-      }
-      await new Promise(resolve => setTimeout(resolve, 500));
+      return { before, playable, fallbackCard, cardInstanceId, error: '' };
+    });
+    if (protectedCounterplayBeforeProbe.error) {
+      throw new Error(`missing protected counterplay card: ${JSON.stringify(protectedCounterplayBeforeProbe)}`);
+    }
+    const protectedCounterplaySelector = liveCardSelector(protectedCounterplayBeforeProbe.cardInstanceId);
+    const protectedCounterplayFirstTouchActionable = await clickLiveControl(seatB.page, protectedCounterplaySelector, 'seat-b-protected-counterplay-card-confirm');
+    await seatB.page.waitForTimeout(250);
+    const protectedCounterplayConfirming = await getLiveSnapshot(seatB.page);
+    let protectedCounterplaySecondTouchActionable = null;
+    if (protectedCounterplayConfirming?.stateVersion === protectedCounterplayBeforeProbe.before?.stateVersion) {
+      protectedCounterplaySecondTouchActionable = await clickLiveControl(seatB.page, protectedCounterplaySelector, 'seat-b-protected-counterplay-card-submit');
+    }
+    await seatB.page.waitForTimeout(500);
+    const protectedCounterplayActionProbe = await seatB.page.evaluate(({ before, playable, fallbackCard, cardInstanceId, confirming }) => {
       const after = window.PVPScene.getLiveSnapshot();
       const receiptEl = document.querySelector('[data-live-action-receipt]');
       return {
@@ -1282,12 +1336,19 @@ async function writeReport() {
         playable,
         fallbackCard,
         cardInstanceId,
+        confirming,
         hint: document.querySelector('[data-live-last-error]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
         receiptText: receiptEl?.textContent?.replace(/\s+/g, ' ').trim() || '',
         receiptType: receiptEl?.getAttribute('data-live-action-receipt-type') || '',
         momentumText: document.querySelector('[data-live-duel-momentum]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
         events: document.querySelector('[data-live-event-log]')?.textContent || '',
       };
+    }, {
+      before: protectedCounterplayBeforeProbe.before,
+      playable: protectedCounterplayBeforeProbe.playable,
+      fallbackCard: protectedCounterplayBeforeProbe.fallbackCard,
+      cardInstanceId: protectedCounterplayBeforeProbe.cardInstanceId,
+      confirming: protectedCounterplayConfirming,
     });
     const afterProtectedCounterplayA = await waitForLiveSnapshot(seatA.page, expectedVersion => {
       const snapshot = window.PVPScene?.getLiveSnapshot?.();
@@ -1310,11 +1371,17 @@ async function writeReport() {
         && afterProtectedCounterplayA.stateVersion === protectedCounterplayActionProbe.after?.stateVersion
         && afterProtectedCounterplayA.currentSeat === protectedCounterplayActionProbe.after?.currentSeat
         && !/hand|deck|cardId|instanceId|loadoutSnapshot|reward|rating|elo|opponentHand|opponentDeck/i.test(`${protectedCounterplayActionProbe.receiptText} ${protectedCounterplayActionProbe.momentumText} ${JSON.stringify(protectedCounterplayActionProbe.after?.actionReceiptReport || {})}`),
-      JSON.stringify({ protectedCounterplayActionProbe, afterProtectedCounterplayA }),
+      JSON.stringify({
+        protectedCounterplayActionProbe,
+        afterProtectedCounterplayA,
+        protectedCounterplayFirstTouchActionable,
+        protectedCounterplaySecondTouchActionable,
+      }),
     );
 
-    const realSurrenderConfirmProbe = await seatB.page.evaluate(async () => {
-      await window.PVPScene.surrenderLiveMatch();
+    const surrenderTouchActionable = await clickLiveControl(seatB.page, '[data-live-action="surrender"]', 'seat-b-surrender-confirm');
+    await seatB.page.waitForTimeout(200);
+    const realSurrenderConfirmProbe = await seatB.page.evaluate(() => {
       return {
         phase: window.PVPScene.getLiveSnapshot()?.phase || '',
         hint: document.querySelector('[data-live-last-error]')?.textContent || '',
@@ -1328,11 +1395,36 @@ async function writeReport() {
         && /再次点击确认认输/.test(realSurrenderConfirmProbe.hint)
         && /确认认输/.test(realSurrenderConfirmProbe.buttonText)
         && !/首败复盘|认输结束|正式积分/.test(realSurrenderConfirmProbe.postReviewText || ''),
-      JSON.stringify(realSurrenderConfirmProbe),
+      JSON.stringify({ realSurrenderConfirmProbe, surrenderTouchActionable }),
     );
-    await seatB.page.evaluate(async () => {
-      await window.PVPScene.surrenderLiveMatch();
-    });
+    add(
+      'real mobile browser protected counterplay battle controls use touch-tap chain',
+      !isMobileViewport
+        || [
+          seatAReadyTouchActionable,
+          seatBReadyTouchActionable,
+          openingEndTurnTouchActionable,
+          openingCardConfirmTouchActionable,
+          acceptedCardTouchActionable,
+          endTurnAfterPlayTouchActionable,
+          protectedCounterplayFirstTouchActionable,
+          protectedCounterplaySecondTouchActionable,
+          surrenderTouchActionable,
+        ].every(item => item?.ok === true),
+      JSON.stringify({
+        seatAReadyTouchActionable,
+        seatBReadyTouchActionable,
+        openingEndTurnTouchActionable,
+        openingCardConfirmTouchActionable,
+        acceptedCardTouchActionable,
+        endTurnAfterPlayTouchActionable,
+        endTurnAfterPlaySecondTouchActionable,
+        protectedCounterplayFirstTouchActionable,
+        protectedCounterplaySecondTouchActionable,
+        surrenderTouchActionable,
+      }),
+    );
+    await clickLiveControl(seatB.page, '[data-live-action="surrender"]', 'seat-b-surrender-submit');
     const finishedB = await waitForLivePhase(seatB.page, 'finished');
     const finishedA = await waitForLivePhase(seatA.page, 'finished');
     const postMatchProbe = await seatB.page.evaluate(() => ({
@@ -1746,6 +1838,7 @@ async function writeReport() {
       document.getElementById('tab-live')?.classList.add('active');
       await window.PVPScene.loadLivePanel();
     });
+    await dismissBlockingModals(seatB.page);
     const restoredPostMatch = await waitForLivePhase(seatB.page, 'finished');
     const reloadPostMatchProbe = await seatB.page.evaluate(() => ({
       phase: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-phase') || '',
@@ -1821,11 +1914,39 @@ async function writeReport() {
       JSON.stringify({ cancelledRematchProbe, seatBCancelRematchActionable }),
     );
 
-    await clickLiveControl(seatB.page, '[data-live-post-review-action="friendly_rematch"]', 'seat-b-friendly-rematch-after-cancel');
-    await seatB.page.waitForFunction(() => {
-      const snapshot = window.PVPScene?.getLiveSnapshot?.();
-      return snapshot?.phase === 'waiting_rematch';
-    }, null, { timeout: 5000 });
+    await dismissBlockingModals(seatB.page);
+    const seatBRematchAfterCancelActionable = await clickLiveControl(seatB.page, '[data-live-post-review-action="friendly_rematch"]', 'seat-b-friendly-rematch-after-cancel');
+    await seatB.page.waitForTimeout(500);
+    const rematchRetryProbe = await seatB.page.evaluate(() => {
+      const sessionState = window.PVPScene?.getLiveSession?.()?.getState?.() || null;
+      const snapshot = window.PVPScene?.getLiveSnapshot?.() || null;
+      const series = document.querySelector('[data-live-friendly-series]');
+      return {
+        phase: snapshot?.phase || '',
+        sessionPhase: sessionState?.phase || '',
+        hint: document.querySelector('[data-live-last-error]')?.textContent || '',
+        rootPhase: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-phase') || '',
+        status: series?.getAttribute('data-live-friendly-series-status') || '',
+        confirmationCount: series?.getAttribute('data-live-friendly-series-confirmations') || '',
+        snapshot: snapshot?.friendlySeries || null,
+        lastError: sessionState?.lastError || null,
+        actionDisabled: document.querySelector('[data-live-post-review-action="friendly_rematch"]')?.disabled ?? null,
+      };
+    });
+    add(
+      'real browser cancelled friendly rematch can be requested again through UI',
+      rematchRetryProbe.phase === 'waiting_rematch'
+        && rematchRetryProbe.sessionPhase === 'waiting_rematch'
+        && rematchRetryProbe.rootPhase === 'waiting_rematch'
+        && rematchRetryProbe.status === 'waiting_rematch'
+        && rematchRetryProbe.confirmationCount === '1'
+        && /等待本局对手确认/.test(rematchRetryProbe.hint)
+        && (!isMobileViewport || seatBRematchAfterCancelActionable?.ok === true),
+      JSON.stringify({ rematchRetryProbe, seatBRematchAfterCancelActionable }),
+    );
+    if (rematchRetryProbe.phase !== 'waiting_rematch') {
+      throw new Error(`friendly rematch retry did not enter waiting_rematch: ${JSON.stringify(rematchRetryProbe)}`);
+    }
     await clickLiveControl(seatA.page, '[data-live-post-review-action="friendly_rematch"]', 'seat-a-friendly-rematch');
     await seatB.page.waitForFunction(() => {
       const snapshot = window.PVPScene?.getLiveSnapshot?.();

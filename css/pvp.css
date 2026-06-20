@@ -904,7 +904,7 @@
 }
 
 .pvp-live-emote-button {
-    min-height: 30px;
+    min-height: 32px;
     padding: 5px 9px;
     border-radius: 8px;
     border: 1px solid rgba(243, 194, 107, 0.24);
@@ -4206,9 +4206,9 @@ input:checked+.seal-slider .seal-face.on {
     }
 
     .pvp-live-emote-button {
-        min-height: 22px;
-        padding: 3px 6px;
-        font-size: 0.62rem;
+        min-height: 34px;
+        padding: 6px 8px;
+        font-size: 0.66rem;
     }
 
     .pvp-live-social-status {

@@ -1,5 +1,22 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-21: V10-S9T live PVP mobile touch chain hardening
+  - 本轮完成
+    - `tests/browser_pvp_live_real_backend_smoke.mjs` 将 mobile 真实双账号 live PVP 主链从程序级 `readyLiveMatch` / `submitLiveCard` / `endLiveTurn` 调用继续加硬为真实浏览器触摸链：准备、开局出牌二次确认、结束回合交权、B 端护体后反打出牌、投降确认、取消友谊再战后的再次请求，都必须走 `page.touchscreen.tap()` 命中的 UI 控件。
+    - mobile 控件点击 helper 新增可操作性重试：同一 selector 允许选择实际可点击候选，要求控件未禁用、在视口内、尺寸达到触摸门槛，且 `elementFromPoint()` 能命中目标或子节点；命中后记录 `tapPoint / candidateIndex / candidateCount`，防止测试绕过真实遮挡、禁用态或滚动后坐标漂移。
+    - `css/pvp.css` 将 live PVP 表情 / 社交控制按钮的移动端触摸高度提高到 34px，并把桌面最小高度提高到 32px；本轮 mobile smoke 曾真实暴露“静音表情”只有 22px 高，属于双方 PVP 体验里的误触风险。
+    - `tests/sanity_release_gate_coverage_checks.cjs` 固定 `page.touchscreen.tap`、ready/card/end-turn/protected-counterplay/surrender 等触摸链 marker，避免后续 release gate 退回“真实后端但关键战斗动作仍由脚本直调”的弱证明。
+    - `package.json` 新增 `test:browser:pvp-live-mobile-real`，一条命令即可运行 mobile 真实后端 PVP smoke：`BROWSER_PVP_LIVE_REAL_VIEWPORT=mobile BROWSER_PVP_LIVE_REAL_REQUIRE_MOBILE=1 node tests/browser_pvp_live_real_backend_smoke.mjs`。
+  - 已验证
+    - 红测：`node tests/sanity_release_gate_coverage_checks.cjs` 在实现前失败于缺少 `page.touchscreen.tap` 覆盖针，证明 release gate 尚未强制 mobile 真实触摸链。
+    - 红测：mobile 真实后端 smoke 在加硬过程中先后暴露社交按钮 22px 触摸目标、结束回合按钮短暂 disabled、测试态重载后存档弹窗遮挡友谊再战重试等真实交互问题；最终分别通过 CSS touch target、可操作性重试和测试 helper 清理阻挡弹窗收口。
+    - 绿测：`node --check tests/browser_pvp_live_real_backend_smoke.mjs`
+    - 绿测：`node tests/sanity_release_gate_coverage_checks.cjs`
+    - 构建：`npm run build:pages`
+    - mobile 真实后端 smoke：`BROWSER_PVP_LIVE_REAL_VIEWPORT=mobile BROWSER_PVP_LIVE_REAL_REQUIRE_MOBILE=1 node tests/browser_pvp_live_real_backend_smoke.mjs http://127.0.0.1:4173 output/pvp-live-mobile-touch-chain-20260621-green6`，54/54 findings、0 console error。
+  - 当前结论
+    - live PVP 的移动端验收现在不再只是“真实后端 + 程序提交动作”，而是能证明双方在手机视口下通过真实触摸完成准备、出牌、交权、护体后反打、赛后与再战流程。下一步可继续做桌面 / 全量 release 回归，或推进复盘驱动改谱推荐与一键套用，把 PVP 的长期可玩性继续往可上线形态打磨。
+
 - 2026-06-21: V10-S9S live PVP protected counterplay real chain
   - 本轮完成
     - `tests/browser_pvp_live_real_backend_smoke.mjs` 将真实双账号主链从“普通首牌伤害 + 普通交权”升级为“测试态低血量护体触发 + A 交权 + B 获得反打缓冲 + B 真实出牌”。A 的 `pvp_burst` 会把 B 打到护体保底 1 血，B 页面必须看到公开护体回执；A 结束回合后，B 必须看到 `交权回执 / 反打缓冲 +8 / 当前 B / 自己行动窗口`，随后 B 必须提交 `play_card` 并让 A 页面同步到同一 `stateVersion`，不再允许用 `end_turn` 兜底通过。

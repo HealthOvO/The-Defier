@@ -17,6 +17,7 @@
     "test:browser:auth-cloud": "node tests/browser_auth_ui_cloud_smoke.mjs",
     "test:browser:mobile:all": "bash tests/run_browser_mobile_checks.sh",
     "test:browser:release": "bash tests/run_browser_release_checks.sh",
+    "test:browser:pvp-live-mobile-real": "BROWSER_PVP_LIVE_REAL_VIEWPORT=mobile BROWSER_PVP_LIVE_REAL_REQUIRE_MOBILE=1 node tests/browser_pvp_live_real_backend_smoke.mjs",
     "test:release:local": "bash scripts/run-local-release-gate.sh",
     "test:prod:read": "bash scripts/check-production-read-only.sh",
     "test:prod:env": "bash scripts/check-production-runtime-env.sh",
