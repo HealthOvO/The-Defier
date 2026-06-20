@@ -36,6 +36,14 @@ export const PVPService = {
       '天穹榜': 1.2
     }
   },
+  seasonHonorRewardTrack: [
+    { targetGames: 1, rewardId: 's1_genesis_honor_mark_1', rewardType: 'cosmetic_badge', rewardName: '开天见证徽记' },
+    { targetGames: 3, rewardId: 's1_genesis_honor_frame_3', rewardType: 'cosmetic_frame', rewardName: '三战问道边框' },
+    { targetGames: 5, rewardId: 's1_genesis_honor_title_5', rewardType: 'cosmetic_title', rewardName: '称号·真人论道新锋' },
+    { targetGames: 10, rewardId: 's1_genesis_honor_aura_10', rewardType: 'cosmetic_aura', rewardName: '开天十战辉光' },
+    { targetGames: 20, rewardId: 's1_genesis_honor_banner_20', rewardType: 'cosmetic_banner', rewardName: '二十战荣誉旗' },
+    { targetGames: 50, rewardId: 's1_genesis_honor_legend_50', rewardType: 'cosmetic_title', rewardName: '称号·开天不坠' }
+  ],
   live: {
     getClient() {
       if (typeof PVPService === 'undefined' || !PVPService || typeof PVPService.getBackendPvpClient !== 'function') return null;
@@ -974,6 +982,128 @@ export const PVPService = {
       totalUnlocked: rewardIds.length,
       lastUnlockedRewardId,
       boundary: '赛季荣誉收藏只保存外观成就，不授予卡牌、属性、资源、起手、匹配或战斗效果。'
+    };
+  },
+  getSeasonHonorRewardTrack() {
+    const source = Array.isArray(this.seasonHonorRewardTrack) ? this.seasonHonorRewardTrack : [];
+    return source.map((entry) => {
+      const rewardId = String(entry && entry.rewardId || '').trim();
+      const targetGames = Math.max(1, Math.floor(Number(entry && entry.targetGames) || 1));
+      if (!rewardId) return null;
+      return {
+        targetGames,
+        rewardId,
+        rewardType: String(entry.rewardType || 'cosmetic_badge'),
+        rewardName: String(entry.rewardName || '赛季荣誉外观'),
+        rewardImpact: 'cosmetic_only',
+        powerImpact: 'none'
+      };
+    }).filter(Boolean).sort((a, b) => a.targetGames - b.targetGames || a.rewardId.localeCompare(b.rewardId));
+  },
+  normalizeSeasonHonorRewardEntry(entry = null, fallback = null) {
+    const src = entry && typeof entry === 'object' ? entry : {};
+    const fallbackSrc = fallback && typeof fallback === 'object' ? fallback : {};
+    const rewardId = String(src.rewardId || fallbackSrc.rewardId || '').trim();
+    if (!rewardId) return null;
+    return {
+      rewardId,
+      rewardType: String(src.rewardType || fallbackSrc.rewardType || 'cosmetic_badge'),
+      rewardName: String(src.rewardName || fallbackSrc.rewardName || '赛季荣誉外观'),
+      targetGames: Math.max(1, Math.floor(Number(src.targetGames || fallbackSrc.targetGames) || 1)),
+      source: 'live_ranked',
+      rewardImpact: 'cosmetic_only',
+      powerImpact: 'none',
+      unlockedAt: Math.max(0, Math.floor(Number(src.unlockedAt) || 0))
+    };
+  },
+  getSeasonHonorShowcase(options = {}) {
+    const opts = options && typeof options === 'object' ? options : {};
+    const economy = opts.economyState ? this.normalizeEconomyState(opts.economyState) : this.loadEconomyState();
+    const rankSource = opts.rankData && typeof opts.rankData === 'object' ? opts.rankData : this.currentRankData || this.loadLocalRank();
+    const rankWins = Math.max(0, Math.floor(Number(rankSource && rankSource.wins) || 0));
+    const rankLosses = Math.max(0, Math.floor(Number(rankSource && rankSource.losses) || 0));
+    const economyWins = Math.max(0, Math.floor(Number(economy.wins) || 0));
+    const economyLosses = Math.max(0, Math.floor(Number(economy.losses) || 0));
+    const rankPlayed = rankWins + rankLosses;
+    const economyPlayed = Math.max(economyWins + economyLosses, Math.max(0, Math.floor(Number(economy.totalMatches) || 0)));
+    const gamesPlayed = rankPlayed > 0 ? rankPlayed : economyPlayed;
+    const wins = rankPlayed > 0 ? rankWins : economyWins;
+    const losses = rankPlayed > 0 ? rankLosses : economyLosses;
+    const seasonMeta = this.getCurrentSeasonMeta();
+    const currentSeasonId = String(seasonMeta && seasonMeta.id || 's1-genesis');
+    const track = this.getSeasonHonorRewardTrack();
+    const collection = this.normalizeSeasonHonorCollection(economy.seasonHonorCollection);
+    const collectionSeasonId = String(collection.seasonId || currentSeasonId);
+    const collectionSeasonMatched = collectionSeasonId === currentSeasonId;
+    const effectiveCollection = collectionSeasonMatched ? collection : {
+      ...collection,
+      seasonId: currentSeasonId,
+      unlockedRewards: {},
+      totalUnlocked: 0,
+      lastUnlockedRewardId: null
+    };
+    const collectionRewards = Object.keys(effectiveCollection.unlockedRewards || {}).map((rewardId) => {
+      const trackEntry = track.find(entry => entry.rewardId === rewardId) || null;
+      return this.normalizeSeasonHonorRewardEntry(effectiveCollection.unlockedRewards[rewardId], trackEntry);
+    }).filter(Boolean).sort((a, b) => a.targetGames - b.targetGames || a.rewardId.localeCompare(b.rewardId));
+    const lastRewardId = String(effectiveCollection.lastUnlockedRewardId || '').trim();
+    const latestReward = (lastRewardId ? collectionRewards.find(entry => entry.rewardId === lastRewardId) : null) || collectionRewards[collectionRewards.length - 1] || null;
+    const latestTrackReward = latestReward ? track.find(entry => entry.rewardId === latestReward.rewardId) || null : null;
+    const nextTrackReward = track.find(entry => entry.targetGames > gamesPlayed) || null;
+    const completedTrackReward = !nextTrackReward && track.length > 0 ? track[track.length - 1] : null;
+    const nextReward = nextTrackReward ? {
+      ...nextTrackReward,
+      remainingGames: Math.max(0, nextTrackReward.targetGames - gamesPlayed),
+      progressText: `本季 ${gamesPlayed}/${nextTrackReward.targetGames} 场`,
+      label: `下一档 ${nextTrackReward.targetGames} 场：${nextTrackReward.rewardName}`
+    } : completedTrackReward ? {
+      ...completedTrackReward,
+      remainingGames: 0,
+      progressText: `本季 ${gamesPlayed}/${completedTrackReward.targetGames} 场`,
+      label: `已达成最高档：${completedTrackReward.rewardName}`
+    } : null;
+    const currentTarget = latestTrackReward || track.slice().reverse().find(entry => gamesPlayed >= entry.targetGames) || null;
+    const totalUnlocked = collectionRewards.length;
+    const totalRewards = track.length;
+    const visibilityLine = '仅本人洞府只读可见，不进入公开回放或审计回放。';
+    const boundary = '赛季荣誉陈列只展示正式论道外观收藏，不授予卡牌、属性、资源、起手、匹配或战斗效果。';
+    return {
+      reportVersion: 'pvp-live-season-honor-showcase-v1',
+      seasonId: currentSeasonId,
+      seasonName: seasonMeta.name || '开天赛季',
+      source: 'live_ranked',
+      sourceVisibility: 'self_only_ranked_economy',
+      rewardImpact: 'cosmetic_only',
+      powerImpact: 'none',
+      collectionSeasonMatched,
+      gamesPlayed,
+      wins,
+      losses,
+      totalUnlocked,
+      totalRewards,
+      latestReward: latestReward ? {
+        ...latestReward,
+        collectionState: 'owned',
+        label: `${latestReward.targetGames} 场 · ${latestReward.rewardName}`
+      } : null,
+      currentTarget: currentTarget ? {
+        ...currentTarget,
+        reached: gamesPlayed >= currentTarget.targetGames
+      } : null,
+      nextReward,
+      unlockedRewards: collectionRewards.map(entry => ({
+        ...entry,
+        collectionState: 'owned',
+        label: `${entry.targetGames} 场 · ${entry.rewardName}`
+      })),
+      summaryLine: totalUnlocked > 0 ? `本季已入库 ${totalUnlocked}/${totalRewards} 项赛季荣誉` : '本季荣誉陈列尚未点亮，完成正式论道后会自动入库。',
+      progressLine: nextReward && nextReward.remainingGames > 0 ? `本季正式论道 ${gamesPlayed} 场，距 ${nextReward.targetGames} 场荣誉还差 ${nextReward.remainingGames} 场。` : `本季正式论道 ${gamesPlayed} 场，当前荣誉目标已达成。`,
+      recordLine: `胜 ${wins} / 负 ${losses}`,
+      visibilityLine,
+      boundary,
+      ctaLabel: '继续正式论道',
+      ctaAction: 'screen',
+      ctaScreenId: 'pvp-screen'
     };
   },
   loadEconomyState() {

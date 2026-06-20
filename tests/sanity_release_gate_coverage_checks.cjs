@@ -17,6 +17,7 @@ const browserPvpLiveAudit = read('tests/browser_pvp_live_audit.mjs');
 const browserPvpLiveRealSmoke = read('tests/browser_pvp_live_real_backend_smoke.mjs');
 const browserFeatureAudit = read('tests/browser_feature_audit.mjs');
 const browserMetaAudit = read('tests/browser_meta_screen_audit.mjs');
+const browserDongfuAudit = read('tests/browser_dongfu_audit.mjs');
 const browserEventBranchAudit = read('tests/browser_event_branch_audit.mjs');
 const browserRunPathEventAudit = read('tests/browser_run_path_event_audit.mjs');
 const browserMobileAudit = read('tests/browser_mobile_layout_audit.mjs');
@@ -31,6 +32,7 @@ const runVowChecks = read('tests/sanity_run_vow_system_checks.cjs');
 const trialChallengeChecks = read('tests/sanity_trial_challenge_checks.cjs');
 const pvpService = read('js/services/pvp-service.js');
 const pvpServiceChecks = read('tests/sanity_pvp_service_checks.cjs');
+const collectionHub = read('js/core/collection_hub.js');
 const pvpLegacySeasonIsolationChecks = read('tests/sanity_pvp_legacy_season_isolation_checks.cjs');
 const pvpLiveEngineChecks = read('tests/sanity_pvp_live_engine_checks.cjs');
 const pvpLiveBalanceSimulationChecks = read('tests/sanity_pvp_live_balance_simulation_checks.cjs');
@@ -1944,6 +1946,10 @@ assert.ok(
   "settlementSource: 'server_authoritative'",
   "settlementSource: 'bmob_online'",
   "settlementSource: 'rejected'",
+  'seasonHonorRewardTrack',
+  'getSeasonHonorShowcase(options = {})',
+  'pvp-live-season-honor-showcase-v1',
+  'self_only_ranked_economy',
 ].forEach((needle) => {
   assert.ok(
     pvpService.includes(needle),
@@ -1958,10 +1964,51 @@ assert.ok(
   "duplicateSettle.settlementSource === 'rejected'",
   "staleReport.settlementSource === 'rejected'",
   "mismatchReport.settlementSource === 'rejected'",
+  "honorShowcase.reportVersion === 'pvp-live-season-honor-showcase-v1'",
+  "honorShowcase.rewardImpact === 'cosmetic_only' && honorShowcase.powerImpact === 'none'",
+  "honorShowcase.sourceVisibility === 'self_only_ranked_economy'",
+  'archivedHonorShowcase.totalUnlocked === 0',
+  'honorShowcase.ownedItems === undefined',
 ].forEach((needle) => {
   assert.ok(
     pvpServiceChecks.includes(needle),
     `PVP service sanity should pin settlement receipt marker: ${needle}`,
+  );
+});
+
+[
+  'seasonHonorShowcase',
+  'data-season-honor-showcase="true"',
+  'data-season-honor-showcase-report="pvp-live-season-honor-showcase-v1"',
+  'data-season-honor-showcase-impact="cosmetic_only"',
+  'data-season-honor-showcase-power="none"',
+  'data-season-honor-showcase-visibility="self_only_ranked_economy"',
+  'data-season-honor-showcase-chip="unlocked"',
+  'data-season-honor-showcase-card="true"',
+  'data-season-honor-showcase-cta="true"',
+  '仅本人洞府只读可见，不进入公开回放或审计回放',
+].forEach((needle) => {
+  assert.ok(
+    collectionHub.includes(needle),
+    `collection hub should pin persistent season honor showcase marker: ${needle}`,
+  );
+});
+
+[
+  'data-season-honor-showcase="true"',
+  "honorSummary?.dataset.seasonHonorShowcaseReport === 'pvp-live-season-honor-showcase-v1'",
+  "honorSummary?.dataset.seasonHonorShowcaseImpact === 'cosmetic_only'",
+  "honorSummary?.dataset.seasonHonorShowcasePower === 'none'",
+  "honorSummary?.dataset.seasonHonorShowcaseVisibility === 'self_only_ranked_economy'",
+  "honorCard?.dataset.seasonHonorShowcaseVisibility === 'self_only_ranked_economy'",
+  'honorFitsViewport',
+  'honorRect.bottom <= window.innerHeight + 2',
+  '仅本人洞府只读可见，不进入公开回放或审计回放',
+  '不授予卡牌、属性、资源、起手、匹配或战斗效果',
+].forEach((needle) => {
+  assert.ok(
+    browserDongfuAudit.includes(needle),
+    `dongfu browser audit should pin persistent season honor showcase marker: ${needle}`,
   );
 });
 

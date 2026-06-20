@@ -1,5 +1,32 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-20: V10-S9C live PVP persistent season honor showcase
+  - 本轮完成
+    - `js/services/pvp-service.js` 新增 `seasonHonorRewardTrack`、`getSeasonHonorRewardTrack()`、`normalizeSeasonHonorRewardEntry()` 与 `getSeasonHonorShowcase()`，把首场 / 3 / 5 / 10 / 20 / 50 场赛季荣誉整理成只读陈列模型。
+    - `getSeasonHonorShowcase()` 输出固定 `pvp-live-season-honor-showcase-v1`，包含本季场次、胜负、已入库数量、最近解锁、下一档目标、剩余正式场次、当前赛季隔离、`self_only_ranked_economy` 可见性和非强度边界；不输出 `ownedItems`、`equippedTitleId` 或 `equippedSkinId`，避免误扩成装备系统。
+    - `js/core/collection_hub.js` 在洞府总览接入 `seasonHonorShowcase`，新增 `data-season-honor-showcase` 概要、统计 chip、长期陈列卡和“继续正式论道”入口；陈列卡明确仅本人洞府只读可见，不进入公开回放或审计回放，RewardView 不承担 PVP 常驻归档职责。
+    - `tests/browser_dongfu_audit.mjs` 新增洞府赛季荣誉探针，检查陈列卡、CTA、`cosmetic_only / power:none / self_only_ranked_economy` 标记、非强度边界文案和滚动后 viewport 上下边界。
+    - `tests/sanity_pvp_service_checks.cjs` 与 `tests/sanity_release_gate_coverage_checks.cjs` 固定服务合同、旧赛季 collection 隔离、UI 标记和浏览器审计 marker。
+  - 已验证
+    - 红测：`node tests/sanity_pvp_service_checks.cjs` 在实现前失败于 `PVPService.getSeasonHonorShowcase is not a function`。
+    - 红测：`node tests/sanity_release_gate_coverage_checks.cjs` 在 UI 接入前失败于 `collection hub should pin persistent season honor showcase marker: seasonHonorShowcase`。
+    - 绿测：`node tests/sanity_pvp_service_checks.cjs`
+    - 绿测：`node tests/sanity_hub_controller_smoke.cjs`
+    - 绿测：`node tests/sanity_release_gate_coverage_checks.cjs`
+    - 绿测：`node tests/sanity_intro_progress_sync_checks.cjs`
+    - 绿测：`node tests/sanity_pvp_live_route_checks.cjs`
+    - 绿测：`node tests/sanity_pvp_live_replay_checks.cjs`
+    - 浏览器审计：`node tests/browser_dongfu_audit.mjs http://127.0.0.1:4173 output/pvp-season-honor-dongfu-audit`
+    - 构建：`npm run build:pages`
+    - 完整门禁：`npm run test:node`
+    - 空白检查：`git diff --check`
+    - 语法检查：`node --check js/services/pvp-service.js`
+    - 语法检查：`node --check js/core/collection_hub.js`
+    - 语法检查：`node --check tests/browser_dongfu_audit.mjs`
+    - 语法检查：`node --check tests/sanity_release_gate_coverage_checks.cjs`
+  - 当前结论
+    - live ranked 的赛季荣誉现在不只在赛后即时点亮，也能在洞府长期回看“已入库 / 下一档 / 还差几场”，给正式 PVP 增加可持续目标；该切片仍只做非强度陈列，不提供战力、装备、匹配或起手收益，也不是生产部署完成。
+
 - 2026-06-20: V10-S9B live PVP foreground resume catch-up
   - 本轮完成
     - `js/services/pvp-live-session.js` 新增 `resumeRealtime()`：前台恢复时会保留 pending `join_match` 的最高 `lastSeenRevision`，立刻重放 join，并在已有连接或重连打开后补 realtime heartbeat。
