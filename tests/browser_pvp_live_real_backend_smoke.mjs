@@ -976,6 +976,14 @@ async function writeReport() {
           && activeB.phase === 'active'),
       JSON.stringify({ seatAReadyTouchActionable, seatBReadyTouchActionable, activeA, activeB }),
     );
+    await waitForLiveSnapshot(firstSeatClient.page, expectedSeat => {
+      const snapshot = window.PVPScene?.getLiveSnapshot?.();
+      const text = document.querySelector('[data-live-turn-timer]')?.textContent || '';
+      return snapshot?.turnTimer?.phase === 'active'
+        && snapshot?.turnTimer?.currentSeat === expectedSeat
+        && /行动倒计时/.test(text)
+        && new RegExp(expectedSeat).test(text);
+    }, activeFirstSeat);
     const activeTimerProbe = await firstSeatClient.page.evaluate(() => ({
       text: document.querySelector('[data-live-turn-timer]')?.textContent || '',
       payload: window.PVPScene.getLiveSnapshot()?.turnTimer || null,
@@ -1211,18 +1219,22 @@ async function writeReport() {
     const openingCardSelector = liveCardSelector(openingCardBeforeProbe.card.instanceId);
     const openingCardConfirmTouchActionable = await clickLiveControl(firstSeatClient.page, openingCardSelector, `${seatSlug(activeFirstSeat)}-opening-card-confirm`);
     await firstSeatClient.page.waitForTimeout(300);
-    const realOpeningCardConfirmProbe = await firstSeatClient.page.evaluate(({ before, card, preview }) => {
+    const realOpeningCardConfirmProbe = await firstSeatClient.page.evaluate(({ before, card, preview, cardSelector }) => {
       const after = window.PVPScene.getLiveSnapshot();
+      const selectedCard = document.querySelector(cardSelector);
+      const confirmingCard = document.querySelector('.pvp-live-card.confirming');
       return {
         before,
         after,
         card,
         preview,
         hint: document.querySelector('[data-live-last-error]')?.textContent || '',
-        cardClass: document.querySelector('[data-live-card]')?.className || '',
-        cardText: document.querySelector('[data-live-card]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+        selectedCardInstanceId: selectedCard?.getAttribute('data-live-card') || '',
+        confirmingCardInstanceId: confirmingCard?.getAttribute('data-live-card') || '',
+        cardClass: selectedCard?.className || '',
+        cardText: selectedCard?.textContent?.replace(/\s+/g, ' ').trim() || '',
       };
-    }, openingCardBeforeProbe);
+    }, { ...openingCardBeforeProbe, cardSelector: openingCardSelector });
     const confirmedCardPreview = realOpeningCardConfirmProbe.preview || {};
     const confirmedHint = realOpeningCardConfirmProbe.hint || '';
     add(
@@ -1247,6 +1259,8 @@ async function writeReport() {
         && new RegExp(`破盾\\s*${confirmedCardPreview.blockedDamage}`).test(confirmedHint)
         && new RegExp(`生命伤害\\s*${confirmedCardPreview.hpDamage}`).test(confirmedHint)
         && new RegExp(`${confirmedCardPreview.targetSeat}\\s*预计\\s*${confirmedCardPreview.targetHpAfter}\\s*血`).test(confirmedHint)
+        && realOpeningCardConfirmProbe.selectedCardInstanceId === realOpeningCardConfirmProbe.card?.instanceId
+        && realOpeningCardConfirmProbe.confirmingCardInstanceId === realOpeningCardConfirmProbe.card?.instanceId
         && /confirming/.test(realOpeningCardConfirmProbe.cardClass)
         && /确认/.test(realOpeningCardConfirmProbe.cardText),
       JSON.stringify({ activeFirstSeat, activeSecondSeat, realOpeningCardConfirmProbe, openingCardConfirmTouchActionable }),
@@ -1350,6 +1364,14 @@ async function writeReport() {
       const snapshot = window.PVPScene?.getLiveSnapshot?.();
       return snapshot?.currentSeat === expectedSeat && Number(snapshot?.stateVersion || 0) > Number(expectedVersion || 0);
     }, { expectedSeat: activeSecondSeat, expectedVersion: afterPlaySecond.stateVersion || activeSecondSnapshot.stateVersion });
+    await waitForLiveSnapshot(secondSeatClient.page, expectedSeat => {
+      const snapshot = window.PVPScene?.getLiveSnapshot?.();
+      const text = document.querySelector('[data-live-turn-timer]')?.textContent || '';
+      return snapshot?.turnTimer?.phase === 'active'
+        && snapshot?.turnTimer?.currentSeat === expectedSeat
+        && /行动倒计时/.test(text)
+        && new RegExp(expectedSeat).test(text);
+    }, activeSecondSeat);
     const secondSeatTimerProbe = await secondSeatClient.page.evaluate(() => ({
       text: document.querySelector('[data-live-turn-timer]')?.textContent || '',
       payload: window.PVPScene.getLiveSnapshot()?.turnTimer || null,

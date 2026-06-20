@@ -308,7 +308,10 @@ async function safeElementScreenshot(page, selector, outputPath) {
     const makeConnectionReport = (mode = window.__livePvpAuditConnectionMode || 'online') => {
       const rawMode = String(mode || 'online');
       const viewerStatus = rawMode === 'viewer_grace' ? 'grace' : rawMode === 'viewer_disconnected' ? 'disconnected' : 'online';
-      const status = ['online', 'grace', 'disconnected'].includes(rawMode) ? rawMode : 'online';
+      const opponentDisconnectedModes = ['active_opponent_disconnected_non_turn', 'active_opponent_disconnected_current_turn'];
+      const status = opponentDisconnectedModes.includes(rawMode)
+        ? 'disconnected'
+        : ['online', 'grace', 'disconnected'].includes(rawMode) ? rawMode : 'online';
       const lastHeartbeatAt = status === 'online' ? Date.now() : Date.now() - 16000;
       const viewerLastHeartbeatAt = viewerStatus === 'online' ? Date.now() : Date.now() - 16000;
       const remainingGraceMs = status === 'grace' ? 18000 : 0;
@@ -950,7 +953,12 @@ async function safeElementScreenshot(page, selector, outputPath) {
       },
       getMatch: async (matchId) => {
         push({ method: 'getMatch', matchId });
-        const stateView = window.__livePvpAuditOpponentEmote
+        const connectionMode = String(window.__livePvpAuditConnectionMode || '');
+        const stateView = connectionMode === 'active_opponent_disconnected_non_turn'
+          ? makeStateView(6, 'A', 'active')
+          : connectionMode === 'active_opponent_disconnected_current_turn'
+            ? makeStateView(7, 'B', 'active')
+        : window.__livePvpAuditOpponentEmote
           ? {
               ...makeStateView(4, 'B', 'active'),
               recentEvents: [
@@ -1505,6 +1513,9 @@ async function safeElementScreenshot(page, selector, outputPath) {
   await page.waitForTimeout(200);
   const localDisconnectedProbe = await page.evaluate(() => ({
     connectionStatus: document.querySelector('[data-live-connection-status]')?.textContent || '',
+    tempoAction: document.querySelector('[data-live-connection-tempo] [data-live-tempo-action="refresh-match"]')?.textContent?.trim() || '',
+    tempoDuplicateGlobalRefreshCount: document.querySelectorAll('[data-live-connection-tempo] [data-live-action="refresh-match"]').length,
+    globalRefreshActionCount: document.querySelectorAll('[data-live-action="refresh-match"]').length,
     payload: JSON.parse(window.render_game_to_text()).pvp?.live || null,
   }));
   add(
@@ -1513,11 +1524,123 @@ async function safeElementScreenshot(page, selector, outputPath) {
       && /刷新同步权威结果|同步权威结果/.test(localDisconnectedProbe.connectionStatus)
       && /仍在可恢复窗口会自动重连/.test(localDisconnectedProbe.connectionStatus)
       && /权威|超时结算|connection_timeout/.test(localDisconnectedProbe.connectionStatus)
+      && /刷新权威状态/.test(localDisconnectedProbe.tempoAction)
+      && localDisconnectedProbe.tempoDuplicateGlobalRefreshCount === 0
+      && localDisconnectedProbe.globalRefreshActionCount === 1
       && localDisconnectedProbe.payload?.connectionReport?.viewer?.status === 'disconnected',
     JSON.stringify(localDisconnectedProbe),
   );
+  const activeNonTurnDisconnectProbe = await page.evaluate(() => {
+    const view = {
+      status: 'active',
+      currentSeat: 'A',
+      connectionReport: {
+        reportVersion: 'pvp-live-connection-v1',
+        connectionHealth: 'opponent_disconnected',
+        viewerSeat: 'A',
+        opponentSeat: 'B',
+        heartbeatIntervalMs: 5000,
+        heartbeatStaleMs: 15000,
+        graceMs: 30000,
+        viewer: { seatId: 'A', status: 'online', isViewer: true, remainingGraceMs: 0 },
+        opponent: { seatId: 'B', status: 'disconnected', isViewer: false, remainingGraceMs: 0 },
+      },
+    };
+    const scene = window.PVPScene;
+    const tempo = scene.getLiveConnectionTempo(view, { phase: 'active' });
+    const el = document.querySelector('[data-live-connection-tempo]');
+    if (el) {
+      el.hidden = false;
+      el.setAttribute('data-live-connection-tempo-state', tempo?.tempoState || '');
+      el.setAttribute('data-live-connection-tempo-actor', tempo?.affectedSeat || '');
+      el.setAttribute('data-live-connection-tempo-severity', tempo?.severity || '');
+      el.innerHTML = scene.renderLiveConnectionTempo(view, { phase: 'active' });
+    }
+    return {
+      phase: view.status,
+      currentSeat: view.currentSeat,
+      connectionStatus: scene.formatLiveConnectionStatus(view),
+      connectionTempo: el?.textContent?.replace(/\s+/g, ' ').trim() || '',
+      connectionTempoState: el?.getAttribute('data-live-connection-tempo-state') || '',
+      connectionTempoActor: el?.getAttribute('data-live-connection-tempo-actor') || '',
+      connectionTempoCta: el?.querySelector('[data-live-action="refresh-match"]')?.textContent?.trim() || '',
+      payload: {
+        connectionTempoReport: tempo,
+        connectionReport: view.connectionReport,
+      },
+    };
+  });
+  add(
+    'live UI explains active non-turn opponent disconnect without pre-announcing timeout settlement',
+    activeNonTurnDisconnectProbe.phase === 'active'
+      && activeNonTurnDisconnectProbe.currentSeat === 'A'
+      && /对方断线/.test(activeNonTurnDisconnectProbe.connectionStatus)
+      && /对局继续|当前行动仍可提交|轮到对手/.test(activeNonTurnDisconnectProbe.connectionStatus)
+      && !/等待权威超时结算/.test(activeNonTurnDisconnectProbe.connectionStatus)
+      && /对局继续|当前行动仍可提交|轮到对手/.test(activeNonTurnDisconnectProbe.connectionTempo)
+      && activeNonTurnDisconnectProbe.connectionTempoState === 'opponent_non_turn_disconnected'
+      && activeNonTurnDisconnectProbe.connectionTempoActor === 'B'
+      && !activeNonTurnDisconnectProbe.connectionTempoCta
+      && activeNonTurnDisconnectProbe.payload?.connectionTempoReport?.reportVersion === 'pvp-live-connection-tempo-v1'
+      && activeNonTurnDisconnectProbe.payload?.connectionTempoReport?.tempoState === 'opponent_non_turn_disconnected'
+      && activeNonTurnDisconnectProbe.payload?.connectionTempoReport?.affectedSeat === 'B'
+      && activeNonTurnDisconnectProbe.payload?.connectionTempoReport?.usesHiddenInformation === false
+      && activeNonTurnDisconnectProbe.payload?.connectionReport?.opponent?.status === 'disconnected',
+    JSON.stringify(activeNonTurnDisconnectProbe),
+  );
+  const activeCurrentTurnDisconnectProbe = await page.evaluate(() => {
+    const view = {
+      status: 'active',
+      currentSeat: 'B',
+      connectionReport: {
+        reportVersion: 'pvp-live-connection-v1',
+        connectionHealth: 'opponent_disconnected',
+        viewerSeat: 'A',
+        opponentSeat: 'B',
+        heartbeatIntervalMs: 5000,
+        heartbeatStaleMs: 15000,
+        graceMs: 30000,
+        viewer: { seatId: 'A', status: 'online', isViewer: true, remainingGraceMs: 0 },
+        opponent: { seatId: 'B', status: 'disconnected', isViewer: false, remainingGraceMs: 0 },
+      },
+    };
+    const scene = window.PVPScene;
+    const tempo = scene.getLiveConnectionTempo(view, { phase: 'active' });
+    const el = document.querySelector('[data-live-connection-tempo]');
+    if (el) {
+      el.hidden = false;
+      el.setAttribute('data-live-connection-tempo-state', tempo?.tempoState || '');
+      el.setAttribute('data-live-connection-tempo-actor', tempo?.affectedSeat || '');
+      el.setAttribute('data-live-connection-tempo-severity', tempo?.severity || '');
+      el.innerHTML = scene.renderLiveConnectionTempo(view, { phase: 'active' });
+    }
+    return {
+      phase: view.status,
+      currentSeat: view.currentSeat,
+      connectionStatus: scene.formatLiveConnectionStatus(view),
+      connectionTempo: el?.textContent?.replace(/\s+/g, ' ').trim() || '',
+      connectionTempoState: el?.getAttribute('data-live-connection-tempo-state') || '',
+      payload: {
+        connectionTempoReport: tempo,
+        connectionReport: view.connectionReport,
+      },
+    };
+  });
+  add(
+    'live UI explains active current-turn opponent disconnect as authoritative timeout pending',
+    activeCurrentTurnDisconnectProbe.phase === 'active'
+      && activeCurrentTurnDisconnectProbe.currentSeat === 'B'
+      && /对方断线/.test(activeCurrentTurnDisconnectProbe.connectionStatus)
+      && /当前行动|connection_timeout|超时结算/.test(activeCurrentTurnDisconnectProbe.connectionStatus)
+      && /当前行动|connection_timeout|超时结算/.test(activeCurrentTurnDisconnectProbe.connectionTempo)
+      && activeCurrentTurnDisconnectProbe.connectionTempoState === 'opponent_action_timeout_pending'
+      && activeCurrentTurnDisconnectProbe.payload?.connectionTempoReport?.tempoState === 'opponent_action_timeout_pending'
+      && activeCurrentTurnDisconnectProbe.payload?.connectionTempoReport?.affectedSeat === 'B',
+    JSON.stringify(activeCurrentTurnDisconnectProbe),
+  );
   await page.evaluate(() => {
     window.__livePvpAuditConnectionMode = 'online';
+    window.PVPScene.renderLivePanel();
   });
   const foregroundResumeProbe = await page.evaluate(async () => {
     const delay = (ms = 0) => new Promise(resolve => window.setTimeout(resolve, ms));

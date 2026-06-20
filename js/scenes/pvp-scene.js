@@ -803,9 +803,13 @@ export const PVPScene = {
       opponent: normalizeSeat(report.opponent)
     };
   },
-  formatLiveConnectionStatus(view) {
+  getLiveConnectionTempo(view, sourceState = null) {
     const report = this.getLiveConnectionReport(view);
-    if (!report || !report.viewer || !report.opponent) return '连接：等待心跳';
+    if (!report || !report.viewer || !report.opponent) return null;
+    const phase = String(view && view.status || sourceState && sourceState.phase || '').trim();
+    const currentSeat = String(view && view.currentSeat || '').trim();
+    const viewerSeat = String(report.viewerSeat || report.viewer.seatId || '').trim();
+    const opponentSeat = String(report.opponentSeat || report.opponent.seatId || '').trim();
     const labels = {
       online: '在线',
       grace: '重连宽限',
@@ -813,21 +817,126 @@ export const PVPScene = {
     };
     const viewerLabel = labels[report.viewer.status] || report.viewer.status;
     const opponentLabel = labels[report.opponent.status] || report.opponent.status;
+    const viewerGraceSec = Math.ceil((report.viewer.remainingGraceMs || 0) / 1000);
     const opponentGraceSec = Math.ceil((report.opponent.remainingGraceMs || 0) / 1000);
+    const makeTempo = (tempoState, affectedSeat, severity, statusLine, detailLine, action = null) => ({
+      reportVersion: 'pvp-live-connection-tempo-v1',
+      sourceVisibility: 'public_connection_report',
+      usesHiddenInformation: false,
+      rankedImpact: 'none',
+      tempoState,
+      severity,
+      phase: phase || 'unknown',
+      currentSeat,
+      viewerSeat,
+      opponentSeat,
+      affectedSeat: String(affectedSeat || ''),
+      statusLine,
+      detailLine,
+      action
+    });
     if (report.viewer.status === 'grace') {
-      const viewerGraceSec = Math.ceil((report.viewer.remainingGraceMs || 0) / 1000);
-      return `连接：我方重连宽限 ${viewerGraceSec}s · 切回页面将自动恢复权威连接 · 对方${opponentLabel}`;
+      return makeTempo(
+        'viewer_reconnect_grace',
+        viewerSeat,
+        'warning',
+        `连接：我方重连宽限 ${viewerGraceSec}s · 切回页面将自动恢复权威连接 · 对方${opponentLabel}`,
+        '本地画面可能落后，恢复后会同步服务端权威状态；不要用旧画面判断胜负。',
+        { id: 'refresh_match', label: '刷新权威状态' }
+      );
     }
     if (report.viewer.status === 'disconnected') {
-      return `连接：我方断线 · 刷新同步权威结果；若仍在可恢复窗口会自动重连，否则按 connection_timeout 结算 · 对方${opponentLabel}`;
+      return makeTempo(
+        'viewer_refresh_required',
+        viewerSeat,
+        'danger',
+        `连接：我方断线 · 刷新同步权威结果；若仍在可恢复窗口会自动重连，否则按 connection_timeout 结算 · 对方${opponentLabel}`,
+        '先刷新权威局面，避免本地旧状态覆盖真实回合。',
+        { id: 'refresh_match', label: '刷新权威状态' }
+      );
     }
     if (report.opponent.status === 'grace') {
-      return `连接：我方${viewerLabel} · 对方重连宽限 ${opponentGraceSec}s · 不会立即判负`;
+      if (phase === 'active' && currentSeat && currentSeat !== opponentSeat) {
+        return makeTempo(
+          'opponent_non_turn_grace',
+          opponentSeat,
+          'info',
+          `连接：我方${viewerLabel} · 对方重连宽限 ${opponentGraceSec}s · 当前行动仍可提交；轮到对手仍未恢复才会处理`,
+          '对局继续：对手不在当前行动窗口，服务端不会提前宣判胜负；本方当前行动仍可提交。'
+        );
+      }
+      if (phase === 'active' && currentSeat === opponentSeat) {
+        return makeTempo(
+          'opponent_action_grace',
+          opponentSeat,
+          'warning',
+          `连接：我方${viewerLabel} · 对方重连宽限 ${opponentGraceSec}s · 对方当前行动，宽限结束才会按 connection_timeout 权威结算`,
+          '胜负仍等服务端终局事件，不由前端提前判定。'
+        );
+      }
+      return makeTempo(
+        'opponent_setup_grace',
+        opponentSeat,
+        'warning',
+        `连接：我方${viewerLabel} · 对方重连宽限 ${opponentGraceSec}s · 不会立即判负`,
+        '准备阶段断线会等待权威判定；若未开战成功，本局不写正式积分。'
+      );
     }
     if (report.opponent.status === 'disconnected') {
-      return `连接：我方${viewerLabel} · 对方断线 · 等待权威超时结算`;
+      if (phase === 'active' && currentSeat && currentSeat !== opponentSeat) {
+        return makeTempo(
+          'opponent_non_turn_disconnected',
+          opponentSeat,
+          'info',
+          `连接：我方${viewerLabel} · 对方断线 · 对局继续，当前行动仍可提交；轮到对手仍未恢复才会由服务端处理`,
+          '对局继续：非当前行动方断线不会立刻触发 connection_timeout；当前行动仍可提交，轮到对手仍未恢复才会处理。'
+        );
+      }
+      if (phase === 'active' && currentSeat === opponentSeat) {
+        return makeTempo(
+          'opponent_action_timeout_pending',
+          opponentSeat,
+          'warning',
+          `连接：我方${viewerLabel} · 对方断线 · 对方当前行动，等待 connection_timeout 权威超时结算`,
+          '只有当前行动方断线超过宽限，服务端才会发布终局；胜负以 match_finished 为准。'
+        );
+      }
+      if (phase === 'setup' || phase === 'matched') {
+        return makeTempo(
+          'opponent_setup_disconnected',
+          opponentSeat,
+          'warning',
+          `连接：我方${viewerLabel} · 对方断线 · 准备阶段等待权威无效局判定`,
+          '若未开战成功，本局不计正式积分，也不会把断线方直接判成正式败局。'
+        );
+      }
+      return makeTempo(
+        'opponent_disconnected',
+        opponentSeat,
+        'warning',
+        `连接：我方${viewerLabel} · 对方断线 · 等待权威同步`,
+        '连接状态只作为公开提示，终局仍以服务端事件为准。'
+      );
     }
-    return `连接：我方${viewerLabel} · 对方${opponentLabel}`;
+    return makeTempo(
+      'stable',
+      '',
+      'normal',
+      `连接：我方${viewerLabel} · 对方${opponentLabel}`,
+      '双方在线，按当前行动窗口继续。'
+    );
+  },
+  formatLiveConnectionStatus(view) {
+    const tempo = this.getLiveConnectionTempo(view);
+    return tempo ? tempo.statusLine : '连接：等待心跳';
+  },
+  renderLiveConnectionTempo(view, state = null) {
+    const tempo = this.getLiveConnectionTempo(view, state);
+    if (!tempo) return '连接节奏：等待权威心跳';
+    const actionMarkup = tempo.action && tempo.action.id === 'refresh_match'
+      ? `<button class="challenge-btn secondary pvp-live-tempo-action" type="button" data-live-tempo-action="refresh-match" onclick="PVPScene.refreshLiveMatch()">${this.escapeHtml(tempo.action.label || '刷新')}</button>`
+      : '';
+    return `<span class="pvp-live-tempo-copy">${this.escapeHtml(tempo.detailLine || tempo.statusLine)}</span>${actionMarkup}`;
   },
   getLiveRealtimeReport(state) {
     const report = state && state.realtimeReport && typeof state.realtimeReport === 'object' ? state.realtimeReport : null;
@@ -2944,6 +3053,7 @@ export const PVPScene = {
       matchQuality: this.getLiveMatchQuality(view),
       turnTimer: this.getLiveTurnTimer(view),
       connectionReport: this.getLiveConnectionReport(view),
+      connectionTempoReport: this.getLiveConnectionTempo(view, state),
       realtimeStatus: String(state.realtimeStatus || 'idle'),
       lastRealtimeSyncAt: Math.max(0, Math.floor(Number(state.lastRealtimeSyncAt) || 0)),
       realtimeReport: this.getLiveRealtimeReport(state),
@@ -3105,6 +3215,15 @@ export const PVPScene = {
       turnTimerEl.setAttribute('data-live-turn-timer-urgency', this.getLiveTurnTimerUrgency(view));
     }
     setText('[data-live-connection-status]', this.formatLiveConnectionStatus(view));
+    const connectionTempoEl = root.querySelector('[data-live-connection-tempo]');
+    if (connectionTempoEl) {
+      const tempo = this.getLiveConnectionTempo(view, state);
+      connectionTempoEl.hidden = !tempo || tempo.tempoState === 'stable';
+      connectionTempoEl.setAttribute('data-live-connection-tempo-state', tempo ? tempo.tempoState : '');
+      connectionTempoEl.setAttribute('data-live-connection-tempo-actor', tempo ? tempo.affectedSeat : '');
+      connectionTempoEl.setAttribute('data-live-connection-tempo-severity', tempo ? tempo.severity : '');
+      connectionTempoEl.innerHTML = this.renderLiveConnectionTempo(view, state);
+    }
     setText('[data-live-realtime-status]', this.formatLiveRealtimeStatus(state));
     const openingSafeguardEl = root.querySelector('[data-live-opening-safeguard]');
     if (openingSafeguardEl) {

@@ -1,5 +1,30 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-21: V10-S9X live PVP connection tempo report
+  - 本轮完成
+    - `js/scenes/pvp-scene.js` 新增 `pvp-live-connection-tempo-v1` 公开连接节奏报告，并接入 `getLiveSnapshot()`、连接状态文案和 live PVP 面板；报告固定 `sourceVisibility=public_connection_report`、`usesHiddenInformation=false`、`rankedImpact=none`，只基于双方公开心跳状态、当前阶段和当前行动席位推导。
+    - `index.html` / `css/pvp.css` 新增 `[data-live-connection-tempo]` 提示条，默认双方在线时隐藏；出现我方断线、我方重连宽限、对手重连宽限或对手断线时展示更具体的行动边界，并在我方需要同步时提供“刷新权威状态”按钮。
+    - 修正 active 阶段对手断线的误导文案：如果对手不是当前行动方，UI 明确写“对局继续，当前行动仍可提交；轮到对手仍未恢复才会由服务端处理”；只有对手正是当前行动方时，才提示等待 `connection_timeout` 权威超时结算。
+    - 连接节奏提示条的“刷新权威状态”按钮使用独立 `data-live-tempo-action="refresh-match"`，不复用主控制区 `data-live-action="refresh-match"`，避免按钮状态更新和浏览器审计选择器出现歧义。
+    - `tests/sanity_pvp_live_ui_runtime_checks.mjs` 用红绿测试固定两条关键分支：非当前行动方断线不能提前说等待超时结算，当前行动方断线必须说明 `connection_timeout` 只由服务端权威处理。
+    - `tests/browser_pvp_live_audit.mjs`、`tests/sanity_pvp_live_ui_contract_checks.cjs`、`tests/sanity_release_gate_coverage_checks.cjs` 补齐 DOM / payload / release marker，防止后续把连接节奏报告、公开来源边界或非当前行动方断线文案删回旧状态。
+    - `tests/browser_pvp_live_real_backend_smoke.mjs` 修复开局出牌二次确认断言只检查第一张手牌的问题：真实后端牌序变化时，脚本现在回读实际点击的那张卡，避免把正确确认态误判成失败。
+  - 已验证
+    - 红测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs` 在实现前失败于非当前行动方断线仍显示“等待权威超时结算”。
+    - 绿测：`node --check js/scenes/pvp-scene.js`
+    - 绿测：`node --check tests/browser_pvp_live_audit.mjs`
+    - 绿测：`node --check tests/browser_pvp_live_real_backend_smoke.mjs`
+    - 绿测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs`
+    - 绿测：`node tests/sanity_pvp_live_ui_contract_checks.cjs`
+    - 绿测：`node tests/sanity_release_gate_coverage_checks.cjs`
+    - 构建：`npm run build:pages`
+    - 浏览器审计：`node tests/browser_pvp_live_audit.mjs http://127.0.0.1:4173 output/pvp-live-connection-tempo-audit-20260621-final2`，84/84 findings、0 console error。
+    - 真实后端 smoke：`node tests/browser_pvp_live_real_backend_smoke.mjs http://127.0.0.1:4173 output/pvp-live-connection-tempo-real-desktop-20260621-final2`，56/56 findings、0 console error。
+    - 移动端真实后端 smoke：`BROWSER_PVP_LIVE_REAL_VIEWPORT=mobile BROWSER_PVP_LIVE_REAL_REQUIRE_MOBILE=1 node tests/browser_pvp_live_real_backend_smoke.mjs http://127.0.0.1:4173 output/pvp-live-connection-tempo-real-mobile-20260621-final`，57/57 findings、0 console error。
+    - 全量 Node 门禁：`npm run test:node`，All node checks passed。
+  - 当前结论
+    - live PVP 的断线提示不再把“对手掉线”粗暴等同于“即将判负”：双方能明确知道当前行动是否还能继续、什么时候才会进入服务端超时处理、我方旧画面何时需要刷新权威状态。这一片继续不改变伤害、生命、抽牌、灵力、起手、匹配、正式积分、奖励或结算，只把弱网场景的可理解性和双方体验补上。
+
 - 2026-06-21: V10-S9W live PVP opener assignment and practice-return loop
   - 本轮完成
     - `server/pvp-live/live-store.js` 在创建真人匹配和好友约战时生成服务端权威先后手分配：用 match / mode / 友谊赛轮次标签和服务端随机种子派生公开种子摘要，决定 `firstSeat / secondSeat`，并明确 `queueOrderBinding=false`、`hostBinding=false`，先手不再默认绑定排队顺序、房主身份或玩家私密标识。
