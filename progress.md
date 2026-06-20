@@ -6,7 +6,8 @@ Original prompt: 进入全自动审查与修复模式，按顺序审查并修复
     - WS 异常 close 后若页面恢复前台，`resumeRealtime()` 会清理原延迟重连 timer，立即创建新连接；新连接打开后先 replay pending join，再发送 heartbeat，避免玩家回到页面后继续等下一次 interval。
     - `js/scenes/pvp-scene.js` 新增一次性 `visibilitychange / pageshow / focus` 监听；hidden 状态不触发同步，同一次前台恢复短窗口去重，随后调用 `sendLiveHeartbeat({ resumeRealtime: true })`。
     - scene 恢复路径仍保留 HTTP heartbeat fallback：当本地 realtime 仍处于 `reconnecting` 时，前台恢复会先推进 WS 追帧，同时立刻走一次权威 heartbeat，不让倒计时、当前行动席或连接状态继续停在旧帧。
-    - `tests/sanity_pvp_live_session_checks.mjs` 固定 session 级恢复合同；`tests/sanity_pvp_live_ui_runtime_checks.mjs` 固定 UI 前台恢复监听、hidden no-op、visibility/focus 去重和 reconnecting heartbeat fallback；`tests/sanity_release_gate_coverage_checks.cjs` 固定防漏 marker。
+    - `tests/browser_pvp_live_audit.mjs` 新增真实页面 probe：先让 UI 停在对手 `grace`，再不点击 refresh，只通过 `visibilitychange -> focus -> pageshow` 恢复前台；断言 hidden 不触发、同一次恢复只调用一次 `resumeRealtime` / `sendLiveHeartbeat` / HTTP heartbeat fallback，WS 重新连接后 replay `join_match` 并发送 realtime heartbeat，最终 realtime 与 UI 连接状态都回到双方 online。
+    - `tests/sanity_pvp_live_session_checks.mjs` 固定 session 级恢复合同；`tests/sanity_pvp_live_ui_runtime_checks.mjs` 固定 UI 前台恢复监听、hidden no-op、visibility/focus 去重和 reconnecting heartbeat fallback；`tests/sanity_release_gate_coverage_checks.cjs` 固定防漏 marker 和 browser audit finding。
   - 已验证
     - 红测：`node tests/sanity_pvp_live_session_checks.mjs` 在实现前失败于 `live session should expose resumeRealtime for hidden-tab recovery`。
     - 红测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs` 在实现前失败于 `live UI foreground resume should bind document visibilitychange`。
@@ -15,6 +16,7 @@ Original prompt: 进入全自动审查与修复模式，按顺序审查并修复
     - 绿测：`node tests/sanity_pvp_live_ui_contract_checks.cjs`
     - 绿测：`node tests/sanity_release_gate_coverage_checks.cjs`
     - 绿测：`node tests/sanity_intro_progress_sync_checks.cjs`
+    - 浏览器审计：`node tests/browser_pvp_live_audit.mjs http://127.0.0.1:4173 output/pvp-live-foreground-resume-audit`，55/55 findings、0 console error。
     - 语法检查：`node --check js/services/pvp-live-session.js`
     - 语法检查：`node --check js/scenes/pvp-scene.js`
     - 全量：`npm run test:node`

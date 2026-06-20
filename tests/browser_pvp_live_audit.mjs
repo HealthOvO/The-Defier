@@ -505,6 +505,10 @@ async function safeElementScreenshot(page, selector, outputPath) {
     };
     window.PVPService.live = {
       connectRealtime: (handlers = {}) => {
+        if (window.__livePvpAuditRecordRealtime) {
+          push({ method: 'connectRealtime' });
+        }
+        window.__livePvpAuditRealtimeHandlers = handlers;
         window.setTimeout(() => {
           handlers.onOpen?.();
           handlers.onMessage?.({
@@ -517,7 +521,12 @@ async function safeElementScreenshot(page, selector, outputPath) {
           });
         }, 0);
         return {
-          send: (payload = {}) => payload.type !== 'intent',
+          send: (payload = {}) => {
+            if (window.__livePvpAuditRecordRealtime) {
+              push({ method: 'realtimeSend', payload });
+            }
+            return payload.type !== 'intent';
+          },
           close: () => true,
         };
       },
@@ -1026,6 +1035,11 @@ async function safeElementScreenshot(page, selector, outputPath) {
       && !/findOpponent|reportMatchResult|GhostEnemy|startPVPBattle|didWin|matchTicket/.test(JSON.stringify(cancelRaceProbe.calls)),
     JSON.stringify(cancelRaceProbe),
   );
+  await page.waitForFunction(
+    () => document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-realtime-state') === 'connected',
+    null,
+    { timeout: 1000 },
+  ).catch(() => {});
   const matchedProbe = await page.evaluate(() => ({
     phase: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-phase') || '',
     matchId: document.querySelector('[data-live-match-id]')?.textContent || '',
@@ -1090,6 +1104,117 @@ async function safeElementScreenshot(page, selector, outputPath) {
       && connectionGraceProbe.payload?.connectionReport?.opponent?.status === 'grace'
       && connectionGraceProbe.payload?.connectionReport?.opponent?.remainingGraceMs > 0,
     JSON.stringify(connectionGraceProbe),
+  );
+  const foregroundResumeProbe = await page.evaluate(async () => {
+    const delay = (ms = 0) => new Promise(resolve => window.setTimeout(resolve, ms));
+    const session = window.PVPScene.getLiveSession();
+    window.__livePvpAuditConnectionMode = 'online';
+    window.PVPScene.activeTab = 'live';
+    window.PVPScene.liveForegroundResumeDebounceMs = 80;
+    if (window.PVPScene.liveForegroundResumeTimer) {
+      window.clearTimeout(window.PVPScene.liveForegroundResumeTimer);
+      window.PVPScene.liveForegroundResumeTimer = null;
+    }
+    window.PVPScene.liveForegroundResumeQueued = false;
+
+    const counters = {
+      resumeRealtime: 0,
+      heartbeat: 0,
+      sendLiveHeartbeat: 0,
+    };
+    const originalResumeRealtime = session.resumeRealtime ? session.resumeRealtime.bind(session) : null;
+    const originalHeartbeat = session.heartbeat ? session.heartbeat.bind(session) : null;
+    const originalSendLiveHeartbeat = window.PVPScene.sendLiveHeartbeat.bind(window.PVPScene);
+    const originalHiddenDescriptor = Object.getOwnPropertyDescriptor(document, 'hidden');
+    let hidden = false;
+
+    session.resumeRealtime = (...args) => {
+      counters.resumeRealtime += 1;
+      return originalResumeRealtime ? originalResumeRealtime(...args) : false;
+    };
+    session.heartbeat = async (...args) => {
+      counters.heartbeat += 1;
+      return originalHeartbeat ? await originalHeartbeat(...args) : null;
+    };
+    window.PVPScene.sendLiveHeartbeat = async (...args) => {
+      counters.sendLiveHeartbeat += 1;
+      return await originalSendLiveHeartbeat(...args);
+    };
+    Object.defineProperty(document, 'hidden', {
+      configurable: true,
+      get: () => hidden,
+    });
+
+    session.connectRealtime?.();
+    session.joinRealtimeMatch?.('pvplm-browser-live');
+    await delay(20);
+    window.__livePvpAuditRealtimeHandlers?.onClose?.();
+    await delay(0);
+    const beforeResumeStatus = session.getState?.()?.realtimeStatus || '';
+    window.__livePvpAuditRecordRealtime = true;
+    const callsBeforeResume = window.__livePvpAuditCalls.length;
+
+    hidden = true;
+    document.dispatchEvent(new Event('visibilitychange'));
+    await delay(0);
+    const hiddenCounters = { ...counters };
+
+    hidden = false;
+    document.dispatchEvent(new Event('visibilitychange'));
+    await delay(0);
+    window.dispatchEvent(new Event('focus'));
+    await delay(0);
+    window.dispatchEvent(new Event('pageshow'));
+    await delay(160);
+
+    const probe = {
+      beforeResumeStatus,
+      hiddenCounters,
+      counters: { ...counters },
+      realtimeState: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-realtime-state') || '',
+      realtimeStatus: document.querySelector('[data-live-realtime-status]')?.textContent || '',
+      connectionStatus: document.querySelector('[data-live-connection-status]')?.textContent || '',
+      payload: JSON.parse(window.render_game_to_text()).pvp?.live || null,
+      calls: window.__livePvpAuditCalls.slice(callsBeforeResume),
+    };
+
+    session.resumeRealtime = originalResumeRealtime;
+    session.heartbeat = originalHeartbeat;
+    window.PVPScene.sendLiveHeartbeat = originalSendLiveHeartbeat;
+    window.__livePvpAuditRecordRealtime = false;
+    if (originalHiddenDescriptor) {
+      Object.defineProperty(document, 'hidden', originalHiddenDescriptor);
+    } else {
+      delete document.hidden;
+    }
+    return probe;
+  });
+  add(
+    'live UI foreground resume catches up reconnecting match without manual refresh',
+    foregroundResumeProbe.beforeResumeStatus === 'reconnecting'
+      && foregroundResumeProbe.hiddenCounters.resumeRealtime === 0
+      && foregroundResumeProbe.hiddenCounters.heartbeat === 0
+      && foregroundResumeProbe.hiddenCounters.sendLiveHeartbeat === 0
+      && foregroundResumeProbe.counters.sendLiveHeartbeat === 1
+      && foregroundResumeProbe.counters.resumeRealtime === 1
+      && foregroundResumeProbe.counters.heartbeat === 1
+      && /连接：我方在线 · 对方在线/.test(foregroundResumeProbe.connectionStatus)
+      && foregroundResumeProbe.realtimeState === 'connected'
+      && /传输：实时通道已连接/.test(foregroundResumeProbe.realtimeStatus)
+      && foregroundResumeProbe.payload?.connectionReport?.opponent?.status === 'online'
+      && foregroundResumeProbe.payload?.realtimeStatus === 'connected'
+      && foregroundResumeProbe.payload?.realtimeReport?.connectionId === 'audit-live-ws-1'
+      && foregroundResumeProbe.calls.some(call => call.method === 'connectRealtime')
+      && foregroundResumeProbe.calls.some(call => call.method === 'realtimeSend'
+        && call.payload?.type === 'join_match'
+        && call.payload?.matchId === 'pvplm-browser-live'
+        && Number.isFinite(Number(call.payload?.lastSeenRevision)))
+      && foregroundResumeProbe.calls.some(call => call.method === 'realtimeSend'
+        && call.payload?.type === 'heartbeat'
+        && call.payload?.matchId === 'pvplm-browser-live'
+        && Number.isFinite(Number(call.payload?.lastSeenRevision)))
+      && foregroundResumeProbe.calls.some(call => call.method === 'heartbeat' && call.matchId === 'pvplm-browser-live'),
+    JSON.stringify(foregroundResumeProbe),
   );
   await page.evaluate(() => {
     window.__livePvpAuditConnectionMode = 'online';
