@@ -1,5 +1,25 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-21: V10-S9R live PVP authoritative handoff receipt
+  - 本轮完成
+    - `js/scenes/pvp-scene.js` 将 `actionReceiptReport.actionType=end_turn` 的 UI 标签从泛化“行动回执”细分为“交权回执”，让结束回合后的权威结果明确表达“谁交权、交给谁、公开抽了几张、是否发放反打缓冲”。
+    - `index.html` / `js/scenes/pvp-scene.js` 在 `[data-live-action-receipt]` 上新增并同步 `data-live-action-receipt-type`、`data-live-action-receipt-acting`、`data-live-action-receipt-next-seat`，配合既有 `source/hidden/seq` 属性，浏览器门禁可直接证明真实 B 端看到的是 `end_turn` 权威交权回执，而不是上一手出牌回执残留。
+    - `tests/sanity_pvp_live_ui_runtime_checks.mjs` 新增 end-turn 回执渲染断言，固定“交权回执 / 行动权交给 B / 抽 3 张 / 反打缓冲 +8”这一有反打缓冲的渲染分支，且不泄露隐藏手牌、牌库、实例 id、评分或奖励。
+    - `tests/browser_pvp_live_audit.mjs` 与 `tests/browser_pvp_live_real_backend_smoke.mjs` 补齐 fake UI 与真实双账号链路：A 结束回合后，B 页面必须看到 `authoritative_public_projection / false / none` 的交权回执，DOM 属性、live snapshot 与 `render_game_to_text()` 的 `actionReceiptReport` 必须一致；真实 smoke 本轮证明的是普通交权和公开抽牌，反打缓冲真实触发链仍由 engine / route 覆盖。
+  - 已验证
+    - 红测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs` 在实现前失败于 end-turn 回执仍显示“行动回执”。
+    - 红测：`node tests/sanity_pvp_live_ui_contract_checks.cjs` 在 DOM 接入前失败于缺少 `data-live-action-receipt-type` marker。
+    - 红测：`node tests/sanity_release_gate_coverage_checks.cjs` 在 browser audit marker 接入前失败于缺少 `data-live-action-receipt-type`。
+    - 绿测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs`
+    - 绿测：`node tests/sanity_pvp_live_ui_contract_checks.cjs`
+    - 绿测：`node tests/sanity_release_gate_coverage_checks.cjs`
+    - 绿测：`node --check js/scenes/pvp-scene.js && node --check tests/browser_pvp_live_audit.mjs && node --check tests/browser_pvp_live_real_backend_smoke.mjs`
+    - 构建：`npm run build:pages`
+    - 浏览器审计：`node tests/browser_pvp_live_audit.mjs http://127.0.0.1:4173 output/pvp-live-handoff-receipt-audit-20260621`，75/75 findings、0 console error。
+    - 真实后端 smoke：`node tests/browser_pvp_live_real_backend_smoke.mjs http://127.0.0.1:4173 output/pvp-live-handoff-receipt-real-20260621`，48/48 findings、0 console error。
+  - 当前结论
+    - live PVP 的行动后解释现在从“出牌结算清楚”继续推进到“结束回合交权也清楚”：B 不只看到倒计时切到自己，还能在真实双端链路里看到服务端权威交权回执和公开抽牌；如该回合触发反打缓冲，回执渲染也会显示对应公开缓冲。这提升了双方连续回合体验，但仍不改变伤害、生命、抽牌、灵力、起手、匹配、正式积分、奖励、赛季验证或结算；复盘驱动的改谱推荐、多实例强一致、生产 smoke 和线上部署仍需后续封板。
+
 - 2026-06-21: V10-S9Q live PVP authoritative action receipt
   - 本轮完成
     - `server/pvp-live/engine/state-view.js` 新增 `actionReceiptReport`，从服务端权威 `state.events` 投影最近一次公开行动结果；卡牌行动会合并预算压低、破盾、生命伤害、开局护体、自身护盾收益，结束回合会合并行动权交接、公开抽牌数量和反打缓冲。

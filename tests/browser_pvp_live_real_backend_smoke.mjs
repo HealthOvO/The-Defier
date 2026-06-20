@@ -1142,6 +1142,22 @@ async function writeReport() {
       text: document.querySelector('[data-live-turn-timer]')?.textContent || '',
       payload: window.PVPScene.getLiveSnapshot()?.turnTimer || null,
     }));
+    const afterEndTurnReceiptProbe = await seatB.page.evaluate(() => {
+      const snapshot = window.PVPScene.getLiveSnapshot();
+      const textPayload = JSON.parse(window.render_game_to_text()).pvp?.live || null;
+      const receiptEl = document.querySelector('[data-live-action-receipt]');
+      return {
+        text: receiptEl?.textContent?.replace(/\s+/g, ' ').trim() || '',
+        typeAttr: receiptEl?.getAttribute('data-live-action-receipt-type') || '',
+        actorAttr: receiptEl?.getAttribute('data-live-action-receipt-acting') || '',
+        nextSeatAttr: receiptEl?.getAttribute('data-live-action-receipt-next-seat') || '',
+        sourceAttr: receiptEl?.getAttribute('data-live-action-receipt-source') || '',
+        hiddenAttr: receiptEl?.getAttribute('data-live-action-receipt-hidden') || '',
+        seqAttr: receiptEl?.getAttribute('data-live-action-receipt-seq') || '',
+        payload: snapshot?.actionReceiptReport || null,
+        textPayload: textPayload?.actionReceiptReport || null,
+      };
+    });
     add(
       'real browser end turn switches authoritative action countdown to opponent',
       afterEndTurnB.currentSeat === 'B'
@@ -1150,6 +1166,35 @@ async function writeReport() {
         && seatBTimerProbe.payload?.currentSeat === 'B'
         && seatBTimerProbe.payload?.isViewerTurn === true,
       JSON.stringify({ endTurnAfterPlayConfirmProbe, afterEndTurnB, seatBTimerProbe }),
+    );
+    add(
+      'real browser end turn renders authoritative handoff receipt',
+      /交权回执/.test(afterEndTurnReceiptProbe.text)
+        && /行动权交给\s*B/.test(afterEndTurnReceiptProbe.text)
+        && /抽\s*\d+\s*张/.test(afterEndTurnReceiptProbe.text)
+        && afterEndTurnReceiptProbe.typeAttr === 'end_turn'
+        && afterEndTurnReceiptProbe.actorAttr === 'A'
+        && afterEndTurnReceiptProbe.nextSeatAttr === 'B'
+        && afterEndTurnReceiptProbe.sourceAttr === 'authoritative_public_projection'
+        && afterEndTurnReceiptProbe.hiddenAttr === 'false'
+        && afterEndTurnReceiptProbe.payload?.reportVersion === 'pvp-live-action-receipt-v1'
+        && afterEndTurnReceiptProbe.payload?.sourceVisibility === 'authoritative_public_projection'
+        && afterEndTurnReceiptProbe.payload?.usesHiddenInformation === false
+        && afterEndTurnReceiptProbe.payload?.rankedImpact === 'none'
+        && afterEndTurnReceiptProbe.payload?.viewerSeat === 'B'
+        && afterEndTurnReceiptProbe.payload?.actingSeat === 'A'
+        && afterEndTurnReceiptProbe.payload?.actionType === 'end_turn'
+        && afterEndTurnReceiptProbe.payload?.nextSeat === 'B'
+        && Number(afterEndTurnReceiptProbe.seqAttr) === afterEndTurnReceiptProbe.payload?.latestSequence
+        && Number.isFinite(afterEndTurnReceiptProbe.payload?.latestSequence)
+        && afterEndTurnReceiptProbe.payload.latestSequence > 0
+        && Number.isFinite(afterEndTurnReceiptProbe.payload?.draw?.count)
+        && afterEndTurnReceiptProbe.textPayload?.reportVersion === 'pvp-live-action-receipt-v1'
+        && afterEndTurnReceiptProbe.textPayload?.actionType === 'end_turn'
+        && afterEndTurnReceiptProbe.textPayload?.latestSequence === afterEndTurnReceiptProbe.payload?.latestSequence
+        && afterEndTurnReceiptProbe.textPayload?.summaryLine === afterEndTurnReceiptProbe.payload?.summaryLine
+        && !/hand|deck|cardId|instanceId|loadoutSnapshot|reward|rating|elo|opponentHand|opponentDeck/i.test(`${afterEndTurnReceiptProbe.text} ${JSON.stringify(afterEndTurnReceiptProbe.payload || {})}`),
+      JSON.stringify(afterEndTurnReceiptProbe),
     );
 
     const realSurrenderConfirmProbe = await seatB.page.evaluate(async () => {

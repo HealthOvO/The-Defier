@@ -169,6 +169,42 @@ assert.match(renderedActionReceipt, /生命伤害 15/, 'live UI action receipt s
 assert.match(renderedActionReceipt, /权威公开投影/, 'live UI action receipt should render accurate projection source');
 assert.doesNotMatch(renderedActionReceipt, /cardInstanceId|sourceCardId|deck|rating|reward/i, 'live UI action receipt rendering must not expose hidden ids or rewards');
 
+const normalizedEndTurnReceipt = PVPScene.getLiveActionReceiptReport({
+  actionReceiptReport: {
+    reportVersion: 'pvp-live-action-receipt-v1',
+    sourceVisibility: 'authoritative_public_projection',
+    usesHiddenInformation: false,
+    rankedImpact: 'none',
+    viewerSeat: 'B',
+    actingSeat: 'A',
+    actionType: 'end_turn',
+    latestSequence: 9,
+    nextSeat: 'B',
+    completedTurns: 1,
+    roundIndex: 1,
+    turnIndex: 2,
+    draw: { seatId: 'B', count: 3, capped: false },
+    counterplay: {
+      granted: true,
+      seatId: 'B',
+      block: 8,
+      totalBlock: 8,
+      minimumHp: 1
+    },
+    summaryLine: 'A 结束回合：行动权交给 B，B 抽 3 张；反打缓冲 +8 给 B。',
+    safeguards: ['public_events', 'counterplay_granted']
+  }
+});
+const renderedEndTurnReceipt = PVPScene.renderLiveActionReceiptReport({ actionReceiptReport: normalizedEndTurnReceipt });
+assert.equal(normalizedEndTurnReceipt.actionType, 'end_turn', 'live UI should preserve end-turn action receipt type');
+assert.equal(normalizedEndTurnReceipt.nextSeat, 'B', 'live UI should preserve public next-seat handoff');
+assert.equal(normalizedEndTurnReceipt.counterplay.block, 8, 'live UI should preserve public counterplay block on handoff receipt');
+assert.match(renderedEndTurnReceipt, /交权回执/, 'live UI should label end-turn receipts as handoff receipts');
+assert.match(renderedEndTurnReceipt, /行动权交给 B/, 'live UI end-turn receipt should render handoff seat');
+assert.match(renderedEndTurnReceipt, /抽 3 张/, 'live UI end-turn receipt should render public draw count');
+assert.match(renderedEndTurnReceipt, /反打缓冲 \+8/, 'live UI end-turn receipt should render public counterplay grant');
+assert.doesNotMatch(renderedEndTurnReceipt, /cardInstanceId|sourceCardId|deck|rating|reward/i, 'live UI end-turn receipt rendering must not expose hidden ids or rewards');
+
 assert.equal(
   PVPScene.getLiveLastSeenEventRevision({
     stateView: { recentEvents: [{ eventType: 'battle_started', sequence: 2 }] },

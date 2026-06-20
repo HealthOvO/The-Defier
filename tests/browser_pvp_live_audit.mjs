@@ -1885,6 +1885,25 @@ async function safeElementScreenshot(page, selector, outputPath) {
     actionReceiptSource: document.querySelector('[data-live-action-receipt]')?.getAttribute('data-live-action-receipt-source') || '',
     actionReceiptHidden: document.querySelector('[data-live-action-receipt]')?.getAttribute('data-live-action-receipt-hidden') || '',
     actionReceiptSeq: document.querySelector('[data-live-action-receipt]')?.getAttribute('data-live-action-receipt-seq') || '',
+    actionReceiptType: document.querySelector('[data-live-action-receipt]')?.getAttribute('data-live-action-receipt-type') || '',
+    actionReceiptActing: document.querySelector('[data-live-action-receipt]')?.getAttribute('data-live-action-receipt-acting') || '',
+    actionReceiptNextSeat: document.querySelector('[data-live-action-receipt]')?.getAttribute('data-live-action-receipt-next-seat') || '',
+    handoffReceipt: window.PVPScene.renderLiveActionReceiptReport({
+      actionReceiptReport: {
+        reportVersion: 'pvp-live-action-receipt-v1',
+        sourceVisibility: 'authoritative_public_projection',
+        usesHiddenInformation: false,
+        rankedImpact: 'none',
+        viewerSeat: 'B',
+        actingSeat: 'A',
+        actionType: 'end_turn',
+        latestSequence: 9,
+        nextSeat: 'B',
+        draw: { seatId: 'B', count: 3, capped: false },
+        counterplay: { granted: true, seatId: 'B', block: 8, totalBlock: 8, minimumHp: 1 },
+        summaryLine: 'A 结束回合：行动权交给 B，B 抽 3 张；反打缓冲 +8 给 B。'
+      }
+    }),
     duelMomentum: document.querySelector('[data-live-duel-momentum]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
     duelMomentumState: document.querySelector('[data-live-duel-momentum]')?.getAttribute('data-live-duel-momentum-state') || '',
     events: document.querySelector('[data-live-event-log]')?.textContent || '',
@@ -1938,11 +1957,23 @@ async function safeElementScreenshot(page, selector, outputPath) {
       && actionProbe.actionReceiptSource === 'authoritative_public_projection'
       && actionProbe.actionReceiptHidden === 'false'
       && actionProbe.actionReceiptSeq === '6'
+      && actionProbe.actionReceiptType === 'play_card'
+      && actionProbe.actionReceiptActing === 'A'
+      && actionProbe.actionReceiptNextSeat === ''
       && actionProbe.payload?.actionReceiptReport?.reportVersion === 'pvp-live-action-receipt-v1'
       && actionProbe.payload?.actionReceiptReport?.sourceVisibility === 'authoritative_public_projection'
       && actionProbe.payload?.actionReceiptReport?.usesHiddenInformation === false
       && actionProbe.payload?.actionReceiptReport?.rankedImpact === 'none'
       && !/payload|hand|deck|cardId|instanceId|loadoutSnapshot|reward|rating|elo/i.test(`${actionProbe.actionReceipt} ${JSON.stringify(actionProbe.payload?.actionReceiptReport || {})}`),
+    JSON.stringify(actionProbe),
+  );
+  add(
+    'live UI renders handoff receipt label for end-turn action receipt',
+    /交权回执/.test(actionProbe.handoffReceipt)
+      && /行动权交给 B/.test(actionProbe.handoffReceipt)
+      && /抽 3 张/.test(actionProbe.handoffReceipt)
+      && /反打缓冲 \+8/.test(actionProbe.handoffReceipt)
+      && !/cardInstanceId|sourceCardId|deck|rating|reward/i.test(actionProbe.handoffReceipt),
     JSON.stringify(actionProbe),
   );
   add(

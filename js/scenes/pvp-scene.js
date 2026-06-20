@@ -1014,12 +1014,13 @@ export const PVPScene = {
     const summary = report.summaryLine || (report.actionType === 'end_turn'
       ? `${report.actingSeat || '--'} 结束回合：行动权交给 ${report.nextSeat || '--'}。`
       : `${report.actingSeat || '--'} 已完成行动。`);
+    const receiptLabel = report.actionType === 'end_turn' ? '交权回执' : '行动回执';
     const source = report.sourceVisibility === 'authoritative_public_projection'
       ? '权威公开投影'
       : report.sourceVisibility === 'public_events' ? '公开事件' : report.sourceVisibility;
     const hidden = report.usesHiddenInformation ? '含隐藏信息' : '不含隐藏信息';
     return `
-      <span class="pvp-live-action-receipt-chip">行动回执</span>
+      <span class="pvp-live-action-receipt-chip">${this.escapeHtml(receiptLabel)}</span>
       <span class="pvp-live-action-receipt-line">${this.escapeHtml(summary)}</span>
       <span class="pvp-live-action-receipt-chip">${this.escapeHtml(source)} · ${this.escapeHtml(hidden)} · ${this.escapeHtml(report.rankedImpact || 'none')}</span>
     `;
@@ -2889,6 +2890,9 @@ export const PVPScene = {
       actionReceiptEl.setAttribute('data-live-action-receipt-source', report ? report.sourceVisibility : '');
       actionReceiptEl.setAttribute('data-live-action-receipt-hidden', report ? String(report.usesHiddenInformation === true) : '');
       actionReceiptEl.setAttribute('data-live-action-receipt-seq', report && report.latestSequence !== null ? String(report.latestSequence) : '');
+      actionReceiptEl.setAttribute('data-live-action-receipt-type', report ? report.actionType : '');
+      actionReceiptEl.setAttribute('data-live-action-receipt-acting', report ? report.actingSeat : '');
+      actionReceiptEl.setAttribute('data-live-action-receipt-next-seat', report ? report.nextSeat : '');
       actionReceiptEl.innerHTML = this.renderLiveActionReceiptReport(view);
     }
     const duelMomentumEl = root.querySelector('[data-live-duel-momentum]');
