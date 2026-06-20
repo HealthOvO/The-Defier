@@ -117,4 +117,72 @@ assert.strictEqual(resourceDrawSample.winnerSeat, 'draw', 'resource_draw should 
 assert.strictEqual(scoreFirstSeatOutcome(resourceDrawSample), 0.5, 'resource_draw should count as 0.5 in first-seat win-rate scoring');
 assert.strictEqual(scoreOutcomeWin(resourceDrawSample, 'aggro_pressure'), 0.5, 'resource_draw should count as 0.5 in archetype win-rate scoring');
 
+assert.strictEqual(RULES.cards.wardingHerb.block, 4, 'wardingHerb should trade lower block for public healing instead of outclassing pvp_guard');
+assert.ok(
+  RULES.cards.wardingHerb.block + RULES.cards.wardingHerb.heal <= RULES.cards.pvp_guard.block,
+  'wardingHerb raw block plus public heal should not exceed pvp_guard while simulation has no guard-stance reduction model'
+);
+const healingAttritionLoadout = BASELINE_LOADOUTS.find(loadout => loadout.id === 'healing_attrition');
+assert.ok(healingAttritionLoadout, 'public heal regression should use the frozen healing_attrition baseline loadout');
+const shieldCounterLoadout = BASELINE_LOADOUTS.find(loadout => loadout.id === 'shield_counter');
+assert.ok(shieldCounterLoadout, 'public heal guard-priority regression should use the frozen shield_counter baseline loadout');
+const fullHpGuardPrioritySample = runOneSimulatedMatch({
+  loadoutA: shieldCounterLoadout,
+  loadoutB: aggroLoadout,
+  firstSeat: 'A',
+  seed: 'public-heal-simulation-pin-full-hp-guard-priority-A-0',
+  forcedOpenings: {
+    A: ['pvp_guard', 'wardingHerb', 'innerPeace'],
+    B: ['pvp_strike', 'quickSlash', 'doubleStrike']
+  }
+});
+assert.deepStrictEqual(
+  fullHpGuardPrioritySample.cardsPlayed[0],
+  { seatId: 'A', loadoutId: 'shield_counter', cardId: 'pvp_guard', recoveredHp: 0 },
+  'balance simulation should prefer pure guard over heal cards at full HP'
+);
+const publicHealSimulationSample = runOneSimulatedMatch({
+  loadoutA: aggroLoadout,
+  loadoutB: healingAttritionLoadout,
+  firstSeat: 'A',
+  seed: 'public-heal-simulation-pin-aggro_pressure-healing_attrition-A-0',
+  forcedOpenings: {
+    A: ['pvp_burst', 'pvp_strike', 'pvp_strike'],
+    B: ['innerPeace', 'mendThread', 'wardingHerb']
+  }
+});
+const recoveredHpPlays = publicHealSimulationSample.cardsPlayed
+  .filter(play => play.seatId === 'B' && play.recoveredHp > 0);
+assert.ok(recoveredHpPlays.length >= 2, 'balance simulation should apply public heal cards after real HP loss');
+assert.ok(
+  recoveredHpPlays.some(play => play.cardId === 'innerPeace' && play.recoveredHp === 3),
+  'balance simulation should carry innerPeace heal from card rules into simulated resolution'
+);
+assert.ok(
+  recoveredHpPlays.some(play => play.cardId === 'mendThread' && play.recoveredHp === 3),
+  'balance simulation should carry mendThread heal from card rules into simulated resolution'
+);
+assert.ok(
+  publicHealSimulationSample.longGameStats.B.preventedOrRecoveredDamage >= recoveredHpPlays.reduce((sum, play) => sum + play.recoveredHp, 0),
+  'balance simulation should count recovered HP in long-game defense scoring'
+);
+const publicHealResponseSample = runOneSimulatedMatch({
+  loadoutA: healingAttritionLoadout,
+  loadoutB: aggroLoadout,
+  firstSeat: 'B',
+  seed: 'public-heal-simulation-pin-heal-response-window-B-0',
+  forcedOpenings: {
+    A: ['innerPeace', 'mendThread', 'wardingHerb'],
+    B: ['pvp_burst', 'pvp_strike', 'pvp_strike']
+  }
+});
+const recoveredByA = publicHealResponseSample.cardsPlayed
+  .filter(play => play.seatId === 'A')
+  .reduce((sum, play) => sum + play.recoveredHp, 0);
+assert.ok(recoveredByA > 0, 'balance simulation should let the pressured second seat recover HP with public heal cards');
+assert.ok(
+  publicHealResponseSample.longGameStats.A.preventedOrRecoveredDamage >= recoveredByA,
+  'balance simulation should count second-seat recovered HP in long-game defense scoring'
+);
+
 console.log('sanity_pvp_live_balance_simulation_checks passed');

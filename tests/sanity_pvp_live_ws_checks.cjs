@@ -73,11 +73,33 @@ function assertPublicArrayEventReplay() {
         hand: ['hidden'],
       },
     },
+    {
+      eventType: 'hp_recovered',
+      sequence: 4,
+      actingSeat: 'A',
+      visibility: 'public',
+      payload: {
+        seatId: 'A',
+        recoveredHp: 3,
+        hp: 41,
+        maxHp: 50,
+        capped: false,
+        sourceCardId: 'innerPeace',
+        cardId: 'innerPeace',
+        hand: ['hidden'],
+      },
+    },
   ], 1);
   assert.deepEqual(replay[0].publicData.disconnectedSeats, ['A', 'B'], 'WS public replay should preserve public disconnected seat arrays');
   assert.deepEqual(replay[1].publicData.unreadySeats, ['A', 'B'], 'WS public replay should preserve public ready-timeout seat arrays');
+  assert.deepEqual(
+    replay[2].publicData,
+    { seatId: 'A', recoveredHp: 3, hp: 41, maxHp: 50, capped: false },
+    'WS public replay should preserve only public hp_recovered fields'
+  );
   assert.equal(JSON.stringify(replay).includes('hidden-card-id'), false, 'WS public replay should still strip non-allowlisted ids');
   assert.equal(JSON.stringify(replay).includes('hidden'), false, 'WS public replay should still strip hidden arrays');
+  assert.equal(JSON.stringify(replay).includes('innerPeace'), false, 'WS public replay should strip hidden heal source card ids');
 }
 
 function openSocket(url) {

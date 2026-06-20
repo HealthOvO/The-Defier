@@ -84,10 +84,12 @@ function scoreCard(card, actor, opponent, policy) {
     const tags = getCardTags(card);
     const damage = Math.max(0, Math.floor(Number(card.damage) || 0));
     const block = Math.max(0, Math.floor(Number(card.block) || 0));
-    let score = damage * 3 + block * 1.35 - Math.max(0, Math.floor(Number(card.cost) || 0)) * 0.4;
+    const heal = Math.max(0, Math.floor(Number(card.heal) || 0));
+    const recoverableHp = Math.min(heal, Math.max(0, Math.floor(Number(actor.maxHp) || 0) - Math.max(0, Math.floor(Number(actor.hp) || 0))));
+    let score = damage * 3 + block * 1.35 + recoverableHp * 1.35 - Math.max(0, Math.floor(Number(card.cost) || 0)) * 0.4;
     if (opponent.hp <= damage) score += 100;
     if (actor.hp <= actor.maxHp * 0.45 && block > 0) score += 18;
-    if (actor.hp <= actor.maxHp * 0.35 && tags.includes('heal')) score += 12;
+    if (actor.hp <= actor.maxHp * 0.35 && tags.includes('heal') && recoverableHp > 0) score += 12;
     if (tags.includes('setup')) score += 4;
     if (tags.includes('finisher') && opponent.hp <= 28) score += 7;
     if (tags.includes('draw')) score += 2;
@@ -165,7 +167,8 @@ function makeSimCard(entry, seatId, ordinal) {
         cardId: entry.id,
         cost: Math.max(0, Math.floor(Number(definition && definition.cost) || 0)),
         damage: Math.max(0, Math.floor(Number(definition && definition.damage) || 0)),
-        block: Math.max(0, Math.floor(Number(definition && definition.block) || 0))
+        block: Math.max(0, Math.floor(Number(definition && definition.block) || 0)),
+        heal: Math.max(0, Math.floor(Number(definition && definition.heal) || 0))
     };
 }
 
@@ -286,12 +289,22 @@ function applySimCard(state, seatId, card) {
         actor.block += card.block;
         actor.effectiveActionThisTurn = true;
     }
+    let recoveredHp = 0;
+    if (card.heal > 0) {
+        const hpBefore = actor.hp;
+        actor.hp = Math.min(actor.maxHp, actor.hp + card.heal);
+        recoveredHp = Math.max(0, actor.hp - hpBefore);
+        if (recoveredHp > 0) {
+            actor.longGameStats.preventedOrRecoveredDamage += recoveredHp;
+            actor.effectiveActionThisTurn = true;
+        }
+    }
     if (actor.playedSetupThisTurn && !actor.setupConvertedThisTurn && !tags.includes('setup') && (card.damage > 0 || card.block > 0)) {
         actor.longGameStats.publicSetupConversions += 1;
         actor.setupConvertedThisTurn = true;
     }
     actor.actionsTaken += 1;
-    return { largestDamage, budgetPrevented };
+    return { largestDamage, budgetPrevented, recoveredHp };
 }
 
 function endSimTurn(state, seatId) {
@@ -395,7 +408,8 @@ function runOneSimulatedMatch({ loadoutA, loadoutB, firstSeat, seed, forcedOpeni
             cardsPlayed.push({
                 seatId,
                 loadoutId: state.seats[seatId].loadoutId,
-                cardId: card.cardId
+                cardId: card.cardId,
+                recoveredHp: result.recoveredHp
             });
             budgetPrevented += result.budgetPrevented;
             largestDamage = Math.max(largestDamage, result.largestDamage);
@@ -438,6 +452,14 @@ function runOneSimulatedMatch({ loadoutA, loadoutB, firstSeat, seed, forcedOpeni
         playableBranchObservations,
         openingHands,
         openingSignature: `${firstSeat}:${openingHands.A.join(',')}|${openingHands.B.join(',')}`,
+        finalHp: {
+            A: state.seats.A.hp,
+            B: state.seats.B.hp
+        },
+        longGameStats: {
+            A: { ...state.seats.A.longGameStats },
+            B: { ...state.seats.B.longGameStats }
+        },
         cardsPlayed,
         maxConsecutiveLowAgency,
         defenseOnlyWindowCount,

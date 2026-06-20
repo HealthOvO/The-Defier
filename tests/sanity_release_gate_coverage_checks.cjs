@@ -637,6 +637,10 @@ const layoutAudit = read('tests/browser_frontend_layout_audit.mjs');
   'guard_stance',
   'public_guard_stance',
   'data-live-guard-stance',
+  'hp_recovered',
+  'public_hp_recovered',
+  'data-live-hp-recovered',
+  'live UI formats public heal event and receipt',
   'live UI formats public card cycle event and receipt',
   'live UI mobile renders opening protection event without overflow',
   'pvp screen opens on live ranked entry by default on mobile',
@@ -976,6 +980,10 @@ assert.ok(
   'guard stance should emit public damage reduction evidence',
   'guard stance should reduce only post-block life damage by two',
   'guard stance should be consumed after reducing incoming life damage',
+  'innerPeace should expose a small public self-heal amount',
+  'paid heal card should emit public hp_recovered evidence',
+  'public heal event should expose only public hp fields',
+  'transfuseStrike should not self-heal in the first public heal slice',
   'opening protection should leave the defender at 1 hp',
   'opening protection should emit a public event',
   'opening protection event should expose minimum hp',
@@ -1011,6 +1019,18 @@ assert.ok(
   assert.ok(
     !source.includes("card_cycled: ['seatId', 'count', 'handCount', 'deckCount', 'capped', 'effect']"),
     `live PVP ${label} public event whitelist must not expose card cycle effect tags`,
+  );
+  assert.ok(
+    source.includes("hp_recovered: ['seatId', 'recoveredHp', 'hp', 'maxHp', 'capped']"),
+    `live PVP ${label} public event whitelist should expose only public hp recovery fields`,
+  );
+  assert.ok(
+    !source.includes("hp_recovered: ['seatId', 'recoveredHp', 'hp', 'maxHp', 'capped', 'sourceCardId']"),
+    `live PVP ${label} public event whitelist must not expose heal source card ids`,
+  );
+  assert.ok(
+    source.includes("status_mitigated: ['statusId', 'label', 'seatId', 'sourceSeat', 'mitigatedBySeat', 'mitigatedTurnIndex', 'responseWindow', 'mitigation', 'preventedDamage']"),
+    `live PVP ${label} public status mitigation whitelist should expose public prevented damage`,
   );
 });
 
@@ -1380,6 +1400,10 @@ assert.ok(
   'HTTP guard_stance event should expose only public status fields',
   'HTTP guard_stance event must not return raw reducer payload',
   'HTTP guard_stance event must not leak internal card identity, hand, deck, rating, or rewards',
+  'route heal card should resolve as a normal paid play_card intent',
+  'HTTP hp_recovered event should expose only public hp fields',
+  'HTTP hp_recovered event must not return raw reducer payload',
+  'HTTP hp_recovered event must not leak internal card identity, hand, deck, rating, or rewards',
   'end turn timer should switch to next seat',
   'end turn should start a fresh timer for next seat',
   'matched view first-match guide should explain opening protection',

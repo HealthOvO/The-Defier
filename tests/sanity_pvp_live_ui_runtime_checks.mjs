@@ -235,6 +235,72 @@ assert.match(renderedGuardStanceReceipt, /守势|减伤/, 'live UI action receip
 assert.match(renderedGuardStanceReceipt, /data-live-guard-stance="public_guard_stance"/, 'live UI guard stance receipt should expose a stable marker');
 assert.doesNotMatch(renderedGuardStanceReceipt, /sourceCardId|cardId|instanceId|hand|deck|rating|reward/i, 'live UI guard stance receipt rendering must not expose hidden ids or rewards');
 
+const normalizedHealReceipt = PVPScene.getLiveActionReceiptReport({
+  actionReceiptReport: {
+    reportVersion: 'pvp-live-action-receipt-v1',
+    sourceVisibility: 'authoritative_public_projection',
+    usesHiddenInformation: false,
+    rankedImpact: 'none',
+    viewerSeat: 'A',
+    actingSeat: 'A',
+    actionType: 'play_card',
+    latestSequence: 14,
+    cardName: '内心平和',
+    healing: {
+      seatId: 'A',
+      recoveredHp: 3,
+      hp: 41,
+      maxHp: 50,
+      capped: false,
+      sourceCardId: 'innerPeace'
+    },
+    summaryLine: 'A 打出内心平和：不造成伤害；自身护盾 +4；自身恢复 +3，当前 41/50。',
+    safeguards: ['public_events', 'self_block', 'public_heal']
+  }
+});
+assert.equal(normalizedHealReceipt.healing.recoveredHp, 3, 'live UI should preserve public heal amount');
+assert.equal(normalizedHealReceipt.healing.hp, 41, 'live UI should preserve public post-heal hp');
+assert.equal(Object.prototype.hasOwnProperty.call(normalizedHealReceipt.healing, 'sourceCardId'), false, 'live UI heal receipt must not retain internal card id');
+const renderedHealReceipt = PVPScene.renderLiveActionReceiptReport({ actionReceiptReport: normalizedHealReceipt });
+assert.match(renderedHealReceipt, /恢复 \+3|回血 \+3/, 'live UI action receipt should render readable public heal feedback');
+assert.match(renderedHealReceipt, /data-live-hp-recovered="public_hp_recovered"/, 'live UI heal receipt should expose a stable public-hp-recovered marker');
+assert.doesNotMatch(renderedHealReceipt, /sourceCardId|cardId|instanceId|hand|deck|rating|reward/i, 'live UI heal receipt rendering must not expose hidden ids or rewards');
+const normalizedHealPreview = PVPScene.getLiveActionPreviewReport({
+  actionPreviewReport: {
+    reportVersion: 'pvp-live-action-preview-v1',
+    sourceVisibility: 'viewer_public_state',
+    usesHiddenInformation: false,
+    rankedImpact: 'none',
+    viewerSeat: 'A',
+    currentSeat: 'A',
+    isViewerTurn: true,
+    playableCards: [{
+      cardInstanceId: 'A-innerPeace-preview',
+      cardName: '内心平和',
+      targetSeat: 'B',
+      rawDamage: 0,
+      damageBudget: 18,
+      budgetedDamage: 0,
+      blockedDamage: 0,
+      hpDamage: 0,
+      targetHpAfter: 50,
+      blockGain: 4,
+      healing: {
+        amount: 3,
+        recoveredHp: 3,
+        hpBefore: 38,
+        hpAfter: 41,
+        maxHp: 50,
+        capped: false,
+        sourceCardId: 'innerPeace'
+      }
+    }]
+  }
+});
+assert.equal(normalizedHealPreview.playableCards[0].healing.recoveredHp, 3, 'live UI preview should preserve public heal amount');
+assert.equal(Object.prototype.hasOwnProperty.call(normalizedHealPreview.playableCards[0].healing, 'sourceCardId'), false, 'live UI heal preview must not retain internal card id');
+assert.match(PVPScene.formatLiveActionPreviewLine(normalizedHealPreview.playableCards[0]), /自身恢复 3|预计 41\/50/, 'live UI preview fallback should explain public healing before second-click confirm');
+
 const normalizedEndTurnReceipt = PVPScene.getLiveActionReceiptReport({
   actionReceiptReport: {
     reportVersion: 'pvp-live-action-receipt-v1',
@@ -990,6 +1056,38 @@ const guardStanceMitigatedEvent = PVPScene.formatLiveEvent({
   }
 });
 assert.match(guardStanceMitigatedEvent.detail, /守势减伤 2|挡下 2/, 'live UI event log should explain public guard stance damage reduction');
+const healEvent = PVPScene.formatLiveEvent({
+  eventType: 'hp_recovered',
+  actingSeat: 'A',
+  publicData: {
+    seatId: 'A',
+    recoveredHp: 3,
+    hp: 41,
+    maxHp: 50,
+    capped: false,
+    sourceCardId: 'innerPeace'
+  }
+});
+assert.match(healEvent.label, /公开恢复/, 'live UI event log should label public hp recovery');
+assert.match(healEvent.detail, /恢复 3|当前 41\/50/, 'live UI event log should explain public heal result');
+assert.doesNotMatch(healEvent.detail, /sourceCardId|cardId|instanceId|hand|deck|rating|reward/i, 'live UI heal event detail must not expose hidden ids or rewards');
+assert.ok(PVPScene.getLiveActionReleaseEventTypes('play_card').includes('hp_recovered'), 'live UI play_card intent release should include standalone public healing events');
+assert.equal(
+  PVPScene.hasLiveActionReleaseEvidence({
+    lastEvents: [{
+      eventType: 'hp_recovered',
+      actingSeat: 'A',
+      sequence: 15,
+      publicData: { seatId: 'A', recoveredHp: 3, hp: 41, maxHp: 50, capped: false }
+    }]
+  }, {
+    intentType: 'play_card',
+    seatId: 'A',
+    lastSeenEventRevision: 14
+  }),
+  true,
+  'live UI should unlock an in-flight play_card intent when the only matching action event is hp_recovered'
+);
 const cardCycleEvent = PVPScene.formatLiveEvent({
   eventType: 'card_cycled',
   actingSeat: 'A',

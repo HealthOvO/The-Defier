@@ -376,7 +376,8 @@ function makeLiveCard(instanceId, cardId) {
     name: RULES.cards[cardId].name,
     cost: RULES.cards[cardId].cost,
     damage: RULES.cards[cardId].damage || 0,
-    block: RULES.cards[cardId].block || 0
+    block: RULES.cards[cardId].block || 0,
+    heal: RULES.cards[cardId].heal || 0
   };
 }
 
@@ -461,6 +462,70 @@ assert(guardStanceHitViewA.recentEvents.some(event => event.eventType === 'statu
 assert(guardStanceHitViewA.actionReceiptReport.statusEffects && guardStanceHitViewA.actionReceiptReport.statusEffects.mitigated.some(status => status.statusId === 'guard_stance' && status.preventedDamage === 2), 'damage receipt should preserve guard stance mitigation');
 assert(/守势|减伤/.test(guardStanceHitViewA.actionReceiptReport.summaryLine), 'damage receipt should explain guard stance damage reduction');
 assert(!/sourceCardId|cardId|instanceId|loadoutSnapshot|rating|elo|reward/i.test(JSON.stringify(guardStanceHitViewA.actionReceiptReport.statusEffects)), 'guard stance receipt must not leak hidden ids, rating, or reward data');
+
+assert(RULES.cards.innerPeace.heal === 3, 'innerPeace should expose a small public self-heal amount');
+assert(RULES.cards.mendThread.heal === 3, 'mendThread should expose a small public self-heal amount');
+assert(RULES.cards.wardingHerb.heal === 3, 'wardingHerb should expose a small public self-heal amount');
+assert(!RULES.cards.transfuseStrike.heal, 'damage-plus-heal transfuseStrike should not self-heal in the first public heal slice');
+const healState = createReadyLiveState('pvpm-heal-test');
+healState.seats.A.hp = 38;
+healState.seats.A.hand = [makeLiveCard('A-innerPeace-heal-1', 'innerPeace')];
+const healPreview = projectStateView(healState, 'A').actionPreviewReport.playableCards.find(card => card.cardInstanceId === 'A-innerPeace-heal-1');
+assert(healPreview && healPreview.healing && healPreview.healing.recoveredHp === 3 && healPreview.healing.hpAfter === 41, 'action preview should expose public heal before committing the card');
+assert(/恢复|回血/.test(healPreview.summaryLine), 'heal action preview should include readable recovery feedback');
+const healResult = reduceIntent(healState, {
+  intentId: 'intent-heal-a-1',
+  intentType: 'play_card',
+  matchId: 'pvpm-heal-test',
+  seatId: 'A',
+  ruleVersion: RULE_VERSION,
+  stateVersion: healState.stateVersion,
+  payload: { cardInstanceId: 'A-innerPeace-heal-1', targetSeat: 'B' }
+});
+assert(healResult.result === 'accepted', 'paid heal card should resolve as a normal action');
+assert(healResult.state.seats.A.hp === 41, 'paid heal card should recover public hp');
+assert(healResult.events.some(e => e.eventType === 'hp_recovered' && e.payload.recoveredHp === 3 && e.payload.hp === 41 && e.payload.maxHp === 50 && e.payload.capped === false), 'paid heal card should emit public hp_recovered evidence');
+const healViewB = projectStateView(healResult.state, 'B');
+const publicHealEvent = healViewB.recentEvents.find(event => event.eventType === 'hp_recovered');
+assert(publicHealEvent, 'opponent should see public hp_recovered evidence');
+assert(JSON.stringify(Object.keys(publicHealEvent.publicData || {}).sort()) === JSON.stringify(['capped', 'hp', 'maxHp', 'recoveredHp', 'seatId']), 'public heal event should expose only public hp fields');
+assert(!/sourceCardId|cardId|instanceId|hand|deck|loadoutSnapshot|rating|elo|reward/i.test(JSON.stringify(publicHealEvent)), 'public heal event must not leak hidden card, hand, deck, rating, or reward data');
+const healReceipt = projectStateView(healResult.state, 'A').actionReceiptReport;
+assert(healReceipt.healing && healReceipt.healing.recoveredHp === 3 && healReceipt.healing.hp === 41 && healReceipt.healing.capped === false, 'action receipt should preserve public heal result');
+assert(/恢复|回血/.test(healReceipt.summaryLine), 'heal receipt should include readable recovery feedback');
+assert(!/sourceCardId|cardId|instanceId|loadoutSnapshot|rating|elo|reward/i.test(JSON.stringify(healReceipt.healing)), 'heal receipt must not leak hidden ids, rating, or reward data');
+
+const cappedHealState = createReadyLiveState('pvpm-heal-cap-test');
+cappedHealState.seats.A.hp = 49;
+cappedHealState.seats.A.hand = [makeLiveCard('A-wardingHerb-heal-cap-1', 'wardingHerb')];
+const cappedHeal = reduceIntent(cappedHealState, {
+  intentId: 'intent-heal-cap-a-1',
+  intentType: 'play_card',
+  matchId: 'pvpm-heal-cap-test',
+  seatId: 'A',
+  ruleVersion: RULE_VERSION,
+  stateVersion: cappedHealState.stateVersion,
+  payload: { cardInstanceId: 'A-wardingHerb-heal-cap-1', targetSeat: 'B' }
+});
+assert(cappedHeal.result === 'accepted', 'over-cap heal card should still resolve as a paid action');
+assert(cappedHeal.state.seats.A.hp === 50, 'over-cap heal must not exceed max hp');
+assert(cappedHeal.events.some(e => e.eventType === 'hp_recovered' && e.payload.recoveredHp === 1 && e.payload.capped === true && e.payload.hp === 50), 'capped heal should emit public capped evidence');
+
+const transfuseNoHealState = createReadyLiveState('pvpm-transfuse-no-heal-test');
+transfuseNoHealState.seats.A.hp = 37;
+transfuseNoHealState.seats.A.hand = [makeLiveCard('A-transfuseStrike-no-heal-1', 'transfuseStrike')];
+const transfuseNoHeal = reduceIntent(transfuseNoHealState, {
+  intentId: 'intent-transfuse-no-heal-a-1',
+  intentType: 'play_card',
+  matchId: 'pvpm-transfuse-no-heal-test',
+  seatId: 'A',
+  ruleVersion: RULE_VERSION,
+  stateVersion: transfuseNoHealState.stateVersion,
+  payload: { cardInstanceId: 'A-transfuseStrike-no-heal-1', targetSeat: 'B' }
+});
+assert(transfuseNoHeal.result === 'accepted', 'transfuseStrike should still resolve as a normal damage card');
+assert(transfuseNoHeal.state.seats.A.hp === 37, 'transfuseStrike should not self-heal in the first public heal slice');
+assert(!transfuseNoHeal.events.some(e => e.eventType === 'hp_recovered'), 'transfuseStrike should not emit hp_recovered yet');
 
 const cappedDrawState = createReadyLiveState('pvpm-card-draw-cap-test');
 cappedDrawState.seats.A.hand = [

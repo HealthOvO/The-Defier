@@ -94,12 +94,34 @@ function assertPublicReplayArraySanitizer() {
         visibility: 'public',
         payload: { reason: 'ready_timeout' },
       },
+      {
+        eventType: 'hp_recovered',
+        sequence: 4,
+        actingSeat: 'A',
+        visibility: 'public',
+        payload: {
+          seatId: 'A',
+          recoveredHp: 3,
+          hp: 41,
+          maxHp: 50,
+          capped: false,
+          sourceCardId: 'innerPeace',
+          cardId: 'innerPeace',
+          deck: ['hidden'],
+        },
+      },
     ],
   });
   assert.deepEqual(replay.events[0].publicData.disconnectedSeats, ['A', 'B'], 'public replay should preserve public disconnected seat arrays');
   assert.deepEqual(replay.events[1].publicData.unreadySeats, ['A', 'B'], 'public replay should preserve public ready-timeout seat arrays');
+  assert.deepEqual(
+    replay.events[3].publicData,
+    { seatId: 'A', recoveredHp: 3, hp: 41, maxHp: 50, capped: false },
+    'public replay should preserve only public hp_recovered fields'
+  );
   assert.equal(JSON.stringify(replay.events).includes('hidden-card-id'), false, 'public replay should still strip non-allowlisted ids');
   assert.equal(JSON.stringify(replay.events).includes('hidden'), false, 'public replay should still strip hidden arrays');
+  assert.equal(JSON.stringify(replay.events).includes('innerPeace'), false, 'public replay should strip hidden heal source card ids');
 }
 
 function makeReplaySettlementStub() {

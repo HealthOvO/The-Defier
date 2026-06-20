@@ -2382,6 +2382,72 @@ async function safeElementScreenshot(page, selector, outputPath) {
       && !/payload|hand|deck|cardId|instanceId|loadoutSnapshot|reward|rating|elo|sourceCardId/i.test(`${guardStanceFormatProbe.appliedEvent?.detail || ''} ${guardStanceFormatProbe.mitigatedEvent?.detail || ''} ${guardStanceFormatProbe.receipt || ''}`),
     JSON.stringify(guardStanceFormatProbe),
   );
+  const healFormatProbe = await page.evaluate(() => {
+    const event = window.PVPScene.formatLiveEvent({
+      eventType: 'hp_recovered',
+      actingSeat: 'A',
+      publicData: {
+        seatId: 'A',
+        recoveredHp: 3,
+        hp: 41,
+        maxHp: 50,
+        capped: false,
+        sourceCardId: 'innerPeace',
+      },
+    });
+    const cappedEvent = window.PVPScene.formatLiveEvent({
+      eventType: 'hp_recovered',
+      actingSeat: 'A',
+      publicData: {
+        seatId: 'A',
+        recoveredHp: 1,
+        hp: 50,
+        maxHp: 50,
+        capped: true,
+        sourceCardId: 'wardingHerb',
+      },
+    });
+    const receipt = window.PVPScene.renderLiveActionReceiptReport({
+      actionReceiptReport: {
+        reportVersion: 'pvp-live-action-receipt-v1',
+        sourceVisibility: 'authoritative_public_projection',
+        usesHiddenInformation: false,
+        rankedImpact: 'none',
+        viewerSeat: 'A',
+        actingSeat: 'A',
+        actionType: 'play_card',
+        latestSequence: 51,
+        cardName: '内心平和',
+        healing: {
+          seatId: 'A',
+          recoveredHp: 3,
+          hp: 41,
+          maxHp: 50,
+          capped: false,
+          sourceCardId: 'innerPeace',
+        },
+        summaryLine: 'A 打出内心平和：不造成伤害；自身护盾 +4；自身恢复 +3，当前 41/50。',
+        safeguards: ['public_events', 'self_block', 'public_heal'],
+      },
+    });
+    return {
+      event,
+      cappedEvent,
+      receipt,
+    };
+  });
+  add(
+    'live UI formats public heal event and receipt',
+    /hp_recovered/.test('hp_recovered')
+      && /公开恢复/.test(healFormatProbe.event?.label || '')
+      && /恢复 3/.test(healFormatProbe.event?.detail || '')
+      && /当前 41\/50/.test(healFormatProbe.event?.detail || '')
+      && /已到上限|当前 50\/50/.test(healFormatProbe.cappedEvent?.detail || '')
+      && /data-live-hp-recovered="public_hp_recovered"/.test(healFormatProbe.receipt || '')
+      && /恢复 \+3|回血 \+3/.test(healFormatProbe.receipt || '')
+      && !/payload|hand|deck|cardId|instanceId|loadoutSnapshot|reward|rating|elo|sourceCardId/i.test(`${healFormatProbe.event?.detail || ''} ${healFormatProbe.cappedEvent?.detail || ''} ${healFormatProbe.receipt || ''}`),
+    JSON.stringify(healFormatProbe),
+  );
   const cardCycleFormatProbe = await page.evaluate(() => {
     const event = window.PVPScene.formatLiveEvent({
       eventType: 'card_cycled',

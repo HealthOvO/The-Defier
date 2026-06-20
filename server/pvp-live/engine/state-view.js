@@ -8,7 +8,8 @@ function publicCard(card) {
         name: card.name,
         cost: card.cost,
         damage: card.damage || 0,
-        block: card.block || 0
+        block: card.block || 0,
+        heal: card.heal || 0
     };
 }
 
@@ -190,6 +191,7 @@ const PUBLIC_EVENT_DATA_KEYS = {
     cards_drawn: ['seatId', 'count', 'handCount', 'deckCount', 'capped'],
     card_cycled: ['seatId', 'count', 'handCount', 'deckCount', 'capped'],
     block_gained: ['block', 'seatId', 'totalBlock'],
+    hp_recovered: ['seatId', 'recoveredHp', 'hp', 'maxHp', 'capped'],
     opening_counterplay_granted: ['seatId', 'block', 'totalBlock', 'minimumHp', 'source'],
     opening_protection_triggered: ['protectedSeat', 'minimumHp', 'preventedDamage', 'wouldHaveHp'],
     budget_clamped: ['rawDamage', 'actualDamage', 'preventedDamage', 'targetSeat'],
@@ -252,6 +254,7 @@ function collectReviewEvidence(events, finishSequence) {
         'cards_drawn',
         'card_cycled',
         'block_gained',
+        'hp_recovered',
         'opening_counterplay_granted',
         'opening_protection_triggered',
         'budget_clamped',
@@ -554,7 +557,7 @@ function getSeatWindowSummary(evidence) {
             addSeatWindow(getEventSeat(event, 'nextSeat'), event);
             return;
         }
-        if (['card_played', 'block_gained', 'card_cycled', 'opening_second_seat_buffer_granted', 'opening_counterplay_granted', 'budget_clamped', 'damage_applied', 'opening_protection_triggered', 'status_applied', 'status_consumed', 'status_mitigated'].includes(event.eventType)) {
+        if (['card_played', 'block_gained', 'hp_recovered', 'card_cycled', 'opening_second_seat_buffer_granted', 'opening_counterplay_granted', 'budget_clamped', 'damage_applied', 'opening_protection_triggered', 'status_applied', 'status_consumed', 'status_mitigated'].includes(event.eventType)) {
             addSeatWindow(event.actingSeat ? String(event.actingSeat) : '', event);
         }
     });
@@ -1160,6 +1163,18 @@ function projectCardActionPreview(state, viewerSeat, card) {
     const hpDamage = willTriggerProtection ? protectedHpDamage : hpDamageBeforeProtection;
     const targetHpAfter = willTriggerProtection ? protectedHp : wouldHaveHp;
     const blockGain = normalizeCount(card.block);
+    const healAmount = normalizeCount(card.heal);
+    const selfHpBefore = normalizeCount(actor.hp);
+    const selfMaxHp = Math.max(1, normalizeCount(actor.maxHp || RULES.startingHp));
+    const recoveredHp = Math.min(healAmount, Math.max(0, selfMaxHp - selfHpBefore));
+    const healing = healAmount > 0 ? {
+        amount: healAmount,
+        recoveredHp,
+        hpBefore: selfHpBefore,
+        hpAfter: Math.min(selfMaxHp, selfHpBefore + recoveredHp),
+        maxHp: selfMaxHp,
+        capped: recoveredHp < healAmount
+    } : null;
     const cardName = String(card.name || card.cardId || '术式');
     const tags = Array.isArray(getCardDefinition(card.cardId) && getCardDefinition(card.cardId).tags)
         ? getCardDefinition(card.cardId).tags
@@ -1180,6 +1195,11 @@ function projectCardActionPreview(state, viewerSeat, card) {
         ? `；护体触发，保底 ${protectedHp} 血，挡下 ${preventedByProtection}`
         : '';
     const blockLine = blockGain > 0 ? `；自身获得 ${blockGain} 护盾` : '';
+    const healLine = healing
+        ? healing.recoveredHp > 0
+            ? `；自身恢复 ${healing.recoveredHp}，预计 ${healing.hpAfter}/${healing.maxHp}`
+            : '；生命已满，恢复封顶'
+        : '';
     const mitigationLine = mitigableStatus ? `；清除${mitigableStatus.label || '公开状态'}，阻止后续兑现` : '';
     const drawLine = drawPreview
         ? drawPreview.capped
@@ -1192,6 +1212,7 @@ function projectCardActionPreview(state, viewerSeat, card) {
     if (willTriggerProtection) safeguards.push('opening_protection');
     if (preventedByProtection > 0) safeguards.push('counterplay_window_pending');
     if (blockGain > 0) safeguards.push('self_block');
+    if (healing) safeguards.push('public_heal_preview');
     if (mitigableStatus) safeguards.push('public_status_mitigation_preview');
     if (drawPreview) safeguards.push('public_card_cycle_preview');
     return {
@@ -1216,9 +1237,10 @@ function projectCardActionPreview(state, viewerSeat, card) {
         },
         blockGain,
         selfBlockAfter: normalizeCount(actor.block) + blockGain,
+        healing,
         publicStatusMitigation: mitigableStatus,
         cardDraw: drawPreview,
-        summaryLine: `${cardName}：${damageLine}${protectionLine}${blockLine}${mitigationLine}${drawLine}。`,
+        summaryLine: `${cardName}：${damageLine}${protectionLine}${blockLine}${healLine}${mitigationLine}${drawLine}。`,
         safeguards: Array.from(new Set(safeguards))
     };
 }
@@ -1267,7 +1289,7 @@ function getPublicCardName(cardId) {
 
 function isCardResolutionEvent(event, cardId, actingSeat) {
     if (!event || event.actingSeat !== actingSeat) return false;
-    if (!['budget_clamped', 'opening_protection_triggered', 'damage_applied', 'block_gained', 'card_cycled', 'status_applied', 'status_consumed', 'status_mitigated'].includes(String(event.eventType || ''))) return false;
+    if (!['budget_clamped', 'opening_protection_triggered', 'damage_applied', 'block_gained', 'hp_recovered', 'card_cycled', 'status_applied', 'status_consumed', 'status_mitigated'].includes(String(event.eventType || ''))) return false;
     const payload = getPublicEventPayload(event);
     if (event.eventType === 'status_applied') {
         return payload.sourceCardId
@@ -1300,6 +1322,7 @@ function projectCardActionReceipt(state, seatId, cardPlayedIndex) {
     const damageEvent = findResolution('damage_applied');
     const protectionEvent = findResolution('opening_protection_triggered');
     const blockEvent = findResolution('block_gained');
+    const healEvent = findResolution('hp_recovered');
     const cardCycleEvent = findResolution('card_cycled');
     const statusAppliedEvent = findResolution('status_applied');
     const statusConsumedEvent = findResolution('status_consumed');
@@ -1308,6 +1331,7 @@ function projectCardActionReceipt(state, seatId, cardPlayedIndex) {
     const damagePayload = getPublicEventPayload(damageEvent);
     const protectionPayload = getPublicEventPayload(protectionEvent);
     const blockPayload = getPublicEventPayload(blockEvent);
+    const healPayload = getPublicEventPayload(healEvent);
     const cardCyclePayload = getPublicEventPayload(cardCycleEvent);
     const statusAppliedPayload = getPublicEventPayload(statusAppliedEvent);
     const statusConsumedPayload = getPublicEventPayload(statusConsumedEvent);
@@ -1330,6 +1354,18 @@ function projectCardActionReceipt(state, seatId, cardPlayedIndex) {
         : '';
     const blockLine = blockGain > 0
         ? `；自身护盾 +${blockGain}，当前 ${normalizeCount(blockPayload.totalBlock)}`
+        : '';
+    const healing = healEvent ? {
+        seatId: String(healPayload.seatId || actingSeat),
+        recoveredHp: normalizeCount(healPayload.recoveredHp),
+        hp: normalizeCount(healPayload.hp),
+        maxHp: normalizeCount(healPayload.maxHp),
+        capped: healPayload.capped === true
+    } : null;
+    const healLine = healing
+        ? healing.recoveredHp > 0
+            ? `；自身恢复 +${healing.recoveredHp}，当前 ${healing.hp}/${healing.maxHp}`
+            : '；生命已满，恢复封顶'
         : '';
     const cardDraw = cardCycleEvent ? {
         seatId: String(cardCyclePayload.seatId || actingSeat),
@@ -1388,6 +1424,7 @@ function projectCardActionReceipt(state, seatId, cardPlayedIndex) {
     if (blockedDamage > 0) safeguards.push('public_block');
     if (protectionTriggered) safeguards.push('opening_protection');
     if (blockGain > 0) safeguards.push('self_block');
+    if (healing) safeguards.push('public_heal');
     if (cardDraw) safeguards.push('public_card_cycle');
     if (statusApplied) safeguards.push(statusApplied.statusId === 'guard_stance' ? 'public_guard_stance' : 'public_status_applied');
     if (statusConsumed) safeguards.push('public_status_consumed');
@@ -1425,13 +1462,14 @@ function projectCardActionReceipt(state, seatId, cardPlayedIndex) {
             block: blockGain,
             totalBlock: normalizeCount(blockPayload.totalBlock)
         } : null,
+        healing,
         cardDraw,
         statusEffects: {
             applied: statusApplied ? [statusApplied] : [],
             consumed: statusConsumed ? [statusConsumed] : [],
             mitigated: statusMitigated ? [statusMitigated] : []
         },
-        summaryLine: `${actingSeat} 打出${cardName}：${damageLine}${protectionLine}${blockLine}${statusLine}${cardDrawLine}。`,
+        summaryLine: `${actingSeat} 打出${cardName}：${damageLine}${protectionLine}${blockLine}${healLine}${statusLine}${cardDrawLine}。`,
         safeguards: Array.from(new Set(safeguards))
     };
 }

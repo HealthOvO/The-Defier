@@ -65,7 +65,8 @@ function makeRouteLiveCard(instanceId, cardId) {
         name: definition.name,
         cost: definition.cost,
         damage: definition.damage || 0,
-        block: definition.block || 0
+        block: definition.block || 0,
+        heal: definition.heal || 0
     };
 }
 
@@ -1046,6 +1047,28 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
         assert.ok(!/sourceCardId|cardId|instanceId|hand":\[|deck":\[|rating|reward/i.test(JSON.stringify(routeGuardStanceEvent)), 'HTTP guard_stance event must not leak internal card identity, hand, deck, rating, or rewards');
         assert.ok(routeGuardStance.payload.stateView.actionReceiptReport?.statusEffects?.applied?.some(status => status.statusId === 'guard_stance' && status.mitigationAmount === 2), 'route guard receipt should preserve public guard stance setup');
 
+        const routeHealMatch = pvpLiveRoutes.__livePvpStore.matches.get(joinB.payload.matchId);
+        const routeHealSeat = routeHealMatch.state.seats[firstSeat];
+        routeHealSeat.hp = 41;
+        routeHealSeat.energy = Math.max(routeHealSeat.energy, RULES.cards.innerPeace.cost);
+        routeHealSeat.hand = [makeRouteLiveCard(`${firstSeat}-innerPeace-heal-route-1`, 'innerPeace')];
+        const routeHeal = await submitIntent(baseUrl, firstToken, joinB.payload.matchId, {
+                intentId: 'route-intent-heal-1',
+                intentType: 'play_card',
+                stateVersion: routeGuardStance.payload.stateView.stateVersion,
+                payload: { cardInstanceId: `${firstSeat}-innerPeace-heal-route-1`, targetSeat: secondSeat }
+        });
+        assert.equal(routeHeal.payload.result, 'accepted', 'route heal card should resolve as a normal paid play_card intent');
+        const routeHealEvent = routeHeal.payload.events.find(event => event.eventType === 'hp_recovered');
+        assert.ok(routeHealEvent, 'HTTP play_card response should include public hp_recovered event');
+        assert.deepEqual(Object.keys(routeHealEvent.publicData || {}).sort(), ['capped', 'hp', 'maxHp', 'recoveredHp', 'seatId'], 'HTTP hp_recovered event should expose only public hp fields');
+        assert.equal(routeHealEvent.publicData.recoveredHp, 3, 'HTTP hp_recovered event should expose the public recovered hp amount');
+        assert.equal(routeHealEvent.publicData.hp, 44, 'HTTP hp_recovered event should expose the public post-heal hp');
+        assert.ok(!Object.prototype.hasOwnProperty.call(routeHealEvent, 'payload'), 'HTTP hp_recovered event must not return raw reducer payload');
+        assert.ok(!/sourceCardId|cardId|instanceId|hand":\[|deck":\[|rating|reward/i.test(JSON.stringify(routeHealEvent)), 'HTTP hp_recovered event must not leak internal card identity, hand, deck, rating, or rewards');
+        assert.ok(routeHeal.payload.stateView.actionReceiptReport?.healing?.recoveredHp === 3, 'route heal receipt should preserve public recovered hp');
+        assert.ok(!/sourceCardId|cardId|instanceId|hand":\[|deck":\[|rating|reward/i.test(JSON.stringify(routeHeal.payload.stateView.actionReceiptReport?.healing || {})), 'route heal receipt must not leak internal card identity, hand, deck, rating, or rewards');
+
         const duplicateA = await submitIntent(baseUrl, firstToken, joinB.payload.matchId, {
                 intentId: 'route-intent-burst-1',
                 intentType: 'play_card',
@@ -1058,7 +1081,7 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
         const wrongSeatB = await submitIntent(baseUrl, secondToken, joinB.payload.matchId, {
                 intentId: 'route-intent-wrong-seat-1',
                 intentType: 'play_card',
-                stateVersion: routeGuardStance.payload.stateView.stateVersion,
+                stateVersion: routeHeal.payload.stateView.stateVersion,
                 payload: { cardInstanceId: secondStrikeCard, targetSeat: firstSeat }
         });
         assert.equal(wrongSeatB.payload.result, 'rejected', 'non-current live seat action should be rejected');
@@ -1067,7 +1090,7 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
         const endTurnA = await submitIntent(baseUrl, firstToken, joinB.payload.matchId, {
                 intentId: 'route-intent-end-turn-1',
                 intentType: 'end_turn',
-                stateVersion: routeGuardStance.payload.stateView.stateVersion,
+                stateVersion: routeHeal.payload.stateView.stateVersion,
                 payload: {}
         });
         assert.equal(endTurnA.payload.result, 'accepted', 'current live seat should end turn');

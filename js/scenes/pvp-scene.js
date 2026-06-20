@@ -1133,6 +1133,14 @@ export const PVPScene = {
           },
           blockGain: Math.max(0, Math.floor(Number(card && card.blockGain) || 0)),
           selfBlockAfter: Math.max(0, Math.floor(Number(card && card.selfBlockAfter) || 0)),
+          healing: card && card.healing && typeof card.healing === 'object' ? {
+            amount: Math.max(0, Math.floor(Number(card.healing.amount) || 0)),
+            recoveredHp: Math.max(0, Math.floor(Number(card.healing.recoveredHp) || 0)),
+            hpBefore: Math.max(0, Math.floor(Number(card.healing.hpBefore) || 0)),
+            hpAfter: Math.max(0, Math.floor(Number(card.healing.hpAfter) || 0)),
+            maxHp: Math.max(0, Math.floor(Number(card.healing.maxHp) || 0)),
+            capped: card.healing.capped === true
+          } : null,
           publicStatusMitigation: publicStatusMitigation ? {
             statusId: String(publicStatusMitigation.statusId || ''),
             label: String(publicStatusMitigation.label || ''),
@@ -1173,7 +1181,12 @@ export const PVPScene = {
       ? `；护体触发，保底 ${preview.openingProtection.minimumHp} 血，挡下 ${preview.openingProtection.preventedDamage}`
       : '';
     const blockText = preview.blockGain > 0 ? `；自身获得 ${preview.blockGain} 护盾` : '';
-    return `${preview.cardName || '术式'}：预算后 ${preview.budgetedDamage}，破盾 ${preview.blockedDamage}，生命伤害 ${preview.hpDamage}，${targetSeat} 预计 ${preview.targetHpAfter} 血${protectionText}${blockText}。`;
+    const healText = preview.healing
+      ? preview.healing.recoveredHp > 0
+        ? `；自身恢复 ${preview.healing.recoveredHp}，预计 ${preview.healing.hpAfter}/${preview.healing.maxHp}`
+        : '；生命已满，恢复封顶'
+      : '';
+    return `${preview.cardName || '术式'}：预算后 ${preview.budgetedDamage}，破盾 ${preview.blockedDamage}，生命伤害 ${preview.hpDamage}，${targetSeat} 预计 ${preview.targetHpAfter} 血${protectionText}${blockText}${healText}。`;
   },
   getLiveActionReceiptReport(view) {
     const report = view && view.actionReceiptReport && typeof view.actionReceiptReport === 'object'
@@ -1184,6 +1197,7 @@ export const PVPScene = {
     const protection = report.openingProtection && typeof report.openingProtection === 'object' ? report.openingProtection : {};
     const blockGain = report.blockGain && typeof report.blockGain === 'object' ? report.blockGain : null;
     const statusEffects = report.statusEffects && typeof report.statusEffects === 'object' ? report.statusEffects : {};
+    const healing = report.healing && typeof report.healing === 'object' ? report.healing : null;
     const cardDraw = report.cardDraw && typeof report.cardDraw === 'object' ? report.cardDraw : null;
     const draw = report.draw && typeof report.draw === 'object' ? report.draw : {};
     const counterplay = report.counterplay && typeof report.counterplay === 'object' ? report.counterplay : {};
@@ -1233,6 +1247,13 @@ export const PVPScene = {
         seatId: String(blockGain.seatId || ''),
         block: Math.max(0, Math.floor(Number(blockGain.block) || 0)),
         totalBlock: Math.max(0, Math.floor(Number(blockGain.totalBlock) || 0))
+      } : null,
+      healing: healing ? {
+        seatId: String(healing.seatId || ''),
+        recoveredHp: Math.max(0, Math.floor(Number(healing.recoveredHp) || 0)),
+        hp: Math.max(0, Math.floor(Number(healing.hp) || 0)),
+        maxHp: Math.max(0, Math.floor(Number(healing.maxHp) || 0)),
+        capped: healing.capped === true
       } : null,
       statusEffects: {
         applied: Array.isArray(statusEffects.applied) ? statusEffects.applied.map(normalizeStatusEffect).filter(status => status.statusId).slice(0, 3) : [],
@@ -1289,6 +1310,9 @@ export const PVPScene = {
     const guardStanceChip = guardStanceStatus
       ? '<span class="pvp-live-action-receipt-chip" data-live-guard-stance="public_guard_stance">公开守势</span>'
       : '';
+    const healingChip = report.healing
+      ? `<span class="pvp-live-action-receipt-chip" data-live-hp-recovered="public_hp_recovered">${this.escapeHtml(report.healing.recoveredHp > 0 ? `恢复 +${report.healing.recoveredHp}` : '恢复封顶')}</span>`
+      : '';
     const cardDrawChip = report.cardDraw
       ? `<span class="pvp-live-action-receipt-chip" data-live-card-cycle="public_card_cycle">${this.escapeHtml(report.cardDraw.capped ? '抽滤已满' : report.cardDraw.count > 0 ? `抽滤 +${report.cardDraw.count}` : '抽滤暂停')}</span>`
       : '';
@@ -1297,6 +1321,7 @@ export const PVPScene = {
       <span class="pvp-live-action-receipt-line">${this.escapeHtml(summary)}</span>
       ${mitigationChip}
       ${guardStanceChip}
+      ${healingChip}
       ${cardDrawChip}
       <span class="pvp-live-action-receipt-chip">${this.escapeHtml(source)} · ${this.escapeHtml(hidden)} · ${this.escapeHtml(report.rankedImpact || 'none')}</span>
     `;
@@ -2959,6 +2984,7 @@ export const PVPScene = {
       status_applied: '公开状态施加',
       status_consumed: '公开状态兑现',
       status_mitigated: '公开状态缓解',
+      hp_recovered: '公开恢复',
       card_cycled: '公开抽滤',
       block_gained: '护盾结算',
       card_played: '术式打出',
@@ -3027,6 +3053,16 @@ export const PVPScene = {
       } else {
         detail = `${seatId ? `目标 ${seatId}` : '目标'} · ${mitigatedBySeat ? `${mitigatedBySeat} ` : ''}稳住${label} · 阻止后续兑现`;
       }
+    } else if (type === 'hp_recovered') {
+      const seatId = String(payload.seatId || event.actingSeat || '');
+      const recoveredHp = Math.max(0, Math.floor(Number(payload.recoveredHp) || 0));
+      const hp = Math.max(0, Math.floor(Number(payload.hp) || 0));
+      const maxHp = Math.max(0, Math.floor(Number(payload.maxHp) || 0));
+      const capped = payload.capped === true;
+      detail = recoveredHp > 0
+        ? `${seatId || '行动方'} · 恢复 ${recoveredHp} · 当前 ${hp}/${maxHp}`
+        : `${seatId || '行动方'} · 已到上限 · 当前 ${hp}/${maxHp}`;
+      if (capped && recoveredHp > 0) detail += ' · 已到上限';
     } else if (type === 'card_cycled') {
       const seatId = String(payload.seatId || event.actingSeat || '');
       const count = Math.max(0, Math.floor(Number(payload.count) || 0));
@@ -3849,6 +3885,7 @@ export const PVPScene = {
         'card_played',
         'damage_applied',
         'block_gained',
+        'hp_recovered',
         'card_cycled',
         'budget_clamped',
         'opening_protection_triggered',

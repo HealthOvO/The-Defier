@@ -17,7 +17,8 @@ function createCardInstance(seatId, cardId, ordinal) {
         name: definition.name,
         cost: definition.cost,
         damage: definition.damage || 0,
-        block: definition.block || 0
+        block: definition.block || 0,
+        heal: definition.heal || 0
     };
 }
 

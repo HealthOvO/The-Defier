@@ -139,6 +139,7 @@ const RULES = Object.freeze({
             name: '内心平和',
             cost: 1,
             block: 4,
+            heal: 3,
             tags: Object.freeze(['defense', 'heal']),
             pvpRoles: Object.freeze(['defenseOrRecovery'])
         }),
@@ -219,6 +220,7 @@ const RULES = Object.freeze({
             name: '续命丝',
             cost: 1,
             block: 4,
+            heal: 3,
             tags: Object.freeze(['heal', 'defense']),
             pvpRoles: Object.freeze(['defenseOrRecovery'])
         }),
@@ -226,7 +228,8 @@ const RULES = Object.freeze({
             id: 'wardingHerb',
             name: '护脉草',
             cost: 1,
-            block: 7,
+            block: 4,
+            heal: 3,
             tags: Object.freeze(['heal', 'defense']),
             pvpRoles: Object.freeze(['defenseOrRecovery'])
         }),

@@ -576,6 +576,36 @@ function applyBlock(state, intent, card, events) {
     });
 }
 
+function applyHeal(state, intent, card, events) {
+    const actor = state.seats[intent.seatId];
+    const heal = Math.max(0, Math.floor(Number(card.heal) || 0));
+    if (!actor || heal <= 0) return null;
+    const maxHp = Math.max(1, Math.floor(Number(actor.maxHp || RULES.startingHp) || RULES.startingHp));
+    const hpBefore = normalizeCount(actor.hp);
+    const recoverableHp = Math.max(0, maxHp - hpBefore);
+    const recoveredHp = Math.min(heal, recoverableHp);
+    const hp = Math.min(maxHp, hpBefore + recoveredHp);
+    actor.hp = hp;
+    if (recoveredHp > 0) {
+        actor.effectiveActionThisTurn = true;
+        ensureLongGameStats(actor).preventedOrRecoveredDamage += recoveredHp;
+    }
+    appendEvent(state, events, 'hp_recovered', intent, {
+        sourceCardId: card.cardId,
+        seatId: actor.seatId,
+        recoveredHp,
+        hp,
+        maxHp,
+        capped: recoveredHp < heal
+    });
+    return {
+        recoveredHp,
+        hp,
+        maxHp,
+        capped: recoveredHp < heal
+    };
+}
+
 function reducePlayCard(state, intent, fingerprint) {
     if (state.currentSeat !== intent.seatId) {
         return reject(state, intent, 'not_current_turn');
@@ -610,6 +640,7 @@ function reducePlayCard(state, intent, fingerprint) {
         return reject(state, intent, damageError);
     }
     applyBlock(newState, intent, card, events);
+    applyHeal(newState, intent, card, events);
     mitigatePublicResponseStatus(newState, intent, card, events);
     applyGuardStanceStatus(newState, intent, card, events);
     applyPublicSetupStatus(newState, intent, card, events);
