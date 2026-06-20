@@ -1106,6 +1106,9 @@ export const PVPScene = {
         const publicStatusMitigation = card && card.publicStatusMitigation && typeof card.publicStatusMitigation === 'object'
           ? card.publicStatusMitigation
           : null;
+        const cardDraw = card && card.cardDraw && typeof card.cardDraw === 'object'
+          ? card.cardDraw
+          : null;
         return {
           cardInstanceId: String(card && card.cardInstanceId || ''),
           cardName: String(card && card.cardName || '术式'),
@@ -1137,6 +1140,10 @@ export const PVPScene = {
             sourceSeat: String(publicStatusMitigation.sourceSeat || ''),
             responseWindow: String(publicStatusMitigation.responseWindow || ''),
             mitigation: String(publicStatusMitigation.mitigation || '')
+          } : null,
+          cardDraw: cardDraw ? {
+            count: Math.max(0, Math.floor(Number(cardDraw.count) || 0)),
+            capped: cardDraw.capped === true
           } : null,
           summaryLine: String(card && card.summaryLine || ''),
           safeguards: Array.isArray(card && card.safeguards)
@@ -1177,6 +1184,7 @@ export const PVPScene = {
     const protection = report.openingProtection && typeof report.openingProtection === 'object' ? report.openingProtection : {};
     const blockGain = report.blockGain && typeof report.blockGain === 'object' ? report.blockGain : null;
     const statusEffects = report.statusEffects && typeof report.statusEffects === 'object' ? report.statusEffects : {};
+    const cardDraw = report.cardDraw && typeof report.cardDraw === 'object' ? report.cardDraw : null;
     const draw = report.draw && typeof report.draw === 'object' ? report.draw : {};
     const counterplay = report.counterplay && typeof report.counterplay === 'object' ? report.counterplay : {};
     const normalizeStatusEffect = (status = {}) => ({
@@ -1229,6 +1237,13 @@ export const PVPScene = {
         consumed: Array.isArray(statusEffects.consumed) ? statusEffects.consumed.map(normalizeStatusEffect).filter(status => status.statusId).slice(0, 3) : [],
         mitigated: Array.isArray(statusEffects.mitigated) ? statusEffects.mitigated.map(normalizeStatusEffect).filter(status => status.statusId).slice(0, 3) : []
       },
+      cardDraw: cardDraw ? {
+        seatId: String(cardDraw.seatId || ''),
+        count: Math.max(0, Math.floor(Number(cardDraw.count) || 0)),
+        handCount: Math.max(0, Math.floor(Number(cardDraw.handCount) || 0)),
+        deckCount: Math.max(0, Math.floor(Number(cardDraw.deckCount) || 0)),
+        capped: cardDraw.capped === true
+      } : null,
       nextSeat: String(report.nextSeat || ''),
       completedTurns: Math.max(0, Math.floor(Number(report.completedTurns) || 0)),
       roundIndex: Math.max(0, Math.floor(Number(report.roundIndex) || 0)),
@@ -1265,10 +1280,14 @@ export const PVPScene = {
     const mitigationChip = report.statusEffects && Array.isArray(report.statusEffects.mitigated) && report.statusEffects.mitigated.length > 0
       ? '<span class="pvp-live-action-receipt-chip" data-live-public-status-mitigation="public_status_mitigated">公开状态缓解</span>'
       : '';
+    const cardDrawChip = report.cardDraw
+      ? `<span class="pvp-live-action-receipt-chip" data-live-card-cycle="public_card_cycle">${this.escapeHtml(report.cardDraw.capped ? '抽滤已满' : report.cardDraw.count > 0 ? `抽滤 +${report.cardDraw.count}` : '抽滤暂停')}</span>`
+      : '';
     return `
       <span class="pvp-live-action-receipt-chip">${this.escapeHtml(receiptLabel)}</span>
       <span class="pvp-live-action-receipt-line">${this.escapeHtml(summary)}</span>
       ${mitigationChip}
+      ${cardDrawChip}
       <span class="pvp-live-action-receipt-chip">${this.escapeHtml(source)} · ${this.escapeHtml(hidden)} · ${this.escapeHtml(report.rankedImpact || 'none')}</span>
     `;
   },
@@ -2914,9 +2933,9 @@ export const PVPScene = {
   },
   formatLiveEvent(event = {}) {
     const type = String(event && event.eventType || 'event');
-    const payload = event && event.payload && typeof event.payload === 'object'
-      ? event.payload
-      : event && event.publicData && typeof event.publicData === 'object' ? event.publicData : {};
+    const payload = event && event.publicData && typeof event.publicData === 'object'
+      ? event.publicData
+      : event && event.payload && typeof event.payload === 'object' ? event.payload : {};
     const actor = event && event.actingSeat ? `席位 ${event.actingSeat}` : '';
     const eventMap = {
       opening_protection_triggered: '开局护体触发',
@@ -2927,6 +2946,7 @@ export const PVPScene = {
       status_applied: '公开状态施加',
       status_consumed: '公开状态兑现',
       status_mitigated: '公开状态缓解',
+      card_cycled: '公开抽滤',
       block_gained: '护盾结算',
       card_played: '术式打出',
       turn_ended: '回合交替',
@@ -2984,6 +3004,17 @@ export const PVPScene = {
       const seatId = String(payload.seatId || '');
       const mitigatedBySeat = String(payload.mitigatedBySeat || event.actingSeat || '');
       detail = `${seatId ? `目标 ${seatId}` : '目标'} · ${mitigatedBySeat ? `${mitigatedBySeat} ` : ''}稳住${label} · 阻止后续兑现`;
+    } else if (type === 'card_cycled') {
+      const seatId = String(payload.seatId || event.actingSeat || '');
+      const count = Math.max(0, Math.floor(Number(payload.count) || 0));
+      const handCount = Math.max(0, Math.floor(Number(payload.handCount) || 0));
+      const deckCount = Math.max(0, Math.floor(Number(payload.deckCount) || 0));
+      const capped = payload.capped === true;
+      detail = capped
+        ? `${seatId || '行动方'} · 手牌已满，抽滤暂停 · 当前手牌 ${handCount} · 牌库 ${deckCount}`
+        : count > 0
+          ? `${seatId || '行动方'} · 抽滤 ${count} 张 · 当前手牌 ${handCount} · 牌库 ${deckCount}`
+          : `${seatId || '行动方'} · 牌库已空，抽滤暂停 · 当前手牌 ${handCount} · 牌库 ${deckCount}`;
     } else if (type === 'match_invalidated' && payload.reason) {
       detail = `原因：${String(payload.reason)}`;
     } else if (type === 'match_finished') {
@@ -3795,6 +3826,7 @@ export const PVPScene = {
         'card_played',
         'damage_applied',
         'block_gained',
+        'card_cycled',
         'budget_clamped',
         'opening_protection_triggered',
         'opening_counterplay_granted',

@@ -1,5 +1,29 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-21: V10-S11 live PVP draw-tag card cycling
+  - 本轮完成
+    - `server/pvp-live/engine/reducer.js` 为 `draw` tag 牌补上真人 PVP 抽滤结算：`surgeStep / tacticalExpose / thunderLattice` 等牌仍按正常出牌流程花费灵力、进入弃牌并结算伤害/护盾/状态，然后只从行动方私有牌库抽 1 张；不会引入 0 费法术、额外行动或先手秒杀链。
+    - 抽滤严格受 `RULES.maxHandSize` 约束：手牌未满时抽 1，手牌已满时公开 capped 并保留牌库不变，避免双方因为抽牌溢出或隐藏丢牌产生误解。
+    - `card_cycled` 成为独立的 play-card 结算事件，不复用回合结束 `cards_drawn`；内部事件可带 `sourceCardId` 用于回执配对，但公开投影、replay、golden replay、persistence 和 WS 白名单只允许 `seatId / count / handCount / deckCount / capped`。
+    - `server/pvp-live/engine/state-view.js` 将 `card_cycled` 纳入行动回执和关键公开事件链，`actionReceiptReport.cardDraw` 只保留公开计数，不暴露抽到的牌、手牌、牌库内容、`sourceCardId`、effect tag、rating、reward 或正式积分私密数据。
+    - `server/routes/pvp-live.js` 的 HTTP intent fallback 现在也会用同一套 `sanitizePublicEvent()` 裁剪 `reduced.events`，不再把 reducer 内部 `sourceCardId / effect` 透传给前端；`js/scenes/pvp-scene.js` 也改为优先读取 `publicData`，防止混合事件对象误用内部 payload。
+    - `js/scenes/pvp-scene.js` 补齐抽滤 UI：预览/回执保留 `cardDraw`，事件日志显示“公开抽滤”，行动回执用 `data-live-card-cycle="public_card_cycle"` 固定 DOM 合同；`getLiveActionReleaseEventTypes('play_card')` 也加入 `card_cycled`，避免实时回执未到就提前释放行动锁。
+    - 测试门禁新增 draw-tag 红绿链：engine 断言正常花费、进弃牌、私有抽 1、capped 不抽、公开字段精确集合；route checks 断言 HTTP `card_cycled` 只返回公开字段；UI runtime / contract / release gate / browser audit 固定抽滤文案、DOM marker、白名单和无隐藏信息边界。
+  - 已验证
+    - 红测：`node tests/sanity_pvp_live_engine_checks.cjs` 在实现前失败于缺少 draw-tag 私有抽牌。
+    - 绿测：`node tests/sanity_pvp_live_engine_checks.cjs`
+    - 绿测：`node tests/sanity_pvp_live_route_checks.cjs`
+    - 绿测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs`
+    - 绿测：`node tests/sanity_pvp_live_ui_contract_checks.cjs`
+    - 绿测：`node tests/sanity_release_gate_coverage_checks.cjs`
+    - 语法：`node --check js/scenes/pvp-scene.js`
+    - 语法：`node --check tests/browser_pvp_live_audit.mjs`
+    - 浏览器审计：`node tests/browser_pvp_live_audit.mjs http://127.0.0.1:4173 output/web-pvp-live-audit`，88/88 findings、0 failed、0 console error。
+    - 全量：`npm run test:node`
+    - 构建：`npm run build:pages`
+  - 当前结论
+    - live PVP 现在有了不靠秒杀的手牌节奏选择：抽滤牌能用正常资源换取下一手质量，防守方/进攻方都能从公开事件和回执读懂“对方抽了几张、现在手牌/牌库计数如何”，但看不到抽到什么。这让真人 PVP 更接近可反制的拉锯，而不是首动直接爆发或隐藏信息突然翻盘。
+
 - 2026-06-21: V10-S10 live PVP public status mitigation response
   - 本轮完成
     - `server/pvp-live/engine/reducer.js` 新增公开破绽响应：防守方在 `vulnerable_mark` 的响应窗口内打出 `guard / defense` 牌时，会花费正常灵力、获得原有护盾，并公开清除自己身上的破绽；事件为 `status_mitigated`，不会引入 0 费反制、隐藏反制或手牌窥探。

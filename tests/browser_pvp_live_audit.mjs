@@ -2312,6 +2312,75 @@ async function safeElementScreenshot(page, selector, outputPath) {
       && !/payload|hand|deck|cardId|instanceId|loadoutSnapshot|reward|rating|elo|sourceCardId/i.test(`${mitigationFormatProbe.event?.detail || ''} ${mitigationFormatProbe.receipt || ''}`),
     JSON.stringify(mitigationFormatProbe),
   );
+  const cardCycleFormatProbe = await page.evaluate(() => {
+    const event = window.PVPScene.formatLiveEvent({
+      eventType: 'card_cycled',
+      actingSeat: 'A',
+      publicData: {
+        seatId: 'A',
+        count: 1,
+        handCount: 4,
+        deckCount: 9,
+        capped: false,
+        sourceCardId: 'surgeStep',
+        effect: 'draw_tag',
+      },
+    });
+    const cappedEvent = window.PVPScene.formatLiveEvent({
+      eventType: 'card_cycled',
+      actingSeat: 'A',
+      publicData: {
+        seatId: 'A',
+        count: 0,
+        handCount: 10,
+        deckCount: 6,
+        capped: true,
+        sourceCardId: 'surgeStep',
+        effect: 'draw_tag',
+      },
+    });
+    const receipt = window.PVPScene.renderLiveActionReceiptReport({
+      actionReceiptReport: {
+        reportVersion: 'pvp-live-action-receipt-v1',
+        sourceVisibility: 'authoritative_public_projection',
+        usesHiddenInformation: false,
+        rankedImpact: 'none',
+        viewerSeat: 'A',
+        actingSeat: 'A',
+        actionType: 'play_card',
+        latestSequence: 48,
+        cardName: '疾电步',
+        cardDraw: {
+          seatId: 'A',
+          count: 1,
+          handCount: 4,
+          deckCount: 9,
+          capped: false,
+          sourceCardId: 'surgeStep',
+          effect: 'draw_tag',
+        },
+        summaryLine: 'A 打出疾电步：不造成伤害；自身护盾 +6；抽滤 1 张，当前手牌 4。',
+        safeguards: ['public_events', 'self_block', 'public_card_cycle'],
+      },
+    });
+    return {
+      event,
+      cappedEvent,
+      receipt,
+    };
+  });
+  add(
+    'live UI formats public card cycle event and receipt',
+    /公开抽滤/.test(cardCycleFormatProbe.event?.label || '')
+      && /抽滤 1 张/.test(cardCycleFormatProbe.event?.detail || '')
+      && /当前手牌 4/.test(cardCycleFormatProbe.event?.detail || '')
+      && /牌库 9/.test(cardCycleFormatProbe.event?.detail || '')
+      && /手牌已满，抽滤暂停/.test(cardCycleFormatProbe.cappedEvent?.detail || '')
+      && /data-live-card-cycle="public_card_cycle"/.test(cardCycleFormatProbe.receipt || '')
+      && /抽滤 1 张/.test(cardCycleFormatProbe.receipt || '')
+      && !/sourceCardId|cardId|instanceId|draw_tag|loadoutSnapshot|reward|rating|elo|hand":\[|deck":\[/i.test(`${cardCycleFormatProbe.event?.detail || ''} ${cardCycleFormatProbe.cappedEvent?.detail || ''} ${cardCycleFormatProbe.receipt || ''}`),
+    JSON.stringify(cardCycleFormatProbe),
+  );
   add(
     'live UI renders handoff receipt label for end-turn action receipt',
     /交权回执/.test(actionProbe.handoffReceipt)

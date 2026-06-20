@@ -2,6 +2,7 @@ const assert = require('assert');
 const express = require('../server/node_modules/express');
 const pvpLiveRoutes = require('../server/routes/pvp-live');
 const { generateToken } = require('../server/middleware/auth');
+const { RULES } = require('../server/pvp-live/engine/rules');
 
 function listen(app) {
     return new Promise((resolve, reject) => {
@@ -53,6 +54,18 @@ function makeLoadout(identitySlot, pattern) {
         identitySlot,
         label: `${identitySlot}-测试谱`,
         deck
+    };
+}
+
+function makeRouteLiveCard(instanceId, cardId) {
+    const definition = RULES.cards[cardId];
+    return {
+        instanceId,
+        cardId,
+        name: definition.name,
+        cost: definition.cost,
+        damage: definition.damage || 0,
+        block: definition.block || 0
     };
 }
 
@@ -994,6 +1007,26 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
         assert.equal(playA.payload.stateView.opponent.hp, 35, 'route should expose server-clamped opponent hp after public second-seat buffer');
         assert.ok(playA.payload.events.some(event => event.eventType === 'budget_clamped'), 'route should return clamp event');
 
+        const routeDrawMatch = pvpLiveRoutes.__livePvpStore.matches.get(joinB.payload.matchId);
+        const routeDrawSeat = routeDrawMatch.state.seats[firstSeat];
+        routeDrawSeat.energy = Math.max(routeDrawSeat.energy, RULES.cards.surgeStep.cost);
+        routeDrawSeat.hand = [makeRouteLiveCard(`${firstSeat}-surgeStep-route-1`, 'surgeStep')];
+        routeDrawSeat.deck = [makeRouteLiveCard(`${firstSeat}-hidden-draw-route-1`, 'pvp_strike')];
+        const routeDraw = await submitIntent(baseUrl, firstToken, joinB.payload.matchId, {
+                intentId: 'route-intent-card-draw-1',
+                intentType: 'play_card',
+                stateVersion: playA.payload.stateView.stateVersion,
+                payload: { cardInstanceId: `${firstSeat}-surgeStep-route-1`, targetSeat: secondSeat }
+        });
+        assert.equal(routeDraw.payload.result, 'accepted', 'route draw-tag card should resolve as a normal paid play_card intent');
+        const routeDrawEvent = routeDraw.payload.events.find(event => event.eventType === 'card_cycled');
+        assert.ok(routeDrawEvent, 'HTTP play_card response should include public card_cycled event');
+        assert.deepEqual(Object.keys(routeDrawEvent.publicData || {}).sort(), ['capped', 'count', 'deckCount', 'handCount', 'seatId'], 'HTTP card_cycled event should expose only public draw count fields');
+        assert.ok(!Object.prototype.hasOwnProperty.call(routeDrawEvent, 'payload'), 'HTTP card_cycled event must not return raw reducer payload');
+        assert.ok(!/sourceCardId|effect|cardId|instanceId|hidden-draw|pvp_strike|hand":\[|deck":\[|rating|reward/i.test(JSON.stringify(routeDrawEvent)), 'HTTP card_cycled event must not leak internal card identity, effect tags, hand, deck, rating, or rewards');
+        assert.equal(routeDraw.payload.stateView.actionReceiptReport?.cardDraw?.count, 1, 'route action receipt should preserve public card cycle count');
+        assert.ok(!/sourceCardId|effect|cardId|instanceId|hidden-draw|pvp_strike|hand":\[|deck":\[|rating|reward/i.test(JSON.stringify(routeDraw.payload.stateView.actionReceiptReport?.cardDraw || {})), 'route cardDraw receipt must not leak internal card identity, effect tags, hand, deck, rating, or rewards');
+
         const duplicateA = await submitIntent(baseUrl, firstToken, joinB.payload.matchId, {
                 intentId: 'route-intent-burst-1',
                 intentType: 'play_card',
@@ -1006,7 +1039,7 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
         const wrongSeatB = await submitIntent(baseUrl, secondToken, joinB.payload.matchId, {
                 intentId: 'route-intent-wrong-seat-1',
                 intentType: 'play_card',
-                stateVersion: playA.payload.stateView.stateVersion,
+                stateVersion: routeDraw.payload.stateView.stateVersion,
                 payload: { cardInstanceId: secondStrikeCard, targetSeat: firstSeat }
         });
         assert.equal(wrongSeatB.payload.result, 'rejected', 'non-current live seat action should be rejected');
@@ -1015,7 +1048,7 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
         const endTurnA = await submitIntent(baseUrl, firstToken, joinB.payload.matchId, {
                 intentId: 'route-intent-end-turn-1',
                 intentType: 'end_turn',
-                stateVersion: playA.payload.stateView.stateVersion,
+                stateVersion: routeDraw.payload.stateView.stateVersion,
                 payload: {}
         });
         assert.equal(endTurnA.payload.result, 'accepted', 'current live seat should end turn');
@@ -1428,10 +1461,11 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
         assert.ok(/护体/.test(protectedBurstFirst.payload.stateView.actionReceiptReport?.summaryLine || ''), 'route action receipt should give readable protection summary');
         assert.ok(!/hand|deck|cardId|instanceId|sourceCardId|loadoutSnapshot|rating|elo|reward/i.test(JSON.stringify(protectedBurstFirst.payload.stateView.actionReceiptReport)), 'route action receipt must not expose hidden ids or hidden state');
         const routeProtectionEvent = protectedBurstFirst.payload.events.find(event => event.eventType === 'opening_protection_triggered');
-        assert.ok(routeProtectionEvent && routeProtectionEvent.payload.protectedSeat === protectSecondSeat, 'opening protected burst should return public protection event');
-        assert.equal(routeProtectionEvent.payload.minimumHp, 1, 'opening protected burst should expose minimum hp');
-        assert.equal(routeProtectionEvent.payload.preventedDamage, 6, 'opening protected burst should expose prevented lethal damage after public second-seat buffer');
-        assert.equal(routeProtectionEvent.payload.wouldHaveHp, 0, 'opening protected burst should expose would-have hp');
+        const routeProtectionData = eventPublicData(routeProtectionEvent);
+        assert.ok(routeProtectionEvent && routeProtectionData.protectedSeat === protectSecondSeat, 'opening protected burst should return public protection event');
+        assert.equal(routeProtectionData.minimumHp, 1, 'opening protected burst should expose minimum hp');
+        assert.equal(routeProtectionData.preventedDamage, 6, 'opening protected burst should expose prevented lethal damage after public second-seat buffer');
+        assert.equal(routeProtectionData.wouldHaveHp, 0, 'opening protected burst should expose would-have hp');
         assert.ok(!protectedBurstFirst.payload.events.some(event => event.eventType === 'match_finished'), 'opening protected burst should not return match_finished');
         const protectedEndTurnFirst = await submitIntent(baseUrl, protectFirstToken, joinProtectB.payload.matchId, {
             intentId: `route-intent-opening-protected-end-${protectFirstSeat.toLowerCase()}`,

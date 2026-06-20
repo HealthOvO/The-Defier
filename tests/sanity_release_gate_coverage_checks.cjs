@@ -42,6 +42,7 @@ const pvpLiveEngineChecks = read('tests/sanity_pvp_live_engine_checks.cjs');
 const pvpLiveBalanceSimulationChecks = read('tests/sanity_pvp_live_balance_simulation_checks.cjs');
 const pvpLiveFullGateChecks = read('tests/sanity_pvp_live_full_gate_balance_checks.cjs');
 const pvpLiveBalanceArtifactChecks = read('tests/sanity_pvp_live_balance_artifact_checks.cjs');
+const pvpLiveStateView = read('server/pvp-live/engine/state-view.js');
 const pvpLiveGoldenReplayChecks = read('tests/sanity_pvp_live_golden_replay_checks.cjs');
 const pvpLiveGoldenReplayRunner = read('server/pvp-live/golden-replay-runner.js');
 const pvpLiveReplayChecks = read('tests/sanity_pvp_live_replay_checks.cjs');
@@ -630,6 +631,10 @@ const layoutAudit = read('tests/browser_frontend_layout_audit.mjs');
   'intentSignalReport',
   'status_mitigated',
   'public_status_mitigated',
+  'card_cycled',
+  'public_card_cycle',
+  'data-live-card-cycle',
+  'live UI formats public card cycle event and receipt',
   'live UI mobile renders opening protection event without overflow',
   'pvp screen opens on live ranked entry by default on mobile',
   'data-live-mode-boundary',
@@ -961,6 +966,9 @@ assert.ok(
   'protected defender duel momentum should expose granted counterplay safeguard',
   'second seat should start active combat with public opening buffer block',
   'battle start should emit public second-seat buffer event',
+  'draw-tag card should spend its normal card cost',
+  'public card draw event should expose only public count fields',
+  'card draw receipt must not leak drawn card identity, effect tags, or ranked/reward data',
   'opening protection should leave the defender at 1 hp',
   'opening protection should emit a public event',
   'opening protection event should expose minimum hp',
@@ -979,6 +987,23 @@ assert.ok(
   assert.ok(
     pvpLiveEngineChecks.includes(needle),
     `live PVP engine sanity should pin snapshot lock marker: ${needle}`,
+  );
+});
+
+[
+  ['state-view', pvpLiveStateView],
+  ['replay', pvpLiveReplaySource],
+  ['live-ws', pvpLiveWsSource],
+  ['persistence', pvpLivePersistence],
+  ['golden-replay-runner', pvpLiveGoldenReplayRunner],
+].forEach(([label, source]) => {
+  assert.ok(
+    source.includes("card_cycled: ['seatId', 'count', 'handCount', 'deckCount', 'capped']"),
+    `live PVP ${label} public event whitelist should expose only public card cycle counts`,
+  );
+  assert.ok(
+    !source.includes("card_cycled: ['seatId', 'count', 'handCount', 'deckCount', 'capped', 'effect']"),
+    `live PVP ${label} public event whitelist must not expose card cycle effect tags`,
   );
 });
 
@@ -1340,6 +1365,10 @@ assert.ok(
   'timer phase',
   'accepted play_card should keep current turn timer start',
   'accepted play_card should not extend current turn deadline',
+  'route draw-tag card should resolve as a normal paid play_card intent',
+  'HTTP card_cycled event should expose only public draw count fields',
+  'HTTP card_cycled event must not return raw reducer payload',
+  'HTTP card_cycled event must not leak internal card identity, effect tags, hand, deck, rating, or rewards',
   'end turn timer should switch to next seat',
   'end turn should start a fresh timer for next seat',
   'matched view first-match guide should explain opening protection',
@@ -1931,6 +1960,8 @@ assert.ok(
   "process.env.NODE_ENV || '').toLowerCase() === 'production'",
   "router.post('/test/matches/:matchId/seats/:seatId'",
   'forceSeatStateForTest(',
+  'sanitizePublicEvent',
+  'events: Array.isArray(reduced.events) ? reduced.events.map(sanitizePublicEvent) : []',
 ].forEach((needle) => {
   assert.ok(
     pvpLiveRoute.includes(needle),

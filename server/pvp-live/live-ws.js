@@ -12,6 +12,7 @@ const PUBLIC_EVENT_DATA_KEYS = Object.freeze({
     card_played: ['cost', 'remainingEnergy'],
     turn_ended: ['nextSeat', 'completedTurns', 'roundIndex', 'turnIndex'],
     cards_drawn: ['seatId', 'count', 'handCount', 'deckCount', 'capped'],
+    card_cycled: ['seatId', 'count', 'handCount', 'deckCount', 'capped'],
     block_gained: ['block', 'seatId', 'totalBlock'],
     opening_counterplay_granted: ['seatId', 'block', 'totalBlock', 'minimumHp', 'source'],
     opening_protection_triggered: ['protectedSeat', 'minimumHp', 'preventedDamage', 'wouldHaveHp'],

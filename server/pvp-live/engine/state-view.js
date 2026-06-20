@@ -188,6 +188,7 @@ const PUBLIC_EVENT_DATA_KEYS = {
     card_played: ['cost', 'remainingEnergy'],
     turn_ended: ['nextSeat', 'completedTurns', 'roundIndex', 'turnIndex'],
     cards_drawn: ['seatId', 'count', 'handCount', 'deckCount', 'capped'],
+    card_cycled: ['seatId', 'count', 'handCount', 'deckCount', 'capped'],
     block_gained: ['block', 'seatId', 'totalBlock'],
     opening_counterplay_granted: ['seatId', 'block', 'totalBlock', 'minimumHp', 'source'],
     opening_protection_triggered: ['protectedSeat', 'minimumHp', 'preventedDamage', 'wouldHaveHp'],
@@ -249,6 +250,7 @@ function collectReviewEvidence(events, finishSequence) {
         'card_played',
         'turn_ended',
         'cards_drawn',
+        'card_cycled',
         'block_gained',
         'opening_counterplay_granted',
         'opening_protection_triggered',
@@ -552,7 +554,7 @@ function getSeatWindowSummary(evidence) {
             addSeatWindow(getEventSeat(event, 'nextSeat'), event);
             return;
         }
-        if (['card_played', 'block_gained', 'opening_second_seat_buffer_granted', 'opening_counterplay_granted', 'budget_clamped', 'damage_applied', 'opening_protection_triggered', 'status_applied', 'status_consumed', 'status_mitigated'].includes(event.eventType)) {
+        if (['card_played', 'block_gained', 'card_cycled', 'opening_second_seat_buffer_granted', 'opening_counterplay_granted', 'budget_clamped', 'damage_applied', 'opening_protection_triggered', 'status_applied', 'status_consumed', 'status_mitigated'].includes(event.eventType)) {
             addSeatWindow(event.actingSeat ? String(event.actingSeat) : '', event);
         }
     });
@@ -1162,6 +1164,12 @@ function projectCardActionPreview(state, viewerSeat, card) {
     const tags = Array.isArray(getCardDefinition(card.cardId) && getCardDefinition(card.cardId).tags)
         ? getCardDefinition(card.cardId).tags
         : [];
+    const drawMaxHandSize = Math.max(RULES.startingHandSize, Math.floor(Number(RULES.maxHandSize) || RULES.startingHandSize));
+    const drawCapped = normalizeCount(actor.hand.length) - 1 >= drawMaxHandSize;
+    const drawPreview = tags.includes('draw') ? {
+        count: drawCapped || !Array.isArray(actor.deck) || actor.deck.length <= 0 ? 0 : 1,
+        capped: drawCapped
+    } : null;
     const mitigableStatus = (tags.includes('guard') || tags.includes('defense'))
         ? getMitigablePublicStatuses(state, viewerSeat)[0] || null
         : null;
@@ -1173,6 +1181,11 @@ function projectCardActionPreview(state, viewerSeat, card) {
         : '';
     const blockLine = blockGain > 0 ? `；自身获得 ${blockGain} 护盾` : '';
     const mitigationLine = mitigableStatus ? `；清除${mitigableStatus.label || '公开状态'}，阻止后续兑现` : '';
+    const drawLine = drawPreview
+        ? drawPreview.capped
+            ? '；手牌已满，抽滤暂停'
+            : drawPreview.count > 0 ? `；抽滤 ${drawPreview.count} 张` : '；牌库已空，抽滤暂停'
+        : '';
     const safeguards = [];
     if (damageBudget !== null) safeguards.push('first_action_budget');
     if (blockedDamage > 0) safeguards.push('public_block');
@@ -1180,6 +1193,7 @@ function projectCardActionPreview(state, viewerSeat, card) {
     if (preventedByProtection > 0) safeguards.push('counterplay_window_pending');
     if (blockGain > 0) safeguards.push('self_block');
     if (mitigableStatus) safeguards.push('public_status_mitigation_preview');
+    if (drawPreview) safeguards.push('public_card_cycle_preview');
     return {
         cardInstanceId: String(card.instanceId || ''),
         cardName,
@@ -1203,7 +1217,8 @@ function projectCardActionPreview(state, viewerSeat, card) {
         blockGain,
         selfBlockAfter: normalizeCount(actor.block) + blockGain,
         publicStatusMitigation: mitigableStatus,
-        summaryLine: `${cardName}：${damageLine}${protectionLine}${blockLine}${mitigationLine}。`,
+        cardDraw: drawPreview,
+        summaryLine: `${cardName}：${damageLine}${protectionLine}${blockLine}${mitigationLine}${drawLine}。`,
         safeguards: Array.from(new Set(safeguards))
     };
 }
@@ -1252,7 +1267,7 @@ function getPublicCardName(cardId) {
 
 function isCardResolutionEvent(event, cardId, actingSeat) {
     if (!event || event.actingSeat !== actingSeat) return false;
-    if (!['budget_clamped', 'opening_protection_triggered', 'damage_applied', 'block_gained', 'status_applied', 'status_consumed', 'status_mitigated'].includes(String(event.eventType || ''))) return false;
+    if (!['budget_clamped', 'opening_protection_triggered', 'damage_applied', 'block_gained', 'card_cycled', 'status_applied', 'status_consumed', 'status_mitigated'].includes(String(event.eventType || ''))) return false;
     if (event.eventType === 'status_applied') return String(cardId || '') === 'punctureMark';
     if (event.eventType === 'status_consumed') return String(cardId || '') === 'exposedCircuit';
     const payload = getPublicEventPayload(event);
@@ -1281,6 +1296,7 @@ function projectCardActionReceipt(state, seatId, cardPlayedIndex) {
     const damageEvent = findResolution('damage_applied');
     const protectionEvent = findResolution('opening_protection_triggered');
     const blockEvent = findResolution('block_gained');
+    const cardCycleEvent = findResolution('card_cycled');
     const statusAppliedEvent = findResolution('status_applied');
     const statusConsumedEvent = findResolution('status_consumed');
     const statusMitigatedEvent = findResolution('status_mitigated');
@@ -1288,6 +1304,7 @@ function projectCardActionReceipt(state, seatId, cardPlayedIndex) {
     const damagePayload = getPublicEventPayload(damageEvent);
     const protectionPayload = getPublicEventPayload(protectionEvent);
     const blockPayload = getPublicEventPayload(blockEvent);
+    const cardCyclePayload = getPublicEventPayload(cardCycleEvent);
     const statusAppliedPayload = getPublicEventPayload(statusAppliedEvent);
     const statusConsumedPayload = getPublicEventPayload(statusConsumedEvent);
     const statusMitigatedPayload = getPublicEventPayload(statusMitigatedEvent);
@@ -1309,6 +1326,18 @@ function projectCardActionReceipt(state, seatId, cardPlayedIndex) {
         : '';
     const blockLine = blockGain > 0
         ? `；自身护盾 +${blockGain}，当前 ${normalizeCount(blockPayload.totalBlock)}`
+        : '';
+    const cardDraw = cardCycleEvent ? {
+        seatId: String(cardCyclePayload.seatId || actingSeat),
+        count: normalizeCount(cardCyclePayload.count),
+        handCount: normalizeCount(cardCyclePayload.handCount),
+        deckCount: normalizeCount(cardCyclePayload.deckCount),
+        capped: cardCyclePayload.capped === true
+    } : null;
+    const cardDrawLine = cardDraw
+        ? cardDraw.capped
+            ? '；手牌已满，抽滤暂停'
+            : cardDraw.count > 0 ? `；抽滤 ${cardDraw.count} 张，当前手牌 ${cardDraw.handCount}` : '；牌库已空，抽滤暂停'
         : '';
     const statusApplied = statusAppliedEvent ? {
         statusId: String(statusAppliedPayload.statusId || ''),
@@ -1349,6 +1378,7 @@ function projectCardActionReceipt(state, seatId, cardPlayedIndex) {
     if (blockedDamage > 0) safeguards.push('public_block');
     if (protectionTriggered) safeguards.push('opening_protection');
     if (blockGain > 0) safeguards.push('self_block');
+    if (cardDraw) safeguards.push('public_card_cycle');
     if (statusApplied) safeguards.push('public_status_applied');
     if (statusConsumed) safeguards.push('public_status_consumed');
     if (statusMitigated) safeguards.push('public_status_mitigated');
@@ -1385,12 +1415,13 @@ function projectCardActionReceipt(state, seatId, cardPlayedIndex) {
             block: blockGain,
             totalBlock: normalizeCount(blockPayload.totalBlock)
         } : null,
+        cardDraw,
         statusEffects: {
             applied: statusApplied ? [statusApplied] : [],
             consumed: statusConsumed ? [statusConsumed] : [],
             mitigated: statusMitigated ? [statusMitigated] : []
         },
-        summaryLine: `${actingSeat} 打出${cardName}：${damageLine}${protectionLine}${blockLine}${statusLine}。`,
+        summaryLine: `${actingSeat} 打出${cardName}：${damageLine}${protectionLine}${blockLine}${statusLine}${cardDrawLine}。`,
         safeguards: Array.from(new Set(safeguards))
     };
 }
@@ -1913,5 +1944,6 @@ function projectStateView(state, seatId) {
 }
 
 module.exports = {
-    projectStateView
+    projectStateView,
+    sanitizePublicEvent
 };

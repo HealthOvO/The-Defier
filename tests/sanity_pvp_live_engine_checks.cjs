@@ -369,6 +369,68 @@ assert(!/hand|deck|cardInstanceId|loadoutSnapshot|rating|elo|reward/i.test(JSON.
 assert(activeState.seats.B.block === 3, 'second seat should start active combat with public opening buffer block');
 assert(activeState.events.some(e => e.eventType === 'opening_second_seat_buffer_granted' && e.payload.seatId === 'B' && e.payload.block === 3), 'battle start should emit public second-seat buffer event');
 
+function makeLiveCard(instanceId, cardId) {
+  return {
+    instanceId,
+    cardId,
+    name: RULES.cards[cardId].name,
+    cost: RULES.cards[cardId].cost,
+    damage: RULES.cards[cardId].damage || 0,
+    block: RULES.cards[cardId].block || 0
+  };
+}
+
+const drawState = createReadyLiveState('pvpm-card-draw-test');
+drawState.seats.A.hand = [makeLiveCard('A-surgeStep-1', 'surgeStep')];
+drawState.seats.A.deck = [
+  makeLiveCard('A-drawn-strike-1', 'pvp_strike'),
+  makeLiveCard('A-drawn-guard-2', 'pvp_guard')
+];
+const drawResult = reduceIntent(drawState, {
+  intentId: 'intent-card-draw-1',
+  intentType: 'play_card',
+  matchId: 'pvpm-card-draw-test',
+  seatId: 'A',
+  ruleVersion: RULE_VERSION,
+  stateVersion: drawState.stateVersion,
+  payload: { cardInstanceId: 'A-surgeStep-1', targetSeat: 'B' }
+});
+assert(drawResult.result === 'accepted', 'draw-tag card should resolve as a normal paid action');
+assert(drawResult.state.seats.A.energy === Math.max(0, drawState.seats.A.energy - RULES.cards.surgeStep.cost), 'draw-tag card should spend its normal card cost');
+assert(drawResult.state.seats.A.discard.some(card => card.cardId === 'surgeStep'), 'draw-tag card should move the played card into discard before drawing');
+assert(drawResult.state.seats.A.hand.length === 1 && drawResult.state.seats.A.hand[0].cardId === 'pvp_strike', 'draw-tag card should privately draw one card into the actor hand');
+assert(drawResult.state.seats.A.deck.length === 1, 'draw-tag card should remove exactly one card from the actor deck');
+assert(drawResult.events.some(e => e.eventType === 'card_cycled' && e.payload.sourceCardId === 'surgeStep' && e.payload.count === 1 && e.payload.handCount === 1 && e.payload.deckCount === 1 && e.payload.capped === false), 'draw-tag card should emit public card_cycled count evidence');
+const drawViewB = projectStateView(drawResult.state, 'B');
+const publicDrawEvent = drawViewB.recentEvents.find(event => event.eventType === 'card_cycled');
+assert(publicDrawEvent && (publicDrawEvent.publicData || {}).count === 1 && (publicDrawEvent.publicData || {}).handCount === 1, 'opponent should see only public card draw counts');
+assert(JSON.stringify(Object.keys(publicDrawEvent.publicData || {}).sort()) === JSON.stringify(['capped', 'count', 'deckCount', 'handCount', 'seatId']), 'public card draw event should expose only public count fields');
+assert(!/sourceCardId|effect|cardId|instanceId|A-drawn|pvp_strike|pvp_guard|hand":\[|deck":\[/i.test(JSON.stringify(publicDrawEvent)), 'public card draw event must not leak drawn card identity, hand, deck, or internal effect tags');
+const drawReceipt = projectStateView(drawResult.state, 'A').actionReceiptReport;
+assert(drawReceipt.cardDraw && drawReceipt.cardDraw.count === 1 && drawReceipt.cardDraw.capped === false, 'action receipt should explain one-shot card draw');
+assert(/抽滤|抽\s*1/.test(drawReceipt.summaryLine), 'action receipt summary should include readable card draw feedback');
+assert(!/sourceCardId|effect|instanceId|A-drawn|loadoutSnapshot|rating|elo|reward/i.test(JSON.stringify(drawReceipt.cardDraw)), 'card draw receipt must not leak drawn card identity, effect tags, or ranked/reward data');
+
+const cappedDrawState = createReadyLiveState('pvpm-card-draw-cap-test');
+cappedDrawState.seats.A.hand = [
+  makeLiveCard('A-surgeStep-cap-1', 'surgeStep'),
+  ...Array.from({ length: RULES.maxHandSize }, (_, index) => makeLiveCard(`A-cap-filler-${index + 1}`, 'pvp_guard'))
+];
+cappedDrawState.seats.A.deck = [makeLiveCard('A-capped-hidden-1', 'pvp_strike')];
+const cappedDraw = reduceIntent(cappedDrawState, {
+  intentId: 'intent-card-draw-cap-1',
+  intentType: 'play_card',
+  matchId: 'pvpm-card-draw-cap-test',
+  seatId: 'A',
+  ruleVersion: RULE_VERSION,
+  stateVersion: cappedDrawState.stateVersion,
+  payload: { cardInstanceId: 'A-surgeStep-cap-1', targetSeat: 'B' }
+});
+assert(cappedDraw.result === 'accepted', 'over-cap draw-tag card should still resolve as a paid action');
+assert(cappedDraw.state.seats.A.hand.length === RULES.maxHandSize, 'draw-tag card must not exceed max hand size');
+assert(cappedDraw.state.seats.A.deck.length === 1, 'capped draw should leave deck unchanged');
+assert(cappedDraw.events.some(e => e.eventType === 'card_cycled' && e.payload.count === 0 && e.payload.capped === true && e.payload.handCount === RULES.maxHandSize), 'capped draw should emit public capped evidence');
+
 const setupDeck = ['punctureMark', 'exposedCircuit', 'pvp_guard'];
 const tacticalDeck = setupDeck.concat(Array.from({ length: 17 }, (_, index) => index % 2 === 0 ? 'pvp_strike' : 'pvp_guard')).map(id => ({ id, upgraded: false }));
 const tacticalState = createReadyLiveState('pvpm-public-status-test');

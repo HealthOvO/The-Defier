@@ -3,6 +3,7 @@ const { authenticate } = require('../middleware/auth');
 const { db } = require('../db/database');
 const { createLivePvpStore } = require('../pvp-live/live-store');
 const { buildMatchReplay, normalizeReplayVisibility } = require('../pvp-live/replay');
+const { sanitizePublicEvent } = require('../pvp-live/engine/state-view');
 
 const router = express.Router();
 const livePvpStore = createLivePvpStore({
@@ -358,7 +359,7 @@ router.post('/matches/:matchId/intents', authenticate, asyncHandler(async (req, 
         success: true,
         result: reduced.result,
         reason: reduced.reason,
-        events: reduced.events,
+        events: Array.isArray(reduced.events) ? reduced.events.map(sanitizePublicEvent) : [],
         stateView: reduced.stateView
     });
 }));

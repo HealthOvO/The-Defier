@@ -354,6 +354,10 @@ function grantOpeningCounterplay(state, intent, events, seatId) {
 
 function drawCardsForTurn(seat) {
     const drawCount = Math.max(0, Math.floor(Number(RULES.drawPerTurn) || 0));
+    return drawCardsToHand(seat, drawCount);
+}
+
+function drawCardsToHand(seat, drawCount) {
     const maxHandSize = Math.max(RULES.startingHandSize, Math.floor(Number(RULES.maxHandSize) || RULES.startingHandSize));
     let drawn = 0;
     let capped = false;
@@ -373,6 +377,25 @@ function drawCardsForTurn(seat) {
         handCount: seat.hand.length,
         deckCount: seat.deck.length
     };
+}
+
+function applyCardDrawEffect(state, intent, card, events) {
+    const tags = getCardTags(card);
+    if (!tags.includes('draw')) return null;
+    if (state.status !== 'active') return null;
+    const actor = state.seats[intent.seatId];
+    if (!actor) return null;
+    const drawReport = drawCardsToHand(actor, 1);
+    appendEvent(state, events, 'card_cycled', intent, {
+        sourceCardId: card.cardId,
+        seatId: actor.seatId,
+        count: drawReport.drawn,
+        handCount: drawReport.handCount,
+        deckCount: drawReport.deckCount,
+        capped: drawReport.capped,
+        effect: 'draw_tag'
+    });
+    return drawReport;
 }
 
 function applyDamage(state, intent, card, events) {
@@ -499,6 +522,7 @@ function reducePlayCard(state, intent, fingerprint) {
     applyBlock(newState, intent, card, events);
     mitigatePublicResponseStatus(newState, intent, card, events);
     applyPublicSetupStatus(newState, intent, card, events);
+    applyCardDrawEffect(newState, intent, card, events);
     if (nextActor.playedSetupThisTurn && !nextActor.setupConvertedThisTurn && !tags.includes('setup') && ((card.damage || 0) > 0 || (card.block || 0) > 0)) {
         ensureLongGameStats(nextActor).publicSetupConversions += 1;
         nextActor.setupConvertedThisTurn = true;

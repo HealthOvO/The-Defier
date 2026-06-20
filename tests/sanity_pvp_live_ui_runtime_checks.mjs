@@ -170,6 +170,40 @@ assert.match(renderedActionReceipt, /生命伤害 15/, 'live UI action receipt s
 assert.match(renderedActionReceipt, /权威公开投影/, 'live UI action receipt should render accurate projection source');
 assert.doesNotMatch(renderedActionReceipt, /cardInstanceId|sourceCardId|deck|rating|reward/i, 'live UI action receipt rendering must not expose hidden ids or rewards');
 
+const normalizedCardDrawReceipt = PVPScene.getLiveActionReceiptReport({
+  actionReceiptReport: {
+    reportVersion: 'pvp-live-action-receipt-v1',
+    sourceVisibility: 'authoritative_public_projection',
+    usesHiddenInformation: false,
+    rankedImpact: 'none',
+    viewerSeat: 'A',
+    actingSeat: 'A',
+    actionType: 'play_card',
+    latestSequence: 12,
+    cardName: '疾电步',
+    cardDraw: {
+      seatId: 'A',
+      count: 1,
+      handCount: 4,
+      deckCount: 9,
+      capped: false,
+      sourceCardId: 'surgeStep',
+      effect: 'draw_tag'
+    },
+    summaryLine: 'A 打出疾电步：不造成伤害；自身护盾 +6；抽滤 1 张，当前手牌 4。',
+    safeguards: ['public_events', 'self_block', 'public_card_cycle']
+  }
+});
+assert.equal(normalizedCardDrawReceipt.cardDraw.count, 1, 'live UI should preserve public card cycle count');
+assert.equal(normalizedCardDrawReceipt.cardDraw.handCount, 4, 'live UI should preserve public card cycle hand count');
+assert.equal(normalizedCardDrawReceipt.cardDraw.deckCount, 9, 'live UI should preserve public card cycle deck count');
+assert.equal(normalizedCardDrawReceipt.cardDraw.capped, false, 'live UI should preserve public card cycle cap state');
+assert.equal(Object.prototype.hasOwnProperty.call(normalizedCardDrawReceipt.cardDraw, 'effect'), false, 'live UI card cycle receipt must not retain internal effect tags');
+const renderedCardDrawReceipt = PVPScene.renderLiveActionReceiptReport({ actionReceiptReport: normalizedCardDrawReceipt });
+assert.match(renderedCardDrawReceipt, /抽滤 1 张/, 'live UI action receipt should render readable card cycle text');
+assert.match(renderedCardDrawReceipt, /data-live-card-cycle="public_card_cycle"/, 'live UI card cycle receipt should expose a stable public-card-cycle marker');
+assert.doesNotMatch(renderedCardDrawReceipt, /sourceCardId|cardId|instanceId|draw_tag|rating|reward/i, 'live UI card cycle receipt rendering must not expose hidden ids, effect tags, or rewards');
+
 const normalizedEndTurnReceipt = PVPScene.getLiveActionReceiptReport({
   actionReceiptReport: {
     reportVersion: 'pvp-live-action-receipt-v1',
@@ -884,6 +918,31 @@ const mitigatedEvent = PVPScene.formatLiveEvent({
   }
 });
 assert.match(mitigatedEvent.detail, /稳住破绽|阻止后续兑现/, 'live UI event log should explain public status mitigation');
+const cardCycleEvent = PVPScene.formatLiveEvent({
+  eventType: 'card_cycled',
+  actingSeat: 'A',
+  payload: {
+    seatId: 'A',
+    count: 99,
+    handCount: 99,
+    deckCount: 99,
+    capped: false,
+    sourceCardId: 'surgeStep',
+    effect: 'draw_tag'
+  },
+  publicData: {
+    seatId: 'A',
+    count: 1,
+    handCount: 4,
+    deckCount: 9,
+    capped: false,
+    sourceCardId: 'surgeStep',
+    effect: 'draw_tag'
+  }
+});
+assert.equal(cardCycleEvent.label, '公开抽滤', 'live UI event log should label public card cycle events');
+assert.match(cardCycleEvent.detail, /A.*抽滤 1 张.*当前手牌 4.*牌库 9/, 'live UI event log should render public card cycle counts');
+assert.doesNotMatch(`${cardCycleEvent.label} ${cardCycleEvent.detail}`, /sourceCardId|cardId|instanceId|draw_tag|rating|reward/i, 'live UI card cycle event must not render hidden ids, effect tags, or rewards');
 
 openingActionState = {
   ...openingActionState,

@@ -177,6 +177,11 @@ const liveBrowserAudit = read('tests/browser_pvp_live_audit.mjs');
   'formatLiveActionPreviewLine(',
   'getLiveActionReceiptReport(',
   'renderLiveActionReceiptReport(',
+  'cardDraw',
+  'card_cycled',
+  '公开抽滤',
+  'public_card_cycle',
+  'data-live-card-cycle',
   '交权回执',
   'getLiveDuelMomentumReport(',
   'renderLiveDuelMomentumReport(',
@@ -259,6 +264,9 @@ const liveBrowserAudit = read('tests/browser_pvp_live_audit.mjs');
   'data-live-public-status',
   'status_mitigated',
   'public_status_mitigated',
+  'card_cycled',
+  'public_card_cycle',
+  'data-live-card-cycle',
   'pvp-live-action-receipt-v1',
   'actionReceiptReport',
   'data-live-action-receipt',
@@ -385,6 +393,7 @@ assert.ok(scene.includes('clearLiveIntentInFlight'), 'PVPScene should clear live
 assert.ok(scene.includes('getLiveIntentLockKey'), 'PVPScene should split action and social realtime intent locks');
 assert.ok(scene.includes('lastRealtimeIntentResult'), 'PVPScene should release realtime intent locks from matching intent_result ack');
 assert.ok(scene.includes('getLiveActionReleaseEventTypes'), 'PVPScene should map action intent locks to matching authoritative event types');
+assert.ok(scene.includes("'card_cycled'"), 'PVPScene should treat card_cycled as a play-card release event');
 assert.ok(scene.includes('hasLiveActionReleaseEvidence'), 'PVPScene should not release action intent locks from social-only stateVersion changes');
 const resolveLiveIntentBody = methodBody(scene, 'resolveLiveIntentInFlight');
 assert.ok(resolveLiveIntentBody.includes('actionReleasedByEvent'), 'resolveLiveIntentInFlight should require action event evidence before stateVersion unlocks action locks');
