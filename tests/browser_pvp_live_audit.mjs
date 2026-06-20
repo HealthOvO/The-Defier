@@ -289,12 +289,18 @@ async function safeElementScreenshot(page, selector, outputPath) {
       };
     };
     const makeConnectionReport = (mode = window.__livePvpAuditConnectionMode || 'online') => {
-      const status = ['online', 'grace', 'disconnected'].includes(mode) ? mode : 'online';
+      const rawMode = String(mode || 'online');
+      const viewerStatus = rawMode === 'viewer_grace' ? 'grace' : rawMode === 'viewer_disconnected' ? 'disconnected' : 'online';
+      const status = ['online', 'grace', 'disconnected'].includes(rawMode) ? rawMode : 'online';
       const lastHeartbeatAt = status === 'online' ? Date.now() : Date.now() - 16000;
+      const viewerLastHeartbeatAt = viewerStatus === 'online' ? Date.now() : Date.now() - 16000;
       const remainingGraceMs = status === 'grace' ? 18000 : 0;
+      const viewerRemainingGraceMs = viewerStatus === 'grace' ? 17000 : 0;
       return {
         reportVersion: 'pvp-live-connection-v1',
-        connectionHealth: status === 'online' ? 'good' : status === 'grace' ? 'opponent_grace' : 'opponent_disconnected',
+        connectionHealth: viewerStatus !== 'online'
+          ? (viewerStatus === 'grace' ? 'viewer_grace' : 'viewer_disconnected')
+          : status === 'online' ? 'good' : status === 'grace' ? 'opponent_grace' : 'opponent_disconnected',
         viewerSeat: 'A',
         opponentSeat: 'B',
         heartbeatIntervalMs: 5000,
@@ -302,11 +308,11 @@ async function safeElementScreenshot(page, selector, outputPath) {
         graceMs: 30000,
         viewer: {
           seatId: 'A',
-          status: 'online',
+          status: viewerStatus,
           isViewer: true,
-          lastHeartbeatAt: Date.now(),
-          elapsedMs: 0,
-          remainingGraceMs: 0,
+          lastHeartbeatAt: viewerLastHeartbeatAt,
+          elapsedMs: viewerStatus === 'online' ? 0 : 16000,
+          remainingGraceMs: viewerRemainingGraceMs,
         },
         opponent: {
           seatId: 'B',
@@ -1238,6 +1244,48 @@ async function safeElementScreenshot(page, selector, outputPath) {
       && connectionGraceProbe.payload?.connectionReport?.opponent?.remainingGraceMs > 0,
     JSON.stringify(connectionGraceProbe),
   );
+  await page.evaluate(() => {
+    window.__livePvpAuditConnectionMode = 'viewer_grace';
+  });
+  await page.click('[data-live-action="refresh-match"]', { timeout: 5000, force: true });
+  await page.waitForTimeout(200);
+  const localGraceProbe = await page.evaluate(() => ({
+    phase: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-phase') || '',
+    connectionStatus: document.querySelector('[data-live-connection-status]')?.textContent || '',
+    turnTimer: document.querySelector('[data-live-turn-timer]')?.textContent || '',
+    payload: JSON.parse(window.render_game_to_text()).pvp?.live || null,
+  }));
+  add(
+    'live UI local reconnect grace exposes resume guidance without confusing it with turn timeout',
+    localGraceProbe.phase === 'setup'
+      && /我方重连宽限/.test(localGraceProbe.connectionStatus)
+      && /恢复|切回页面/.test(localGraceProbe.connectionStatus)
+      && /准备倒计时/.test(localGraceProbe.turnTimer)
+      && localGraceProbe.payload?.connectionReport?.viewer?.status === 'grace'
+      && localGraceProbe.payload?.connectionReport?.viewer?.remainingGraceMs > 0,
+    JSON.stringify(localGraceProbe),
+  );
+  await page.evaluate(() => {
+    window.__livePvpAuditConnectionMode = 'viewer_disconnected';
+  });
+  await page.click('[data-live-action="refresh-match"]', { timeout: 5000, force: true });
+  await page.waitForTimeout(200);
+  const localDisconnectedProbe = await page.evaluate(() => ({
+    connectionStatus: document.querySelector('[data-live-connection-status]')?.textContent || '',
+    payload: JSON.parse(window.render_game_to_text()).pvp?.live || null,
+  }));
+  add(
+    'live UI local disconnected state names authoritative sync path before timeout',
+    /我方断线/.test(localDisconnectedProbe.connectionStatus)
+      && /刷新同步权威结果|同步权威结果/.test(localDisconnectedProbe.connectionStatus)
+      && /仍在可恢复窗口会自动重连/.test(localDisconnectedProbe.connectionStatus)
+      && /权威|超时结算|connection_timeout/.test(localDisconnectedProbe.connectionStatus)
+      && localDisconnectedProbe.payload?.connectionReport?.viewer?.status === 'disconnected',
+    JSON.stringify(localDisconnectedProbe),
+  );
+  await page.evaluate(() => {
+    window.__livePvpAuditConnectionMode = 'online';
+  });
   const foregroundResumeProbe = await page.evaluate(async () => {
     const delay = (ms = 0) => new Promise(resolve => window.setTimeout(resolve, ms));
     const session = window.PVPScene.getLiveSession();

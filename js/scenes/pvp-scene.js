@@ -684,15 +684,18 @@ export const PVPScene = {
     const viewerLabel = labels[report.viewer.status] || report.viewer.status;
     const opponentLabel = labels[report.opponent.status] || report.opponent.status;
     const opponentGraceSec = Math.ceil((report.opponent.remainingGraceMs || 0) / 1000);
+    if (report.viewer.status === 'grace') {
+      const viewerGraceSec = Math.ceil((report.viewer.remainingGraceMs || 0) / 1000);
+      return `连接：我方重连宽限 ${viewerGraceSec}s · 切回页面将自动恢复权威连接 · 对方${opponentLabel}`;
+    }
+    if (report.viewer.status === 'disconnected') {
+      return `连接：我方断线 · 刷新同步权威结果；若仍在可恢复窗口会自动重连，否则按 connection_timeout 结算 · 对方${opponentLabel}`;
+    }
     if (report.opponent.status === 'grace') {
       return `连接：我方${viewerLabel} · 对方重连宽限 ${opponentGraceSec}s · 不会立即判负`;
     }
     if (report.opponent.status === 'disconnected') {
       return `连接：我方${viewerLabel} · 对方断线 · 等待权威超时结算`;
-    }
-    if (report.viewer.status === 'grace') {
-      const viewerGraceSec = Math.ceil((report.viewer.remainingGraceMs || 0) / 1000);
-      return `连接：我方重连宽限 ${viewerGraceSec}s · 对方${opponentLabel}`;
     }
     return `连接：我方${viewerLabel} · 对方${opponentLabel}`;
   },

@@ -1,5 +1,23 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-20: V10-S9I live PVP local reconnect recovery UX
+  - 本轮完成
+    - `js/scenes/pvp-scene.js` 收口本机连接状态文案：`viewer=grace` 时不再只显示“我方重连宽限 Xs”，而是明确“切回页面将自动恢复权威连接”，同时继续与准备/行动倒计时分离；`viewer=disconnected` 时改为“刷新同步权威结果；若仍在可恢复窗口会自动重连，否则按 `connection_timeout` 结算”，避免对已经超出宽限的本机断线过度承诺。
+    - `tests/sanity_pvp_live_ui_runtime_checks.mjs` 新增本机 grace / disconnected 直测，固定剩余宽限倒计时、恢复指引、不要把连接超时文案混进 turn timer、disconnected 的条件式恢复口径、以及权威终局边界。
+    - `tests/browser_pvp_live_audit.mjs` 的 fake live connection report 增加 `viewer_grace` / `viewer_disconnected` 模式，浏览器审计覆盖“对手重连宽限”“我方重连宽限”“我方断线”三种 UI 口径。
+    - `tests/browser_pvp_live_real_backend_smoke.mjs` 新增真实后端双账号 smoke：先停止本机 heartbeat，短窗口轮询真实服务端 `refreshMatch()` 直到权威 `connectionReport.viewer.status=grace`，验证 UI 展示恢复指引；再用 `finally` 恢复 monkey patch 并走 `handleLiveForegroundResume()`，证明前台恢复可把本机 grace 拉回 online。
+    - `tests/sanity_release_gate_coverage_checks.cjs` 固定本机重连文案、fake browser finding 和真实后端 finding，防止后续只保留对手断线体验而丢掉本机恢复体验。
+  - 已验证
+    - 红测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs` 在实现前失败于 `live UI local reconnect grace should give explicit recovery guidance`，实际旧文案为 `连接：我方重连宽限 13s · 对方在线`。
+    - 绿测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs`
+    - 绿测：`node tests/sanity_release_gate_coverage_checks.cjs`
+    - 构建：`npm run build:pages`
+    - 浏览器审计：`node tests/browser_pvp_live_audit.mjs http://127.0.0.1:4173 output/pvp-live-local-reconnect-audit-final2`，65/65 findings、0 console error。
+    - 真实后端 smoke：`node tests/browser_pvp_live_real_backend_smoke.mjs http://127.0.0.1:4173 output/pvp-live-local-reconnect-real-final2`，41/41 findings、0 console error。
+    - 全量 Node：`npm run test:node`
+  - 当前结论
+    - live PVP 的连接体验不再只照顾“在线方看到对手 grace”：断线方自己也能看到剩余宽限、恢复动作和权威超时边界，并且真实后端 smoke 已证明前台恢复可以从本机 grace 回到 online。该切片只提升弱网/切后台后的双方可理解性和恢复确定性，不改变伤害、生命、抽牌、灵力、起手、匹配、正式积分、奖励、赛季验证或结算；匹配前连接健康门、生产 smoke、线上部署和完整社交举报治理仍未封板。
+
 - 2026-06-20: V10-S9H live PVP waiting rematch lifecycle
   - 本轮完成
     - `server/pvp-live/live-store.js` 为低压力再战 pending 请求补齐 `getFriendlyRematchStatus()` 与 `cancelFriendlyRematch()`，并新增 `DEFAULT_REMATCH_TTL_MS` / `PVP_LIVE_REMATCH_TTL_MS` 过期窗口；读取、取消和再次发起前都会清理过期 pending。

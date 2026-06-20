@@ -136,6 +136,39 @@ assert.equal(
   'getLiveLastSeenEventRevision should prefer replay event high-water marks when reconnecting',
 );
 
+const localGraceConnectionCopy = PVPScene.formatLiveConnectionStatus({
+  connectionReport: {
+    reportVersion: 'pvp-live-connection-v1',
+    viewerSeat: 'A',
+    opponentSeat: 'B',
+    heartbeatIntervalMs: 1000,
+    heartbeatStaleMs: 1000,
+    graceMs: 30000,
+    viewer: { seatId: 'A', status: 'grace', isViewer: true, remainingGraceMs: 12700 },
+    opponent: { seatId: 'B', status: 'online', isViewer: false, remainingGraceMs: 0 }
+  }
+});
+assert.match(localGraceConnectionCopy, /我方重连宽限 13s/, 'live UI local reconnect grace exposes remaining countdown');
+assert.match(localGraceConnectionCopy, /自动恢复|恢复权威连接|切回页面/, 'live UI local reconnect grace should give explicit recovery guidance');
+assert.doesNotMatch(localGraceConnectionCopy, /行动倒计时|准备倒计时/, 'live UI local reconnect grace keeps timeout copy off the turn timer');
+
+const localDisconnectedConnectionCopy = PVPScene.formatLiveConnectionStatus({
+  connectionReport: {
+    reportVersion: 'pvp-live-connection-v1',
+    viewerSeat: 'A',
+    opponentSeat: 'B',
+    heartbeatIntervalMs: 1000,
+    heartbeatStaleMs: 1000,
+    graceMs: 30000,
+    viewer: { seatId: 'A', status: 'disconnected', isViewer: true, remainingGraceMs: 0 },
+    opponent: { seatId: 'B', status: 'online', isViewer: false, remainingGraceMs: 0 }
+  }
+});
+assert.match(localDisconnectedConnectionCopy, /我方断线/, 'live UI local disconnected state should name the viewer as disconnected');
+assert.match(localDisconnectedConnectionCopy, /刷新同步权威结果|同步权威结果/, 'live UI local disconnected state prefers authoritative sync guidance before connection_timeout');
+assert.match(localDisconnectedConnectionCopy, /仍在可恢复窗口会自动重连/, 'live UI local disconnected state keeps recovery conditional');
+assert.match(localDisconnectedConnectionCopy, /权威|connection_timeout|超时结算/, 'live UI local disconnected state should explain authoritative terminal boundary');
+
 let currentState = {
   phase: 'active',
   matchId: 'pvpm-ui-runtime-heartbeat',

@@ -72,7 +72,7 @@ function startBackend() {
       PVP_LIVE_LONG_WAIT_THRESHOLD_MS: '1000',
       PVP_LIVE_HEARTBEAT_INTERVAL_MS: '1000',
       PVP_LIVE_HEARTBEAT_STALE_MS: '1000',
-      PVP_LIVE_RECONNECT_GRACE_MS: '30000',
+      PVP_LIVE_RECONNECT_GRACE_MS: '60000',
     },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
@@ -650,6 +650,62 @@ async function writeReport() {
       /对方在线/.test(recoveredConnectionProbe.text)
         && recoveredConnectionProbe.payload?.opponent?.status === 'online',
       JSON.stringify(recoveredConnectionProbe),
+    );
+
+    await seatA.page.evaluate(() => {
+      window.PVPScene.stopLiveHeartbeat();
+      window.PVPScene.__realSmokeStartLiveHeartbeat = window.PVPScene.startLiveHeartbeat;
+      window.PVPScene.startLiveHeartbeat = () => {};
+    });
+    let localGraceProbe = null;
+    try {
+      for (let attempt = 0; attempt < 4; attempt += 1) {
+        await seatA.page.waitForTimeout(attempt === 0 ? 1100 : 250);
+        await seatA.page.evaluate(async () => {
+          await window.PVPScene.getLiveSession().refreshMatch();
+          window.PVPScene.renderLivePanel();
+        });
+        localGraceProbe = await seatA.page.evaluate(() => ({
+          text: document.querySelector('[data-live-connection-status]')?.textContent || '',
+          timer: document.querySelector('[data-live-turn-timer]')?.textContent || '',
+          payload: window.PVPScene.getLiveSnapshot()?.connectionReport || null,
+        }));
+        if (localGraceProbe.payload?.viewer?.status === 'grace') break;
+      }
+      add(
+        'real browser local reconnect grace shows resume guidance before timeout',
+        /我方重连宽限/.test(localGraceProbe?.text || '')
+          && /恢复|切回页面/.test(localGraceProbe?.text || '')
+          && /准备倒计时/.test(localGraceProbe?.timer || '')
+          && localGraceProbe?.payload?.viewer?.status === 'grace'
+          && localGraceProbe?.payload?.viewer?.remainingGraceMs > 0,
+        JSON.stringify(localGraceProbe),
+      );
+    } finally {
+      await seatA.page.evaluate(() => {
+        if (window.PVPScene.__realSmokeStartLiveHeartbeat) {
+          window.PVPScene.startLiveHeartbeat = window.PVPScene.__realSmokeStartLiveHeartbeat;
+          delete window.PVPScene.__realSmokeStartLiveHeartbeat;
+        }
+      });
+    }
+    await seatA.page.evaluate(async () => {
+      window.PVPScene.activeTab = 'live';
+      await window.PVPScene.handleLiveForegroundResume();
+    });
+    await waitForLiveSnapshot(seatA.page, () => {
+      const report = window.PVPScene?.getLiveSnapshot?.()?.connectionReport || null;
+      return report?.viewer?.status === 'online';
+    });
+    const localRecoveredProbe = await seatA.page.evaluate(() => ({
+      text: document.querySelector('[data-live-connection-status]')?.textContent || '',
+      payload: window.PVPScene.getLiveSnapshot()?.connectionReport || null,
+    }));
+    add(
+      'real browser foreground resume recovers local reconnect grace to online',
+      /我方在线/.test(localRecoveredProbe.text)
+        && localRecoveredProbe.payload?.viewer?.status === 'online',
+      JSON.stringify(localRecoveredProbe),
     );
 
     const matchedGuideProbe = await seatA.page.evaluate(() => ({
