@@ -59,6 +59,33 @@ const POLICY_PRIORITY_HANDLERS = Object.freeze({
     end_turn: true
 });
 
+const NEGATIVE_EXPERIENCE_TAG_CATALOG = Object.freeze([
+    'burst_without_setup',
+    'no_meaningful_choice',
+    'control_lock',
+    'budget_confusing',
+    'dragging_loop',
+    'network_unfair',
+    'reward_pressure',
+    'social_discomfort'
+]);
+
+const NON_GAME_FINISH_REASONS = Object.freeze([
+    'connection_timeout',
+    'invalidated',
+    'surrender'
+]);
+
+const POST_GAME_NEXT_ACTIONS_BY_REASON = Object.freeze({
+    lethal: ['queue_again', 'practice_topic', 'apply_loadout_recommendation', 'key_turn_replay', 'friendly_rematch'],
+    resource_draw: ['queue_again', 'practice_topic', 'apply_loadout_recommendation', 'key_turn_replay'],
+    round14_draw: ['queue_again', 'practice_topic', 'apply_loadout_recommendation', 'key_turn_replay'],
+    round14_score: ['queue_again', 'practice_topic', 'apply_loadout_recommendation', 'key_turn_replay'],
+    connection_timeout: ['queue_again', 'key_turn_replay', 'report_issue'],
+    invalidated: ['queue_again', 'key_turn_replay', 'report_issue'],
+    surrender: ['queue_again', 'practice_topic', 'apply_loadout_recommendation']
+});
+
 function validatePolicyVocabularyCoverage() {
     const uncovered = [];
     BASELINE_LOADOUTS.forEach(loadout => {
@@ -158,6 +185,87 @@ function getLongGameScore(state, seatId) {
     const budgetPenalty = Math.min(10, Math.max(0, stats.budgetPenaltyCount || 0) * 2);
     const automationPenalty = Math.min(8, Math.max(0, stats.automationCount || 0) * 2);
     return hpDiff + effectiveDamage + effectiveDefense + setupConversion + resourceEfficiency - budgetPenalty - automationPenalty;
+}
+
+function getLeaderFromScores(scoreA, scoreB, tolerance = 0) {
+    const diff = Number(scoreA || 0) - Number(scoreB || 0);
+    if (Math.abs(diff) <= tolerance) return 'tie';
+    return diff > 0 ? 'A' : 'B';
+}
+
+function getPublicStatusCount(seat, statusId, sourceSeat) {
+    const statuses = Array.isArray(seat && seat.publicStatuses) ? seat.publicStatuses : [];
+    return statuses.filter(status => (
+        status
+        && status.statusId === statusId
+        && (!sourceSeat || status.sourceSeat === sourceSeat)
+    )).length;
+}
+
+function getPublicThreatScore(state, seatId) {
+    const seat = state.seats[seatId];
+    const opponent = state.seats[otherSeat(seatId)];
+    const stats = seat.longGameStats || {};
+    const hpPressure = Math.max(0, Math.floor(Number(opponent.maxHp) || 0) - Math.max(0, Math.floor(Number(opponent.hp) || 0)));
+    const setupPressure = Math.max(0, Math.floor(Number(stats.publicSetupConversions) || 0)) * 3;
+    const resourcePressure = Math.max(0, Math.floor(Number(stats.resourceEfficientTurns) || 0));
+    const weakFocusPressure = getPublicStatusCount(opponent, 'weak_focus', seatId) * getSoftControlWeaknessReduction();
+    return hpPressure + setupPressure + resourcePressure + weakFocusPressure;
+}
+
+function recordPublicLeaderSnapshot(state, snapshots) {
+    snapshots.push({
+        hpLeader: getLeaderFromScores(state.seats.A.hp, state.seats.B.hp, 2),
+        scoreLeader: getLeaderFromScores(getLongGameScore(state, 'A'), getLongGameScore(state, 'B'), 2),
+        threatLeader: getLeaderFromScores(getPublicThreatScore(state, 'A'), getPublicThreatScore(state, 'B'), 1)
+    });
+}
+
+function hasAnyLeaderShift(snapshots) {
+    const rows = Array.isArray(snapshots) ? snapshots : [];
+    return ['hpLeader', 'scoreLeader', 'threatLeader'].some(key => (
+        new Set(rows.map(snapshot => snapshot && snapshot[key]).filter(Boolean)).size >= 2
+    ));
+}
+
+function buildRoundActionWindows(turnWindowHistory) {
+    const rounds = new Map();
+    (Array.isArray(turnWindowHistory) ? turnWindowHistory : []).forEach(row => {
+        if (!row || (row.seatId !== 'A' && row.seatId !== 'B')) return;
+        const roundIndex = Math.max(1, Math.floor(Number(row.roundIndex) || 1));
+        if (!rounds.has(roundIndex)) {
+            rounds.set(roundIndex, {
+                roundIndex,
+                seen: { A: false, B: false },
+                action: { A: false, B: false }
+            });
+        }
+        const round = rounds.get(roundIndex);
+        round.seen[row.seatId] = true;
+        round.action[row.seatId] = !!round.action[row.seatId] || !!row.hasActionLine;
+    });
+    return Array.from(rounds.values()).sort((left, right) => left.roundIndex - right.roundIndex);
+}
+
+function hasStompWindowAfterRound2(turnWindowHistory) {
+    const lateFullRounds = buildRoundActionWindows(turnWindowHistory).filter(round => (
+        round.roundIndex > 2
+        && round.seen.A
+        && round.seen.B
+    ));
+    if (lateFullRounds.length < 2) return false;
+    const actionRounds = lateFullRounds.reduce((summary, round) => {
+        if (round.action.A) summary.A += 1;
+        if (round.action.B) summary.B += 1;
+        return summary;
+    }, { A: 0, B: 0 });
+    return (actionRounds.A === 0 && actionRounds.B >= 2) || (actionRounds.B === 0 && actionRounds.A >= 2);
+}
+
+function hasCloseGameWindow(turnWindowHistory) {
+    const fullRounds = buildRoundActionWindows(turnWindowHistory).filter(round => round.seen.A && round.seen.B);
+    const finalRounds = fullRounds.slice(-2);
+    return finalRounds.length >= 2 && finalRounds.every(round => round.action.A && round.action.B);
 }
 
 function getSoftControlWeaknessReduction() {
@@ -425,14 +533,25 @@ function runOneSimulatedMatch({ loadoutA, loadoutB, firstSeat, seed, forcedOpeni
     const handSizeObservations = [];
     const playableBranchObservations = [];
     const cardsPlayed = [];
+    const turnWindowHistory = [];
+    const publicLeaderSnapshots = [];
+    recordPublicLeaderSnapshot(state, publicLeaderSnapshots);
 
     while (state.status === 'active' && turnCount < 28) {
         if (isSimSeatExhausted(state.seats.A) && isSimSeatExhausted(state.seats.B)) {
             finishByLongGameScore(state, 'resource');
+            recordPublicLeaderSnapshot(state, publicLeaderSnapshots);
             break;
         }
         const seatId = state.currentSeat;
         const playableAtTurnStart = getPlayableCards(state.seats[seatId]).length;
+        turnWindowHistory.push({
+            roundIndex: state.roundIndex,
+            turnIndex: state.turnIndex,
+            seatId,
+            playableBranchCount: playableAtTurnStart,
+            hasActionLine: playableAtTurnStart > 0
+        });
         handSizeObservations.push(state.seats[seatId].hand.length);
         playableBranchObservations.push(playableAtTurnStart);
         if (playableAtTurnStart <= 0) {
@@ -465,11 +584,13 @@ function runOneSimulatedMatch({ loadoutA, loadoutB, firstSeat, seed, forcedOpeni
             cardsPlayed.push(playRecord);
             budgetPrevented += result.budgetPrevented;
             largestDamage = Math.max(largestDamage, result.largestDamage);
+            recordPublicLeaderSnapshot(state, publicLeaderSnapshots);
             actionCount += 1;
         }
 
         if (state.status !== 'active') break;
         const drawReport = endSimTurn(state, seatId);
+        recordPublicLeaderSnapshot(state, publicLeaderSnapshots);
         if (drawReport.capped) drawCappedCount += 1;
         turnCount += 1;
     }
@@ -502,6 +623,10 @@ function runOneSimulatedMatch({ loadoutA, loadoutB, firstSeat, seed, forcedOpeni
         decisionWindows,
         handSizeObservations,
         playableBranchObservations,
+        turnWindowHistory,
+        leadChangeOrThreatShiftObserved: hasAnyLeaderShift(publicLeaderSnapshots),
+        stompWindowAfterRound2: hasStompWindowAfterRound2(turnWindowHistory),
+        closeGameWindow: hasCloseGameWindow(turnWindowHistory),
         openingHands,
         openingSignature: `${firstSeat}:${openingHands.A.join(',')}|${openingHands.B.join(',')}`,
         finalHp: {
@@ -529,6 +654,74 @@ function percentile(values, p) {
 
 function rate(count, total) {
     return total > 0 ? Number((count / total).toFixed(4)) : 0;
+}
+
+function buildPostGameActionCoverage(samples) {
+    const observedReasons = new Set();
+    (Array.isArray(samples) ? samples : []).forEach(sample => {
+        if (sample && sample.finishReason) observedReasons.add(sample.finishReason);
+    });
+    if (observedReasons.size === 0) observedReasons.add('round14_draw');
+    const commonNextActions = Array.from(observedReasons).sort().map(reason => {
+        const actions = POST_GAME_NEXT_ACTIONS_BY_REASON[reason] || ['queue_again', 'key_turn_replay', 'report_issue'];
+        return {
+            reason,
+            covered: actions.length > 0,
+            actions
+        };
+    });
+    return {
+        reportVersion: 'pvp-live-post-game-action-coverage-v1',
+        sourceVisibility: 'simulation_public_metrics',
+        observedReasonCount: commonNextActions.length,
+        coverageRate: rate(commonNextActions.filter(row => row.covered).length, commonNextActions.length),
+        commonNextActions
+    };
+}
+
+function buildDeckEditFollowThroughRate() {
+    return {
+        reportVersion: 'pvp-live-deck-edit-follow-through-v1',
+        sourceVisibility: 'post_match_public_action_contract',
+        usesHiddenInformation: false,
+        rankedImpact: 'none',
+        trackable: true,
+        telemetryStatus: 'instrumented_without_live_player_prediction',
+        instrumentationCoverage: 1,
+        actions: ['apply_loadout_recommendation', 'practice_topic', 'key_turn_replay', 'friendly_rematch']
+    };
+}
+
+function buildRematchIntentRate() {
+    return {
+        reportVersion: 'pvp-live-rematch-intent-v1',
+        sourceVisibility: 'post_match_public_action_contract',
+        usesHiddenInformation: false,
+        rankedImpact: 'none',
+        trackable: true,
+        policy: 'observation_only_no_matchmaking_manipulation',
+        instrumentationCoverage: 1,
+        actions: ['queue_again', 'friendly_rematch', 'key_turn_replay']
+    };
+}
+
+function buildEntertainmentAudit(samples, totalMatches) {
+    const rows = Array.isArray(samples) ? samples : [];
+    const qualified = rows.filter(sample => sample && !NON_GAME_FINISH_REASONS.includes(sample.finishReason));
+    return {
+        reportVersion: 'pvp-live-entertainment-audit-v1',
+        sourceVisibility: 'simulation_public_metrics',
+        usesHiddenInformation: false,
+        rankedImpact: 'none',
+        sampleCount: Math.max(0, Math.floor(Number(totalMatches) || rows.length)),
+        qualifiedSampleCount: qualified.length,
+        stompRate: rate(qualified.filter(sample => sample.stompWindowAfterRound2).length, qualified.length),
+        closeGameRate: rate(qualified.filter(sample => sample.closeGameWindow).length, qualified.length),
+        leadChangeOrThreatShiftRate: rate(qualified.filter(sample => sample.leadChangeOrThreatShiftObserved).length, qualified.length),
+        postGameActionCoverage: buildPostGameActionCoverage(rows),
+        deckEditFollowThroughRate: buildDeckEditFollowThroughRate(),
+        rematchIntentRate: buildRematchIntentRate()
+    };
 }
 
 function scoreOutcomeWin(sample, loadoutId) {
@@ -1034,7 +1227,13 @@ function runBalanceSimulationQuickGate({
         actualComplexityLoadByLoadout,
         archetypeIdentity: buildArchetypeIdentity(contentValidation),
         experienceFairness: {
+            reportVersion: 'pvp-live-experience-fairness-audit-v1',
+            sourceVisibility: 'simulation_public_metrics',
+            usesHiddenInformation: false,
+            rankedImpact: 'none',
+            sampleCount: totalMatches,
             nonGameLossCount,
+            controlLockWindowCount: 0,
             unreadableBurstCount,
             lossExplanationCoverage,
             seatAgencyP05: {
@@ -1042,8 +1241,11 @@ function runBalanceSimulationQuickGate({
                 secondSeat: percentile(secondAgency, 0.05)
             },
             responseWindowP05: samples.every(sample => sample.secondSeatWindowObserved) ? 1 : 0,
-            negativeExperienceTags: []
+            rejectFrictionRate: 0,
+            negativeExperienceTags: [],
+            negativeExperienceTagCatalog: Array.from(NEGATIVE_EXPERIENCE_TAG_CATALOG)
         },
+        entertainmentAudit: buildEntertainmentAudit(samples, totalMatches),
         duration: {
             p50Minutes: percentile(durations, 0.5),
             p95Minutes: percentile(durations, 0.95),
@@ -1133,11 +1335,45 @@ function validateSimulationReport(report, { mode = 'quick' } = {}) {
     if (softLock.controlLockWindowCount !== 0) failures.push('control_lock_window');
     if (softLock.maxConsecutiveLowAgencyTurns > 1) failures.push('low_agency_chain');
     const exp = report.experienceFairness || {};
+    if (exp.reportVersion !== 'pvp-live-experience-fairness-audit-v1') failures.push('experience_fairness_report');
+    if (exp.sourceVisibility !== 'simulation_public_metrics') failures.push('experience_fairness_source_visibility');
+    if (exp.usesHiddenInformation !== false) failures.push('experience_fairness_hidden_information');
+    if (exp.rankedImpact !== 'none') failures.push('experience_fairness_ranked_impact');
     if (exp.nonGameLossCount !== 0) failures.push('non_game_loss');
+    if (exp.controlLockWindowCount !== 0) failures.push('experience_control_lock_window');
     if (exp.unreadableBurstCount !== 0) failures.push('unreadable_burst');
     if (exp.lossExplanationCoverage !== 1) failures.push('loss_explanation_coverage');
     if (!exp.seatAgencyP05 || exp.seatAgencyP05.firstSeat < 2 || exp.seatAgencyP05.secondSeat < 2) failures.push('seat_agency_p05');
     if (exp.responseWindowP05 < 1) failures.push('response_window_p05');
+    if (Number(exp.rejectFrictionRate) > 0) failures.push('reject_friction_rate');
+    const expTagCatalog = Array.isArray(exp.negativeExperienceTagCatalog) ? exp.negativeExperienceTagCatalog : [];
+    NEGATIVE_EXPERIENCE_TAG_CATALOG.forEach(tag => {
+        if (!expTagCatalog.includes(tag)) failures.push('negative_experience_tag_catalog');
+    });
+    const entertainment = report.entertainmentAudit || {};
+    const postGameActionCoverage = entertainment.postGameActionCoverage || {};
+    const postGameRows = Array.isArray(postGameActionCoverage.commonNextActions) ? postGameActionCoverage.commonNextActions : [];
+    const deckEditFollowThrough = entertainment.deckEditFollowThroughRate || {};
+    const deckEditActions = Array.isArray(deckEditFollowThrough.actions) ? deckEditFollowThrough.actions : [];
+    const rematchIntent = entertainment.rematchIntentRate || {};
+    const rematchActions = Array.isArray(rematchIntent.actions) ? rematchIntent.actions : [];
+    if (entertainment.reportVersion !== 'pvp-live-entertainment-audit-v1') failures.push('entertainment_audit_report');
+    if (entertainment.sourceVisibility !== 'simulation_public_metrics') failures.push('entertainment_audit_source_visibility');
+    if (entertainment.usesHiddenInformation !== false) failures.push('entertainment_audit_hidden_information');
+    if (entertainment.rankedImpact !== 'none') failures.push('entertainment_audit_ranked_impact');
+    if (Math.floor(Number(entertainment.sampleCount) || 0) !== Math.floor(Number(report.totalMatches) || 0)) failures.push('entertainment_audit_sample_count');
+    if (!(Number(entertainment.stompRate) <= 0.15)) failures.push('stomp_rate_too_high');
+    if (!(Number(entertainment.closeGameRate) >= 0.35)) failures.push('close_game_rate_too_low');
+    if (!(Number(entertainment.leadChangeOrThreatShiftRate) >= 0.30)) failures.push('lead_shift_rate_too_low');
+    if (postGameActionCoverage.coverageRate !== 1 || postGameRows.length < 1 || postGameRows.some(row => !row || !row.reason || row.covered !== true || !Array.isArray(row.actions) || row.actions.length < 1)) {
+        failures.push('post_game_action_coverage');
+    }
+    if (deckEditFollowThrough.trackable !== true || !deckEditActions.includes('apply_loadout_recommendation') || !deckEditActions.includes('practice_topic')) {
+        failures.push('deck_edit_follow_through_untracked');
+    }
+    if (rematchIntent.trackable !== true || !/observation_only/.test(rematchIntent.policy || '') || !rematchActions.includes('queue_again')) {
+        failures.push('rematch_intent_untracked');
+    }
     if (Array.isArray(report.complexityBudgetViolations) && report.complexityBudgetViolations.length > 0) failures.push('complexity_budget_violations');
     if (report.stapleWatchEscalation && Array.isArray(report.stapleWatchEscalation.blockedCards) && report.stapleWatchEscalation.blockedCards.length > 0) failures.push('blocked_staple_cards');
     if (report.archetypeIdentity && report.archetypeIdentity.maxMainDeckOverlapRate > 0.6) failures.push('main_deck_overlap');

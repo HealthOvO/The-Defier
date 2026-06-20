@@ -1,5 +1,25 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-21: V10-S13 live PVP fairness / entertainment audit report
+  - 本轮完成
+    - `server/pvp-live/balance-simulation.js` 新增正式 `experienceFairness.reportVersion=pvp-live-experience-fairness-audit-v1`，把非游戏失败、不可读爆发、控制锁、P05 双方行动窗口、响应窗口、拒绝摩擦率和负面体验标签目录统一纳入可校验审计对象；来源固定为 `simulation_public_metrics`，不读取隐藏手牌/牌库顺序，不写 ranked、奖励或匹配状态。
+    - 新增 `entertainmentAudit.reportVersion=pvp-live-entertainment-audit-v1`：基于已有模拟样本线性聚合 `stompRate / closeGameRate / leadChangeOrThreatShiftRate / postGameActionCoverage / deckEditFollowThroughRate / rematchIntentRate`，把“不要先手秒杀、双方都有拉锯和复盘入口”从策划要求落成门禁字段。
+    - 单局模拟现在记录公开行动窗口和公开局势 leader 快照：第 2 回合后持续一方没有反制线才计入 stomp，最终两个完整回合双方仍有行动线计入 close game，HP / 长线分 / 公开威胁任一发生变化计入 lead/threat shift；不新增随机源、不重放、不扩大 UI 或 runtime 写入面。
+    - 赛后行动覆盖固定每类观测到的失败/结束原因至少有一个下一步：`queue_again`、`practice_topic`、`apply_loadout_recommendation`、`key_turn_replay`、`friendly_rematch` 等；换组跟进和再战意愿只声明为可观测/可追踪，不伪造真人行为率，也不操纵匹配。
+    - `tests/sanity_pvp_live_balance_simulation_checks.cjs`、`tests/sanity_pvp_live_balance_artifact_checks.cjs`、`tests/sanity_pvp_live_full_gate_balance_checks.cjs` 和 `tests/sanity_release_gate_coverage_checks.cjs` 同步钉住 quick / artifact / full gate 三层合同，避免以后只改小样本或删掉审计字段。
+  - 已验证
+    - 红测：`node tests/sanity_pvp_live_balance_simulation_checks.cjs` 在实现前失败于缺少 `experienceFairness.reportVersion=pvp-live-experience-fairness-audit-v1`。
+    - 绿测：`node tests/sanity_pvp_live_balance_simulation_checks.cjs`
+    - 绿测：`node tests/sanity_pvp_live_full_gate_balance_checks.cjs`
+    - 绿测：`node tests/sanity_pvp_live_balance_artifact_checks.cjs`
+    - 绿测：`node tests/sanity_release_gate_coverage_checks.cjs`
+    - 全量 Node 门禁：`npm run test:node`，All node checks passed。
+  - 当前指标
+    - quick gate：10,048 局，`firstSeatWinRate=0.5019`，`stompRate=0`，`closeGameRate=0.7716`，`leadChangeOrThreatShiftRate=1`，`postGameActionCoverage=1`，双方 `seatAgencyP05=7`。
+    - full gate：32,000 局，`firstSeatWinRate=0.5`，`stompRate=0`，`closeGameRate=0.7693`，`leadChangeOrThreatShiftRate=1`，`postGameActionCoverage=1`，双方 `seatAgencyP05=7`。
+  - 当前结论
+    - live PVP 不再只靠“手感描述”判断是否公平好玩：现在 quick、冻结 artifact 和 32,000 局 full gate 都会证明没有持续无反制窗口、双方后期仍有行动线、局势会发生可读变化，并且每种结束原因都有明确赛后行动入口。这为继续开发真人 PVP 排队、再战、换组推荐和复盘页提供了可直接依赖的审计合同。
+
 - 2026-06-21: V10-S12 live PVP soft-control weak focus
   - 本轮完成
     - `server/pvp-live/engine/rules.js` 新增 `softControlWeakness.reduction=2`，把真人 PVP 软控制固定成“小幅公开削弱下一次出手”，不做硬控、禁手、弃牌或隐藏反制。

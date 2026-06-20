@@ -18,6 +18,17 @@ assert.strictEqual(validation.pass, true, `S2-C full gate should pass full valid
 assert.strictEqual(fullGate.safety.secondSeatDeathBeforeActionCount, 0, 'S2-C full gate should still show zero second-seat deaths before action');
 assert.strictEqual(fullGate.safety.secondSeatDeadActionLineCount, 0, 'S2-C full gate should still show zero second-seat dead action lines');
 assert.strictEqual(fullGate.burstCounterplay.midBurstWithoutResponseWindowCount, 0, 'S2-C full gate should still show zero unreadable mid-burst samples');
+const fullEntertainmentAudit = fullGate.entertainmentAudit || {};
+const fullPostGameCoverage = fullEntertainmentAudit.postGameActionCoverage || {};
+const fullPostGameRows = Array.isArray(fullPostGameCoverage.commonNextActions)
+  ? fullPostGameCoverage.commonNextActions
+  : [];
+assert.strictEqual(fullEntertainmentAudit.reportVersion, 'pvp-live-entertainment-audit-v1', 'S2-C full gate should include the live PVP entertainment audit report');
+assert.ok(fullEntertainmentAudit.stompRate <= 0.15, 'S2-C full gate entertainment audit stompRate should stay below the live PVP ceiling');
+assert.ok(fullEntertainmentAudit.closeGameRate >= 0.35, 'S2-C full gate entertainment audit should preserve enough late-game suspense');
+assert.ok(fullEntertainmentAudit.leadChangeOrThreatShiftRate >= 0.30, 'S2-C full gate entertainment audit should preserve enough lead or threat shifts');
+assert.strictEqual(fullPostGameCoverage.coverageRate, 1, 'S2-C full gate entertainment audit should cover observed finish reasons with post-game next actions');
+assert.ok(fullPostGameRows.length >= 1, 'S2-C full gate entertainment audit should include observed finish reason next-action rows');
 assert.ok(
   Object.values(fullGate.archetypeWinRates).every(rate => rate >= 0.45 && rate <= 0.55),
   `S2-C archetype win rates should all stay within 45%-55%: ${JSON.stringify(fullGate.archetypeWinRates)}`

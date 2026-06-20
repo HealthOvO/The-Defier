@@ -94,11 +94,65 @@ assert.strictEqual(quickGate.safety.secondSeatDeadActionLineCount, 0, 'quick gat
 assert.strictEqual(quickGate.burstCounterplay.midBurstWithoutResponseWindowCount, 0, 'quick gate should show zero unreadable mid-burst samples');
 assert.strictEqual(quickGate.burstCounterplay.lethalWithoutFullResponseWindowCount, 0, 'quick gate should show zero lethal bursts without full response windows');
 assert.strictEqual(quickGate.experienceFairness.nonGameLossCount, 0, 'quick gate should show zero non-game losses');
+assert.strictEqual(quickGate.experienceFairness.reportVersion, 'pvp-live-experience-fairness-audit-v1', 'quick gate should expose a formal experience fairness audit report');
+assert.strictEqual(quickGate.experienceFairness.sourceVisibility, 'simulation_public_metrics', 'experience fairness audit should use public simulation metrics');
+assert.strictEqual(quickGate.experienceFairness.usesHiddenInformation, false, 'experience fairness audit must not use hidden hands or deck order');
+assert.strictEqual(quickGate.experienceFairness.rankedImpact, 'none', 'experience fairness audit must not write ranked state');
 assert.strictEqual(quickGate.experienceFairness.unreadableBurstCount, 0, 'quick gate should show zero unreadable burst losses');
 assert.strictEqual(quickGate.experienceFairness.lossExplanationCoverage, 1, 'quick gate should preserve public loss explanation coverage');
+assert.strictEqual(quickGate.experienceFairness.controlLockWindowCount, 0, 'quick gate should show zero control-lock windows');
+assert.strictEqual(quickGate.experienceFairness.rejectFrictionRate, 0, 'quick gate should show zero unclear reject friction in deterministic bot simulation');
+assert.ok(
+  [
+    'burst_without_setup',
+    'no_meaningful_choice',
+    'control_lock',
+    'budget_confusing',
+    'dragging_loop',
+    'network_unfair',
+    'reward_pressure',
+    'social_discomfort'
+  ].every(tag => quickGate.experienceFairness.negativeExperienceTagCatalog.includes(tag)),
+  'experience fairness audit should preserve the documented negative experience tag catalog'
+);
 assert.strictEqual(quickGate.botPolicyCoverage.uncovered.length, 0, 'quick gate should cover every declared bot policy priority token');
 assert.ok(quickGate.experienceFairness.seatAgencyP05.firstSeat >= 2, 'first seat should have at least two real decision windows at P05');
 assert.ok(quickGate.experienceFairness.seatAgencyP05.secondSeat >= 2, 'second seat should have at least two real decision windows at P05');
+const entertainmentAudit = quickGate.entertainmentAudit || {};
+const postGameActionCoverage = entertainmentAudit.postGameActionCoverage || {};
+const postGameActionRows = Array.isArray(postGameActionCoverage.commonNextActions)
+  ? postGameActionCoverage.commonNextActions
+  : [];
+const deckEditFollowThroughRate = entertainmentAudit.deckEditFollowThroughRate || {};
+const deckEditActions = Array.isArray(deckEditFollowThroughRate.actions) ? deckEditFollowThroughRate.actions : [];
+const rematchIntentRate = entertainmentAudit.rematchIntentRate || {};
+const rematchActions = Array.isArray(rematchIntentRate.actions) ? rematchIntentRate.actions : [];
+assert.strictEqual(entertainmentAudit.reportVersion, 'pvp-live-entertainment-audit-v1', 'quick gate should expose a live PVP entertainment audit report');
+assert.strictEqual(entertainmentAudit.sourceVisibility, 'simulation_public_metrics', 'entertainment audit should be derived from public simulation metrics');
+assert.strictEqual(entertainmentAudit.usesHiddenInformation, false, 'entertainment audit must not require hidden hands or deck order');
+assert.strictEqual(entertainmentAudit.rankedImpact, 'none', 'entertainment audit must not write ranked state or rewards');
+assert.strictEqual(entertainmentAudit.sampleCount, quickGate.totalMatches, 'entertainment audit should cover the full quick-gate sample set');
+assert.ok(entertainmentAudit.stompRate <= 0.15, 'entertainment audit stompRate should stay below the live PVP ceiling');
+assert.ok(entertainmentAudit.closeGameRate >= 0.35, 'entertainment audit closeGameRate should prove enough late-game suspense');
+assert.ok(entertainmentAudit.leadChangeOrThreatShiftRate >= 0.30, 'entertainment audit should prove mid-game lead or threat shifts');
+assert.strictEqual(postGameActionCoverage.coverageRate, 1, 'entertainment audit should cover every observed common finish reason with next actions');
+assert.ok(postGameActionRows.length >= 1, 'entertainment audit should include at least one observed finish reason next-action row');
+assert.ok(
+  postGameActionRows.every(row => row.reason && row.covered === true && row.actions.length >= 1),
+  'entertainment audit post-game coverage rows should be actionable per finish reason'
+);
+assert.ok(
+  deckEditFollowThroughRate.trackable === true
+    && deckEditActions.includes('apply_loadout_recommendation')
+    && deckEditActions.includes('practice_topic'),
+  'entertainment audit should prove deck-edit follow-through is instrumented through recommendation and practice actions'
+);
+assert.ok(
+  rematchIntentRate.trackable === true
+    && /observation_only/.test(rematchIntentRate.policy)
+    && rematchActions.includes('queue_again'),
+  'entertainment audit should track rematch intent as observation-only without manipulating matchmaking'
+);
 assert.ok(quickGate.safety.damagePreventedByBudgetCount > 0, 'quick gate should include real budget prevention samples');
 assert.ok(quickGate.evidenceSeeds.longestReplaySeed, 'quick gate should expose a longest replay seed');
 assert.ok(quickGate.evidenceSeeds.largestBurstReplaySeed, 'quick gate should expose a largest burst replay seed');

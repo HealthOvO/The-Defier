@@ -71,6 +71,22 @@ assert.ok(
 );
 assert.strictEqual(artifacts.simulationReport.totalMatches, 10048, 'artifact quick report should keep the current 10,048-match quick gate');
 assert.ok(artifacts.simulationReport.staplePressure.length > 0, 'artifact report should include derived staple pressure rows');
+const artifactEntertainmentAudit = artifacts.simulationReport.entertainmentAudit || {};
+const artifactPostGameCoverage = artifactEntertainmentAudit.postGameActionCoverage || {};
+const artifactPostGameRows = Array.isArray(artifactPostGameCoverage.commonNextActions)
+  ? artifactPostGameCoverage.commonNextActions
+  : [];
+assert.strictEqual(artifactEntertainmentAudit.reportVersion, 'pvp-live-entertainment-audit-v1', 'artifact quick report should include the live PVP entertainment audit report');
+assert.strictEqual(artifactEntertainmentAudit.sampleCount, artifacts.simulationReport.totalMatches, 'artifact entertainment audit should cover every quick-gate sample');
+assert.ok(artifactEntertainmentAudit.stompRate <= 0.15, 'artifact entertainment audit stompRate should stay below the live PVP ceiling');
+assert.ok(artifactEntertainmentAudit.closeGameRate >= 0.35, 'artifact entertainment audit closeGameRate should preserve enough late-game suspense');
+assert.ok(artifactEntertainmentAudit.leadChangeOrThreatShiftRate >= 0.30, 'artifact entertainment audit should preserve enough lead or threat shifts');
+assert.strictEqual(artifactPostGameCoverage.coverageRate, 1, 'artifact entertainment audit should cover observed finish reasons with post-game next actions');
+assert.ok(artifactPostGameRows.length >= 1, 'artifact entertainment audit should include observed finish reason next-action rows');
+assert.ok(
+  artifactPostGameRows.every(row => row.reason && row.covered === true && row.actions.length >= 1),
+  'artifact entertainment audit next-action rows should stay actionable'
+);
 assert.ok(
   Object.values(artifacts.simulationReport.archetypeSpread).every(report => !report.dominantRisk && !report.falseArchetypeRisk),
   'artifact quick report should keep the stabilized quick-gate archetype spread; full helper owns the S2-C pass gate'
