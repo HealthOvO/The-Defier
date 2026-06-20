@@ -534,6 +534,37 @@ let openingActionState = {
       usesHiddenInformation: false,
       rankedImpact: 'none'
     },
+    actionPreviewReport: {
+      reportVersion: 'pvp-live-action-preview-v1',
+      sourceVisibility: 'viewer_public_state',
+      usesHiddenInformation: false,
+      rankedImpact: 'none',
+      viewerSeat: 'A',
+      currentSeat: 'A',
+      isViewerTurn: true,
+      playableCards: [{
+        cardInstanceId: 'A-strike-opening',
+        cardName: '试探斩',
+        targetSeat: 'B',
+        rawDamage: 8,
+        damageBudget: 18,
+        budgetedDamage: 8,
+        blockedDamage: 3,
+        hpDamage: 5,
+        targetHpAfter: 45,
+        openingProtection: {
+          willTrigger: false,
+          minimumHp: 1,
+          preventedDamage: 0
+        },
+        blockGain: 0,
+        summaryLine: '试探斩：预算后 8，破盾 3，生命伤害 5，B 预计 45 血。'
+      }],
+      endTurn: {
+        nextSeat: 'B',
+        summaryLine: '结束回合后行动权交给 B。'
+      }
+    },
     duelMomentumReport: {
       reportVersion: 'pvp-live-duel-momentum-v1',
       pressureState: 'opening_window',
@@ -580,6 +611,10 @@ assert.match(PVPScene.liveInlineHint, /首动预算\s*18/, 'opening-window card 
 assert.match(PVPScene.liveInlineHint, /保底\s*1\s*血/, 'opening-window card confirmation should name opening protection minimum HP');
 assert.match(PVPScene.liveInlineHint, /后手护盾\s*B\s*\+3/, 'opening-window card confirmation should name the second-seat public shield');
 assert.match(PVPScene.liveInlineHint, /反打缓冲\s*\+8/, 'opening-window card confirmation should name the counterplay buffer before commit');
+assert.match(PVPScene.liveInlineHint, /预算后\s*8/, 'opening-window card confirmation should use server action preview budgeted damage');
+assert.match(PVPScene.liveInlineHint, /破盾\s*3/, 'opening-window card confirmation should use server action preview blocked damage');
+assert.match(PVPScene.liveInlineHint, /生命伤害\s*5/, 'opening-window card confirmation should use server action preview HP damage');
+assert.match(PVPScene.liveInlineHint, /B\s*预计\s*45\s*血/, 'opening-window card confirmation should use server action preview target HP');
 await PVPScene.submitLiveCard('A-strike-opening');
 assert.equal(openingActionIntents.length, 1, 'second opening-window card click should submit exactly one play_card intent');
 assert.equal(openingActionIntents[0].intentType, 'play_card', 'confirmed opening-window card click should keep the authoritative play_card intent');

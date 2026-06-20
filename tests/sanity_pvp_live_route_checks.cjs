@@ -1277,8 +1277,36 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
             stateVersionA: joinProtectB.payload.stateView.stateVersion,
             prefix: 'route-opening-protection'
         });
+        const routePreviewA = await request(baseUrl, `/api/pvp/live/matches/${joinProtectB.payload.matchId}`, {
+            token: tokenA
+        });
+        assert.equal(routePreviewA.payload.stateView.actionPreviewReport?.reportVersion, 'pvp-live-action-preview-v1', 'route state view should expose authoritative action preview report');
+        assert.equal(routePreviewA.payload.stateView.actionPreviewReport?.sourceVisibility, 'viewer_public_state', 'route action preview should be viewer-scoped public state');
+        assert.equal(routePreviewA.payload.stateView.actionPreviewReport?.usesHiddenInformation, false, 'route action preview must not use hidden information');
+        assert.equal(routePreviewA.payload.stateView.actionPreviewReport?.rankedImpact, 'none', 'route action preview should not write ranked result');
+        const routeBurstPreview = routePreviewA.payload.stateView.actionPreviewReport?.playableCards?.find(card => card.cardInstanceId === 'A-burst-1');
+        assert.ok(routeBurstPreview, 'route action preview should include A-burst-1 for acting seat A');
+        assert.equal(routeBurstPreview.damageBudget, 18, 'route action preview should expose first-action budget');
+        assert.equal(routeBurstPreview.blockedDamage, 3, 'route action preview should account for public second-seat shield');
+        assert.equal(routeBurstPreview.targetHpAfter, 35, 'route action preview should expose expected target HP');
+        const routePreviewB = await request(baseUrl, `/api/pvp/live/matches/${joinProtectB.payload.matchId}`, {
+            token: tokenB
+        });
+        assert.equal(routePreviewB.payload.stateView.actionPreviewReport?.reportVersion, 'pvp-live-action-preview-v1', 'route non-acting state view should still expose preview report envelope');
+        assert.equal(routePreviewB.payload.stateView.actionPreviewReport?.viewerSeat, 'B', 'route non-acting preview should be scoped to viewer B');
+        assert.equal(routePreviewB.payload.stateView.actionPreviewReport?.currentSeat, 'A', 'route non-acting preview should identify current actor');
+        assert.equal(routePreviewB.payload.stateView.actionPreviewReport?.isViewerTurn, false, 'route non-acting preview should not mark viewer turn');
+        assert.deepEqual(routePreviewB.payload.stateView.actionPreviewReport?.playableCards, [], 'route non-acting preview must not expose acting seat card projections');
+        assert.equal(routePreviewB.payload.stateView.actionPreviewReport?.endTurn, null, 'route non-acting preview must not expose actionable end-turn projection');
         const protectMatch = pvpLiveRoutes.__livePvpStore.matches.get(joinProtectB.payload.matchId);
         protectMatch.state.seats.B.hp = 10;
+        const routeLethalPreviewA = await request(baseUrl, `/api/pvp/live/matches/${joinProtectB.payload.matchId}`, {
+            token: tokenA
+        });
+        const routeProtectedPreview = routeLethalPreviewA.payload.stateView.actionPreviewReport?.playableCards?.find(card => card.cardInstanceId === 'A-burst-1');
+        assert.equal(routeProtectedPreview?.openingProtection?.willTrigger, true, 'route action preview should predict opening protection for protected lethal');
+        assert.equal(routeProtectedPreview?.openingProtection?.preventedDamage, 6, 'route action preview should expose protected lethal prevented damage');
+        assert.equal(routeProtectedPreview?.targetHpAfter, 1, 'route action preview should expose protected target HP');
         const protectedBurstA = await submitIntent(baseUrl, tokenA, joinProtectB.payload.matchId, {
             intentId: 'route-intent-opening-protected-burst-a',
             intentType: 'play_card',

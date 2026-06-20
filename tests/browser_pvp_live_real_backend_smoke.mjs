@@ -818,6 +818,55 @@ async function writeReport() {
         && activeTimerProbe.payload?.isViewerTurn === true,
       JSON.stringify(activeTimerProbe),
     );
+    const activeOpeningPreviewProbe = await seatA.page.evaluate(() => {
+      const snapshot = window.PVPScene.getLiveSnapshot();
+      const textPayload = JSON.parse(window.render_game_to_text()).pvp?.live || null;
+      return {
+        openingText: document.querySelector('[data-live-opening-safeguard]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+        actionPreview: snapshot?.actionPreviewReport || null,
+        textActionPreview: textPayload?.actionPreviewReport || null,
+      };
+    });
+    const activeOpeningCardPreview = activeOpeningPreviewProbe.actionPreview?.playableCards?.find(card => card.targetHpAfter === 45 && card.budgetedDamage === 8);
+    add(
+      'real browser live match exposes authoritative opening action preview without hidden opponent payloads',
+      /首动预算/.test(activeOpeningPreviewProbe.openingText)
+        && /当前 A/.test(activeOpeningPreviewProbe.openingText)
+        && /后手护盾/.test(activeOpeningPreviewProbe.openingText)
+        && /B \+3/.test(activeOpeningPreviewProbe.openingText)
+        && activeOpeningPreviewProbe.actionPreview?.reportVersion === 'pvp-live-action-preview-v1'
+        && activeOpeningPreviewProbe.actionPreview?.sourceVisibility === 'viewer_public_state'
+        && activeOpeningPreviewProbe.actionPreview?.usesHiddenInformation === false
+        && activeOpeningPreviewProbe.actionPreview?.rankedImpact === 'none'
+        && activeOpeningCardPreview?.damageBudget === 18
+        && activeOpeningCardPreview?.blockedDamage === 3
+        && activeOpeningCardPreview?.hpDamage === 5
+        && activeOpeningPreviewProbe.textActionPreview?.reportVersion === 'pvp-live-action-preview-v1'
+        && !/deck|loadoutSnapshot|reward|rating|elo|opponentHand|opponentDeck/i.test(JSON.stringify(activeOpeningPreviewProbe.actionPreview || {})),
+      JSON.stringify(activeOpeningPreviewProbe),
+    );
+    const nonActingActionPreviewProbe = await seatB.page.evaluate(() => {
+      const snapshot = window.PVPScene.getLiveSnapshot();
+      const textPayload = JSON.parse(window.render_game_to_text()).pvp?.live || null;
+      return {
+        actionPreview: snapshot?.actionPreviewReport || null,
+        textActionPreview: textPayload?.actionPreviewReport || null,
+      };
+    });
+    add(
+      'real browser non-acting seat receives no playable action preview payload',
+      nonActingActionPreviewProbe.actionPreview?.reportVersion === 'pvp-live-action-preview-v1'
+        && nonActingActionPreviewProbe.actionPreview?.viewerSeat === 'B'
+        && nonActingActionPreviewProbe.actionPreview?.currentSeat === 'A'
+        && nonActingActionPreviewProbe.actionPreview?.isViewerTurn === false
+        && Array.isArray(nonActingActionPreviewProbe.actionPreview?.playableCards)
+        && nonActingActionPreviewProbe.actionPreview.playableCards.length === 0
+        && nonActingActionPreviewProbe.actionPreview?.endTurn === null
+        && nonActingActionPreviewProbe.textActionPreview?.reportVersion === 'pvp-live-action-preview-v1'
+        && nonActingActionPreviewProbe.textActionPreview?.playableCards?.length === 0
+        && !/cardInstanceId|cardName|rawDamage|budgetedDamage|opponentHand|opponentDeck|deck|loadoutSnapshot|reward|rating|elo/i.test(JSON.stringify(nonActingActionPreviewProbe.actionPreview || {})),
+      JSON.stringify(nonActingActionPreviewProbe),
+    );
     const activeMomentumProbe = await seatA.page.evaluate(() => ({
       text: document.querySelector('[data-live-duel-momentum]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
       state: document.querySelector('[data-live-duel-momentum]')?.getAttribute('data-live-duel-momentum-state') || '',
@@ -949,17 +998,22 @@ async function writeReport() {
       const state = window.PVPScene.getLiveSession().getState();
       const card = state.stateView?.self?.hand?.[0];
       if (!card?.instanceId) throw new Error('seat A has no playable card');
+      const preview = before?.actionPreviewReport?.playableCards?.find(item => item.cardInstanceId === card.instanceId) || null;
       await window.PVPScene.submitLiveCard(card.instanceId);
       await new Promise(resolve => setTimeout(resolve, 300));
       const after = window.PVPScene.getLiveSnapshot();
       return {
         before,
         after,
+        card,
+        preview,
         hint: document.querySelector('[data-live-last-error]')?.textContent || '',
         cardClass: document.querySelector('[data-live-card]')?.className || '',
         cardText: document.querySelector('[data-live-card]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
       };
     });
+    const confirmedCardPreview = realOpeningCardConfirmProbe.preview || {};
+    const confirmedHint = realOpeningCardConfirmProbe.hint || '';
     add(
       'real browser opening-window card confirmation blocks authoritative submit until second click',
       realOpeningCardConfirmProbe.before?.phase === 'active'
@@ -967,11 +1021,21 @@ async function writeReport() {
         && realOpeningCardConfirmProbe.after?.currentSeat === realOpeningCardConfirmProbe.before?.currentSeat
         && realOpeningCardConfirmProbe.after?.stateVersion === realOpeningCardConfirmProbe.before?.stateVersion
         && realOpeningCardConfirmProbe.after?.opponent?.hp === realOpeningCardConfirmProbe.before?.opponent?.hp
+        && confirmedCardPreview.cardInstanceId === realOpeningCardConfirmProbe.card?.instanceId
+        && confirmedCardPreview.damageBudget === 18
+        && Number.isFinite(confirmedCardPreview.budgetedDamage)
+        && Number.isFinite(confirmedCardPreview.blockedDamage)
+        && Number.isFinite(confirmedCardPreview.hpDamage)
+        && Number.isFinite(confirmedCardPreview.targetHpAfter)
         && /再次点击确认出牌/.test(realOpeningCardConfirmProbe.hint)
         && /首动预算\s*18/.test(realOpeningCardConfirmProbe.hint)
         && /保底\s*1\s*血/.test(realOpeningCardConfirmProbe.hint)
         && /后手护盾\s*B\s*\+3/.test(realOpeningCardConfirmProbe.hint)
         && /反打缓冲\s*\+8/.test(realOpeningCardConfirmProbe.hint)
+        && new RegExp(`预算后\\s*${confirmedCardPreview.budgetedDamage}`).test(confirmedHint)
+        && new RegExp(`破盾\\s*${confirmedCardPreview.blockedDamage}`).test(confirmedHint)
+        && new RegExp(`生命伤害\\s*${confirmedCardPreview.hpDamage}`).test(confirmedHint)
+        && new RegExp(`${confirmedCardPreview.targetSeat}\\s*预计\\s*${confirmedCardPreview.targetHpAfter}\\s*血`).test(confirmedHint)
         && /confirming/.test(realOpeningCardConfirmProbe.cardClass)
         && /确认/.test(realOpeningCardConfirmProbe.cardText),
       JSON.stringify(realOpeningCardConfirmProbe),

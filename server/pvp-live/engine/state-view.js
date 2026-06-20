@@ -996,6 +996,10 @@ function getOpeningSeatDamageBudget(firstSeat, seatId) {
     return Math.max(0, Math.floor(Number(RULES.firstActionDamageBudget[key]) || 0));
 }
 
+function otherSeat(seatId) {
+    return seatId === 'A' ? 'B' : 'A';
+}
+
 function getActionDamageBudget(state, seat) {
     if (!seat || !seat.seatId) return null;
     if (normalizeCount(seat.actionsTaken) === 0) {
@@ -1008,6 +1012,106 @@ function getActionDamageBudget(state, seat) {
         return Math.max(0, Math.floor(Number(RULES.firstActionDamageBudget.secondAction) || 0));
     }
     return null;
+}
+
+function projectCardActionPreview(state, viewerSeat, card) {
+    const actor = state && state.seats ? state.seats[viewerSeat] : null;
+    const targetSeat = otherSeat(viewerSeat);
+    const target = state && state.seats ? state.seats[targetSeat] : null;
+    if (!actor || !target || !card) return null;
+    const cost = normalizeCount(card.cost);
+    if (normalizeCount(actor.energy) < cost) return null;
+    const rawDamage = normalizeCount(card.damage);
+    const damageBudget = getActionDamageBudget(state, actor);
+    const budgetedDamage = damageBudget === null ? rawDamage : Math.min(rawDamage, damageBudget);
+    const preventedByBudget = Math.max(0, rawDamage - budgetedDamage);
+    const blockedDamage = Math.min(normalizeCount(target.block), budgetedDamage);
+    const hpDamageBeforeProtection = Math.max(0, budgetedDamage - blockedDamage);
+    const wouldHaveHp = Math.max(0, normalizeCount(target.hp) - hpDamageBeforeProtection);
+    const minimumHp = Math.max(0, Math.floor(Number(RULES.openingProtection && RULES.openingProtection.minimumHp) || 0));
+    const protectedHp = Math.min(Math.max(0, normalizeCount(target.maxHp || RULES.startingHp)), minimumHp);
+    const willTriggerProtection = minimumHp > 0 && normalizeCount(target.hp) - hpDamageBeforeProtection < minimumHp && normalizeCount(target.turnsTaken) <= 0;
+    const protectedHpDamage = willTriggerProtection
+        ? Math.max(0, normalizeCount(target.hp) - protectedHp)
+        : hpDamageBeforeProtection;
+    const preventedByProtection = willTriggerProtection
+        ? Math.max(0, hpDamageBeforeProtection - protectedHpDamage)
+        : 0;
+    const hpDamage = willTriggerProtection ? protectedHpDamage : hpDamageBeforeProtection;
+    const targetHpAfter = willTriggerProtection ? protectedHp : wouldHaveHp;
+    const blockGain = normalizeCount(card.block);
+    const cardName = String(card.name || card.cardId || '术式');
+    const damageLine = rawDamage > 0
+        ? `预算后 ${budgetedDamage}，破盾 ${blockedDamage}，生命伤害 ${hpDamage}，${targetSeat} 预计 ${targetHpAfter} 血`
+        : `不造成伤害，${targetSeat} 血线不变`;
+    const protectionLine = willTriggerProtection
+        ? `；护体触发，保底 ${protectedHp} 血，挡下 ${preventedByProtection}`
+        : '';
+    const blockLine = blockGain > 0 ? `；自身获得 ${blockGain} 护盾` : '';
+    const safeguards = [];
+    if (damageBudget !== null) safeguards.push('first_action_budget');
+    if (blockedDamage > 0) safeguards.push('public_block');
+    if (willTriggerProtection) safeguards.push('opening_protection');
+    if (preventedByProtection > 0) safeguards.push('counterplay_window_pending');
+    if (blockGain > 0) safeguards.push('self_block');
+    return {
+        cardInstanceId: String(card.instanceId || ''),
+        cardName,
+        targetSeat,
+        cost,
+        energyAfter: Math.max(0, normalizeCount(actor.energy) - cost),
+        rawDamage,
+        damageBudget,
+        budgetedDamage,
+        preventedByBudget,
+        blockedDamage,
+        hpDamage,
+        targetHpBefore: normalizeCount(target.hp),
+        targetHpAfter,
+        wouldHaveHp,
+        openingProtection: {
+            willTrigger: willTriggerProtection,
+            minimumHp,
+            preventedDamage: preventedByProtection
+        },
+        blockGain,
+        selfBlockAfter: normalizeCount(actor.block) + blockGain,
+        summaryLine: `${cardName}：${damageLine}${protectionLine}${blockLine}。`,
+        safeguards: Array.from(new Set(safeguards))
+    };
+}
+
+function projectActionPreviewReport(state, seatId) {
+    const viewerSeat = seatId === 'B' ? 'B' : 'A';
+    const currentSeat = state && state.currentSeat === 'B' ? 'B' : 'A';
+    const isViewerTurn = String(state && state.status || '') === 'active' && currentSeat === viewerSeat;
+    const actor = state && state.seats ? state.seats[viewerSeat] : null;
+    const playableCards = isViewerTurn && actor && Array.isArray(actor.hand)
+        ? actor.hand.map(card => projectCardActionPreview(state, viewerSeat, card)).filter(Boolean)
+        : [];
+    const nextSeat = otherSeat(viewerSeat);
+    const nextSeatState = state && state.seats ? state.seats[nextSeat] : null;
+    const counterplayBlock = Math.max(0, Math.floor(Number(RULES.openingCounterplay && RULES.openingCounterplay.block) || 0));
+    const willGrantCounterplay = !!(isViewerTurn && nextSeatState && nextSeatState.openingCounterplayPending && !nextSeatState.openingCounterplayGranted && normalizeCount(nextSeatState.turnsTaken) <= 0 && counterplayBlock > 0);
+    return {
+        reportVersion: 'pvp-live-action-preview-v1',
+        sourceVisibility: 'viewer_public_state',
+        usesHiddenInformation: false,
+        rankedImpact: 'none',
+        viewerSeat,
+        currentSeat,
+        isViewerTurn,
+        status: String(state && state.status || ''),
+        playableCards,
+        endTurn: isViewerTurn ? {
+            nextSeat,
+            willGrantCounterplay,
+            counterplayBlock: willGrantCounterplay ? counterplayBlock : 0,
+            summaryLine: willGrantCounterplay
+                ? `结束回合后行动权交给 ${nextSeat}，并发放反打缓冲 +${counterplayBlock}。`
+                : `结束回合后行动权交给 ${nextSeat}。`
+        } : null
+    };
 }
 
 function projectOpeningSafeguardReport(state, seatId) {
@@ -1243,6 +1347,7 @@ function projectStateView(state, seatId) {
         firstMatchGuide: projectFirstMatchGuide(state.firstMatchGuide, state.status),
         loadoutExplorationReport: projectLoadoutExplorationReport(state.loadoutExplorationReport),
         openingSafeguardReport,
+        actionPreviewReport: projectActionPreviewReport(state, seatId),
         duelMomentumReport: projectDuelMomentumReport(state, seatId, openingSafeguardReport),
         settlementReport: projectSettlementReport(state, seatId),
         postMatchReview: projectPostMatchReview(state, seatId),

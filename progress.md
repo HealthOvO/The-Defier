@@ -1,5 +1,31 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-20: V10-S9P live PVP authoritative action preview
+  - 本轮完成
+    - `server/pvp-live/engine/state-view.js` 新增 viewer-scoped `actionPreviewReport`，在权威 `stateView` 内公开当前行动方可出牌的行动预览：原始伤害、首动预算后伤害、破盾、生命伤害、目标预计血量、开局护体是否会触发、自身护盾收益，以及结束回合是否会发放反打缓冲。
+    - `actionPreviewReport` 固定 `sourceVisibility=viewer_public_state`、`usesHiddenInformation=false`、`rankedImpact=none`；非当前行动方只拿到报告信封和空 `playableCards`，不会看到对手手牌逐张预演。
+    - `js/scenes/pvp-scene.js` 的 opening-window 二次确认提示接入服务端权威预览：出牌首击现在会显示“权威预览：预算后 X、破盾 Y、生命伤害 Z、目标预计 N 血”，结束回合首击继续展示行动权交接和反打缓冲。
+    - 该切片不改 reducer / rules / WS / HTTP fallback / 存档结构 / 正式结算 / 积分 / 奖励 / 赛季验证；前端只消费 `stateView.actionPreviewReport`，不自行重算伤害、护体、预算、护盾或胜负。
+    - 挑战者巡检发现真实 smoke 原先把第一张手牌误断言成固定 `A-strike-1`，已修成“按实际被点击卡牌匹配服务端 preview”；同时补 route 和 real browser 的非行动方空预览覆盖。
+  - 已验证
+    - 红测：`node tests/sanity_pvp_live_engine_checks.cjs` 在实现前失败于 active `stateView` 缺少 viewer-scoped `actionPreviewReport`。
+    - 红测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs` 在实现前失败于 opening-window 出牌确认缺少 `预算后 8` 等权威预览。
+    - 红测：`node tests/sanity_pvp_live_ui_contract_checks.cjs` 在实现前失败于缺少 `getLiveActionPreviewReport(` 合约 marker。
+    - 绿测：`node tests/sanity_pvp_live_engine_checks.cjs`
+    - 绿测：`node tests/sanity_pvp_live_route_checks.cjs`
+    - 绿测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs`
+    - 绿测：`node tests/sanity_pvp_live_ui_contract_checks.cjs`
+    - 绿测：`node tests/sanity_release_gate_coverage_checks.cjs`
+    - 语法检查：`node --check server/pvp-live/engine/state-view.js`
+    - 语法检查：`node --check js/scenes/pvp-scene.js`
+    - 语法检查：`node --check tests/browser_pvp_live_audit.mjs && node --check tests/browser_pvp_live_real_backend_smoke.mjs`
+    - 构建：`npm run build:pages`
+    - 全量 Node：`npm run test:node`
+    - 浏览器审计：`node tests/browser_pvp_live_audit.mjs http://127.0.0.1:4173 output/pvp-live-action-preview-audit-2`，73/73 findings、0 console error。
+    - 真实后端 smoke：`node tests/browser_pvp_live_real_backend_smoke.mjs http://127.0.0.1:4173 output/pvp-live-action-preview-real-2`，46/46 findings、0 console error。
+  - 当前结论
+    - live PVP 开局窗口现在不仅告诉玩家“为什么不会先手秒杀”，还会在正式提交前把本张牌的公开结算预期讲清楚。先手能理解伤害为什么被预算 / 护盾 / 护体压住，后手也能确认自己仍有血线、护盾和反打窗口；这比单纯防误触更接近真正 PVP 的双边体验。
+
 - 2026-06-20: V10-S9O live PVP opening action preview
   - 本轮完成
     - `js/scenes/pvp-scene.js` 新增 `formatLiveOpeningActionConfirmMessage()`，把 live PVP `opening_window` 的第一次出牌 / 结束回合点击从泛化二次确认，升级为可读的公开规则预期提示。

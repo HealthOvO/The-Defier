@@ -323,6 +323,25 @@ assert(activeViewA.duelMomentumReport.currentSeat === 'A' && activeViewA.duelMom
 assert(/护体/.test(activeViewA.duelMomentumReport.summaryLine), 'active duel momentum should mention active opening protection');
 assert(/反打窗口/.test(activeViewA.duelMomentumReport.counterplayLine), 'active duel momentum should keep counterplay window readable');
 assert(activeViewA.duelMomentumReport.safeguards.includes('second_seat_buffer'), 'active duel momentum should surface second-seat buffer safeguard');
+assert(activeViewA.actionPreviewReport && activeViewA.actionPreviewReport.reportVersion === 'pvp-live-action-preview-v1', 'active state view should expose viewer-scoped action preview report');
+assert(activeViewA.actionPreviewReport.sourceVisibility === 'viewer_public_state', 'action preview should be scoped to viewer public state');
+assert(activeViewA.actionPreviewReport.usesHiddenInformation === false, 'action preview must not use hidden information');
+assert(activeViewA.actionPreviewReport.rankedImpact === 'none', 'action preview should not write ranked result');
+assert(activeViewA.actionPreviewReport.isViewerTurn === true, 'action preview should mark the current viewer turn');
+const activeBurstPreview = activeViewA.actionPreviewReport.playableCards.find(card => card.cardInstanceId === 'A-burst-1');
+assert(activeBurstPreview, 'action preview should include the acting viewer hand card');
+assert(activeBurstPreview.rawDamage === 19, 'action preview should expose raw card damage from the viewer hand');
+assert(activeBurstPreview.damageBudget === 18, 'action preview should expose current first-action budget');
+assert(activeBurstPreview.budgetedDamage === 18, 'action preview should clamp damage to the current budget');
+assert(activeBurstPreview.blockedDamage === 3, 'action preview should account for the public second-seat shield');
+assert(activeBurstPreview.hpDamage === 15, 'action preview should expose expected HP damage after block');
+assert(activeBurstPreview.targetHpAfter === 35, 'action preview should expose expected target HP after public mitigation');
+assert(activeBurstPreview.openingProtection.willTrigger === false, 'action preview should not predict protection when the target survives above minimum HP');
+assert(/B.*预计.*35/.test(activeBurstPreview.summaryLine), 'action preview should give a readable expected HP line');
+assert(!/deck|loadoutSnapshot|rating|elo|reward|opponentHand|opponentDeck/i.test(JSON.stringify(activeViewA.actionPreviewReport)), 'action preview must not leak deck, hidden rating, reward, or opponent hidden hand');
+const activeViewB = projectStateView(activeState, 'B');
+assert(activeViewB.actionPreviewReport && activeViewB.actionPreviewReport.isViewerTurn === false, 'non-current viewer should receive a non-actionable preview boundary');
+assert(activeViewB.actionPreviewReport.playableCards.length === 0, 'non-current viewer preview must not expose opponent playable card projections');
 assert(activeState.seats.B.block === 3, 'second seat should start active combat with public opening buffer block');
 assert(activeState.events.some(e => e.eventType === 'opening_second_seat_buffer_granted' && e.payload.seatId === 'B' && e.payload.block === 3), 'battle start should emit public second-seat buffer event');
 
@@ -573,6 +592,15 @@ const lethalReadyB = reduceIntent(lethalReadyA.state, {
 });
 const lethalState = lethalReadyB.state;
 lethalState.seats.B.hp = 10;
+const lethalPreviewViewA = projectStateView(lethalState, 'A');
+const lethalBurstPreview = lethalPreviewViewA.actionPreviewReport.playableCards.find(card => card.cardInstanceId === 'A-burst-1');
+assert(lethalBurstPreview && lethalBurstPreview.openingProtection.willTrigger === true, 'action preview should predict opening protection before a protected lethal action');
+assert(lethalBurstPreview.damageBudget === 18, 'protected lethal preview should still use the current first-action budget');
+assert(lethalBurstPreview.blockedDamage === 3, 'protected lethal preview should account for public second-seat shield first');
+assert(lethalBurstPreview.openingProtection.minimumHp === 1, 'protected lethal preview should expose opening protection minimum HP');
+assert(lethalBurstPreview.openingProtection.preventedDamage === 6, 'protected lethal preview should expose prevented lethal damage');
+assert(lethalBurstPreview.targetHpAfter === 1, 'protected lethal preview should expose expected protected target HP');
+assert(/护体.*1/.test(lethalBurstPreview.summaryLine), 'protected lethal preview should explain the 1 HP safeguard in readable text');
 const lethalIntent = {
   intentId: 'intent-lethal-burst-1',
   intentType: 'play_card',

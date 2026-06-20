@@ -869,6 +869,80 @@ export const PVPScene = {
       <span class="pvp-live-opening-safeguard-chip">反打缓冲 · 护盾 ${report.counterplay.block} · ${this.escapeHtml(counterplaySeats)}</span>
     `;
   },
+  getLiveActionPreviewReport(view) {
+    const report = view && view.actionPreviewReport && typeof view.actionPreviewReport === 'object'
+      ? view.actionPreviewReport
+      : null;
+    if (!report) return null;
+    const playableCards = Array.isArray(report.playableCards) ? report.playableCards : [];
+    const endTurn = report.endTurn && typeof report.endTurn === 'object' ? report.endTurn : null;
+    return {
+      reportVersion: String(report.reportVersion || 'pvp-live-action-preview-v1'),
+      sourceVisibility: String(report.sourceVisibility || 'viewer_public_state'),
+      usesHiddenInformation: report.usesHiddenInformation === true,
+      rankedImpact: String(report.rankedImpact || 'none'),
+      viewerSeat: String(report.viewerSeat || ''),
+      currentSeat: String(report.currentSeat || ''),
+      isViewerTurn: !!report.isViewerTurn,
+      status: String(report.status || ''),
+      playableCards: playableCards.map(card => {
+        const protection = card && card.openingProtection && typeof card.openingProtection === 'object'
+          ? card.openingProtection
+          : {};
+        return {
+          cardInstanceId: String(card && card.cardInstanceId || ''),
+          cardName: String(card && card.cardName || '术式'),
+          targetSeat: String(card && card.targetSeat || ''),
+          cost: Math.max(0, Math.floor(Number(card && card.cost) || 0)),
+          energyAfter: Math.max(0, Math.floor(Number(card && card.energyAfter) || 0)),
+          rawDamage: Math.max(0, Math.floor(Number(card && card.rawDamage) || 0)),
+          damageBudget: card && card.damageBudget === null || card && card.damageBudget === undefined
+            ? null
+            : Math.max(0, Math.floor(Number(card && card.damageBudget) || 0)),
+          budgetedDamage: Math.max(0, Math.floor(Number(card && card.budgetedDamage) || 0)),
+          preventedByBudget: Math.max(0, Math.floor(Number(card && card.preventedByBudget) || 0)),
+          blockedDamage: Math.max(0, Math.floor(Number(card && card.blockedDamage) || 0)),
+          hpDamage: Math.max(0, Math.floor(Number(card && card.hpDamage) || 0)),
+          targetHpBefore: Math.max(0, Math.floor(Number(card && card.targetHpBefore) || 0)),
+          targetHpAfter: Math.max(0, Math.floor(Number(card && card.targetHpAfter) || 0)),
+          wouldHaveHp: Math.max(0, Math.floor(Number(card && card.wouldHaveHp) || 0)),
+          openingProtection: {
+            willTrigger: protection.willTrigger === true,
+            minimumHp: Math.max(0, Math.floor(Number(protection.minimumHp) || 0)),
+            preventedDamage: Math.max(0, Math.floor(Number(protection.preventedDamage) || 0))
+          },
+          blockGain: Math.max(0, Math.floor(Number(card && card.blockGain) || 0)),
+          selfBlockAfter: Math.max(0, Math.floor(Number(card && card.selfBlockAfter) || 0)),
+          summaryLine: String(card && card.summaryLine || ''),
+          safeguards: Array.isArray(card && card.safeguards)
+            ? card.safeguards.map(item => String(item || '')).filter(Boolean).slice(0, 8)
+            : []
+        };
+      }).filter(card => card.cardInstanceId),
+      endTurn: endTurn ? {
+        nextSeat: String(endTurn.nextSeat || ''),
+        willGrantCounterplay: endTurn.willGrantCounterplay === true,
+        counterplayBlock: Math.max(0, Math.floor(Number(endTurn.counterplayBlock) || 0)),
+        summaryLine: String(endTurn.summaryLine || '')
+      } : null
+    };
+  },
+  getLiveCardActionPreview(view, cardInstanceId = '') {
+    const report = this.getLiveActionPreviewReport(view);
+    const targetId = String(cardInstanceId || '');
+    if (!report || !targetId) return null;
+    return report.playableCards.find(card => card.cardInstanceId === targetId) || null;
+  },
+  formatLiveActionPreviewLine(preview) {
+    if (!preview) return '';
+    if (preview.summaryLine) return preview.summaryLine;
+    const targetSeat = preview.targetSeat || '目标';
+    const protectionText = preview.openingProtection && preview.openingProtection.willTrigger
+      ? `；护体触发，保底 ${preview.openingProtection.minimumHp} 血，挡下 ${preview.openingProtection.preventedDamage}`
+      : '';
+    const blockText = preview.blockGain > 0 ? `；自身获得 ${preview.blockGain} 护盾` : '';
+    return `${preview.cardName || '术式'}：预算后 ${preview.budgetedDamage}，破盾 ${preview.blockedDamage}，生命伤害 ${preview.hpDamage}，${targetSeat} 预计 ${preview.targetHpAfter} 血${protectionText}${blockText}。`;
+  },
   getLiveDuelMomentumReport(view) {
     const report = view && view.duelMomentumReport && typeof view.duelMomentumReport === 'object'
       ? view.duelMomentumReport
@@ -2567,6 +2641,7 @@ export const PVPScene = {
       lastRealtimeSyncAt: Math.max(0, Math.floor(Number(state.lastRealtimeSyncAt) || 0)),
       realtimeReport: this.getLiveRealtimeReport(state),
       openingSafeguardReport: this.getLiveOpeningSafeguardReport(view),
+      actionPreviewReport: this.getLiveActionPreviewReport(view),
       duelMomentumReport: this.getLiveDuelMomentumReport(view),
       friendlySeries: this.getLiveFriendlySeries(view && view.friendlySeries ? view.friendlySeries : state.rematchReport),
       firstMatchGuide: this.getLiveFirstMatchGuide(view),
@@ -3199,7 +3274,11 @@ export const PVPScene = {
       const nextSeat = view && view.opponent && view.opponent.seatId
         ? view.opponent.seatId
         : context.currentSeat === 'A' ? 'B' : 'A';
-      return `再次点击确认结束回合；确认后行动权交给 ${nextSeat}。${publicRulesText}`;
+      const actionPreview = this.getLiveActionPreviewReport(view);
+      const endTurnPreview = actionPreview && actionPreview.endTurn && actionPreview.endTurn.summaryLine
+        ? `权威预览：${actionPreview.endTurn.summaryLine}`
+        : '';
+      return `再次点击确认结束回合；确认后行动权交给 ${nextSeat}。${publicRulesText}${endTurnPreview}`;
     }
     const cardInstanceId = String(payload && payload.cardInstanceId || context.payload && context.payload.cardInstanceId || '');
     const hand = view && view.self && Array.isArray(view.self.hand) ? view.self.hand : [];
@@ -3207,7 +3286,9 @@ export const PVPScene = {
     const cardName = card && (card.name || card.cardId) ? String(card.name || card.cardId) : '当前术式';
     const targetSeat = String(payload && payload.targetSeat || view && view.opponent && view.opponent.seatId || '');
     const targetText = targetSeat ? `，目标 ${targetSeat}` : '';
-    return `再次点击确认出牌；${cardName}${targetText}。${publicRulesText}`;
+    const previewText = this.formatLiveActionPreviewLine(this.getLiveCardActionPreview(view, cardInstanceId));
+    const previewSuffix = previewText ? `权威预览：${previewText}` : '';
+    return `再次点击确认出牌；${cardName}${targetText}。${publicRulesText}${previewSuffix}`;
   },
   isLiveOpeningActionConfirmArmed(state = null, actionType = '', payload = {}) {
     const context = this.getLiveOpeningActionConfirmContext(state, actionType, payload);

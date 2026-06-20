@@ -163,6 +163,9 @@ const liveBrowserAudit = read('tests/browser_pvp_live_audit.mjs');
   'renderLiveLoadoutExplorationReport(',
   'getLiveOpeningSafeguardReport(',
   'renderLiveOpeningSafeguardReport(',
+  'getLiveActionPreviewReport(',
+  'getLiveCardActionPreview(',
+  'formatLiveActionPreviewLine(',
   'getLiveDuelMomentumReport(',
   'renderLiveDuelMomentumReport(',
   'formatLiveEvent(',
@@ -402,6 +405,16 @@ assert.ok(
   submitLiveCardBody.indexOf('armLiveOpeningActionConfirm') < submitLiveCardBody.indexOf("intentType: 'play_card'"),
   'submitLiveCard should arm opening confirmation before submitting play_card',
 );
+
+const openingConfirmMessageBody = methodBody(scene, 'formatLiveOpeningActionConfirmMessage');
+[
+  'getLiveActionPreviewReport',
+  'getLiveCardActionPreview',
+  'formatLiveActionPreviewLine',
+  '权威预览',
+].forEach((needle) => {
+  assert.ok(openingConfirmMessageBody.includes(needle), `opening confirmation formatter should consume authoritative action preview: ${needle}`);
+});
 
 const endLiveTurnBody = methodBody(scene, 'endLiveTurn');
 [

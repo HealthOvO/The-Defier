@@ -456,6 +456,36 @@ async function safeElementScreenshot(page, selector, outputPath) {
         safeguards: ['server_authoritative', 'snapshot_locked', 'setup_ready_required', 'connection_health_gate'],
       },
       openingSafeguardReport: makeOpeningSafeguardReport(stateVersion, currentSeat, status),
+      actionPreviewReport: {
+        reportVersion: 'pvp-live-action-preview-v1',
+        sourceVisibility: 'viewer_public_state',
+        usesHiddenInformation: false,
+        rankedImpact: 'none',
+        viewerSeat: 'A',
+        currentSeat,
+        isViewerTurn: status === 'active' && currentSeat === 'A',
+        playableCards: status === 'active' && currentSeat === 'A' ? [{
+          cardInstanceId: 'A-strike-1',
+          cardName: '试探斩',
+          targetSeat: 'B',
+          rawDamage: 8,
+          damageBudget: 18,
+          budgetedDamage: 8,
+          blockedDamage: 3,
+          hpDamage: 5,
+          targetHpAfter: 45,
+          openingProtection: {
+            willTrigger: false,
+            minimumHp: 1,
+            preventedDamage: 0,
+          },
+          blockGain: 0,
+          summaryLine: '试探斩：预算后 8，破盾 3，生命伤害 5，B 预计 45 血。',
+        }] : [],
+        endTurn: status === 'active' && currentSeat === 'A'
+          ? { nextSeat: 'B', summaryLine: '结束回合后行动权交给 B。' }
+          : null,
+      },
       duelMomentumReport: makeDuelMomentumReport(stateVersion, currentSeat, status),
       firstMatchGuide: makeFirstMatchGuide(status),
       loadoutExplorationReport: makeLoadoutExplorationReport(),
@@ -1690,6 +1720,22 @@ async function safeElementScreenshot(page, selector, outputPath) {
       && !/payload|hand|deck|cardId|instanceId|loadoutSnapshot|reward|rating|elo/i.test(`${setupProbe.openingSafeguard} ${JSON.stringify(setupProbe.payload?.openingSafeguardReport || {})}`),
     JSON.stringify(setupProbe),
   );
+  const setupActionPreview = setupProbe.payload?.actionPreviewReport?.playableCards?.find(card => card.cardInstanceId === 'A-strike-1');
+  add(
+    'live UI exposes authoritative action preview report for opening card without hidden opponent payloads',
+    setupProbe.payload?.actionPreviewReport?.reportVersion === 'pvp-live-action-preview-v1'
+      && setupProbe.payload?.actionPreviewReport?.sourceVisibility === 'viewer_public_state'
+      && setupProbe.payload?.actionPreviewReport?.usesHiddenInformation === false
+      && setupProbe.payload?.actionPreviewReport?.rankedImpact === 'none'
+      && setupActionPreview?.damageBudget === 18
+      && setupActionPreview?.budgetedDamage === 8
+      && setupActionPreview?.blockedDamage === 3
+      && setupActionPreview?.hpDamage === 5
+      && setupActionPreview?.targetHpAfter === 45
+      && /预算后\s*8/.test(setupActionPreview?.summaryLine || '')
+      && !/deck|loadoutSnapshot|reward|rating|elo|opponentHand|opponentDeck/i.test(JSON.stringify(setupProbe.payload?.actionPreviewReport || {})),
+    JSON.stringify(setupProbe.payload?.actionPreviewReport || null),
+  );
   add(
     'live UI renders active duel momentum opening window without hidden payloads',
     setupProbe.phase === 'active'
@@ -1786,6 +1832,10 @@ async function safeElementScreenshot(page, selector, outputPath) {
       && /保底\s*1\s*血/.test(openingCardConfirmProbe.hint)
       && /后手护盾\s*B\s*\+3/.test(openingCardConfirmProbe.hint)
       && /反打缓冲\s*\+8/.test(openingCardConfirmProbe.hint)
+      && /预算后\s*8/.test(openingCardConfirmProbe.hint)
+      && /破盾\s*3/.test(openingCardConfirmProbe.hint)
+      && /生命伤害\s*5/.test(openingCardConfirmProbe.hint)
+      && /B\s*预计\s*45\s*血/.test(openingCardConfirmProbe.hint)
       && /confirming/.test(openingCardConfirmProbe.cardClass)
       && /确认/.test(openingCardConfirmProbe.cardText)
       && !/play_card/.test(JSON.stringify(openingCardConfirmProbe.calls)),
