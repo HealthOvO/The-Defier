@@ -1781,6 +1781,9 @@ async function writeReport() {
       document.querySelector('[data-live-post-review-action="review_events"]')?.click();
       document.querySelector('[data-live-post-review-action="adjust_loadout"]')?.click();
       document.querySelector('[data-live-loadout-preset="balanced"]')?.click();
+      const queueLoadoutResolution = window.PVPScene.resolveLivePostReviewLoadoutPreset('queue_again');
+      const rematchLoadoutResolution = window.PVPScene.resolveLivePostReviewLoadoutPreset('friendly_rematch');
+      const practiceLoadoutResolution = window.PVPScene.resolveLivePostReviewLoadoutPreset('practice');
       document.querySelector('[data-live-post-review-action="practice"]')?.click();
       await new Promise(resolve => setTimeout(resolve, 450));
       const payload = typeof window.render_game_to_text === 'function'
@@ -1801,6 +1804,9 @@ async function writeReport() {
         insightText: document.querySelector('#challenge-selection-banner .challenge-record-insight')?.textContent?.replace(/\s+/g, ' ').trim() || '',
         confirmText: document.querySelector('#confirm-character-btn .btn-text')?.textContent?.trim() || '',
         drillScenario: payload?.pvp?.live?.drillScenario || window.PVPScene.getLiveSnapshot()?.drillScenario || null,
+        queueLoadoutResolution,
+        rematchLoadoutResolution,
+        practiceLoadoutResolution,
         experienceFocus,
         keyTurnFocus,
       };
@@ -1815,6 +1821,36 @@ async function writeReport() {
         && (postActionProbe.experienceFocus?.payload?.fairnessChecks || []).some(item => item.id === 'decision_windows' && (item.linkedEvidence || []).some(event => event.eventType === 'battle_started'))
         && !/payload|hand|deck|cardId|instanceId|loadoutSnapshot|reward|rating|elo/i.test(JSON.stringify(postActionProbe.experienceFocus?.payload || {})),
       JSON.stringify(postActionProbe.experienceFocus),
+    );
+    add(
+      'real browser post-match loadout resolution keeps manual formal candidate while practice uses public recommendation',
+      postActionProbe.queueLoadoutResolution?.reportVersion === 'pvp-live-post-review-loadout-resolution-v1'
+        && postActionProbe.queueLoadoutResolution?.presetId === 'balanced'
+        && postActionProbe.queueLoadoutResolution?.source === 'manual_candidate_override'
+        && postActionProbe.queueLoadoutResolution?.sourceVisibility === 'local_candidate'
+        && postActionProbe.queueLoadoutResolution?.recommendationVisibility === 'public_events_and_public_content'
+        && postActionProbe.queueLoadoutResolution?.rankedImpact === 'candidate_only'
+        && postActionProbe.rematchLoadoutResolution?.presetId === 'balanced'
+        && postActionProbe.rematchLoadoutResolution?.source === 'manual_candidate_override'
+        && postActionProbe.rematchLoadoutResolution?.sourceVisibility === 'local_candidate'
+        && postActionProbe.rematchLoadoutResolution?.rankedImpact === 'candidate_only'
+        && postActionProbe.practiceLoadoutResolution?.presetId === 'shield'
+        && postActionProbe.practiceLoadoutResolution?.source === 'public_recommendation_practice'
+        && postActionProbe.practiceLoadoutResolution?.sourceVisibility === 'public_events_and_public_content'
+        && postActionProbe.practiceLoadoutResolution?.rankedImpact === 'none'
+        && postActionProbe.drillScenario?.recommendedLoadoutId === postActionProbe.practiceLoadoutResolution?.presetId
+        && [postActionProbe.queueLoadoutResolution, postActionProbe.rematchLoadoutResolution, postActionProbe.practiceLoadoutResolution].every(item => item?.usesHiddenInformation === false)
+        && !/payload|hand|deck|cardId|instanceId|loadoutSnapshot|reward|rating|elo/i.test(JSON.stringify({
+          queue: postActionProbe.queueLoadoutResolution,
+          rematch: postActionProbe.rematchLoadoutResolution,
+          practice: postActionProbe.practiceLoadoutResolution,
+        })),
+      JSON.stringify({
+        queueLoadoutResolution: postActionProbe.queueLoadoutResolution,
+        rematchLoadoutResolution: postActionProbe.rematchLoadoutResolution,
+        practiceLoadoutResolution: postActionProbe.practiceLoadoutResolution,
+        drillScenario: postActionProbe.drillScenario,
+      }),
     );
     add(
       'real browser post-match review actions focus events, unlock loadout, and create replay-only no-score drill handoff',

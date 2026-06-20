@@ -2423,6 +2423,7 @@ async function safeElementScreenshot(page, selector, outputPath) {
     selectedPreset: document.querySelector('[data-live-loadout-preset].selected')?.getAttribute('data-live-loadout-preset') || '',
     loadoutPanelFocused: document.querySelector('.pvp-live-loadout-selector')?.getAttribute('data-live-review-focus') || '',
     presetDisabled: Array.from(document.querySelectorAll('[data-live-loadout-preset]')).map(button => button.disabled),
+    resolutions: ['queue_again', 'friendly_rematch', 'practice'].map(actionId => window.PVPScene.resolveLivePostReviewLoadoutPreset(actionId)),
     calls: window.__livePvpAuditCalls.slice(callStart),
   }), loadoutRecommendationApplyCallStart);
   add(
@@ -2436,6 +2437,266 @@ async function safeElementScreenshot(page, selector, outputPath) {
       && loadoutRecommendationApplyProbe.presetDisabled.every(value => value === false)
       && !/findOpponent|reportMatchResult|GhostEnemy|startPVPBattle|didWin|matchTicket|joinQueue|requestRematch/.test(JSON.stringify(loadoutRecommendationApplyProbe.calls)),
     JSON.stringify(loadoutRecommendationApplyProbe),
+  );
+  add(
+    'live UI post-match loadout resolution carries apply receipt across next actions',
+    loadoutRecommendationApplyProbe.resolutions.length === 3
+      && loadoutRecommendationApplyProbe.resolutions.every(item => item?.reportVersion === 'pvp-live-post-review-loadout-resolution-v1')
+      && loadoutRecommendationApplyProbe.resolutions.every(item => item?.presetId === 'shield')
+      && loadoutRecommendationApplyProbe.resolutions.some(item => item?.actionId === 'queue_again' && item?.source === 'applied_public_recommendation' && item?.sourceVisibility === 'public_events_and_public_content' && item?.rankedImpact === 'candidate_only')
+      && loadoutRecommendationApplyProbe.resolutions.some(item => item?.actionId === 'friendly_rematch' && item?.source === 'applied_public_recommendation' && item?.sourceVisibility === 'public_events_and_public_content' && item?.rankedImpact === 'candidate_only')
+      && loadoutRecommendationApplyProbe.resolutions.some(item => item?.actionId === 'practice' && item?.source === 'public_recommendation_practice' && item?.sourceVisibility === 'public_events_and_public_content' && item?.rankedImpact === 'none')
+      && loadoutRecommendationApplyProbe.resolutions.every(item => item?.usesHiddenInformation === false)
+      && !/payload|hand|deck|cardId|instanceId|loadoutSnapshot|reward|rating|elo/i.test(JSON.stringify(loadoutRecommendationApplyProbe.resolutions)),
+    JSON.stringify(loadoutRecommendationApplyProbe.resolutions),
+  );
+  const manualLoadoutOverrideProbe = await page.evaluate(() => {
+    const previousPreset = window.PVPScene.liveSelectedLoadoutPreset;
+    window.PVPScene.liveSelectedLoadoutPreset = 'balanced';
+    const probe = {
+      selectedPreset: window.PVPScene.liveSelectedLoadoutPreset,
+      queue: window.PVPScene.resolveLivePostReviewLoadoutPreset('queue_again'),
+      rematch: window.PVPScene.resolveLivePostReviewLoadoutPreset('friendly_rematch'),
+      practice: window.PVPScene.resolveLivePostReviewLoadoutPreset('practice'),
+    };
+    window.PVPScene.liveSelectedLoadoutPreset = previousPreset;
+    return probe;
+  });
+  add(
+    'live UI post-match loadout resolution lets manual candidate override formal carryover while practice stays no-score',
+    manualLoadoutOverrideProbe.selectedPreset === 'balanced'
+      && manualLoadoutOverrideProbe.queue?.presetId === 'balanced'
+      && manualLoadoutOverrideProbe.queue?.source === 'manual_candidate_override'
+      && manualLoadoutOverrideProbe.queue?.sourceVisibility === 'local_candidate'
+      && manualLoadoutOverrideProbe.queue?.recommendationVisibility === 'public_events_and_public_content'
+      && manualLoadoutOverrideProbe.queue?.rankedImpact === 'candidate_only'
+      && manualLoadoutOverrideProbe.rematch?.presetId === 'balanced'
+      && manualLoadoutOverrideProbe.rematch?.source === 'manual_candidate_override'
+      && manualLoadoutOverrideProbe.rematch?.sourceVisibility === 'local_candidate'
+      && manualLoadoutOverrideProbe.rematch?.rankedImpact === 'candidate_only'
+      && manualLoadoutOverrideProbe.practice?.presetId === 'shield'
+      && manualLoadoutOverrideProbe.practice?.source === 'public_recommendation_practice'
+      && manualLoadoutOverrideProbe.practice?.sourceVisibility === 'public_events_and_public_content'
+      && manualLoadoutOverrideProbe.practice?.rankedImpact === 'none'
+      && [manualLoadoutOverrideProbe.queue, manualLoadoutOverrideProbe.rematch, manualLoadoutOverrideProbe.practice].every(item => item?.usesHiddenInformation === false)
+      && !/payload|hand|deck|cardId|instanceId|loadoutSnapshot|reward|rating|elo/i.test(JSON.stringify(manualLoadoutOverrideProbe)),
+    JSON.stringify(manualLoadoutOverrideProbe),
+  );
+  const manualLoadoutActionPayloadProbe = await page.evaluate(async () => {
+    const scene = window.PVPScene;
+    const originalGetLiveSession = scene.getLiveSession;
+    const originalRenderLivePanel = scene.renderLivePanel;
+    const originalStartLivePolling = scene.startLivePolling;
+    const originalStopLivePolling = scene.stopLivePolling;
+    const previousPreset = scene.liveSelectedLoadoutPreset;
+    const previousHint = scene.liveInlineHint;
+    const baseReview = scene.getLiveSnapshot()?.postMatchReview || {};
+    const state = {
+      phase: 'finished',
+      matchId: 'pvplm-browser-manual-loadout-action',
+      seatId: 'A',
+      stateView: {
+        matchId: 'pvplm-browser-manual-loadout-action',
+        status: 'finished',
+        stateVersion: 101,
+        postMatchReview: baseReview,
+      },
+      lastError: null,
+    };
+    const calls = [];
+    scene.liveSelectedLoadoutPreset = 'balanced';
+    scene.renderLivePanel = () => {};
+    scene.startLivePolling = () => {};
+    scene.stopLivePolling = () => {};
+    scene.getLiveSession = () => ({
+      getState: () => state,
+      joinQueue: async (options) => {
+        calls.push({ method: 'joinQueue', options });
+        state.phase = 'waiting';
+        state.queueTicket = 'pvplq-browser-manual-loadout-action';
+        state.lastError = null;
+        return state;
+      },
+      requestRematch: async (options) => {
+        calls.push({ method: 'requestRematch', options });
+        state.phase = 'waiting_rematch';
+        state.lastError = {
+          reason: 'waiting_rematch',
+          message: '已发起低压力再战，等待本局对手确认；不写正式积分。',
+        };
+        return state;
+      },
+    });
+    await scene.handleLivePostReviewAction('queue_again');
+    const queueHint = scene.liveInlineHint;
+    state.phase = 'finished';
+    state.queueTicket = '';
+    state.lastError = null;
+    await scene.handleLivePostReviewAction('friendly_rematch');
+    const rematchHint = scene.liveInlineHint;
+    state.phase = 'finished';
+    state.lastError = null;
+    const practiceScenario = scene.buildLivePostReviewDrillScenario(state);
+    scene.getLiveSession = originalGetLiveSession;
+    scene.renderLivePanel = originalRenderLivePanel;
+    scene.startLivePolling = originalStartLivePolling;
+    scene.stopLivePolling = originalStopLivePolling;
+    scene.liveSelectedLoadoutPreset = previousPreset;
+    scene.liveInlineHint = previousHint;
+    return { calls, queueHint, rematchHint, practiceScenario };
+  });
+  add(
+    'live UI post-match actions submit manual formal loadout while practice keeps public recommendation',
+    manualLoadoutActionPayloadProbe.calls.filter(call => call.method === 'joinQueue').length === 1
+      && manualLoadoutActionPayloadProbe.calls.find(call => call.method === 'joinQueue')?.options?.loadout?.identitySlot === 'balanced'
+      && manualLoadoutActionPayloadProbe.calls.filter(call => call.method === 'requestRematch').length === 1
+      && manualLoadoutActionPayloadProbe.calls.find(call => call.method === 'requestRematch')?.options?.loadout?.identitySlot === 'balanced'
+      && /手动候选谱默认斗法谱/.test(manualLoadoutActionPayloadProbe.queueHint || '')
+      && /手动候选谱默认斗法谱/.test(manualLoadoutActionPayloadProbe.rematchHint || '')
+      && /不写正式积分/.test(manualLoadoutActionPayloadProbe.rematchHint || '')
+      && manualLoadoutActionPayloadProbe.practiceScenario?.recommendedLoadoutId === 'shield'
+      && manualLoadoutActionPayloadProbe.practiceScenario?.rankedImpact === 'none'
+      && !/opponentHand|opponentDeck|loadoutSnapshot|reward|rating|elo/i.test(JSON.stringify(manualLoadoutActionPayloadProbe)),
+    JSON.stringify(manualLoadoutActionPayloadProbe),
+  );
+  const failedLoadoutReceiptProbe = await page.evaluate(async () => {
+    const scene = window.PVPScene;
+    const originalGetLiveSession = scene.getLiveSession;
+    const originalRenderLivePanel = scene.renderLivePanel;
+    const originalStartLivePolling = scene.startLivePolling;
+    const originalStopLivePolling = scene.stopLivePolling;
+    const previousPreset = scene.liveSelectedLoadoutPreset;
+    const previousHint = scene.liveInlineHint;
+    const baseReview = scene.getLiveSnapshot()?.postMatchReview || {};
+    const state = {
+      phase: 'finished',
+      matchId: 'pvplm-browser-failed-loadout-receipt',
+      seatId: 'A',
+      stateView: {
+        matchId: 'pvplm-browser-failed-loadout-receipt',
+        status: 'finished',
+        stateVersion: 102,
+        postMatchReview: baseReview,
+      },
+      lastError: null,
+    };
+    const calls = [];
+    scene.liveSelectedLoadoutPreset = 'shield';
+    scene.liveInlineHint = '旧成功提示';
+    scene.renderLivePanel = () => {};
+    scene.startLivePolling = () => {};
+    scene.stopLivePolling = () => {};
+    scene.getLiveSession = () => ({
+      getState: () => state,
+      joinQueue: async (options) => {
+        calls.push({ method: 'joinQueue', options });
+        state.phase = 'idle';
+        state.matchId = '';
+        state.stateView = null;
+        state.lastError = {
+          reason: 'connection_health_failed',
+          message: '当前连接不适合进入正式真人排位',
+        };
+        return state;
+      },
+      requestRematch: async (options) => {
+        calls.push({ method: 'requestRematch', options });
+        state.phase = 'finished';
+        state.lastError = {
+          reason: 'rematch_expired',
+          message: '低压力再战等待已过期',
+        };
+        return state;
+      },
+    });
+    await scene.handleLivePostReviewAction('queue_again');
+    const queueHint = scene.liveInlineHint;
+    const queueError = { ...(state.lastError || {}) };
+    state.phase = 'finished';
+    state.matchId = 'pvplm-browser-failed-loadout-receipt';
+    state.stateView = {
+      matchId: 'pvplm-browser-failed-loadout-receipt',
+      status: 'finished',
+      stateVersion: 103,
+      postMatchReview: baseReview,
+    };
+    state.lastError = null;
+    scene.liveInlineHint = '旧成功提示';
+    await scene.handleLivePostReviewAction('friendly_rematch');
+    const rematchHint = scene.liveInlineHint;
+    const rematchError = { ...(state.lastError || {}) };
+    scene.getLiveSession = originalGetLiveSession;
+    scene.renderLivePanel = originalRenderLivePanel;
+    scene.startLivePolling = originalStartLivePolling;
+    scene.stopLivePolling = originalStopLivePolling;
+    scene.liveSelectedLoadoutPreset = previousPreset;
+    scene.liveInlineHint = previousHint;
+    return { calls, queueHint, queueError, rematchHint, rematchError };
+  });
+  add(
+    'live UI post-match loadout receipts do not mask queue or rematch failures',
+    failedLoadoutReceiptProbe.calls.some(call => call.method === 'joinQueue' && call.options?.loadout?.identitySlot === 'shield')
+      && failedLoadoutReceiptProbe.queueHint === ''
+      && failedLoadoutReceiptProbe.queueError?.reason === 'connection_health_failed'
+      && failedLoadoutReceiptProbe.calls.some(call => call.method === 'requestRematch' && call.options?.loadout?.identitySlot === 'shield')
+      && failedLoadoutReceiptProbe.rematchHint === ''
+      && failedLoadoutReceiptProbe.rematchError?.reason === 'rematch_expired'
+      && !/已使用/.test(`${failedLoadoutReceiptProbe.queueHint} ${failedLoadoutReceiptProbe.rematchHint}`),
+    JSON.stringify(failedLoadoutReceiptProbe),
+  );
+  const recommendationPracticePresetProbe = await page.evaluate(() => {
+    const scene = window.PVPScene;
+    const originalGetLiveSession = scene.getLiveSession;
+    const baseReview = scene.getLiveSnapshot()?.postMatchReview || {};
+    const state = {
+      phase: 'finished',
+      matchId: 'pvplm-browser-winning-recommendation-practice',
+      seatId: 'A',
+      stateView: {
+        matchId: 'pvplm-browser-winning-recommendation-practice',
+        status: 'finished',
+        stateVersion: 99,
+        postMatchReview: {
+          ...baseReview,
+          result: 'win',
+          winnerSeat: 'A',
+          loserSeat: 'B',
+          finishReason: 'lethal',
+          summary: '公开轨迹显示主动压制有效。',
+          loadoutRecommendation: {
+            ...(baseReview.loadoutRecommendation || {}),
+            reportVersion: 'pvp-live-loadout-recommendation-v1',
+            sourceVisibility: 'public_events_and_public_content',
+            usesHiddenInformation: false,
+            rankedImpact: 'none',
+            recommendedPresetId: 'sword',
+            recommendedPresetLabel: '破阵斗法谱',
+            reasonLine: '本局公开轨迹显示主动压制有效，下一局可套用破阵斗法谱继续验证前两手压力。',
+          },
+        },
+      },
+    };
+    scene.liveSelectedLoadoutPreset = 'balanced';
+    scene.getLiveSession = () => ({ getState: () => state });
+    const scenario = scene.buildLivePostReviewDrillScenario();
+    scene.getLiveSession = originalGetLiveSession;
+    return {
+      selectedPreset: 'balanced',
+      recommendationPreset: state.stateView.postMatchReview.loadoutRecommendation.recommendedPresetId,
+      scenario,
+    };
+  });
+  add(
+    'live UI post-match practice drill follows public loadout recommendation over current preset',
+    recommendationPracticePresetProbe.selectedPreset === 'balanced'
+      && recommendationPracticePresetProbe.recommendationPreset === 'sword'
+      && recommendationPracticePresetProbe.scenario?.recommendedLoadoutId === 'sword'
+      && /破阵斗法谱/.test(recommendationPracticePresetProbe.scenario?.recommendedLoadoutLabel || '')
+      && /破阵斗法谱/.test(recommendationPracticePresetProbe.scenario?.drillObjective || '')
+      && recommendationPracticePresetProbe.scenario?.usesHiddenInformation === false
+      && recommendationPracticePresetProbe.scenario?.rankedImpact === 'none'
+      && !/payload|hand|deck|cardId|instanceId|loadoutSnapshot|reward|rating|elo/i.test(JSON.stringify(recommendationPracticePresetProbe.scenario || {})),
+    JSON.stringify(recommendationPracticePresetProbe),
   );
 
   await page.click('[data-live-post-review-action="practice"]', { timeout: 5000, force: true });

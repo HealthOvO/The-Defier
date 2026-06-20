@@ -113,7 +113,9 @@ const liveBrowserAudit = read('tests/browser_pvp_live_audit.mjs');
   'isLiveSurrenderConfirmArmed(',
   'armLiveSurrenderConfirm(',
   'clearLiveSurrenderConfirm(',
-  'joinLiveQueue()',
+  'joinLiveQueue(options = {})',
+  'resolveLivePostReviewLoadoutPreset(',
+  'pvp-live-post-review-loadout-resolution-v1',
   'createLiveInvite()',
   'joinLiveInvite()',
   'joinLiveInboxInvite(',
@@ -397,7 +399,8 @@ assert.ok(refreshLiveMatchBody.includes('this.clearLiveIntentInFlight()'), 'manu
 });
 
 const joinLiveQueueBody = methodBody(scene, 'joinLiveQueue');
-assert.ok(joinLiveQueueBody.includes('const selectedPreset = this.getLiveSelectedLoadoutPreset()'), 'joinLiveQueue should resolve the currently selected live loadout preset');
+assert.ok(joinLiveQueueBody.includes('this.getLiveSelectedLoadoutPreset()'), 'joinLiveQueue should resolve the currently selected live loadout preset as fallback');
+assert.ok(joinLiveQueueBody.includes('options.loadoutPresetId'), 'joinLiveQueue should accept an explicit post-review loadout preset when provided');
 assert.ok(joinLiveQueueBody.includes('loadout: this.getLiveQueueLoadoutCandidate(selectedPreset.id)'), 'joinLiveQueue should submit the selected live loadout candidate for server-side snapshot lock');
 assert.ok(joinLiveQueueBody.includes('connectionHealthProbe'), 'joinLiveQueue should send live connection health probe for ranked entry safeguard');
 assert.ok(joinLiveQueueBody.includes('buildLiveQueueConnectionHealthProbe'), 'joinLiveQueue should build a pre-queue connection health probe before entering ranked queue');

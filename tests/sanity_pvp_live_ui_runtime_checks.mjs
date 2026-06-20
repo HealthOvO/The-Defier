@@ -980,7 +980,10 @@ let recommendationState = {
     }
   }
 };
+const baseRecommendationState = JSON.parse(JSON.stringify(recommendationState));
 const recommendationCalls = [];
+let nextQueueState = null;
+let nextRematchState = null;
 PVPScene.liveSelectedLoadoutPreset = 'sword';
 PVPScene.liveLoadoutReviewFocused = false;
 PVPScene.liveInlineHint = '';
@@ -992,10 +995,18 @@ PVPScene.getLiveSession = () => ({
   getState: () => recommendationState,
   joinQueue: async (options) => {
     recommendationCalls.push({ method: 'joinQueue', options });
+    if (nextQueueState) {
+      recommendationState = nextQueueState;
+      nextQueueState = null;
+    }
     return recommendationState;
   },
   requestRematch: async (options) => {
     recommendationCalls.push({ method: 'requestRematch', options });
+    if (nextRematchState) {
+      recommendationState = nextRematchState;
+      nextRematchState = null;
+    }
     return recommendationState;
   }
 });
@@ -1014,6 +1025,38 @@ assert.equal(
   null,
   'live UI should reject non-public loadout recommendation sources',
 );
+PVPScene.liveSelectedLoadoutPreset = 'balanced';
+const preApplyQueueResolution = PVPScene.resolveLivePostReviewLoadoutPreset('queue_again');
+assert.equal(preApplyQueueResolution.presetId, 'balanced', 'formal queue should keep the manual candidate before recommendation apply');
+assert.equal(preApplyQueueResolution.source, 'manual_candidate_override', 'formal queue should mark manual candidate override before recommendation apply');
+assert.equal(preApplyQueueResolution.sourceVisibility, 'local_candidate', 'manual formal queue override should expose local candidate visibility');
+assert.equal(preApplyQueueResolution.recommendationVisibility, 'public_events_and_public_content', 'manual formal queue override should still carry recommendation visibility separately');
+assert.equal(preApplyQueueResolution.rankedImpact, 'candidate_only', 'formal queue resolution should only change the next candidate');
+const preApplyPracticeResolution = PVPScene.resolveLivePostReviewLoadoutPreset('practice');
+assert.equal(preApplyPracticeResolution.presetId, 'shield', 'no-score practice should use the public recommendation before formal apply');
+assert.equal(preApplyPracticeResolution.source, 'public_recommendation_practice', 'practice should label the public recommendation source');
+assert.equal(preApplyPracticeResolution.sourceVisibility, 'public_events_and_public_content', 'practice recommendation should expose public recommendation visibility');
+assert.equal(preApplyPracticeResolution.usesHiddenInformation, false, 'post-review loadout resolution must not use hidden information');
+
+await PVPScene.handleLivePostReviewAction('queue_again');
+assert.equal(recommendationCalls.length, 1, 'manual override queue should perform exactly one queue call');
+assert.equal(recommendationCalls[0].method, 'joinQueue', 'manual override queue should use live queue');
+assert.equal(recommendationCalls[0].options?.loadout?.identitySlot, 'balanced', 'manual override queue should submit the current manual candidate');
+
+recommendationCalls.length = 0;
+recommendationState = {
+  ...recommendationState,
+  phase: 'finished'
+};
+await PVPScene.handleLivePostReviewAction('friendly_rematch');
+assert.equal(recommendationCalls.length, 1, 'manual override rematch should perform exactly one rematch call');
+assert.equal(recommendationCalls[0].method, 'requestRematch', 'manual override rematch should use rematch service');
+assert.equal(recommendationCalls[0].options?.loadout?.identitySlot, 'balanced', 'manual override rematch should submit the current manual candidate');
+const manualOverridePracticeScenario = PVPScene.buildLivePostReviewDrillScenario();
+assert.equal(manualOverridePracticeScenario.recommendedLoadoutId, 'shield', 'manual formal override should not stop no-score practice from using the public recommendation');
+
+recommendationCalls.length = 0;
+PVPScene.liveSelectedLoadoutPreset = 'sword';
 PVPScene.applyLivePostReviewLoadoutRecommendation();
 assert.equal(PVPScene.liveSelectedLoadoutPreset, 'shield', 'one-click loadout recommendation should select the recommended preset locally');
 assert.equal(recommendationState.phase, 'finished', 'one-click loadout recommendation should keep the post-match review phase');
@@ -1021,6 +1064,10 @@ assert.equal(recommendationCalls.length, 0, 'one-click loadout recommendation mu
 assert.match(PVPScene.liveInlineHint, /下一局/, 'one-click loadout recommendation should explain the next-game scope');
 assert.match(PVPScene.liveInlineHint, /不自动排队/, 'one-click loadout recommendation should not auto queue');
 assert.match(PVPScene.liveInlineHint, /不写正式积分/, 'one-click loadout recommendation should not write ranked state');
+const postApplyQueueResolution = PVPScene.resolveLivePostReviewLoadoutPreset('queue_again');
+assert.equal(postApplyQueueResolution.presetId, 'shield', 'formal queue should resolve to the applied public recommendation');
+assert.equal(postApplyQueueResolution.source, 'applied_public_recommendation', 'formal queue should carry an applied recommendation receipt');
+assert.equal(postApplyQueueResolution.sourceVisibility, 'public_events_and_public_content', 'applied recommendation should keep public recommendation visibility');
 
 await PVPScene.joinLiveQueue();
 assert.equal(recommendationCalls.length, 1, 'queue after applying recommendation should perform exactly one queue call');
@@ -1036,5 +1083,82 @@ await PVPScene.handleLivePostReviewAction('friendly_rematch');
 assert.equal(recommendationCalls.length, 1, 'friendly rematch after applying recommendation should perform exactly one rematch call');
 assert.equal(recommendationCalls[0].method, 'requestRematch', 'friendly rematch after recommendation should use rematch service');
 assert.equal(recommendationCalls[0].options?.loadout?.identitySlot, 'shield', 'friendly rematch after recommendation should submit the recommended loadout preset');
+
+recommendationCalls.length = 0;
+PVPScene.liveInlineHint = '旧成功提示';
+recommendationState = {
+  ...baseRecommendationState,
+  phase: 'finished'
+};
+nextQueueState = {
+  phase: 'idle',
+  matchId: '',
+  stateView: null,
+  lastError: {
+    reason: 'connection_health_failed',
+    message: '当前连接不适合进入正式真人排位'
+  }
+};
+await PVPScene.handleLivePostReviewAction('queue_again');
+assert.equal(recommendationCalls.length, 1, 'failed post-review queue should still attempt one queue call');
+assert.equal(recommendationCalls[0].options?.loadout?.identitySlot, 'shield', 'failed post-review queue should submit the resolved preset before authority rejects it');
+assert.equal(PVPScene.liveInlineHint, '', 'failed post-review queue should not keep or write a success receipt over lastError');
+assert.equal(recommendationState.lastError?.reason, 'connection_health_failed', 'failed post-review queue should preserve authoritative failure reason');
+
+recommendationCalls.length = 0;
+PVPScene.liveInlineHint = '旧成功提示';
+recommendationState = {
+  phase: 'finished',
+  matchId: 'pvpm-ui-runtime-loadout-recommendation',
+  seatId: 'A',
+  stateView: JSON.parse(JSON.stringify(baseRecommendationState.stateView))
+};
+nextRematchState = {
+  ...recommendationState,
+  phase: 'finished',
+  lastError: {
+    reason: 'rematch_expired',
+    message: '低压力再战等待已过期'
+  }
+};
+await PVPScene.handleLivePostReviewAction('friendly_rematch');
+assert.equal(recommendationCalls.length, 1, 'failed post-review rematch should still attempt one rematch call');
+assert.equal(recommendationCalls[0].options?.loadout?.identitySlot, 'shield', 'failed post-review rematch should submit the resolved preset before authority rejects it');
+assert.equal(PVPScene.liveInlineHint, '', 'failed post-review rematch should not keep or write a success receipt over lastError');
+assert.equal(recommendationState.lastError?.reason, 'rematch_expired', 'failed post-review rematch should preserve authoritative failure reason');
+
+const winningRecommendationState = {
+  phase: 'finished',
+  matchId: 'pvpm-ui-runtime-winning-recommendation-practice',
+  seatId: 'A',
+  stateView: {
+    matchId: 'pvpm-ui-runtime-winning-recommendation-practice',
+    status: 'finished',
+    stateVersion: 50,
+    postMatchReview: {
+      ...recommendationState.stateView.postMatchReview,
+      result: 'win',
+      winnerSeat: 'A',
+      loserSeat: 'B',
+      finishReason: 'lethal',
+      summary: '公开轨迹显示主动压制有效。',
+      loadoutRecommendation: {
+        ...recommendationState.stateView.postMatchReview.loadoutRecommendation,
+        recommendedPresetId: 'sword',
+        recommendedPresetLabel: '破阵斗法谱',
+        reasonLine: '本局公开轨迹显示主动压制有效，下一局可套用破阵斗法谱继续验证前两手压力。'
+      }
+    }
+  }
+};
+PVPScene.liveSelectedLoadoutPreset = 'balanced';
+PVPScene.getLiveSession = () => ({
+  getState: () => winningRecommendationState
+});
+const winningRecommendationScenario = PVPScene.buildLivePostReviewDrillScenario();
+assert.equal(winningRecommendationScenario.recommendedLoadoutId, 'sword', 'post-match practice drill should use the public loadout recommendation instead of the current selected preset');
+assert.equal(winningRecommendationScenario.recommendedLoadoutLabel, '破阵斗法谱', 'post-match practice drill should carry the recommended preset label');
+assert.match(winningRecommendationScenario.drillObjective, /破阵斗法谱/, 'post-match practice objective should explain the recommended loadout');
+assert.equal(winningRecommendationScenario.rankedImpact, 'none', 'post-match practice drill from loadout recommendation must not write ranked state');
 
 console.log('PVP live UI runtime checks passed.');

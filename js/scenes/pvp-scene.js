@@ -591,6 +591,77 @@ export const PVPScene = {
       deck: this.buildLiveLoadoutDeck(preset.pattern)
     };
   },
+  resolveLivePostReviewLoadoutPreset(actionId = 'queue_again', state = null) {
+    const id = String(actionId || 'queue_again');
+    const session = state && typeof state === 'object' ? null : this.getLiveSession();
+    const sourceState = state && typeof state === 'object'
+      ? state
+      : session && typeof session.getState === 'function' ? session.getState() : null;
+    const view = sourceState && sourceState.stateView ? sourceState.stateView : null;
+    const review = this.getLivePostMatchReview(view);
+    const recommendation = review && review.loadoutRecommendation
+      ? this.getLiveLoadoutRecommendation(review.loadoutRecommendation)
+      : null;
+    const presets = this.getLiveLoadoutPresets();
+    const selectedPreset = this.getLiveSelectedLoadoutPreset();
+    const recommendationPreset = recommendation
+      ? presets.find(item => item.id === recommendation.recommendedPresetId) || null
+      : null;
+    const usesPracticeRecommendation = id === 'practice' && !!recommendationPreset;
+    const preset = usesPracticeRecommendation ? recommendationPreset : selectedPreset;
+    const candidateMatchesRecommendation = !!recommendationPreset && preset.id === recommendationPreset.id;
+    const source = usesPracticeRecommendation
+      ? 'public_recommendation_practice'
+      : candidateMatchesRecommendation
+        ? 'applied_public_recommendation'
+        : recommendationPreset ? 'manual_candidate_override' : 'current_candidate';
+    const rankedImpact = id === 'practice' ? 'none' : 'candidate_only';
+    const boundaryLine = id === 'practice'
+      ? '问道练习只读取公开复盘建议生成无积分训练，不写正式积分。'
+      : candidateMatchesRecommendation
+        ? '本次入口将使用已套用的公开推荐谱；仍需玩家主动发起，不自动排队。'
+        : '本次入口使用当前候选斗法谱；公开推荐可被手动改谱覆盖。';
+    return {
+      reportVersion: 'pvp-live-post-review-loadout-resolution-v1',
+      actionId: id,
+      presetId: preset.id,
+      presetLabel: preset.label,
+      identitySlot: preset.identitySlot,
+      source,
+      sourceVisibility: usesPracticeRecommendation || candidateMatchesRecommendation ? 'public_events_and_public_content' : 'local_candidate',
+      recommendationVisibility: recommendationPreset ? 'public_events_and_public_content' : '',
+      usesHiddenInformation: false,
+      rankedImpact,
+      recommendationPresetId: recommendationPreset ? recommendationPreset.id : '',
+      recommendationPresetLabel: recommendationPreset ? recommendationPreset.label : '',
+      candidateMatchesRecommendation,
+      boundaryLine
+    };
+  },
+  formatLivePostReviewLoadoutResolution(actionId = 'queue_again', resolution = null) {
+    if (!resolution || resolution.reportVersion !== 'pvp-live-post-review-loadout-resolution-v1') {
+      return '';
+    }
+    const label = resolution.presetLabel || '当前斗法谱';
+    const sourceLabel = resolution.source === 'applied_public_recommendation'
+      ? '已套用的公开推荐谱'
+      : resolution.source === 'public_recommendation_practice'
+        ? '公开推荐谱'
+        : resolution.source === 'manual_candidate_override'
+          ? '手动候选谱'
+          : '当前候选谱';
+    const id = String(actionId || resolution.actionId || '');
+    if (id === 'practice') {
+      return `已使用${sourceLabel}${label}生成真人 PVP 练习课题；练习不写正式积分。`;
+    }
+    if (id === 'friendly_rematch') {
+      return `已使用${sourceLabel}${label}发起低压力再战；不写正式积分。`;
+    }
+    if (id === 'queue_again') {
+      return `已使用${sourceLabel}${label}回到真人排队；仍需真人匹配，不自动切残影。`;
+    }
+    return `下一步将使用${sourceLabel}${label}；${resolution.boundaryLine || '不自动写正式积分。'}`;
+  },
   async buildLiveQueueConnectionHealthProbe() {
     try {
       const report = PVPService && PVPService.live && typeof PVPService.live.measureConnectionHealth === 'function'
@@ -2472,7 +2543,10 @@ export const PVPScene = {
       : review.result === 'win'
         ? { key: 'assault', label: '前压爆发', advice: '把本局有效压制节奏复刻成可重复的前两手路线。' }
         : { key: 'bulwark', label: '稳守续航', advice: '先练低费防御、调息保留和首轮稳血，再回到真人排位。' };
-    const recommendedLoadoutId = review.result === 'loss' ? 'shield' : this.getLiveSelectedLoadoutPreset().id;
+    const loadoutResolution = this.resolveLivePostReviewLoadoutPreset('practice', sourceState);
+    const recommendedLoadoutId = loadoutResolution && loadoutResolution.presetId
+      ? loadoutResolution.presetId
+      : review.result === 'loss' ? 'shield' : this.getLiveSelectedLoadoutPreset().id;
     const recommendedLoadout = this.getLiveLoadoutPresets().find(preset => preset.id === recommendedLoadoutId) || this.getLiveSelectedLoadoutPreset();
     const evidence = Array.isArray(review.evidence) ? review.evidence.slice(0, 12) : [];
     const publicEventTypes = evidence.map(event => String(event && event.eventType || '')).filter(Boolean);
@@ -2537,7 +2611,10 @@ export const PVPScene = {
     if (gameRef && typeof gameRef.setObservatoryTrainingFocus === 'function') {
       gameRef.setObservatoryTrainingFocus(focus, { silent: true });
     }
-    const message = '已生成真人 PVP 练习课题：练习不写正式积分，只使用公开事件和本方复盘信息。';
+    const resolution = this.resolveLivePostReviewLoadoutPreset('practice');
+    const message = this.formatLivePostReviewLoadoutResolution('practice', resolution)
+      || '已生成真人 PVP 练习课题：练习不写正式积分，只使用公开事件和本方复盘信息。';
+    this.liveInlineHint = message;
     const root = document.querySelector('[data-live-pvp-root]');
     const hint = root ? root.querySelector('[data-live-last-error]') : null;
     if (hint) hint.textContent = message;
@@ -3645,7 +3722,14 @@ export const PVPScene = {
     const session = this.getLiveSession();
     const gameRef = this.getGameRef();
     const displayName = gameRef && gameRef.player && gameRef.player.name ? gameRef.player.name : '无名修士';
-    const selectedPreset = this.getLiveSelectedLoadoutPreset();
+    const presets = this.getLiveLoadoutPresets();
+    const selectedPreset = options && typeof options.loadoutPresetId === 'string'
+      ? presets.find(item => item.id === options.loadoutPresetId) || this.getLiveSelectedLoadoutPreset()
+      : this.getLiveSelectedLoadoutPreset();
+    const postReviewLoadoutResolution = options && options.postReviewLoadoutResolution
+      && options.postReviewLoadoutResolution.reportVersion === 'pvp-live-post-review-loadout-resolution-v1'
+      ? options.postReviewLoadoutResolution
+      : null;
     const connectionHealthProbe = await this.buildLiveQueueConnectionHealthProbe();
     await session.joinQueue({
       displayName,
@@ -3656,9 +3740,12 @@ export const PVPScene = {
         ? { testMatchScope: options.testMatchScope }
         : {})
     });
+    const state = session.getState();
+    if (postReviewLoadoutResolution && ['waiting', 'matched', 'setup', 'active'].includes(state.phase)) {
+      this.liveInlineHint = this.formatLivePostReviewLoadoutResolution('queue_again', postReviewLoadoutResolution);
+    }
     this.liveLongWaitPollUntil = 0;
     this.renderLivePanel();
-    const state = session.getState();
     if (['waiting', 'matched', 'setup', 'active'].includes(state.phase)) {
       this.liveDrillScenario = null;
     }
@@ -3675,6 +3762,7 @@ export const PVPScene = {
     this.startLivePolling();
   },
   async createLiveInvite() {
+    this.liveInlineHint = '';
     const session = this.getLiveSession();
     const gameRef = this.getGameRef();
     const displayName = gameRef && gameRef.player && gameRef.player.name ? gameRef.player.name : '无名修士';
@@ -3697,6 +3785,7 @@ export const PVPScene = {
     }
   },
   async joinLiveInvite() {
+    this.liveInlineHint = '';
     const session = this.getLiveSession();
     const root = document.querySelector('[data-live-pvp-root]');
     const input = root ? root.querySelector('[data-live-invite-input]') : null;
@@ -3718,6 +3807,7 @@ export const PVPScene = {
     if (this.shouldLivePoll(state)) this.startLivePolling();
   },
   async joinLiveInboxInvite(inviteCode = '') {
+    this.liveInlineHint = '';
     const code = String(inviteCode || '').trim();
     if (!code) return;
     const session = this.getLiveSession();
@@ -3738,6 +3828,7 @@ export const PVPScene = {
     if (this.shouldLivePoll(state)) this.startLivePolling();
   },
   async cancelLiveInvite() {
+    this.liveInlineHint = '';
     const session = this.getLiveSession();
     if (!session || typeof session.cancelInvite !== 'function') return;
     const state = session.getState();
@@ -3747,6 +3838,7 @@ export const PVPScene = {
     this.renderLivePanel();
   },
   async cancelLiveQueue() {
+    this.liveInlineHint = '';
     const session = this.getLiveSession();
     await session.cancelQueue();
     this.liveLongWaitPollUntil = 0;
@@ -3826,7 +3918,12 @@ export const PVPScene = {
     }
     this.recordLiveSeasonGoalAction(id);
     if (id === 'queue_again') {
-      await this.joinLiveQueue();
+      this.liveInlineHint = '';
+      const resolution = this.resolveLivePostReviewLoadoutPreset('queue_again');
+      await this.joinLiveQueue({
+        loadoutPresetId: resolution.presetId,
+        postReviewLoadoutResolution: resolution
+      });
       return;
     }
     if (id === 'practice') {
@@ -3842,18 +3939,21 @@ export const PVPScene = {
         setHint('实时论道再战服务未就绪。');
         return;
       }
+      this.liveInlineHint = '';
+      const resolution = this.resolveLivePostReviewLoadoutPreset('friendly_rematch');
       await session.requestRematch({
         displayName,
-        loadout: this.getLiveQueueLoadoutCandidate(selectedPreset.id)
+        loadout: this.getLiveQueueLoadoutCandidate(resolution.presetId || selectedPreset.id)
       });
       this.stopLivePolling();
       this.renderLivePanel();
       const next = session.getState();
       if (next.phase === 'setup' || next.phase === 'active') {
         this.liveDrillScenario = null;
-        setHint('已进入低压力再战；本局不写正式积分。');
-      } else if (next.lastError && next.lastError.reason === 'waiting_rematch') {
-        setHint(next.lastError.message || '已发起低压力再战，等待本局对手确认；不写正式积分。');
+        setHint(this.formatLivePostReviewLoadoutResolution('friendly_rematch', resolution) || '已进入低压力再战；本局不写正式积分。');
+      } else if (next.phase === 'waiting_rematch' && next.lastError && next.lastError.reason === 'waiting_rematch') {
+        const resolutionHint = this.formatLivePostReviewLoadoutResolution('friendly_rematch', resolution);
+        setHint(resolutionHint ? `${resolutionHint} 等待本局对手确认。` : next.lastError.message || '已发起低压力再战，等待本局对手确认；不写正式积分。');
         if (next.phase === 'waiting_rematch') this.startLivePolling();
       }
       return;

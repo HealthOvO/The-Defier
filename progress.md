@@ -1,5 +1,29 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-21: V10-S9V live PVP post-match recommendation carryover receipts
+  - 本轮完成
+    - `js/scenes/pvp-scene.js` 新增 `resolveLivePostReviewLoadoutPreset()` / `formatLivePostReviewLoadoutResolution()`，把赛后 `practice / queue_again / friendly_rematch` 三个入口统一到同一套“下一步实际使用哪套斗法谱”的解析与回执语义。
+    - `practice` 入口会优先使用公开 `loadoutRecommendation` 生成无积分训练；正式 `queue_again` / `friendly_rematch` 仍尊重当前候选谱：玩家点击“一键套用”后候选谱就是公开推荐，玩家手动改回默认谱后正式入口就提交默认谱，不会暗中自动排队或偷改正式 PVP 参数。
+    - 解析报告新增 `sourceVisibility` / `recommendationVisibility` 区分最终采用来源和曾存在的公开推荐来源，避免把手动候选谱误报成公开事件来源。
+    - 修复 post-review 成功回执覆盖失败原因的问题：`queue_again` 只有进入 `waiting/matched/setup/active` 成功态才写“已使用...”回执；`friendly_rematch` 只有进入 `waiting_rematch/setup/active` 成功态才写回执，连接健康失败、再战过期等失败态继续显示服务端 `lastError`。
+    - 修复复盘入口成功 hint 污染后续约战取消提示的问题：创建/加入/取消约战和取消排队会清理旧的 `liveInlineHint`，避免“已使用某谱回到真人排队”残留到无关流程。
+  - 已验证
+    - 红测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs` 在实现前失败于缺少 `resolveLivePostReviewLoadoutPreset()`。
+    - 红测：`node tests/browser_pvp_live_audit.mjs http://127.0.0.1:4173 output/pvp-live-loadout-resolution-audit-20260621` 曾暴露旧成功 hint 覆盖 `invite_cancelled` 真实提示；修复后同目录 82/82 findings、0 console error。
+    - 挑战者巡检：subagent 指出成功回执覆盖失败、手动覆盖 `sourceVisibility` 误报、缺少实际 payload 断言；本轮已按三点补 runtime、fake browser、real smoke 和 release gate。
+    - 绿测：`node --check js/scenes/pvp-scene.js`
+    - 绿测：`node --check tests/browser_pvp_live_audit.mjs`
+    - 绿测：`node --check tests/browser_pvp_live_real_backend_smoke.mjs`
+    - 绿测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs`
+    - 绿测：`node tests/sanity_pvp_live_ui_contract_checks.cjs`
+    - 绿测：`node tests/sanity_release_gate_coverage_checks.cjs`
+    - 构建：`npm run build:pages`
+    - 浏览器审计：`node tests/browser_pvp_live_audit.mjs http://127.0.0.1:4173 output/pvp-live-loadout-resolution-audit-20260621`，82/82 findings、0 console error。
+    - 真实后端 smoke：`node tests/browser_pvp_live_real_backend_smoke.mjs http://127.0.0.1:4173 output/pvp-live-loadout-resolution-real-20260621`，54/54 findings、0 console error。
+    - 全量 Node 门禁：`npm run test:node`，All node checks passed。
+  - 当前结论
+    - live PVP 赛后推荐现在不再停留在“卡片看到了、selector 被改了”的弱闭环，而是能说明并证明下一步入口实际提交哪套谱。练习保留低风险公开推荐路线，正式排队和低压力再战保留玩家最终手动选择权；失败态不再被成功话术盖住，双方体验更清晰，也不触碰隐藏信息、正式积分、奖励或先手公平护栏。
+
 - 2026-06-21: V10-S9U live PVP post-match loadout recommendation
   - 本轮完成
     - `server/pvp-live/engine/state-view.js` 的 `postMatchReview` 新增 `loadoutRecommendation`，只基于公开事件和公开斗法谱内容给出下一局推荐谱；败局推荐守势谱、胜局推荐破阵谱、平局/默认推荐默认谱，报告固定 `public_events_and_public_content / usesHiddenInformation=false / rankedImpact=none`。
