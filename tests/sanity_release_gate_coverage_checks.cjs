@@ -946,6 +946,12 @@ assert.ok(
   'remote process socket should receive authoritative state_sync after opponent intent',
   'cross-process proactive WS fanout should not require heartbeat catch-up',
   'origin process should not echo its own SQLite state_sync signal',
+  'second backend process should be able to start the shared live battle',
+  'cross-process terminal fanout should keep remote winner seat scope',
+  'remote terminal fanout should deliver winner post-match review without heartbeat',
+  'remote terminal fanout should include official ranked settlement projection',
+  'cross-process terminal heartbeat replay should include player_surrendered',
+  'cross-process terminal heartbeat replay should include match_finished',
   'PVP_LIVE_WS_SIGNAL_POLL_INTERVAL_MS',
   'DEFIER_DB_PATH',
 ].forEach((needle) => {

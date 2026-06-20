@@ -1,5 +1,23 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-20: V10-S8W live PVP cross-process terminal WS fanout evidence
+  - 本轮完成
+    - `tests/sanity_pvp_live_cross_process_ws_fanout_checks.cjs` 在既有双真实 `server/app.js` / 共享 SQLite harness 中继续推进到完整开战：A/B 分别连到不同进程，B ready 后 A 通过 WS 投降。
+    - 新增终局主动 fanout 断言：A 收到 `intent_result=accepted / status=finished / postMatchReview=loss / settlementReport=pvp-live-settlement-report-v1`；B 在不发送 heartbeat 的前提下，通过另一进程的 `state_sync` 收到 `status=finished`、赢家复盘、`finishReason=surrender`、正式结算投影和 `match_finished` 公开事件。
+    - 新增终局事件补发断言：B 随后带终局前 `lastSeenRevision` 发送 heartbeat，必须收到 `events_replay`，且包含 `player_surrendered` 与 `match_finished`，明确主动 fanout 负责状态终局、事件时间线仍由 replay/catch-up 补齐。
+    - `tests/sanity_release_gate_coverage_checks.cjs` 固定跨进程终局 fanout、赢家复盘、正式结算投影和终局公开事件补发 marker。
+    - 本切片未改运行时代码；新增 smoke 在现有 SQLite signal / seat-scoped StateView / heartbeat events replay 链路上直接通过，说明缺口是证据覆盖而不是当前实现断链。
+  - 已验证
+    - 绿测：`node tests/sanity_pvp_live_cross_process_ws_fanout_checks.cjs`
+    - 绿测：`node tests/sanity_release_gate_coverage_checks.cjs`
+    - 语法检查：`node --check tests/sanity_pvp_live_cross_process_ws_fanout_checks.cjs`
+    - 语法检查：`node --check tests/sanity_release_gate_coverage_checks.cjs`
+    - 全量：`npm run test:node`
+    - 构建：`npm run build:pages`
+    - 清洁检查：`git diff --check`
+  - 当前结论
+    - live PVP 的 SQLite-backed 跨进程 WS 主动 fanout 已从 active 状态推进证明扩展到 surrender 终局证明：非粘性连接下，对手连在另一进程时也能无 heartbeat 收到终局复盘和正式结算投影；终局公开事件时间线可通过 heartbeat replay/catch-up 补齐。该切片仍不是 Redis / 多实例强一致、生产 API smoke 或线上部署完成。
+
 - 2026-06-20: V10-S8V live PVP intent in-flight lock
   - 本轮完成
     - `js/services/pvp-live-session.js` 现在把 WS `intent_result` 投影为 `lastRealtimeIntentResult`，scene 层可以用同一 `intentId` 的权威回执释放本地 pending。
