@@ -187,4 +187,143 @@ assert.deepEqual(clearedTimers, [1], 'sendLiveHeartbeat runtime should clear sta
 
 PVPScene.stopLiveHeartbeat();
 
+let intentState = {
+  phase: 'active',
+  matchId: 'pvpm-ui-runtime-intent-lock',
+  seatId: 'A',
+  realtimeStatus: 'connected',
+  stateView: {
+    matchId: 'pvpm-ui-runtime-intent-lock',
+    status: 'active',
+    stateVersion: 3,
+    currentSeat: 'A'
+  }
+};
+const realtimeIntentCalls = [];
+PVPScene.liveIntentSeq = 0;
+PVPScene.liveIntentInFlight = null;
+PVPScene.startLiveRealtime = () => {};
+PVPScene.renderLivePanel = () => {};
+PVPScene.getLiveSession = () => ({
+  getState: () => intentState,
+  submitRealtimeIntent: (intent, matchId) => {
+    realtimeIntentCalls.push({ intent, matchId });
+    return true;
+  },
+  submitIntent: async () => {
+    throw new Error('HTTP fallback should not run while realtime intent send succeeds');
+  }
+});
+
+await Promise.all([
+  PVPScene.endLiveTurn(),
+  PVPScene.endLiveTurn()
+]);
+assert.equal(realtimeIntentCalls.length, 1, 'live UI should keep one realtime intent in-flight and ignore double-click submits');
+
+intentState = {
+  ...intentState,
+  stateView: {
+    ...intentState.stateView,
+    stateVersion: 4
+  }
+};
+await PVPScene.endLiveTurn();
+assert.equal(realtimeIntentCalls.length, 2, 'live UI should unlock realtime intent after authoritative stateVersion advances');
+
+intentState = {
+  phase: 'active',
+  matchId: 'pvpm-ui-runtime-intent-lock',
+  seatId: 'A',
+  realtimeStatus: 'connected',
+  stateView: {
+    matchId: 'pvpm-ui-runtime-intent-lock',
+    status: 'active',
+    stateVersion: 8,
+    currentSeat: 'A'
+  }
+};
+PVPScene.liveIntentInFlight = null;
+await PVPScene.endLiveTurn();
+assert.equal(realtimeIntentCalls.length, 3, 'live UI should send the first action intent before reconnect protection check');
+intentState = {
+  ...intentState,
+  realtimeStatus: 'reconnecting',
+  lastError: { reason: 'live_ws_reconnecting', message: '实时论道 WS 正在重连' },
+  updatedAt: Date.now() + 1
+};
+await PVPScene.endLiveTurn();
+assert.equal(realtimeIntentCalls.length, 3, 'live UI should keep action intent in-flight during realtime reconnecting');
+
+intentState = {
+  phase: 'active',
+  matchId: 'pvpm-ui-runtime-intent-lock',
+  seatId: 'A',
+  realtimeStatus: 'connected',
+  stateView: {
+    matchId: 'pvpm-ui-runtime-intent-lock',
+    status: 'active',
+    stateVersion: 12,
+    currentSeat: 'A'
+  },
+  lastRealtimeIntentResult: null
+};
+PVPScene.liveIntentInFlight = null;
+await Promise.all([
+  PVPScene.submitLiveEmote('respect'),
+  PVPScene.submitLiveEmote('respect')
+]);
+assert.equal(realtimeIntentCalls.length, 4, 'live UI should keep one social realtime intent in-flight and ignore double-click emotes');
+const socialIntentId = realtimeIntentCalls[realtimeIntentCalls.length - 1].intent.intentId;
+await PVPScene.endLiveTurn();
+assert.equal(realtimeIntentCalls.length, 5, 'live UI should not let a pending social intent block action intents');
+intentState = {
+  ...intentState,
+  lastRealtimeIntentResult: {
+    intentId: socialIntentId,
+    matchId: 'pvpm-ui-runtime-intent-lock',
+    result: 'accepted',
+    updatedAt: Date.now() + 2
+  }
+};
+await PVPScene.submitLiveEmote('thinking');
+assert.equal(realtimeIntentCalls.length, 6, 'live UI should unlock social intents after the matching intent_result ack');
+
+intentState = {
+  phase: 'active',
+  matchId: 'pvpm-ui-runtime-intent-lock',
+  seatId: 'A',
+  realtimeStatus: 'connected',
+  stateView: {
+    matchId: 'pvpm-ui-runtime-intent-lock',
+    status: 'active',
+    stateVersion: 14,
+    currentSeat: 'A'
+  },
+  lastRealtimeIntentResult: null
+};
+let refreshMatchCalls = 0;
+PVPScene.liveIntentInFlight = null;
+PVPScene.getLiveSession = () => ({
+  getState: () => intentState,
+  submitRealtimeIntent: (intent, matchId) => {
+    realtimeIntentCalls.push({ intent, matchId });
+    return true;
+  },
+  submitIntent: async () => {
+    throw new Error('HTTP fallback should not run while realtime intent send succeeds');
+  },
+  refreshMatch: async () => {
+    refreshMatchCalls += 1;
+    return intentState;
+  }
+});
+await PVPScene.submitLiveEmote('respect');
+await PVPScene.submitLiveEmote('respect');
+assert.equal(realtimeIntentCalls.length, 7, 'live UI should keep lost-ack social intent pending before manual refresh');
+await PVPScene.refreshLiveMatch();
+assert.equal(refreshMatchCalls, 1, 'manual live refresh should read authoritative match state while an intent is pending');
+await PVPScene.submitLiveEmote('thinking');
+assert.equal(realtimeIntentCalls.length, 8, 'live UI should unlock pending realtime intents after manual authoritative refresh');
+
 console.log('PVP live UI runtime checks passed.');

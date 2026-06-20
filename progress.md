@@ -1,5 +1,29 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-20: V10-S8V live PVP intent in-flight lock
+  - 本轮完成
+    - `js/services/pvp-live-session.js` 现在把 WS `intent_result` 投影为 `lastRealtimeIntentResult`，scene 层可以用同一 `intentId` 的权威回执释放本地 pending。
+    - `PVPScene.submitLiveIntent()` 增加 live intent in-flight 锁，防止同一 `stateVersion` 下双击 ready / end_turn / play_card / mulligan / surrender 发送多个不同 `intentId`。
+    - 锁拆成 action / social 两类：战斗动作等 `intent_result` 或权威 `stateVersion` 推进释放；表情不推进版本，必须靠同 intent ack 释放，且 pending 表情不阻塞战斗动作。
+    - live 手牌、调息、ready、end-turn、surrender 和表情按钮会按对应 pending 锁禁用；`refresh-match` 不被锁住，手动完成一次权威刷新后会清本地 pending，作为 WS 回执丢失时的恢复通道。
+    - `tests/sanity_pvp_live_ui_runtime_checks.mjs` 补红测覆盖 action 双击只发一次、reconnecting 不误解锁、social 双击只发一次、social ack 后释放、social pending 不阻塞 action。
+    - `tests/sanity_pvp_live_session_checks.mjs` 固定 `intent_result` ack 投影；`tests/sanity_pvp_live_ui_contract_checks.cjs` 与 `tests/sanity_release_gate_coverage_checks.cjs` 固定 action/social 锁和 ack marker。
+    - `tests/browser_pvp_live_audit.mjs` 新增浏览器探针，覆盖 lost-ack social intent 双击 pending、手动 refresh 后解锁并可再次发送。
+  - 已验证
+    - 红测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs` 在实现前失败于 `live UI should keep one realtime intent in-flight and ignore double-click submits`，实际发送 2 次。
+    - 红测：`node tests/sanity_pvp_live_session_checks.mjs` 在 ack 投影实现前失败于 `lastRealtimeIntentResult.intentId` 为 `undefined`。
+    - 红测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs` 在 action/social 拆锁前失败于 reconnecting 后误走 HTTP fallback。
+    - 红测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs` 在 refresh 恢复实现前失败于 `live UI should unlock pending realtime intents after manual authoritative refresh`，actual 为 7、expected 为 8。
+    - 绿测：`node tests/sanity_pvp_live_session_checks.mjs`
+    - 绿测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs`
+    - 绿测：`node tests/sanity_pvp_live_ui_contract_checks.cjs`
+    - 绿测：`node tests/sanity_release_gate_coverage_checks.cjs`
+    - 绿测：`node tests/browser_pvp_live_audit.mjs http://127.0.0.1:4173 output/pvp-live-intent-lock-audit`（54/54）
+    - 语法检查：`node --check js/services/pvp-live-session.js`
+    - 语法检查：`node --check js/scenes/pvp-scene.js`
+  - 当前结论
+    - live PVP 现在能在 WS 快路径下抑制同一权威版本的重复战斗操作，不再让手快或网络快的一方通过双击制造重复动作；表情也有独立 pending 体验，不会卡住出牌 / 结束回合。该切片仍不是离页保活、跨进程终局 fanout、生产 smoke 或线上部署完成。
+
 - 2026-06-20: V10-S8U live PVP local realtime status visibility
   - 本轮完成
     - `PVPScene.getLiveSnapshot()` 现在透出 session 层的 `realtimeStatus`、`lastRealtimeSyncAt` 和 `realtimeReport`，`render_game_to_text()` 因此能看到本地实时通道状态。

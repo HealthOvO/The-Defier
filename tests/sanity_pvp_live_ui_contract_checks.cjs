@@ -228,6 +228,15 @@ const liveBrowserAudit = read('tests/browser_pvp_live_audit.mjs');
 });
 
 [
+  'lastRealtimeIntentResult: null',
+  'lastRealtimeIntentResult: intentResult',
+  "intentId: String(message.intentId || '')",
+  "const result = String(message.result || '').trim()",
+].forEach((needle) => {
+  assert.ok(liveSession.includes(needle), `PVP live session should expose realtime intent ack marker: ${needle}`);
+});
+
+[
   'buildPvpLiveDrillBundle = function',
   'beginPvpLiveDrillScenario = function',
   'pvp-live-drill-scenario-v1',
@@ -293,6 +302,18 @@ assert.ok(sendLiveHeartbeatBody.includes('await session.heartbeat()'), 'sendLive
 const submitLiveIntentBody = methodBody(scene, 'submitLiveIntent');
 assert.ok(submitLiveIntentBody.includes('session.submitRealtimeIntent(intentWithVersion'), 'submitLiveIntent should prefer realtime intent when WS is connected');
 assert.ok(submitLiveIntentBody.includes('return await session.submitIntent(intentWithVersion)'), 'submitLiveIntent should keep HTTP intent fallback');
+assert.ok(scene.includes('liveIntentInFlight'), 'PVPScene should track one live realtime intent in-flight');
+assert.ok(scene.includes('resolveLiveIntentInFlight'), 'PVPScene should release live realtime intent locks from authoritative state changes');
+assert.ok(scene.includes('markLiveIntentInFlight'), 'PVPScene should mark realtime intents as pending after successful WS send');
+assert.ok(scene.includes('clearLiveIntentInFlight'), 'PVPScene should clear live intent lock for HTTP fallback or released realtime state');
+assert.ok(scene.includes('getLiveIntentLockKey'), 'PVPScene should split action and social realtime intent locks');
+assert.ok(scene.includes('lastRealtimeIntentResult'), 'PVPScene should release realtime intent locks from matching intent_result ack');
+assert.ok(submitLiveIntentBody.includes('上一动作正在等待权威回执，请稍候。'), 'submitLiveIntent should surface a pending-action hint instead of sending duplicate live intents');
+assert.ok(scene.includes('const intentLocked = this.isLiveIntentInFlight(state)'), 'live hand rendering should disable card clicks while a realtime intent is pending');
+assert.ok(scene.includes('button.disabled = socialIntentLocked || !this.canSendLiveEmote(phase)'), 'live emote buttons should only be disabled while a social realtime intent is pending');
+const refreshLiveMatchBody = methodBody(scene, 'refreshLiveMatch');
+assert.ok(refreshLiveMatchBody.includes('if (!fromAutoPoll)'), 'manual live refresh should be distinct from auto polling when clearing pending intents');
+assert.ok(refreshLiveMatchBody.includes('this.clearLiveIntentInFlight()'), 'manual live refresh should clear local realtime intent locks after authoritative refresh');
 
 [
   "liveSelectedLoadoutPreset: 'balanced'",

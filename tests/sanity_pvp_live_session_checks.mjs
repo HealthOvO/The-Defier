@@ -1208,6 +1208,9 @@ realtimeHandlers.onMessage({
 });
 assert.equal(realtimeSession.getState().stateView.stateVersion, 9, 'intent_result WS message should update state view');
 assert.equal(realtimeSession.getState().lastEvents[0].eventType, 'card_played', 'intent_result WS message should retain public intent events');
+assert.equal(realtimeSession.getState().lastRealtimeIntentResult.intentId, 'ws-intent-session', 'intent_result WS message should expose the acknowledged intent id');
+assert.equal(realtimeSession.getState().lastRealtimeIntentResult.result, 'accepted', 'intent_result WS message should expose the authoritative result');
+assert.equal(realtimeSession.getState().lastRealtimeIntentResult.matchId, 'pvplm-ws-session', 'intent_result WS message should expose the acknowledged match id');
 
 realtimeHandlers.onMessage({
   type: 'state_sync',
@@ -1243,6 +1246,7 @@ realtimeHandlers.onMessage({
 });
 assert.equal(realtimeSession.getState().stateView.stateVersion, 9, 'stale intent_result WS message should not downgrade authoritative stateVersion');
 assert.equal(realtimeSession.getState().lastEvents[0].eventType, 'card_played', 'stale intent_result WS message should not downgrade public events');
+assert.equal(realtimeSession.getState().lastRealtimeIntentResult.intentId, 'ws-intent-stale', 'stale intent_result WS message should still expose the acknowledged intent id for UI locks');
 
 realtimeHandlers.onMessage({
   type: 'events_replay',

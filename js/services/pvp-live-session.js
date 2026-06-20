@@ -16,6 +16,7 @@ const DEFAULT_STATE = Object.freeze({
   lastRealtimeConnectionId: '',
   lastRealtimeSyncMatchId: '',
   lastRealtimeSyncAt: 0,
+  lastRealtimeIntentResult: null,
   realtimeReport: null,
   updatedAt: 0
 });
@@ -509,6 +510,16 @@ export function createPvpLiveSession({
       const resolved = resolveAuthoritativeStateView(message.stateView || state.stateView);
       const stateView = resolved.stateView;
       const result = String(message.result || '').trim();
+      const intentResult = {
+        intentId: String(message.intentId || ''),
+        matchId: String(message.matchId || state.matchId || stateView && stateView.matchId || ''),
+        result,
+        reason: String(message.reason || ''),
+        message: String(message.message || ''),
+        stateVersion: Math.max(0, Math.floor(Number(stateView && stateView.stateVersion) || 0)),
+        serverTime: Math.max(0, Math.floor(Number(message.serverTime) || 0)),
+        updatedAt: now()
+      };
       const next = publish({
         phase: resolved.accepted ? normalizePhaseFromView(stateView, 'active') : state.phase,
         matchId: resolved.accepted ? String(message.matchId || state.matchId || stateView && stateView.matchId || '') : state.matchId,
@@ -517,6 +528,7 @@ export function createPvpLiveSession({
         waitingReport: null,
         rematchReport: state.rematchReport || null,
         lastEvents: resolveAuthoritativeEvents(message.events, stateView, resolved.accepted),
+        lastRealtimeIntentResult: intentResult,
         lastError: result === 'accepted'
           ? null
           : { reason: message.reason || result || 'intent_result', message: message.message || '实时论道行动需要处理' }

@@ -28,6 +28,7 @@ export const PVPScene = {
   liveLongWaitPollUntil: 0,
   liveRealtimeRenderQueued: false,
   liveIntentSeq: 0,
+  liveIntentInFlight: { action: null, social: null },
   liveMulliganSelection: new Set(),
   liveSelectedLoadoutPreset: 'balanced',
   liveDrillScenario: null,
@@ -2132,6 +2133,7 @@ export const PVPScene = {
     if (!root) return;
     const session = this.getLiveSession();
     const state = session.getState();
+    this.resolveAllLiveIntentInFlight(state);
     const view = state.stateView || null;
     const phase = state.phase || 'idle';
     root.dataset.livePhase = phase;
@@ -2243,8 +2245,9 @@ export const PVPScene = {
         this.liveMulliganSelection.forEach(cardId => {
           if (!liveCardIds.has(cardId)) this.liveMulliganSelection.delete(cardId);
         });
-        const canAct = phase === 'active' && view && view.currentSeat === state.seatId;
-        const canSelectMulligan = phase === 'setup' && self && !self.mulliganUsed;
+        const intentLocked = this.isLiveIntentInFlight(state);
+        const canAct = phase === 'active' && view && view.currentSeat === state.seatId && !intentLocked;
+        const canSelectMulligan = phase === 'setup' && self && !self.mulliganUsed && !intentLocked;
         handEl.innerHTML = cards.map(card => `
           <button class="pvp-live-card ${this.liveMulliganSelection.has(card.instanceId) ? 'selected' : ''}" ${canSelectMulligan ? `data-live-mulligan-card="${this.escapeHtml(card.instanceId || '')}" onclick="PVPScene.toggleLiveMulliganCard('${this.escapeHtml(card.instanceId || '')}')"` : `data-live-card="${this.escapeHtml(card.instanceId || '')}" onclick="PVPScene.submitLiveCard('${this.escapeHtml(card.instanceId || '')}')"`} ${canAct || canSelectMulligan ? '' : 'disabled'}>
             <span class="pvp-live-card-name">${this.escapeHtml(card.name || card.cardId || '术式')}</span>
@@ -2294,6 +2297,8 @@ export const PVPScene = {
   updateLiveButtons(phase, isMyTurn, self = null) {
     const root = document.querySelector('[data-live-pvp-root]');
     if (!root) return;
+    const intentLocked = this.isLiveIntentInFlight(null, 'action');
+    const socialIntentLocked = this.isLiveIntentInFlight(null, 'social');
     const setDisabled = (action, disabled) => {
       const btn = root.querySelector(`[data-live-action="${action}"]`);
       if (btn) btn.disabled = !!disabled;
@@ -2305,12 +2310,12 @@ export const PVPScene = {
     setDisabled('cancel-queue', phase !== 'waiting');
     setDisabled('practice-live', !(phase === 'waiting' && this.getLiveWaitingReport(this.getLiveSession().getState())?.longWait));
     setDisabled('refresh-match', phase === 'queueing' || phase === 'idle' || phase === 'finished' || phase === 'invalidated');
-    setDisabled('confirm-mulligan', !(phase === 'setup' && self && !self.mulliganUsed));
-    setDisabled('ready', !(phase === 'setup' && self && !self.ready));
-    setDisabled('end-turn', !(phase === 'active' && isMyTurn));
-    setDisabled('surrender', !(phase === 'active' || phase === 'sync_required'));
+    setDisabled('confirm-mulligan', intentLocked || !(phase === 'setup' && self && !self.mulliganUsed));
+    setDisabled('ready', intentLocked || !(phase === 'setup' && self && !self.ready));
+    setDisabled('end-turn', intentLocked || !(phase === 'active' && isMyTurn));
+    setDisabled('surrender', intentLocked || !(phase === 'active' || phase === 'sync_required'));
     root.querySelectorAll('[data-live-emote]').forEach(button => {
-      button.disabled = !this.canSendLiveEmote(phase);
+      button.disabled = socialIntentLocked || !this.canSendLiveEmote(phase);
       const emoteId = button.getAttribute('data-live-emote') || '';
       const option = this.getLiveEmoteOptions().find(item => item.id === emoteId);
       if (option) button.textContent = option.label;
@@ -2434,6 +2439,12 @@ export const PVPScene = {
     const session = this.getLiveSession();
     const state = session.getState();
     if (!state || !state.matchId) return state;
+    const lockKey = this.getLiveIntentLockKey(intent.intentType);
+    const pendingIntent = this.resolveLiveIntentInFlight(state, lockKey);
+    if (pendingIntent) {
+      this.liveInlineHint = '上一动作正在等待权威回执，请稍候。';
+      return state;
+    }
     const stateVersion = Number.isFinite(Number(intent.stateVersion))
       ? Math.floor(Number(intent.stateVersion))
       : Math.floor(Number(state.stateView && state.stateView.stateVersion) || 0);
@@ -2449,9 +2460,113 @@ export const PVPScene = {
       && typeof session.submitRealtimeIntent === 'function'
       && session.submitRealtimeIntent(intentWithVersion, nextState.matchId || state.matchId);
     if (realtimeSent) {
+      this.markLiveIntentInFlight(intentWithVersion, nextState || state, lockKey);
       return session.getState();
     }
-    return await session.submitIntent(intentWithVersion);
+    try {
+      return await session.submitIntent(intentWithVersion);
+    } finally {
+      this.clearLiveIntentInFlight(lockKey);
+    }
+  },
+  getLiveStateVersion(state = null) {
+    const rawVersion = state && state.stateView && state.stateView.stateVersion !== undefined
+      ? state.stateView.stateVersion
+      : state && state.stateVersion;
+    const version = Number(rawVersion);
+    return Number.isFinite(version) ? Math.floor(version) : 0;
+  },
+  getLiveLastErrorSignature(state = null) {
+    const error = state && state.lastError && typeof state.lastError === 'object'
+      ? state.lastError
+      : null;
+    if (!error) return '';
+    return `${String(error.reason || '')}:${String(error.message || '')}`;
+  },
+  normalizeLiveIntentInFlight() {
+    if (!this.liveIntentInFlight || typeof this.liveIntentInFlight !== 'object' || Array.isArray(this.liveIntentInFlight)) {
+      this.liveIntentInFlight = { action: null, social: null };
+    }
+    if (!Object.prototype.hasOwnProperty.call(this.liveIntentInFlight, 'action')) this.liveIntentInFlight.action = null;
+    if (!Object.prototype.hasOwnProperty.call(this.liveIntentInFlight, 'social')) this.liveIntentInFlight.social = null;
+    return this.liveIntentInFlight;
+  },
+  getLiveIntentLockKey(intentType = '') {
+    return String(intentType || '') === 'emote' ? 'social' : 'action';
+  },
+  getLiveIntentAck(state = null) {
+    const result = state && state.lastRealtimeIntentResult && typeof state.lastRealtimeIntentResult === 'object'
+      ? state.lastRealtimeIntentResult
+      : null;
+    if (!result) return null;
+    return {
+      intentId: String(result.intentId || ''),
+      matchId: String(result.matchId || ''),
+      result: String(result.result || ''),
+      updatedAt: Math.max(0, Math.floor(Number(result.updatedAt || result.serverTime) || 0))
+    };
+  },
+  getLiveIntentLockState(state = null) {
+    const source = state || this.getLiveSession().getState();
+    return {
+      matchId: String(source && (source.matchId || source.stateView && source.stateView.matchId) || ''),
+      phase: String(source && source.phase || ''),
+      stateVersion: this.getLiveStateVersion(source),
+      realtimeStatus: String(source && source.realtimeStatus || ''),
+      lastErrorSignature: this.getLiveLastErrorSignature(source),
+      lastRealtimeIntentResult: this.getLiveIntentAck(source),
+      updatedAt: Math.max(0, Math.floor(Number(source && source.updatedAt) || 0))
+    };
+  },
+  resolveLiveIntentInFlight(state = null, lockKey = 'action') {
+    const locks = this.normalizeLiveIntentInFlight();
+    const key = lockKey === 'social' ? 'social' : 'action';
+    const pending = locks[key];
+    if (!pending) return null;
+    const current = this.getLiveIntentLockState(state);
+    const ack = current.lastRealtimeIntentResult;
+    const acknowledged = !!ack
+      && ack.intentId === pending.intentId
+      && (!ack.matchId || ack.matchId === pending.matchId)
+      && ack.updatedAt >= pending.updatedAt;
+    const versionAdvanced = key === 'action' && current.stateVersion > pending.stateVersion;
+    const released = !current.matchId
+      || current.matchId !== pending.matchId
+      || current.phase !== pending.phase
+      || versionAdvanced
+      || acknowledged;
+    if (released) {
+      this.clearLiveIntentInFlight(key);
+      return null;
+    }
+    return pending;
+  },
+  resolveAllLiveIntentInFlight(state = null) {
+    this.resolveLiveIntentInFlight(state, 'action');
+    this.resolveLiveIntentInFlight(state, 'social');
+  },
+  isLiveIntentInFlight(state = null, lockKey = 'action') {
+    return !!this.resolveLiveIntentInFlight(state, lockKey);
+  },
+  markLiveIntentInFlight(intent = {}, state = null, lockKey = 'action') {
+    const locks = this.normalizeLiveIntentInFlight();
+    const key = lockKey === 'social' ? 'social' : 'action';
+    const current = this.getLiveIntentLockState(state);
+    locks[key] = {
+      intentId: String(intent.intentId || ''),
+      intentType: String(intent.intentType || ''),
+      ...current,
+      startedAt: Date.now()
+    };
+  },
+  clearLiveIntentInFlight(lockKey = '') {
+    const locks = this.normalizeLiveIntentInFlight();
+    if (lockKey === 'action' || lockKey === 'social') {
+      locks[lockKey] = null;
+      return;
+    }
+    locks.action = null;
+    locks.social = null;
   },
   makeLiveIntentId(type) {
     this.liveIntentSeq += 1;
@@ -2729,6 +2844,9 @@ export const PVPScene = {
       await session.refreshMatch();
     }
     const next = session.getState();
+    if (!fromAutoPoll) {
+      this.clearLiveIntentInFlight();
+    }
     if (next.phase !== 'waiting' || !this.isLiveLongWait(next)) {
       this.liveLongWaitPollUntil = 0;
     }

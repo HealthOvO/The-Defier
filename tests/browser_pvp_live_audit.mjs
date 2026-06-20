@@ -1309,6 +1309,82 @@ async function safeElementScreenshot(page, selector, outputPath) {
     JSON.stringify({ ownEmoteProbe, opponentEmoteProbe, mutedEmoteProbe }),
   );
 
+  const realtimeIntentRefreshProbe = await page.evaluate(async () => {
+    const scene = window.PVPScene;
+    const original = {
+      getLiveSession: scene.getLiveSession,
+      startLiveRealtime: scene.startLiveRealtime,
+      renderLivePanel: scene.renderLivePanel,
+      liveIntentInFlight: scene.liveIntentInFlight,
+      liveInlineHint: scene.liveInlineHint,
+    };
+    let intentState = {
+      phase: 'active',
+      matchId: 'pvplm-browser-live-intent-lock',
+      seatId: 'A',
+      realtimeStatus: 'connected',
+      stateView: {
+        matchId: 'pvplm-browser-live-intent-lock',
+        status: 'active',
+        stateVersion: 14,
+        currentSeat: 'A',
+      },
+      lastRealtimeIntentResult: null,
+    };
+    const calls = [];
+    let refreshMatchCalls = 0;
+    try {
+      scene.liveIntentInFlight = null;
+      scene.liveInlineHint = '';
+      scene.startLiveRealtime = () => {};
+      scene.renderLivePanel = () => {};
+      scene.getLiveSession = () => ({
+        getState: () => intentState,
+        submitRealtimeIntent: (intent, matchId) => {
+          calls.push({ method: 'submitRealtimeIntent', intent, matchId });
+          return true;
+        },
+        submitIntent: async () => {
+          throw new Error('HTTP fallback should not run for browser realtime intent lock probe');
+        },
+        refreshMatch: async () => {
+          refreshMatchCalls += 1;
+          return intentState;
+        },
+      });
+      await scene.submitLiveEmote('respect');
+      await scene.submitLiveEmote('respect');
+      const beforeRefresh = {
+        calls: calls.slice(),
+        hint: scene.liveInlineHint,
+        lock: scene.liveIntentInFlight ? JSON.parse(JSON.stringify(scene.liveIntentInFlight)) : null,
+      };
+      await scene.refreshLiveMatch();
+      await scene.submitLiveEmote('thinking');
+      return {
+        beforeRefresh,
+        afterRefreshCalls: calls.slice(),
+        refreshMatchCalls,
+      };
+    } finally {
+      scene.getLiveSession = original.getLiveSession;
+      scene.startLiveRealtime = original.startLiveRealtime;
+      scene.renderLivePanel = original.renderLivePanel;
+      scene.liveIntentInFlight = original.liveIntentInFlight;
+      scene.liveInlineHint = original.liveInlineHint;
+      scene.renderLivePanel();
+    }
+  });
+  add(
+    'live UI realtime intent lock keeps double-click pending and manual refresh unlocks lost ack',
+    realtimeIntentRefreshProbe.beforeRefresh?.calls?.length === 1
+      && /上一动作正在等待权威回执/.test(realtimeIntentRefreshProbe.beforeRefresh?.hint || '')
+      && realtimeIntentRefreshProbe.refreshMatchCalls === 1
+      && realtimeIntentRefreshProbe.afterRefreshCalls?.length === 2
+      && realtimeIntentRefreshProbe.afterRefreshCalls?.[1]?.intent?.intentType === 'emote',
+    JSON.stringify(realtimeIntentRefreshProbe),
+  );
+
   await page.click('[data-live-action="surrender"]', { timeout: 5000, force: true });
   await page.waitForTimeout(200);
   const surrenderProbe = await page.evaluate(() => ({
