@@ -195,6 +195,7 @@ const PUBLIC_EVENT_DATA_KEYS = {
     damage_applied: ['actualDamage', 'budgetedDamage', 'blockedDamage', 'hpDamage', 'targetSeat', 'targetHp'],
     status_applied: ['statusId', 'label', 'seatId', 'sourceSeat', 'stacks', 'appliedTurnIndex', 'earliestConsumeTurnIndex', 'expiresAtTurnIndex', 'responseWindow'],
     status_consumed: ['statusId', 'label', 'seatId', 'sourceSeat', 'damageBonus', 'consumedTurnIndex'],
+    status_mitigated: ['statusId', 'label', 'seatId', 'sourceSeat', 'mitigatedBySeat', 'mitigatedTurnIndex', 'responseWindow', 'mitigation'],
     player_surrendered: ['loserSeat', 'winnerSeat'],
     match_finished: ['winnerSeat', 'loserSeat', 'finishReason', 'scoreA', 'scoreB', 'scoreDelta', 'scoreThreshold', 'roundIndex'],
     turn_timeout: ['seatId', 'winnerSeat', 'loserSeat', 'finishReason'],
@@ -255,6 +256,7 @@ function collectReviewEvidence(events, finishSequence) {
         'damage_applied',
         'status_applied',
         'status_consumed',
+        'status_mitigated',
         'connection_timeout',
         'ready_timeout',
         'match_invalidated',
@@ -424,6 +426,9 @@ function getKeyTurnLesson(eventType, { result, finishReason }) {
     if (eventType === 'block_gained') {
         return '护盾窗口会改变伤害节奏，复盘时确认进攻与防守是否错位。';
     }
+    if (eventType === 'status_mitigated') {
+        return '防守牌已经公开清除破绽，说明这次威胁没有被直接兑现；下一局要继续保留这类响应窗口。';
+    }
     if (eventType === 'turn_timeout') {
         if (finishReason === 'connection_timeout') {
             return '连接宽限结束说明行动窗口被网络中断占用，下一局先确认重连状态再进入关键回合。';
@@ -472,6 +477,7 @@ function buildKeyTurnReplay(evidence, { result, finishReason }) {
         'opening_counterplay_granted',
         'budget_clamped',
         'damage_applied',
+        'status_mitigated',
         'block_gained',
         'connection_timeout',
         'turn_timeout',
@@ -546,7 +552,7 @@ function getSeatWindowSummary(evidence) {
             addSeatWindow(getEventSeat(event, 'nextSeat'), event);
             return;
         }
-        if (['card_played', 'block_gained', 'opening_second_seat_buffer_granted', 'opening_counterplay_granted', 'budget_clamped', 'damage_applied', 'opening_protection_triggered', 'status_applied', 'status_consumed'].includes(event.eventType)) {
+        if (['card_played', 'block_gained', 'opening_second_seat_buffer_granted', 'opening_counterplay_granted', 'budget_clamped', 'damage_applied', 'opening_protection_triggered', 'status_applied', 'status_consumed', 'status_mitigated'].includes(event.eventType)) {
             addSeatWindow(event.actingSeat ? String(event.actingSeat) : '', event);
         }
     });
@@ -1104,6 +1110,28 @@ function getActionDamageBudget(state, seat) {
     return null;
 }
 
+function getMitigablePublicStatuses(state, seatId) {
+    const seat = state && state.seats ? state.seats[seatId] : null;
+    const currentTurn = normalizeCount(state && state.turnIndex);
+    if (!seat || !Array.isArray(seat.publicStatuses)) return [];
+    return seat.publicStatuses.filter(status => (
+        status
+        && status.statusId === 'vulnerable_mark'
+        && status.seatId === seatId
+        && status.sourceSeat !== seatId
+        && currentTurn >= normalizeCount(status.appliedTurnIndex)
+        && currentTurn < normalizeCount(status.earliestConsumeTurnIndex)
+        && (normalizeCount(status.expiresAtTurnIndex) <= 0 || currentTurn <= normalizeCount(status.expiresAtTurnIndex))
+    )).map(status => ({
+        statusId: String(status.statusId || ''),
+        label: String(status.label || '公开状态'),
+        seatId,
+        sourceSeat: status.sourceSeat === 'B' ? 'B' : 'A',
+        responseWindow: String(status.responseWindow || ''),
+        mitigation: 'guard_response'
+    }));
+}
+
 function projectCardActionPreview(state, viewerSeat, card) {
     const actor = state && state.seats ? state.seats[viewerSeat] : null;
     const targetSeat = otherSeat(viewerSeat);
@@ -1131,6 +1159,12 @@ function projectCardActionPreview(state, viewerSeat, card) {
     const targetHpAfter = willTriggerProtection ? protectedHp : wouldHaveHp;
     const blockGain = normalizeCount(card.block);
     const cardName = String(card.name || card.cardId || '术式');
+    const tags = Array.isArray(getCardDefinition(card.cardId) && getCardDefinition(card.cardId).tags)
+        ? getCardDefinition(card.cardId).tags
+        : [];
+    const mitigableStatus = (tags.includes('guard') || tags.includes('defense'))
+        ? getMitigablePublicStatuses(state, viewerSeat)[0] || null
+        : null;
     const damageLine = rawDamage > 0
         ? `预算后 ${budgetedDamage}，破盾 ${blockedDamage}，生命伤害 ${hpDamage}，${targetSeat} 预计 ${targetHpAfter} 血`
         : `不造成伤害，${targetSeat} 血线不变`;
@@ -1138,12 +1172,14 @@ function projectCardActionPreview(state, viewerSeat, card) {
         ? `；护体触发，保底 ${protectedHp} 血，挡下 ${preventedByProtection}`
         : '';
     const blockLine = blockGain > 0 ? `；自身获得 ${blockGain} 护盾` : '';
+    const mitigationLine = mitigableStatus ? `；清除${mitigableStatus.label || '公开状态'}，阻止后续兑现` : '';
     const safeguards = [];
     if (damageBudget !== null) safeguards.push('first_action_budget');
     if (blockedDamage > 0) safeguards.push('public_block');
     if (willTriggerProtection) safeguards.push('opening_protection');
     if (preventedByProtection > 0) safeguards.push('counterplay_window_pending');
     if (blockGain > 0) safeguards.push('self_block');
+    if (mitigableStatus) safeguards.push('public_status_mitigation_preview');
     return {
         cardInstanceId: String(card.instanceId || ''),
         cardName,
@@ -1166,7 +1202,8 @@ function projectCardActionPreview(state, viewerSeat, card) {
         },
         blockGain,
         selfBlockAfter: normalizeCount(actor.block) + blockGain,
-        summaryLine: `${cardName}：${damageLine}${protectionLine}${blockLine}。`,
+        publicStatusMitigation: mitigableStatus,
+        summaryLine: `${cardName}：${damageLine}${protectionLine}${blockLine}${mitigationLine}。`,
         safeguards: Array.from(new Set(safeguards))
     };
 }
@@ -1215,7 +1252,7 @@ function getPublicCardName(cardId) {
 
 function isCardResolutionEvent(event, cardId, actingSeat) {
     if (!event || event.actingSeat !== actingSeat) return false;
-    if (!['budget_clamped', 'opening_protection_triggered', 'damage_applied', 'block_gained', 'status_applied', 'status_consumed'].includes(String(event.eventType || ''))) return false;
+    if (!['budget_clamped', 'opening_protection_triggered', 'damage_applied', 'block_gained', 'status_applied', 'status_consumed', 'status_mitigated'].includes(String(event.eventType || ''))) return false;
     if (event.eventType === 'status_applied') return String(cardId || '') === 'punctureMark';
     if (event.eventType === 'status_consumed') return String(cardId || '') === 'exposedCircuit';
     const payload = getPublicEventPayload(event);
@@ -1246,12 +1283,14 @@ function projectCardActionReceipt(state, seatId, cardPlayedIndex) {
     const blockEvent = findResolution('block_gained');
     const statusAppliedEvent = findResolution('status_applied');
     const statusConsumedEvent = findResolution('status_consumed');
+    const statusMitigatedEvent = findResolution('status_mitigated');
     const budgetPayload = getPublicEventPayload(budgetEvent);
     const damagePayload = getPublicEventPayload(damageEvent);
     const protectionPayload = getPublicEventPayload(protectionEvent);
     const blockPayload = getPublicEventPayload(blockEvent);
     const statusAppliedPayload = getPublicEventPayload(statusAppliedEvent);
     const statusConsumedPayload = getPublicEventPayload(statusConsumedEvent);
+    const statusMitigatedPayload = getPublicEventPayload(statusMitigatedEvent);
     const rawDamage = normalizeCount(damagePayload.rawDamage || budgetPayload.rawDamage);
     const budgetedDamage = normalizeCount(damagePayload.budgetedDamage || damagePayload.actualDamage || budgetPayload.actualDamage);
     const preventedByBudget = normalizeCount(budgetPayload.preventedDamage);
@@ -1288,11 +1327,23 @@ function projectCardActionReceipt(state, seatId, cardPlayedIndex) {
         damageBonus: normalizeCount(statusConsumedPayload.damageBonus),
         consumedTurnIndex: normalizeCount(statusConsumedPayload.consumedTurnIndex)
     } : null;
+    const statusMitigated = statusMitigatedEvent ? {
+        statusId: String(statusMitigatedPayload.statusId || ''),
+        label: String(statusMitigatedPayload.label || ''),
+        seatId: String(statusMitigatedPayload.seatId || ''),
+        sourceSeat: String(statusMitigatedPayload.sourceSeat || ''),
+        mitigatedBySeat: String(statusMitigatedPayload.mitigatedBySeat || actingSeat),
+        mitigatedTurnIndex: normalizeCount(statusMitigatedPayload.mitigatedTurnIndex),
+        responseWindow: String(statusMitigatedPayload.responseWindow || ''),
+        mitigation: String(statusMitigatedPayload.mitigation || '')
+    } : null;
     const statusLine = statusApplied
         ? `；给 ${statusApplied.seatId || targetSeat || '目标'} 挂上${statusApplied.label || '公开状态'}，保留反制窗口`
         : statusConsumed
             ? `；消耗${statusConsumed.label || '公开状态'}，额外伤害 +${statusConsumed.damageBonus}`
-            : '';
+            : statusMitigated
+                ? `；稳住${statusMitigated.label || '公开状态'}，阻止后续兑现`
+                : '';
     const safeguards = ['public_events'];
     if (budgetEvent) safeguards.push('first_action_budget');
     if (blockedDamage > 0) safeguards.push('public_block');
@@ -1300,6 +1351,7 @@ function projectCardActionReceipt(state, seatId, cardPlayedIndex) {
     if (blockGain > 0) safeguards.push('self_block');
     if (statusApplied) safeguards.push('public_status_applied');
     if (statusConsumed) safeguards.push('public_status_consumed');
+    if (statusMitigated) safeguards.push('public_status_mitigated');
     return {
         reportVersion: 'pvp-live-action-receipt-v1',
         sourceVisibility: 'authoritative_public_projection',
@@ -1335,7 +1387,8 @@ function projectCardActionReceipt(state, seatId, cardPlayedIndex) {
         } : null,
         statusEffects: {
             applied: statusApplied ? [statusApplied] : [],
-            consumed: statusConsumed ? [statusConsumed] : []
+            consumed: statusConsumed ? [statusConsumed] : [],
+            mitigated: statusMitigated ? [statusMitigated] : []
         },
         summaryLine: `${actingSeat} 打出${cardName}：${damageLine}${protectionLine}${blockLine}${statusLine}。`,
         safeguards: Array.from(new Set(safeguards))
@@ -1551,15 +1604,21 @@ function projectDuelMomentumReport(state, seatId, openingSafeguardReport = null)
     const opponentHasCounterplay = grantedSeats.includes(opponentSeat);
     const viewerProtected = protectedSeats.includes(viewerSeat);
     const opponentProtected = protectedSeats.includes(opponentSeat);
+    const viewerMitigableStatuses = getMitigablePublicStatuses(state, viewerSeat);
+    const opponentMitigableStatuses = getMitigablePublicStatuses(state, opponentSeat);
+    const currentSeatMitigableStatuses = getMitigablePublicStatuses(state, currentSeat);
     const safeguards = [];
     if (openingProtectionActive || status === 'setup') safeguards.push('opening_protection');
     if (Math.max(0, Math.floor(Number(buffer.block) || 0)) > 0) safeguards.push('second_seat_buffer');
     if (grantedSeats.length > 0) safeguards.push('counterplay_granted');
     if (pendingSeats.length > 0 || openingProtectionActive && grantedSeats.length === 0) safeguards.push('counterplay_window_pending');
+    if (viewerMitigableStatuses.length > 0 || opponentMitigableStatuses.length > 0) safeguards.push('public_status_response_window');
     if (status === 'setup') safeguards.push('setup_ready_required');
     const pressureState = status === 'setup'
         ? 'setup'
-        : currentSeatHasCounterplay || viewerHasCounterplay || opponentHasCounterplay
+        : currentSeatMitigableStatuses.length > 0
+            ? 'status_response_window'
+            : currentSeatHasCounterplay || viewerHasCounterplay || opponentHasCounterplay
             ? 'reversal_window'
             : openingProtectionActive
                 ? 'opening_window'
@@ -1568,6 +1627,8 @@ function projectDuelMomentumReport(state, seatId, openingSafeguardReport = null)
         ? '准备观察'
         : pressureState === 'reversal_window'
             ? currentSeat === viewerSeat ? '你的反打窗口' : `${currentSeat} 的反打窗口`
+            : pressureState === 'status_response_window'
+                ? currentSeat === viewerSeat ? '你的破绽响应' : `${currentSeat} 的破绽响应`
             : pressureState === 'opening_window'
                 ? '开局护体窗口'
                 : pressureState === 'viewer_advantage' ? '你方血线领先' : pressureState === 'opponent_advantage' ? '对方血线领先' : '血线均衡';
@@ -1580,6 +1641,10 @@ function projectDuelMomentumReport(state, seatId, openingSafeguardReport = null)
             ? currentSeat === viewerSeat
                 ? '局势：你的反打窗口已打开，公开缓冲已发放。'
                 : `局势：${currentSeat} 的反打窗口已打开，公开缓冲已发放。`
+            : pressureState === 'status_response_window'
+                ? currentSeat === viewerSeat
+                    ? `局势：你身上有${currentSeatMitigableStatuses[0].label || '公开状态'}，防守牌可在本窗口稳住它。`
+                    : `局势：${currentSeat} 正处在公开破绽响应窗口，防守牌可阻止后续兑现。`
             : pressureState === 'opening_window'
                 ? isViewerTurn
                     ? '局势：你的开局行动窗口，对手仍有开局护体。'
@@ -1591,6 +1656,10 @@ function projectDuelMomentumReport(state, seatId, openingSafeguardReport = null)
             ? currentSeat === viewerSeat
                 ? '反打窗口：你的反打窗口已生效，先处理护盾缓冲后的首个选择。'
                 : `反打窗口：${currentSeat} 已获得公开缓冲，等待其首个行动选择。`
+            : pressureState === 'status_response_window'
+                ? currentSeat === viewerSeat
+                    ? '反制窗口：打出 guard / defense 防守牌可公开清除破绽，避免对手下一轮兑现。'
+                    : `反制窗口：${currentSeat} 可用防守牌清除破绽；若不用，下一轮可能被兑现。`
             : openingProtectionActive
                 ? viewerProtected && !isViewerTurn
                     ? '反打窗口：若你被护体保住，首个行动窗口会获得缓冲。'
@@ -1729,13 +1798,17 @@ function projectIntentSignalReport(state, seatId, openingSafeguardReport = null)
         : Math.max(0, targetHpBefore - hpDamageBeforeProtection);
     const counterplayBlock = Math.max(0, Math.floor(Number(counterplay.block) || 0));
     const hasPendingCounterplay = pendingSeats.includes(targetSeat) || !!target.openingCounterplayPending;
+    const actorMitigableStatuses = getMitigablePublicStatuses(state, actorSeat);
     const safeguards = ['public_card_catalog_only', 'private_card_projection_blocked', 'public_board_state'];
     if (damageBudget !== null) safeguards.push('first_action_budget');
     if (blockedByCurrentBlock > 0) safeguards.push('public_block');
     if (targetProtected || openingProtectionWouldTrigger) safeguards.push('opening_protection');
     if (hasPendingCounterplay) safeguards.push('counterplay_window_pending');
+    if (actorMitigableStatuses.length > 0) safeguards.push('public_status_response_window');
     let signalState = 'tempo_probe';
-    if (openingProtectionWouldTrigger) {
+    if (actorMitigableStatuses.length > 0) {
+        signalState = 'status_response';
+    } else if (openingProtectionWouldTrigger) {
         signalState = 'protected_lethal_read';
     } else if (targetHpAfter <= 0) {
         signalState = 'lethal_pressure';
@@ -1748,7 +1821,9 @@ function projectIntentSignalReport(state, seatId, openingSafeguardReport = null)
     }
     const signalLabel = signalState === 'protected_lethal_read'
         ? '护体读秒'
-        : signalState === 'lethal_pressure'
+        : signalState === 'status_response'
+            ? '破绽响应'
+            : signalState === 'lethal_pressure'
             ? '斩杀压力'
             : signalState === 'opening_pressure'
                 ? '公开压迫'
@@ -1756,7 +1831,9 @@ function projectIntentSignalReport(state, seatId, openingSafeguardReport = null)
                     ? '爆发压力'
                     : signalState === 'guard_pressure' ? '防守蓄势' : '节奏试探';
     const intentLine = `读牌：${actorSeat} 当前 ${Math.max(0, Math.floor(Number(actor.energy) || 0))} 能量，公开牌池上限可造成 ${publicDamageCeiling} 点生命压力；${targetSeat} 预计保留 ${targetHpAfter} 血。`;
-    const responseLine = openingProtectionWouldTrigger
+    const responseLine = actorMitigableStatuses.length > 0
+        ? `反制窗口：${actorSeat} 可用 guard / defense 防守牌清除${actorMitigableStatuses[0].label || '公开状态'}，否则对手下一轮可能兑现。`
+        : openingProtectionWouldTrigger
         ? `反制窗口：${targetSeat} 会被开局护体保到 ${targetHpAfter} 血，并在首个行动窗口获得缓冲。`
         : targetProtected || hasPendingCounterplay
             ? `反制窗口：${targetSeat} 仍有开局护体与反打缓冲，先手不能直接终结。`
@@ -1789,7 +1866,8 @@ function projectIntentSignalReport(state, seatId, openingSafeguardReport = null)
             hasPendingCounterplay,
             counterplayBlock: hasPendingCounterplay || targetProtected ? counterplayBlock : 0,
             defenderBlock: Math.max(0, Math.floor(Number(target.block) || 0)),
-            defenderHp: targetHpBefore
+            defenderHp: targetHpBefore,
+            publicStatusMitigation: actorMitigableStatuses[0] || null
         },
         safeguards: Array.from(new Set(safeguards)).slice(0, 8)
     };

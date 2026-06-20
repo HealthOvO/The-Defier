@@ -628,6 +628,8 @@ const layoutAudit = read('tests/browser_frontend_layout_audit.mjs');
   'pvp-live-intent-signal-v1',
   'data-live-intent-signal',
   'intentSignalReport',
+  'status_mitigated',
+  'public_status_mitigated',
   'live UI mobile renders opening protection event without overflow',
   'pvp screen opens on live ranked entry by default on mobile',
   'data-live-mode-boundary',

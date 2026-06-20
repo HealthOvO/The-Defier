@@ -843,6 +843,47 @@ const renderedPublicStatuses = PVPScene.renderLivePublicStatuses(openingActionSt
 assert.match(renderedPublicStatuses, /破绽/, 'live UI should render public tactical status labels');
 assert.match(renderedPublicStatuses, /反制窗口|可兑现/, 'live UI public status should explain the response/payoff window');
 assert.doesNotMatch(renderedPublicStatuses, /hand|deck|cardId|instanceId|loadoutSnapshot|rating|elo|reward/i, 'live UI public status chips must not render hidden payload markers');
+const mitigatedReceipt = PVPScene.getLiveActionReceiptReport({
+  actionReceiptReport: {
+    reportVersion: 'pvp-live-action-receipt-v1',
+    sourceVisibility: 'authoritative_public_projection',
+    usesHiddenInformation: false,
+    rankedImpact: 'none',
+    viewerSeat: 'B',
+    actingSeat: 'B',
+    actionType: 'play_card',
+    latestSequence: 44,
+    cardName: '护体诀',
+    statusEffects: {
+      mitigated: [{
+        statusId: 'vulnerable_mark',
+        label: '破绽',
+        seatId: 'B',
+        sourceSeat: 'A',
+        mitigatedBySeat: 'B',
+        mitigatedTurnIndex: 12,
+        responseWindow: 'defender_turn_before_payoff',
+        mitigation: 'guard_response'
+      }]
+    },
+    summaryLine: 'B 打出护体诀：不造成伤害；自身护盾 +7；稳住破绽，阻止后续兑现。',
+    safeguards: ['public_events', 'self_block', 'public_status_mitigated']
+  }
+});
+assert.equal(mitigatedReceipt.statusEffects.mitigated[0].statusId, 'vulnerable_mark', 'live UI should preserve mitigated public status effects in action receipts');
+assert.match(PVPScene.renderLiveActionReceiptReport({ actionReceiptReport: mitigatedReceipt }), /稳住破绽|阻止后续兑现/, 'live UI action receipt should explain public status mitigation');
+const mitigatedEvent = PVPScene.formatLiveEvent({
+  eventType: 'status_mitigated',
+  actingSeat: 'B',
+  publicData: {
+    statusId: 'vulnerable_mark',
+    label: '破绽',
+    seatId: 'B',
+    mitigatedBySeat: 'B',
+    mitigation: 'guard_response'
+  }
+});
+assert.match(mitigatedEvent.detail, /稳住破绽|阻止后续兑现/, 'live UI event log should explain public status mitigation');
 
 openingActionState = {
   ...openingActionState,

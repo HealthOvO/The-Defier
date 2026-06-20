@@ -1,5 +1,25 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-21: V10-S10 live PVP public status mitigation response
+  - 本轮完成
+    - `server/pvp-live/engine/reducer.js` 新增公开破绽响应：防守方在 `vulnerable_mark` 的响应窗口内打出 `guard / defense` 牌时，会花费正常灵力、获得原有护盾，并公开清除自己身上的破绽；事件为 `status_mitigated`，不会引入 0 费反制、隐藏反制或手牌窥探。
+    - `exposedCircuit` 后续兑现现在会尊重 mitigation 结果：如果防守方已用 `pvp_guard` 等防守牌稳住破绽，攻击方下一轮仍可正常出牌，但不能再消费已移除的 `vulnerable_mark` 拿 `+6` 额外伤害。
+    - `server/pvp-live/engine/state-view.js` 将 `status_mitigated` 纳入公开投影、赛后证据、关键回合复盘、行动回执、duel momentum 和 intent signal；防守方响应窗口会明确写“guard / defense 防守牌可清除破绽”，手牌预览也会对可用防守牌显示“清除破绽，阻止后续兑现”。
+    - replay / golden replay / persistence / WS 四个公开事件白名单同步加入 `status_mitigated`，公开字段只包含状态、席位、窗口和 mitigation 类型，不公开 `sourceCardId`、手牌、牌库、rating、reward 或正式积分私密数据。
+    - `js/scenes/pvp-scene.js` 补齐 mitigation 归一化与可见反馈：行动回执保留 `statusEffects.mitigated`，事件日志显示“公开状态缓解”，回执 chip 用 `data-live-public-status-mitigation="public_status_mitigated"` 固定 UI 合同。
+    - 测试新增防守响应红绿链：engine 断言 B 被挂破绽后用 `pvp_guard` 清除、A 能看到公开缓解事件、后续 `exposedCircuit` 不消费破绽；UI runtime / contract / release gate / browser audit 固定 mitigation 回执、事件日志、白名单和无隐藏信息边界。
+  - 已验证
+    - 红测：`node tests/sanity_pvp_live_engine_checks.cjs` 在实现前失败于缺少 `status_mitigated`。
+    - 绿测：`node tests/sanity_pvp_live_engine_checks.cjs`
+    - 绿测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs`
+    - 绿测：`node tests/sanity_pvp_live_ui_contract_checks.cjs`
+    - 绿测：`node tests/sanity_release_gate_coverage_checks.cjs`
+    - 语法：`node --check js/scenes/pvp-scene.js`
+    - 语法：`node --check tests/browser_pvp_live_audit.mjs`
+    - 浏览器审计：`node tests/browser_pvp_live_audit.mjs http://127.0.0.1:4173 output/web-pvp-live-audit`，87/87 findings、0 failed、0 console error。
+  - 当前结论
+    - live PVP 的公开破绽不再只是“看得见但只能等着被打”的威胁：进攻方能通过破绽逼防守资源，防守方能用公开防守牌在响应窗口内稳住破绽，双方都能从事件、回执和局势提示读懂这次攻防交换。这继续服务“不要先手秒杀、双方体验都高”的方向，把上一轮 setup/payoff 扩展成真正有反制的互动链。
+
 - 2026-06-21: V10-S9Z live PVP public intent and setup payoff
   - 本轮完成
     - `server/pvp-live/engine/state-view.js` 新增 `pvp-live-intent-signal-v1` 公开读牌报告：只基于公开牌面、公开牌库内容、当前灵力、格挡、开局保护和已公开反制窗口推导伤害上限，固定 `sourceVisibility=public_state_and_public_content`、`usesHiddenInformation=false`、`rankedImpact=none`，不读取隐藏手牌、牌库顺序、抽牌结果、rating 或任何正式匹配私密信息。

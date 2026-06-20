@@ -2255,6 +2255,63 @@ async function safeElementScreenshot(page, selector, outputPath) {
       && !/payload|hand|deck|cardId|instanceId|loadoutSnapshot|reward|rating|elo/i.test(`${actionProbe.actionReceipt} ${JSON.stringify(actionProbe.payload?.actionReceiptReport || {})}`),
     JSON.stringify(actionProbe),
   );
+  const mitigationFormatProbe = await page.evaluate(() => {
+    const event = window.PVPScene.formatLiveEvent({
+      eventType: 'status_mitigated',
+      actingSeat: 'B',
+      publicData: {
+        statusId: 'vulnerable_mark',
+        label: '破绽',
+        seatId: 'B',
+        sourceSeat: 'A',
+        mitigatedBySeat: 'B',
+        mitigatedTurnIndex: 12,
+        responseWindow: 'defender_turn_before_payoff',
+        mitigation: 'guard_response',
+      },
+    });
+    const receipt = window.PVPScene.renderLiveActionReceiptReport({
+      actionReceiptReport: {
+        reportVersion: 'pvp-live-action-receipt-v1',
+        sourceVisibility: 'authoritative_public_projection',
+        usesHiddenInformation: false,
+        rankedImpact: 'none',
+        viewerSeat: 'B',
+        actingSeat: 'B',
+        actionType: 'play_card',
+        latestSequence: 44,
+        cardName: '护体诀',
+        statusEffects: {
+          mitigated: [{
+            statusId: 'vulnerable_mark',
+            label: '破绽',
+            seatId: 'B',
+            sourceSeat: 'A',
+            mitigatedBySeat: 'B',
+            mitigatedTurnIndex: 12,
+            responseWindow: 'defender_turn_before_payoff',
+            mitigation: 'guard_response',
+          }],
+        },
+        summaryLine: 'B 打出护体诀：不造成伤害；自身护盾 +7；稳住破绽，阻止后续兑现。',
+        safeguards: ['public_events', 'self_block', 'public_status_mitigated'],
+      },
+    });
+    return {
+      event,
+      receipt,
+    };
+  });
+  add(
+    'live UI formats public status mitigation event and receipt',
+    /status_mitigated/.test('status_mitigated')
+      && /公开状态缓解/.test(mitigationFormatProbe.event?.label || '')
+      && /稳住破绽|阻止后续兑现/.test(mitigationFormatProbe.event?.detail || '')
+      && /data-live-public-status-mitigation="public_status_mitigated"/.test(mitigationFormatProbe.receipt || '')
+      && /稳住破绽|阻止后续兑现/.test(mitigationFormatProbe.receipt || '')
+      && !/payload|hand|deck|cardId|instanceId|loadoutSnapshot|reward|rating|elo|sourceCardId/i.test(`${mitigationFormatProbe.event?.detail || ''} ${mitigationFormatProbe.receipt || ''}`),
+    JSON.stringify(mitigationFormatProbe),
+  );
   add(
     'live UI renders handoff receipt label for end-turn action receipt',
     /交权回执/.test(actionProbe.handoffReceipt)

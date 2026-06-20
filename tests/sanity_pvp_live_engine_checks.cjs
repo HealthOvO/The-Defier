@@ -388,6 +388,14 @@ tacticalState.seats.A.deck = tacticalDeck.slice(3).map((entry, index) => ({
   damage: RULES.cards[entry.id].damage || 0,
   block: RULES.cards[entry.id].block || 0
 }));
+tacticalState.seats.B.hand = ['pvp_guard', 'pvp_strike', 'pvp_guard'].map((id, index) => ({
+  instanceId: `B-${id}-${index + 1}`,
+  cardId: id,
+  name: RULES.cards[id].name,
+  cost: RULES.cards[id].cost,
+  damage: RULES.cards[id].damage || 0,
+  block: RULES.cards[id].block || 0
+}));
 const punctureMark = reduceIntent(tacticalState, {
   intentId: 'intent-public-status-mark-1',
   intentType: 'play_card',
@@ -428,6 +436,44 @@ const markEndTurn = reduceIntent(punctureMark.state, {
 const defenderResponseTurn = projectStateView(markEndTurn.state, 'B');
 assert(defenderResponseTurn.self.publicStatuses.some(status => status.statusId === 'vulnerable_mark'), 'defender response turn should keep the public mark visible');
 assert(/破绽|反制/.test(defenderResponseTurn.duelMomentumReport.counterplayLine) || defenderResponseTurn.self.publicStatuses.length > 0, 'defender response turn should be readable as a response window');
+const guardMitigation = reduceIntent(markEndTurn.state, {
+  intentId: 'intent-public-status-b-guard-1',
+  intentType: 'play_card',
+  matchId: 'pvpm-public-status-test',
+  seatId: 'B',
+  ruleVersion: RULE_VERSION,
+  stateVersion: markEndTurn.state.stateVersion,
+  payload: { cardInstanceId: 'B-pvp_guard-1', targetSeat: 'A' }
+});
+assert(guardMitigation.result === 'accepted', 'defender guard response should be accepted inside the public mark response window');
+assert(guardMitigation.events.some(e => e.eventType === 'status_mitigated' && e.payload.statusId === 'vulnerable_mark' && e.payload.seatId === 'B'), 'defender guard response should emit public status_mitigated evidence');
+assert(!guardMitigation.state.seats.B.publicStatuses.some(status => status.statusId === 'vulnerable_mark'), 'defender guard response should remove the public vulnerable mark');
+const mitigatedViewA = projectStateView(guardMitigation.state, 'A');
+assert(mitigatedViewA.recentEvents.some(event => event.eventType === 'status_mitigated' && (event.publicData || {}).statusId === 'vulnerable_mark'), 'attacker should see the public mitigation event before payoff');
+assert(mitigatedViewA.actionReceiptReport.statusEffects && mitigatedViewA.actionReceiptReport.statusEffects.mitigated.some(status => status.statusId === 'vulnerable_mark'), 'guard receipt should explain the public status mitigation');
+assert(!/hand|deck|cardId|instanceId|loadoutSnapshot|rating|elo|reward/i.test(JSON.stringify(mitigatedViewA.actionReceiptReport.statusEffects)), 'mitigation receipt must not leak hidden hand, deck, rating, or reward data');
+const guardMitigationEndTurn = reduceIntent(guardMitigation.state, {
+  intentId: 'intent-public-status-b-guard-end-1',
+  intentType: 'end_turn',
+  matchId: 'pvpm-public-status-test',
+  seatId: 'B',
+  ruleVersion: RULE_VERSION,
+  stateVersion: guardMitigation.state.stateVersion,
+  payload: {}
+});
+const mitigatedPayoff = reduceIntent(guardMitigationEndTurn.state, {
+  intentId: 'intent-public-status-mitigated-payoff-1',
+  intentType: 'play_card',
+  matchId: 'pvpm-public-status-test',
+  seatId: 'A',
+  ruleVersion: RULE_VERSION,
+  stateVersion: guardMitigationEndTurn.state.stateVersion,
+  payload: { cardInstanceId: 'A-exposedCircuit-2', targetSeat: 'B' }
+});
+assert(mitigatedPayoff.result === 'accepted', 'payoff after mitigation should still resolve as a normal card');
+assert(!mitigatedPayoff.events.some(e => e.eventType === 'status_consumed'), 'payoff after mitigation should not consume a removed public mark');
+const mitigatedPayoffReceipt = projectStateView(mitigatedPayoff.state, 'A').actionReceiptReport;
+assert(!mitigatedPayoffReceipt.statusEffects.consumed.some(status => status.statusId === 'vulnerable_mark'), 'payoff receipt after mitigation should not claim a public status bonus');
 const defenderEndTurn = reduceIntent(markEndTurn.state, {
   intentId: 'intent-public-status-b-end-1',
   intentType: 'end_turn',

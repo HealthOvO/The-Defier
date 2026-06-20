@@ -189,6 +189,37 @@ function consumePublicPayoffStatus(state, intent, card, events) {
     return { damageBonus, consumed: status };
 }
 
+function mitigatePublicResponseStatus(state, intent, card, events) {
+    const tags = getCardTags(card);
+    if (!tags.includes('guard') && !tags.includes('defense')) return null;
+    const actor = state && state.seats && state.seats[intent.seatId];
+    if (!actor || !Array.isArray(actor.publicStatuses)) return null;
+    const currentTurn = normalizeCount(state.turnIndex);
+    const statusIndex = actor.publicStatuses.findIndex(status => {
+        if (!status || status.statusId !== 'vulnerable_mark') return false;
+        if (status.seatId !== intent.seatId) return false;
+        if (status.sourceSeat === intent.seatId) return false;
+        if (currentTurn < normalizeCount(status.appliedTurnIndex)) return false;
+        if (currentTurn >= normalizeCount(status.earliestConsumeTurnIndex)) return false;
+        if (normalizeCount(status.expiresAtTurnIndex) > 0 && currentTurn > normalizeCount(status.expiresAtTurnIndex)) return false;
+        return true;
+    });
+    if (statusIndex < 0) return null;
+    const [status] = actor.publicStatuses.splice(statusIndex, 1);
+    appendEvent(state, events, 'status_mitigated', intent, {
+        sourceCardId: card.cardId,
+        statusId: status.statusId,
+        label: status.label,
+        seatId: intent.seatId,
+        sourceSeat: status.sourceSeat,
+        mitigatedBySeat: intent.seatId,
+        mitigatedTurnIndex: currentTurn,
+        responseWindow: status.responseWindow,
+        mitigation: 'guard_response'
+    });
+    return status;
+}
+
 function ensureLongGameStats(seat) {
     if (!seat.longGameStats || typeof seat.longGameStats !== 'object') {
         seat.longGameStats = {};
@@ -466,6 +497,7 @@ function reducePlayCard(state, intent, fingerprint) {
         return reject(state, intent, damageError);
     }
     applyBlock(newState, intent, card, events);
+    mitigatePublicResponseStatus(newState, intent, card, events);
     applyPublicSetupStatus(newState, intent, card, events);
     if (nextActor.playedSetupThisTurn && !nextActor.setupConvertedThisTurn && !tags.includes('setup') && ((card.damage || 0) > 0 || (card.block || 0) > 0)) {
         ensureLongGameStats(nextActor).publicSetupConversions += 1;

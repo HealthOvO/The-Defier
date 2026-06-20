@@ -257,6 +257,8 @@ const liveBrowserAudit = read('tests/browser_pvp_live_audit.mjs');
   'data-live-self-statuses',
   'data-live-opponent-statuses',
   'data-live-public-status',
+  'status_mitigated',
+  'public_status_mitigated',
   'pvp-live-action-receipt-v1',
   'actionReceiptReport',
   'data-live-action-receipt',
