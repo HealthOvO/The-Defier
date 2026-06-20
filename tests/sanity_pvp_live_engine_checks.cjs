@@ -43,6 +43,13 @@ function assertPostMatchReview(review, {
   assert(review.experienceReport.usesHiddenInformation === false, 'experience report must not use hidden information');
   assert(review.experienceReport.rankedImpact === 'none', 'experience report should not imply ranked impact or compensation');
   assert(['low', 'watch'].includes(review.experienceReport.nonGameRisk), `experience report should bucket non-game risk, got ${JSON.stringify(review.experienceReport)}`);
+  assert(review.loadoutRecommendation && review.loadoutRecommendation.reportVersion === 'pvp-live-loadout-recommendation-v1', 'post-match review should expose a loadout recommendation report');
+  assert(review.loadoutRecommendation.sourceVisibility === 'public_events_and_public_content', 'loadout recommendation should use public replay events and public content only');
+  assert(review.loadoutRecommendation.usesHiddenInformation === false, 'loadout recommendation must not use hidden information');
+  assert(review.loadoutRecommendation.rankedImpact === 'none', 'loadout recommendation must not affect ranked state');
+  assert(Array.isArray(review.loadoutRecommendation.evidenceRefs) && review.loadoutRecommendation.evidenceRefs.length >= 1, 'loadout recommendation should cite public evidence refs');
+  assert(/下一局/.test(review.loadoutRecommendation.boundaryLine || '') && /不自动排队/.test(review.loadoutRecommendation.boundaryLine || '') && /不写正式积分/.test(review.loadoutRecommendation.boundaryLine || ''), 'loadout recommendation should explain next-game no-auto-queue boundary');
+  assert(!/payload|hand|deck|cardId|instanceId|loadoutSnapshot|reward|rating|elo/i.test(JSON.stringify(review.loadoutRecommendation)), 'loadout recommendation must not leak hidden payloads or reward/rating data');
   assert(Array.isArray(review.experienceReport.nonGameRiskReasons), 'experience report should expose public non-game risk reasons');
   assert(review.experienceReport.seatWindowSummary && review.experienceReport.seatWindowSummary.firstSeat, 'experience report should expose first-seat window summary from public evidence');
   assert(typeof review.experienceReport.seatWindowSummary.secondSeatWindowObserved === 'boolean', 'experience report should expose second-seat window observation');
@@ -88,6 +95,7 @@ function assertDrawPostMatchReview(review) {
   assert(review.experienceReport && review.experienceReport.fairnessChecks.some(item => item.id === 'round14_resolution'), 'round14 draw experience report should expose long-game resolution fairness check');
   assert(review.fairnessReceipt && review.fairnessReceipt.reportVersion === 'pvp-live-fairness-receipt-v1', 'round14 draw review should expose a fairness receipt');
   assert(review.fairnessReceipt.evidenceSummary.some(item => item.id === 'round14_resolution'), 'round14 draw fairness receipt should summarize long-game public scoring');
+  assert(review.loadoutRecommendation?.recommendedPresetId === 'balanced', 'round14 draw should recommend the default balanced loadout');
   assert(!/reward|rating|elo|hand|deck|cardId|instanceId|loadoutSnapshot/i.test(JSON.stringify(review)), 'round14 draw review must not leak hidden cards or imply reward/rating');
 }
 
@@ -718,6 +726,16 @@ assertPostMatchReview(normalLethal.stateView.postMatchReview, {
   loserSeat: 'A',
   finishReason: 'lethal'
 });
+assert(normalLethal.stateView.postMatchReview.loadoutRecommendation.recommendedPresetId === 'sword', 'normal lethal winner should receive pressure loadout recommendation');
+const normalLethalLoserReview = projectStateView(normalLethal.state, 'A').postMatchReview;
+assertPostMatchReview(normalLethalLoserReview, {
+  result: 'loss',
+  winnerSeat: 'B',
+  loserSeat: 'A',
+  finishReason: 'lethal'
+});
+assert(normalLethalLoserReview.loadoutRecommendation.recommendedPresetId === 'shield', 'normal lethal loser should receive defensive loadout recommendation');
+assert(normalLethalLoserReview.loadoutRecommendation.evidenceRefs.some(event => event.eventType === 'damage_applied'), 'normal lethal loser loadout recommendation should cite public damage evidence');
 const round14DrawState = createReadyLiveState('pvpm-round14-draw');
 round14DrawState.roundIndex = 14;
 round14DrawState.turnIndex = 28;

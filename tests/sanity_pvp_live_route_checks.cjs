@@ -1426,6 +1426,7 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
         assert.equal(normalFinishB.payload.stateView.postMatchReview?.result, 'win', 'winning live seat should receive a win review');
         assert.equal(normalFinishB.payload.stateView.postMatchReview?.finishReason, 'lethal', 'normal lethal review should expose lethal finish reason');
         assert.ok(normalFinishB.payload.stateView.postMatchReview?.evidence?.some(event => event.eventType === 'damage_applied'), 'normal lethal review should cite public damage evidence');
+        assert.equal(normalFinishB.payload.stateView.postMatchReview?.loadoutRecommendation?.recommendedPresetId, 'sword', 'normal lethal winner should be recommended the pressure MVP preset');
         assert.equal(normalFinishB.payload.stateView.postMatchReview?.settlementReport?.reportVersion, 'pvp-live-settlement-report-v1', 'normal lethal winner should receive settlement report');
         assert.equal(normalFinishB.payload.stateView.postMatchReview?.settlementReport?.result, 'win', 'normal lethal winner settlement should be winner-scoped');
         assert.ok(normalFinishB.payload.stateView.postMatchReview?.settlementReport?.ratingDelta > 0, 'normal lethal winner should see positive score delta');
@@ -1439,6 +1440,15 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
         assert.ok(normalFinishLoserA.payload.stateView.postMatchReview?.suggestions?.length >= 1, 'normal lethal loser review should include learning suggestions');
         assert.equal(normalFinishLoserA.payload.stateView.postMatchReview?.settlementReport?.result, 'loss', 'normal lethal loser settlement should be loser-scoped');
         assert.ok(normalFinishLoserA.payload.stateView.postMatchReview?.settlementReport?.ratingDelta < 0, 'normal lethal loser should see negative score delta');
+        const loserLoadoutRecommendation = normalFinishLoserA.payload.stateView.postMatchReview?.loadoutRecommendation;
+        assert.equal(loserLoadoutRecommendation?.reportVersion, 'pvp-live-loadout-recommendation-v1', 'normal lethal loser review should expose a loadout recommendation report');
+        assert.equal(loserLoadoutRecommendation?.recommendedPresetId, 'shield', 'normal lethal loser should be recommended the defensive MVP preset');
+        assert.equal(loserLoadoutRecommendation?.sourceVisibility, 'public_events_and_public_content', 'loadout recommendation should be based on public replay and public content only');
+        assert.equal(loserLoadoutRecommendation?.usesHiddenInformation, false, 'loadout recommendation must not use hidden information');
+        assert.equal(loserLoadoutRecommendation?.rankedImpact, 'none', 'loadout recommendation must not affect ranked state');
+        assert.ok(loserLoadoutRecommendation?.evidenceRefs?.some(event => event.eventType === 'damage_applied'), 'loadout recommendation should cite public damage evidence');
+        assert.ok(/下一局|套用/.test(loserLoadoutRecommendation?.boundaryLine || ''), 'loadout recommendation should explain it only applies to the next game');
+        assert.ok(!/hand|deck|cardId|instanceId|loadoutSnapshot|reward|rating|elo|payload/i.test(JSON.stringify(loserLoadoutRecommendation || {})), 'loadout recommendation must not leak hidden payloads or reward/rating data');
 
         pvpLiveRoutes.__livePvpStore.reset();
         const joinD = await request(baseUrl, '/api/pvp/live/queue/join', {
@@ -1691,6 +1701,7 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
         assert.equal(round14DrawEnd.payload.stateView.postMatchReview?.result, 'draw', 'round14 draw route should expose draw review');
         assert.equal(round14DrawEnd.payload.stateView.postMatchReview?.winnerSeat, 'draw', 'round14 draw route should expose draw winner marker');
         assert.equal(round14DrawEnd.payload.stateView.postMatchReview?.loserSeat, '', 'round14 draw route should not invent a loser');
+        assert.equal(round14DrawEnd.payload.stateView.postMatchReview?.loadoutRecommendation?.recommendedPresetId, 'balanced', 'round14 draw route should recommend the default balanced loadout');
         assert.ok(round14DrawEnd.payload.stateView.postMatchReview?.experienceReport?.fairnessChecks?.some(item => item.id === 'round14_resolution'), 'round14 draw route review should expose long-game fairness check');
         const round14DrawAView = await request(baseUrl, `/api/pvp/live/matches/${joinRound14DrawB.payload.matchId}`, {
             token: tokenA

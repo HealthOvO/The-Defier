@@ -1678,6 +1678,77 @@
     outline: none;
 }
 
+.pvp-live-loadout-recommendation {
+    margin-top: 8px;
+    padding: 8px;
+    border-radius: 8px;
+    border: 1px solid rgba(153, 214, 170, 0.18);
+    background: rgba(20, 48, 34, 0.25);
+    overflow-wrap: anywhere;
+}
+
+.pvp-live-loadout-recommendation-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    min-width: 0;
+    color: rgba(229, 246, 233, 0.92);
+    font-size: 0.72rem;
+    font-weight: 700;
+}
+
+.pvp-live-loadout-recommendation-head span:last-child {
+    color: rgba(153, 214, 170, 0.82);
+    text-align: right;
+}
+
+.pvp-live-loadout-recommendation-line,
+.pvp-live-loadout-recommendation-evidence,
+.pvp-live-loadout-recommendation-boundary {
+    margin-top: 5px;
+    color: rgba(226, 241, 231, 0.78);
+    font-size: 0.68rem;
+    line-height: 1.35;
+}
+
+.pvp-live-loadout-recommendation-evidence,
+.pvp-live-loadout-recommendation-boundary {
+    color: rgba(205, 226, 211, 0.64);
+}
+
+.pvp-live-loadout-recommendation-actions {
+    margin-top: 7px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.pvp-live-loadout-recommendation-actions button {
+    min-width: 0;
+    min-height: 32px;
+    padding: 5px 9px;
+    border-radius: 999px;
+    border: 1px solid rgba(153, 214, 170, 0.22);
+    background: rgba(255, 255, 255, 0.045);
+    color: rgba(229, 246, 233, 0.88);
+    font: inherit;
+    font-size: 0.68rem;
+    cursor: pointer;
+}
+
+.pvp-live-loadout-recommendation-actions button:hover,
+.pvp-live-loadout-recommendation-actions button:focus-visible {
+    border-color: rgba(153, 214, 170, 0.46);
+    background: rgba(153, 214, 170, 0.11);
+    outline: none;
+}
+
+.pvp-live-loadout-recommendation-actions button:disabled {
+    cursor: not-allowed;
+    opacity: 0.62;
+}
+
 .pvp-live-settlement-report {
     margin-top: 8px;
     padding: 8px;
@@ -4067,6 +4138,7 @@ input:checked+.seal-slider .seal-face.on {
     }
 
     .pvp-live-season-goal-head,
+    .pvp-live-loadout-recommendation-head,
     .pvp-live-loadout-exploration-head,
     .pvp-live-loadout-exploration-card-head {
         align-items: flex-start;
@@ -4075,6 +4147,7 @@ input:checked+.seal-slider .seal-face.on {
     }
 
     .pvp-live-season-goal-head span:last-child,
+    .pvp-live-loadout-recommendation-head span:last-child,
     .pvp-live-loadout-exploration-head span:last-child,
     .pvp-live-loadout-exploration-card-head span:last-child {
         text-align: left;

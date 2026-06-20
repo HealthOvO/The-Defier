@@ -331,7 +331,7 @@ async function assertMobileActionable(page, selector, label) {
 
 async function clickLiveControl(page, selector, label) {
   await page.waitForSelector(selector, { timeout: 5000 });
-  if (isMobileViewport) {
+  const waitForActionableControl = async () => {
     const deadline = Date.now() + 5000;
     let actionability = null;
     do {
@@ -345,12 +345,15 @@ async function clickLiveControl(page, selector, label) {
           const target = targets[index];
           target.scrollIntoView({ block: 'center', inline: 'nearest' });
           const rect = target.getBoundingClientRect();
+          const style = window.getComputedStyle(target);
           const x = Math.min(window.innerWidth - 1, Math.max(1, rect.left + rect.width / 2));
           const y = Math.min(window.innerHeight - 1, Math.max(1, rect.top + rect.height / 2));
           const hit = document.elementFromPoint(x, y);
           const ok = !target.disabled
+            && style.visibility !== 'hidden'
+            && style.display !== 'none'
             && rect.width > 0
-            && rect.height >= 32
+            && rect.height >= (window.innerWidth <= 480 ? 32 : 1)
             && rect.left >= 0
             && rect.right <= window.innerWidth + 2
             && rect.top >= 0
@@ -376,9 +379,7 @@ async function clickLiveControl(page, selector, label) {
             hitTag: hit?.tagName || '',
             hitText: hit?.textContent?.replace(/\s+/g, ' ').trim().slice(0, 60) || '',
           };
-          if (ok) {
-            return report;
-          }
+          if (ok) return report;
           if (!fallback) fallback = report;
         }
         return fallback;
@@ -387,14 +388,44 @@ async function clickLiveControl(page, selector, label) {
       await page.waitForTimeout(100);
     } while (Date.now() < deadline);
     if (!actionability.ok) {
-      throw new Error(`mobile live control is not actionable: ${JSON.stringify(actionability)}`);
+      throw new Error(`live control is not actionable: ${JSON.stringify(actionability)}`);
     }
+    return actionability;
+  };
+  const actionability = await waitForActionableControl();
+  if (isMobileViewport) {
     await page.waitForTimeout(80);
     await page.touchscreen.tap(actionability.tapPoint.x, actionability.tapPoint.y);
     return actionability;
   }
-  await page.click(selector, { timeout: 5000, force: true });
+  await page.mouse.click(actionability.tapPoint.x, actionability.tapPoint.y);
   return null;
+}
+
+async function waitForLiveActionUnlocked(page, label, timeoutMs = 10000) {
+  try {
+    await page.waitForFunction(() => {
+      const scene = window.PVPScene;
+      const session = scene?.getLiveSession?.();
+      const state = session?.getState?.();
+      return !!scene && !scene.isLiveIntentInFlight?.(state, 'action');
+    }, null, { timeout: timeoutMs });
+  } catch (error) {
+    const detail = await page.evaluate(() => {
+      const scene = window.PVPScene;
+      const session = scene?.getLiveSession?.();
+      const state = session?.getState?.();
+      return {
+        snapshot: scene?.getLiveSnapshot?.() || null,
+        lockState: scene?.getLiveIntentLockState?.(state) || null,
+        inFlight: scene?.liveIntentInFlight || null,
+        hint: document.querySelector('[data-live-last-error]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+        endTurnDisabled: document.querySelector('[data-live-action="end-turn"]')?.disabled ?? null,
+        endTurnText: document.querySelector('[data-live-action="end-turn"]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+      };
+    });
+    throw new Error(`${label}: live action lock did not release: ${JSON.stringify(detail)}; ${error.message}`);
+  }
 }
 
 async function refreshUntilLivePhase(page, phase, timeoutMs = 10000) {
@@ -1220,6 +1251,7 @@ async function writeReport() {
       JSON.stringify(afterPlayMomentumProbe),
     );
 
+    await waitForLiveActionUnlocked(seatA.page, 'seat-a-after-play-before-end-turn');
     const endTurnAfterPlayTouchActionable = await clickLiveControl(seatA.page, '[data-live-action="end-turn"]', 'seat-a-end-turn-after-play');
     await seatA.page.waitForTimeout(300);
     const endTurnAfterPlayConfirmProbe = await seatA.page.evaluate(() => {

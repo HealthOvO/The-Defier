@@ -770,6 +770,7 @@ function projectPostMatchReview(state, seatId) {
     const keyTurnReplay = buildKeyTurnReplay(evidence, { result, finishReason });
     const experienceReport = buildExperienceReport(evidence, { result, finishReason });
     const fairnessReceipt = buildFairnessReceipt(experienceReport, { result, finishReason });
+    const loadoutRecommendation = buildLoadoutRecommendation(evidence, { result, finishReason });
     const settlementReport = projectSettlementReport(state, seatId);
     const friendlySeries = projectFriendlySeries(state.friendlySeries, state.status);
     const isFriendly = state.mode === 'friendly';
@@ -822,9 +823,68 @@ function projectPostMatchReview(state, seatId) {
         keyTurnReplay,
         experienceReport,
         fairnessReceipt,
+        loadoutRecommendation,
         friendlySeries,
         suggestions: copy.suggestions.slice(0, 2),
         nextActions
+    };
+}
+
+function buildLoadoutRecommendation(evidence, context = {}) {
+    const result = String(context.result || '');
+    const finishReason = String(context.finishReason || '');
+    const eventTypes = new Set((Array.isArray(evidence) ? evidence : []).map(event => String(event && event.eventType || '')).filter(Boolean));
+    let recommendedPresetId = 'balanced';
+    let recommendedPresetLabel = '默认斗法谱';
+    let reasonLine = '本局公开轨迹接近均势，下一局先用默认斗法谱复核出牌和调息节奏。';
+    let practiceLine = '配合问道练习复刻开战、交权和终局窗口。';
+    if (result === 'loss') {
+        recommendedPresetId = 'shield';
+        recommendedPresetLabel = '守势斗法谱';
+        reasonLine = eventTypes.has('damage_applied')
+            ? '本局公开轨迹显示血线被压低，下一局先套用守势斗法谱测试低费防御窗口。'
+            : '本局公开轨迹显示终局前防守窗口不足，下一局先套用守势斗法谱稳住前两手。';
+        practiceLine = finishReason === 'timeout'
+            ? '配合问道练习复刻读秒前的可执行动作。'
+            : '配合问道练习复刻开战与反打窗口。';
+    } else if (result === 'win') {
+        recommendedPresetId = 'sword';
+        recommendedPresetLabel = '破阵斗法谱';
+        reasonLine = '本局公开轨迹显示主动压制有效，下一局可套用破阵斗法谱继续验证前两手压力。';
+        practiceLine = '配合问道练习确认压制不是偶然手顺。';
+    }
+    const sourceEvidence = (Array.isArray(evidence) ? evidence : [])
+        .filter(event => event && event.eventType);
+    const priorityTypes = ['damage_applied', 'block_gained', 'turn_ended', 'card_played', 'battle_started', 'match_finished'];
+    const prioritized = [
+        ...sourceEvidence.filter(event => priorityTypes.includes(String(event.eventType || ''))),
+        ...sourceEvidence.filter(event => !priorityTypes.includes(String(event.eventType || '')))
+    ];
+    const seenEvidenceKeys = new Set();
+    const evidenceRefs = prioritized
+        .filter(event => {
+            const key = `${String(event.eventType || '')}:${Number.isFinite(Number(event.sequence)) ? Math.floor(Number(event.sequence)) : ''}`;
+            if (seenEvidenceKeys.has(key)) return false;
+            seenEvidenceKeys.add(key);
+            return true;
+        })
+        .slice(0, 4)
+        .map(event => ({
+            eventType: String(event.eventType || ''),
+            sequence: Number.isFinite(Number(event.sequence)) ? Math.floor(Number(event.sequence)) : null,
+            actingSeat: String(event.actingSeat || '')
+        }));
+    return {
+        reportVersion: 'pvp-live-loadout-recommendation-v1',
+        sourceVisibility: 'public_events_and_public_content',
+        usesHiddenInformation: false,
+        rankedImpact: 'none',
+        recommendedPresetId,
+        recommendedPresetLabel,
+        reasonLine,
+        practiceLine,
+        boundaryLine: '一键套用只改下一局入队候选，不自动排队、不写正式积分。',
+        evidenceRefs
     };
 }
 

@@ -259,6 +259,22 @@ async function safeElementScreenshot(page, selector, outputPath) {
         ],
         boundary: '公平回执只汇总公开复盘证据，不读取隐藏手牌、牌库或原始事件明细，也不改正式积分或结算。',
       },
+      loadoutRecommendation: {
+        reportVersion: 'pvp-live-loadout-recommendation-v1',
+        sourceVisibility: 'public_events_and_public_content',
+        usesHiddenInformation: false,
+        rankedImpact: 'none',
+        recommendedPresetId: 'shield',
+        recommendedPresetLabel: '守势斗法谱',
+        reasonLine: '本局公开轨迹显示血线被压低，下一局先套用守势斗法谱测试低费防御窗口。',
+        practiceLine: '配合问道练习复刻开战与反打窗口。',
+        boundaryLine: '一键套用只改下一局入队候选，不自动排队、不写正式积分。',
+        evidenceRefs: [
+          { eventType: 'damage_applied', sequence: 6, actingSeat: 'A' },
+          { eventType: 'turn_ended', sequence: 7, actingSeat: 'A' },
+          { eventType: 'match_finished', sequence: 8, actingSeat: 'B' },
+        ],
+      },
       suggestions: [
         '查看认输前的生命、灵力和手牌窗口，确认是不是过早放弃。',
         '如果连续被压低血线，下一局先换守势斗法谱或保留低费防御。',
@@ -2180,6 +2196,11 @@ async function safeElementScreenshot(page, selector, outputPath) {
     seasonGoalSource: document.querySelector('[data-live-season-goal]')?.getAttribute('data-live-season-goal-source') || '',
     seasonGoalHidden: document.querySelector('[data-live-season-goal]')?.getAttribute('data-live-season-goal-hidden') || '',
     seasonGoalActionIds: Array.from(document.querySelectorAll('[data-live-season-goal-action]')).map(button => button.getAttribute('data-live-season-goal-action')),
+    loadoutRecommendationText: document.querySelector('[data-live-loadout-recommendation]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+    loadoutRecommendationSource: document.querySelector('[data-live-loadout-recommendation]')?.getAttribute('data-live-loadout-recommendation-source') || '',
+    loadoutRecommendationHidden: document.querySelector('[data-live-loadout-recommendation]')?.getAttribute('data-live-loadout-recommendation-hidden') || '',
+    loadoutRecommendationPreset: document.querySelector('[data-live-loadout-recommendation]')?.getAttribute('data-live-loadout-recommendation-preset') || '',
+    loadoutRecommendationAction: document.querySelector('[data-live-loadout-recommendation-action]')?.getAttribute('data-live-loadout-recommendation-action') || '',
     reviewActionIds: Array.from(document.querySelectorAll('[data-live-post-review-action]')).map(button => button.getAttribute('data-live-post-review-action')),
     reviewPayload: window.PVPScene.getLiveSnapshot()?.postMatchReview || null,
     seasonGoalPayload: window.PVPScene.getLiveSnapshot()?.seasonGoal || null,
@@ -2216,6 +2237,17 @@ async function safeElementScreenshot(page, selector, outputPath) {
       && reviewParity?.finishReason === true
       && reviewParity?.evidence === true
       && reviewParity?.nextActions === true
+      && /改谱建议/.test(surrenderProbe.loadoutRecommendationText)
+      && /守势斗法谱/.test(surrenderProbe.loadoutRecommendationText)
+      && /一键套用/.test(surrenderProbe.loadoutRecommendationText)
+      && /不自动排队/.test(surrenderProbe.loadoutRecommendationText)
+      && surrenderProbe.loadoutRecommendationSource === 'public_events_and_public_content'
+      && surrenderProbe.loadoutRecommendationHidden === 'false'
+      && surrenderProbe.loadoutRecommendationPreset === 'shield'
+      && surrenderProbe.loadoutRecommendationAction === 'apply'
+      && surrenderProbe.reviewPayload?.loadoutRecommendation?.reportVersion === 'pvp-live-loadout-recommendation-v1'
+      && surrenderProbe.textPayload?.loadoutRecommendation?.recommendedPresetId === 'shield'
+      && !/payload|hand|deck|cardId|instanceId|loadoutSnapshot|reward|rating|elo/i.test(JSON.stringify(surrenderProbe.reviewPayload?.loadoutRecommendation || {}))
       && !/reward|rating|elo/i.test(`${surrenderProbe.reviewText} ${JSON.stringify(surrenderProbe.reviewPayload || {})}`),
     JSON.stringify({ ...surrenderProbe, reviewParity }),
   );
@@ -2379,6 +2411,31 @@ async function safeElementScreenshot(page, selector, outputPath) {
       && postReviewActionProbe.loadoutDisabled.every(value => value === false)
       && !/findOpponent|reportMatchResult|GhostEnemy|startPVPBattle|didWin|matchTicket/.test(JSON.stringify(postReviewActionProbe.calls)),
     JSON.stringify(postReviewActionProbe),
+  );
+
+  const loadoutRecommendationApplyCallStart = await page.evaluate(() => window.__livePvpAuditCalls.length);
+  await page.click('[data-live-loadout-recommendation-action="apply"]', { timeout: 5000, force: true });
+  await page.waitForTimeout(100);
+  const loadoutRecommendationApplyProbe = await page.evaluate(callStart => ({
+    phase: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-phase') || '',
+    hint: document.querySelector('[data-live-last-error]')?.textContent || '',
+    selectedLoadout: document.querySelector('[data-live-selected-loadout]')?.textContent || '',
+    selectedPreset: document.querySelector('[data-live-loadout-preset].selected')?.getAttribute('data-live-loadout-preset') || '',
+    loadoutPanelFocused: document.querySelector('.pvp-live-loadout-selector')?.getAttribute('data-live-review-focus') || '',
+    presetDisabled: Array.from(document.querySelectorAll('[data-live-loadout-preset]')).map(button => button.disabled),
+    calls: window.__livePvpAuditCalls.slice(callStart),
+  }), loadoutRecommendationApplyCallStart);
+  add(
+    'live UI one-click applies post-match loadout recommendation without queueing',
+    loadoutRecommendationApplyProbe.phase === 'finished'
+      && loadoutRecommendationApplyProbe.selectedPreset === 'shield'
+      && /守势斗法谱/.test(loadoutRecommendationApplyProbe.selectedLoadout)
+      && /已套用.*下一局/.test(loadoutRecommendationApplyProbe.hint)
+      && /不自动排队|不写正式积分/.test(loadoutRecommendationApplyProbe.hint)
+      && loadoutRecommendationApplyProbe.loadoutPanelFocused === 'loadout_recommendation'
+      && loadoutRecommendationApplyProbe.presetDisabled.every(value => value === false)
+      && !/findOpponent|reportMatchResult|GhostEnemy|startPVPBattle|didWin|matchTicket|joinQueue|requestRematch/.test(JSON.stringify(loadoutRecommendationApplyProbe.calls)),
+    JSON.stringify(loadoutRecommendationApplyProbe),
   );
 
   await page.click('[data-live-post-review-action="practice"]', { timeout: 5000, force: true });
@@ -2812,6 +2869,9 @@ async function safeElementScreenshot(page, selector, outputPath) {
     friendlyText: document.querySelector('[data-live-friendly-series]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
     snapshot: window.PVPScene.getLiveSnapshot()?.friendlySeries || null,
     actionDisabled: Object.fromEntries(Array.from(document.querySelectorAll('[data-live-post-review-action]')).map(button => [button.getAttribute('data-live-post-review-action'), button.disabled])),
+    recommendationLocked: document.querySelector('[data-live-loadout-recommendation]')?.getAttribute('data-live-loadout-recommendation-locked') || '',
+    recommendationActionDisabled: document.querySelector('[data-live-loadout-recommendation-action="apply"]')?.disabled ?? null,
+    recommendationActionText: document.querySelector('[data-live-loadout-recommendation-action="apply"]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
     calls: window.__livePvpAuditCalls,
   }));
   add(
@@ -2830,6 +2890,9 @@ async function safeElementScreenshot(page, selector, outputPath) {
       && friendlyRematchProbe.actionDisabled?.friendly_rematch === true
       && friendlyRematchProbe.actionDisabled?.queue_again === true
       && friendlyRematchProbe.actionDisabled?.practice === true
+      && friendlyRematchProbe.recommendationLocked === 'true'
+      && friendlyRematchProbe.recommendationActionDisabled === true
+      && /锁谱/.test(friendlyRematchProbe.recommendationActionText)
       && friendlyRematchProbe.calls.some(call => call.method === 'requestRematch')
       && !/findOpponent|reportMatchResult|GhostEnemy|startPVPBattle|didWin|matchTicket/.test(JSON.stringify(friendlyRematchProbe.calls)),
     JSON.stringify(friendlyRematchProbe),
@@ -3492,6 +3555,7 @@ async function safeElementScreenshot(page, selector, outputPath) {
       },
       recentEvents: [{ eventType: 'snapshot_locked', payload: { seats: { A: opponentLoadoutSummary, B: selfLoadoutSummary } } }],
     });
+    window.__makeLivePvpMobileAuditStateView = makeStateView;
     window.PVPService.findOpponent = async () => {
       throw new Error('live UI should not call legacy PVP matching or settlement');
     };
@@ -3790,6 +3854,107 @@ async function safeElementScreenshot(page, selector, outputPath) {
       && mobileProbe.tabs.every((rect) => rect && rect.left >= -1 && rect.right <= mobileProbe.viewportWidth + 2)
       && mobileBottomProbe.buttons.every((rect) => rect && rect.left >= -1 && rect.right <= mobileBottomProbe.viewportWidth + 2 && rect.bottom <= mobileBottomProbe.viewportHeight + 2 && rect.height >= 34),
     JSON.stringify({ top: mobileProbe, bottom: mobileBottomProbe }),
+  );
+  await mobilePage.evaluate(async () => {
+    const finishedView = {
+      ...window.__makeLivePvpMobileAuditStateView(8, 'B', 'finished'),
+      status: 'finished',
+      postMatchReview: {
+        reportVersion: 'pvp-live-post-match-review-v1',
+        title: '首败复盘 MVP',
+        result: 'loss',
+        winnerSeat: 'A',
+        loserSeat: 'B',
+        finishReason: 'lethal',
+        summary: '本局公开轨迹显示血线被压低，下一局先测试守势谱。',
+        evidence: [
+          { eventType: 'damage_applied', sequence: 6, actingSeat: 'A' },
+          { eventType: 'match_finished', sequence: 8, actingSeat: 'A' },
+        ],
+        loadoutRecommendation: {
+          reportVersion: 'pvp-live-loadout-recommendation-v1',
+          sourceVisibility: 'public_events_and_public_content',
+          usesHiddenInformation: false,
+          rankedImpact: 'none',
+          recommendedPresetId: 'shield',
+          recommendedPresetLabel: '守势斗法谱',
+          reasonLine: '本局公开轨迹显示血线被压低，下一局先套用守势斗法谱测试低费防御窗口。',
+          practiceLine: '配合问道练习复刻开战与反打窗口。',
+          boundaryLine: '一键套用只改下一局入队候选，不自动排队、不写正式积分。',
+          evidenceRefs: [
+            { eventType: 'damage_applied', sequence: 6, actingSeat: 'A' },
+            { eventType: 'match_finished', sequence: 8, actingSeat: 'A' },
+          ],
+        },
+        suggestions: ['先稳住前两手。'],
+        nextActions: [
+          { id: 'review_events', label: '查看权威事件' },
+          { id: 'adjust_loadout', label: '调整斗法谱' },
+          { id: 'queue_again', label: '继续真人排位' },
+        ],
+      },
+    };
+    window.PVPService.live.getMatch = async () => ({
+      success: true,
+      matchId: 'pvplm-browser-live-mobile',
+      seatId: 'B',
+      stateView: finishedView,
+    });
+    await window.PVPScene.refreshLiveMatch();
+    document.querySelector('[data-live-loadout-recommendation]')?.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'auto' });
+  });
+  await mobilePage.waitForTimeout(100);
+  const mobileRecommendationProbe = await mobilePage.evaluate(() => {
+    const card = document.querySelector('[data-live-loadout-recommendation]');
+    const button = document.querySelector('[data-live-loadout-recommendation-action="apply"]');
+    const cardStyle = card ? window.getComputedStyle(card) : null;
+    const cardRect = card?.getBoundingClientRect();
+    const buttonRect = button?.getBoundingClientRect();
+    return {
+      text: card?.textContent?.replace(/\s+/g, ' ').trim() || '',
+      source: card?.getAttribute('data-live-loadout-recommendation-source') || '',
+      hidden: card?.getAttribute('data-live-loadout-recommendation-hidden') || '',
+      preset: card?.getAttribute('data-live-loadout-recommendation-preset') || '',
+      locked: card?.getAttribute('data-live-loadout-recommendation-locked') || '',
+      overflow: cardStyle?.overflow || '',
+      overflowWrap: cardStyle?.overflowWrap || '',
+      cardScrollWidth: card ? Math.round(card.scrollWidth) : 0,
+      cardClientWidth: card ? Math.round(card.clientWidth) : 0,
+      cardRect: cardRect ? {
+        left: Math.round(cardRect.left),
+        right: Math.round(cardRect.right),
+        width: Math.round(cardRect.width),
+        height: Math.round(cardRect.height),
+      } : null,
+      buttonDisabled: button?.disabled ?? null,
+      buttonRect: buttonRect ? {
+        left: Math.round(buttonRect.left),
+        right: Math.round(buttonRect.right),
+        width: Math.round(buttonRect.width),
+        height: Math.round(buttonRect.height),
+      } : null,
+      viewportWidth: window.innerWidth,
+    };
+  });
+  add(
+    'live UI mobile renders post-match loadout recommendation card readably',
+    /改谱建议/.test(mobileRecommendationProbe.text)
+      && /守势斗法谱/.test(mobileRecommendationProbe.text)
+      && /一键套用/.test(mobileRecommendationProbe.text)
+      && /不自动排队/.test(mobileRecommendationProbe.text)
+      && mobileRecommendationProbe.source === 'public_events_and_public_content'
+      && mobileRecommendationProbe.hidden === 'false'
+      && mobileRecommendationProbe.preset === 'shield'
+      && mobileRecommendationProbe.locked === 'false'
+      && mobileRecommendationProbe.buttonDisabled === false
+      && mobileRecommendationProbe.buttonRect?.height >= 32
+      && mobileRecommendationProbe.cardRect?.left >= -1
+      && mobileRecommendationProbe.cardRect?.right <= mobileRecommendationProbe.viewportWidth + 2
+      && mobileRecommendationProbe.buttonRect?.left >= -1
+      && mobileRecommendationProbe.buttonRect?.right <= mobileRecommendationProbe.viewportWidth + 2
+      && mobileRecommendationProbe.cardScrollWidth <= mobileRecommendationProbe.cardClientWidth + 2
+      && mobileRecommendationProbe.overflowWrap !== 'normal',
+    JSON.stringify(mobileRecommendationProbe),
   );
 
   await safeElementScreenshot(page, '[data-live-pvp-root]', path.join(outDir, 'pvp-live-panel.png'));

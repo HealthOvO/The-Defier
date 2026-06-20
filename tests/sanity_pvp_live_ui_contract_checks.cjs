@@ -389,6 +389,9 @@ assert.ok(refreshLiveMatchBody.includes('this.clearLiveIntentInFlight()'), 'manu
   "id: 'sword'",
   "id: 'shield'",
   "return phase === 'idle' || phase === 'finished' || phase === 'invalidated'",
+  'getLiveLoadoutRecommendation(',
+  'renderLiveLoadoutRecommendation(',
+  'applyLivePostReviewLoadoutRecommendation(',
 ].forEach((needle) => {
   assert.ok(scene.includes(needle), `PVPScene should pin selectable live loadout preset marker: ${needle}`);
 });
@@ -665,6 +668,8 @@ assert.ok(browserGate.includes('node tests/browser_pvp_live_audit.mjs "$BASE_URL
   'data-live-waiting-report',
   'data-live-post-match-review',
   'data-live-post-review-action',
+  'data-live-loadout-recommendation',
+  'data-live-loadout-recommendation-action',
   'data-live-action="cancel-rematch"',
   'live UI renders first-match guide report without reward or rating promises',
   'live UI renders active opening safeguard report without hidden payloads',
@@ -674,6 +679,7 @@ assert.ok(browserGate.includes('node tests/browser_pvp_live_audit.mjs "$BASE_URL
   'B \\+3',
   'live UI renders 120s no-real-player waiting branch without ghost fallback',
   'live UI renders post-match review MVP from public finished state',
+  'live UI one-click applies post-match loadout recommendation without queueing',
   'live UI renders post-match key-turn replay from public events',
   'live UI post-match key-turn action focuses replay without hidden payloads',
   'live UI renders post-match experience report from public events',

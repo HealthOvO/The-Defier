@@ -1,5 +1,31 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-21: V10-S9U live PVP post-match loadout recommendation
+  - 本轮完成
+    - `server/pvp-live/engine/state-view.js` 的 `postMatchReview` 新增 `loadoutRecommendation`，只基于公开事件和公开斗法谱内容给出下一局推荐谱；败局推荐守势谱、胜局推荐破阵谱、平局/默认推荐默认谱，报告固定 `public_events_and_public_content / usesHiddenInformation=false / rankedImpact=none`。
+    - `js/scenes/pvp-scene.js` 新增赛后“改谱建议”卡片和“一键套用”：点击只更新下一局入队候选，不自动排队、不请求友谊再战、不写正式积分；前端还会拒绝非公开来源，并用本地预设名与边界文案归一化展示。
+    - `waiting_rematch` 下改谱建议仍展示复盘结论，但按钮会进入禁用锁谱状态，避免玩家以为等待对手确认时还能修改已发出的再战候选。
+    - `tests/browser_pvp_live_real_backend_smoke.mjs` 的真人链路点击 helper 从桌面 `force` click 改成“控件可见、未禁用、命中自身后再真实鼠标/触摸点击”，并在连续动作间等待 action lock 释放，防止测试绕过真实按钮状态。
+    - 浏览器审计新增移动端 finished 复盘场景，直打 recommendation 卡片的文本、边界、按钮高度、视口内布局和 wrapping，不再只靠 selector marker 间接覆盖。
+  - 已验证
+    - 红测：`node tests/sanity_pvp_live_route_checks.cjs` 在实现前失败于缺少 `pvp-live-loadout-recommendation-v1`。
+    - 红测：`node tests/sanity_pvp_live_ui_contract_checks.cjs` 在实现前失败于缺少 `applyLivePostReviewLoadoutRecommendation`。
+    - 红测：`node tests/sanity_release_gate_coverage_checks.cjs` 在实现前失败于缺少 `getLiveLoadoutRecommendation(`。
+    - 绿测：`node --check server/pvp-live/engine/state-view.js`
+    - 绿测：`node --check js/scenes/pvp-scene.js`
+    - 绿测：`node --check tests/browser_pvp_live_audit.mjs`
+    - 绿测：`node --check tests/browser_pvp_live_real_backend_smoke.mjs`
+    - 绿测：`node tests/sanity_pvp_live_engine_checks.cjs`
+    - 绿测：`node tests/sanity_pvp_live_route_checks.cjs`
+    - 绿测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs`
+    - 绿测：`node tests/sanity_pvp_live_ui_contract_checks.cjs`
+    - 绿测：`node tests/sanity_release_gate_coverage_checks.cjs`
+    - 构建：`npm run build:pages`
+    - 浏览器审计：`node tests/browser_pvp_live_audit.mjs http://127.0.0.1:4173 output/pvp-live-loadout-recommendation-audit-20260621-final2`，77/77 findings、0 console error。
+    - 真实后端 smoke：`node tests/browser_pvp_live_real_backend_smoke.mjs http://127.0.0.1:4173 output/pvp-live-loadout-recommendation-real-20260621-final3`，53/53 findings、0 console error。
+  - 当前结论
+    - live PVP 的赛后复盘现在不只是解释胜负，还能把公开轨迹转成下一局可执行的改谱动作：败方能低摩擦切到守势验证防守窗口，胜方能继续验证压制路线，平局回到默认谱复核基本节奏。该切片仍不改变生命、伤害、抽牌、灵力、起手、匹配、正式积分、奖励、赛季验证或结算，只把“复盘 -> 下一局选择”的可玩闭环补上。
+
 - 2026-06-21: V10-S9T live PVP mobile touch chain hardening
   - 本轮完成
     - `tests/browser_pvp_live_real_backend_smoke.mjs` 将 mobile 真实双账号 live PVP 主链从程序级 `readyLiveMatch` / `submitLiveCard` / `endLiveTurn` 调用继续加硬为真实浏览器触摸链：准备、开局出牌二次确认、结束回合交权、B 端护体后反打出牌、投降确认、取消友谊再战后的再次请求，都必须走 `page.touchscreen.tap()` 命中的 UI 控件。

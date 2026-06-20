@@ -45,6 +45,7 @@ export const PVPScene = {
   liveInlineHint: '',
   liveReviewFocus: '',
   liveLoadoutReviewFocused: false,
+  liveLoadoutReviewFocusReason: 'loadout',
   rankingFocusId: null,
   rankingFocusData: null,
   lastLoadedRankings: [],
@@ -1596,6 +1597,7 @@ export const PVPScene = {
       keyTurnReplay: this.getLiveKeyTurnReplay(report.keyTurnReplay),
       experienceReport: this.getLiveExperienceReport(report.experienceReport),
       fairnessReceipt: this.getLiveFairnessReceipt(report.fairnessReceipt),
+      loadoutRecommendation: this.getLiveLoadoutRecommendation(report.loadoutRecommendation),
       friendlySeries: this.getLiveFriendlySeries(report.friendlySeries),
       suggestions: suggestions.slice(0, 2).map(item => String(item || '')).filter(Boolean),
       nextActions: nextActions.slice(0, 6).map(action => ({
@@ -1604,6 +1606,68 @@ export const PVPScene = {
         detail: String(action && action.detail || '')
       })).filter(action => action.id && action.label)
     };
+  },
+  getLiveLoadoutRecommendation(source) {
+    const report = source && typeof source === 'object' ? source : null;
+    if (!report || report.reportVersion !== 'pvp-live-loadout-recommendation-v1') return null;
+    if (String(report.sourceVisibility || '') !== 'public_events_and_public_content') return null;
+    if (report.usesHiddenInformation === true || String(report.rankedImpact || '') !== 'none') return null;
+    const presets = this.getLiveLoadoutPresets();
+    const recommendedPresetId = String(report.recommendedPresetId || '').trim();
+    const preset = presets.find(item => item.id === recommendedPresetId);
+    if (!preset) return null;
+    const evidenceRefs = Array.isArray(report.evidenceRefs) ? report.evidenceRefs : [];
+    return {
+      reportVersion: 'pvp-live-loadout-recommendation-v1',
+      sourceVisibility: String(report.sourceVisibility || 'public_events_and_public_content'),
+      usesHiddenInformation: false,
+      rankedImpact: 'none',
+      recommendedPresetId: preset.id,
+      recommendedPresetLabel: preset.label,
+      reasonLine: String(report.reasonLine || ''),
+      practiceLine: String(report.practiceLine || ''),
+      boundaryLine: '一键套用只改下一局入队候选，不自动排队、不写正式积分。',
+      evidenceRefs: evidenceRefs.slice(0, 4).map(event => ({
+        eventType: String(event && event.eventType || ''),
+        sequence: Number.isFinite(Number(event && event.sequence)) ? Math.floor(Number(event.sequence)) : null,
+        actingSeat: String(event && event.actingSeat || '')
+      })).filter(event => event.eventType)
+    };
+  },
+  renderLiveLoadoutRecommendation(review, phase = 'idle') {
+    const recommendation = review && review.loadoutRecommendation ? this.getLiveLoadoutRecommendation(review.loadoutRecommendation) : null;
+    if (!recommendation) return '';
+    const editable = this.canEditLiveLoadout(phase);
+    const evidenceLine = recommendation.evidenceRefs
+      .map(event => `${event.eventType}${event.sequence !== null ? ` #${event.sequence}` : ''}`)
+      .join(' / ');
+    return `
+      <div
+        class="pvp-live-loadout-recommendation"
+        data-live-loadout-recommendation
+        data-live-loadout-recommendation-source="${this.escapeHtml(recommendation.sourceVisibility)}"
+        data-live-loadout-recommendation-hidden="${recommendation.usesHiddenInformation ? 'true' : 'false'}"
+        data-live-loadout-recommendation-preset="${this.escapeHtml(recommendation.recommendedPresetId)}"
+        data-live-loadout-recommendation-locked="${editable ? 'false' : 'true'}"
+      >
+        <div class="pvp-live-loadout-recommendation-head">
+          <span>改谱建议</span>
+          <span>${this.escapeHtml(recommendation.recommendedPresetLabel)}</span>
+        </div>
+        ${recommendation.reasonLine ? `<div class="pvp-live-loadout-recommendation-line">${this.escapeHtml(recommendation.reasonLine)}</div>` : ''}
+        ${recommendation.practiceLine ? `<div class="pvp-live-loadout-recommendation-line">${this.escapeHtml(recommendation.practiceLine)}</div>` : ''}
+        ${evidenceLine ? `<div class="pvp-live-loadout-recommendation-evidence">公开证据：${this.escapeHtml(evidenceLine)}</div>` : ''}
+        <div class="pvp-live-loadout-recommendation-boundary">${this.escapeHtml(recommendation.boundaryLine)}</div>
+        <div class="pvp-live-loadout-recommendation-actions">
+          <button
+            type="button"
+            data-live-loadout-recommendation-action="apply"
+            onclick="PVPScene.applyLivePostReviewLoadoutRecommendation()"
+            ${editable ? '' : 'disabled aria-disabled="true"'}
+          >${editable ? '一键套用' : '下一局已锁谱'}</button>
+        </div>
+      </div>
+    `;
   },
   getLiveSettlementReport(source) {
     const report = source && typeof source === 'object' ? source : null;
@@ -2298,6 +2362,55 @@ export const PVPScene = {
     if (phase !== 'waiting_rematch') return false;
     return ['friendly_rematch', 'adjust_loadout', 'practice', 'queue_again'].includes(String(actionId || ''));
   },
+  applyLivePostReviewLoadoutRecommendation() {
+    const session = this.getLiveSession();
+    const state = session && typeof session.getState === 'function' ? session.getState() : null;
+    const phase = state && state.phase ? state.phase : 'idle';
+    const review = this.getLivePostMatchReview(state && state.stateView ? state.stateView : null);
+    const recommendation = review && review.loadoutRecommendation ? this.getLiveLoadoutRecommendation(review.loadoutRecommendation) : null;
+    const root = document.querySelector('[data-live-pvp-root]');
+    const setHint = (message) => {
+      this.liveInlineHint = message;
+      const hint = root ? root.querySelector('[data-live-last-error]') : null;
+      if (hint) hint.textContent = message;
+      if (typeof Utils !== 'undefined' && Utils && typeof Utils.showBattleLog === 'function') {
+        Utils.showBattleLog(message);
+      }
+    };
+    if (!recommendation) {
+      setHint('当前复盘没有可套用的公开改谱建议。');
+      return;
+    }
+    if (!this.canEditLiveLoadout(phase)) {
+      setHint('当前对局已锁谱；改谱建议只能用于下一局入队前。');
+      return;
+    }
+    const presets = this.getLiveLoadoutPresets();
+    const preset = presets.find(item => item.id === recommendation.recommendedPresetId);
+    if (!preset) {
+      setHint('推荐斗法谱暂不可用；本次不会改动入队候选。');
+      return;
+    }
+    this.liveSelectedLoadoutPreset = preset.id;
+    this.liveLoadoutReviewFocused = true;
+    this.liveLoadoutReviewFocusReason = 'loadout_recommendation';
+    this.renderLivePanel();
+    const nextRoot = document.querySelector('[data-live-pvp-root]');
+    const loadoutPanel = nextRoot ? nextRoot.querySelector('.pvp-live-loadout-selector') : null;
+    if (loadoutPanel) {
+      loadoutPanel.setAttribute('data-live-review-focus', 'loadout_recommendation');
+      if (typeof loadoutPanel.scrollIntoView === 'function') {
+        loadoutPanel.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      }
+    }
+    const message = `已套用${preset.label}到下一局入队候选；不自动排队，也不写正式积分。`;
+    this.liveInlineHint = message;
+    const hint = nextRoot ? nextRoot.querySelector('[data-live-last-error]') : null;
+    if (hint) hint.textContent = message;
+    if (typeof Utils !== 'undefined' && Utils && typeof Utils.showBattleLog === 'function') {
+      Utils.showBattleLog(message);
+    }
+  },
   renderLivePostMatchReview(view, phase = 'idle') {
     const review = this.getLivePostMatchReview(view);
     if (!review) return '';
@@ -2333,6 +2446,7 @@ export const PVPScene = {
       ${this.renderLiveExperienceReport(review)}
       ${this.renderLiveKeyTurnReplay(review)}
       ${this.renderLiveSeasonGoalCard(view)}
+      ${this.renderLiveLoadoutRecommendation(review, phase)}
       <div class="pvp-live-review-actions">
         ${review.nextActions.map(action => `
           <button
@@ -2935,6 +3049,7 @@ export const PVPScene = {
     if (phase !== 'finished' && phase !== 'waiting_rematch') {
       this.liveReviewFocus = '';
       this.liveLoadoutReviewFocused = false;
+      this.liveLoadoutReviewFocusReason = 'loadout';
       root.querySelectorAll('[data-live-review-focus]').forEach(element => {
         element.removeAttribute('data-live-review-focus');
       });
@@ -2954,7 +3069,7 @@ export const PVPScene = {
     }
     if (this.liveLoadoutReviewFocused) {
       const loadoutPanel = root.querySelector('.pvp-live-loadout-selector');
-      if (loadoutPanel) loadoutPanel.setAttribute('data-live-review-focus', 'loadout');
+      if (loadoutPanel) loadoutPanel.setAttribute('data-live-review-focus', this.liveLoadoutReviewFocusReason || 'loadout');
     }
 
     const self = view && view.self ? view.self : null;
@@ -3784,6 +3899,7 @@ export const PVPScene = {
     if (id === 'adjust_loadout') {
       if (!this.liveReviewFocus) this.liveReviewFocus = 'events';
       this.liveLoadoutReviewFocused = true;
+      this.liveLoadoutReviewFocusReason = 'loadout';
       const loadoutPanel = root ? root.querySelector('.pvp-live-loadout-selector') : null;
       if (loadoutPanel) {
         loadoutPanel.setAttribute('data-live-review-focus', 'loadout');

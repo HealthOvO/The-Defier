@@ -29,6 +29,7 @@ const documentStub = {
     };
   },
   body: { appendChild() {} },
+  getElementById() { return null; },
   querySelector() { return null; },
   querySelectorAll() { return []; }
 };
@@ -938,5 +939,102 @@ await PVPScene.surrenderLiveMatch();
 assert.equal(surrenderIntents.length, 1, 'second live surrender click inside confirmation window should submit exactly one surrender intent');
 assert.equal(surrenderIntents[0].intentType, 'surrender', 'confirmed live surrender should still use the authoritative surrender intent type');
 assert.equal(PVPScene.liveSurrenderConfirmUntil, 0, 'confirmed live surrender should clear the confirmation window');
+
+let recommendationState = {
+  phase: 'finished',
+  matchId: 'pvpm-ui-runtime-loadout-recommendation',
+  seatId: 'A',
+  stateView: {
+    matchId: 'pvpm-ui-runtime-loadout-recommendation',
+    status: 'finished',
+    stateVersion: 44,
+    postMatchReview: {
+      reportVersion: 'pvp-live-post-match-review-v1',
+      result: 'loss',
+      finishReason: 'lethal',
+      summary: '公开轨迹显示血线被压低。',
+      evidence: [
+        { eventType: 'damage_applied', sequence: 8, actingSeat: 'B' },
+        { eventType: 'match_finished', sequence: 12, actingSeat: 'B' }
+      ],
+      suggestions: ['下一局先稳住前两手。'],
+      loadoutRecommendation: {
+        reportVersion: 'pvp-live-loadout-recommendation-v1',
+        sourceVisibility: 'public_events_and_public_content',
+        usesHiddenInformation: false,
+        rankedImpact: 'none',
+        recommendedPresetId: 'shield',
+        recommendedPresetLabel: '守势斗法谱',
+        reasonLine: '本局公开轨迹显示血线被压低，下一局先套用守势斗法谱测试低费防御窗口。',
+        practiceLine: '配合问道练习复刻开战与反打窗口。',
+        boundaryLine: '一键套用只改下一局入队候选，不自动排队、不写正式积分。',
+        evidenceRefs: [
+          { eventType: 'damage_applied', sequence: 8, actingSeat: 'B' },
+          { eventType: 'match_finished', sequence: 12, actingSeat: 'B' }
+        ]
+      },
+      nextActions: [
+        { id: 'friendly_rematch', label: '低压力再战' },
+        { id: 'queue_again', label: '继续真人排位' }
+      ]
+    }
+  }
+};
+const recommendationCalls = [];
+PVPScene.liveSelectedLoadoutPreset = 'sword';
+PVPScene.liveLoadoutReviewFocused = false;
+PVPScene.liveInlineHint = '';
+PVPScene.renderLivePanel = () => {};
+PVPScene.startLivePolling = () => {};
+PVPScene.stopLivePolling = () => {};
+PVPScene.getGameRef = () => ({ player: { name: '甲' } });
+PVPScene.getLiveSession = () => ({
+  getState: () => recommendationState,
+  joinQueue: async (options) => {
+    recommendationCalls.push({ method: 'joinQueue', options });
+    return recommendationState;
+  },
+  requestRematch: async (options) => {
+    recommendationCalls.push({ method: 'requestRematch', options });
+    return recommendationState;
+  }
+});
+const normalizedRecommendation = PVPScene.getLiveLoadoutRecommendation({
+  ...recommendationState.stateView.postMatchReview.loadoutRecommendation,
+  recommendedPresetLabel: '伪造奖励谱',
+  boundaryLine: '写入正式积分'
+});
+assert.equal(normalizedRecommendation.recommendedPresetLabel, '守势斗法谱', 'live UI should render the local preset label for recommendations');
+assert.equal(normalizedRecommendation.boundaryLine, '一键套用只改下一局入队候选，不自动排队、不写正式积分。', 'live UI should keep the recommendation boundary local and fixed');
+assert.equal(
+  PVPScene.getLiveLoadoutRecommendation({
+    ...recommendationState.stateView.postMatchReview.loadoutRecommendation,
+    sourceVisibility: 'hidden_deck'
+  }),
+  null,
+  'live UI should reject non-public loadout recommendation sources',
+);
+PVPScene.applyLivePostReviewLoadoutRecommendation();
+assert.equal(PVPScene.liveSelectedLoadoutPreset, 'shield', 'one-click loadout recommendation should select the recommended preset locally');
+assert.equal(recommendationState.phase, 'finished', 'one-click loadout recommendation should keep the post-match review phase');
+assert.equal(recommendationCalls.length, 0, 'one-click loadout recommendation must not queue or request rematch by itself');
+assert.match(PVPScene.liveInlineHint, /下一局/, 'one-click loadout recommendation should explain the next-game scope');
+assert.match(PVPScene.liveInlineHint, /不自动排队/, 'one-click loadout recommendation should not auto queue');
+assert.match(PVPScene.liveInlineHint, /不写正式积分/, 'one-click loadout recommendation should not write ranked state');
+
+await PVPScene.joinLiveQueue();
+assert.equal(recommendationCalls.length, 1, 'queue after applying recommendation should perform exactly one queue call');
+assert.equal(recommendationCalls[0].method, 'joinQueue', 'queue after recommendation should use live queue');
+assert.equal(recommendationCalls[0].options?.loadout?.identitySlot, 'shield', 'queue after recommendation should submit the recommended loadout preset');
+
+recommendationCalls.length = 0;
+recommendationState = {
+  ...recommendationState,
+  phase: 'finished'
+};
+await PVPScene.handleLivePostReviewAction('friendly_rematch');
+assert.equal(recommendationCalls.length, 1, 'friendly rematch after applying recommendation should perform exactly one rematch call');
+assert.equal(recommendationCalls[0].method, 'requestRematch', 'friendly rematch after recommendation should use rematch service');
+assert.equal(recommendationCalls[0].options?.loadout?.identitySlot, 'shield', 'friendly rematch after recommendation should submit the recommended loadout preset');
 
 console.log('PVP live UI runtime checks passed.');
