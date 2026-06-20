@@ -1,5 +1,26 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-20: V10-S9K live PVP entry safeguard action loop
+  - 本轮完成
+    - `js/scenes/pvp-scene.js` 把上一轮 `connection_health_failed` 的结构化 `connectionHealth.actions` 接成真正可点的 UI：idle blocked 状态下，`join-queue` 会从“入队”切成“重试检测”，`practice-live` 会按 `practice` action 启用，恢复健康 idle 后自动还原正常入队文案和禁用练习入口。
+    - 新增 `getLiveConnectionHealthError()`、`isLiveEntrySafeguardBlocked()`、`hasLiveEntrySafeguardAction()`，统一规范化 blocked / risky 入场报告，避免 UI 自己猜测弱网原因；只有 `phase=idle` 且 `reason=connection_health_failed` 时才触发入口保障 CTA，不混入好友邀请、友谊再战、长等待、finished 复盘或旧镜像 PVP。
+    - 新增 `buildLiveEntrySafeguardPracticeScenario()` 与 `commitLiveEntrySafeguardPracticeHandoff()`：连接健康阻断后点“问道练习”会进入 `entry_safeguard:connection_health_failed` 的 replay-only / practice-only 练习，不取消队列、不写正式积分、不触发旧 `findOpponent / reportMatchResult / startPVPBattle` 链路，也不读取对手隐藏手牌或牌库。
+    - `openLivePracticeHint()` 先尝试 entry safeguard drill，再 fallback 到原有长等待练习；长等待练习的 `cancelQueue` 与 matched-race 恢复链保持原样，正式重试入队成功进入 waiting / matched / setup / active 后会清理旧 drill 状态。
+    - `tests/browser_pvp_live_audit.mjs` 新增真实点击路径：blocked join 后必须显示“重试检测”、启用“问道练习”，点练习后必须打开 no-score entry safeguard drill，并确认未调用 `cancelQueue` 或旧镜像 PVP / 结算 API。
+    - `tests/sanity_pvp_live_ui_runtime_checks.mjs`、`tests/sanity_pvp_live_ui_contract_checks.cjs`、`tests/sanity_release_gate_coverage_checks.cjs` 固定 helper、handler 顺序、按钮态、drill 边界和 browser finding，防止 entry safeguard helper 再变成死代码。
+  - 已验证
+    - 红测：`node tests/browser_pvp_live_audit.mjs http://127.0.0.1:4173 output/pvp-live-entry-safeguard-red` 在实现前 66/68，失败于 blocked 后 `join-queue` 仍显示“入队”、`practice-live` 禁用，且点击练习未进入 drill。
+    - 绿测：`node --check js/scenes/pvp-scene.js`
+    - 绿测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs`
+    - 绿测：`node tests/sanity_pvp_live_ui_contract_checks.cjs`
+    - 绿测：`node tests/sanity_release_gate_coverage_checks.cjs`
+    - 构建：`npm run build:pages`
+    - 浏览器审计：`node tests/browser_pvp_live_audit.mjs http://127.0.0.1:4173 output/pvp-live-entry-safeguard-green-2`，68/68 findings、0 console error。
+    - 真实后端 smoke：`node tests/browser_pvp_live_real_backend_smoke.mjs http://127.0.0.1:4173 output/pvp-live-entry-safeguard-real`，41/41 findings、0 console error。
+    - 全量 Node：`npm run test:node`
+  - 当前结论
+    - 连接健康被挡的玩家不再只看到失败文案：现在有明确“重试检测”和“不计分练习”两条可操作路径，既保护正式真人排位双方体验，也给弱网玩家一个即时可玩的练习出口。该切片仍不改变伤害、生命、抽牌、灵力、起手、匹配评分、正式积分、奖励、赛季验证或结算；线上部署、多地区真实弱网样本和更完整的生产监控仍未封板。
+
 - 2026-06-20: V10-S9J live PVP ranked connection health gate
   - 本轮完成
     - `server/pvp-live/live-store.js` 为正式排位 `/api/pvp/live/queue/join` 增加 `pvp-live-queue-connection-health-v1` 入场报告：客户端探测缺失会降级为 `not_measured`，高 RTT / 失败探测 / 明确 risky 或 blocked 会在入队前返回稳定 `connection_health_failed`，并附带 `retry_connection_check` 与 `practice` 行动建议，不让弱网高风险用户先进入正式队列再破坏双方体验。

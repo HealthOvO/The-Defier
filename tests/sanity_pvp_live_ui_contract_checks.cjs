@@ -114,6 +114,11 @@ const liveBrowserAudit = read('tests/browser_pvp_live_audit.mjs');
   'getLiveSnapshot()',
   'getLiveWaitingReport(',
   'renderLiveWaitingReport(',
+  'getLiveConnectionHealthError(',
+  'isLiveEntrySafeguardBlocked(',
+  'hasLiveEntrySafeguardAction(',
+  'buildLiveEntrySafeguardPracticeScenario(',
+  'commitLiveEntrySafeguardPracticeHandoff(',
   'buildLiveWaitingPracticeScenario(',
   'commitLiveWaitingPracticeHandoff(',
   'getLivePostMatchReview(',
@@ -391,12 +396,48 @@ assert.ok(!firstGuideBody.includes('guide.reviewActions.slice(0, 3)'), 'renderLi
 
 const openLivePracticeHintBody = methodBody(scene, 'openLivePracticeHint');
 [
+  'this.commitLiveEntrySafeguardPracticeHandoff()',
   'this.commitLiveWaitingPracticeHandoff()',
   '长等待练习',
+  '连接健康练习',
   '不写正式积分',
 ].forEach((needle) => {
   assert.ok(openLivePracticeHintBody.includes(needle), `openLivePracticeHint should execute live waiting practice handoff: ${needle}`);
 });
+assert.ok(
+  openLivePracticeHintBody.indexOf('this.commitLiveEntrySafeguardPracticeHandoff()') < openLivePracticeHintBody.indexOf('this.commitLiveWaitingPracticeHandoff()'),
+  'openLivePracticeHint should try entry-safeguard no-score drill before falling back to long-wait practice',
+);
+
+const entrySafeguardPracticeBody = methodBody(scene, 'buildLiveEntrySafeguardPracticeScenario');
+[
+  "reportVersion: 'pvp-live-drill-scenario-v1'",
+  "sourceMatchId: 'entry_safeguard:connection_health_failed'",
+  "sourceVisibility: 'replay_self'",
+  'usesHiddenInformation: false',
+  "rankedImpact: 'none'",
+  'connectionHealth',
+  '连接健康练习',
+  '入场保障',
+].forEach((needle) => {
+  assert.ok(entrySafeguardPracticeBody.includes(needle), `buildLiveEntrySafeguardPracticeScenario should create no-score connection drill scenario: ${needle}`);
+});
+
+const entrySafeguardPracticeCommitBody = methodBody(scene, 'commitLiveEntrySafeguardPracticeHandoff');
+[
+  'buildLiveEntrySafeguardPracticeScenario',
+  'beginPvpLiveDrillScenario',
+  "showChallengeHub('daily')",
+  '练习不写正式积分',
+  '重试检测',
+  '真人 PVP 入场保障',
+].forEach((needle) => {
+  assert.ok(entrySafeguardPracticeCommitBody.includes(needle), `commitLiveEntrySafeguardPracticeHandoff should open no-score entry safeguard drill: ${needle}`);
+});
+assert.ok(
+  !entrySafeguardPracticeCommitBody.includes('cancelQueue'),
+  'commitLiveEntrySafeguardPracticeHandoff must not cancel queue because blocked entry is already idle',
+);
 
 const waitingPracticeBody = methodBody(scene, 'buildLiveWaitingPracticeScenario');
 [

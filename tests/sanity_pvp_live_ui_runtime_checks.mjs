@@ -188,6 +188,67 @@ const matchQualityWithConnectionGate = PVPScene.formatLiveMatchQuality({
 assert.match(matchQualityWithConnectionGate, /连接健康通过/, 'live UI match quality should expose passed connection health gate');
 assert.doesNotMatch(matchQualityWithConnectionGate, /rtt|missed|heartbeat|reconnect|延迟.*\\d/i, 'live UI match quality should not expose raw connection probe details');
 
+let entrySafeguardState = {
+  phase: 'idle',
+  queueTicket: '',
+  matchId: '',
+  lastError: {
+    reason: 'connection_health_failed',
+    message: '当前连接不适合进入正式真人排位，请重试检测或先进入问道练习。',
+    connectionHealth: {
+      reportVersion: 'pvp-live-queue-connection-health-v1',
+      status: 'blocked',
+      sampleTag: 'client_preflight',
+      reasons: ['latency_unstable'],
+      actions: [
+        { id: 'retry_connection_check', label: '重试检测', detail: '重新检测连接后再尝试入队。' },
+        { id: 'practice', label: '问道练习', detail: '进入不写正式积分的练习。' }
+      ]
+    }
+  },
+  stateView: null,
+  lastEvents: []
+};
+PVPScene.liveSelectedLoadoutPreset = 'sword';
+PVPScene.getLiveSession = () => ({ getState: () => entrySafeguardState });
+assert.equal(PVPScene.isLiveEntrySafeguardBlocked(), true, 'blocked connection health should mark live entry safeguard as active');
+assert.equal(PVPScene.hasLiveEntrySafeguardAction(null, 'retry_connection_check'), true, 'blocked connection health should expose retry action');
+assert.equal(PVPScene.hasLiveEntrySafeguardAction(null, 'practice'), true, 'blocked connection health should expose practice action');
+const entryScenario = PVPScene.buildLiveEntrySafeguardPracticeScenario();
+assert.equal(entryScenario.sourceMatchId, 'entry_safeguard:connection_health_failed', 'entry safeguard drill should have a stable source id');
+assert.equal(entryScenario.sourceVisibility, 'replay_self', 'entry safeguard drill should use self-visible replay data only');
+assert.equal(entryScenario.usesHiddenInformation, false, 'entry safeguard drill must not use hidden opponent information');
+assert.equal(entryScenario.rankedImpact, 'none', 'entry safeguard drill must not write ranked score');
+assert.ok(entryScenario.trainingTags.includes('连接健康练习'), 'entry safeguard drill should be labeled as connection health practice');
+PVPScene.liveDrillScenario = entryScenario;
+assert.equal(
+  PVPScene.getLiveSnapshot().drillScenario.sourceMatchId,
+  'entry_safeguard:connection_health_failed',
+  'live snapshot should keep the entry safeguard drill visible while no live match is active',
+);
+const oldDocumentQuerySelector = documentStub.querySelector;
+const liveButtons = new Map([
+  ['join-queue', { disabled: true, textContent: '入队', querySelector() { return null; } }],
+  ['practice-live', { disabled: true, textContent: '问道练习', querySelector() { return null; } }],
+]);
+const liveRootStub = {
+  querySelector(selector) {
+    const actionMatch = String(selector || '').match(/^\[data-live-action="([^"]+)"\]$/);
+    return actionMatch ? liveButtons.get(actionMatch[1]) || null : null;
+  },
+  querySelectorAll() { return []; }
+};
+documentStub.querySelector = (selector) => selector === '[data-live-pvp-root]' ? liveRootStub : null;
+PVPScene.updateLiveButtons('idle', false, null);
+assert.equal(liveButtons.get('join-queue').disabled, false, 'blocked entry safeguard should keep retry join button enabled');
+assert.equal(liveButtons.get('join-queue').textContent, '重试检测', 'blocked entry safeguard should relabel join button to retry connection check');
+assert.equal(liveButtons.get('practice-live').disabled, false, 'blocked entry safeguard should enable no-score practice');
+entrySafeguardState = { phase: 'idle', queueTicket: '', matchId: '', lastError: null, stateView: null, lastEvents: [] };
+PVPScene.updateLiveButtons('idle', false, null);
+assert.equal(liveButtons.get('join-queue').textContent, '入队', 'healthy idle live entry should restore normal queue copy');
+assert.equal(liveButtons.get('practice-live').disabled, true, 'healthy idle live entry should not expose practice without a blocked safeguard action');
+documentStub.querySelector = oldDocumentQuerySelector;
+
 let currentState = {
   phase: 'active',
   matchId: 'pvpm-ui-runtime-heartbeat',

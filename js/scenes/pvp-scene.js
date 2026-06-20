@@ -1117,6 +1117,41 @@ export const PVPScene = {
   isLiveLongWait(state) {
     return !!this.getLiveWaitingReport(state)?.longWait;
   },
+  getLiveConnectionHealthError(state = null) {
+    const source = state && typeof state === 'object' ? state : this.getLiveSession().getState();
+    const error = source && source.lastError && typeof source.lastError === 'object' ? source.lastError : null;
+    const health = error && error.connectionHealth && typeof error.connectionHealth === 'object' ? error.connectionHealth : null;
+    if (!error || String(error.reason || '') !== 'connection_health_failed' || !health) return null;
+    return {
+      reason: String(error.reason || ''),
+      message: String(error.message || ''),
+      connectionHealth: {
+        reportVersion: String(health.reportVersion || 'pvp-live-queue-connection-health-v1'),
+        status: String(health.status || 'blocked'),
+        sampleTag: String(health.sampleTag || 'client_preflight'),
+        reasons: Array.isArray(health.reasons)
+          ? health.reasons.map(item => String(item || '')).filter(Boolean).slice(0, 6)
+          : [],
+        actions: Array.isArray(health.actions)
+          ? health.actions.slice(0, 4).map(action => ({
+            id: String(action && action.id || ''),
+            label: String(action && action.label || ''),
+            detail: String(action && action.detail || '')
+          })).filter(action => action.id && action.label)
+          : []
+      }
+    };
+  },
+  isLiveEntrySafeguardBlocked(state = null) {
+    const report = this.getLiveConnectionHealthError(state);
+    const status = String(report && report.connectionHealth && report.connectionHealth.status || '');
+    return status === 'blocked' || status === 'risky';
+  },
+  hasLiveEntrySafeguardAction(state = null, actionId = '') {
+    const report = this.getLiveConnectionHealthError(state);
+    const id = String(actionId || '');
+    return !!(report && report.connectionHealth.actions.some(action => action.id === id));
+  },
   shouldLivePoll(state) {
     if (!state) return false;
     if (state.phase === 'idle') return true;
@@ -1171,6 +1206,83 @@ export const PVPScene = {
       sourceEventSequences: [],
       waitingReport
     };
+  },
+  buildLiveEntrySafeguardPracticeScenario(state = null) {
+    const sourceState = state && typeof state === 'object' ? state : this.getLiveSession().getState();
+    if (!this.isLiveEntrySafeguardBlocked(sourceState) || !this.hasLiveEntrySafeguardAction(sourceState, 'practice')) return null;
+    const report = this.getLiveConnectionHealthError(sourceState);
+    const selectedLoadout = this.getLiveSelectedLoadoutPreset();
+    return {
+      reportVersion: 'pvp-live-drill-scenario-v1',
+      sourceMatchId: 'entry_safeguard:connection_health_failed',
+      sourceVisibility: 'replay_self',
+      usesHiddenInformation: false,
+      rankedImpact: 'none',
+      result: 'entry_safeguard_blocked',
+      finishReason: 'connection_health_failed',
+      recommendedLoadoutId: selectedLoadout.id,
+      recommendedLoadoutLabel: selectedLoadout.label,
+      themeKey: 'connection_health',
+      themeLabel: '入场保障',
+      trainingAdvice: '连接健康入场保障：当前连接未稳定，先练首轮调息、稳血和低费节奏；不写正式积分。',
+      drillObjective: `${selectedLoadout.label}：连接恢复前先练首轮稳血和出牌节奏，不写正式积分。`,
+      trainingTags: ['真人 PVP', '连接健康练习', '不计积分', '入场保障'],
+      publicEventTypes: ['connection_health_failed'],
+      sourceEventSequences: [],
+      connectionHealth: report ? report.connectionHealth : null
+    };
+  },
+  async commitLiveEntrySafeguardPracticeHandoff() {
+    const session = this.getLiveSession();
+    const sourceState = session && typeof session.getState === 'function' ? session.getState() : null;
+    const scenario = this.buildLiveEntrySafeguardPracticeScenario(sourceState);
+    if (!scenario) return null;
+    this.liveDrillScenario = scenario;
+    this.liveLongWaitPollUntil = 0;
+    this.stopLivePolling();
+    const gameRef = this.getGameRef();
+    const focus = {
+      sourceRunId: `pvp_live:${scenario.sourceMatchId}`,
+      guideRecordId: `pvp_live:${scenario.sourceMatchId}`,
+      chapterName: '真人 PVP 入场保障',
+      sourceTitle: scenario.recommendedLoadoutLabel,
+      themeKey: scenario.themeKey,
+      themeLabel: scenario.themeLabel,
+      ratingLabel: '连接健康练习',
+      ratingTone: 'selected',
+      trainingAdvice: scenario.trainingAdvice,
+      highlightLine: scenario.drillObjective,
+      routeFocusLine: '未进入正式排位队列；练习不写正式积分，恢复后再重试检测。',
+      compareHint: '练习只使用入场保障和公开规则，不读取对手隐藏手牌或牌库。',
+      trainingTags: scenario.trainingTags,
+      goalHighlights: [
+        '入场保障：connection_health_failed',
+        `推荐谱：${scenario.recommendedLoadoutLabel}`,
+        '正式积分：不变'
+      ]
+    };
+    if (gameRef && typeof gameRef.ensureChallengeHubLoaded === 'function') {
+      await gameRef.ensureChallengeHubLoaded();
+    }
+    if (gameRef && typeof gameRef.setObservatoryTrainingFocus === 'function') {
+      gameRef.setObservatoryTrainingFocus(focus, { silent: true });
+    }
+    const message = '已进入真人 PVP 连接健康练习：练习不写正式积分，恢复后可重试正式排位。';
+    this.liveInlineHint = message;
+    const root = document.querySelector('[data-live-pvp-root]');
+    const hint = root ? root.querySelector('[data-live-last-error]') : null;
+    if (hint) hint.textContent = message;
+    if (typeof Utils !== 'undefined' && Utils && typeof Utils.showBattleLog === 'function') {
+      Utils.showBattleLog(message);
+    }
+    let drillStarted = false;
+    if (gameRef && typeof gameRef.beginPvpLiveDrillScenario === 'function') {
+      drillStarted = !!gameRef.beginPvpLiveDrillScenario(scenario);
+    }
+    if (!drillStarted && gameRef && typeof gameRef.showChallengeHub === 'function') {
+      await gameRef.showChallengeHub('daily');
+    }
+    return scenario;
   },
   async commitLiveWaitingPracticeHandoff() {
     const session = this.getLiveSession();
@@ -2404,6 +2516,7 @@ export const PVPScene = {
       liveDrillSourceId === activeLiveSourceId
       || liveDrillSourceId === waitingLiveSourceId
       || (liveDrillSourceId.startsWith('waiting:') && !activeLiveSourceId)
+      || (liveDrillSourceId.startsWith('entry_safeguard:') && !activeLiveSourceId)
     )
       ? {
           ...this.liveDrillScenario,
@@ -2726,19 +2839,27 @@ export const PVPScene = {
   updateLiveButtons(phase, isMyTurn, self = null) {
     const root = document.querySelector('[data-live-pvp-root]');
     if (!root) return;
+    const state = this.getLiveSession().getState();
+    const entrySafeguardBlocked = phase === 'idle' && this.isLiveEntrySafeguardBlocked(state);
     const intentLocked = this.isLiveIntentInFlight(null, 'action');
     const socialIntentLocked = this.isLiveIntentInFlight(null, 'social');
     const setDisabled = (action, disabled) => {
       const btn = root.querySelector(`[data-live-action="${action}"]`);
       if (btn) btn.disabled = !!disabled;
     };
+    const setButtonText = (action, text) => {
+      const btn = root.querySelector(`[data-live-action="${action}"]`);
+      const label = btn ? btn.querySelector('.text') || btn : null;
+      if (label) label.textContent = text;
+    };
     setDisabled('join-queue', phase === 'queueing' || phase === 'waiting' || phase === 'waiting_invite' || phase === 'waiting_rematch' || phase === 'matched' || phase === 'setup' || phase === 'active');
     setDisabled('create-invite', phase === 'queueing' || phase === 'waiting' || phase === 'waiting_invite' || phase === 'waiting_rematch' || phase === 'matched' || phase === 'setup' || phase === 'active');
     setDisabled('join-invite', phase === 'queueing' || phase === 'waiting' || phase === 'waiting_invite' || phase === 'waiting_rematch' || phase === 'matched' || phase === 'setup' || phase === 'active');
     setDisabled('cancel-invite', phase !== 'waiting_invite');
     setDisabled('cancel-queue', phase !== 'waiting');
-    setDisabled('practice-live', !(phase === 'waiting' && this.getLiveWaitingReport(this.getLiveSession().getState())?.longWait));
+    setDisabled('practice-live', !(entrySafeguardBlocked && this.hasLiveEntrySafeguardAction(state, 'practice')) && !(phase === 'waiting' && this.getLiveWaitingReport(state)?.longWait));
     setDisabled('refresh-match', phase === 'queueing' || phase === 'idle' || phase === 'finished' || phase === 'invalidated');
+    setButtonText('join-queue', entrySafeguardBlocked && this.hasLiveEntrySafeguardAction(state, 'retry_connection_check') ? '重试检测' : '入队');
     setDisabled('confirm-mulligan', intentLocked || !(phase === 'setup' && self && !self.mulliganUsed));
     setDisabled('ready', intentLocked || !(phase === 'setup' && self && !self.ready));
     setDisabled('end-turn', intentLocked || !(phase === 'active' && isMyTurn));
@@ -3188,9 +3309,12 @@ export const PVPScene = {
     this.renderLivePanel();
   },
   async openLivePracticeHint() {
-    const scenario = await this.commitLiveWaitingPracticeHandoff();
+    const entryScenario = await this.commitLiveEntrySafeguardPracticeHandoff();
+    const scenario = entryScenario || await this.commitLiveWaitingPracticeHandoff();
     const message = scenario
-      ? '已打开真人 PVP 长等待练习；练习不写正式积分，返回真人排位需重新入队。'
+      ? entryScenario
+        ? '已打开真人 PVP 连接健康练习；练习不写正式积分，恢复后可重试正式排位。'
+        : '已打开真人 PVP 长等待练习；练习不写正式积分，返回真人排位需重新入队。'
       : this.liveInlineHint || '问道练习不会写正式积分；当前未进入长等待，继续等待真人或取消匹配后再练习。';
     this.liveInlineHint = message;
     const root = document.querySelector('[data-live-pvp-root]');

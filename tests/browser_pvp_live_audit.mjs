@@ -1083,6 +1083,10 @@ async function safeElementScreenshot(page, selector, outputPath) {
   const blockedHealthProbe = await page.evaluate(() => ({
     phase: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-phase') || '',
     lastError: document.querySelector('[data-live-last-error]')?.textContent || '',
+    buttons: Object.fromEntries(Array.from(document.querySelectorAll('[data-live-action]')).map(button => [
+      button.getAttribute('data-live-action'),
+      { disabled: button.disabled, text: button.textContent?.replace(/\s+/g, ' ').trim() || '' },
+    ])),
     payload: JSON.parse(window.render_game_to_text()).pvp?.live || null,
     calls: window.__livePvpAuditCalls,
   }));
@@ -1094,10 +1098,59 @@ async function safeElementScreenshot(page, selector, outputPath) {
       && blockedHealthProbe.payload?.lastError?.connectionHealth?.status === 'blocked'
       && blockedHealthProbe.payload?.lastError?.connectionHealth?.actions?.some(action => action.id === 'retry_connection_check')
       && blockedHealthProbe.payload?.lastError?.connectionHealth?.actions?.some(action => action.id === 'practice' && /不写正式积分/.test(action.detail))
+      && blockedHealthProbe.buttons['join-queue']?.disabled === false
+      && /重试检测/.test(blockedHealthProbe.buttons['join-queue']?.text || '')
+      && blockedHealthProbe.buttons['practice-live']?.disabled === false
       && blockedHealthProbe.calls.some(call => call.method === 'measureConnectionHealth')
       && blockedHealthProbe.calls.some(call => call.method === 'joinQueue' && call.options?.connectionHealthProbe?.status === 'blocked'),
     JSON.stringify(blockedHealthProbe),
   );
+  await page.click('[data-live-action="practice-live"]', { timeout: 5000, force: true });
+  await page.waitForTimeout(350);
+  const blockedHealthPracticeProbe = await page.evaluate(() => {
+    const payload = typeof window.render_game_to_text === 'function'
+      ? JSON.parse(window.render_game_to_text())
+      : null;
+    return {
+      currentScreen: window.game?.currentScreen || '',
+      pending: payload?.challenge?.pending || null,
+      focus: payload?.challenge?.trainingFocus || null,
+      drillScenario: payload?.pvp?.live?.drillScenario || window.PVPScene.getLiveSnapshot()?.drillScenario || null,
+      calls: window.__livePvpAuditCalls,
+    };
+  });
+  add(
+    'live UI blocked connection practice opens no-score entry safeguard drill without queue cancellation',
+    blockedHealthPracticeProbe.currentScreen === 'character-selection-screen'
+      && blockedHealthPracticeProbe.pending?.replayOnly === true
+      && blockedHealthPracticeProbe.pending?.practiceOnly === true
+      && /^pvp_live_drill_/.test(blockedHealthPracticeProbe.pending?.ruleId || '')
+      && blockedHealthPracticeProbe.focus?.sourceRunId === 'pvp_live:entry_safeguard:connection_health_failed'
+      && /连接健康|入场保障/.test(blockedHealthPracticeProbe.focus?.trainingAdvice || '')
+      && blockedHealthPracticeProbe.drillScenario?.reportVersion === 'pvp-live-drill-scenario-v1'
+      && blockedHealthPracticeProbe.drillScenario?.sourceMatchId === 'entry_safeguard:connection_health_failed'
+      && blockedHealthPracticeProbe.drillScenario?.sourceVisibility === 'replay_self'
+      && blockedHealthPracticeProbe.drillScenario?.usesHiddenInformation === false
+      && blockedHealthPracticeProbe.drillScenario?.rankedImpact === 'none'
+      && (blockedHealthPracticeProbe.drillScenario?.trainingTags || []).includes('连接健康练习')
+      && !blockedHealthPracticeProbe.calls.some(call => call.method === 'cancelQueue')
+      && !blockedHealthPracticeProbe.calls.some(call => /findOpponent|reportMatchResult|startPVPBattle/i.test(call.method || ''))
+      && !/GhostEnemy|didWin|matchTicket/i.test(JSON.stringify(blockedHealthPracticeProbe.pending || {}))
+      && !/ratingDelta|scoreAfter|coinsAwarded|formalResultPolicy|elo/i.test(JSON.stringify(blockedHealthPracticeProbe.drillScenario || {})),
+    JSON.stringify(blockedHealthPracticeProbe),
+  );
+  await page.evaluate(async () => {
+    window.game.showScreen('pvp-screen');
+    if (window.game) {
+      window.game.pendingChallengeStart = null;
+      window.game.activeChallengeRun = null;
+    }
+    window.PVPScene.switchTab('live');
+    if (typeof window.PVPScene.loadLivePanel === 'function') {
+      await window.PVPScene.loadLivePanel();
+    }
+  });
+  await page.waitForTimeout(100);
   await page.evaluate(() => {
     window.__livePvpAuditCalls = [];
     window.__livePvpAuditConnectionHealthMode = '';
