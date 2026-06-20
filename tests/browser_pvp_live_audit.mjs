@@ -274,8 +274,9 @@ async function safeElementScreenshot(page, selector, outputPath) {
     }) : null;
     const makeTurnTimer = (status, currentSeat, viewerSeat = 'A') => {
       if (status !== 'setup' && status !== 'active') return null;
+      const lowTimerMode = status === 'active' && String(window.__livePvpAuditTurnTimerMode || '') === 'low';
       const timeoutMs = status === 'setup' ? 45000 : 90000;
-      const startedAt = Date.now();
+      const startedAt = lowTimerMode ? Date.now() - 81000 : Date.now();
       return {
         reportVersion: 'pvp-live-turn-timer-v1',
         phase: status === 'setup' ? 'setup' : 'active',
@@ -868,6 +869,8 @@ async function safeElementScreenshot(page, selector, outputPath) {
                 { eventType: 'emote_sent', actingSeat: 'B', payload: { seatId: 'B', emoteId: 'thinking', label: '思考' } },
               ],
             }
+          : String(window.__livePvpAuditTurnTimerMode || '') === 'low'
+            ? makeStateView(3, 'A', 'active')
           : makeStateView(1, 'A', 'setup');
         return {
           success: true,
@@ -1700,6 +1703,29 @@ async function safeElementScreenshot(page, selector, outputPath) {
       && setupProbe.payload?.duelMomentumReport?.usesHiddenInformation === false
       && !/payload|hand|deck|cardId|instanceId|loadoutSnapshot|reward|rating|elo/i.test(`${setupProbe.duelMomentum} ${JSON.stringify(setupProbe.payload?.duelMomentumReport || {})}`),
     JSON.stringify(setupProbe),
+  );
+  const lowTimerProbe = await page.evaluate(() => {
+    window.__livePvpAuditTurnTimerMode = 'low';
+    return window.PVPScene?.refreshLiveMatch?.().then(() => {
+      window.__livePvpAuditTurnTimerMode = '';
+      const timer = document.querySelector('[data-live-turn-timer]');
+      const endTurn = document.querySelector('[data-live-action="end-turn"]');
+      return {
+        text: timer?.textContent || '',
+        urgency: timer?.getAttribute('data-live-turn-timer-urgency') || '',
+        endTurnDisabled: !!endTurn?.disabled,
+        payload: JSON.parse(window.render_game_to_text()).pvp?.live?.turnTimer || null,
+      };
+    });
+  });
+  add(
+    'live UI warns the acting player during the final 10 seconds without hiding action controls',
+    /最后 10 秒，请确认行动/.test(lowTimerProbe.text)
+      && lowTimerProbe.urgency === 'low'
+      && lowTimerProbe.endTurnDisabled === false
+      && lowTimerProbe.payload?.phase === 'active'
+      && lowTimerProbe.payload?.remainingMs <= 10000,
+    JSON.stringify(lowTimerProbe),
   );
 
   const liveCardClicked = await page.evaluate(() => {

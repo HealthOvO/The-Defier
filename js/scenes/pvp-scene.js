@@ -680,6 +680,12 @@ export const PVPScene = {
       remainingMs
     };
   },
+  getLiveTurnTimerUrgency(view) {
+    const timer = this.getLiveTurnTimer(view);
+    if (!timer || timer.phase !== 'active') return 'normal';
+    if (timer.remainingMs <= 0) return 'expired';
+    return timer.remainingMs <= 10000 ? 'low' : 'normal';
+  },
   formatLiveTurnTimer(view) {
     const timer = this.getLiveTurnTimer(view);
     if (!timer || !timer.phase) return '倒计时：等待权威状态';
@@ -688,7 +694,13 @@ export const PVPScene = {
       return `准备倒计时：${remainingSec}s · 双方确认后开战`;
     }
     const turnLabel = timer.isViewerTurn ? '我的行动窗口' : `等待 ${timer.currentSeat || '--'} 行动`;
-    return `行动倒计时：${remainingSec}s · 当前 ${timer.currentSeat || '--'} · ${turnLabel}`;
+    const baseText = `行动倒计时：${remainingSec}s · 当前 ${timer.currentSeat || '--'} · ${turnLabel}`;
+    if (timer.remainingMs <= 0) return `${baseText} · 行动超时，等待服务端处理`;
+    if (timer.remainingMs <= 10000) {
+      const lowTimeText = timer.isViewerTurn ? '最后 10 秒，请确认行动' : '对手思考中，剩余时间不多';
+      return `${baseText} · ${lowTimeText}`;
+    }
+    return baseText;
   },
   getLiveConnectionReport(view) {
     const report = view && view.connectionReport && typeof view.connectionReport === 'object' ? view.connectionReport : null;
@@ -2701,7 +2713,11 @@ export const PVPScene = {
     setText('[data-live-state-version]', view && view.stateVersion !== undefined ? String(view.stateVersion) : '--');
     setText('[data-live-current-seat]', view && view.currentSeat ? view.currentSeat : '--');
     setText('[data-live-match-quality]', this.formatLiveMatchQuality(view));
-    setText('[data-live-turn-timer]', this.formatLiveTurnTimer(view));
+    const turnTimerEl = root.querySelector('[data-live-turn-timer]');
+    if (turnTimerEl) {
+      turnTimerEl.textContent = this.formatLiveTurnTimer(view);
+      turnTimerEl.setAttribute('data-live-turn-timer-urgency', this.getLiveTurnTimerUrgency(view));
+    }
     setText('[data-live-connection-status]', this.formatLiveConnectionStatus(view));
     setText('[data-live-realtime-status]', this.formatLiveRealtimeStatus(state));
     const openingSafeguardEl = root.querySelector('[data-live-opening-safeguard]');

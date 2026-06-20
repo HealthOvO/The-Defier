@@ -763,6 +763,18 @@
     overflow-wrap: anywhere;
 }
 
+.pvp-live-turn-timer[data-live-turn-timer-urgency="low"] {
+    border-color: rgba(255, 191, 92, 0.4);
+    background: rgba(255, 191, 92, 0.12);
+    color: rgba(255, 238, 190, 0.96);
+}
+
+.pvp-live-turn-timer[data-live-turn-timer-urgency="expired"] {
+    border-color: rgba(255, 107, 107, 0.42);
+    background: rgba(255, 107, 107, 0.11);
+    color: rgba(255, 214, 214, 0.96);
+}
+
 .pvp-live-connection-status,
 .pvp-live-realtime-status {
     margin-top: 8px;

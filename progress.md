@@ -1,5 +1,26 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-20: V10-S9M live PVP final 10s action warning
+  - 本轮完成
+    - `js/scenes/pvp-scene.js` 为 live PVP active 回合倒计时增加最后 10 秒提示：己方行动窗口显示“最后 10 秒，请确认行动”，对手行动窗口显示“对手思考中，剩余时间不多”，让双方都能明确感知低时间压力，而不是突然超时或误以为界面卡住。
+    - 新增 `getLiveTurnTimerUrgency()`，并在 `[data-live-turn-timer]` 上写入 `data-live-turn-timer-urgency="low|expired|normal"`；`css/pvp.css` 为 low / expired 两档增加局部强调样式，只突出倒计时，不遮挡出牌、结束回合、复盘或断线恢复控件。
+    - 保持服务端权威规则不变：该切片只改变前端提示与 DOM 状态，不改行动时限、超时判定、伤害、生命、抽牌、灵力、起手、匹配评分、正式积分、奖励、赛季验证或结算。
+    - `tests/sanity_pvp_live_ui_runtime_checks.mjs` 固定己方最后 10 秒提示、对手低时间提示和 urgency helper；`tests/browser_pvp_live_audit.mjs` 用 fake live session 刷出真实 active 低时间窗口，并确认提示出现时行动按钮仍可用。
+    - `tests/sanity_pvp_live_ui_contract_checks.cjs` 与 `tests/sanity_release_gate_coverage_checks.cjs` 固定 helper、DOM 属性、文案 marker 和 browser finding，防止后续把低时间提示退化成普通倒计时。
+  - 已验证
+    - 红测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs` 在实现前失败于 9 秒 active 计时只显示普通“行动倒计时”，缺少“最后 10 秒，请确认行动”。
+    - 红测：`node tests/sanity_pvp_live_ui_contract_checks.cjs` 在实现前失败于缺少 `getLiveTurnTimerUrgency(` 与 `data-live-turn-timer-urgency` 合约 marker。
+    - 绿测：`node --check js/scenes/pvp-scene.js`
+    - 绿测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs`
+    - 绿测：`node tests/sanity_pvp_live_ui_contract_checks.cjs`
+    - 绿测：`node tests/sanity_release_gate_coverage_checks.cjs`
+    - 构建：`npm run build:pages`
+    - 浏览器审计：`node tests/browser_pvp_live_audit.mjs http://127.0.0.1:4173 output/pvp-live-final-10s-audit-final`，70/70 findings、0 console error。
+    - 真实后端 smoke：`node tests/browser_pvp_live_real_backend_smoke.mjs http://127.0.0.1:4173 output/pvp-live-final-10s-real`，42/42 findings、0 console error。
+    - 全量 Node：`npm run test:node`
+  - 当前结论
+    - live PVP active 阶段现在能在最后 10 秒给行动方明确提醒，也让等待方知道对手时间即将耗尽，减少正式对局里“没看见倒计时 / 以为卡住 / 被动超时”的挫败感。该切片仍未改变对局规则与服务端结算；下一步建议继续补开局窗口内的出牌 / 结束回合本地确认，降低刚进入正式局时的一击误操作风险。
+
 - 2026-06-20: V10-S9L live PVP surrender misclick confirmation
   - 本轮完成
     - `js/scenes/pvp-scene.js` 为 live PVP 的 `认输` 增加本地短窗口二次确认：第一次点击只 arm `liveSurrenderConfirmUntil`、显示“再次点击确认认输”提示，并把按钮文案切到“确认认输”；第二次点击且仍处于 active / sync_required 才提交既有权威 `intentType: 'surrender'`。
