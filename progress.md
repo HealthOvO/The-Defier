@@ -1,5 +1,28 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-20: V10-S9B live PVP foreground resume catch-up
+  - 本轮完成
+    - `js/services/pvp-live-session.js` 新增 `resumeRealtime()`：前台恢复时会保留 pending `join_match` 的最高 `lastSeenRevision`，立刻重放 join，并在已有连接或重连打开后补 realtime heartbeat。
+    - WS 异常 close 后若页面恢复前台，`resumeRealtime()` 会清理原延迟重连 timer，立即创建新连接；新连接打开后先 replay pending join，再发送 heartbeat，避免玩家回到页面后继续等下一次 interval。
+    - `js/scenes/pvp-scene.js` 新增一次性 `visibilitychange / pageshow / focus` 监听；hidden 状态不触发同步，同一次前台恢复短窗口去重，随后调用 `sendLiveHeartbeat({ resumeRealtime: true })`。
+    - scene 恢复路径仍保留 HTTP heartbeat fallback：当本地 realtime 仍处于 `reconnecting` 时，前台恢复会先推进 WS 追帧，同时立刻走一次权威 heartbeat，不让倒计时、当前行动席或连接状态继续停在旧帧。
+    - `tests/sanity_pvp_live_session_checks.mjs` 固定 session 级恢复合同；`tests/sanity_pvp_live_ui_runtime_checks.mjs` 固定 UI 前台恢复监听、hidden no-op、visibility/focus 去重和 reconnecting heartbeat fallback；`tests/sanity_release_gate_coverage_checks.cjs` 固定防漏 marker。
+  - 已验证
+    - 红测：`node tests/sanity_pvp_live_session_checks.mjs` 在实现前失败于 `live session should expose resumeRealtime for hidden-tab recovery`。
+    - 红测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs` 在实现前失败于 `live UI foreground resume should bind document visibilitychange`。
+    - 绿测：`node tests/sanity_pvp_live_session_checks.mjs`
+    - 绿测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs`
+    - 绿测：`node tests/sanity_pvp_live_ui_contract_checks.cjs`
+    - 绿测：`node tests/sanity_release_gate_coverage_checks.cjs`
+    - 绿测：`node tests/sanity_intro_progress_sync_checks.cjs`
+    - 语法检查：`node --check js/services/pvp-live-session.js`
+    - 语法检查：`node --check js/scenes/pvp-scene.js`
+    - 全量：`npm run test:node`
+    - 构建：`npm run build:pages`
+    - 清洁检查：`git diff --check`
+  - 当前结论
+    - live PVP 的前后台切换不再只依赖下一个心跳 interval 或手动刷新：玩家从锁屏、切标签页或切 App 回到对局后，会立即重放 join、补权威 heartbeat 并刷新 UI，减少一方看到旧倒计时 / 旧行动席、另一方仍看到 grace 的割裂窗口。该切片仍不是后台常驻保活、sendBeacon、Redis / 多实例强一致、生产 API smoke 或线上部署完成。
+
 - 2026-06-20: V10-S9A live PVP cross-process duplicate WS signal dedupe
   - 本轮完成
     - `tests/sanity_pvp_live_cross_process_ws_fanout_checks.cjs` 在真实双 `server/app.js` / 共享 SQLite harness 里补齐 duplicate_action 场景：A/B 分别连到不同进程，B ready 正常 accepted 后，B 原样重放同一 `intentId` 会收到 `duplicate / duplicate_action`，A 不发 heartbeat 也会通过另一进程收到同版本权威 `state_sync`。

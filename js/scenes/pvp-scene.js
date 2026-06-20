@@ -25,6 +25,10 @@ export const PVPScene = {
   livePollTimer: null,
   liveHeartbeatTimer: null,
   liveHeartbeatIntervalMs: 0,
+  liveLifecycleBound: false,
+  liveForegroundResumeQueued: false,
+  liveForegroundResumeTimer: null,
+  liveForegroundResumeDebounceMs: 250,
   liveLongWaitPollUntil: 0,
   liveRealtimeRenderQueued: false,
   liveIntentSeq: 0,
@@ -447,6 +451,7 @@ export const PVPScene = {
     if (tabName === 'shop') this.loadShop();
   },
   getLiveSession() {
+    this.ensureLiveLifecycleBindings();
     if (!this.liveSession) {
       this.liveSession = createPvpLiveSession({
         liveService: PVPService && PVPService.live ? PVPService.live : null,
@@ -454,6 +459,51 @@ export const PVPScene = {
       });
     }
     return this.liveSession;
+  },
+  ensureLiveLifecycleBindings() {
+    if (this.liveLifecycleBound) return;
+    const doc = typeof document !== 'undefined' ? document : null;
+    const win = typeof window !== 'undefined' ? window : null;
+    const onForegroundSignal = () => this.queueLiveForegroundResume();
+    if (doc && typeof doc.addEventListener === 'function') {
+      doc.addEventListener('visibilitychange', onForegroundSignal);
+    }
+    if (win && typeof win.addEventListener === 'function') {
+      win.addEventListener('pageshow', onForegroundSignal);
+      win.addEventListener('focus', onForegroundSignal);
+    }
+    this.liveLifecycleBound = true;
+  },
+  queueLiveForegroundResume() {
+    const doc = typeof document !== 'undefined' ? document : null;
+    if (doc && doc.hidden === true) return;
+    if (this.liveForegroundResumeQueued || this.liveForegroundResumeTimer) return;
+    this.liveForegroundResumeQueued = true;
+    const win = typeof window !== 'undefined' ? window : null;
+    const setTimer = win && typeof win.setTimeout === 'function' ? win.setTimeout.bind(win) : setTimeout;
+    const clearResumeWindow = () => {
+      this.liveForegroundResumeTimer = null;
+    };
+    this.liveForegroundResumeTimer = setTimer(clearResumeWindow, this.liveForegroundResumeDebounceMs);
+    Promise.resolve()
+      .then(async () => {
+        await this.handleLiveForegroundResume();
+      })
+      .catch(error => {
+        console.warn('[PVP Live] foreground resume failed', error);
+      })
+      .finally(() => {
+        this.liveForegroundResumeQueued = false;
+      });
+  },
+  async handleLiveForegroundResume() {
+    const doc = typeof document !== 'undefined' ? document : null;
+    if (doc && doc.hidden === true) return;
+    if (this.activeTab && this.activeTab !== 'live') return;
+    const session = this.getLiveSession();
+    const state = session && typeof session.getState === 'function' ? session.getState() : null;
+    if (!state || !state.matchId || !this.shouldLiveHeartbeat(state.phase)) return;
+    await this.sendLiveHeartbeat({ resumeRealtime: true });
   },
   queueLiveRealtimeRender() {
     if (this.liveRealtimeRenderQueued) return;
@@ -2363,13 +2413,17 @@ export const PVPScene = {
     return viewEvents.concat(replayEvents)
       .reduce((max, event) => Math.max(max, Math.floor(Number(event && event.sequence) || 0)), 0);
   },
-  startLiveRealtime(state = null) {
+  startLiveRealtime(state = null, { resume = false } = {}) {
     const session = this.getLiveSession();
-    if (!session || typeof session.connectRealtime !== 'function' || typeof session.joinRealtimeMatch !== 'function') return;
+    if (!session) return false;
     const sourceState = state || session.getState();
     if (!sourceState || !sourceState.matchId || !this.shouldLiveHeartbeat(sourceState.phase)) return;
+    if (resume && typeof session.resumeRealtime === 'function') {
+      return session.resumeRealtime(sourceState.matchId);
+    }
+    if (typeof session.connectRealtime !== 'function' || typeof session.joinRealtimeMatch !== 'function') return false;
     session.connectRealtime();
-    session.joinRealtimeMatch(sourceState.matchId, {
+    return session.joinRealtimeMatch(sourceState.matchId, {
       lastSeenRevision: this.getLiveLastSeenEventRevision(sourceState)
     });
   },
@@ -2381,6 +2435,7 @@ export const PVPScene = {
   },
   startLiveHeartbeat({ sendImmediately = true } = {}) {
     if (typeof window === 'undefined') return;
+    this.ensureLiveLifecycleBindings();
     const state = this.getLiveSession().getState();
     const heartbeatIntervalMs = this.getLiveHeartbeatIntervalMs(state);
     if (this.liveHeartbeatTimer && this.liveHeartbeatIntervalMs === heartbeatIntervalMs) {
@@ -2411,17 +2466,20 @@ export const PVPScene = {
     this.liveHeartbeatIntervalMs = 0;
     this.stopLiveRealtime();
   },
-  async sendLiveHeartbeat() {
+  async sendLiveHeartbeat({ resumeRealtime = false } = {}) {
     const session = this.getLiveSession();
     const state = session.getState();
     if (!state || !state.matchId || !this.shouldLiveHeartbeat(state.phase)) {
       this.stopLiveHeartbeat();
       return;
     }
-    this.startLiveRealtime(state);
-    const realtimeSent = state.realtimeStatus === 'connected'
-      && typeof session.heartbeatRealtime === 'function'
-      && session.heartbeatRealtime(state.matchId);
+    const usedRealtimeResume = !!(resumeRealtime && typeof session.resumeRealtime === 'function');
+    const resumeQueued = this.startLiveRealtime(state, { resume: resumeRealtime });
+    const realtimeSent = usedRealtimeResume
+      ? !!(resumeQueued && state.realtimeStatus === 'connected')
+      : state.realtimeStatus === 'connected'
+        && typeof session.heartbeatRealtime === 'function'
+        && session.heartbeatRealtime(state.matchId);
     if (!realtimeSent) {
       if (typeof session.heartbeat !== 'function') return;
       await session.heartbeat();

@@ -1,7 +1,23 @@
 import assert from 'node:assert';
 
+const documentListeners = new Map();
+const windowListeners = new Map();
+
+function addListener(registry, type, listener) {
+  if (!registry.has(type)) registry.set(type, []);
+  registry.get(type).push(listener);
+}
+
+function dispatchListeners(registry, type, event = {}) {
+  const listeners = registry.get(type) || [];
+  listeners.forEach(listener => listener({ type, ...event }));
+}
+
 const documentStub = {
-  addEventListener() {},
+  hidden: false,
+  addEventListener(type, listener) {
+    addListener(documentListeners, type, listener);
+  },
   createElement() {
     return {
       style: {},
@@ -22,7 +38,9 @@ const clearedTimers = [];
 
 globalThis.document = documentStub;
 globalThis.window = {
-  addEventListener() {},
+  addEventListener(type, listener) {
+    addListener(windowListeners, type, listener);
+  },
   removeEventListener() {},
   setInterval(callback, intervalMs) {
     const id = nextTimerId;
@@ -184,6 +202,98 @@ assert.deepEqual(
   'sendLiveHeartbeat runtime should rebuild heartbeat timer after receiving a new server interval',
 );
 assert.deepEqual(clearedTimers, [1], 'sendLiveHeartbeat runtime should clear stale timer after server interval changes');
+
+PVPScene.stopLiveHeartbeat();
+scheduledIntervals.length = 0;
+clearedTimers.length = 0;
+nextTimerId = 1;
+
+let foregroundState = {
+  phase: 'active',
+  matchId: 'pvpm-ui-runtime-foreground',
+  realtimeStatus: 'reconnecting',
+  stateView: {
+    matchId: 'pvpm-ui-runtime-foreground',
+    status: 'active',
+    stateVersion: 11,
+    currentSeat: 'A',
+    connectionReport: {
+      heartbeatIntervalMs: 1200
+    }
+  }
+};
+let foregroundResumeCalls = 0;
+let foregroundHeartbeatCalls = 0;
+let foregroundRenderCalls = 0;
+PVPScene.liveLifecycleBound = false;
+PVPScene.liveForegroundResumeQueued = false;
+PVPScene.liveForegroundResumeTimer = null;
+PVPScene.liveHeartbeatTimer = null;
+PVPScene.liveHeartbeatIntervalMs = 0;
+PVPScene.getLiveSession = () => ({
+  getState: () => foregroundState,
+  connectRealtime: () => true,
+  joinRealtimeMatch: () => true,
+  resumeRealtime: (matchId) => {
+    foregroundResumeCalls += 1;
+    assert.equal(matchId, 'pvpm-ui-runtime-foreground', 'foreground resume should target the active live match');
+    return true;
+  },
+  heartbeatRealtime: () => false,
+  heartbeat: async () => {
+    foregroundHeartbeatCalls += 1;
+    foregroundState = {
+      ...foregroundState,
+      realtimeStatus: 'connected'
+    };
+  },
+  disconnectRealtime: () => {}
+});
+PVPScene.renderLivePanel = () => {
+  foregroundRenderCalls += 1;
+};
+PVPScene.startLiveHeartbeat({ sendImmediately: false });
+assert.ok((documentListeners.get('visibilitychange') || []).length > 0, 'live UI foreground resume should bind document visibilitychange');
+assert.ok((windowListeners.get('focus') || []).length > 0, 'live UI foreground resume should bind window focus');
+assert.ok((windowListeners.get('pageshow') || []).length > 0, 'live UI foreground resume should bind window pageshow');
+
+documentStub.hidden = true;
+dispatchListeners(documentListeners, 'visibilitychange');
+await Promise.resolve();
+await Promise.resolve();
+assert.equal(foregroundResumeCalls, 0, 'live UI foreground resume should ignore hidden visibilitychange');
+assert.equal(foregroundHeartbeatCalls, 0, 'live UI foreground resume should not heartbeat while the document is hidden');
+
+documentStub.hidden = false;
+dispatchListeners(documentListeners, 'visibilitychange');
+dispatchListeners(windowListeners, 'focus');
+await Promise.resolve();
+await Promise.resolve();
+await Promise.resolve();
+assert.equal(foregroundResumeCalls, 1, 'resume-visible live UI should trigger one immediate realtime resume after hidden-tab throttling');
+assert.equal(foregroundHeartbeatCalls, 1, 'live UI foreground resume should send one immediate heartbeat for reconnecting matches');
+assert.equal(foregroundRenderCalls, 1, 'live UI foreground resume should rerender after the authority heartbeat');
+
+dispatchListeners(windowListeners, 'focus');
+await Promise.resolve();
+await Promise.resolve();
+await Promise.resolve();
+assert.equal(foregroundResumeCalls, 1, 'live UI foreground resume should not double-fire focus after the same visibility return');
+assert.equal(foregroundHeartbeatCalls, 1, 'live UI foreground resume should not double-heartbeat after a follow-up focus task');
+
+if (PVPScene.liveForegroundResumeTimer) {
+  clearTimeout(PVPScene.liveForegroundResumeTimer);
+  PVPScene.liveForegroundResumeTimer = null;
+}
+PVPScene.liveForegroundResumeQueued = false;
+PVPScene.activeTab = 'ranking';
+dispatchListeners(windowListeners, 'pageshow');
+await Promise.resolve();
+await Promise.resolve();
+await Promise.resolve();
+assert.equal(foregroundResumeCalls, 1, 'live UI foreground resume should not restart realtime after leaving the live tab');
+assert.equal(foregroundHeartbeatCalls, 1, 'live UI foreground resume should not heartbeat after leaving the live tab');
+PVPScene.activeTab = 'live';
 
 PVPScene.stopLiveHeartbeat();
 

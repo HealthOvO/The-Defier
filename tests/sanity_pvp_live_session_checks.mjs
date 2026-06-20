@@ -1138,6 +1138,7 @@ assert.equal(typeof realtimeSession.connectRealtime, 'function', 'live session s
 assert.equal(typeof realtimeSession.joinRealtimeMatch, 'function', 'live session should expose joinRealtimeMatch');
 assert.equal(typeof realtimeSession.submitRealtimeIntent, 'function', 'live session should expose submitRealtimeIntent');
 assert.equal(typeof realtimeSession.heartbeatRealtime, 'function', 'live session should expose heartbeatRealtime');
+assert.equal(typeof realtimeSession.resumeRealtime, 'function', 'live session should expose resumeRealtime for hidden-tab recovery');
 assert.equal(typeof realtimeSession.disconnectRealtime, 'function', 'live session should expose disconnectRealtime');
 const realtimeInitial = realtimeSession.connectRealtime();
 assert.equal(realtimeInitial.realtimeStatus, 'connecting', 'connectRealtime should mark realtime connecting');
@@ -1298,6 +1299,11 @@ assert.deepEqual(realtimeSentMessages.slice(0, 3), [
     }
   }
 ], 'live session realtime helpers should send stable WS message envelopes with last seen event revision');
+realtimeSession.resumeRealtime();
+assert.deepEqual(realtimeSentMessages.slice(3, 5), [
+  { type: 'join_match', matchId: 'pvplm-ws-session', lastSeenRevision: 5 },
+  { type: 'heartbeat', matchId: 'pvplm-ws-session', lastSeenRevision: 5 }
+], 'visibility resume should replay pending join_match and heartbeat immediately with the latest public event revision');
 realtimeSession.disconnectRealtime();
 assert.equal(realtimeSession.getState().realtimeStatus, 'closed', 'disconnectRealtime should mark realtime closed');
 
@@ -1384,15 +1390,19 @@ assert.deepEqual(reconnectSent[0], {
 reconnectHandlers[0].onClose();
 assert.equal(reconnectRealtimeSession.getState().realtimeStatus, 'reconnecting', 'unexpected WS close should mark realtime reconnecting');
 assert.equal(reconnectTimers[0]?.delayMs, 25, 'unexpected WS close should schedule a short reconnect delay');
-reconnectTimers[0].fn();
+reconnectRealtimeSession.resumeRealtime();
 assert.equal(reconnectHandlers.length, 2, 'reconnect timer should create a fresh realtime connection');
 reconnectHandlers[1].onOpen();
 assert.deepEqual(reconnectSent[1], {
   connectionIndex: 2,
   payload: { type: 'join_match', matchId: 'pvplm-reconnect-fast', lastSeenRevision: 7 }
 }, 'reconnected realtime socket should replay pending join_match without waiting for heartbeat');
+assert.deepEqual(reconnectSent[2], {
+  connectionIndex: 2,
+  payload: { type: 'heartbeat', matchId: 'pvplm-reconnect-fast', lastSeenRevision: 7 }
+}, 'visibility resume should send heartbeat_realtime with the pending join high-water mark as soon as the reconnected socket opens');
 reconnectRealtimeSession.disconnectRealtime();
-assert.equal(reconnectClearedTimer, null, 'manual disconnect after successful reconnect should not clear an active reconnect timer');
+assert.equal(reconnectClearedTimer, reconnectTimers[0], 'visibility resume should clear the delayed reconnect timer instead of waiting for the next interval');
 reconnectHandlers[1].onClose();
 assert.equal(reconnectTimers.length, 1, 'manual disconnect should not schedule another reconnect');
 

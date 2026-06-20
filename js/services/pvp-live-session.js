@@ -189,6 +189,7 @@ export function createPvpLiveSession({
   let realtimeConnectionId = 0;
   let realtimeReconnectTimer = null;
   let pendingRealtimeJoin = null;
+  let pendingRealtimeResumeHeartbeat = false;
   let realtimeManualClose = false;
   const fallbackTimers = getDefaultTimerApi();
   const timerApi = timers && typeof timers.setTimeout === 'function'
@@ -613,6 +614,12 @@ export function createPvpLiveSession({
             lastSeenRevision: pendingRealtimeJoin.lastSeenRevision
           });
         }
+        if (pendingRealtimeResumeHeartbeat) {
+          pendingRealtimeResumeHeartbeat = false;
+          heartbeatRealtime(pendingRealtimeJoin && pendingRealtimeJoin.matchId || state.matchId, {
+            lastSeenRevision: pendingRealtimeJoin && pendingRealtimeJoin.lastSeenRevision
+          });
+        }
       },
       onClose: () => {
         if (connectionId !== realtimeConnectionId) return;
@@ -658,13 +665,46 @@ export function createPvpLiveSession({
     });
   }
 
-  function heartbeatRealtime(matchId = '') {
+  function resumeRealtime(matchId = '') {
+    const id = String(matchId || pendingRealtimeJoin && pendingRealtimeJoin.matchId || state.matchId || '').trim();
+    if (!id) return false;
+    const previousLastSeenRevision = pendingRealtimeJoin && pendingRealtimeJoin.matchId === id
+      ? Math.max(0, Math.floor(Number(pendingRealtimeJoin.lastSeenRevision) || 0))
+      : 0;
+    pendingRealtimeJoin = {
+      matchId: id,
+      lastSeenRevision: Math.max(previousLastSeenRevision, getLastSeenEventRevision())
+    };
+    pendingRealtimeResumeHeartbeat = true;
+    if (!realtimeHandle) {
+      connectRealtime();
+      return true;
+    }
+    const joined = sendRealtime({
+      type: 'join_match',
+      matchId: pendingRealtimeJoin.matchId,
+      lastSeenRevision: pendingRealtimeJoin.lastSeenRevision
+    });
+    if (joined) {
+      pendingRealtimeResumeHeartbeat = false;
+      heartbeatRealtime(pendingRealtimeJoin.matchId, {
+        lastSeenRevision: pendingRealtimeJoin.lastSeenRevision
+      });
+    }
+    return joined;
+  }
+
+  function heartbeatRealtime(matchId = '', { lastSeenRevision = null } = {}) {
     const id = String(matchId || state.matchId || '').trim();
     if (!id) return false;
+    const hasExplicitRevision = lastSeenRevision !== null && lastSeenRevision !== undefined;
+    const explicitRevision = Number(lastSeenRevision);
     return sendRealtime({
       type: 'heartbeat',
       matchId: id,
-      lastSeenRevision: getLastSeenEventRevision()
+      lastSeenRevision: hasExplicitRevision && Number.isFinite(explicitRevision)
+        ? Math.max(0, Math.floor(explicitRevision))
+        : getLastSeenEventRevision()
     });
   }
 
@@ -686,6 +726,7 @@ export function createPvpLiveSession({
     }
     realtimeHandle = null;
     pendingRealtimeJoin = null;
+    pendingRealtimeResumeHeartbeat = false;
     return publish({ realtimeStatus: 'closed' });
   }
 
@@ -1364,6 +1405,7 @@ export function createPvpLiveSession({
     heartbeat,
     connectRealtime,
     joinRealtimeMatch,
+    resumeRealtime,
     submitRealtimeIntent,
     heartbeatRealtime,
     disconnectRealtime,
