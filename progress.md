@@ -1,5 +1,28 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-20: V10-S9L live PVP surrender misclick confirmation
+  - 本轮完成
+    - `js/scenes/pvp-scene.js` 为 live PVP 的 `认输` 增加本地短窗口二次确认：第一次点击只 arm `liveSurrenderConfirmUntil`、显示“再次点击确认认输”提示，并把按钮文案切到“确认认输”；第二次点击且仍处于 active / sync_required 才提交既有权威 `intentType: 'surrender'`。
+    - 非 surrender 的 live intent 会清掉本地确认态；离开 active / sync_required 时也会清掉确认态，避免认输确认残留到 finished、invalidated、再战、邀请或刷新恢复后变成“第二击即认输”。
+    - 保持服务端和 session 结算语义不变：确认后的 surrender 仍走原有 `/intents`、server reducer、finished / settlement / post-match review 链路；二次确认只负责前端误触保护，不把 UI 确认语义写进正式结算。
+    - `tests/sanity_pvp_live_ui_runtime_checks.mjs` 新增运行时红绿测：第一次 `surrenderLiveMatch()` 不得提交 intent，第二次才提交一个 surrender intent 并清空确认窗。
+    - `tests/browser_pvp_live_audit.mjs` 把旧“一点即投”审计改成两步：第一次点击后 phase 仍为 active、hint 和按钮文案进入确认态、没有 surrender 调用；第二次点击才进入 finished 与复盘。
+    - `tests/browser_pvp_live_real_backend_smoke.mjs` 在真实双账号链路中固定第一次认输不终局、第二次才走真实后端 surrender；旧的第二处直调 surrender 也改成连续两次调用，避免 smoke 仍按旧单步模型通过。
+    - `tests/sanity_pvp_live_ui_contract_checks.cjs` 与 `tests/sanity_release_gate_coverage_checks.cjs` 固定 helper、文案 marker、browser finding 和 real backend finding，防止后续回退成一击即发。
+  - 已验证
+    - 红测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs` 在实现前失败于第一次认输已经提交 `surrender` intent。
+    - 红测：`node tests/sanity_pvp_live_ui_contract_checks.cjs` 在实现前失败于缺少 `isLiveSurrenderConfirmArmed(` 合约 marker。
+    - 绿测：`node --check js/scenes/pvp-scene.js`
+    - 绿测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs`
+    - 绿测：`node tests/sanity_pvp_live_ui_contract_checks.cjs`
+    - 绿测：`node tests/sanity_release_gate_coverage_checks.cjs`
+    - 构建：`npm run build:pages`
+    - 浏览器审计：`node tests/browser_pvp_live_audit.mjs http://127.0.0.1:4173 output/pvp-live-surrender-confirm-audit-final`，69/69 findings、0 console error。
+    - 真实后端 smoke：`node tests/browser_pvp_live_real_backend_smoke.mjs http://127.0.0.1:4173 output/pvp-live-surrender-confirm-real-final`，42/42 findings、0 console error。
+    - 全量 Node：`npm run test:node`
+  - 当前结论
+    - live PVP 的高代价“认输”不再是一击即发，移动端或紧张局内误触不会直接送掉正式对局；确认后仍沿用服务端权威 surrender 结算，双方都能获得原有终局复盘、正式结算和再战路径。该切片只提升局内高代价操作安全性，不改变伤害、生命、抽牌、灵力、起手、匹配评分、正式积分、奖励、赛季验证或服务端结算；更强的 modal / 长按 / 滑动确认、移动端专门触控审计和线上部署仍未封板。
+
 - 2026-06-20: V10-S9K live PVP entry safeguard action loop
   - 本轮完成
     - `js/scenes/pvp-scene.js` 把上一轮 `connection_health_failed` 的结构化 `connectionHealth.actions` 接成真正可点的 UI：idle blocked 状态下，`join-queue` 会从“入队”切成“重试检测”，`practice-live` 会按 `practice` action 启用，恢复健康 idle 后自动还原正常入队文案和禁用练习入口。

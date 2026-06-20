@@ -605,4 +605,48 @@ assert.equal(refreshMatchCalls, 1, 'manual live refresh should read authoritativ
 await PVPScene.submitLiveEmote('thinking');
 assert.equal(realtimeIntentCalls.length, 8, 'live UI should unlock pending realtime intents after manual authoritative refresh');
 
+let surrenderState = {
+  phase: 'active',
+  matchId: 'pvpm-ui-runtime-surrender-confirm',
+  seatId: 'A',
+  realtimeStatus: 'closed',
+  stateView: {
+    matchId: 'pvpm-ui-runtime-surrender-confirm',
+    status: 'active',
+    stateVersion: 21,
+    currentSeat: 'A'
+  }
+};
+const surrenderIntents = [];
+PVPScene.liveIntentInFlight = null;
+PVPScene.liveSurrenderConfirmUntil = 0;
+PVPScene.liveInlineHint = '';
+PVPScene.startLiveRealtime = () => {};
+PVPScene.stopLivePolling = () => {};
+PVPScene.renderLivePanel = () => {};
+PVPScene.getLiveSession = () => ({
+  getState: () => surrenderState,
+  submitIntent: async (intent) => {
+    surrenderIntents.push(intent);
+    surrenderState = {
+      ...surrenderState,
+      phase: 'finished',
+      stateView: {
+        ...surrenderState.stateView,
+        status: 'finished',
+        stateVersion: surrenderState.stateView.stateVersion + 1
+      }
+    };
+    return surrenderState;
+  }
+});
+await PVPScene.surrenderLiveMatch();
+assert.equal(surrenderIntents.length, 0, 'first live surrender click should only arm confirmation and must not submit surrender intent');
+assert.match(PVPScene.liveInlineHint, /再次点击确认认输/, 'first live surrender click should explain the second confirmation click');
+assert.ok(PVPScene.liveSurrenderConfirmUntil > Date.now(), 'first live surrender click should arm a short confirmation window');
+await PVPScene.surrenderLiveMatch();
+assert.equal(surrenderIntents.length, 1, 'second live surrender click inside confirmation window should submit exactly one surrender intent');
+assert.equal(surrenderIntents[0].intentType, 'surrender', 'confirmed live surrender should still use the authoritative surrender intent type');
+assert.equal(PVPScene.liveSurrenderConfirmUntil, 0, 'confirmed live surrender should clear the confirmation window');
+
 console.log('PVP live UI runtime checks passed.');

@@ -977,6 +977,23 @@ async function writeReport() {
       JSON.stringify({ afterEndTurnB, seatBTimerProbe }),
     );
 
+    const realSurrenderConfirmProbe = await seatB.page.evaluate(async () => {
+      await window.PVPScene.surrenderLiveMatch();
+      return {
+        phase: window.PVPScene.getLiveSnapshot()?.phase || '',
+        hint: document.querySelector('[data-live-last-error]')?.textContent || '',
+        buttonText: document.querySelector('[data-live-action="surrender"]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+        postReviewText: document.querySelector('[data-live-post-match-review]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+      };
+    });
+    add(
+      'real browser surrender confirmation blocks terminal submit until second click',
+      realSurrenderConfirmProbe.phase === 'active'
+        && /再次点击确认认输/.test(realSurrenderConfirmProbe.hint)
+        && /确认认输/.test(realSurrenderConfirmProbe.buttonText)
+        && !/首败复盘|认输结束|正式积分/.test(realSurrenderConfirmProbe.postReviewText || ''),
+      JSON.stringify(realSurrenderConfirmProbe),
+    );
     await seatB.page.evaluate(async () => {
       await window.PVPScene.surrenderLiveMatch();
     });
@@ -1522,6 +1539,7 @@ async function writeReport() {
     await waitForLivePhase(seatA.page, 'active');
     await waitForLivePhase(seatB.page, 'active');
     await seatB.page.evaluate(async () => {
+      await window.PVPScene.surrenderLiveMatch();
       await window.PVPScene.surrenderLiveMatch();
     });
     await waitForLivePhase(seatB.page, 'finished');

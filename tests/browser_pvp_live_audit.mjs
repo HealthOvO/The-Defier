@@ -1921,6 +1921,22 @@ async function safeElementScreenshot(page, selector, outputPath) {
   );
 
   await page.click('[data-live-action="surrender"]', { timeout: 5000, force: true });
+  await page.waitForTimeout(100);
+  const surrenderConfirmProbe = await page.evaluate(() => ({
+    phase: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-phase') || '',
+    hint: document.querySelector('[data-live-last-error]')?.textContent || '',
+    buttonText: document.querySelector('[data-live-action="surrender"]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+    calls: window.__livePvpAuditCalls,
+  }));
+  add(
+    'live UI requires a second click before surrender submits terminal intent',
+    surrenderConfirmProbe.phase === 'active'
+      && /再次点击确认认输/.test(surrenderConfirmProbe.hint)
+      && /确认认输/.test(surrenderConfirmProbe.buttonText)
+      && !/surrender/.test(JSON.stringify(surrenderConfirmProbe.calls)),
+    JSON.stringify(surrenderConfirmProbe),
+  );
+  await page.click('[data-live-action="surrender"]', { timeout: 5000, force: true });
   await page.waitForTimeout(200);
   const surrenderProbe = await page.evaluate(() => ({
     phase: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-phase') || '',

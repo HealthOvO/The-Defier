@@ -33,6 +33,8 @@ export const PVPScene = {
   liveRealtimeRenderQueued: false,
   liveIntentSeq: 0,
   liveIntentInFlight: { action: null, social: null },
+  liveSurrenderConfirmUntil: 0,
+  liveSurrenderConfirmMs: 6000,
   liveMulliganSelection: new Set(),
   liveSelectedLoadoutPreset: 'balanced',
   liveDrillScenario: null,
@@ -2840,7 +2842,11 @@ export const PVPScene = {
     const root = document.querySelector('[data-live-pvp-root]');
     if (!root) return;
     const state = this.getLiveSession().getState();
+    if (!(phase === 'active' || phase === 'sync_required')) {
+      this.clearLiveSurrenderConfirm();
+    }
     const entrySafeguardBlocked = phase === 'idle' && this.isLiveEntrySafeguardBlocked(state);
+    const surrenderConfirmArmed = this.isLiveSurrenderConfirmArmed(state);
     const intentLocked = this.isLiveIntentInFlight(null, 'action');
     const socialIntentLocked = this.isLiveIntentInFlight(null, 'social');
     const setDisabled = (action, disabled) => {
@@ -2860,6 +2866,7 @@ export const PVPScene = {
     setDisabled('practice-live', !(entrySafeguardBlocked && this.hasLiveEntrySafeguardAction(state, 'practice')) && !(phase === 'waiting' && this.getLiveWaitingReport(state)?.longWait));
     setDisabled('refresh-match', phase === 'queueing' || phase === 'idle' || phase === 'finished' || phase === 'invalidated');
     setButtonText('join-queue', entrySafeguardBlocked && this.hasLiveEntrySafeguardAction(state, 'retry_connection_check') ? '重试检测' : '入队');
+    setButtonText('surrender', surrenderConfirmArmed ? '确认认输' : '认输');
     setDisabled('confirm-mulligan', intentLocked || !(phase === 'setup' && self && !self.mulliganUsed));
     setDisabled('ready', intentLocked || !(phase === 'setup' && self && !self.ready));
     setDisabled('end-turn', intentLocked || !(phase === 'active' && isMyTurn));
@@ -2997,6 +3004,9 @@ export const PVPScene = {
     const session = this.getLiveSession();
     const state = session.getState();
     if (!state || !state.matchId) return state;
+    if (String(intent.intentType || '') !== 'surrender') {
+      this.clearLiveSurrenderConfirm();
+    }
     const lockKey = this.getLiveIntentLockKey(intent.intentType);
     const pendingIntent = this.resolveLiveIntentInFlight(state, lockKey);
     if (pendingIntent) {
@@ -3082,6 +3092,24 @@ export const PVPScene = {
       surrender: ['player_surrendered', 'match_finished']
     };
     return releaseEventsByIntent[String(intentType || '')] || [];
+  },
+  clearLiveSurrenderConfirm() {
+    this.liveSurrenderConfirmUntil = 0;
+  },
+  isLiveSurrenderConfirmArmed(state = null) {
+    const source = state && typeof state === 'object' ? state : this.getLiveSession().getState();
+    if (!source || !source.matchId || !(source.phase === 'active' || source.phase === 'sync_required')) return false;
+    return Date.now() <= Math.max(0, Math.floor(Number(this.liveSurrenderConfirmUntil) || 0));
+  },
+  armLiveSurrenderConfirm(state = null, message = '再次点击确认认输；本局会立刻结束，对手获胜，正式结果只按当前对局模式的服务端规则处理。') {
+    const source = state && typeof state === 'object' ? state : this.getLiveSession().getState();
+    if (!source || !source.matchId || !(source.phase === 'active' || source.phase === 'sync_required')) return false;
+    this.liveSurrenderConfirmUntil = Date.now() + Math.max(1000, Math.floor(Number(this.liveSurrenderConfirmMs) || 6000));
+    this.liveInlineHint = message;
+    if (typeof document !== 'undefined' && typeof document.getElementById === 'function' && typeof Utils !== 'undefined' && Utils && typeof Utils.showBattleLog === 'function') {
+      Utils.showBattleLog(this.liveInlineHint);
+    }
+    return true;
   },
   getLiveAuthoritativeEvents(state = null) {
     const source = state || this.getLiveSession().getState();
@@ -3542,6 +3570,15 @@ export const PVPScene = {
     this.renderLivePanel();
   },
   async surrenderLiveMatch() {
+    const session = this.getLiveSession();
+    const state = session && typeof session.getState === 'function' ? session.getState() : null;
+    if (!state || !state.matchId || !(state.phase === 'active' || state.phase === 'sync_required')) return state;
+    if (!this.isLiveSurrenderConfirmArmed(state)) {
+      this.armLiveSurrenderConfirm(state, '再次点击确认认输；本局会立刻结束，对手获胜，正式结果只按当前对局模式的服务端规则处理。');
+      this.renderLivePanel();
+      return state;
+    }
+    this.clearLiveSurrenderConfirm();
     await this.submitLiveIntent({
       intentId: this.makeLiveIntentId('surrender'),
       intentType: 'surrender',

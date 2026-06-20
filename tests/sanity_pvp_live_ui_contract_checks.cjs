@@ -97,6 +97,9 @@ const liveBrowserAudit = read('tests/browser_pvp_live_audit.mjs');
   'renderLivePanel()',
   'formatLiveRealtimeStatus(',
   'buildLiveQueueConnectionHealthProbe(',
+  'isLiveSurrenderConfirmArmed(',
+  'armLiveSurrenderConfirm(',
+  'clearLiveSurrenderConfirm(',
   'joinLiveQueue()',
   'createLiveInvite()',
   'joinLiveInvite()',
@@ -380,6 +383,20 @@ assert.ok(scene.includes('wideMatchConsent: true'), 'live wide match consent act
 const submitLiveCardBody = methodBody(scene, 'submitLiveCard');
 assert.ok(submitLiveCardBody.includes('view.opponent') && submitLiveCardBody.includes("state.seatId === 'B'"), 'submitLiveCard should target the opponent seat from live state, not hard-code seat B');
 assert.ok(!submitLiveCardBody.includes("targetSeat: 'B'"), 'submitLiveCard must not hard-code targetSeat to B');
+
+const surrenderLiveMatchBody = methodBody(scene, 'surrenderLiveMatch');
+[
+  'isLiveSurrenderConfirmArmed',
+  'armLiveSurrenderConfirm',
+  '再次点击确认认输',
+  "intentType: 'surrender'",
+].forEach((needle) => {
+  assert.ok(surrenderLiveMatchBody.includes(needle), `surrenderLiveMatch should require explicit confirm before terminal intent: ${needle}`);
+});
+assert.ok(
+  surrenderLiveMatchBody.indexOf('armLiveSurrenderConfirm') < surrenderLiveMatchBody.indexOf("intentType: 'surrender'"),
+  'surrenderLiveMatch should arm confirmation before submitting the terminal surrender intent',
+);
 
 const firstGuideBody = methodBody(scene, 'renderLiveFirstMatchGuide');
 [
