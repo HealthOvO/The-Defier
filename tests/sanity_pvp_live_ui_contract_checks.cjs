@@ -150,6 +150,10 @@ const liveBrowserAudit = read('tests/browser_pvp_live_audit.mjs');
   'formatLiveEvent(',
   'formatLiveLoadoutSummary(',
   'getLiveEmoteOptions()',
+  'getLiveSocialPreferenceStorageKey()',
+  'loadLiveSocialPreferences()',
+  'saveLiveSocialPreferences()',
+  'ensureLiveSocialPreferencesLoaded()',
   'submitLiveEmote(',
   'toggleLiveSocialMute(',
   'createLiveInvite(',
@@ -162,6 +166,12 @@ const liveBrowserAudit = read('tests/browser_pvp_live_audit.mjs');
   'joinLiveInvite(',
   'cancelLiveInvite(',
   'filterLiveEventsForMute(',
+  'pvp-live-social-preferences-v1',
+  "preferenceScope: 'local_only'",
+  "sourceVisibility: 'local_preference'",
+  "rankedImpact: 'none'",
+  "persistence: 'local_storage'",
+  '本地偏好',
 ].forEach((needle) => {
   assert.ok(scene.includes(needle), `PVPScene should expose live UI marker: ${needle}`);
 });
@@ -318,6 +328,12 @@ assert.ok(scene.includes('markLiveIntentInFlight'), 'PVPScene should mark realti
 assert.ok(scene.includes('clearLiveIntentInFlight'), 'PVPScene should clear live intent lock for HTTP fallback or released realtime state');
 assert.ok(scene.includes('getLiveIntentLockKey'), 'PVPScene should split action and social realtime intent locks');
 assert.ok(scene.includes('lastRealtimeIntentResult'), 'PVPScene should release realtime intent locks from matching intent_result ack');
+assert.ok(scene.includes('getLiveActionReleaseEventTypes'), 'PVPScene should map action intent locks to matching authoritative event types');
+assert.ok(scene.includes('hasLiveActionReleaseEvidence'), 'PVPScene should not release action intent locks from social-only stateVersion changes');
+const resolveLiveIntentBody = methodBody(scene, 'resolveLiveIntentInFlight');
+assert.ok(resolveLiveIntentBody.includes('actionReleasedByEvent'), 'resolveLiveIntentInFlight should require action event evidence before stateVersion unlocks action locks');
+assert.ok(scene.includes('lastSeenEventRevision'), 'PVPScene should record event high-water marks when realtime intents become pending');
+assert.ok(scene.includes('eventRevision <= pendingEventRevision'), 'PVPScene should ignore stale action events when social stateVersion changes arrive later');
 assert.ok(submitLiveIntentBody.includes('上一动作正在等待权威回执，请稍候。'), 'submitLiveIntent should surface a pending-action hint instead of sending duplicate live intents');
 assert.ok(scene.includes('const intentLocked = this.isLiveIntentInFlight(state)'), 'live hand rendering should disable card clicks while a realtime intent is pending');
 assert.ok(scene.includes('button.disabled = socialIntentLocked || !this.canSendLiveEmote(phase)'), 'live emote buttons should only be disabled while a social realtime intent is pending');

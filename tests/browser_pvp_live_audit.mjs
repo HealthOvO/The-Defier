@@ -836,6 +836,9 @@ async function safeElementScreenshot(page, selector, outputPath) {
     };
     if (window.PVPScene) {
       window.PVPScene.liveSession = null;
+      window.PVPScene.liveSocialMuted = false;
+      window.PVPScene.liveSocialPreferencesLoaded = false;
+      window.localStorage.removeItem('the-defier:pvp-live-social-preferences:v1');
     }
   });
 
@@ -1421,7 +1424,24 @@ async function safeElementScreenshot(page, selector, outputPath) {
     status: document.querySelector('[data-live-social-status]')?.textContent || '',
     hint: document.querySelector('[data-live-last-error]')?.textContent || '',
     payload: window.PVPScene.getLiveSnapshot()?.social || null,
+    storage: window.localStorage.getItem('the-defier:pvp-live-social-preferences:v1') || '',
   }));
+  const mutedPersistProbe = await page.evaluate(() => {
+    const storageKey = 'the-defier:pvp-live-social-preferences:v1';
+    const scene = window.PVPScene;
+    const storage = window.localStorage.getItem(storageKey) || '';
+    scene.liveSocialMuted = false;
+    scene.liveSocialPreferencesLoaded = false;
+    scene.loadLiveSocialPreferences();
+    scene.renderLivePanel();
+    return {
+      status: document.querySelector('[data-live-social-status]')?.textContent || '',
+      events: document.querySelector('[data-live-event-log]')?.textContent || '',
+      payload: scene.getLiveSnapshot()?.social || null,
+      storage,
+      liveSocialMuted: scene.liveSocialMuted,
+    };
+  });
   add(
     'live UI sends preset emote and can locally mute opponent emotes',
     /emote/.test(JSON.stringify(ownEmoteProbe.calls))
@@ -1429,10 +1449,29 @@ async function safeElementScreenshot(page, selector, outputPath) {
       && /抱拳/.test(ownEmoteProbe.events)
       && /B · 思考/.test(opponentEmoteProbe.events)
       && /已静音/.test(mutedEmoteProbe.status)
+      && /本地偏好/.test(mutedEmoteProbe.status)
       && mutedEmoteProbe.payload?.muted === true
+      && mutedEmoteProbe.payload?.preferenceScope === 'local_only'
+      && mutedEmoteProbe.payload?.sourceVisibility === 'local_preference'
+      && mutedEmoteProbe.payload?.rankedImpact === 'none'
       && !/B · 思考/.test(mutedEmoteProbe.events)
       && !/自由文本/.test(JSON.stringify(ownEmoteProbe.calls)),
     JSON.stringify({ ownEmoteProbe, opponentEmoteProbe, mutedEmoteProbe }),
+  );
+  add(
+    'live UI persists local social mute preference without affecting ranked state',
+    /"socialMuted":true/.test(mutedPersistProbe.storage)
+      && mutedPersistProbe.liveSocialMuted === true
+      && /已静音/.test(mutedPersistProbe.status)
+      && /本地偏好/.test(mutedPersistProbe.status)
+      && mutedPersistProbe.payload?.muted === true
+      && mutedPersistProbe.payload?.preferenceScope === 'local_only'
+      && mutedPersistProbe.payload?.sourceVisibility === 'local_preference'
+      && mutedPersistProbe.payload?.rankedImpact === 'none'
+      && mutedPersistProbe.payload?.persistence === 'local_storage'
+      && !/B · 思考/.test(mutedPersistProbe.events)
+      && !/reward|rating|elo|settlement|matchTicket/i.test(JSON.stringify(mutedPersistProbe)),
+    JSON.stringify({ mutedPersistProbe }),
   );
 
   const realtimeIntentRefreshProbe = await page.evaluate(async () => {

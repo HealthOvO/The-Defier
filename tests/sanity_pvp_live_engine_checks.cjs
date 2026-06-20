@@ -305,7 +305,7 @@ const setupEmote = reduceIntent(baseState, {
 });
 assert(setupEmote.result === 'accepted', 'setup phase should accept preset emote as non-combat social intent');
 assert(setupEmote.state.status === 'setup', 'setup emote must not start or finish the match');
-assert(setupEmote.state.stateVersion === baseState.stateVersion, 'emote should not advance combat state version');
+assert(setupEmote.state.stateVersion === baseState.stateVersion + 1, 'emote should advance public state version for persistence without starting combat');
 assert(setupEmote.events.length === 1 && setupEmote.events[0].eventType === 'emote_sent', 'emote should emit one public emote event');
 assert(setupEmote.events[0].payload.emoteId === 'respect', 'emote event should expose preset emote id');
 assert(projectStateView(setupEmote.state, 'B').recentEvents.some(e => e.eventType === 'emote_sent' && e.payload.seatId === 'A'), 'opponent view should see public preset emote event');

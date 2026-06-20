@@ -1,5 +1,32 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-20: V10-S9E live PVP local social comfort preference
+  - 本轮完成
+    - `js/scenes/pvp-scene.js` 新增 `pvp-live-social-preferences-v1` 本地偏好读写，玩家静音对手预设表情后会写入 localStorage，重新进入 live 面板或恢复 snapshot 时仍保持本机静音。
+    - `PVPScene.getLiveSnapshot().social` 现在固定输出 `preferenceScope: local_only`、`sourceVisibility: local_preference`、`rankedImpact: none` 和 `persistence: local_storage`，把“只影响本机显示、不写正式状态”的边界直接暴露给文本渲染和浏览器审计。
+    - live 面板社交状态文案同步为“本地偏好 / 不写正式积分”，静音提示明确不改变服务端权威事件；预设表情发送仍走既有 live intent / 服务端白名单 / social in-flight 锁，不增加自由文本聊天；重连同步态不再展示可点但必被服务端拒绝的表情入口。
+    - `server/pvp-live/engine/reducer.js` 修正 emote 非战斗事件版本语义：accepted emote 不改战斗回合、血量或行动席，但会推进公开 `stateVersion`，避免 active 对局里社交事件改变事件流却被 SQLite active same-version content guard 拒绝为 `conflicting_state_version`。
+    - `PVPScene.resolveLiveIntentInFlight()` 同步收紧 action 锁释放条件：matching `intent_result` 仍可立即释放；若只靠权威版本推进兜底，必须同时看到 pending 建立后的对应 action 类型公开事件证据，避免对手 `emote_sent` 等社交事件推进 `stateVersion`，再叠加旧 action 事件残留后误释放出牌 / 结束回合 pending。
+    - `tests/sanity_pvp_live_ui_runtime_checks.mjs` 新增 localStorage stub 和偏好加载 / snapshot / toggle 持久化断言；`tests/browser_pvp_live_audit.mjs` 新增真实页面持久化探针，验证刷新本地偏好后对手表情仍被本机隐藏，且 payload 不包含 reward / rating / ELO / settlement / matchTicket。
+    - `tests/browser_pvp_live_real_backend_smoke.mjs` 在真实后端双账号 active 对局里新增社交 smoke：B 发送预设表情，A 看到后本地静音并重新加载偏好，确认 DOM、snapshot 和 `render_game_to_text()` 都保持 `local_only / local_preference / none`，且不影响后续出牌、认输和正式结算主链路。
+    - `tests/sanity_pvp_live_engine_checks.cjs` 与 `tests/sanity_pvp_live_route_checks.cjs` 同步固定 emote 会推进公开状态版本但不启动战斗；`tests/sanity_pvp_live_ui_contract_checks.cjs` 与 `tests/sanity_release_gate_coverage_checks.cjs` 固定源码、UI 文案、fake browser 和 real backend smoke marker，防止后续重构把本地静音误接到排名、奖励或结算链，或把社交事件版本推进误当成 action ack。
+  - 已验证
+    - 红测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs` 在实现前失败于 `PVPScene.loadLiveSocialPreferences is not a function`。
+    - 红测：补 action/social 锁边界后，`node tests/sanity_pvp_live_ui_runtime_checks.mjs` 在实现前失败于 `live UI should not unlock action intent when social stateVersion advance includes stale action events`，实际对手 `emote_sent` 推进版本且窗口残留旧 `turn_ended` 后误释放 action pending。
+    - 绿测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs`
+    - 绿测：`node tests/sanity_pvp_live_ui_contract_checks.cjs`
+    - 绿测：`node tests/sanity_release_gate_coverage_checks.cjs`
+    - 全量 Node：`npm run test:node`
+    - 浏览器审计：`node tests/browser_pvp_live_audit.mjs http://127.0.0.1:4173 output/pvp-live-social-action-lock-audit-final`，57/57 findings、0 console error。
+    - 真实后端 smoke：`node tests/browser_pvp_live_real_backend_smoke.mjs http://127.0.0.1:4173 output/pvp-live-social-action-lock-real-final`，35/35 findings、0 console error。
+    - 构建：`npm run build:pages`
+    - 同步检查：`node tests/sanity_intro_progress_sync_checks.cjs`
+    - 清洁检查：`git diff --check`
+    - 语法检查：`node --check js/scenes/pvp-scene.js`
+    - 语法检查：`node --check tests/sanity_pvp_live_ui_runtime_checks.mjs`
+  - 当前结论
+    - live PVP 现在允许玩家把“我不想看对手表情”的舒适度选择保存为本机偏好，减少 PVP 社交压力，同时不削弱对手表达、不屏蔽服务端事件、不影响正式积分、奖励、匹配、赛季验证或结算。该切片仍不是举报系统、好友黑名单、账号级封禁、自由文本聊天、生产部署或完整社交治理封板。
+
 - 2026-06-20: V10-S9D live PVP post-review practice plan
   - 本轮完成
     - `js/scenes/pvp-scene.js` 新增 `buildLivePostReviewPracticePlan()`，把已净化的 `keyTurnReplay` / `experienceReport` 转成 `pvp-live-practice-plan-v1`，包含公开节奏脚本、体验复查焦点、练习目标、教练提示和隐藏信息边界。
@@ -176,7 +203,7 @@ Original prompt: 进入全自动审查与修复模式，按顺序审查并修复
   - 本轮完成
     - `js/services/pvp-live-session.js` 现在把 WS `intent_result` 投影为 `lastRealtimeIntentResult`，scene 层可以用同一 `intentId` 的权威回执释放本地 pending。
     - `PVPScene.submitLiveIntent()` 增加 live intent in-flight 锁，防止同一 `stateVersion` 下双击 ready / end_turn / play_card / mulligan / surrender 发送多个不同 `intentId`。
-    - 锁拆成 action / social 两类：战斗动作等 `intent_result` 或权威 `stateVersion` 推进释放；表情不推进版本，必须靠同 intent ack 释放，且 pending 表情不阻塞战斗动作。
+    - 锁拆成 action / social 两类：战斗动作等同 intent 的 `intent_result` 释放；后续 S9E 已把权威 `stateVersion` 兜底释放收紧为“版本推进 + 匹配 action 类型的公开事件证据”，且表情现在会推进公开版本但仍不得释放 action 锁；pending 表情不阻塞战斗动作。
     - live 手牌、调息、ready、end-turn、surrender 和表情按钮会按对应 pending 锁禁用；`refresh-match` 不被锁住，手动完成一次权威刷新后会清本地 pending，作为 WS 回执丢失时的恢复通道。
     - `tests/sanity_pvp_live_ui_runtime_checks.mjs` 补红测覆盖 action 双击只发一次、reconnecting 不误解锁、social 双击只发一次、social ack 后释放、social pending 不阻塞 action。
     - `tests/sanity_pvp_live_session_checks.mjs` 固定 `intent_result` ack 投影；`tests/sanity_pvp_live_ui_contract_checks.cjs` 与 `tests/sanity_release_gate_coverage_checks.cjs` 固定 action/social 锁和 ack marker。
@@ -1049,7 +1076,7 @@ Original prompt: 进入全自动审查与修复模式，按顺序审查并修复
 
 - 2026-06-19: V10 真 PVP live 低干扰社交与离页心跳收口切片
   - 本轮完成
-    - `server/pvp-live/engine/rules.js` / `reducer.js` 新增白名单预设表情：`respect / thinking / well_played`；表情是 `emote_sent` 公开事件，不推进回合、不改 `stateVersion`、不刷新行动倒计时，也不触发伤害、胜负或结算。
+    - `server/pvp-live/engine/rules.js` / `reducer.js` 新增白名单预设表情：`respect / thinking / well_played`；表情是 `emote_sent` 公开事件。S9E 已把它调整为推进公开 `stateVersion` 以便持久化和跨端同步，但仍不推进回合、不刷新行动倒计时，也不触发伤害、胜负或结算。
     - 服务端按席位记录表情冷却，短时间重复发送返回 `emote_rate_limited`；非白名单表情返回 `invalid_emote`，不支持自由文本聊天。
     - `index.html` / `css/pvp.css` / `js/scenes/pvp-scene.js` 增加 live 社交区、预设表情按钮和本地“静音表情”；静音只过滤本地事件面板里的对手表情，不改变服务端权威事件、复盘或审计事实。
     - `js/services/pvp-live-session.js` 修正 `refreshMatch()`：刷新权威战局时会把 `stateView.recentEvents` 写回 `lastEvents`，避免事件面板长期停留在上一条本地行动事件。

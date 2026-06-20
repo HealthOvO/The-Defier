@@ -2,6 +2,7 @@ import assert from 'node:assert';
 
 const documentListeners = new Map();
 const windowListeners = new Map();
+const localStorageState = new Map();
 
 function addListener(registry, type, listener) {
   if (!registry.has(type)) registry.set(type, []);
@@ -52,6 +53,18 @@ globalThis.window = {
     clearedTimers.push(id);
   }
 };
+globalThis.localStorage = {
+  getItem(key) {
+    return localStorageState.has(key) ? localStorageState.get(key) : null;
+  },
+  setItem(key, value) {
+    localStorageState.set(key, String(value));
+  },
+  removeItem(key) {
+    localStorageState.delete(key);
+  }
+};
+globalThis.window.localStorage = globalThis.localStorage;
 
 const { PVPScene } = await import('../js/scenes/pvp-scene.js');
 
@@ -81,6 +94,25 @@ PVPScene.getLiveSession = () => ({
     }
   })
 });
+
+localStorageState.set('the-defier:pvp-live-social-preferences:v1', JSON.stringify({ socialMuted: true }));
+PVPScene.liveSocialMuted = false;
+PVPScene.liveSocialPreferencesLoaded = false;
+PVPScene.loadLiveSocialPreferences();
+assert.equal(PVPScene.liveSocialMuted, true, 'live social mute preference should load from local storage');
+const persistedMuteSnapshot = PVPScene.getLiveSnapshot();
+assert.equal(persistedMuteSnapshot.social.muted, true, 'live snapshot should expose persisted local social mute');
+assert.equal(persistedMuteSnapshot.social.preferenceScope, 'local_only', 'live social preference should be scoped to local display only');
+assert.equal(persistedMuteSnapshot.social.sourceVisibility, 'local_preference', 'live social preference should be marked as local visibility state');
+assert.equal(persistedMuteSnapshot.social.rankedImpact, 'none', 'live social preference should not affect ranked state');
+PVPScene.toggleLiveSocialMute();
+assert.equal(PVPScene.liveSocialMuted, false, 'toggle should update in-memory social mute preference');
+assert.match(
+  localStorageState.get('the-defier:pvp-live-social-preferences:v1') || '',
+  /"socialMuted":false/,
+  'toggle should persist social mute preference for the next session',
+);
+
 const realtimeSnapshot = PVPScene.getLiveSnapshot();
 assert.equal(realtimeSnapshot.realtimeStatus, 'reconnecting', 'live snapshot should expose local realtime reconnecting status');
 assert.equal(realtimeSnapshot.lastRealtimeSyncAt, 1781871234567, 'live snapshot should expose last local realtime sync timestamp');
@@ -307,7 +339,10 @@ let intentState = {
     status: 'active',
     stateVersion: 3,
     currentSeat: 'A'
-  }
+  },
+  lastEvents: [
+    { eventType: 'turn_ended', actingSeat: 'A', sequence: 3, payload: { nextSeat: 'B' } }
+  ]
 };
 const realtimeIntentCalls = [];
 PVPScene.liveIntentSeq = 0;
@@ -336,10 +371,31 @@ intentState = {
   stateView: {
     ...intentState.stateView,
     stateVersion: 4
-  }
+  },
+  lastEvents: [
+    { eventType: 'turn_ended', actingSeat: 'A', sequence: 3, payload: { nextSeat: 'B' } },
+    { eventType: 'emote_sent', actingSeat: 'B', sequence: 4, payload: { seatId: 'B', emoteId: 'thinking', label: '思考' } }
+  ]
 };
 await PVPScene.endLiveTurn();
-assert.equal(realtimeIntentCalls.length, 2, 'live UI should unlock realtime intent after authoritative stateVersion advances');
+assert.equal(
+  realtimeIntentCalls.length,
+  1,
+  'live UI should not unlock action intent when social stateVersion advance includes stale action events',
+);
+
+intentState = {
+  ...intentState,
+  stateView: {
+    ...intentState.stateView,
+    stateVersion: 5
+  },
+  lastEvents: [
+    { eventType: 'turn_ended', actingSeat: 'A', sequence: 5, payload: { nextSeat: 'B' } }
+  ]
+};
+await PVPScene.endLiveTurn();
+assert.equal(realtimeIntentCalls.length, 2, 'live UI should unlock realtime action intent after matching authoritative action event advances stateVersion');
 
 intentState = {
   phase: 'active',

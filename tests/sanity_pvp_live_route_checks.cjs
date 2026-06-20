@@ -822,7 +822,7 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
         assert.equal(emoteA.status, 200, 'participant should be able to submit a preset emote');
         assert.equal(emoteA.payload.result, 'accepted', 'preset emote should be accepted');
         assert.equal(emoteA.payload.stateView.status, 'setup', 'preset emote should not change setup status');
-        assert.equal(emoteA.payload.stateView.stateVersion, currentA.payload.stateView.stateVersion, 'preset emote should not advance combat state version');
+        assert.equal(emoteA.payload.stateView.stateVersion, currentA.payload.stateView.stateVersion + 1, 'preset emote should advance public state version without starting combat');
         assert.ok(emoteA.payload.events.some(event => event.eventType === 'emote_sent' && event.payload.emoteId === 'respect'), 'preset emote should return public emote event');
         const emoteVisibleToB = await request(baseUrl, `/api/pvp/live/matches/${joinB.payload.matchId}`, {
             token: tokenB
@@ -831,7 +831,7 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
         const emoteRateLimitedA = await submitIntent(baseUrl, tokenA, joinB.payload.matchId, {
             intentId: 'route-intent-emote-a-2',
             intentType: 'emote',
-            stateVersion: currentA.payload.stateView.stateVersion,
+            stateVersion: emoteA.payload.stateView.stateVersion,
             payload: { emoteId: 'thinking' }
         });
         assert.equal(emoteRateLimitedA.payload.result, 'rejected', 'repeat emote should be rate limited');
@@ -839,7 +839,7 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
         const invalidEmoteA = await submitIntent(baseUrl, tokenA, joinB.payload.matchId, {
             intentId: 'route-intent-emote-a-invalid',
             intentType: 'emote',
-            stateVersion: currentA.payload.stateView.stateVersion,
+            stateVersion: emoteA.payload.stateView.stateVersion,
             payload: { emoteId: 'free_text_payload' }
         });
         assert.equal(invalidEmoteA.payload.result, 'rejected', 'non-whitelisted emote should be rejected');
@@ -853,7 +853,7 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
         const setupPlayA = await submitIntent(baseUrl, tokenA, joinB.payload.matchId, {
             intentId: 'route-intent-setup-play-a-1',
             intentType: 'play_card',
-            stateVersion: pollA.payload.stateView.stateVersion,
+            stateVersion: emoteA.payload.stateView.stateVersion,
             payload: { cardInstanceId: 'A-burst-1', targetSeat: 'B' }
         });
         assert.equal(setupPlayA.payload.result, 'rejected', 'setup phase should reject card play before ready');
@@ -863,7 +863,7 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
             matchId: joinB.payload.matchId,
             tokenA,
             tokenB,
-            stateVersionA: pollA.payload.stateView.stateVersion,
+            stateVersionA: emoteA.payload.stateView.stateVersion,
             prefix: 'route-main'
         });
 

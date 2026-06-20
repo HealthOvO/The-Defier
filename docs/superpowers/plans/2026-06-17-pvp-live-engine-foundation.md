@@ -515,7 +515,7 @@ Expected and observed: focused Node checks, build, fake browser, and real browse
 Covered:
 
 - preset `emote` intents must be accepted in setup / active as non-combat social events;
-- accepted emotes must not advance combat `stateVersion`, refresh turn timers, deal damage, or settle matches;
+- accepted emotes must not advance combat rounds, refresh turn timers, deal damage, or settle matches; S9E later advances the public `stateVersion` so social events persist and sync correctly;
 - repeated emotes from the same seat must be rate-limited;
 - non-whitelisted emotes must be rejected, and no free-text chat path is introduced;
 - if both active seats exceed reconnect grace, the match must invalidate without win/loss settlement;
@@ -528,7 +528,7 @@ Implemented:
 
 - `RULES.social` defines `respect / thinking / well_played` and an emote cooldown;
 - `reduceIntent()` handles `intentType='emote'` before setup / active combat routing;
-- accepted emotes append public `emote_sent` events and update only social metadata, not combat state version;
+- accepted emotes append public `emote_sent` events and update only social metadata; S9E later advances the public `stateVersion` while still leaving combat rounds, timers, damage, and settlement untouched;
 - `LivePvpStore.submitIntent()` does not refresh `match.updatedAt` for `reduced.nonCombat`, so action countdown ownership is not extended by emotes;
 - `state-view` whitelists `emote_sent` public data.
 

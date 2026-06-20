@@ -37,6 +37,7 @@ export const PVPScene = {
   liveSelectedLoadoutPreset: 'balanced',
   liveDrillScenario: null,
   liveSocialMuted: false,
+  liveSocialPreferencesLoaded: false,
   liveInlineHint: '',
   liveReviewFocus: '',
   liveLoadoutReviewFocused: false,
@@ -73,6 +74,7 @@ export const PVPScene = {
       ...this.context,
       ...context
     };
+    this.loadLiveSocialPreferences();
     return this;
   },
   getGameRef() {
@@ -2050,10 +2052,56 @@ export const PVPScene = {
       { id: 'well_played', label: '妙手' }
     ];
   },
+  getLiveSocialPreferenceStorageKey() {
+    return 'the-defier:pvp-live-social-preferences:v1';
+  },
+  getLivePreferenceStorage() {
+    if (typeof localStorage !== 'undefined') return localStorage;
+    if (typeof window !== 'undefined' && window.localStorage) return window.localStorage;
+    return null;
+  },
+  loadLiveSocialPreferences() {
+    const storage = this.getLivePreferenceStorage();
+    this.liveSocialPreferencesLoaded = true;
+    if (!storage || typeof storage.getItem !== 'function') return { socialMuted: !!this.liveSocialMuted };
+    try {
+      const raw = storage.getItem(this.getLiveSocialPreferenceStorageKey());
+      if (!raw) return { socialMuted: !!this.liveSocialMuted };
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object' && Object.prototype.hasOwnProperty.call(parsed, 'socialMuted')) {
+        this.liveSocialMuted = parsed.socialMuted === true;
+      }
+    } catch (error) {
+      this.liveSocialMuted = false;
+    }
+    return { socialMuted: !!this.liveSocialMuted };
+  },
+  saveLiveSocialPreferences() {
+    const storage = this.getLivePreferenceStorage();
+    const payload = {
+      reportVersion: 'pvp-live-social-preferences-v1',
+      preferenceScope: 'local_only',
+      rankedImpact: 'none',
+      socialMuted: !!this.liveSocialMuted,
+      updatedAt: Date.now()
+    };
+    if (!storage || typeof storage.setItem !== 'function') return payload;
+    try {
+      storage.setItem(this.getLiveSocialPreferenceStorageKey(), JSON.stringify(payload));
+    } catch (error) {
+      // Local preference persistence is best-effort and must never block live PVP.
+    }
+    return payload;
+  },
+  ensureLiveSocialPreferencesLoaded() {
+    if (!this.liveSocialPreferencesLoaded) this.loadLiveSocialPreferences();
+    return { socialMuted: !!this.liveSocialMuted };
+  },
   canSendLiveEmote(phase) {
-    return phase === 'setup' || phase === 'active' || phase === 'sync_required';
+    return phase === 'setup' || phase === 'active';
   },
   filterLiveEventsForMute(events = []) {
+    this.ensureLiveSocialPreferencesLoaded();
     if (!this.liveSocialMuted) return Array.isArray(events) ? events : [];
     const state = this.getLiveSession().getState();
     const mySeat = String(state && state.seatId || '');
@@ -2085,14 +2133,16 @@ export const PVPScene = {
     this.renderLivePanel();
   },
   toggleLiveSocialMute() {
+    this.ensureLiveSocialPreferencesLoaded();
     this.liveSocialMuted = !this.liveSocialMuted;
+    this.saveLiveSocialPreferences();
     this.renderLivePanel();
     const root = document.querySelector('[data-live-pvp-root]');
     const hint = root ? root.querySelector('[data-live-last-error]') : null;
     if (hint) {
       hint.textContent = this.liveSocialMuted
-        ? '已静音对手表情；只影响本地显示，不改变权威事件。'
-        : '已恢复表情显示；仍只允许预设表情，无自由文本。';
+        ? '已静音对手表情；本地偏好已保存，只影响本机显示，不改变权威事件。'
+        : '已恢复表情显示；本地偏好已保存，仍只允许预设表情，无自由文本。';
     }
   },
   renderLiveLoadoutPresets(phase = 'idle') {
@@ -2144,6 +2194,7 @@ export const PVPScene = {
     return `${summary.label}${identity}${deckSize} · ${hash}${summary.locked ? ' · 已锁定' : ''}`;
   },
   getLiveSnapshot() {
+    this.ensureLiveSocialPreferencesLoaded();
     const session = this.getLiveSession();
     const state = session && typeof session.getState === 'function' ? session.getState() : null;
     if (!state) return null;
@@ -2174,7 +2225,12 @@ export const PVPScene = {
       currentSeat: view ? view.currentSeat || '' : '',
       status: view ? view.status || '' : '',
       social: {
+        reportVersion: 'pvp-live-social-preferences-v1',
         muted: !!this.liveSocialMuted,
+        preferenceScope: 'local_only',
+        sourceVisibility: 'local_preference',
+        rankedImpact: 'none',
+        persistence: 'local_storage',
         emotes: this.getLiveEmoteOptions().map(item => item.id)
       },
       matchQuality: this.getLiveMatchQuality(view),
@@ -2279,6 +2335,7 @@ export const PVPScene = {
   renderLivePanel() {
     const root = document.querySelector('[data-live-pvp-root]');
     if (!root) return;
+    this.ensureLiveSocialPreferencesLoaded();
     const session = this.getLiveSession();
     const state = session.getState();
     this.resolveAllLiveIntentInFlight(state);
@@ -2321,8 +2378,8 @@ export const PVPScene = {
       openingSafeguardEl.innerHTML = this.renderLiveOpeningSafeguardReport(view);
     }
     setText('[data-live-social-status]', this.liveSocialMuted
-      ? '社交：已静音对手表情 · 只影响本地显示'
-      : '社交：预设表情 · 无自由文本');
+      ? '社交：已静音对手表情 · 本地偏好 · 不写正式积分'
+      : '社交：预设表情 · 无自由文本 · 本地偏好');
     const guideEl = root.querySelector('[data-live-first-guide]');
     if (guideEl) guideEl.innerHTML = this.renderLiveFirstMatchGuide(view);
     const waitingReportEl = root.querySelector('[data-live-waiting-report]');
@@ -2662,10 +2719,63 @@ export const PVPScene = {
       updatedAt: Math.max(0, Math.floor(Number(result.updatedAt || result.serverTime) || 0))
     };
   },
+  getLiveActionReleaseEventTypes(intentType = '') {
+    const releaseEventsByIntent = {
+      play_card: [
+        'card_played',
+        'damage_applied',
+        'block_gained',
+        'budget_clamped',
+        'opening_protection_triggered',
+        'opening_counterplay_granted',
+        'opening_second_seat_buffer_granted',
+        'match_finished'
+      ],
+      end_turn: ['turn_ended', 'cards_drawn', 'match_finished'],
+      mulligan: ['mulligan_completed'],
+      ready: ['player_ready', 'battle_started'],
+      surrender: ['player_surrendered', 'match_finished']
+    };
+    return releaseEventsByIntent[String(intentType || '')] || [];
+  },
+  getLiveAuthoritativeEvents(state = null) {
+    const source = state || this.getLiveSession().getState();
+    const events = [];
+    const addEvents = (candidate) => {
+      if (!Array.isArray(candidate)) return;
+      candidate.forEach(event => {
+        if (event && typeof event === 'object' && event.eventType) events.push(event);
+      });
+    };
+    addEvents(source && source.lastEvents);
+    addEvents(source && source.stateView && source.stateView.recentEvents);
+    return events;
+  },
+  hasLiveActionReleaseEvidence(state = null, pending = null) {
+    if (!pending || !pending.intentType) return false;
+    const releaseTypes = this.getLiveActionReleaseEventTypes(pending.intentType);
+    if (releaseTypes.length === 0) return false;
+    const releaseTypeSet = new Set(releaseTypes);
+    const pendingSeat = String(pending.seatId || '');
+    const pendingEventRevision = Math.max(0, Math.floor(Number(pending.lastSeenEventRevision) || 0));
+    return this.getLiveAuthoritativeEvents(state).some(event => {
+      const eventType = String(event && event.eventType || '');
+      if (!releaseTypeSet.has(eventType)) return false;
+      const eventRevision = Math.floor(Number(event && event.sequence) || 0);
+      if (eventRevision <= pendingEventRevision) return false;
+      if (!pendingSeat) return true;
+      const payload = event && event.payload && typeof event.payload === 'object'
+        ? event.payload
+        : event && event.publicData && typeof event.publicData === 'object' ? event.publicData : {};
+      const eventSeat = String(event && event.actingSeat || payload.seatId || '');
+      return !eventSeat || eventSeat === pendingSeat;
+    });
+  },
   getLiveIntentLockState(state = null) {
     const source = state || this.getLiveSession().getState();
     return {
       matchId: String(source && (source.matchId || source.stateView && source.stateView.matchId) || ''),
+      seatId: String(source && source.seatId || ''),
       phase: String(source && source.phase || ''),
       stateVersion: this.getLiveStateVersion(source),
       realtimeStatus: String(source && source.realtimeStatus || ''),
@@ -2679,17 +2789,20 @@ export const PVPScene = {
     const key = lockKey === 'social' ? 'social' : 'action';
     const pending = locks[key];
     if (!pending) return null;
-    const current = this.getLiveIntentLockState(state);
+    const source = state || this.getLiveSession().getState();
+    const current = this.getLiveIntentLockState(source);
     const ack = current.lastRealtimeIntentResult;
     const acknowledged = !!ack
       && ack.intentId === pending.intentId
       && (!ack.matchId || ack.matchId === pending.matchId)
       && ack.updatedAt >= pending.updatedAt;
-    const versionAdvanced = key === 'action' && current.stateVersion > pending.stateVersion;
+    const actionReleasedByEvent = key === 'action'
+      && current.stateVersion > pending.stateVersion
+      && this.hasLiveActionReleaseEvidence(source, pending);
     const released = !current.matchId
       || current.matchId !== pending.matchId
       || current.phase !== pending.phase
-      || versionAdvanced
+      || actionReleasedByEvent
       || acknowledged;
     if (released) {
       this.clearLiveIntentInFlight(key);
@@ -2712,6 +2825,7 @@ export const PVPScene = {
       intentId: String(intent.intentId || ''),
       intentType: String(intent.intentType || ''),
       ...current,
+      lastSeenEventRevision: this.getLiveLastSeenEventRevision(state),
       startedAt: Date.now()
     };
   },

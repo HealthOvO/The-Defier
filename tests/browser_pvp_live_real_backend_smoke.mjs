@@ -770,6 +770,70 @@ async function writeReport() {
       JSON.stringify(activeGuideProbe),
     );
 
+    const realSocialSubmitProbe = await seatB.page.evaluate(async () => {
+      await window.PVPScene.submitLiveEmote('thinking');
+      await new Promise(resolve => setTimeout(resolve, 300));
+      const state = window.PVPScene.getLiveSession().getState();
+      return {
+        snapshot: window.PVPScene.getLiveSnapshot(),
+        lastError: state.lastError || null,
+        lastRealtimeIntentResult: state.lastRealtimeIntentResult || null,
+        eventLog: document.querySelector('[data-live-event-log]')?.textContent || '',
+      };
+    });
+    await seatA.page.evaluate(async () => {
+      await window.PVPScene.refreshLiveMatch();
+    });
+    await seatA.page.waitForTimeout(300);
+    const realSocialUnmutedProbe = await seatA.page.evaluate(() => ({
+      events: document.querySelector('[data-live-event-log]')?.textContent || '',
+      status: document.querySelector('[data-live-social-status]')?.textContent || '',
+      payload: window.PVPScene.getLiveSnapshot()?.social || null,
+      snapshot: window.PVPScene.getLiveSnapshot() || null,
+      sessionState: window.PVPScene.getLiveSession().getState(),
+    }));
+    await seatA.page.click('[data-live-action="toggle-social-mute"]', { timeout: 5000, force: true });
+    await seatA.page.waitForFunction(
+      () => /已静音/.test(document.querySelector('[data-live-social-status]')?.textContent || ''),
+      null,
+      { timeout: 5000 },
+    );
+    const realSocialMutedProbe = await seatA.page.evaluate(() => {
+      const storageKey = 'the-defier:pvp-live-social-preferences:v1';
+      const storage = window.localStorage.getItem(storageKey) || '';
+      window.PVPScene.liveSocialMuted = false;
+      window.PVPScene.liveSocialPreferencesLoaded = false;
+      window.PVPScene.loadLiveSocialPreferences();
+      window.PVPScene.renderLivePanel();
+      return {
+        events: document.querySelector('[data-live-event-log]')?.textContent || '',
+        status: document.querySelector('[data-live-social-status]')?.textContent || '',
+        payload: window.PVPScene.getLiveSnapshot()?.social || null,
+        storage,
+        liveSocialMuted: window.PVPScene.liveSocialMuted,
+        textPayload: JSON.parse(window.render_game_to_text()).pvp?.live?.social || null,
+      };
+    });
+    add(
+      'real browser persists local social mute without ranked impact',
+      realSocialSubmitProbe.lastRealtimeIntentResult?.result === 'accepted'
+        && !/sync_required|conflicting_state_version/i.test(JSON.stringify(realSocialSubmitProbe))
+        && /B · (思考|thinking)/.test(realSocialUnmutedProbe.events)
+        && /已静音/.test(realSocialMutedProbe.status)
+        && /本地偏好/.test(realSocialMutedProbe.status)
+        && !/B · (思考|thinking)/.test(realSocialMutedProbe.events)
+        && /"socialMuted":true/.test(realSocialMutedProbe.storage)
+        && realSocialMutedProbe.liveSocialMuted === true
+        && realSocialMutedProbe.payload?.muted === true
+        && realSocialMutedProbe.payload?.preferenceScope === 'local_only'
+        && realSocialMutedProbe.payload?.sourceVisibility === 'local_preference'
+        && realSocialMutedProbe.payload?.rankedImpact === 'none'
+        && realSocialMutedProbe.payload?.persistence === 'local_storage'
+        && realSocialMutedProbe.textPayload?.rankedImpact === 'none'
+        && !/reward|rating|elo|settlement|matchTicket/i.test(JSON.stringify(realSocialMutedProbe)),
+      JSON.stringify({ realSocialSubmitProbe, realSocialUnmutedProbe, realSocialMutedProbe }),
+    );
+
     await seatA.page.evaluate(async () => {
       const state = window.PVPScene.getLiveSession().getState();
       const card = state.stateView?.self?.hand?.[0];

@@ -59,6 +59,7 @@ function accept(newState, intent, events, fingerprint) {
 function acceptNonCombat(newState, intent, events, fingerprint) {
     newState.eventSeq += events.length;
     newState.events.push(...events);
+    newState.stateVersion += 1;
     newState.processedIntents[intentKey(intent)] = {
         fingerprint,
         stateVersion: newState.stateVersion,
