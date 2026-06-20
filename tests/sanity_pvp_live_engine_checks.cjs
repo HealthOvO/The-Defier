@@ -61,6 +61,17 @@ function assertPostMatchReview(review, {
   assert(JSON.stringify(review.experienceReport.fairnessChecks).includes('"publicData"'), 'linked evidence should include allowlisted publicData for explainability');
   assert(typeof review.experienceReport.summary === 'string' && review.experienceReport.summary.length > 0, 'experience report should include a readable summary');
   assert(!/payload|hand|deck|cardId|instanceId|loadoutSnapshot/i.test(JSON.stringify(review.experienceReport)), 'experience report must not leak hidden card, hand, deck, or payload details');
+  assert(review.fairnessReceipt && review.fairnessReceipt.reportVersion === 'pvp-live-fairness-receipt-v1', 'post-match review should expose a player-facing fairness receipt');
+  assert(review.fairnessReceipt.sourceVisibility === 'public_events', 'fairness receipt should be built from public events');
+  assert(review.fairnessReceipt.usesHiddenInformation === false, 'fairness receipt must not use hidden information');
+  assert(review.fairnessReceipt.rankedImpact === 'none', 'fairness receipt should not imply ranked impact or compensation');
+  assert(review.fairnessReceipt.result === result && review.fairnessReceipt.finishReason === finishReason, 'fairness receipt should mirror the seat result and finish reason');
+  assert(['accepted', 'watch'].includes(review.fairnessReceipt.receiptState), 'fairness receipt should expose an accepted/watch state');
+  assert(/先手|秒杀|行动窗口|公平/.test(review.fairnessReceipt.fairnessVerdict), 'fairness receipt should explain anti-first-kill fairness');
+  assert(/反打|护体|窗口/.test(review.fairnessReceipt.counterplayVerdict), 'fairness receipt should explain counterplay or protection windows');
+  assert(Array.isArray(review.fairnessReceipt.evidenceSummary) && review.fairnessReceipt.evidenceSummary.length >= 3, 'fairness receipt should summarize multiple public checks');
+  assert(review.fairnessReceipt.evidenceSummary.every(item => item && item.id && item.label && Array.isArray(item.evidenceSequences)), 'fairness receipt evidence summary should be structured');
+  assert(!/payload|hand|deck|cardId|instanceId|loadoutSnapshot|reward|rating|elo/i.test(JSON.stringify(review.fairnessReceipt)), 'fairness receipt must not leak hidden cards or imply rating/reward');
   assert(!/reward|rating|elo/i.test(JSON.stringify(review)), 'post-match review must not imply reward or exact rating compensation');
 }
 
@@ -75,6 +86,8 @@ function assertDrawPostMatchReview(review) {
   assert(review.evidence.some(item => item.eventType === 'match_finished' && item.publicData && item.publicData.finishReason === 'round14_draw'), 'round14 draw evidence should expose public round14_draw reason');
   assert(review.keyTurnReplay && review.keyTurnReplay.turns.some(item => item.eventType === 'match_finished'), 'round14 draw key-turn replay should include the terminal score decision');
   assert(review.experienceReport && review.experienceReport.fairnessChecks.some(item => item.id === 'round14_resolution'), 'round14 draw experience report should expose long-game resolution fairness check');
+  assert(review.fairnessReceipt && review.fairnessReceipt.reportVersion === 'pvp-live-fairness-receipt-v1', 'round14 draw review should expose a fairness receipt');
+  assert(review.fairnessReceipt.evidenceSummary.some(item => item.id === 'round14_resolution'), 'round14 draw fairness receipt should summarize long-game public scoring');
   assert(!/reward|rating|elo|hand|deck|cardId|instanceId|loadoutSnapshot/i.test(JSON.stringify(review)), 'round14 draw review must not leak hidden cards or imply reward/rating');
 }
 

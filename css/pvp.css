@@ -1323,6 +1323,77 @@
     overflow-wrap: anywhere;
 }
 
+.pvp-live-fairness-receipt {
+    margin-top: 8px;
+    padding: 8px;
+    border-radius: 8px;
+    border: 1px solid rgba(153, 214, 170, 0.16);
+    background: rgba(8, 24, 17, 0.3);
+}
+
+.pvp-live-fairness-receipt.state-watch {
+    border-color: rgba(242, 192, 121, 0.24);
+    background: rgba(36, 28, 14, 0.28);
+}
+
+.pvp-live-fairness-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    min-width: 0;
+    color: rgba(231, 246, 235, 0.9);
+    font-size: 0.7rem;
+    font-weight: 650;
+}
+
+.pvp-live-fairness-head span:last-child {
+    color: rgba(207, 238, 217, 0.64);
+    text-align: right;
+}
+
+.pvp-live-fairness-verdicts {
+    margin-top: 7px;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+}
+
+.pvp-live-fairness-verdicts span,
+.pvp-live-fairness-evidence span {
+    min-width: 0;
+    padding: 6px 7px;
+    border-radius: 8px;
+    border: 1px solid rgba(153, 214, 170, 0.12);
+    background: rgba(255, 255, 255, 0.035);
+    color: rgba(226, 241, 231, 0.78);
+    font-size: 0.66rem;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+}
+
+.pvp-live-fairness-evidence {
+    margin-top: 7px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.pvp-live-fairness-evidence span.passed {
+    border-color: rgba(153, 214, 170, 0.2);
+}
+
+.pvp-live-fairness-evidence span.watch {
+    border-color: rgba(242, 192, 121, 0.2);
+}
+
+.pvp-live-fairness-boundary {
+    margin-top: 7px;
+    color: rgba(207, 238, 217, 0.62);
+    font-size: 0.64rem;
+    line-height: 1.35;
+}
+
 .pvp-live-experience-report {
     margin-top: 8px;
     padding: 8px;

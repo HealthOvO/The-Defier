@@ -665,6 +665,84 @@ function buildExperienceReport(evidence, { result, finishReason }) {
     };
 }
 
+function buildFairnessReceipt(experienceReport, { result, finishReason }) {
+    const report = experienceReport && typeof experienceReport === 'object' ? experienceReport : null;
+    const checks = Array.isArray(report && report.fairnessChecks) ? report.fairnessChecks : [];
+    const receiptState = report && report.nonGameRisk === 'low'
+        && checks.filter(check => check && check.passed === false).length === 0
+        ? 'accepted'
+        : 'watch';
+    const setupCheck = checks.find(check => check && check.id === 'setup_ready_required');
+    const budgetCheck = checks.find(check => check && check.id === 'first_action_budget');
+    const protectionCheck = checks.find(check => check && check.id === 'opening_protection');
+    const windowCheck = checks.find(check => check && check.id === 'decision_windows');
+    const round14Check = checks.find(check => check && check.id === 'round14_resolution');
+    const safeguard = report && report.safeguardSummary && typeof report.safeguardSummary === 'object'
+        ? report.safeguardSummary
+        : {};
+    const decisionWindowCount = Math.max(0, Math.floor(Number(report && report.decisionWindowCount) || 0));
+    const evidenceSummary = checks.slice(0, 5).map(check => {
+        const linked = Array.isArray(check && check.linkedEvidence) ? check.linkedEvidence : [];
+        return {
+            id: String(check && check.id || ''),
+            label: String(check && check.label || ''),
+            passed: !!(check && check.passed),
+            evidenceSequences: linked
+                .map(event => Math.max(0, Math.floor(Number(event && event.sequence) || 0)))
+                .filter(sequence => Number.isInteger(sequence))
+                .slice(0, 4)
+        };
+    }).filter(item => item.id && item.label);
+    const fairnessVerdict = receiptState === 'accepted'
+        ? '公平回执：公开事件能解释开战、压力和终局，不属于无解释先手秒杀。'
+        : '公平回执：公开行动窗口偏短，本局需要先复盘关键回合，再判断是否继续排位。';
+    const budgetVerdict = budgetCheck && budgetCheck.passed
+        ? String(budgetCheck.detail || '首动预算已按公开规则检查。')
+        : '首动预算证据不足，下一局优先观察第一手伤害是否被公开预算约束。';
+    const counterplayVerdict = safeguard.openingProtection === 'triggered'
+        ? '反打回执：开局护体已经触发，受保护方获得后续反打窗口。'
+        : safeguard.openingProtection === 'not_needed'
+            ? '反打回执：护体未触发，但公开事件显示双方已有行动窗口。'
+            : '反打回执：护体或反打窗口样本不足，建议先查看公开关键回合。';
+    const windowVerdict = windowCheck && windowCheck.passed
+        ? `行动窗口：公开事件至少覆盖 ${decisionWindowCount} 个行动席位。`
+        : '行动窗口：公开窗口偏短，先确认是否认输、超时或连接中断导致。';
+    const terminalVerdict = finishReason === 'round14_draw' || finishReason === 'round14_score'
+        ? String(round14Check && round14Check.detail || '长局终局来自公开轮次评分。')
+        : finishReason === 'connection_timeout'
+            ? '终局边界：连接超时来自服务端裁决，不把网络中断当作压制能力证明。'
+            : finishReason === 'timeout'
+                ? '终局边界：行动超时说明操作窗口耗尽，下一局优先降低关键回合操作压力。'
+                : finishReason === 'surrender'
+                    ? '终局边界：认输只说明本局提前结束，真正要复盘的是认输前公开压力。'
+                    : '终局边界：终局来自公开伤害或公开长局规则，复盘看终局前一手。';
+    const nextStepLine = receiptState === 'accepted'
+        ? (result === 'loss' ? '下一步：按回执里的压力窗口调整斗法谱或进入问道练习。' : '下一步：保留有效节奏，继续真人排位或邀请低压力再战。')
+        : '下一步：先查看权威事件和关键回合复盘，不把短窗口样本直接当成公平结论。';
+    return {
+        reportVersion: 'pvp-live-fairness-receipt-v1',
+        sourceVisibility: 'public_events',
+        usesHiddenInformation: false,
+        rankedImpact: 'none',
+        result,
+        finishReason,
+        receiptState,
+        riskState: String(report && report.nonGameRisk || 'watch'),
+        agencyLabel: String(report && report.agencyLabel || '公开窗口待复查'),
+        setupVerdict: setupCheck && setupCheck.passed
+            ? '开战回执：双方准备公开确认后才进入战斗。'
+            : '开战回执：缺少完整准备公开信号，建议复查同步链路。',
+        fairnessVerdict,
+        budgetVerdict,
+        counterplayVerdict,
+        windowVerdict,
+        terminalVerdict,
+        nextStepLine,
+        evidenceSummary,
+        boundary: '公平回执只汇总公开复盘证据，不读取隐藏手牌、牌库或原始事件明细，也不改正式积分或结算。'
+    };
+}
+
 function projectPostMatchReview(state, seatId) {
     if (!state || state.status !== 'finished' || !Array.isArray(state.events)) return null;
     const finishedEvent = state.events.slice().reverse().find(event => event && event.eventType === 'match_finished' && event.payload);
@@ -680,6 +758,7 @@ function projectPostMatchReview(state, seatId) {
     const copy = getFinishCopy({ result, finishReason, evidenceTypes });
     const keyTurnReplay = buildKeyTurnReplay(evidence, { result, finishReason });
     const experienceReport = buildExperienceReport(evidence, { result, finishReason });
+    const fairnessReceipt = buildFairnessReceipt(experienceReport, { result, finishReason });
     const settlementReport = projectSettlementReport(state, seatId);
     const friendlySeries = projectFriendlySeries(state.friendlySeries, state.status);
     const isFriendly = state.mode === 'friendly';
@@ -731,6 +810,7 @@ function projectPostMatchReview(state, seatId) {
         settlementReport,
         keyTurnReplay,
         experienceReport,
+        fairnessReceipt,
         friendlySeries,
         suggestions: copy.suggestions.slice(0, 2),
         nextActions

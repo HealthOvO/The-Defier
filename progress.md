@@ -1,5 +1,35 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-20: V10-S9G live PVP post-match fairness receipt
+  - 本轮完成
+    - `server/pvp-live/engine/state-view.js` 新增 `pvp-live-fairness-receipt-v1`，从既有 `experienceReport.fairnessChecks`、公开行动窗口、开局护体 / 首动预算 / 长局评分等公开证据归纳赛后公平回执。
+    - `fairnessReceipt` 固定 `sourceVisibility: public_events`、`usesHiddenInformation: false`、`rankedImpact: none`，只汇总公开复盘证据和公开事件序号，不读取隐藏手牌、牌库、原始事件明细、rating / ELO 或奖励信息。
+    - 回执会给出 `receiptState`、开战回执、反先手秒杀结论、首动预算说明、反打 / 护体窗口说明、终局边界和下一步建议，让胜负双方在赛后能快速理解“这局是否有可读行动窗口，而不是无解释先手秒杀”。
+    - `js/scenes/pvp-scene.js` 新增 `getLiveFairnessReceipt()` / `renderLiveFairnessReceipt()`，把回执接入 `PVPScene.getLiveSnapshot()`、`render_game_to_text()` 和赛后复盘 DOM。
+    - live 赛后复盘新增 `data-live-fairness-receipt`，在结算 / 友谊局系列信息之后、细项体验检查之前展示玩家可读回执；CSS 使用紧凑双列 verdict 和证据 chip，真实后端移动端 post-match layout probe 会把该卡片纳入横向边界检查。
+    - `tests/sanity_pvp_live_engine_checks.cjs` 覆盖 surrender、lethal、round14 draw / score 的回执结构、安全标记、公开证据序号和隐藏信息扫描。
+    - `tests/browser_pvp_live_audit.mjs` 新增 fake browser 断言，验证 DOM / snapshot / `render_game_to_text()` 三路都能看到 `fairnessReceipt`，并且不含隐藏手牌、牌库、实例 id、rating / ELO 或奖励。
+    - `tests/browser_pvp_live_real_backend_smoke.mjs` 新增真实后端双账号 smoke finding，验证真实服务端生成的 `fairnessReceipt` 能经 API / WS / 前端渲染进入赛后复盘。
+    - `tests/sanity_pvp_live_ui_contract_checks.cjs` 与 `tests/sanity_release_gate_coverage_checks.cjs` 固定源码、DOM marker、fake browser finding、real backend finding 和引擎 marker，防止后续把赛后公平回执误删或误接到正式补偿链。
+  - 已验证
+    - 红测：`node tests/sanity_pvp_live_engine_checks.cjs` 在实现前失败于 `post-match review should expose a player-facing fairness receipt`。
+    - 红测：`node tests/sanity_pvp_live_ui_contract_checks.cjs` 在 DOM 接入前失败于 `PVPScene live practice handoff should include marker: pvp-live-fairness-receipt-v1`。
+    - 绿测：`node tests/sanity_pvp_live_engine_checks.cjs`
+    - 绿测：`node tests/sanity_pvp_live_ui_contract_checks.cjs`
+    - 绿测：`node tests/sanity_release_gate_coverage_checks.cjs`
+    - 语法检查：`node --check server/pvp-live/engine/state-view.js`
+    - 语法检查：`node --check js/scenes/pvp-scene.js`
+    - 语法检查：`node --check tests/browser_pvp_live_audit.mjs`
+    - 语法检查：`node --check tests/browser_pvp_live_real_backend_smoke.mjs`
+    - 构建：`npm run build:pages`
+    - 浏览器审计：`node tests/browser_pvp_live_audit.mjs http://127.0.0.1:4173 output/pvp-live-fairness-receipt-audit-final`，61/61 findings、0 console error。
+    - 真实后端 smoke：`node tests/browser_pvp_live_real_backend_smoke.mjs http://127.0.0.1:4173 output/pvp-live-fairness-receipt-real-final`，38/38 findings、0 console error。
+    - 全量 Node：`npm run test:node`
+    - 同步检查：`node tests/sanity_intro_progress_sync_checks.cjs`
+    - 清洁检查：`git diff --check`
+  - 当前结论
+    - live PVP 赛后现在不只给玩家关键回合和细项体验检查，还会先给一个面向双方的公平回执，解释开战、首动预算、护体 / 反打窗口、公开行动窗口和终局边界。该切片只提升赛后理解与信任，不改变伤害、生命、抽牌、灵力、起手、匹配、正式积分、奖励、赛季验证或结算，也不是举报系统、再战等待生命周期、多实例强一致、生产 smoke 或线上部署封板。
+
 - 2026-06-20: V10-S9F live PVP duel momentum HUD
   - 本轮完成
     - `server/pvp-live/engine/state-view.js` 新增 `pvp-live-duel-momentum-v1` 投影，把公开血线百分比、当前行动席位、开局护体窗口、后手护盾、反打缓冲状态和行动窗口解释整理成 `duelMomentumReport`。

@@ -234,6 +234,31 @@ async function safeElementScreenshot(page, selector, outputPath) {
           ] },
         ],
       },
+      fairnessReceipt: {
+        reportVersion: 'pvp-live-fairness-receipt-v1',
+        sourceVisibility: 'public_events',
+        usesHiddenInformation: false,
+        rankedImpact: 'none',
+        result: 'loss',
+        finishReason: 'surrender',
+        receiptState: 'accepted',
+        riskState: 'low',
+        agencyLabel: '双方均有可读窗口',
+        setupVerdict: '开战回执：双方准备公开确认后才进入战斗。',
+        fairnessVerdict: '公平回执：公开事件能解释开战、压力和终局，不属于无解释先手秒杀。',
+        budgetVerdict: '本局按首动预算规则运行。',
+        counterplayVerdict: '反打回执：护体未触发，但公开事件显示双方已有行动窗口。',
+        windowVerdict: '行动窗口：公开事件至少覆盖 2 个行动席位。',
+        terminalVerdict: '终局边界：认输只说明本局提前结束，真正要复盘的是认输前公开压力。',
+        nextStepLine: '下一步：按回执里的压力窗口调整斗法谱或进入问道练习。',
+        evidenceSummary: [
+          { id: 'setup_ready_required', label: '双方确认开战', passed: true, evidenceSequences: [3, 4, 5] },
+          { id: 'first_action_budget', label: '首动爆发预算', passed: true, evidenceSequences: [5, 6] },
+          { id: 'opening_protection', label: '开局护体', passed: true, evidenceSequences: [5, 7] },
+          { id: 'decision_windows', label: '公开决策窗口', passed: true, evidenceSequences: [5, 7] },
+        ],
+        boundary: '公平回执只汇总公开复盘证据，不读取隐藏手牌、牌库或原始事件明细，也不改正式积分或结算。',
+      },
       suggestions: [
         '查看认输前的生命、灵力和手牌窗口，确认是不是过早放弃。',
         '如果连续被压低血线，下一局先换守势斗法谱或保留低费防御。',
@@ -1691,6 +1716,10 @@ async function safeElementScreenshot(page, selector, outputPath) {
     experienceSource: document.querySelector('[data-live-experience-report]')?.getAttribute('data-live-experience-source') || '',
     experienceHidden: document.querySelector('[data-live-experience-report]')?.getAttribute('data-live-experience-hidden') || '',
     experienceCheckIds: Array.from(document.querySelectorAll('[data-live-experience-check]')).map(item => item.getAttribute('data-live-experience-check')),
+    fairnessText: document.querySelector('[data-live-fairness-receipt]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+    fairnessSource: document.querySelector('[data-live-fairness-receipt]')?.getAttribute('data-live-fairness-source') || '',
+    fairnessHidden: document.querySelector('[data-live-fairness-receipt]')?.getAttribute('data-live-fairness-hidden') || '',
+    fairnessState: document.querySelector('[data-live-fairness-receipt]')?.getAttribute('data-live-fairness-state') || '',
     seasonGoalText: document.querySelector('[data-live-season-goal]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
     seasonGoalMode: document.querySelector('[data-live-season-goal]')?.getAttribute('data-live-season-goal-mode') || '',
     seasonGoalDismissState: document.querySelector('[data-live-season-goal]')?.getAttribute('data-live-season-goal-dismiss-state') || '',
@@ -1710,6 +1739,7 @@ async function safeElementScreenshot(page, selector, outputPath) {
     nextActions: JSON.stringify((surrenderProbe.reviewPayload.nextActions || []).map(action => action.id)) === JSON.stringify((surrenderProbe.textPayload.nextActions || []).map(action => action.id)),
     keyTurns: JSON.stringify((surrenderProbe.reviewPayload.keyTurnReplay?.turns || []).map(event => event.eventType)) === JSON.stringify((surrenderProbe.textPayload.keyTurnReplay?.turns || []).map(event => event.eventType)),
     experienceChecks: JSON.stringify((surrenderProbe.reviewPayload.experienceReport?.fairnessChecks || []).map(item => item.id)) === JSON.stringify((surrenderProbe.textPayload.experienceReport?.fairnessChecks || []).map(item => item.id)),
+    fairnessReceipt: JSON.stringify((surrenderProbe.reviewPayload.fairnessReceipt?.evidenceSummary || []).map(item => item.id)) === JSON.stringify((surrenderProbe.textPayload.fairnessReceipt?.evidenceSummary || []).map(item => item.id)),
   } : null;
   add(
     'live UI surrenders through live intent and reaches finished phase',
@@ -1733,6 +1763,22 @@ async function safeElementScreenshot(page, selector, outputPath) {
       && reviewParity?.evidence === true
       && reviewParity?.nextActions === true
       && !/reward|rating|elo/i.test(`${surrenderProbe.reviewText} ${JSON.stringify(surrenderProbe.reviewPayload || {})}`),
+    JSON.stringify({ ...surrenderProbe, reviewParity }),
+  );
+  add(
+    'live UI renders post-match fairness receipt from public experience checks',
+    /公平回执|无解释先手秒杀|首动预算|行动窗口|反打回执/.test(surrenderProbe.fairnessText)
+      && surrenderProbe.fairnessSource === 'public_events'
+      && surrenderProbe.fairnessHidden === 'false'
+      && surrenderProbe.fairnessState === 'accepted'
+      && surrenderProbe.reviewPayload?.fairnessReceipt?.reportVersion === 'pvp-live-fairness-receipt-v1'
+      && surrenderProbe.reviewPayload?.fairnessReceipt?.sourceVisibility === 'public_events'
+      && surrenderProbe.reviewPayload?.fairnessReceipt?.usesHiddenInformation === false
+      && surrenderProbe.reviewPayload?.fairnessReceipt?.rankedImpact === 'none'
+      && surrenderProbe.reviewPayload?.fairnessReceipt?.receiptState === 'accepted'
+      && (surrenderProbe.reviewPayload?.fairnessReceipt?.evidenceSummary || []).length >= 3
+      && reviewParity?.fairnessReceipt === true
+      && !/payload|hand|deck|cardId|instanceId|loadoutSnapshot|reward|rating|elo/i.test(`${surrenderProbe.fairnessText} ${JSON.stringify(surrenderProbe.reviewPayload?.fairnessReceipt || {})}`),
     JSON.stringify({ ...surrenderProbe, reviewParity }),
   );
   add(
@@ -2298,6 +2344,8 @@ async function safeElementScreenshot(page, selector, outputPath) {
         stateView: window.__makeLivePvpAuditStateView(5, 'A', 'finished'),
       };
     };
+    window.game.showScreen('pvp-screen');
+    window.PVPScene.switchTab('live');
     window.PVPScene.liveSession = null;
     await window.PVPScene.loadLivePanel();
   });
@@ -2387,6 +2435,8 @@ async function safeElementScreenshot(page, selector, outputPath) {
         },
       };
     };
+    window.game.showScreen('pvp-screen');
+    window.PVPScene.switchTab('live');
     window.PVPScene.liveSession = null;
     await window.PVPScene.loadLivePanel();
   });
@@ -2433,6 +2483,8 @@ async function safeElementScreenshot(page, selector, outputPath) {
       seatId: 'B',
       stateView: window.__makeLivePvpAuditFriendlyCompleteView(),
     });
+    window.game.showScreen('pvp-screen');
+    window.PVPScene.switchTab('live');
     window.PVPScene.liveSession = null;
     await window.PVPScene.loadLivePanel();
   });
@@ -2725,6 +2777,7 @@ async function safeElementScreenshot(page, selector, outputPath) {
     phase: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-phase') || '',
     events: document.querySelector('[data-live-event-log]')?.textContent || '',
     review: document.querySelector('[data-live-post-match-review]')?.textContent || '',
+    fairnessReceiptVisible: !!document.querySelector('[data-live-fairness-receipt]'),
     payload: JSON.parse(window.render_game_to_text()).pvp?.live || null,
   }));
   add(
@@ -2734,6 +2787,7 @@ async function safeElementScreenshot(page, selector, outputPath) {
       && /重连宽限结束/.test(connectionTimeoutProbe.events)
       && /connection_timeout/.test(JSON.stringify(connectionTimeoutProbe.payload?.postMatchReview || {}))
       && /连接超时|网络|前后台/.test(connectionTimeoutProbe.review)
+      && connectionTimeoutProbe.fairnessReceiptVisible === false
       && connectionTimeoutProbe.payload?.postMatchReview?.finishReason === 'connection_timeout',
     JSON.stringify(connectionTimeoutProbe),
   );

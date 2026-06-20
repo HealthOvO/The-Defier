@@ -933,6 +933,10 @@ async function writeReport() {
       experienceSource: document.querySelector('[data-live-experience-report]')?.getAttribute('data-live-experience-source') || '',
       experienceHidden: document.querySelector('[data-live-experience-report]')?.getAttribute('data-live-experience-hidden') || '',
       experienceCheckIds: Array.from(document.querySelectorAll('[data-live-experience-check]')).map(item => item.getAttribute('data-live-experience-check')),
+      fairnessText: document.querySelector('[data-live-fairness-receipt]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+      fairnessSource: document.querySelector('[data-live-fairness-receipt]')?.getAttribute('data-live-fairness-source') || '',
+      fairnessHidden: document.querySelector('[data-live-fairness-receipt]')?.getAttribute('data-live-fairness-hidden') || '',
+      fairnessState: document.querySelector('[data-live-fairness-receipt]')?.getAttribute('data-live-fairness-state') || '',
       settlementText: document.querySelector('[data-live-settlement-report]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
       settlementSource: document.querySelector('[data-live-settlement-report]')?.getAttribute('data-live-settlement-source') || '',
       settlementHidden: document.querySelector('[data-live-settlement-report]')?.getAttribute('data-live-settlement-hidden') || '',
@@ -953,6 +957,7 @@ async function writeReport() {
       nextActions: JSON.stringify((postMatchProbe.payload.nextActions || []).map(action => action.id)) === JSON.stringify((postMatchProbe.textPayload.nextActions || []).map(action => action.id)),
       keyTurns: JSON.stringify((postMatchProbe.payload.keyTurnReplay?.turns || []).map(event => event.eventType)) === JSON.stringify((postMatchProbe.textPayload.keyTurnReplay?.turns || []).map(event => event.eventType)),
       experienceChecks: JSON.stringify((postMatchProbe.payload.experienceReport?.fairnessChecks || []).map(item => item.id)) === JSON.stringify((postMatchProbe.textPayload.experienceReport?.fairnessChecks || []).map(item => item.id)),
+      fairnessReceipt: JSON.stringify((postMatchProbe.payload.fairnessReceipt?.evidenceSummary || []).map(item => item.id)) === JSON.stringify((postMatchProbe.textPayload.fairnessReceipt?.evidenceSummary || []).map(item => item.id)),
     } : null;
     add(
       'real browser live match renders public post-match review after surrender',
@@ -1033,11 +1038,13 @@ async function writeReport() {
           && rect.right <= window.innerWidth + 2;
         const root = document.querySelector('[data-live-pvp-root]');
         const review = document.querySelector('[data-live-post-match-review]');
+        const fairness = document.querySelector('[data-live-fairness-receipt]');
         const settlement = document.querySelector('[data-live-settlement-report]');
         const honor = document.querySelector('[data-live-season-honor]');
         const honorReward = document.querySelector('[data-live-season-honor-reward]');
         const actionButtons = Array.from(document.querySelectorAll('[data-live-post-review-action]'));
         const textBlocks = Array.from(document.querySelectorAll([
+          '[data-live-fairness-receipt]',
           '[data-live-settlement-report]',
           '[data-live-season-honor]',
           '[data-live-season-honor-reward]',
@@ -1060,17 +1067,19 @@ async function writeReport() {
             hitText: hit?.textContent?.replace(/\s+/g, ' ').trim().slice(0, 40) || '',
           };
         });
-        const allLiveRects = Array.from(document.querySelectorAll('[data-live-post-match-review], [data-live-settlement-report], [data-live-season-honor], [data-live-season-honor-reward], [data-live-key-turn-replay], [data-live-experience-report], [data-live-post-review-action]'))
+        const allLiveRects = Array.from(document.querySelectorAll('[data-live-post-match-review], [data-live-fairness-receipt], [data-live-settlement-report], [data-live-season-honor], [data-live-season-honor-reward], [data-live-key-turn-replay], [data-live-experience-report], [data-live-post-review-action]'))
           .map((el) => ({ marker: el.getAttribute('data-live-post-review-action') || el.getAttribute('class') || el.tagName, rect: toRect(el) }));
         return {
           viewport: { width: window.innerWidth, height: window.innerHeight },
           root: toRect(root),
           review: toRect(review),
+          fairness: toRect(fairness),
           settlement: toRect(settlement),
           honor: toRect(honor),
           honorReward: toRect(honorReward),
           bodyScrollWidth: document.scrollingElement?.scrollWidth || document.documentElement.scrollWidth || 0,
           reviewText: review?.textContent?.replace(/\s+/g, ' ').trim() || '',
+          fairnessText: fairness?.textContent?.replace(/\s+/g, ' ').trim() || '',
           settlementText: settlement?.textContent?.replace(/\s+/g, ' ').trim() || '',
           honorText: honor?.textContent?.replace(/\s+/g, ' ').trim() || '',
           honorRewardText: honorReward?.textContent?.replace(/\s+/g, ' ').trim() || '',
@@ -1085,6 +1094,7 @@ async function writeReport() {
           horizontallyInside: {
             root: horizontallyInside(toRect(root)),
             review: horizontallyInside(toRect(review)),
+            fairness: horizontallyInside(toRect(fairness)),
             settlement: horizontallyInside(toRect(settlement)),
             honor: horizontallyInside(toRect(honor)),
             honorReward: horizontallyInside(toRect(honorReward)),
@@ -1101,6 +1111,7 @@ async function writeReport() {
           && mobileRealLayoutProbe.bodyScrollWidth <= mobileRealLayoutProbe.viewport.width + 2
           && mobileRealLayoutProbe.horizontallyInside?.root === true
           && mobileRealLayoutProbe.horizontallyInside?.review === true
+          && mobileRealLayoutProbe.horizontallyInside?.fairness === true
           && mobileRealLayoutProbe.horizontallyInside?.settlement === true
           && mobileRealLayoutProbe.horizontallyInside?.honor === true
           && mobileRealLayoutProbe.horizontallyInside?.honorReward === true
@@ -1108,6 +1119,7 @@ async function writeReport() {
           && mobileRealLayoutProbe.noVerticalClip === true
           && mobileRealLayoutProbe.textBlocksDoNotOverflow === true
           && /复盘/.test(mobileRealLayoutProbe.reviewText)
+          && /公平回执|首动预算/.test(mobileRealLayoutProbe.fairnessText)
           && /正式积分/.test(mobileRealLayoutProbe.settlementText)
           && /赛季荣誉/.test(mobileRealLayoutProbe.honorText)
           && /收藏状态/.test(mobileRealLayoutProbe.honorRewardText)
@@ -1119,9 +1131,9 @@ async function writeReport() {
       );
     }
     const publicReplayProbe = await requestLivePvpReplay(seatB.page, finishedB.matchId, { visibility: 'replay_public' });
-    publicReplayProbe.hasForbiddenReport = /postMatchReview|settlementReport|seasonHonorReport|cosmeticReward|seasonHonorCollection|collectionState|viewerSeat/.test(JSON.stringify(publicReplayProbe.replay || {}));
+    publicReplayProbe.hasForbiddenReport = /postMatchReview|fairnessReceipt|settlementReport|seasonHonorReport|cosmeticReward|seasonHonorCollection|collectionState|viewerSeat/.test(JSON.stringify(publicReplayProbe.replay || {}));
     const auditSafeReplayProbe = await requestLivePvpReplay(seatB.page, finishedB.matchId, { visibility: 'audit_safe' });
-    auditSafeReplayProbe.hasForbiddenReport = /postMatchReview|settlementReport|seasonHonorReport|cosmeticReward|seasonHonorCollection|collectionState|viewerSeat/.test(JSON.stringify(auditSafeReplayProbe.replay || {}));
+    auditSafeReplayProbe.hasForbiddenReport = /postMatchReview|fairnessReceipt|settlementReport|seasonHonorReport|cosmeticReward|seasonHonorCollection|collectionState|viewerSeat/.test(JSON.stringify(auditSafeReplayProbe.replay || {}));
     add(
       'real browser replay_public hides seat-specific settlement and season honor reports',
       publicReplayProbe?.success === true
@@ -1129,6 +1141,7 @@ async function writeReport() {
         && publicReplayProbe.replay?.publicSummary?.finishReason === 'surrender'
         && publicReplayProbe.replay?.hiddenScan?.forbiddenTokenCount === 0
         && !publicReplayProbe.replay?.postMatchReview
+        && !publicReplayProbe.replay?.fairnessReceipt
         && !publicReplayProbe.replay?.settlementReport
         && !publicReplayProbe.replay?.seasonHonorReport
         && !publicReplayProbe.replay?.cosmeticReward
@@ -1147,6 +1160,7 @@ async function writeReport() {
         && Array.isArray(auditSafeReplayProbe.replay?.fieldPaths)
         && auditSafeReplayProbe.replay?.fieldPaths.length > 0
         && !auditSafeReplayProbe.replay?.postMatchReview
+        && !auditSafeReplayProbe.replay?.fairnessReceipt
         && !auditSafeReplayProbe.replay?.settlementReport
         && !auditSafeReplayProbe.replay?.seasonHonorReport
         && !auditSafeReplayProbe.replay?.cosmeticReward
@@ -1154,6 +1168,23 @@ async function writeReport() {
         && !auditSafeReplayProbe.replay?.viewerSeat
         && auditSafeReplayProbe.hasForbiddenReport === false,
       JSON.stringify(auditSafeReplayProbe),
+    );
+    add(
+      'real browser live match renders fairness receipt from public post-match checks',
+      /公平回执|先手秒杀|首动预算|行动窗口|反打/.test(postMatchProbe.fairnessText)
+        && postMatchProbe.fairnessSource === 'public_events'
+        && postMatchProbe.fairnessHidden === 'false'
+        && ['accepted', 'watch'].includes(postMatchProbe.fairnessState)
+        && postMatchProbe.payload?.fairnessReceipt?.reportVersion === 'pvp-live-fairness-receipt-v1'
+        && postMatchProbe.payload?.fairnessReceipt?.sourceVisibility === 'public_events'
+        && postMatchProbe.payload?.fairnessReceipt?.usesHiddenInformation === false
+        && postMatchProbe.payload?.fairnessReceipt?.rankedImpact === 'none'
+        && postMatchProbe.payload?.fairnessReceipt?.result === 'loss'
+        && postMatchProbe.payload?.fairnessReceipt?.finishReason === 'surrender'
+        && (postMatchProbe.payload?.fairnessReceipt?.evidenceSummary || []).length >= 3
+        && postMatchParity?.fairnessReceipt === true
+        && !/payload|hand|deck|cardId|instanceId|loadoutSnapshot|reward|rating|elo/i.test(`${postMatchProbe.fairnessText} ${JSON.stringify(postMatchProbe.payload?.fairnessReceipt || {})}`),
+      JSON.stringify({ finishedA, finishedB, postMatchProbe, postMatchParity }),
     );
     add(
       'real browser live match renders key-turn replay from public post-match events',

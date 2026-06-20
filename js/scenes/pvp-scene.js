@@ -1266,6 +1266,7 @@ export const PVPScene = {
       settlementReport: this.getLiveSettlementReport(report.settlementReport),
       keyTurnReplay: this.getLiveKeyTurnReplay(report.keyTurnReplay),
       experienceReport: this.getLiveExperienceReport(report.experienceReport),
+      fairnessReceipt: this.getLiveFairnessReceipt(report.fairnessReceipt),
       friendlySeries: this.getLiveFriendlySeries(report.friendlySeries),
       suggestions: suggestions.slice(0, 2).map(item => String(item || '')).filter(Boolean),
       nextActions: nextActions.slice(0, 6).map(action => ({
@@ -1551,6 +1552,41 @@ export const PVPScene = {
       })).filter(check => check.id && check.label && check.detail)
     };
   },
+  getLiveFairnessReceipt(source) {
+    const report = source && typeof source === 'object' && source.fairnessReceipt
+      ? source.fairnessReceipt
+      : source && typeof source === 'object' && source.reportVersion === 'pvp-live-fairness-receipt-v1' ? source : null;
+    if (!report || report.reportVersion !== 'pvp-live-fairness-receipt-v1') return null;
+    const evidenceSummary = Array.isArray(report.evidenceSummary) ? report.evidenceSummary : [];
+    return {
+      reportVersion: String(report.reportVersion || 'pvp-live-fairness-receipt-v1'),
+      sourceVisibility: String(report.sourceVisibility || 'public_events'),
+      usesHiddenInformation: report.usesHiddenInformation === true,
+      rankedImpact: String(report.rankedImpact || 'none'),
+      explicitSourceSafety: this.isExplicitLivePublicNoImpactReport(report),
+      result: String(report.result || ''),
+      finishReason: String(report.finishReason || ''),
+      receiptState: String(report.receiptState || 'watch'),
+      riskState: String(report.riskState || 'watch'),
+      agencyLabel: String(report.agencyLabel || '公开窗口待复查'),
+      setupVerdict: String(report.setupVerdict || ''),
+      fairnessVerdict: String(report.fairnessVerdict || ''),
+      budgetVerdict: String(report.budgetVerdict || ''),
+      counterplayVerdict: String(report.counterplayVerdict || ''),
+      windowVerdict: String(report.windowVerdict || ''),
+      terminalVerdict: String(report.terminalVerdict || ''),
+      nextStepLine: String(report.nextStepLine || ''),
+      boundary: String(report.boundary || '公平回执只汇总公开复盘证据，不读取隐藏手牌、牌库或原始事件明细。'),
+      evidenceSummary: evidenceSummary.slice(0, 5).map(item => ({
+        id: String(item && item.id || ''),
+        label: String(item && item.label || ''),
+        passed: item && item.passed === true,
+        evidenceSequences: Array.isArray(item && item.evidenceSequences)
+          ? item.evidenceSequences.map(sequence => Math.max(0, Math.floor(Number(sequence) || 0))).slice(0, 4)
+          : []
+      })).filter(item => item.id && item.label)
+    };
+  },
   getLiveKeyTurnReplay(source) {
     const report = source && typeof source === 'object' && source.keyTurnReplay
       ? source.keyTurnReplay
@@ -1610,6 +1646,46 @@ export const PVPScene = {
             </button>
           `).join('')}
         </div>
+      </div>
+    `;
+  },
+  renderLiveFairnessReceipt(review) {
+    const receipt = this.getLiveFairnessReceipt(review && review.fairnessReceipt ? review.fairnessReceipt : review);
+    if (!receipt) return '';
+    const stateLabel = receipt.receiptState === 'accepted' ? '可接受' : '需复查';
+    const verdicts = [
+      receipt.setupVerdict,
+      receipt.fairnessVerdict,
+      receipt.budgetVerdict,
+      receipt.counterplayVerdict,
+      receipt.windowVerdict,
+      receipt.terminalVerdict,
+      receipt.nextStepLine
+    ].filter(Boolean);
+    return `
+      <div
+        class="pvp-live-fairness-receipt state-${this.escapeHtml(receipt.receiptState)}"
+        data-live-fairness-receipt
+        data-live-fairness-source="${this.escapeHtml(receipt.sourceVisibility)}"
+        data-live-fairness-hidden="${receipt.usesHiddenInformation ? 'true' : 'false'}"
+        data-live-fairness-state="${this.escapeHtml(receipt.receiptState)}"
+      >
+        <div class="pvp-live-fairness-head">
+          <span>公平回执</span>
+          <span>${this.escapeHtml(stateLabel)} · ${this.escapeHtml(receipt.agencyLabel)}</span>
+        </div>
+        <div class="pvp-live-fairness-verdicts">
+          ${verdicts.slice(0, 6).map(line => `<span>${this.escapeHtml(line)}</span>`).join('')}
+        </div>
+        <div class="pvp-live-fairness-evidence">
+          ${receipt.evidenceSummary.map(item => `
+            <span class="${item.passed ? 'passed' : 'watch'}">
+              ${this.escapeHtml(item.label)} · ${this.escapeHtml(item.passed ? '通过' : '观察')}
+              ${item.evidenceSequences.length ? ` · #${this.escapeHtml(item.evidenceSequences.join('/#'))}` : ''}
+            </span>
+          `).join('')}
+        </div>
+        <div class="pvp-live-fairness-boundary">${this.escapeHtml(receipt.boundary)}</div>
       </div>
     `;
   },
@@ -1902,6 +1978,7 @@ export const PVPScene = {
         </div>
       ` : ''}
       ${this.renderLiveFriendlySeries(review.friendlySeries)}
+      ${this.renderLiveFairnessReceipt(review)}
       ${this.renderLiveExperienceReport(review)}
       ${this.renderLiveKeyTurnReplay(review)}
       ${this.renderLiveSeasonGoalCard(view)}
