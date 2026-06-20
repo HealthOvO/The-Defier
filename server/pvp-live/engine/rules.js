@@ -24,6 +24,9 @@ const RULES = Object.freeze({
     guardStance: Object.freeze({
         reduction: 2
     }),
+    softControlWeakness: Object.freeze({
+        reduction: 2
+    }),
     longGame: Object.freeze({
         maxRounds: 14,
         scoreThreshold: 5,

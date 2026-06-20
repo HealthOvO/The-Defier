@@ -1324,18 +1324,15 @@ function projectCardActionReceipt(state, seatId, cardPlayedIndex) {
     const blockEvent = findResolution('block_gained');
     const healEvent = findResolution('hp_recovered');
     const cardCycleEvent = findResolution('card_cycled');
-    const statusAppliedEvent = findResolution('status_applied');
-    const statusConsumedEvent = findResolution('status_consumed');
-    const statusMitigatedEvent = findResolution('status_mitigated');
+    const statusAppliedEvents = resolutionEvents.filter(event => event.eventType === 'status_applied');
+    const statusConsumedEvents = resolutionEvents.filter(event => event.eventType === 'status_consumed');
+    const statusMitigatedEvents = resolutionEvents.filter(event => event.eventType === 'status_mitigated');
     const budgetPayload = getPublicEventPayload(budgetEvent);
     const damagePayload = getPublicEventPayload(damageEvent);
     const protectionPayload = getPublicEventPayload(protectionEvent);
     const blockPayload = getPublicEventPayload(blockEvent);
     const healPayload = getPublicEventPayload(healEvent);
     const cardCyclePayload = getPublicEventPayload(cardCycleEvent);
-    const statusAppliedPayload = getPublicEventPayload(statusAppliedEvent);
-    const statusConsumedPayload = getPublicEventPayload(statusConsumedEvent);
-    const statusMitigatedPayload = getPublicEventPayload(statusMitigatedEvent);
     const rawDamage = normalizeCount(damagePayload.rawDamage || budgetPayload.rawDamage);
     const budgetedDamage = normalizeCount(damagePayload.budgetedDamage || damagePayload.actualDamage || budgetPayload.actualDamage);
     const preventedByBudget = normalizeCount(budgetPayload.preventedDamage);
@@ -1379,46 +1376,67 @@ function projectCardActionReceipt(state, seatId, cardPlayedIndex) {
             ? '；手牌已满，抽滤暂停'
             : cardDraw.count > 0 ? `；抽滤 ${cardDraw.count} 张，当前手牌 ${cardDraw.handCount}` : '；牌库已空，抽滤暂停'
         : '';
-    const statusApplied = statusAppliedEvent ? {
-        statusId: String(statusAppliedPayload.statusId || ''),
-        label: String(statusAppliedPayload.label || ''),
-        seatId: String(statusAppliedPayload.seatId || ''),
-        sourceSeat: String(statusAppliedPayload.sourceSeat || actingSeat),
-        stacks: normalizeCount(statusAppliedPayload.stacks),
-        mitigationAmount: normalizeCount(statusAppliedPayload.mitigationAmount),
-        earliestConsumeTurnIndex: normalizeCount(statusAppliedPayload.earliestConsumeTurnIndex),
-        responseWindow: String(statusAppliedPayload.responseWindow || '')
-    } : null;
-    const statusConsumed = statusConsumedEvent ? {
-        statusId: String(statusConsumedPayload.statusId || ''),
-        label: String(statusConsumedPayload.label || ''),
-        seatId: String(statusConsumedPayload.seatId || ''),
-        sourceSeat: String(statusConsumedPayload.sourceSeat || actingSeat),
-        damageBonus: normalizeCount(statusConsumedPayload.damageBonus),
-        consumedTurnIndex: normalizeCount(statusConsumedPayload.consumedTurnIndex)
-    } : null;
-    const statusMitigated = statusMitigatedEvent ? {
-        statusId: String(statusMitigatedPayload.statusId || ''),
-        label: String(statusMitigatedPayload.label || ''),
-        seatId: String(statusMitigatedPayload.seatId || ''),
-        sourceSeat: String(statusMitigatedPayload.sourceSeat || ''),
-        mitigatedBySeat: String(statusMitigatedPayload.mitigatedBySeat || actingSeat),
-        mitigatedTurnIndex: normalizeCount(statusMitigatedPayload.mitigatedTurnIndex),
-        responseWindow: String(statusMitigatedPayload.responseWindow || ''),
-        mitigation: String(statusMitigatedPayload.mitigation || ''),
-        preventedDamage: normalizeCount(statusMitigatedPayload.preventedDamage)
-    } : null;
-    const statusLine = statusApplied
-        ? statusApplied.statusId === 'guard_stance'
-            ? `；进入${statusApplied.label || '守势'}，下次生命伤害 -${statusApplied.mitigationAmount || 0}`
-            : `；给 ${statusApplied.seatId || targetSeat || '目标'} 挂上${statusApplied.label || '公开状态'}，保留反制窗口`
-        : statusConsumed
-            ? `；消耗${statusConsumed.label || '公开状态'}，额外伤害 +${statusConsumed.damageBonus}`
-            : statusMitigated
-                ? statusMitigated.statusId === 'guard_stance'
-                    ? `；${statusMitigated.label || '守势'}减伤 ${statusMitigated.preventedDamage || 0}`
-                    : `；稳住${statusMitigated.label || '公开状态'}，阻止后续兑现`
-                : '';
+    const statusAppliedList = statusAppliedEvents.map(event => {
+        const payload = getPublicEventPayload(event);
+        return {
+            statusId: String(payload.statusId || ''),
+            label: String(payload.label || ''),
+            seatId: String(payload.seatId || ''),
+            sourceSeat: String(payload.sourceSeat || actingSeat),
+            stacks: normalizeCount(payload.stacks),
+            mitigationAmount: normalizeCount(payload.mitigationAmount),
+            earliestConsumeTurnIndex: normalizeCount(payload.earliestConsumeTurnIndex),
+            responseWindow: String(payload.responseWindow || '')
+        };
+    }).filter(status => status.statusId);
+    const statusConsumedList = statusConsumedEvents.map(event => {
+        const payload = getPublicEventPayload(event);
+        return {
+            statusId: String(payload.statusId || ''),
+            label: String(payload.label || ''),
+            seatId: String(payload.seatId || ''),
+            sourceSeat: String(payload.sourceSeat || actingSeat),
+            damageBonus: normalizeCount(payload.damageBonus),
+            consumedTurnIndex: normalizeCount(payload.consumedTurnIndex)
+        };
+    }).filter(status => status.statusId);
+    const statusMitigatedList = statusMitigatedEvents.map(event => {
+        const payload = getPublicEventPayload(event);
+        return {
+            statusId: String(payload.statusId || ''),
+            label: String(payload.label || ''),
+            seatId: String(payload.seatId || ''),
+            sourceSeat: String(payload.sourceSeat || ''),
+            mitigatedBySeat: String(payload.mitigatedBySeat || actingSeat),
+            mitigatedTurnIndex: normalizeCount(payload.mitigatedTurnIndex),
+            responseWindow: String(payload.responseWindow || ''),
+            mitigation: String(payload.mitigation || ''),
+            preventedDamage: normalizeCount(payload.preventedDamage)
+        };
+    }).filter(status => status.statusId);
+    const statusLineParts = [];
+    statusAppliedList.forEach(status => {
+        if (status.statusId === 'guard_stance') {
+            statusLineParts.push(`进入${status.label || '守势'}，下次生命伤害 -${status.mitigationAmount || 0}`);
+        } else if (status.statusId === 'weak_focus') {
+            statusLineParts.push(`给 ${status.seatId || targetSeat || '目标'} 挂上${status.label || '虚弱'}，下次伤害 -${status.mitigationAmount || 0}`);
+        } else {
+            statusLineParts.push(`给 ${status.seatId || targetSeat || '目标'} 挂上${status.label || '公开状态'}，保留反制窗口`);
+        }
+    });
+    statusConsumedList.forEach(status => {
+        statusLineParts.push(`消耗${status.label || '公开状态'}，额外伤害 +${status.damageBonus}`);
+    });
+    statusMitigatedList.forEach(status => {
+        if (status.statusId === 'guard_stance') {
+            statusLineParts.push(`${status.label || '守势'}减伤 ${status.preventedDamage || 0}`);
+        } else if (status.statusId === 'weak_focus' || status.mitigation === 'public_weak_damage_reduction') {
+            statusLineParts.push(`${status.label || '虚弱'}削减 ${status.preventedDamage || 0}`);
+        } else {
+            statusLineParts.push(`稳住${status.label || '公开状态'}，阻止后续兑现`);
+        }
+    });
+    const statusLine = statusLineParts.length ? `；${statusLineParts.join('；')}` : '';
     const safeguards = ['public_events'];
     if (budgetEvent) safeguards.push('first_action_budget');
     if (blockedDamage > 0) safeguards.push('public_block');
@@ -1426,9 +1444,9 @@ function projectCardActionReceipt(state, seatId, cardPlayedIndex) {
     if (blockGain > 0) safeguards.push('self_block');
     if (healing) safeguards.push('public_heal');
     if (cardDraw) safeguards.push('public_card_cycle');
-    if (statusApplied) safeguards.push(statusApplied.statusId === 'guard_stance' ? 'public_guard_stance' : 'public_status_applied');
-    if (statusConsumed) safeguards.push('public_status_consumed');
-    if (statusMitigated) safeguards.push(statusMitigated.statusId === 'guard_stance' ? 'public_guard_stance_mitigated' : 'public_status_mitigated');
+    statusAppliedList.forEach(status => safeguards.push(status.statusId === 'guard_stance' ? 'public_guard_stance' : status.statusId === 'weak_focus' ? 'public_weak_focus' : 'public_status_applied'));
+    if (statusConsumedList.length > 0) safeguards.push('public_status_consumed');
+    statusMitigatedList.forEach(status => safeguards.push(status.statusId === 'guard_stance' ? 'public_guard_stance_mitigated' : status.statusId === 'weak_focus' ? 'public_weak_focus_mitigated' : 'public_status_mitigated'));
     return {
         reportVersion: 'pvp-live-action-receipt-v1',
         sourceVisibility: 'authoritative_public_projection',
@@ -1465,9 +1483,9 @@ function projectCardActionReceipt(state, seatId, cardPlayedIndex) {
         healing,
         cardDraw,
         statusEffects: {
-            applied: statusApplied ? [statusApplied] : [],
-            consumed: statusConsumed ? [statusConsumed] : [],
-            mitigated: statusMitigated ? [statusMitigated] : []
+            applied: statusAppliedList,
+            consumed: statusConsumedList,
+            mitigated: statusMitigatedList
         },
         summaryLine: `${actingSeat} 打出${cardName}：${damageLine}${protectionLine}${blockLine}${healLine}${statusLine}${cardDrawLine}。`,
         safeguards: Array.from(new Set(safeguards))

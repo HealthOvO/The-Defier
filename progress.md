@@ -1,5 +1,30 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-21: V10-S12 live PVP soft-control weak focus
+  - 本轮完成
+    - `server/pvp-live/engine/rules.js` 新增 `softControlWeakness.reduction=2`，把真人 PVP 软控制固定成“小幅公开削弱下一次出手”，不做硬控、禁手、弃牌或隐藏反制。
+    - `server/pvp-live/engine/reducer.js` 让 `stormWard / 雷障` 在正常花费灵力、获得护盾和守势后，对目标挂上公开 `weak_focus / 虚弱`；目标下一次造成生命伤害时先扣 2 点，事件为 `status_mitigated(public_weak_damage_reduction)`，随后状态消耗，攻击动作仍正常结算。
+    - `server/pvp-live/engine/state-view.js` 的行动回执从“只取第一个公开状态事件”升级为聚合多状态数组；同一张雷障现在能同时解释“我方进入守势”和“对手被虚弱”，后续伤害回执也能同时保留守势减伤与虚弱削减。
+    - replay / golden replay / persistence / WS 的 `status_applied` 公开白名单同步加入 `mitigationAmount`，保证守势和虚弱的公开减伤数值在 HTTP、WS、持久化和回放层一致可读，仍不暴露 `sourceCardId`、手牌、牌库、rating、reward 或正式积分私密信息。
+    - `server/pvp-live/balance-simulation.js` 纳入 `weak_focus`：模拟器会记录软控制削弱、把被削弱的伤害计入防守方 long-game 防御收益，并在 `cardsPlayed` 中只对真实触发的攻击记录 `preventedByWeak`，避免后续公平/娱乐性审计低估软控制价值。
+    - `js/scenes/pvp-scene.js` 补齐虚弱 UI：公开状态条显示“下次出手减伤”，事件日志显示“虚弱削减 / 伤害降低”，行动回执新增 `data-live-weak-focus="public_weak_focus"` 固定 DOM 合同。
+    - route / engine / UI runtime / browser audit / release coverage 增加 weak_focus 红绿链：确认 HTTP 事件只返回公开字段，回执能读到虚弱，浏览器审计能看到稳定 marker，且全链路无隐藏信息泄漏。
+  - 已验证
+    - 红测：`node tests/sanity_pvp_live_engine_checks.cjs` 在实现前失败于缺少 `RULES.softControlWeakness.reduction`。
+    - 红测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs` 在实现前失败于缺少 `data-live-weak-focus="public_weak_focus"`。
+    - 红测：`node tests/sanity_pvp_live_balance_simulation_checks.cjs` 在实现前失败于模拟器未读取软控制削弱规则。
+    - 绿测：`node tests/sanity_pvp_live_engine_checks.cjs`
+    - 绿测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs`
+    - 绿测：`node tests/sanity_pvp_live_balance_simulation_checks.cjs`
+    - 绿测：`node tests/sanity_pvp_live_route_checks.cjs`
+    - 绿测：`node tests/sanity_pvp_live_balance_artifact_checks.cjs`
+    - 绿测：`node tests/sanity_release_gate_coverage_checks.cjs`
+    - 构建：`npm run build`
+    - 浏览器审计：`AUDIT_FILTER=pvp-live bash tests/run_browser_release_checks.sh http://127.0.0.1:4173 output/release-browser-audits-pvp-live-weak-focus`，0 failed、0 console error。
+    - 全量 Node 门禁：`npm run test:node`，All node checks passed。
+  - 当前结论
+    - live PVP 现在多了一种双方都能理解的付费反制：防守方用雷障换护盾、守势和对手下一次出手 -2，进攻方仍能行动、仍能造成伤害，但爆发被公开削弱。这比硬控或先手秒杀更适合真人 PVP 的拉锯体验，也为下一步“公平 / 娱乐性审计报告”提供了真实可统计的软控制收益。
+
 - 2026-06-21: V10-S11 live PVP draw-tag card cycling
   - 本轮完成
     - `server/pvp-live/engine/reducer.js` 为 `draw` tag 牌补上真人 PVP 抽滤结算：`surgeStep / tacticalExpose / thunderLattice` 等牌仍按正常出牌流程花费灵力、进入弃牌并结算伤害/护盾/状态，然后只从行动方私有牌库抽 1 张；不会引入 0 费法术、额外行动或先手秒杀链。

@@ -160,6 +160,10 @@ function getLongGameScore(state, seatId) {
     return hpDiff + effectiveDamage + effectiveDefense + setupConversion + resourceEfficiency - budgetPenalty - automationPenalty;
 }
 
+function getSoftControlWeaknessReduction() {
+    return Math.max(0, Math.floor(Number(RULES.softControlWeakness && RULES.softControlWeakness.reduction) || 0));
+}
+
 function makeSimCard(entry, seatId, ordinal) {
     const definition = RULES.cards[entry.id];
     return {
@@ -203,6 +207,7 @@ function makeSimSeat(seatId, loadout, seed, forcedOpeningIds = []) {
         setupConvertedThisTurn: false,
         openingCounterplayPending: false,
         openingCounterplayGranted: false,
+        publicStatuses: [],
         hand: cards.slice(0, RULES.startingHandSize),
         deck: cards.slice(RULES.startingHandSize),
         discard: [],
@@ -246,6 +251,46 @@ function getSimBudget(state, actor) {
     return null;
 }
 
+function applySimSoftControlWeakness(state, seatId, card) {
+    const tags = getCardTags(card);
+    const reduction = getSoftControlWeaknessReduction();
+    if (!tags.includes('control') || reduction <= 0) return 0;
+    const target = state.seats[otherSeat(seatId)];
+    if (!target) return 0;
+    target.publicStatuses = Array.isArray(target.publicStatuses)
+        ? target.publicStatuses.filter(status => status && status.statusId !== 'weak_focus')
+        : [];
+    target.publicStatuses.push({
+        statusId: 'weak_focus',
+        seatId: target.seatId,
+        sourceSeat: seatId,
+        mitigationAmount: reduction
+    });
+    return reduction;
+}
+
+function consumeSimSoftControlWeakness(state, seatId, hpDamage) {
+    const actor = state.seats[seatId];
+    const defender = state.seats[otherSeat(seatId)];
+    if (!actor || hpDamage <= 0 || !Array.isArray(actor.publicStatuses)) {
+        return { hpDamage, preventedByWeak: 0 };
+    }
+    const statusIndex = actor.publicStatuses.findIndex(status => status && status.statusId === 'weak_focus' && status.seatId === seatId);
+    if (statusIndex < 0) return { hpDamage, preventedByWeak: 0 };
+    const [status] = actor.publicStatuses.splice(statusIndex, 1);
+    const reduction = Math.max(0, Math.floor(Number(status.mitigationAmount) || getSoftControlWeaknessReduction()));
+    const preventedByWeak = Math.min(reduction, hpDamage);
+    if (preventedByWeak <= 0) {
+        actor.publicStatuses.push(status);
+        return { hpDamage, preventedByWeak: 0 };
+    }
+    if (defender) defender.longGameStats.preventedOrRecoveredDamage += preventedByWeak;
+    return {
+        hpDamage: hpDamage - preventedByWeak,
+        preventedByWeak
+    };
+}
+
 function applySimCard(state, seatId, card) {
     const actor = state.seats[seatId];
     const target = state.seats[otherSeat(seatId)];
@@ -256,6 +301,7 @@ function applySimCard(state, seatId, card) {
     actor.discard.push(card);
     let largestDamage = 0;
     let budgetPrevented = 0;
+    let preventedByWeak = 0;
     if (card.damage > 0) {
         const budget = getSimBudget(state, actor);
         const budgetedDamage = budget === null ? card.damage : Math.min(card.damage, budget);
@@ -269,6 +315,9 @@ function applySimCard(state, seatId, card) {
         target.block -= blockedDamage;
         target.longGameStats.preventedOrRecoveredDamage += blockedDamage;
         let hpDamage = budgetedDamage - blockedDamage;
+        const weakResult = consumeSimSoftControlWeakness(state, seatId, hpDamage);
+        hpDamage = weakResult.hpDamage;
+        preventedByWeak = weakResult.preventedByWeak;
         let nextHp = Math.max(0, target.hp - hpDamage);
         if (RULES.openingProtection.minimumHp > 0 && nextHp < RULES.openingProtection.minimumHp && target.turnsTaken <= 0) {
             const protectedHp = RULES.openingProtection.minimumHp;
@@ -303,8 +352,9 @@ function applySimCard(state, seatId, card) {
         actor.longGameStats.publicSetupConversions += 1;
         actor.setupConvertedThisTurn = true;
     }
+    applySimSoftControlWeakness(state, seatId, card);
     actor.actionsTaken += 1;
-    return { largestDamage, budgetPrevented, recoveredHp };
+    return { largestDamage, budgetPrevented, recoveredHp, preventedByWeak };
 }
 
 function endSimTurn(state, seatId) {
@@ -405,12 +455,14 @@ function runOneSimulatedMatch({ loadoutA, loadoutB, firstSeat, seed, forcedOpeni
             const card = chooseCard(state, seatId, policies[seatId]);
             if (!card) break;
             const result = applySimCard(state, seatId, card);
-            cardsPlayed.push({
+            const playRecord = {
                 seatId,
                 loadoutId: state.seats[seatId].loadoutId,
                 cardId: card.cardId,
                 recoveredHp: result.recoveredHp
-            });
+            };
+            if (result.preventedByWeak > 0) playRecord.preventedByWeak = result.preventedByWeak;
+            cardsPlayed.push(playRecord);
             budgetPrevented += result.budgetPrevented;
             largestDamage = Math.max(largestDamage, result.largestDamage);
             actionCount += 1;

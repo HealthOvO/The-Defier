@@ -1056,6 +1056,49 @@ const guardStanceMitigatedEvent = PVPScene.formatLiveEvent({
   }
 });
 assert.match(guardStanceMitigatedEvent.detail, /守势减伤 2|挡下 2/, 'live UI event log should explain public guard stance damage reduction');
+const weakFocusReceipt = PVPScene.getLiveActionReceiptReport({
+  actionReceiptReport: {
+    reportVersion: 'pvp-live-action-receipt-v1',
+    sourceVisibility: 'authoritative_public_projection',
+    usesHiddenInformation: false,
+    rankedImpact: 'none',
+    viewerSeat: 'A',
+    actingSeat: 'B',
+    actionType: 'play_card',
+    latestSequence: 54,
+    cardName: '破阵爆发',
+    statusEffects: {
+      mitigated: [{
+        statusId: 'weak_focus',
+        label: '虚弱',
+        seatId: 'B',
+        sourceSeat: 'A',
+        mitigatedBySeat: 'A',
+        preventedDamage: 2,
+        mitigation: 'public_weak_damage_reduction'
+      }]
+    },
+    summaryLine: 'B 打出破阵爆发：预算后 19，破盾 8，生命伤害 7，A 剩余 43 血；虚弱削减 2。',
+    safeguards: ['public_events', 'public_weak_focus_mitigated']
+  }
+});
+assert.equal(weakFocusReceipt.statusEffects.mitigated[0].preventedDamage, 2, 'live UI should preserve weak_focus prevented damage');
+assert.match(PVPScene.renderLiveActionReceiptReport({ actionReceiptReport: weakFocusReceipt }), /虚弱削减 2|生命伤害 7/, 'live UI damage receipt should explain weak_focus damage reduction');
+assert.match(PVPScene.renderLiveActionReceiptReport({ actionReceiptReport: weakFocusReceipt }), /data-live-weak-focus="public_weak_focus"/, 'live UI weak focus receipt should expose a stable marker');
+const weakFocusEvent = PVPScene.formatLiveEvent({
+  eventType: 'status_mitigated',
+  actingSeat: 'B',
+  publicData: {
+    statusId: 'weak_focus',
+    label: '虚弱',
+    seatId: 'B',
+    sourceSeat: 'A',
+    mitigatedBySeat: 'A',
+    preventedDamage: 2,
+    mitigation: 'public_weak_damage_reduction'
+  }
+});
+assert.match(weakFocusEvent.detail, /虚弱削减 2|伤害降低 2/, 'live UI event log should explain public weak_focus damage reduction');
 const healEvent = PVPScene.formatLiveEvent({
   eventType: 'hp_recovered',
   actingSeat: 'A',

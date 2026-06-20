@@ -227,6 +227,10 @@ function getGuardStanceReduction() {
     return Math.max(0, Math.floor(Number(RULES.guardStance && RULES.guardStance.reduction) || 0));
 }
 
+function getSoftControlWeaknessReduction() {
+    return Math.max(0, Math.floor(Number(RULES.softControlWeakness && RULES.softControlWeakness.reduction) || 0));
+}
+
 function applyGuardStanceStatus(state, intent, card, events) {
     const tags = getCardTags(card);
     const block = Math.max(0, Math.floor(Number(card && card.block) || 0));
@@ -253,6 +257,49 @@ function applyGuardStanceStatus(state, intent, card, events) {
         ? actor.publicStatuses.filter(item => item && item.statusId !== status.statusId)
         : [];
     actor.publicStatuses.push(status);
+    appendEvent(state, events, 'status_applied', intent, {
+        sourceCardId: card.cardId,
+        statusId: status.statusId,
+        label: status.label,
+        seatId: status.seatId,
+        sourceSeat: status.sourceSeat,
+        stacks: status.stacks,
+        mitigationAmount: status.mitigationAmount,
+        appliedTurnIndex: status.appliedTurnIndex,
+        earliestConsumeTurnIndex: status.earliestConsumeTurnIndex,
+        expiresAtTurnIndex: status.expiresAtTurnIndex,
+        responseWindow: status.responseWindow
+    });
+    return status;
+}
+
+function applySoftControlWeaknessStatus(state, intent, card, events) {
+    const tags = getCardTags(card);
+    if (!tags.includes('control')) return null;
+    const targetSeat = intent.payload && intent.payload.targetSeat === 'A' ? 'A' : intent.payload && intent.payload.targetSeat === 'B' ? 'B' : '';
+    if (!targetSeat || targetSeat === intent.seatId) return null;
+    const target = targetSeat && state.seats[targetSeat];
+    if (!target || state.status !== 'active') return null;
+    const mitigationAmount = getSoftControlWeaknessReduction();
+    if (mitigationAmount <= 0) return null;
+    const currentTurn = normalizeCount(state.turnIndex);
+    const status = makePublicStatus({
+        statusId: 'weak_focus',
+        label: '虚弱',
+        seatId: targetSeat,
+        sourceSeat: intent.seatId,
+        stacks: 1,
+        mitigationAmount,
+        appliedTurnIndex: currentTurn,
+        earliestConsumeTurnIndex: currentTurn + 1,
+        expiresAtTurnIndex: currentTurn + 2,
+        responseWindow: 'next_outgoing_attack',
+        summary: `虚弱公开：下次造成生命伤害时先减 ${mitigationAmount}；行动仍会正常结算。`
+    });
+    target.publicStatuses = Array.isArray(target.publicStatuses)
+        ? target.publicStatuses.filter(item => item && item.statusId !== status.statusId)
+        : [];
+    target.publicStatuses.push(status);
     appendEvent(state, events, 'status_applied', intent, {
         sourceCardId: card.cardId,
         statusId: status.statusId,
@@ -299,6 +346,47 @@ function consumeGuardStanceDamageReduction(state, intent, card, target, targetSe
         mitigatedTurnIndex: currentTurn,
         responseWindow: status.responseWindow,
         mitigation: 'guard_stance_damage_reduction',
+        preventedDamage
+    });
+    return {
+        hpDamage: hpDamage - preventedDamage,
+        preventedDamage,
+        consumed: status
+    };
+}
+
+function consumeSoftControlWeaknessDamageReduction(state, intent, card, actor, targetSeat, hpDamage, events) {
+    if (!actor || hpDamage <= 0 || !Array.isArray(actor.publicStatuses)) {
+        return { hpDamage, preventedDamage: 0, consumed: null };
+    }
+    const currentTurn = normalizeCount(state.turnIndex);
+    const statusIndex = actor.publicStatuses.findIndex(status => {
+        if (!status || status.statusId !== 'weak_focus') return false;
+        if (status.seatId !== intent.seatId) return false;
+        if (currentTurn < normalizeCount(status.earliestConsumeTurnIndex)) return false;
+        if (normalizeCount(status.expiresAtTurnIndex) > 0 && currentTurn > normalizeCount(status.expiresAtTurnIndex)) return false;
+        return true;
+    });
+    if (statusIndex < 0) return { hpDamage, preventedDamage: 0, consumed: null };
+    const [status] = actor.publicStatuses.splice(statusIndex, 1);
+    const reduction = Math.max(0, Math.floor(Number(status.mitigationAmount) || getSoftControlWeaknessReduction()));
+    const preventedDamage = Math.min(reduction, hpDamage);
+    if (preventedDamage <= 0) {
+        actor.publicStatuses.push(status);
+        return { hpDamage, preventedDamage: 0, consumed: null };
+    }
+    const defender = state.seats[targetSeat];
+    if (defender) ensureLongGameStats(defender).preventedOrRecoveredDamage += preventedDamage;
+    appendEvent(state, events, 'status_mitigated', intent, {
+        sourceCardId: card.cardId,
+        statusId: status.statusId,
+        label: status.label,
+        seatId: intent.seatId,
+        sourceSeat: status.sourceSeat,
+        mitigatedBySeat: targetSeat,
+        mitigatedTurnIndex: currentTurn,
+        responseWindow: status.responseWindow,
+        mitigation: 'public_weak_damage_reduction',
         preventedDamage
     });
     return {
@@ -521,6 +609,8 @@ function applyDamage(state, intent, card, events) {
     let hpDamage = actualDamage - blockedDamage;
     const guardStanceMitigation = consumeGuardStanceDamageReduction(state, intent, card, target, targetSeat, hpDamage, events);
     hpDamage = guardStanceMitigation.hpDamage;
+    const weakFocusMitigation = consumeSoftControlWeaknessDamageReduction(state, intent, card, actor, targetSeat, hpDamage, events);
+    hpDamage = weakFocusMitigation.hpDamage;
     let targetHp = Math.max(0, target.hp - hpDamage);
     if (shouldTriggerOpeningProtection(target, targetHp)) {
         const minimumHp = getOpeningProtectionMinimumHp();
@@ -643,6 +733,7 @@ function reducePlayCard(state, intent, fingerprint) {
     applyHeal(newState, intent, card, events);
     mitigatePublicResponseStatus(newState, intent, card, events);
     applyGuardStanceStatus(newState, intent, card, events);
+    applySoftControlWeaknessStatus(newState, intent, card, events);
     applyPublicSetupStatus(newState, intent, card, events);
     applyCardDrawEffect(newState, intent, card, events);
     if (nextActor.playedSetupThisTurn && !nextActor.setupConvertedThisTurn && !tags.includes('setup') && ((card.damage || 0) > 0 || (card.block || 0) > 0)) {

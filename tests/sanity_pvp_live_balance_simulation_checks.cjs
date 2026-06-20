@@ -184,5 +184,26 @@ assert.ok(
   publicHealResponseSample.longGameStats.A.preventedOrRecoveredDamage >= recoveredByA,
   'balance simulation should count second-seat recovered HP in long-game defense scoring'
 );
+assert.strictEqual((RULES.softControlWeakness || {}).reduction, 2, 'balance simulation should read the public soft-control weakness amount from rules');
+const softControlWeakSample = runOneSimulatedMatch({
+  loadoutA: shieldCounterLoadout,
+  loadoutB: aggroLoadout,
+  firstSeat: 'A',
+  seed: 'public-weak-focus-simulation-pin-shield_counter-aggro_pressure-A-0',
+  forcedOpenings: {
+    A: ['stormWard', 'stormWard', 'stormWard'],
+    B: ['pvp_burst', 'pvp_burst', 'pvp_burst']
+  }
+});
+const weakPreventedPlays = softControlWeakSample.cardsPlayed
+  .filter(play => play.preventedByWeak > 0);
+assert.ok(
+  weakPreventedPlays.some(play => play.seatId === 'B' && play.cardId === 'pvp_burst' && play.preventedByWeak === 2),
+  'balance simulation should apply public weak_focus to the next outgoing attack instead of ignoring soft control'
+);
+assert.ok(
+  softControlWeakSample.longGameStats.A.preventedOrRecoveredDamage >= RULES.cards.stormWard.block + RULES.softControlWeakness.reduction,
+  'balance simulation should count weak_focus prevented damage in defender long-game scoring'
+);
 
 console.log('sanity_pvp_live_balance_simulation_checks passed');

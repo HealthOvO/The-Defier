@@ -2382,6 +2382,76 @@ async function safeElementScreenshot(page, selector, outputPath) {
       && !/payload|hand|deck|cardId|instanceId|loadoutSnapshot|reward|rating|elo|sourceCardId/i.test(`${guardStanceFormatProbe.appliedEvent?.detail || ''} ${guardStanceFormatProbe.mitigatedEvent?.detail || ''} ${guardStanceFormatProbe.receipt || ''}`),
     JSON.stringify(guardStanceFormatProbe),
   );
+  const weakFocusFormatProbe = await page.evaluate(() => {
+    const appliedEvent = window.PVPScene.formatLiveEvent({
+      eventType: 'status_applied',
+      actingSeat: 'A',
+      publicData: {
+        statusId: 'weak_focus',
+        label: '虚弱',
+        seatId: 'B',
+        sourceSeat: 'A',
+        stacks: 1,
+        mitigationAmount: 2,
+        responseWindow: 'next_outgoing_attack',
+      },
+    });
+    const mitigatedEvent = window.PVPScene.formatLiveEvent({
+      eventType: 'status_mitigated',
+      actingSeat: 'B',
+      publicData: {
+        statusId: 'weak_focus',
+        label: '虚弱',
+        seatId: 'B',
+        sourceSeat: 'A',
+        mitigatedBySeat: 'A',
+        preventedDamage: 2,
+        mitigation: 'public_weak_damage_reduction',
+      },
+    });
+    const receipt = window.PVPScene.renderLiveActionReceiptReport({
+      actionReceiptReport: {
+        reportVersion: 'pvp-live-action-receipt-v1',
+        sourceVisibility: 'authoritative_public_projection',
+        usesHiddenInformation: false,
+        rankedImpact: 'none',
+        viewerSeat: 'A',
+        actingSeat: 'B',
+        actionType: 'play_card',
+        latestSequence: 54,
+        cardName: '破阵爆发',
+        statusEffects: {
+          mitigated: [{
+            statusId: 'weak_focus',
+            label: '虚弱',
+            seatId: 'B',
+            sourceSeat: 'A',
+            mitigatedBySeat: 'A',
+            preventedDamage: 2,
+            mitigation: 'public_weak_damage_reduction',
+          }],
+        },
+        summaryLine: 'B 打出破阵爆发：预算后 19，破盾 8，生命伤害 7，A 剩余 43 血；虚弱削减 2。',
+        safeguards: ['public_events', 'public_weak_focus_mitigated'],
+      },
+    });
+    return {
+      appliedEvent,
+      mitigatedEvent,
+      receipt,
+    };
+  });
+  add(
+    'live UI formats public weak focus event and receipt',
+    /weak_focus/.test('weak_focus')
+      && /公开状态施加/.test(weakFocusFormatProbe.appliedEvent?.label || '')
+      && /下次出手伤害 -2|虚弱/.test(weakFocusFormatProbe.appliedEvent?.detail || '')
+      && /虚弱削减 2|伤害降低 2/.test(weakFocusFormatProbe.mitigatedEvent?.detail || '')
+      && /data-live-weak-focus="public_weak_focus"/.test(weakFocusFormatProbe.receipt || '')
+      && /虚弱削减 2/.test(weakFocusFormatProbe.receipt || '')
+      && !/payload|hand|deck|cardId|instanceId|loadoutSnapshot|reward|rating|elo|sourceCardId/i.test(`${weakFocusFormatProbe.appliedEvent?.detail || ''} ${weakFocusFormatProbe.mitigatedEvent?.detail || ''} ${weakFocusFormatProbe.receipt || ''}`),
+    JSON.stringify(weakFocusFormatProbe),
+  );
   const healFormatProbe = await page.evaluate(() => {
     const event = window.PVPScene.formatLiveEvent({
       eventType: 'hp_recovered',

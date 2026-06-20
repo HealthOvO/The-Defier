@@ -1310,6 +1310,13 @@ export const PVPScene = {
     const guardStanceChip = guardStanceStatus
       ? '<span class="pvp-live-action-receipt-chip" data-live-guard-stance="public_guard_stance">公开守势</span>'
       : '';
+    const weakFocusStatus = report.statusEffects && (
+      (Array.isArray(report.statusEffects.applied) && report.statusEffects.applied.some(status => status.statusId === 'weak_focus'))
+      || (Array.isArray(report.statusEffects.mitigated) && report.statusEffects.mitigated.some(status => status.statusId === 'weak_focus'))
+    );
+    const weakFocusChip = weakFocusStatus
+      ? '<span class="pvp-live-action-receipt-chip" data-live-weak-focus="public_weak_focus">公开虚弱</span>'
+      : '';
     const healingChip = report.healing
       ? `<span class="pvp-live-action-receipt-chip" data-live-hp-recovered="public_hp_recovered">${this.escapeHtml(report.healing.recoveredHp > 0 ? `恢复 +${report.healing.recoveredHp}` : '恢复封顶')}</span>`
       : '';
@@ -1321,6 +1328,7 @@ export const PVPScene = {
       <span class="pvp-live-action-receipt-line">${this.escapeHtml(summary)}</span>
       ${mitigationChip}
       ${guardStanceChip}
+      ${weakFocusChip}
       ${healingChip}
       ${cardDrawChip}
       <span class="pvp-live-action-receipt-chip">${this.escapeHtml(source)} · ${this.escapeHtml(hidden)} · ${this.escapeHtml(report.rankedImpact || 'none')}</span>
@@ -1470,7 +1478,9 @@ export const PVPScene = {
         ? `反制窗口后可兑现`
         : status.responseWindow === 'next_incoming_attack'
           ? `下次受击减伤`
-        : status.earliestConsumeTurnIndex > 0 ? `第 ${status.earliestConsumeTurnIndex} 手后可兑现` : '公开可见';
+          : status.responseWindow === 'next_outgoing_attack'
+            ? `下次出手减伤`
+            : status.earliestConsumeTurnIndex > 0 ? `第 ${status.earliestConsumeTurnIndex} 手后可兑现` : '公开可见';
       const summary = status.summary || `${status.label}：${windowText}`;
       return `
         <span class="pvp-live-public-status" data-live-public-status="${this.escapeHtml(status.statusId)}">
@@ -3035,6 +3045,9 @@ export const PVPScene = {
       if (payload.statusId === 'guard_stance') {
         const mitigationAmount = Math.max(0, Math.floor(Number(payload.mitigationAmount) || 0));
         detail = `${seatId || '行动方'} · ${label} · 下次生命伤害 -${mitigationAmount}`;
+      } else if (payload.statusId === 'weak_focus') {
+        const mitigationAmount = Math.max(0, Math.floor(Number(payload.mitigationAmount) || 0));
+        detail = `${seatId ? `目标 ${seatId}` : '目标'} · ${label} · 下次出手伤害 -${mitigationAmount}`;
       } else {
         detail = `${seatId ? `目标 ${seatId}` : '目标'} · ${label} · 反制窗口后可兑现${earliest ? ` · 最早第 ${earliest} 手` : ''}`;
       }
@@ -3050,6 +3063,9 @@ export const PVPScene = {
       if (payload.statusId === 'guard_stance' || payload.mitigation === 'guard_stance_damage_reduction') {
         const preventedDamage = Math.max(0, Math.floor(Number(payload.preventedDamage) || 0));
         detail = `${seatId ? `目标 ${seatId}` : '目标'} · ${label}减伤 ${preventedDamage}`;
+      } else if (payload.statusId === 'weak_focus' || payload.mitigation === 'public_weak_damage_reduction') {
+        const preventedDamage = Math.max(0, Math.floor(Number(payload.preventedDamage) || 0));
+        detail = `${seatId ? `目标 ${seatId}` : '目标'} · ${label}削减 ${preventedDamage} · 伤害降低 ${preventedDamage}`;
       } else {
         detail = `${seatId ? `目标 ${seatId}` : '目标'} · ${mitigatedBySeat ? `${mitigatedBySeat} ` : ''}稳住${label} · 阻止后续兑现`;
       }

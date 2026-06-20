@@ -1047,6 +1047,25 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
         assert.ok(!/sourceCardId|cardId|instanceId|hand":\[|deck":\[|rating|reward/i.test(JSON.stringify(routeGuardStanceEvent)), 'HTTP guard_stance event must not leak internal card identity, hand, deck, rating, or rewards');
         assert.ok(routeGuardStance.payload.stateView.actionReceiptReport?.statusEffects?.applied?.some(status => status.statusId === 'guard_stance' && status.mitigationAmount === 2), 'route guard receipt should preserve public guard stance setup');
 
+        const routeWeakFocusMatch = pvpLiveRoutes.__livePvpStore.matches.get(joinB.payload.matchId);
+        const routeWeakFocusSeat = routeWeakFocusMatch.state.seats[firstSeat];
+        routeWeakFocusSeat.energy = Math.max(routeWeakFocusSeat.energy, RULES.cards.stormWard.cost);
+        routeWeakFocusSeat.hand = [makeRouteLiveCard(`${firstSeat}-stormWard-weak-route-1`, 'stormWard')];
+        const routeWeakFocus = await submitIntent(baseUrl, firstToken, joinB.payload.matchId, {
+                intentId: 'route-intent-weak-focus-1',
+                intentType: 'play_card',
+                stateVersion: routeGuardStance.payload.stateView.stateVersion,
+                payload: { cardInstanceId: `${firstSeat}-stormWard-weak-route-1`, targetSeat: secondSeat }
+        });
+        assert.equal(routeWeakFocus.payload.result, 'accepted', 'route soft-control card should resolve as a normal paid play_card intent');
+        const routeWeakFocusEvent = routeWeakFocus.payload.events.find(event => event.eventType === 'status_applied' && event.publicData?.statusId === 'weak_focus');
+        assert.ok(routeWeakFocusEvent, 'HTTP play_card response should include public weak_focus event');
+        assert.deepEqual(Object.keys(routeWeakFocusEvent.publicData || {}).sort(), ['appliedTurnIndex', 'earliestConsumeTurnIndex', 'expiresAtTurnIndex', 'label', 'mitigationAmount', 'responseWindow', 'seatId', 'sourceSeat', 'stacks', 'statusId'], 'HTTP weak_focus event should expose only public status fields');
+        assert.equal(routeWeakFocusEvent.publicData.mitigationAmount, 2, 'HTTP weak_focus event should expose the public damage reduction amount');
+        assert.ok(!Object.prototype.hasOwnProperty.call(routeWeakFocusEvent, 'payload'), 'HTTP weak_focus event must not return raw reducer payload');
+        assert.ok(!/sourceCardId|cardId|instanceId|hand":\[|deck":\[|rating|reward/i.test(JSON.stringify(routeWeakFocusEvent)), 'HTTP weak_focus event must not leak internal card identity, hand, deck, rating, or rewards');
+        assert.ok(routeWeakFocus.payload.stateView.actionReceiptReport?.statusEffects?.applied?.some(status => status.statusId === 'weak_focus' && status.mitigationAmount === 2), 'route weak_focus receipt should preserve public soft-control setup');
+
         const routeHealMatch = pvpLiveRoutes.__livePvpStore.matches.get(joinB.payload.matchId);
         const routeHealSeat = routeHealMatch.state.seats[firstSeat];
         routeHealSeat.hp = 41;
@@ -1055,7 +1074,7 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
         const routeHeal = await submitIntent(baseUrl, firstToken, joinB.payload.matchId, {
                 intentId: 'route-intent-heal-1',
                 intentType: 'play_card',
-                stateVersion: routeGuardStance.payload.stateView.stateVersion,
+                stateVersion: routeWeakFocus.payload.stateView.stateVersion,
                 payload: { cardInstanceId: `${firstSeat}-innerPeace-heal-route-1`, targetSeat: secondSeat }
         });
         assert.equal(routeHeal.payload.result, 'accepted', 'route heal card should resolve as a normal paid play_card intent');

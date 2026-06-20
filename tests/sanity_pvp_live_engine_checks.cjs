@@ -463,6 +463,58 @@ assert(guardStanceHitViewA.actionReceiptReport.statusEffects && guardStanceHitVi
 assert(/守势|减伤/.test(guardStanceHitViewA.actionReceiptReport.summaryLine), 'damage receipt should explain guard stance damage reduction');
 assert(!/sourceCardId|cardId|instanceId|loadoutSnapshot|rating|elo|reward/i.test(JSON.stringify(guardStanceHitViewA.actionReceiptReport.statusEffects)), 'guard stance receipt must not leak hidden ids, rating, or reward data');
 
+assert((RULES.softControlWeakness || {}).reduction === 2, 'soft control weakness should expose a small public next-attack damage reduction');
+const weakFocusState = createReadyLiveState('pvpm-weak-focus-test');
+weakFocusState.seats.A.hand = [makeLiveCard('A-stormWard-weak-1', 'stormWard')];
+weakFocusState.seats.B.hand = [makeLiveCard('B-pvp_burst-weak-1', 'pvp_burst')];
+const weakFocus = reduceIntent(weakFocusState, {
+  intentId: 'intent-weak-focus-a-1',
+  intentType: 'play_card',
+  matchId: 'pvpm-weak-focus-test',
+  seatId: 'A',
+  ruleVersion: RULE_VERSION,
+  stateVersion: weakFocusState.stateVersion,
+  payload: { cardInstanceId: 'A-stormWard-weak-1', targetSeat: 'B' }
+});
+assert(weakFocus.result === 'accepted', 'soft-control guard card should resolve as a normal paid action');
+assert(weakFocus.events.some(e => e.eventType === 'status_applied' && e.payload.statusId === 'weak_focus' && e.payload.seatId === 'B' && e.payload.sourceSeat === 'A' && e.payload.mitigationAmount === 2), 'stormWard should emit public weak_focus setup evidence on the opponent');
+assert(weakFocus.state.seats.B.publicStatuses.some(status => status.statusId === 'weak_focus' && status.mitigationAmount === 2 && status.responseWindow === 'next_outgoing_attack'), 'stormWard should attach public weak_focus to the target attack line');
+const weakFocusViewB = projectStateView(weakFocus.state, 'B');
+const publicWeakFocusEvent = weakFocusViewB.recentEvents.find(event => event.eventType === 'status_applied' && (event.publicData || {}).statusId === 'weak_focus');
+assert(publicWeakFocusEvent, 'weakened opponent should see public weak_focus setup evidence');
+assert(JSON.stringify(Object.keys(publicWeakFocusEvent.publicData || {}).sort()) === JSON.stringify(['appliedTurnIndex', 'earliestConsumeTurnIndex', 'expiresAtTurnIndex', 'label', 'mitigationAmount', 'responseWindow', 'seatId', 'sourceSeat', 'stacks', 'statusId']), 'public weak_focus setup event should expose only public status fields');
+assert(!/sourceCardId|cardId|instanceId|hand|deck|loadoutSnapshot|rating|elo|reward/i.test(JSON.stringify(publicWeakFocusEvent)), 'public weak_focus event must not leak hidden card, hand, deck, rating, or reward data');
+const weakFocusReceipt = projectStateView(weakFocus.state, 'A').actionReceiptReport;
+assert(weakFocusReceipt.statusEffects && weakFocusReceipt.statusEffects.applied.some(status => status.statusId === 'weak_focus' && status.mitigationAmount === 2), 'stormWard receipt should explain public weak_focus setup');
+assert(/虚弱|下次伤害/.test(weakFocusReceipt.summaryLine), 'stormWard receipt should include readable weak-focus feedback');
+const weakFocusEndTurn = reduceIntent(weakFocus.state, {
+  intentId: 'intent-weak-focus-a-end-1',
+  intentType: 'end_turn',
+  matchId: 'pvpm-weak-focus-test',
+  seatId: 'A',
+  ruleVersion: RULE_VERSION,
+  stateVersion: weakFocus.state.stateVersion,
+  payload: {}
+});
+const weakFocusHit = reduceIntent(weakFocusEndTurn.state, {
+  intentId: 'intent-weak-focus-b-burst-1',
+  intentType: 'play_card',
+  matchId: 'pvpm-weak-focus-test',
+  seatId: 'B',
+  ruleVersion: RULE_VERSION,
+  stateVersion: weakFocusEndTurn.state.stateVersion,
+  payload: { cardInstanceId: 'B-pvp_burst-weak-1', targetSeat: 'A' }
+});
+assert(weakFocusHit.result === 'accepted', 'weakened attacker should still be able to play a normal attack');
+assert(weakFocusHit.events.some(e => e.eventType === 'status_mitigated' && e.payload.statusId === 'weak_focus' && e.payload.preventedDamage === 2 && e.payload.mitigation === 'public_weak_damage_reduction'), 'weak_focus should emit public damage reduction evidence instead of denying the action');
+assert(weakFocusHit.events.some(e => e.eventType === 'damage_applied' && e.payload.blockedDamage === 8 && e.payload.hpDamage === 7 && e.payload.targetHp === 43), 'weak_focus should reduce only post-block post-guard life damage by two');
+assert(!weakFocusHit.state.seats.B.publicStatuses.some(status => status.statusId === 'weak_focus'), 'weak_focus should be consumed after reducing outgoing life damage');
+const weakFocusHitViewA = projectStateView(weakFocusHit.state, 'A');
+assert(weakFocusHitViewA.recentEvents.some(event => event.eventType === 'status_mitigated' && (event.publicData || {}).statusId === 'weak_focus' && (event.publicData || {}).preventedDamage === 2), 'defender should see public weak_focus damage reduction evidence');
+assert(weakFocusHitViewA.actionReceiptReport.statusEffects && weakFocusHitViewA.actionReceiptReport.statusEffects.mitigated.some(status => status.statusId === 'weak_focus' && status.preventedDamage === 2), 'damage receipt should preserve weak_focus mitigation');
+assert(/虚弱|削减 2|伤害降低 2/.test(weakFocusHitViewA.actionReceiptReport.summaryLine), 'damage receipt should explain weak_focus damage reduction');
+assert(!/sourceCardId|cardId|instanceId|loadoutSnapshot|rating|elo|reward/i.test(JSON.stringify(weakFocusHitViewA.actionReceiptReport.statusEffects)), 'weak_focus receipt must not leak hidden ids, rating, or reward data');
+
 assert(RULES.cards.innerPeace.heal === 3, 'innerPeace should expose a small public self-heal amount');
 assert(RULES.cards.mendThread.heal === 3, 'mendThread should expose a small public self-heal amount');
 assert(RULES.cards.wardingHerb.heal === 3, 'wardingHerb should expose a small public self-heal amount');
