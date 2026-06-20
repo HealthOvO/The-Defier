@@ -219,9 +219,28 @@ async function runSyncRequiredBroadcastCheck() {
       assert.equal(userId, 'ws-sync-a', 'WS sync_required broadcast should submit as the acting user');
       assert.equal(matchId, fakeMatchId, 'WS sync_required broadcast should submit the requested match');
       assert.ok(
-        intent.intentId === 'ws-sync-required-intent' || intent.intentId === 'ws-sync-required-intent-repeat',
+        intent.intentId === 'ws-sync-required-intent'
+          || intent.intentId === 'ws-sync-required-intent-repeat'
+          || intent.intentId === 'ws-duplicate-intent'
+          || intent.intentId === 'ws-duplicate-intent-repeat',
         'WS sync_required broadcast should forward the intent payload',
       );
+      if (intent.intentId === 'ws-duplicate-intent' || intent.intentId === 'ws-duplicate-intent-repeat') {
+        authoritativeVersion = 12;
+        return {
+          result: 'duplicate',
+          reason: 'duplicate_action',
+          events: [],
+          stateView: {
+            matchId: fakeMatchId,
+            status: 'active',
+            stateVersion: authoritativeVersion,
+            currentSeat: 'B',
+            self: { seatId: 'A', hand: [] },
+            opponent: { seatId: 'B', handCount: 3 }
+          }
+        };
+      }
       authoritativeVersion = 11;
       return {
         result: 'sync_required',
@@ -300,6 +319,39 @@ async function runSyncRequiredBroadcastCheck() {
     await waitForMessage(socketA, message => message.type === 'state_sync' && message.matchId === fakeMatchId && message.stateView?.stateVersion === 11, 'sync_required repeat state_sync A');
     const syncRequiredSignals = signalStore.getSignals().filter(signal => signal.reason === 'sync_required');
     assert.equal(syncRequiredSignals.length, 1, 'WS sync_required fanout should throttle repeated same-version signals');
+
+    sendJson(socketA, {
+      type: 'intent',
+      matchId: fakeMatchId,
+      intent: {
+        intentId: 'ws-duplicate-intent',
+        intentType: 'play_card',
+        stateVersion: 9,
+        payload: { cardInstanceId: 'A-card-1', targetSeat: 'B' }
+      }
+    });
+    const duplicateResultA = await waitForMessage(socketA, message => message.type === 'intent_result' && message.intentId === 'ws-duplicate-intent', 'duplicate intent_result A');
+    assert.equal(duplicateResultA.result, 'duplicate', 'WS duplicate intent should report duplicate to the sender');
+    assert.equal(duplicateResultA.reason, 'duplicate_action', 'WS duplicate intent should preserve the idempotent duplicate reason');
+    const duplicateSyncToA = await waitForMessage(socketA, message => message.type === 'state_sync' && message.matchId === fakeMatchId && message.stateView?.stateVersion === 12, 'duplicate broadcast state_sync A');
+    assert.equal(duplicateSyncToA.seatId, 'A', 'WS duplicate intent should also refresh the sender with authoritative state_sync');
+    const duplicateBroadcastToB = await waitForMessage(socketB, message => message.type === 'state_sync' && message.matchId === fakeMatchId && message.stateView?.stateVersion === 12, 'duplicate broadcast state_sync B');
+    assert.equal(duplicateBroadcastToB.seatId, 'B', 'WS duplicate intent should broadcast authoritative sync to the opponent seat');
+
+    sendJson(socketA, {
+      type: 'intent',
+      matchId: fakeMatchId,
+      intent: {
+        intentId: 'ws-duplicate-intent-repeat',
+        intentType: 'play_card',
+        stateVersion: 9,
+        payload: { cardInstanceId: 'A-card-1', targetSeat: 'B' }
+      }
+    });
+    await waitForMessage(socketA, message => message.type === 'intent_result' && message.intentId === 'ws-duplicate-intent-repeat', 'duplicate repeat intent_result A');
+    await waitForMessage(socketA, message => message.type === 'state_sync' && message.matchId === fakeMatchId && message.stateView?.stateVersion === 12, 'duplicate repeat state_sync A');
+    const duplicateSignals = signalStore.getSignals().filter(signal => signal.reason === 'duplicate_action');
+    assert.equal(duplicateSignals.length, 1, 'WS duplicate fanout should throttle repeated same-version signals');
   } finally {
     if (socketA) socketA.close();
     if (socketB) socketB.close();

@@ -238,7 +238,7 @@ function attachLivePvpWebSocket(server, {
     }
 
     function shouldSkipDuplicateSignal(matchId, stateVersion, reason) {
-        if (reason !== 'sync_required') return false;
+        if (reason !== 'sync_required' && reason !== 'duplicate_action') return false;
         const key = `${matchId}:${stateVersion}:${reason}`;
         const referenceTime = now();
         pruneRecentSignalAppendKeys(referenceTime);
@@ -393,10 +393,16 @@ function attachLivePvpWebSocket(server, {
             stateView: result.stateView,
             serverTime: now()
         });
-        if (result.result === 'accepted' || (result.result === 'sync_required' && result.stateView)) {
+        const shouldFanoutState = result.result === 'accepted'
+            || (result.result === 'sync_required' && result.stateView)
+            || (result.result === 'duplicate' && result.reason === 'duplicate_action' && result.stateView);
+        if (shouldFanoutState) {
+            const signalReason = result.result === 'sync_required'
+                ? 'sync_required'
+                : result.result === 'duplicate' ? 'duplicate_action' : 'intent_accepted';
             const signalAlreadyAppended = !!(result.saveResult && result.saveResult.liveWsSignalAppended);
-            if (result.result === 'sync_required' || !signalAlreadyAppended) {
-                await appendLiveWsSignal(matchId, result, result.result === 'sync_required' ? 'sync_required' : 'intent_accepted');
+            if (result.result !== 'accepted' || !signalAlreadyAppended) {
+                await appendLiveWsSignal(matchId, result, signalReason);
             }
             await broadcastState(matchId);
         }

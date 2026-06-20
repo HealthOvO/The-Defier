@@ -1,5 +1,25 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-20: V10-S8Z live PVP WS duplicate peer fanout
+  - 本轮完成
+    - `server/pvp-live/live-ws.js` 现在把 `intent_result=duplicate / duplicate_action` 且带 authoritative `stateView` 的幂等回执纳入 `state_sync` fanout：发起方收到 duplicate 回执后，同一 WS server 上的双方都会马上收到 seat-scoped 权威 `state_sync`。
+    - `appendLiveWsSignal()` 的重复信号节流从 `sync_required` 扩展到 `duplicate_action`，同一 match / stateVersion / reason 的 duplicate 重放只写一次 signal，避免弱网重复点击制造跨进程 signal 噪声。
+    - `duplicate_action_conflict` 仍保持 rejected 语义，不触发 peer fanout；这轮只同步“权威已处理同一 intent”的幂等成功重放。
+    - `tests/sanity_pvp_live_ws_checks.cjs` 新增 duplicate WS 红测：发起方必须收到 `duplicate / duplicate_action`，随后 A/B 都要收到 `stateVersion=12` 的 `state_sync`，重复 duplicate 同版本只保留 1 条 `duplicate_action` signal。
+    - `tests/sanity_release_gate_coverage_checks.cjs` 固定 duplicate fanout 行为 marker 和 `shouldFanoutState / signalReason` 源码 marker。
+  - 已验证
+    - 红测：`node tests/sanity_pvp_live_ws_checks.cjs` 在实现前失败于 `ws message timeout: duplicate broadcast state_sync A`。
+    - 绿测：`node tests/sanity_pvp_live_ws_checks.cjs`
+    - 绿测：`node tests/sanity_release_gate_coverage_checks.cjs`
+    - 绿测：`node tests/sanity_intro_progress_sync_checks.cjs`
+    - 语法检查：`node --check server/pvp-live/live-ws.js`
+    - 语法检查：`node --check tests/sanity_pvp_live_ws_checks.cjs`
+    - 全量：`npm run test:node`
+    - 构建：`npm run build:pages`
+    - 清洁检查：`git diff --check`
+  - 当前结论
+    - live PVP 的 WS duplicate 幂等重放不再只修正发起方：当旧包 / 重连重放命中权威已处理 intent 时，双方都会收到同一权威版本的 `state_sync`，减少一方看到幂等成功、一方仍停在旧局面的弱网窗口。该切片仍不是完整 active match revision/CAS、专门跨进程 duplicate smoke、Redis / 多实例强一致、生产 API smoke 或线上部署完成。
+
 - 2026-06-20: V10-S8Y live PVP stale duplicate intent authoritative replay
   - 本轮完成
     - `server/pvp-live/live-store.js` 新增 `makeAuthoritativeDuplicateIntentResult()`：当 accepted intent 的 state 保存因 `stale_state_version` / `conflicting_state_version` 写输后，store 会先回读 authoritative match；若权威 `processedIntents` 已包含同 `seatId:intentId`，则在权威 state 上复用 reducer 判定，返回 `duplicate / duplicate_action` 或 `rejected / duplicate_action_conflict`。
