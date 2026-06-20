@@ -37,6 +37,46 @@ globalThis.window = {
 
 const { PVPScene } = await import('../js/scenes/pvp-scene.js');
 
+PVPScene.getLiveSession = () => ({
+  getState: () => ({
+    phase: 'active',
+    matchId: 'pvpm-ui-runtime-realtime',
+    seatId: 'A',
+    realtimeStatus: 'reconnecting',
+    lastRealtimeSyncAt: 1781871234567,
+    realtimeReport: {
+      connectionId: 'ws-runtime-1',
+      heartbeatIntervalMs: 1200
+    },
+    lastError: {
+      reason: 'live_ws_reconnecting',
+      message: '实时论道 WS 正在重连'
+    },
+    stateView: {
+      matchId: 'pvpm-ui-runtime-realtime',
+      status: 'active',
+      stateVersion: 8,
+      currentSeat: 'A',
+      connectionReport: {
+        heartbeatIntervalMs: 1200
+      }
+    }
+  })
+});
+const realtimeSnapshot = PVPScene.getLiveSnapshot();
+assert.equal(realtimeSnapshot.realtimeStatus, 'reconnecting', 'live snapshot should expose local realtime reconnecting status');
+assert.equal(realtimeSnapshot.lastRealtimeSyncAt, 1781871234567, 'live snapshot should expose last local realtime sync timestamp');
+assert.deepEqual(
+  realtimeSnapshot.realtimeReport,
+  { connectionId: 'ws-runtime-1', heartbeatIntervalMs: 1200 },
+  'live snapshot should expose cloned local realtime report for text renderers',
+);
+assert.equal(
+  realtimeSnapshot.lastError.reason,
+  'live_ws_reconnecting',
+  'live snapshot should preserve local realtime reconnect reason for UI diagnostics',
+);
+
 assert.equal(
   PVPScene.getLiveLastSeenEventRevision({
     stateView: { recentEvents: [{ eventType: 'battle_started', sequence: 2 }] },

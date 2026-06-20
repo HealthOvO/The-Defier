@@ -1307,6 +1307,71 @@ assert.deepEqual(delayedRealtimeSent[0], {
   lastSeenRevision: 6
 }, 'onOpen should replay pending join_match after the socket becomes writable');
 
+const reconnectSent = [];
+const reconnectHandlers = [];
+const reconnectTimers = [];
+const reconnectOpenConnections = new Set();
+let reconnectClearedTimer = null;
+const reconnectRealtimeSession = createPvpLiveSession({
+  liveService: {
+    connectRealtime: (handlers) => {
+      const connectionIndex = reconnectHandlers.length + 1;
+      const wrappedHandlers = {
+        ...handlers,
+        onOpen: (...args) => {
+          reconnectOpenConnections.add(connectionIndex);
+          return handlers.onOpen(...args);
+        }
+      };
+      reconnectHandlers.push(wrappedHandlers);
+      return {
+        send: (payload) => {
+          if (!reconnectOpenConnections.has(connectionIndex)) return false;
+          reconnectSent.push({
+            connectionIndex,
+            payload
+          });
+          return true;
+        },
+        close: () => true
+      };
+    }
+  },
+  realtimeReconnectDelayMs: 25,
+  timers: {
+    setTimeout: (fn, delayMs) => {
+      const timer = { fn, delayMs };
+      reconnectTimers.push(timer);
+      return timer;
+    },
+    clearTimeout: (timer) => {
+      reconnectClearedTimer = timer;
+    }
+  },
+  now: () => 1781870000000
+});
+reconnectRealtimeSession.connectRealtime();
+reconnectRealtimeSession.joinRealtimeMatch('pvplm-reconnect-fast', { lastSeenRevision: 7 });
+reconnectHandlers[0].onOpen();
+assert.deepEqual(reconnectSent[0], {
+  connectionIndex: 1,
+  payload: { type: 'join_match', matchId: 'pvplm-reconnect-fast', lastSeenRevision: 7 }
+}, 'initial realtime open should send pending join before reconnect testing');
+reconnectHandlers[0].onClose();
+assert.equal(reconnectRealtimeSession.getState().realtimeStatus, 'reconnecting', 'unexpected WS close should mark realtime reconnecting');
+assert.equal(reconnectTimers[0]?.delayMs, 25, 'unexpected WS close should schedule a short reconnect delay');
+reconnectTimers[0].fn();
+assert.equal(reconnectHandlers.length, 2, 'reconnect timer should create a fresh realtime connection');
+reconnectHandlers[1].onOpen();
+assert.deepEqual(reconnectSent[1], {
+  connectionIndex: 2,
+  payload: { type: 'join_match', matchId: 'pvplm-reconnect-fast', lastSeenRevision: 7 }
+}, 'reconnected realtime socket should replay pending join_match without waiting for heartbeat');
+reconnectRealtimeSession.disconnectRealtime();
+assert.equal(reconnectClearedTimer, null, 'manual disconnect after successful reconnect should not clear an active reconnect timer');
+reconnectHandlers[1].onClose();
+assert.equal(reconnectTimers.length, 1, 'manual disconnect should not schedule another reconnect');
+
 const staleHttpSession = createPvpLiveSession({
   liveService: {
     joinQueue: async () => ({

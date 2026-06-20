@@ -763,7 +763,8 @@
     overflow-wrap: anywhere;
 }
 
-.pvp-live-connection-status {
+.pvp-live-connection-status,
+.pvp-live-realtime-status {
     margin-top: 8px;
     padding: 8px 10px;
     border-radius: 8px;
@@ -3948,7 +3949,8 @@ input:checked+.seal-slider .seal-face.on {
         overflow-wrap: anywhere;
     }
 
-    .pvp-live-connection-status {
+    .pvp-live-connection-status,
+    .pvp-live-realtime-status {
         margin-top: 4px;
         padding: 5px 8px;
         font-size: 0.7rem;

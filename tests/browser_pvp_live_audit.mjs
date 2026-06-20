@@ -504,6 +504,23 @@ async function safeElementScreenshot(page, selector, outputPath) {
       throw new Error('live UI should not call legacy PVP matching or settlement');
     };
     window.PVPService.live = {
+      connectRealtime: (handlers = {}) => {
+        window.setTimeout(() => {
+          handlers.onOpen?.();
+          handlers.onMessage?.({
+            type: 'connected',
+            connectionId: 'audit-live-ws-1',
+            connectionReport: {
+              connectionId: 'audit-live-ws-1',
+              heartbeatIntervalMs: 5000,
+            },
+          });
+        }, 0);
+        return {
+          send: (payload = {}) => payload.type !== 'intent',
+          close: () => true,
+        };
+      },
       joinQueue: async (options = {}) => {
         push({ method: 'joinQueue', options });
         return { success: true, status: 'waiting', queueTicket: 'pvplq-browser-live' };
@@ -1019,6 +1036,8 @@ async function safeElementScreenshot(page, selector, outputPath) {
     matchQuality: document.querySelector('[data-live-match-quality]')?.textContent || '',
     turnTimer: document.querySelector('[data-live-turn-timer]')?.textContent || '',
     connectionStatus: document.querySelector('[data-live-connection-status]')?.textContent || '',
+    realtimeStatus: document.querySelector('[data-live-realtime-status]')?.textContent || '',
+    realtimeDataset: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-realtime-state') || '',
     openingSafeguard: document.querySelector('[data-live-opening-safeguard]')?.textContent || '',
     firstGuide: document.querySelector('[data-live-first-guide]')?.textContent || '',
     loadoutExplorationText: document.querySelector('[data-live-loadout-exploration]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
@@ -1039,10 +1058,15 @@ async function safeElementScreenshot(page, selector, outputPath) {
       && matchedProbe.presetDisabled.every(value => value === true)
       && /准备倒计时/.test(matchedProbe.turnTimer)
       && /连接：我方在线 · 对方在线/.test(matchedProbe.connectionStatus)
+      && /^传输：/.test(matchedProbe.realtimeStatus)
+      && /传输：实时通道已连接/.test(matchedProbe.realtimeStatus)
+      && matchedProbe.realtimeDataset === 'connected'
       && matchedProbe.payload?.turnTimer?.reportVersion === 'pvp-live-turn-timer-v1'
       && matchedProbe.payload?.turnTimer?.phase === 'setup'
       && matchedProbe.payload?.connectionReport?.reportVersion === 'pvp-live-connection-v1'
       && matchedProbe.payload?.connectionReport?.opponent?.status === 'online'
+      && matchedProbe.payload?.realtimeStatus === 'connected'
+      && matchedProbe.payload?.realtimeReport?.connectionId === 'audit-live-ws-1'
       && matchedProbe.payload?.matchId === 'pvplm-browser-live',
     JSON.stringify(matchedProbe),
   );
@@ -2335,6 +2359,23 @@ async function safeElementScreenshot(page, selector, outputPath) {
       throw new Error('live UI should not call legacy PVP matching or settlement');
     };
     window.PVPService.live = {
+      connectRealtime: (handlers = {}) => {
+        window.setTimeout(() => {
+          handlers.onOpen?.();
+          handlers.onMessage?.({
+            type: 'connected',
+            connectionId: 'audit-live-mobile-ws-1',
+            connectionReport: {
+              connectionId: 'audit-live-mobile-ws-1',
+              heartbeatIntervalMs: 5000,
+            },
+          });
+        }, 0);
+        return {
+          send: (payload = {}) => payload.type !== 'intent',
+          close: () => true,
+        };
+      },
       joinQueue: async (options = {}) => {
         push({ method: 'joinQueue', options });
         return { success: true, status: 'waiting', queueTicket: 'pvplq-browser-live-mobile' };

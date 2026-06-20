@@ -643,7 +643,7 @@ golden 覆盖矩阵：
 
 后续 replay 扩展仍需继续覆盖：
 
-- 更广义正式赛季入口、多实例队列、跨进程 WebSocket 推送、`round14_score` / `round14_draw` 生产 smoke 和线上域名浏览器回归。
+- 更广义正式赛季入口、多实例队列、跨进程终局结算 fanout smoke、`round14_score` / `round14_draw` 生产 smoke 和线上域名浏览器回归。SQLite-backed 跨进程 WS `state_sync` fanout 已由 S8S 覆盖，但不能替代 Redis / 多实例强一致或生产域名 smoke。
 - 正式赛季积分、多实例队列、生产 API smoke、线上域名浏览器回归，以及 S6A 单进程 WS 之外的共享房间 / 灰度监控。
 
 ## 9. 封板证据要求

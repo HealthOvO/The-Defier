@@ -63,6 +63,20 @@ function getDefaultLiveStorage() {
   return storage;
 }
 
+function getDefaultTimerApi() {
+  const root = typeof globalThis !== 'undefined' ? globalThis : (typeof window !== 'undefined' ? window : {});
+  return {
+    setTimeout: root && typeof root.setTimeout === 'function' ? root.setTimeout.bind(root) : null,
+    clearTimeout: root && typeof root.clearTimeout === 'function' ? root.clearTimeout.bind(root) : null
+  };
+}
+
+function normalizeDelayMs(value, fallback) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return fallback;
+  return Math.max(0, Math.floor(number));
+}
+
 function getUserIdentityFromCandidate(candidate) {
   if (!candidate || typeof candidate !== 'object') return '';
   try {
@@ -166,10 +180,20 @@ export function createPvpLiveSession({
   storage = getDefaultLiveStorage(),
   userScope = getDefaultLiveUserScope,
   onChange = null,
-  now = () => Date.now()
+  now = () => Date.now(),
+  realtimeReconnectDelayMs = 750,
+  timers = null
 } = {}) {
   let realtimeHandle = null;
+  let realtimeConnectionId = 0;
+  let realtimeReconnectTimer = null;
   let pendingRealtimeJoin = null;
+  let realtimeManualClose = false;
+  const fallbackTimers = getDefaultTimerApi();
+  const timerApi = timers && typeof timers.setTimeout === 'function'
+    ? timers
+    : fallbackTimers;
+  const reconnectDelayMs = normalizeDelayMs(realtimeReconnectDelayMs, 750);
   let state = {
     ...DEFAULT_STATE,
     updatedAt: now()
@@ -512,6 +536,46 @@ export function createPvpLiveSession({
     return getState();
   }
 
+  function clearRealtimeReconnectTimer() {
+    if (!realtimeReconnectTimer) return;
+    if (timerApi && typeof timerApi.clearTimeout === 'function') {
+      timerApi.clearTimeout(realtimeReconnectTimer);
+    }
+    realtimeReconnectTimer = null;
+  }
+
+  function canReconnectRealtime() {
+    return !!(pendingRealtimeJoin && pendingRealtimeJoin.matchId);
+  }
+
+  function scheduleRealtimeReconnect() {
+    if (!canReconnectRealtime()) {
+      return publish({ realtimeStatus: 'closed' });
+    }
+    if (!timerApi || typeof timerApi.setTimeout !== 'function') {
+      return publish({
+        realtimeStatus: 'closed',
+        lastError: { reason: 'live_ws_timer_unavailable', message: '实时论道 WS 重连计时器不可用' }
+      });
+    }
+    if (realtimeReconnectTimer) {
+      return publish({
+        realtimeStatus: 'reconnecting',
+        lastError: { reason: 'live_ws_reconnecting', message: '实时论道 WS 正在重连' }
+      });
+    }
+    publish({
+      realtimeStatus: 'reconnecting',
+      lastError: { reason: 'live_ws_reconnecting', message: '实时论道 WS 正在重连' }
+    });
+    realtimeReconnectTimer = timerApi.setTimeout(() => {
+      realtimeReconnectTimer = null;
+      if (!canReconnectRealtime()) return;
+      connectRealtime();
+    }, reconnectDelayMs);
+    return getState();
+  }
+
   function connectRealtime() {
     if (!liveService || typeof liveService.connectRealtime !== 'function') {
       return publish({
@@ -520,9 +584,14 @@ export function createPvpLiveSession({
       });
     }
     if (realtimeHandle) return getState();
+    realtimeManualClose = false;
+    clearRealtimeReconnectTimer();
+    const connectionId = realtimeConnectionId + 1;
+    realtimeConnectionId = connectionId;
     realtimeHandle = liveService.connectRealtime({
       onMessage: handleRealtimeMessage,
       onOpen: () => {
+        if (connectionId !== realtimeConnectionId) return;
         publish({ realtimeStatus: 'connected', lastError: null });
         if (pendingRealtimeJoin) {
           sendRealtime({
@@ -533,8 +602,13 @@ export function createPvpLiveSession({
         }
       },
       onClose: () => {
+        if (connectionId !== realtimeConnectionId) return;
         realtimeHandle = null;
-        publish({ realtimeStatus: 'closed' });
+        if (realtimeManualClose) {
+          publish({ realtimeStatus: 'closed' });
+          return;
+        }
+        scheduleRealtimeReconnect();
       },
       onError: () => publish({
         realtimeStatus: 'error',
@@ -592,6 +666,8 @@ export function createPvpLiveSession({
   }
 
   function disconnectRealtime() {
+    realtimeManualClose = true;
+    clearRealtimeReconnectTimer();
     if (realtimeHandle && typeof realtimeHandle.close === 'function') {
       realtimeHandle.close();
     }
@@ -1251,6 +1327,7 @@ export function createPvpLiveSession({
 
   function reset() {
     clearStoredTerminalMatchId();
+    disconnectRealtime();
     return publish({
       ...DEFAULT_STATE,
       updatedAt: now()

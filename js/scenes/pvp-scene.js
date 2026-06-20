@@ -637,6 +637,36 @@ export const PVPScene = {
     }
     return `连接：我方${viewerLabel} · 对方${opponentLabel}`;
   },
+  getLiveRealtimeReport(state) {
+    const report = state && state.realtimeReport && typeof state.realtimeReport === 'object' ? state.realtimeReport : null;
+    if (!report) return null;
+    const result = { ...report };
+    if (Object.prototype.hasOwnProperty.call(report, 'connectionId')) {
+      result.connectionId = String(report.connectionId || '');
+    }
+    if (Object.prototype.hasOwnProperty.call(report, 'heartbeatIntervalMs')) {
+      result.heartbeatIntervalMs = Math.max(0, Math.floor(Number(report.heartbeatIntervalMs) || 0));
+    }
+    return result;
+  },
+  formatLiveRealtimeStatus(state) {
+    const status = String(state && state.realtimeStatus || 'idle');
+    const labels = {
+      idle: '等待实时通道',
+      unavailable: '实时通道不可用，使用 HTTP 心跳',
+      connecting: '正在连接实时通道',
+      connected: '实时通道已连接',
+      reconnecting: '实时通道正在重连',
+      closed: '实时通道已关闭',
+      error: '实时通道异常'
+    };
+    const label = labels[status] || status;
+    const lastSyncAt = Math.max(0, Math.floor(Number(state && state.lastRealtimeSyncAt) || 0));
+    const syncText = lastSyncAt > 0 ? ` · 最近同步 ${new Date(lastSyncAt).toLocaleTimeString()}` : '';
+    const reason = String(state && state.lastError && state.lastError.reason || '');
+    const reasonText = reason && (status === 'reconnecting' || status === 'error' || status === 'unavailable') ? ` · ${reason}` : '';
+    return `传输：${label}${syncText}${reasonText}`;
+  },
   getLiveOpeningSafeguardReport(view) {
     const report = view && view.openingSafeguardReport && typeof view.openingSafeguardReport === 'object' ? view.openingSafeguardReport : null;
     if (!report) return null;
@@ -2001,6 +2031,9 @@ export const PVPScene = {
       matchQuality: this.getLiveMatchQuality(view),
       turnTimer: this.getLiveTurnTimer(view),
       connectionReport: this.getLiveConnectionReport(view),
+      realtimeStatus: String(state.realtimeStatus || 'idle'),
+      lastRealtimeSyncAt: Math.max(0, Math.floor(Number(state.lastRealtimeSyncAt) || 0)),
+      realtimeReport: this.getLiveRealtimeReport(state),
       openingSafeguardReport: this.getLiveOpeningSafeguardReport(view),
       friendlySeries: this.getLiveFriendlySeries(view && view.friendlySeries ? view.friendlySeries : state.rematchReport),
       firstMatchGuide: this.getLiveFirstMatchGuide(view),
@@ -2103,6 +2136,9 @@ export const PVPScene = {
     const phase = state.phase || 'idle';
     root.dataset.livePhase = phase;
     root.setAttribute('data-live-phase', phase);
+    const realtimeStatus = String(state.realtimeStatus || 'idle');
+    root.dataset.liveRealtimeState = realtimeStatus;
+    root.setAttribute('data-live-realtime-state', realtimeStatus);
     const setText = (selector, value) => {
       const el = root.querySelector(selector);
       if (el) el.textContent = value;
@@ -2129,6 +2165,7 @@ export const PVPScene = {
     setText('[data-live-match-quality]', this.formatLiveMatchQuality(view));
     setText('[data-live-turn-timer]', this.formatLiveTurnTimer(view));
     setText('[data-live-connection-status]', this.formatLiveConnectionStatus(view));
+    setText('[data-live-realtime-status]', this.formatLiveRealtimeStatus(state));
     const openingSafeguardEl = root.querySelector('[data-live-opening-safeguard]');
     if (openingSafeguardEl) {
       openingSafeguardEl.innerHTML = this.renderLiveOpeningSafeguardReport(view);

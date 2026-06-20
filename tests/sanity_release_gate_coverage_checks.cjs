@@ -55,6 +55,7 @@ const pvpLiveSettlementChecks = read('tests/sanity_pvp_live_settlement_checks.cj
 const pvpLiveClientChecks = read('tests/sanity_pvp_live_client_checks.mjs');
 const pvpLiveServiceBridgeChecks = read('tests/sanity_pvp_live_service_bridge_checks.cjs');
 const pvpLiveSessionChecks = read('tests/sanity_pvp_live_session_checks.mjs');
+const pvpLiveSessionSource = read('js/services/pvp-live-session.js');
 const pvpLiveUiContractChecks = read('tests/sanity_pvp_live_ui_contract_checks.cjs');
 const pvpLiveUiRuntimeChecks = read('tests/sanity_pvp_live_ui_runtime_checks.mjs');
 const runNodeChecks = read('tests/run_node_checks.sh');
@@ -561,6 +562,12 @@ const layoutAudit = read('tests/browser_frontend_layout_audit.mjs');
   '准备倒计时',
   '行动倒计时',
   '对方重连宽限',
+  'data-live-realtime-status',
+  'data-live-realtime-state',
+  '^传输：',
+  '传输：实时通道已连接',
+  "matchedProbe.payload?.realtimeStatus === 'connected'",
+  "matchedProbe.payload?.realtimeReport?.connectionId === 'audit-live-ws-1'",
   'live UI renders opponent reconnect grace without confusing it with action timeout',
   'live UI renders connection_timeout as reconnect grace terminal review',
   '重连宽限结束',
@@ -1683,6 +1690,19 @@ assert.ok(
 });
 
 [
+  'realtimeReconnectDelayMs = 750',
+  'clearRealtimeReconnectTimer',
+  'scheduleRealtimeReconnect',
+  'live_ws_reconnecting',
+  'realtimeConnectionId',
+].forEach((needle) => {
+  assert.ok(
+    pvpLiveSessionSource.includes(needle),
+    `live PVP session source should pin client realtime reconnect marker: ${needle}`,
+  );
+});
+
+[
   'live session should not expose client-reported result API',
   'live session should expose friendly rematch request API',
   'live session should expose friendly rematch polling API',
@@ -1757,6 +1777,11 @@ assert.ok(
   'live session realtime helpers should send stable WS message envelopes with last seen event revision',
   'disconnectRealtime should mark realtime closed',
   'onOpen should replay pending join_match after the socket becomes writable',
+  'unexpected WS close should mark realtime reconnecting',
+  'unexpected WS close should schedule a short reconnect delay',
+  'reconnect timer should create a fresh realtime connection',
+  'reconnected realtime socket should replay pending join_match without waiting for heartbeat',
+  'manual disconnect should not schedule another reconnect',
   'stale state_sync WS message should not downgrade authoritative stateVersion',
   'stale intent_result WS message should not downgrade authoritative stateVersion',
   'stale HTTP refresh should not downgrade authoritative stateVersion',
@@ -1775,6 +1800,8 @@ assert.ok(
   'startLiveHeartbeat should rebuild heartbeat timer when authoritative interval changes',
   'startLiveHeartbeat should allow timer rebuild without duplicate immediate heartbeat',
   'startLiveRealtime(state = null)',
+  'formatLiveRealtimeStatus(',
+  'data-live-realtime-status',
   'session.joinRealtimeMatch(sourceState.matchId',
   'lastSeenRevision: this.getLiveLastSeenEventRevision(sourceState)',
   'Array.isArray(sourceState.lastEvents)',
@@ -1795,6 +1822,10 @@ assert.ok(
 
 [
   'startLiveHeartbeat runtime should schedule the server heartbeat interval',
+  'live snapshot should expose local realtime reconnecting status',
+  'live snapshot should expose last local realtime sync timestamp',
+  'live snapshot should expose cloned local realtime report for text renderers',
+  'live snapshot should preserve local realtime reconnect reason for UI diagnostics',
   'getLiveLastSeenEventRevision should prefer replay event high-water marks when reconnecting',
   'startLiveHeartbeat runtime should not stack duplicate timers for the same interval',
   'sendLiveHeartbeat runtime should rebuild heartbeat timer after receiving a new server interval',

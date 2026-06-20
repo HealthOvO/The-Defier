@@ -1,5 +1,53 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-20: V10-S8U live PVP local realtime status visibility
+  - 本轮完成
+    - `PVPScene.getLiveSnapshot()` 现在透出 session 层的 `realtimeStatus`、`lastRealtimeSyncAt` 和 `realtimeReport`，`render_game_to_text()` 因此能看到本地实时通道状态。
+    - live 面板新增 `data-live-realtime-status`，与服务端 `data-live-connection-status` 分离：前者表示本机 WS/实时通道 connected / reconnecting / error，后者仍表示双方 heartbeat / grace / disconnected。
+    - `tests/browser_pvp_live_audit.mjs` 的 fake live service 加入 `connectRealtime()`，浏览器审计固定匹配态必须显示“传输：实时通道已连接”，text payload 必须包含 `realtimeStatus=connected` 和 WS report。
+    - `tests/sanity_pvp_live_ui_runtime_checks.mjs` 新增 snapshot 运行时断言，`tests/sanity_pvp_live_ui_contract_checks.cjs` 与 `tests/sanity_release_gate_coverage_checks.cjs` 固定 DOM / scene / browser audit marker。
+  - 已验证
+    - 红测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs` 在实现前失败于 `live snapshot should expose local realtime reconnecting status`，实际为 `undefined`。
+    - 红测：`node tests/sanity_pvp_live_ui_contract_checks.cjs` 在实现前失败于缺少 `formatLiveRealtimeStatus(` / `data-live-realtime-status`。
+    - 绿测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs`
+    - 绿测：`node tests/sanity_pvp_live_ui_contract_checks.cjs`
+    - 绿测：`node tests/sanity_release_gate_coverage_checks.cjs`
+    - 语法检查：`node --check js/scenes/pvp-scene.js`
+    - 语法检查：`node --check tests/browser_pvp_live_audit.mjs`
+  - 当前结论
+    - live PVP 现在能把“对手连接健康”和“我方实时传输状态”拆开展示：弱网或 WS 重连时，玩家不必把本机传输问题误读成对手断线或服务器旧状态。该切片仍不是离页保活、intent in-flight 防双击、跨进程终局 fanout、生产 smoke 或线上部署完成。
+
+- 2026-06-20: V10-S8T live PVP client realtime reconnect
+  - 本轮完成
+    - `js/services/pvp-live-session.js` 的 live WS 异常 `onClose` 不再直接停在 `closed`；只要仍有 pending `join_match`，就进入 `reconnecting`，用可注入 timer 安排短延迟重连。
+    - 重连成功后会复用同一份 pending `join_match` 和 `lastSeenRevision`，不必等下一次 heartbeat 才重新加入房间；`connectionId` 防止旧连接迟到事件误写新连接状态。
+    - `disconnectRealtime()` / `reset()` 会清理重连 timer 和 pending join，手动关闭或无战局时不会自动重连，避免玩家主动离开后继续挂住真人局。
+    - `tests/sanity_pvp_live_session_checks.mjs` 新增假 timer 红测，固定异常 close -> reconnecting -> 新连接 replay join -> 手动断开不重连；`tests/sanity_release_gate_coverage_checks.cjs` 固定源码与行为 marker。
+  - 已验证
+    - 红测：`node tests/sanity_pvp_live_session_checks.mjs` 在实现前失败于 `unexpected WS close should mark realtime reconnecting`，实际状态为 `closed`。
+    - 绿测：`node tests/sanity_pvp_live_session_checks.mjs`
+    - 绿测：`node tests/sanity_release_gate_coverage_checks.cjs`
+    - 语法检查：`node --check js/services/pvp-live-session.js`
+  - 当前结论
+    - live PVP 前端 WS 从“断线后等 heartbeat 下次兜底”推进到“异常断线后快速重连并自动重放 join”：弱网、浏览器短暂休眠或单次 WS close 后，玩家更少停在旧画面，也减少双方误以为对方掉线的窗口。该切片仍不是 UI 传输状态可见化、intent in-flight 防双击、跨进程终局 fanout、生产 smoke 或线上部署完成。
+
+- 2026-06-20: V10-S8S live PVP SQLite cross-process WS state_sync fanout
+  - 本轮完成
+    - `server/db/database.js` / `server/pvp-live/live-persistence.js` 增加 `pvp_live_state_signals`，用 SQLite 持久化跨进程 `state_sync` 信号。
+    - `server/pvp-live/live-store.js` 在 live match 状态推进后写入 signal；`server/pvp-live/live-ws.js` 为每个 WS client 维护 signal cursor，轮询共享表并跳过本进程自发信号，避免重复广播。
+    - join race baseline cursor、`sync_required` 节流和 per-client cursor 共同保证新加入者不会收到陈旧启动信号，也不会错过后续权威状态推进。
+    - `tests/sanity_pvp_live_cross_process_ws_fanout_checks.cjs` 启动两个真实 `server/app.js` 进程，共用临时 SQLite，验证 A/B 分别连到不同进程时也能收到对方推进后的 `state_sync`。
+  - 已验证
+    - 绿测：`node tests/sanity_pvp_live_ws_checks.cjs`
+    - 绿测：`node tests/sanity_pvp_live_cross_process_ws_fanout_checks.cjs`
+    - 绿测：`node tests/sanity_pvp_live_persistence_checks.cjs`
+    - 绿测：`node tests/sanity_release_gate_coverage_checks.cjs`
+    - 全量：`npm run test:node`
+    - 构建：`npm run build:pages`
+    - 清洁检查：`git diff --check`
+  - 当前结论
+    - live PVP 已从 heartbeat 有界追赶继续推进到 SQLite-backed 跨进程 WS 主动 `state_sync` fanout：非粘性连接下，连在另一个进程的对手不必等自己的下一次 heartbeat 才看到权威状态。该切片仍不是 Redis / 多实例强一致、跨进程终局结算专门 smoke、生产 API smoke 或线上部署完成。
+
 - 2026-06-20: V10-S8R live PVP soft-timeout automation stale-save rehydrate
   - 本轮完成
     - `server/pvp-live/live-store.js` 的首次回合超时软托管分支现在会把 `executeFirstTimeoutAutomation()` 的 `saveMatch()` 结果向上冒泡给 `finishMatchByTimeout()` / `sweepMatchTimeout()`，复用既有 stale-save authoritative rehydrate 链路。
