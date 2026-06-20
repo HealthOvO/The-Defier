@@ -61,6 +61,14 @@ function loadFile(ctx, filePath) {
         calls.push({ method: 'requestLivePvpRematch', matchId, options });
         return { success: true, status: 'waiting_rematch', friendlySeries: { reportVersion: 'pvp-live-friendly-series-v1', rankedImpact: 'none' } };
       },
+      getLivePvpRematchStatus: async (matchId) => {
+        calls.push({ method: 'getLivePvpRematchStatus', matchId });
+        return { success: true, status: 'waiting_rematch', friendlySeries: { reportVersion: 'pvp-live-friendly-series-v1', rankedImpact: 'none' } };
+      },
+      cancelLivePvpRematch: async (matchId) => {
+        calls.push({ method: 'cancelLivePvpRematch', matchId });
+        return { success: true, status: 'cancelled', reason: 'rematch_cancelled', friendlySeries: { reportVersion: 'pvp-live-friendly-series-v1', status: 'cancelled', rankedImpact: 'none' } };
+      },
       createLivePvpInvite: async (options) => {
         calls.push({ method: 'createLivePvpInvite', options });
         return { success: true, status: 'waiting_invite', inviteCode: 'TD1234', inviteReport: { reportVersion: 'pvp-live-invite-v1', rankedImpact: 'none' } };
@@ -136,6 +144,8 @@ function loadFile(ctx, filePath) {
   assert(typeof PVPService.live.getCurrentMatch === 'function', 'PVPService.live should expose getCurrentMatch');
   assert(typeof PVPService.live.getReplay === 'function', 'PVPService.live should expose getReplay');
   assert(typeof PVPService.live.requestRematch === 'function', 'PVPService.live should expose requestRematch');
+  assert(typeof PVPService.live.getRematchStatus === 'function', 'PVPService.live should expose getRematchStatus');
+  assert(typeof PVPService.live.cancelRematch === 'function', 'PVPService.live should expose cancelRematch');
   assert(typeof PVPService.live.createInvite === 'function', 'PVPService.live should expose createInvite');
   assert(typeof PVPService.live.joinInvite === 'function', 'PVPService.live should expose joinInvite');
   assert(typeof PVPService.live.cancelInvite === 'function', 'PVPService.live should expose cancelInvite');
@@ -174,6 +184,14 @@ function loadFile(ctx, filePath) {
   const rematch = await PVPService.live.requestRematch('pvplm-test', { displayName: '甲' });
   assert(rematch.success === true && rematch.status === 'waiting_rematch', 'live rematch bridge should forward friendly rematch state');
   assert(calls.at(-1).method === 'requestLivePvpRematch', 'live rematch bridge should call BackendClient.requestLivePvpRematch');
+
+  const rematchStatus = await PVPService.live.getRematchStatus('pvplm-test');
+  assert(rematchStatus.success === true && rematchStatus.status === 'waiting_rematch', 'live rematch status bridge should forward friendly rematch state');
+  assert(calls.at(-1).method === 'getLivePvpRematchStatus', 'live rematch status bridge should call BackendClient.getLivePvpRematchStatus');
+
+  const rematchCancel = await PVPService.live.cancelRematch('pvplm-test');
+  assert(rematchCancel.success === true && rematchCancel.status === 'cancelled', 'live rematch cancel bridge should forward cancelled rematch state');
+  assert(calls.at(-1).method === 'cancelLivePvpRematch', 'live rematch cancel bridge should call BackendClient.cancelLivePvpRematch');
 
   const invite = await PVPService.live.createInvite({ displayName: '甲' });
   assert(invite.success === true && invite.status === 'waiting_invite', 'live invite bridge should forward waiting invite state');

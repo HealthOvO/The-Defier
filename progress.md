@@ -1,5 +1,48 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-20: V10-S9H live PVP waiting rematch lifecycle
+  - 本轮完成
+    - `server/pvp-live/live-store.js` 为低压力再战 pending 请求补齐 `getFriendlyRematchStatus()` 与 `cancelFriendlyRematch()`，并新增 `DEFAULT_REMATCH_TTL_MS` / `PVP_LIVE_REMATCH_TTL_MS` 过期窗口；读取、取消和再次发起前都会清理过期 pending。
+    - rematch pending 的 TTL 改为锚定“本次等待创建时间”，不再继承整条 Bo3 `friendlySeries.createdAt`；长时间 Bo3 系列进入决胜局时，新 pending 不会因为系列创建时间很早而秒过期，同时 UI 仍保留原系列 createdAt 用于展示。
+    - `server/routes/pvp-live.js` 新增 `GET /api/pvp/live/matches/:matchId/rematch` 与 `POST /api/pvp/live/matches/:matchId/rematch/cancel`：原局双方可读取 pending 状态，只有 pending 发起方能取消；旁观者、非发起方取消、已取消 pending 都返回稳定 404，不会误建新局。
+    - 过期 pending 返回稳定 `rematch_expired / status=expired` 并删除 SQLite row；取消 pending 返回 `rematch_cancelled / status=cancelled`，保留原 finished 复盘，不写正式积分、奖励、赛季验证或结算。
+    - `js/services/backend-client.js`、`js/services/pvp-service.js`、`js/services/pvp-live-session.js` 接通 rematch status / cancel；`pollRematch()` 在没有新 current match 时会读取 pending 状态，遇到 `cancelled / expired / no_pending_rematch` 会回到 finished 复盘态，而不是无限停在 `waiting_rematch`；`resumeCurrentMatch()` 从本地 terminal 复盘恢复时也会查询 pending status，刷新后可直接回到 `waiting_rematch`。
+    - `js/scenes/pvp-scene.js` 的 `data-live-friendly-series` 增加 status / series id / source match / confirmation count DOM marker；`waiting_rematch` 时显示 `data-live-action="cancel-rematch"` 取消按钮，点击后调用 `cancelLiveRematch()` 并恢复复盘 action；`cancelled / expired` 会显示“等待已取消 / 等待已过期”，不再误写成“系列进行中”。
+    - `tests/browser_pvp_live_audit.mjs` 增加 fake browser 取消等待断言：发起再战后必须出现取消入口，取消后 phase 回 `finished`、复盘保留、series 状态为 `cancelled`，且不触发旧 `findOpponent / reportMatchResult / GhostEnemy / didWin / matchTicket` 链路。
+    - `tests/browser_pvp_live_real_backend_smoke.mjs` 在真实双账号 smoke 中补上“发起再战 -> 取消 -> 回 finished 复盘 -> 再次发起 -> 对手接受”的真实路径，证明取消不会污染后续再战。
+    - `tests/sanity_pvp_live_route_checks.cjs`、`tests/sanity_pvp_live_persistence_checks.cjs`、client / service / session / UI contract / release coverage 同步固定 status、cancel、TTL、重启读取、发起方权限和 UI marker。
+  - 已验证
+    - 红测：`node tests/sanity_pvp_live_route_checks.cjs` 在实现前失败于 `friendly rematch requester should be able to read pending rematch status`。
+    - 红测：`node tests/sanity_pvp_live_route_checks.cjs` 在权限收紧前失败于 `non-requesting opponent should not cancel a pending friendly rematch by surprise`。
+    - 红测：`node tests/sanity_pvp_live_session_checks.mjs` 在实现前失败于 `live session should expose friendly rematch cancel API`。
+    - 红测：`node tests/sanity_pvp_live_ui_contract_checks.cjs` 在 UI 接入前失败于 `data-live-action="cancel-rematch"`。
+    - 红测：`node tests/sanity_pvp_live_route_checks.cjs` 在 TTL 拆分前失败于 `fresh Bo3 decider pending should not expire just because the series is old`。
+    - 红测：`node tests/sanity_pvp_live_session_checks.mjs` 在刷新恢复接入前失败于 `resumeCurrentMatch should restore pending friendly rematch after refreshing from terminal review`。
+    - 绿测：`node tests/sanity_pvp_live_route_checks.cjs`
+    - 绿测：`node tests/sanity_pvp_live_persistence_checks.cjs`
+    - 绿测：`node tests/sanity_pvp_live_client_checks.mjs`
+    - 绿测：`node tests/sanity_pvp_live_service_bridge_checks.cjs`
+    - 绿测：`node tests/sanity_pvp_live_session_checks.mjs`
+    - 绿测：`node tests/sanity_pvp_live_ui_contract_checks.cjs`
+    - 绿测：`node tests/sanity_release_gate_coverage_checks.cjs`
+    - 语法检查：`node --check server/pvp-live/live-store.js`
+    - 语法检查：`node --check server/routes/pvp-live.js`
+    - 语法检查：`node --check js/services/backend-client.js`
+    - 语法检查：`node --check js/services/pvp-live-session.js`
+    - 语法检查：`node --check js/scenes/pvp-scene.js`
+    - 语法检查：`node --check tests/browser_pvp_live_audit.mjs`
+    - 语法检查：`node --check tests/browser_pvp_live_real_backend_smoke.mjs`
+    - 语法检查：`node --check tests/sanity_pvp_live_route_checks.cjs`
+    - 语法检查：`node --check tests/sanity_pvp_live_persistence_checks.cjs`
+    - 构建：`npm run build:pages`
+    - 浏览器审计：`node tests/browser_pvp_live_audit.mjs http://127.0.0.1:4173 output/pvp-live-rematch-lifecycle-audit-final2`，63/63 findings、0 console error。
+    - 真实后端 smoke：`node tests/browser_pvp_live_real_backend_smoke.mjs http://127.0.0.1:4173 output/pvp-live-rematch-lifecycle-real-final2`，39/39 findings、0 console error。
+    - 全量 Node：`npm run test:node`
+    - 同步检查：`node tests/sanity_intro_progress_sync_checks.cjs`
+    - 清洁检查：`git diff --check`
+  - 当前结论
+    - live PVP 的低压力再战不再只有“等对手接受”半条链：等待方可以主动取消，过期会稳定退出，重启后 pending 可读，刷新后能恢复等待态，取消后还能重新发起并让对手正常接受；Bo3 长系列的新一轮 pending 不会被旧系列时间误判过期。该切片只提升赛后连续对局的掌控感和失败路径确定性，不改变伤害、生命、抽牌、灵力、起手、匹配、Bo3 计分规则、正式积分、奖励、赛季验证或结算，也不是完整好友系统、多实例强一致、生产 smoke 或线上部署封板。
+
 - 2026-06-20: V10-S9G live PVP post-match fairness receipt
   - 本轮完成
     - `server/pvp-live/engine/state-view.js` 新增 `pvp-live-fairness-receipt-v1`，从既有 `experienceReport.fairnessChecks`、公开行动窗口、开局护体 / 首动预算 / 长局评分等公开证据归纳赛后公平回执。

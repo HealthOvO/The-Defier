@@ -1377,6 +1377,43 @@ async function writeReport() {
         && friendlyRematchProbe.snapshot?.rankedImpact === 'none',
       JSON.stringify({ friendlyRematchProbe, seatBFriendlyRematchActionable }),
     );
+    const seatBCancelRematchActionable = await clickLiveControl(seatB.page, '[data-live-action="cancel-rematch"]', 'seat-b-cancel-friendly-rematch');
+    await seatB.page.waitForTimeout(200);
+    const cancelledRematchProbe = await seatB.page.evaluate(() => {
+      const series = document.querySelector('[data-live-friendly-series]');
+      const actions = Object.fromEntries(Array.from(document.querySelectorAll('[data-live-post-review-action]')).map(button => [button.getAttribute('data-live-post-review-action'), button.disabled]));
+      return {
+        phase: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-phase') || '',
+        hint: document.querySelector('[data-live-last-error]')?.textContent || '',
+        reviewText: document.querySelector('[data-live-post-match-review]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+        status: series?.getAttribute('data-live-friendly-series-status') || '',
+        seriesText: series?.textContent?.replace(/\s+/g, ' ').trim() || '',
+        cancelVisible: !!document.querySelector('[data-live-action="cancel-rematch"]'),
+        actions,
+        snapshot: window.PVPScene?.getLiveSnapshot?.()?.friendlySeries || null,
+      };
+    });
+    add(
+      'real browser waiting friendly rematch requester can cancel and restore finished review',
+      cancelledRematchProbe.phase === 'finished'
+        && /已取消低压力再战|rematch_cancelled/.test(cancelledRematchProbe.hint)
+        && /复盘/.test(cancelledRematchProbe.reviewText)
+        && cancelledRematchProbe.status === 'cancelled'
+        && /等待已取消/.test(cancelledRematchProbe.seriesText)
+        && !/系列进行中/.test(cancelledRematchProbe.seriesText)
+        && cancelledRematchProbe.cancelVisible === false
+        && cancelledRematchProbe.actions?.friendly_rematch === false
+        && cancelledRematchProbe.actions?.queue_again === false
+        && cancelledRematchProbe.snapshot?.rankedImpact === 'none'
+        && (!isMobileViewport || seatBCancelRematchActionable?.ok === true),
+      JSON.stringify({ cancelledRematchProbe, seatBCancelRematchActionable }),
+    );
+
+    await clickLiveControl(seatB.page, '[data-live-post-review-action="friendly_rematch"]', 'seat-b-friendly-rematch-after-cancel');
+    await seatB.page.waitForFunction(() => {
+      const snapshot = window.PVPScene?.getLiveSnapshot?.();
+      return snapshot?.phase === 'waiting_rematch';
+    }, null, { timeout: 5000 });
     await clickLiveControl(seatA.page, '[data-live-post-review-action="friendly_rematch"]', 'seat-a-friendly-rematch');
     await seatB.page.waitForFunction(() => {
       const snapshot = window.PVPScene?.getLiveSnapshot?.();

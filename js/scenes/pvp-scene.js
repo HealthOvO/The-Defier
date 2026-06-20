@@ -1444,14 +1444,36 @@ export const PVPScene = {
     const nameA = series.sourceParticipants.A.displayName || '甲方';
     const nameB = series.sourceParticipants.B.displayName || '乙方';
     const scoreLabel = `${nameA} ${series.scoreBySourceSeat.A} : ${series.scoreBySourceSeat.B} ${nameB}`;
-    const seriesLabel = series.winnerSourceSeat
-      ? `系列结束 · ${series.winnerSourceSeat === 'A' ? nameA : nameB} 先到 ${series.targetWins} 胜`
-      : series.canRequestNextRound ? '系列未决 · 可继续决胜局' : '系列进行中';
+    const seriesLabel = series.status === 'waiting_rematch'
+      ? '等待对手确认 · 可取消等待'
+      : series.status === 'cancelled'
+        ? '等待已取消 · 可从复盘重新发起'
+        : series.status === 'expired'
+          ? '等待已过期 · 可从复盘重新发起'
+          : series.winnerSourceSeat
+            ? `系列结束 · ${series.winnerSourceSeat === 'A' ? nameA : nameB} 先到 ${series.targetWins} 胜`
+            : series.canRequestNextRound ? '系列未决 · 可继续决胜局' : '系列进行中';
+    const canCancel = series.status === 'waiting_rematch';
     return `
-      <div class="pvp-live-friendly-series" data-live-friendly-series>
+      <div
+        class="pvp-live-friendly-series"
+        data-live-friendly-series
+        data-live-friendly-series-status="${this.escapeHtml(series.status || '')}"
+        data-live-friendly-series-id="${this.escapeHtml(series.seriesId || '')}"
+        data-live-friendly-series-source-match="${this.escapeHtml(series.sourceMatchId || '')}"
+        data-live-friendly-series-confirmations="${this.escapeHtml(series.confirmationCount || 0)}"
+      >
         <span>${this.escapeHtml(series.roundLabel)} · ${this.escapeHtml(scoreLabel)}</span>
         <span>${this.escapeHtml(seriesLabel)} · ${this.escapeHtml(impactLabel)}</span>
         <span>系列 ${this.escapeHtml(series.seriesId.slice(0, 12) || '--')} · ${this.escapeHtml(series.seatPolicy)}</span>
+        ${canCancel ? `
+          <button
+            type="button"
+            class="pvp-live-friendly-series-cancel"
+            data-live-action="cancel-rematch"
+            onclick="PVPScene.cancelLiveRematch()"
+          >取消再战等待</button>
+        ` : ''}
       </div>
     `;
   },
@@ -3087,6 +3109,17 @@ export const PVPScene = {
     const session = this.getLiveSession();
     await session.cancelQueue();
     this.liveLongWaitPollUntil = 0;
+    this.stopLivePolling();
+    this.renderLivePanel();
+  },
+  async cancelLiveRematch() {
+    const session = this.getLiveSession();
+    if (!session || typeof session.cancelRematch !== 'function') return;
+    await session.cancelRematch();
+    const state = session.getState();
+    this.liveInlineHint = state.lastError && state.lastError.message
+      ? state.lastError.message
+      : '已取消低压力再战等待；本局复盘保留，不写正式积分。';
     this.stopLivePolling();
     this.renderLivePanel();
   },

@@ -979,6 +979,48 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
         assert.equal(rematchA.payload.friendlySeries?.sourceMatchId, joinB.payload.matchId, 'friendly rematch should link to the source live match');
         assert.ok(!/reward|rating|elo/i.test(JSON.stringify(rematchA.payload.friendlySeries || {})), 'friendly rematch waiting report must not promise reward or exact rating compensation');
 
+        const rematchStatusA = await request(baseUrl, `/api/pvp/live/matches/${joinB.payload.matchId}/rematch`, {
+            token: tokenA
+        });
+        assert.equal(rematchStatusA.status, 200, 'friendly rematch requester should be able to read pending rematch status');
+        assert.equal(rematchStatusA.payload.status, 'waiting_rematch', 'pending rematch status should remain waiting before opponent accepts');
+        assert.equal(rematchStatusA.payload.friendlySeries?.seriesId, rematchA.payload.friendlySeries?.seriesId, 'pending rematch status should preserve series id');
+
+        const outsiderCancelRematch = await request(baseUrl, `/api/pvp/live/matches/${joinB.payload.matchId}/rematch/cancel`, {
+            method: 'POST',
+            token: tokenC
+        });
+        assert.equal(outsiderCancelRematch.status, 404, 'non-participant should not be able to cancel a pending friendly rematch');
+
+        const opponentCancelRematch = await request(baseUrl, `/api/pvp/live/matches/${joinB.payload.matchId}/rematch/cancel`, {
+            method: 'POST',
+            token: tokenB
+        });
+        assert.equal(opponentCancelRematch.status, 404, 'non-requesting opponent should not cancel a pending friendly rematch by surprise');
+
+        const cancelledRematchA = await request(baseUrl, `/api/pvp/live/matches/${joinB.payload.matchId}/rematch/cancel`, {
+            method: 'POST',
+            token: tokenA
+        });
+        assert.equal(cancelledRematchA.status, 200, 'friendly rematch requester should be able to cancel pending rematch');
+        assert.equal(cancelledRematchA.payload.status, 'cancelled', 'cancelled friendly rematch should return cancelled status');
+        assert.equal(cancelledRematchA.payload.reason, 'rematch_cancelled', 'cancelled friendly rematch should expose stable reason');
+        assert.equal(cancelledRematchA.payload.friendlySeries?.status, 'cancelled', 'cancelled friendly rematch should project cancelled series status');
+
+        const statusAfterCancel = await request(baseUrl, `/api/pvp/live/matches/${joinB.payload.matchId}/rematch`, {
+            token: tokenA
+        });
+        assert.equal(statusAfterCancel.status, 404, 'cancelled friendly rematch should no longer expose a pending status');
+        assert.equal(statusAfterCancel.payload.reason, 'no_pending_rematch', 'cancelled friendly rematch status should expose stable missing reason');
+
+        const rematchBWait = await request(baseUrl, `/api/pvp/live/matches/${joinB.payload.matchId}/rematch`, {
+            method: 'POST',
+            token: tokenB,
+            body: { displayName: '乙', loadout: loadoutB }
+        });
+        assert.equal(rematchBWait.status, 200, 'opponent should be able to start a fresh rematch after requester cancellation');
+        assert.equal(rematchBWait.payload.status, 'waiting_rematch', 'fresh rematch after cancellation should wait instead of matching stale cancelled request');
+
         const outsiderRematch = await request(baseUrl, `/api/pvp/live/matches/${joinB.payload.matchId}/rematch`, {
             method: 'POST',
             token: tokenC,
@@ -988,8 +1030,8 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
 
         const rematchB = await request(baseUrl, `/api/pvp/live/matches/${joinB.payload.matchId}/rematch`, {
             method: 'POST',
-            token: tokenB,
-            body: { displayName: '乙', loadout: loadoutB }
+            token: tokenA,
+            body: { displayName: '甲', loadout: loadoutA }
         });
         assert.equal(rematchB.status, 200, 'loser should be able to accept the friendly rematch');
         assert.equal(rematchB.payload.status, 'matched', 'second friendly rematch request should create a new live match');
@@ -1079,6 +1121,8 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
         assert.equal(friendlyRound14Draw.payload.stateView.postMatchReview?.friendlySeries?.canRequestNextRound, true, 'friendly round14 draw should keep next-round rematch available');
         assert.ok(friendlyRound14Draw.payload.stateView.postMatchReview?.nextActions?.some(action => action.id === 'friendly_rematch'), 'friendly round14 draw review should expose next-round rematch action');
 
+        const longSeriesSourceMatch = pvpLiveRoutes.__livePvpStore.matches.get(rematchB.payload.matchId);
+        longSeriesSourceMatch.state.friendlySeries.createdAt = Date.now() - pvpLiveRoutes.__livePvpStore.rematchTtlMs - 1000;
         const deciderWait = await request(baseUrl, `/api/pvp/live/matches/${rematchB.payload.matchId}/rematch`, {
             method: 'POST',
             token: tokenB,
@@ -1088,6 +1132,13 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
         assert.equal(deciderWait.payload.status, 'waiting_rematch', 'first Bo3 decider request should wait');
         assert.equal(deciderWait.payload.friendlySeries?.seriesId, rematchB.payload.stateView.friendlySeries?.seriesId, 'Bo3 decider should keep the original series id');
         assert.deepEqual(deciderWait.payload.friendlySeries?.scoreBySourceSeat, { A: 1, B: 1 }, 'Bo3 decider wait should carry tied score');
+        assert.equal(deciderWait.payload.friendlySeries?.createdAt, longSeriesSourceMatch.state.friendlySeries.createdAt, 'Bo3 decider should keep the original series created time for display');
+
+        const deciderPendingStatus = await request(baseUrl, `/api/pvp/live/matches/${rematchB.payload.matchId}/rematch`, {
+            token: tokenB
+        });
+        assert.equal(deciderPendingStatus.status, 200, 'fresh Bo3 decider pending should not expire just because the series is old');
+        assert.equal(deciderPendingStatus.payload.status, 'waiting_rematch', 'fresh Bo3 decider pending should remain readable while waiting for opponent');
 
         const deciderMatch = await request(baseUrl, `/api/pvp/live/matches/${rematchB.payload.matchId}/rematch`, {
             method: 'POST',

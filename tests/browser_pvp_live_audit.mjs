@@ -518,6 +518,7 @@ async function safeElementScreenshot(page, selector, outputPath) {
       safeguards: ['friendly_no_ranked_impact', 'seat_rotation'],
       ...overrides,
     });
+    window.__makeLivePvpAuditFriendlySeries = makeFriendlySeries;
     window.__makeLivePvpAuditFriendlyView = () => ({
       ...makeStateView(1, 'B', 'setup'),
       matchId: 'pvplm-browser-friendly',
@@ -828,6 +829,32 @@ async function safeElementScreenshot(page, selector, outputPath) {
           status: 'waiting_rematch',
           friendlySeries: {
             ...makeFriendlySeries('waiting_rematch', 1),
+            sourceMatchId: matchId,
+            originMatchId: matchId,
+          },
+        };
+      },
+      getRematchStatus: async (matchId) => {
+        push({ method: 'getRematchStatus', matchId });
+        return {
+          success: true,
+          status: 'waiting_rematch',
+          friendlySeries: {
+            ...makeFriendlySeries('waiting_rematch', 1),
+            sourceMatchId: matchId,
+            originMatchId: matchId,
+          },
+        };
+      },
+      cancelRematch: async (matchId) => {
+        push({ method: 'cancelRematch', matchId });
+        return {
+          success: true,
+          status: 'cancelled',
+          reason: 'rematch_cancelled',
+          message: '已取消低压力再战等待；本局复盘保留，不写正式积分。',
+          friendlySeries: {
+            ...makeFriendlySeries('cancelled', 1),
             sourceMatchId: matchId,
             originMatchId: matchId,
           },
@@ -2401,6 +2428,117 @@ async function safeElementScreenshot(page, selector, outputPath) {
       && friendlyRecoveryProbe.calls.some(call => call.method === 'getCurrentMatch' && call.rematchAccepted === true)
       && !/findOpponent|reportMatchResult|GhostEnemy|startPVPBattle|didWin|matchTicket/.test(JSON.stringify(friendlyRecoveryProbe.calls)),
     JSON.stringify(friendlyRecoveryProbe),
+  );
+
+  await page.evaluate(async () => {
+    window.__livePvpAuditCalls.push({ method: 'reset-rematch-cancel-probe' });
+    window.PVPService.live.getCurrentMatch = async () => {
+      window.__livePvpAuditCalls.push({ method: 'getCurrentMatch', rematchCancelProbe: true });
+      return {
+        success: true,
+        matchId: 'pvplm-browser-live',
+        seatId: 'A',
+        stateView: window.__makeLivePvpAuditStateView(5, 'A', 'finished'),
+      };
+    };
+    window.PVPService.live.requestRematch = async (matchId, options = {}) => {
+      window.__livePvpAuditCalls.push({ method: 'requestRematch', matchId, options, cancelProbe: true });
+      return {
+        success: true,
+        status: 'waiting_rematch',
+        friendlySeries: {
+          ...window.__makeLivePvpAuditFriendlySeries('waiting_rematch', 1),
+          sourceMatchId: matchId,
+          originMatchId: matchId,
+        },
+      };
+    };
+    window.PVPService.live.getRematchStatus = async (matchId) => {
+      window.__livePvpAuditCalls.push({ method: 'getRematchStatus', matchId, cancelProbe: true });
+      return {
+        success: true,
+        status: 'waiting_rematch',
+        friendlySeries: {
+          ...window.__makeLivePvpAuditFriendlySeries('waiting_rematch', 1),
+          sourceMatchId: matchId,
+          originMatchId: matchId,
+        },
+      };
+    };
+    window.PVPService.live.cancelRematch = async (matchId) => {
+      window.__livePvpAuditCalls.push({ method: 'cancelRematch', matchId, cancelProbe: true });
+      return {
+        success: true,
+        status: 'cancelled',
+        reason: 'rematch_cancelled',
+        message: '已取消低压力再战等待；本局复盘保留，不写正式积分。',
+        friendlySeries: {
+          ...window.__makeLivePvpAuditFriendlySeries('cancelled', 1),
+          sourceMatchId: matchId,
+          originMatchId: matchId,
+        },
+      };
+    };
+    window.game.showScreen('pvp-screen');
+    window.PVPScene.switchTab('live');
+    window.PVPScene.liveSession = null;
+    await window.PVPScene.loadLivePanel();
+  });
+  await page.waitForTimeout(100);
+  await page.click('[data-live-post-review-action="friendly_rematch"]', { timeout: 5000, force: true });
+  await page.waitForTimeout(120);
+  const friendlyCancelWaitProbe = await page.evaluate(() => {
+    const series = document.querySelector('[data-live-friendly-series]');
+    return {
+      phase: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-phase') || '',
+      status: series?.getAttribute('data-live-friendly-series-status') || '',
+      sourceMatch: series?.getAttribute('data-live-friendly-series-source-match') || '',
+      confirmationCount: series?.getAttribute('data-live-friendly-series-confirmations') || '',
+      cancelVisible: !!document.querySelector('[data-live-action="cancel-rematch"]'),
+      hint: document.querySelector('[data-live-last-error]')?.textContent || '',
+      calls: window.__livePvpAuditCalls,
+    };
+  });
+  add(
+    'live UI waiting friendly rematch exposes requester cancel control',
+    friendlyCancelWaitProbe.phase === 'waiting_rematch'
+      && friendlyCancelWaitProbe.status === 'waiting_rematch'
+      && friendlyCancelWaitProbe.sourceMatch === 'pvplm-browser-live'
+      && friendlyCancelWaitProbe.confirmationCount === '1'
+      && friendlyCancelWaitProbe.cancelVisible === true
+      && /等待本局对手确认/.test(friendlyCancelWaitProbe.hint),
+    JSON.stringify(friendlyCancelWaitProbe),
+  );
+  await page.click('[data-live-action="cancel-rematch"]', { timeout: 5000, force: true });
+  await page.waitForTimeout(120);
+  const friendlyCancelProbe = await page.evaluate(() => {
+    const series = document.querySelector('[data-live-friendly-series]');
+    const actions = Object.fromEntries(Array.from(document.querySelectorAll('[data-live-post-review-action]')).map(button => [button.getAttribute('data-live-post-review-action'), button.disabled]));
+    return {
+      phase: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-phase') || '',
+      hint: document.querySelector('[data-live-last-error]')?.textContent || '',
+      reviewText: document.querySelector('[data-live-post-match-review]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+      status: series?.getAttribute('data-live-friendly-series-status') || '',
+      seriesText: series?.textContent?.replace(/\s+/g, ' ').trim() || '',
+      cancelVisible: !!document.querySelector('[data-live-action="cancel-rematch"]'),
+      actions,
+      calls: window.__livePvpAuditCalls,
+    };
+  });
+  add(
+    'live UI waiting friendly rematch requester can cancel and restores finished review',
+    friendlyCancelProbe.phase === 'finished'
+      && /rematch_cancelled|已取消低压力再战/.test(friendlyCancelProbe.hint)
+      && /首胜复盘|首败复盘|复盘/.test(friendlyCancelProbe.reviewText)
+      && friendlyCancelProbe.status === 'cancelled'
+      && /等待已取消/.test(friendlyCancelProbe.seriesText)
+      && !/系列进行中/.test(friendlyCancelProbe.seriesText)
+      && friendlyCancelProbe.cancelVisible === false
+      && friendlyCancelProbe.actions?.friendly_rematch === false
+      && friendlyCancelProbe.actions?.queue_again === false
+      && friendlyCancelProbe.calls.some(call => call.method === 'cancelRematch' && call.cancelProbe === true)
+      && !/findOpponent|reportMatchResult|GhostEnemy|startPVPBattle|didWin|matchTicket/.test(JSON.stringify(friendlyCancelProbe.calls)),
+    JSON.stringify(friendlyCancelProbe),
   );
 
   await page.evaluate(async () => {

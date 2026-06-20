@@ -255,6 +255,7 @@ assert.equal(session.getState().phase, 'idle', 'new live session should start id
 assert.equal(typeof session.reportResult, 'undefined', 'live session should not expose client-reported result API');
 assert.equal(typeof session.requestRematch, 'function', 'live session should expose friendly rematch request API');
 assert.equal(typeof session.pollRematch, 'function', 'live session should expose friendly rematch polling API');
+assert.equal(typeof session.cancelRematch, 'function', 'live session should expose friendly rematch cancel API');
 assert.equal(typeof session.heartbeat, 'function', 'live session should expose heartbeat API');
 assert.equal(typeof session.getReplay, 'function', 'live session should expose replay API');
 assert.equal(typeof session.createInvite, 'function', 'live session should expose private invite creation API');
@@ -757,6 +758,122 @@ assert.equal(unrelatedPoll.phase, 'waiting_rematch', 'waiting friendly rematch s
 assert.equal(unrelatedPoll.matchId, 'pvplm-rematch-source-guard', 'unrelated friendly rematch guard should keep the original source match anchor');
 assert.equal(unrelatedPoll.rematchReport?.seriesId, 'pvpls-session-expected', 'unrelated friendly rematch guard should keep expected series id');
 
+const cancelledRematchCalls = [];
+const cancelledRematchSession = createPvpLiveSession({
+  liveService: {
+    getCurrentMatch: async () => ({
+      success: true,
+      matchId: 'pvplm-rematch-cancel-source',
+      seatId: 'A',
+      stateView: {
+        matchId: 'pvplm-rematch-cancel-source',
+        status: 'finished',
+        postMatchReview: {
+          reportVersion: 'pvp-live-post-match-review-v1',
+          result: 'win',
+          finishReason: 'surrender'
+        },
+        self: { seatId: 'A', hand: [] },
+        opponent: { seatId: 'B', handCount: 0 }
+      }
+    }),
+    requestRematch: async (matchId) => {
+      cancelledRematchCalls.push({ method: 'requestRematch', matchId });
+      return {
+        success: true,
+        status: 'waiting_rematch',
+        friendlySeries: {
+          reportVersion: 'pvp-live-friendly-series-v1',
+          sourceMatchId: matchId,
+          seriesId: 'pvpls-session-cancel',
+          status: 'waiting_rematch',
+          rankedImpact: 'none'
+        }
+      };
+    },
+    cancelRematch: async (matchId) => {
+      cancelledRematchCalls.push({ method: 'cancelRematch', matchId });
+      return {
+        success: true,
+        status: 'cancelled',
+        reason: 'rematch_cancelled',
+        message: '已取消低压力再战等待；本局复盘保留，不写正式积分。',
+        friendlySeries: {
+          reportVersion: 'pvp-live-friendly-series-v1',
+          sourceMatchId: matchId,
+          seriesId: 'pvpls-session-cancel',
+          status: 'cancelled',
+          rankedImpact: 'none'
+        }
+      };
+    }
+  }
+});
+await cancelledRematchSession.resumeCurrentMatch();
+await cancelledRematchSession.requestRematch({ displayName: '甲' });
+const cancelledRematch = await cancelledRematchSession.cancelRematch();
+assert.equal(cancelledRematch.phase, 'finished', 'cancelled friendly rematch should return to the finished review phase');
+assert.equal(cancelledRematch.matchId, 'pvplm-rematch-cancel-source', 'cancelled friendly rematch should keep source match id');
+assert.equal(cancelledRematch.rematchReport?.status, 'cancelled', 'cancelled friendly rematch should keep cancelled series report');
+assert.equal(cancelledRematch.lastError.reason, 'rematch_cancelled', 'cancelled friendly rematch should expose stable cancellation reason');
+assert.deepEqual(cancelledRematchCalls.map(call => call.method), ['requestRematch', 'cancelRematch'], 'cancelled friendly rematch should call request then cancel only');
+
+const expiredRematchSession = createPvpLiveSession({
+  liveService: {
+    getCurrentMatch: async () => expiredRematchSession.getState().phase === 'waiting_rematch'
+      ? ({
+        success: false,
+        code: '404',
+        reason: 'no_current_match',
+        message: '当前没有进行中的实时论道'
+      })
+      : ({
+        success: true,
+        matchId: 'pvplm-rematch-expired-source',
+        seatId: 'A',
+        stateView: {
+          matchId: 'pvplm-rematch-expired-source',
+          status: 'finished',
+          postMatchReview: {
+            reportVersion: 'pvp-live-post-match-review-v1',
+            result: 'win',
+            finishReason: 'surrender'
+          }
+        }
+      }),
+    requestRematch: async (matchId) => ({
+      success: true,
+      status: 'waiting_rematch',
+      friendlySeries: {
+        reportVersion: 'pvp-live-friendly-series-v1',
+        sourceMatchId: matchId,
+        seriesId: 'pvpls-session-expired',
+        status: 'waiting_rematch',
+        rankedImpact: 'none'
+      }
+    }),
+    getRematchStatus: async (matchId) => ({
+      success: false,
+      code: '404',
+      reason: 'rematch_expired',
+      message: '低压力再战等待已过期，可回到复盘后重新发起。',
+      friendlySeries: {
+        reportVersion: 'pvp-live-friendly-series-v1',
+        sourceMatchId: matchId,
+        seriesId: 'pvpls-session-expired',
+        status: 'expired',
+        rankedImpact: 'none'
+      }
+    })
+  }
+});
+await expiredRematchSession.resumeCurrentMatch();
+await expiredRematchSession.requestRematch({ displayName: '甲' });
+const expiredRematch = await expiredRematchSession.pollRematch();
+assert.equal(expiredRematch.phase, 'finished', 'expired friendly rematch should return to finished review instead of waiting forever');
+assert.equal(expiredRematch.rematchReport?.status, 'expired', 'expired friendly rematch should keep expired series report');
+assert.equal(expiredRematch.lastError.reason, 'rematch_expired', 'expired friendly rematch should expose stable expiry reason');
+
 const matchedRematchSession = createPvpLiveSession({
   liveService: {
     getCurrentMatch: async () => ({
@@ -976,6 +1093,74 @@ assert.equal(restoredTerminal.phase, 'finished', 'resumeCurrentMatch should rest
 assert.equal(restoredTerminal.matchId, 'pvplm-terminal-review', 'restored terminal review should retain stored match id');
 assert.equal(restoredTerminal.stateView.postMatchReview.reportVersion, 'pvp-live-post-match-review-v1', 'restored terminal review should retain post-match review payload');
 assert.deepEqual(terminalCalls.map(call => call.method), ['getCurrentMatch', 'submitIntent', 'getCurrentMatch', 'getMatch'], 'terminal review refresh should try current match before stored terminal match');
+
+const waitingRematchResumeCalls = [];
+const waitingRematchResumeStorage = createMemoryStorage([
+  ['theDefierPvpLiveLastTerminalMatchV1', 'pvplm-terminal-rematch-source']
+]);
+const waitingRematchResumeSession = createPvpLiveSession({
+  storage: waitingRematchResumeStorage,
+  liveService: {
+    getCurrentMatch: async () => {
+      waitingRematchResumeCalls.push({ method: 'getCurrentMatch' });
+      return { success: false, reason: 'no_current_match', message: '当前没有进行中的实时论道' };
+    },
+    getMatch: async (matchId) => {
+      waitingRematchResumeCalls.push({ method: 'getMatch', matchId });
+      return {
+        success: true,
+        matchId,
+        seatId: 'A',
+        stateView: {
+          matchId,
+          status: 'finished',
+          stateVersion: 21,
+          currentSeat: 'A',
+          postMatchReview: {
+            reportVersion: 'pvp-live-post-match-review-v1',
+            result: 'win',
+            finishReason: 'surrender',
+            evidence: [{ eventType: 'match_finished', sequence: 8, actingSeat: 'B' }],
+            nextActions: [
+              { id: 'review_events', label: '查看权威事件' },
+              { id: 'friendly_rematch', label: '低压力再战' }
+            ]
+          },
+          recentEvents: [{ eventType: 'match_finished', sequence: 8, actingSeat: 'B' }],
+          self: { seatId: 'A', hand: [] },
+          opponent: { seatId: 'B', handCount: 0 }
+        }
+      };
+    },
+    getRematchStatus: async (matchId) => {
+      waitingRematchResumeCalls.push({ method: 'getRematchStatus', matchId });
+      return {
+        success: true,
+        status: 'waiting_rematch',
+        friendlySeries: {
+          reportVersion: 'pvp-live-friendly-series-v1',
+          sourceMatchId: matchId,
+          seriesId: 'pvpls-session-refresh-wait',
+          status: 'waiting_rematch',
+          targetWins: 2,
+          maxRounds: 3,
+          roundIndex: 2,
+          roundLabel: 'Bo3 第 2 局 · 换边再战',
+          seriesStatus: 'ongoing',
+          scoreBySourceSeat: { A: 1, B: 0 },
+          rankedImpact: 'none'
+        }
+      };
+    }
+  }
+});
+const restoredWaitingRematch = await waitingRematchResumeSession.resumeCurrentMatch();
+assert.equal(restoredWaitingRematch.phase, 'waiting_rematch', 'resumeCurrentMatch should restore pending friendly rematch after refreshing from terminal review');
+assert.equal(restoredWaitingRematch.matchId, 'pvplm-terminal-rematch-source', 'restored waiting rematch should retain source match id');
+assert.equal(restoredWaitingRematch.stateView.postMatchReview.reportVersion, 'pvp-live-post-match-review-v1', 'restored waiting rematch should keep terminal review visible');
+assert.equal(restoredWaitingRematch.rematchReport?.status, 'waiting_rematch', 'restored waiting rematch should retain pending series status');
+assert.equal(restoredWaitingRematch.lastError.reason, 'waiting_rematch', 'restored waiting rematch should show opponent confirmation hint');
+assert.deepEqual(waitingRematchResumeCalls.map(call => call.method), ['getCurrentMatch', 'getMatch', 'getRematchStatus'], 'terminal recovery with rematch action should ask pending rematch status before rendering finished');
 
 const transientCurrentCalls = [];
 const transientCurrentStorage = createMemoryStorage([

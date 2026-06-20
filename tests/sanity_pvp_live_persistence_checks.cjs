@@ -160,6 +160,7 @@ function startServer() {
       DEFIER_HMAC_SECRET: HMAC_SECRET,
       DEFIER_DB_PATH: DB_PATH,
       PVP_LIVE_SETUP_READY_TIMEOUT_MS: '1000',
+      PVP_LIVE_REMATCH_TTL_MS: '1000',
     },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
@@ -2141,6 +2142,13 @@ async function readyBoth({ matchId, tokenA, tokenB, stateVersionA, prefix }) {
   assert.ok(pendingRematchRow.players_json.includes(rematchUserA.userId), 'persisted pending rematch should keep requester player snapshot');
 
   await withServer(async () => {
+    const recoveredPendingStatus = await request(`/api/pvp/live/matches/${encodeURIComponent(rematchSourceMatchId)}/rematch`, {
+      token: rematchUserA.token,
+    });
+    assert.equal(recoveredPendingStatus.status, 200, 'restarted pending rematch requester should read pending rematch status before opponent accepts');
+    assert.equal(recoveredPendingStatus.payload.status, 'waiting_rematch', 'restarted pending rematch status should remain waiting');
+    assert.equal(recoveredPendingStatus.payload.friendlySeries?.seriesId, rematchSeriesId, 'restarted pending rematch status should keep original series id');
+
     const acceptedAfterRestart = await request(`/api/pvp/live/matches/${encodeURIComponent(rematchSourceMatchId)}/rematch`, {
       method: 'POST',
       token: rematchUserB.token,
@@ -2164,6 +2172,35 @@ async function readyBoth({ matchId, tokenA, tokenB, stateVersionA, prefix }) {
     [rematchSourceMatchId],
   );
   assert.equal(clearedPendingRematchRow, null, 'accepted pending rematch should be cleared after friendly match creation');
+
+  await dbRun(
+    `INSERT INTO pvp_live_rematch_requests
+      (source_match_id, series_id, players_json, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?)`,
+    [
+      rematchSourceMatchId,
+      `${rematchSeriesId}-expired`,
+      pendingRematchRow.players_json,
+      Date.now() - 5000,
+      Date.now() - 5000,
+    ],
+  );
+
+  await withServer(async () => {
+    const expiredPendingStatus = await request(`/api/pvp/live/matches/${encodeURIComponent(rematchSourceMatchId)}/rematch`, {
+      token: rematchUserA.token,
+    });
+    assert.equal(expiredPendingStatus.status, 404, 'expired restarted pending rematch should not remain readable as waiting');
+    assert.equal(expiredPendingStatus.payload.reason, 'rematch_expired', 'expired restarted pending rematch should expose stable expiry reason');
+    assert.equal(expiredPendingStatus.payload.status, 'expired', 'expired restarted pending rematch should expose expired status');
+    assert.equal(expiredPendingStatus.payload.friendlySeries?.status, 'expired', 'expired restarted pending rematch should project expired series status');
+  });
+
+  const clearedExpiredPendingRematchRow = await dbGet(
+    'SELECT source_match_id FROM pvp_live_rematch_requests WHERE source_match_id = ?',
+    [rematchSourceMatchId],
+  );
+  assert.equal(clearedExpiredPendingRematchRow, null, 'expired pending rematch should be cleared after status read');
 
   await withServer(async () => {
     inviteUserA = await registerUser('live_invite_restart_a');

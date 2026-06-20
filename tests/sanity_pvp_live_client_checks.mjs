@@ -41,6 +41,8 @@ assert.equal(typeof BackendClient.getLivePvpMatch, 'function', 'BackendClient sh
 assert.equal(typeof BackendClient.getCurrentLivePvpMatch, 'function', 'BackendClient should expose getCurrentLivePvpMatch');
 assert.equal(typeof BackendClient.getLivePvpReplay, 'function', 'BackendClient should expose getLivePvpReplay');
 assert.equal(typeof BackendClient.requestLivePvpRematch, 'function', 'BackendClient should expose requestLivePvpRematch');
+assert.equal(typeof BackendClient.getLivePvpRematchStatus, 'function', 'BackendClient should expose getLivePvpRematchStatus');
+assert.equal(typeof BackendClient.cancelLivePvpRematch, 'function', 'BackendClient should expose cancelLivePvpRematch');
 assert.equal(typeof BackendClient.createLivePvpInvite, 'function', 'BackendClient should expose createLivePvpInvite');
 assert.equal(typeof BackendClient.joinLivePvpInvite, 'function', 'BackendClient should expose joinLivePvpInvite');
 assert.equal(typeof BackendClient.cancelLivePvpInvite, 'function', 'BackendClient should expose cancelLivePvpInvite');
@@ -132,6 +134,17 @@ assert.equal(calls.at(-1).path, '/api/pvp/live/matches/pvplm%20test%2F1/rematch'
 assert.equal(calls.at(-1).options.method, 'POST', 'live friendly rematch should POST');
 assert.deepEqual(calls.at(-1).options.data, { displayName: '甲', loadout: liveLoadout }, 'live friendly rematch should forward display name and loadout snapshot candidate');
 assert.notEqual(calls.at(-1).options.data.loadout, liveLoadout, 'live friendly rematch should clone loadout before sending');
+
+const rematchStatus = await BackendClient.getLivePvpRematchStatus('pvplm test/1');
+assert.equal(rematchStatus.success, true, 'live friendly rematch status should forward success payload');
+assert.equal(calls.at(-1).path, '/api/pvp/live/matches/pvplm%20test%2F1/rematch', 'live friendly rematch status should encode source match id');
+assert.equal(calls.at(-1).options.method, 'GET', 'live friendly rematch status should GET');
+
+const rematchCancel = await BackendClient.cancelLivePvpRematch('pvplm test/1');
+assert.equal(rematchCancel.success, true, 'live friendly rematch cancel should forward success payload');
+assert.equal(calls.at(-1).path, '/api/pvp/live/matches/pvplm%20test%2F1/rematch/cancel', 'live friendly rematch cancel should encode source match id');
+assert.equal(calls.at(-1).options.method, 'POST', 'live friendly rematch cancel should POST');
+assert.deepEqual(calls.at(-1).options.data, undefined, 'live friendly rematch cancel should not send legacy settlement body');
 
 const invite = await BackendClient.createLivePvpInvite({ displayName: '甲', loadout: liveLoadout });
 assert.equal(invite.success, true, 'live private invite creation should forward success payload');

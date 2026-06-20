@@ -884,6 +884,39 @@ export function createPvpLiveSession({
       lastEvents: Array.isArray(stateView.recentEvents) ? stateView.recentEvents.slice(-8) : []
     });
     rememberTerminalReviewMatch(next);
+    return await resumePendingRematchFromTerminal(next);
+  }
+
+  function terminalReviewCanRequestRematch(stateView) {
+    const actions = stateView && stateView.postMatchReview && Array.isArray(stateView.postMatchReview.nextActions)
+      ? stateView.postMatchReview.nextActions
+      : [];
+    return actions.some(action => action && action.id === 'friendly_rematch');
+  }
+
+  async function resumePendingRematchFromTerminal(next) {
+    const sourceMatchId = String(next && next.matchId || '').trim();
+    if (!sourceMatchId || !terminalReviewCanRequestRematch(next && next.stateView)) return next;
+    const statusResult = await callLive('getRematchStatus', sourceMatchId);
+    if (statusResult && statusResult.success !== false && statusResult.status === 'waiting_rematch') {
+      return publish({
+        phase: 'waiting_rematch',
+        queueTicket: '',
+        matchId: sourceMatchId,
+        seatId: next.seatId || '',
+        stateView: next.stateView || null,
+        waitingReport: null,
+        rematchReport: statusResult.friendlySeries || state.rematchReport || null,
+        lastError: {
+          reason: 'waiting_rematch',
+          message: statusResult.message || '已发起低压力再战，等待本局对手确认；不写正式积分。'
+        },
+        lastEvents: Array.isArray(next.lastEvents) ? next.lastEvents.slice(-8) : []
+      });
+    }
+    if (isTerminalRematchResult(statusResult) && String(statusResult.reason || '') !== 'no_pending_rematch') {
+      return publishTerminalRematch(statusResult, statusResult.reason || 'rematch_closed', statusResult.message);
+    }
     return next;
   }
 
@@ -1069,6 +1102,50 @@ export function createPvpLiveSession({
     return fail(result.reason || 'rematch_unavailable', result.message || '实时论道再战暂不可用', state.phase);
   }
 
+  function publishTerminalRematch(result, fallbackReason, fallbackMessage) {
+    const reason = String(result && result.reason || fallbackReason || 'rematch_closed');
+    const message = String(result && result.message || fallbackMessage || '低压力再战等待已结束，可回到复盘后重新发起。');
+    return publish({
+      phase: normalizePhaseFromView(state.stateView, 'finished'),
+      queueTicket: '',
+      waitingReport: null,
+      rematchReport: result && result.friendlySeries ? result.friendlySeries : state.rematchReport || null,
+      lastError: {
+        reason,
+        message
+      }
+    });
+  }
+
+  function isTerminalRematchResult(result) {
+    if (!result || typeof result !== 'object') return false;
+    const status = String(result.status || '').trim();
+    const reason = String(result.reason || '').trim();
+    return status === 'cancelled'
+      || status === 'expired'
+      || reason === 'rematch_cancelled'
+      || reason === 'rematch_expired'
+      || reason === 'no_pending_rematch';
+  }
+
+  async function cancelRematch() {
+    if (state.phase !== 'waiting_rematch') {
+      return getState();
+    }
+    const sourceMatchId = String(state.rematchReport && state.rematchReport.sourceMatchId || state.matchId || '').trim();
+    if (!sourceMatchId) {
+      return fail('missing_match_id', '缺少实时论道再战来源', state.phase);
+    }
+    const result = await callLive('cancelRematch', sourceMatchId);
+    if (result && result.success !== false && (result.status === 'cancelled' || result.status === 'expired')) {
+      return publishTerminalRematch(result, result.status === 'expired' ? 'rematch_expired' : 'rematch_cancelled', result.message);
+    }
+    if (isTerminalRematchResult(result)) {
+      return publishTerminalRematch(result, result.reason || 'rematch_cancelled', result.message);
+    }
+    return fail(result && result.reason || 'rematch_cancel_failed', result && result.message || '实时论道再战取消失败', state.phase);
+  }
+
   async function pollRematch() {
     if (state.phase !== 'waiting_rematch') {
       return getState();
@@ -1104,6 +1181,21 @@ export function createPvpLiveSession({
       if (!isNoCurrentMatch(result)) {
         return fail(result && result.reason || 'rematch_poll_failed', result && result.message || '实时论道再战状态读取失败', 'waiting_rematch');
       }
+    }
+    const statusResult = await callLive('getRematchStatus', expectedSourceMatchId);
+    if (statusResult && statusResult.success !== false && statusResult.status === 'waiting_rematch') {
+      return publish({
+        phase: 'waiting_rematch',
+        waitingReport: null,
+        rematchReport: statusResult.friendlySeries || state.rematchReport || null,
+        lastError: {
+          reason: 'waiting_rematch',
+          message: statusResult.message || '已发起低压力再战，等待本局对手确认；不写正式积分。'
+        }
+      });
+    }
+    if (isTerminalRematchResult(statusResult)) {
+      return publishTerminalRematch(statusResult, statusResult.reason || 'rematch_closed', statusResult.message);
     }
     return publish({
       phase: 'waiting_rematch',
@@ -1415,6 +1507,7 @@ export function createPvpLiveSession({
     getReplay,
     requestRematch,
     pollRematch,
+    cancelRematch,
     mulligan,
     ready,
     surrender,

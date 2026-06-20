@@ -251,7 +251,15 @@ export const BackendClient = {
       return payload;
     } else {
       const errMsg = payload && payload.message ? payload.message : `HTTP ${response ? response.status : 'unknown'}`;
-      throw this.createError(errMsg, response ? response.status : 0, payload && payload.reason ? { reason: payload.reason } : null);
+      const extra = payload && typeof payload === 'object'
+        ? {
+          reason: payload.reason,
+          status: payload.status,
+          friendlySeries: payload.friendlySeries,
+          payload
+        }
+        : null;
+      throw this.createError(errMsg, response ? response.status : 0, extra);
     }
   },
   async register(username, password) {
@@ -1136,6 +1144,66 @@ export const BackendClient = {
         error,
         reason: error && error.reason || undefined,
         message: error.message || '实时论道再战发起失败'
+      };
+    }
+  },
+  async getLivePvpRematchStatus(matchId = '') {
+    const user = this.getCurrentUser();
+    if (!user) return {
+      success: false,
+      message: '未登录'
+    };
+    const id = String(matchId || '').trim();
+    if (!id) return {
+      success: false,
+      message: '实时论道战局缺失'
+    };
+    try {
+      const result = await this.requestServer(`${this.getLivePvpPathPrefix()}/matches/${encodeURIComponent(id)}/rematch`, {
+        method: 'GET'
+      });
+      return result && typeof result === 'object' ? result : {
+        success: false,
+        message: '实时论道再战状态返回异常'
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error,
+        reason: error && error.reason || undefined,
+        status: error && error.status || undefined,
+        friendlySeries: error && error.friendlySeries || undefined,
+        message: error.message || '实时论道再战状态读取失败'
+      };
+    }
+  },
+  async cancelLivePvpRematch(matchId = '') {
+    const user = this.getCurrentUser();
+    if (!user) return {
+      success: false,
+      message: '未登录'
+    };
+    const id = String(matchId || '').trim();
+    if (!id) return {
+      success: false,
+      message: '实时论道战局缺失'
+    };
+    try {
+      const result = await this.requestServer(`${this.getLivePvpPathPrefix()}/matches/${encodeURIComponent(id)}/rematch/cancel`, {
+        method: 'POST'
+      });
+      return result && typeof result === 'object' ? result : {
+        success: false,
+        message: '实时论道再战取消返回异常'
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error,
+        reason: error && error.reason || undefined,
+        status: error && error.status || undefined,
+        friendlySeries: error && error.friendlySeries || undefined,
+        message: error.message || '实时论道再战取消失败'
       };
     }
   },

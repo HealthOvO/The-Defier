@@ -543,6 +543,7 @@ assert.ok(browserGate.includes('node tests/browser_pvp_live_audit.mjs "$BASE_URL
   'data-live-waiting-report',
   'data-live-post-match-review',
   'data-live-post-review-action',
+  'data-live-action="cancel-rematch"',
   'live UI renders first-match guide report without reward or rating promises',
   'live UI renders active opening safeguard report without hidden payloads',
   'live UI updates first-match guide next action after setup',
@@ -567,6 +568,7 @@ assert.ok(browserGate.includes('node tests/browser_pvp_live_audit.mjs "$BASE_URL
   'rankedImpact',
   'live UI post-match queue again re-enters live queue without legacy settlement',
   'live UI post-match friendly rematch waits for same opponent without legacy settlement',
+  'live UI waiting friendly rematch requester can cancel and restores finished review',
   'live UI private invite creation shows share code without entering public queue',
   'live UI private invite join enters friendly setup without legacy settlement',
   'live UI Bo3 tied friendly review exposes decider and auto-enters G3 with same series id',
@@ -587,6 +589,28 @@ assert.ok(browserGate.includes('node tests/browser_pvp_live_audit.mjs "$BASE_URL
   'live UI renders ready_timeout invalidated as no-score terminal state',
 ].forEach((needle) => {
   assert.ok(liveBrowserAudit.includes(needle), `live PVP browser audit should include marker: ${needle}`);
+});
+
+[
+  'cancelLiveRematch',
+  'data-live-action="cancel-rematch"',
+  'data-live-friendly-series-status',
+  'data-live-friendly-series-id',
+  'data-live-friendly-series-source-match',
+  'data-live-friendly-series-confirmations',
+  '等待已取消',
+  '等待已过期',
+].forEach((needle) => {
+  assert.ok(scene.includes(needle), `live PVP scene should include rematch lifecycle marker: ${needle}`);
+});
+
+[
+  'cancelRematch',
+  'getRematchStatus',
+  'rematch_cancelled',
+  'rematch_expired',
+].forEach((needle) => {
+  assert.ok(liveSession.includes(needle), `live PVP session should include rematch lifecycle marker: ${needle}`);
 });
 
 console.log('PVP live UI contract checks passed.');

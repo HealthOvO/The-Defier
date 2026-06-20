@@ -13,6 +13,7 @@ const livePvpStore = createLivePvpStore({
     heartbeatStaleMs: Number(process.env.PVP_LIVE_HEARTBEAT_STALE_MS),
     reconnectGraceMs: Number(process.env.PVP_LIVE_RECONNECT_GRACE_MS),
     inviteTtlMs: Number(process.env.PVP_LIVE_INVITE_TTL_MS),
+    rematchTtlMs: Number(process.env.PVP_LIVE_REMATCH_TTL_MS),
     ratingProvider: makeDefaultRatingProvider()
 });
 let userDirectory = makeDefaultUserDirectory();
@@ -270,6 +271,17 @@ router.get('/matches/:matchId/replay', authenticate, asyncHandler(async (req, re
     });
 }));
 
+router.get('/matches/:matchId/rematch', authenticate, asyncHandler(async (req, res) => {
+    const result = await livePvpStore.getFriendlyRematchStatus(req.user.id, req.params.matchId);
+    if (!result) {
+        return res.status(404).json({ success: false, reason: 'no_pending_rematch', message: '当前没有等待中的低压力再战' });
+    }
+    if (result.status === 'expired') {
+        return res.status(404).json({ success: false, status: result.status, reason: result.reason, message: result.message || '低压力再战等待已过期', friendlySeries: result.friendlySeries });
+    }
+    res.json({ success: true, ...result });
+}));
+
 router.post('/matches/:matchId/rematch', authenticate, asyncHandler(async (req, res) => {
     const result = await livePvpStore.requestFriendlyRematch(req.user.id, req.params.matchId, {
         displayName: getDisplayName(req),
@@ -280,6 +292,17 @@ router.post('/matches/:matchId/rematch', authenticate, asyncHandler(async (req, 
     }
     if (result.status === 'blocked') {
         return res.status(409).json({ success: false, reason: result.reason, message: result.message || '当前已有进行中的真人对局' });
+    }
+    res.json({ success: true, ...result });
+}));
+
+router.post('/matches/:matchId/rematch/cancel', authenticate, asyncHandler(async (req, res) => {
+    const result = await livePvpStore.cancelFriendlyRematch(req.user.id, req.params.matchId);
+    if (!result) {
+        return res.status(404).json({ success: false, reason: 'no_pending_rematch', message: '当前没有等待中的低压力再战' });
+    }
+    if (result.status === 'expired') {
+        return res.status(404).json({ success: false, status: result.status, reason: result.reason, message: result.message || '低压力再战等待已过期', friendlySeries: result.friendlySeries });
     }
     res.json({ success: true, ...result });
 }));

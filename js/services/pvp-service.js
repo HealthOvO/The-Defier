@@ -140,6 +140,20 @@ export const PVPService = {
       }
       return await client.requestLivePvpRematch(matchId, options);
     },
+    async getRematchStatus(matchId = '') {
+      const client = this.getClient();
+      if (!client || typeof client.getLivePvpRematchStatus !== 'function') {
+        return { success: false, message: '实时论道服务未就绪' };
+      }
+      return await client.getLivePvpRematchStatus(matchId);
+    },
+    async cancelRematch(matchId = '') {
+      const client = this.getClient();
+      if (!client || typeof client.cancelLivePvpRematch !== 'function') {
+        return { success: false, message: '实时论道服务未就绪' };
+      }
+      return await client.cancelLivePvpRematch(matchId);
+    },
     async heartbeat(matchId = '') {
       const client = this.getClient();
       if (!client || typeof client.heartbeatLivePvpMatch !== 'function') {

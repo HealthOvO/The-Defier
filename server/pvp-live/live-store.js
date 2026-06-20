@@ -10,6 +10,7 @@ const DEFAULT_HEARTBEAT_INTERVAL_MS = 5 * 1000;
 const DEFAULT_HEARTBEAT_STALE_MS = 15 * 1000;
 const DEFAULT_RECONNECT_GRACE_MS = 30 * 1000;
 const DEFAULT_INVITE_TTL_MS = 15 * 60 * 1000;
+const DEFAULT_REMATCH_TTL_MS = 10 * 60 * 1000;
 const DEFAULT_RATING_SCORE = 1000;
 const STRICT_RATING_DELTA = 99;
 const FAIR_RATING_DELTA = 199;
@@ -308,7 +309,7 @@ function makeFriendlySeriesReport({
     const score = normalizeFriendlyScore(scoreBySourceSeat);
     const gamesAccountedFor = score.A + score.B;
     const seriesStatus = getFriendlySeriesStatus(score, safeTargetWins);
-    const safeStatus = status === 'matched' || status === 'finished' ? status : 'waiting_rematch';
+    const safeStatus = ['matched', 'finished', 'cancelled', 'expired'].includes(status) ? status : 'waiting_rematch';
     const safeRoundIndex = Math.max(1, Math.min(maxRounds, Math.floor(Number(roundIndex) || Math.min(maxRounds, gamesAccountedFor + 1) || 2)));
     const winnerSourceSeat = getFriendlySeriesWinnerSeat(score, safeTargetWins);
     return {
@@ -349,6 +350,7 @@ class LivePvpStore {
         heartbeatStaleMs = DEFAULT_HEARTBEAT_STALE_MS,
         reconnectGraceMs = DEFAULT_RECONNECT_GRACE_MS,
         inviteTtlMs = DEFAULT_INVITE_TTL_MS,
+        rematchTtlMs = DEFAULT_REMATCH_TTL_MS,
         persistence = null,
         settlement = null,
         ratingProvider = null
@@ -361,6 +363,7 @@ class LivePvpStore {
         this.heartbeatStaleMs = Math.max(this.heartbeatIntervalMs, Math.floor(Number(heartbeatStaleMs) || DEFAULT_HEARTBEAT_STALE_MS));
         this.reconnectGraceMs = Math.max(1000, Math.floor(Number(reconnectGraceMs) || DEFAULT_RECONNECT_GRACE_MS));
         this.inviteTtlMs = Math.max(5000, Math.floor(Number(inviteTtlMs) || DEFAULT_INVITE_TTL_MS));
+        this.rematchTtlMs = Math.max(5000, Math.floor(Number(rematchTtlMs) || DEFAULT_REMATCH_TTL_MS));
         this.persistence = persistence;
         this.settlement = settlement;
         this.ratingProvider = ratingProvider;
@@ -557,6 +560,7 @@ class LivePvpStore {
             sourceMatchId: matchId,
             seriesId: String(request.seriesId || ''),
             createdAt: Math.max(0, Math.floor(Number(request.createdAt) || this.now())),
+            seriesCreatedAt: Math.max(0, Math.floor(Number(request.seriesCreatedAt) || 0)),
             playersByUserId
         };
         if (!hydrated.seriesId) return null;
@@ -1846,13 +1850,22 @@ class LivePvpStore {
 
         const maxRounds = getFriendlyMaxRounds(targetWins);
         const nextRoundIndex = Math.max(2, Math.min(maxRounds, scoreBySourceSeat.A + scoreBySourceSeat.B + 1));
+        const seriesCreatedAt = Math.max(
+            0,
+            Math.floor(Number(
+                request && request.seriesCreatedAt
+                || previousSeries && previousSeries.createdAt
+                || request && request.createdAt
+                || this.now()
+            ) || this.now())
+        );
         return makeFriendlySeriesReport({
             sourceMatchId: sourceMatch.matchId,
             originMatchId,
             seriesId: request.seriesId,
             status,
             confirmationCount,
-            createdAt: request.createdAt,
+            createdAt: seriesCreatedAt,
             sourceParticipants,
             scoreBySourceSeat,
             targetWins,
@@ -1900,6 +1913,98 @@ class LivePvpStore {
         return active.match.matchId !== sourceMatchId && !this.isTerminalStatus(active.match.state && active.match.state.status);
     }
 
+    isFriendlyRematchRequestExpired(request) {
+        if (!request) return false;
+        const createdAt = Math.max(0, Math.floor(Number(request.createdAt) || 0));
+        return createdAt > 0 && createdAt + this.rematchTtlMs <= this.now();
+    }
+
+    async getFriendlyRematchAccess(userId, sourceMatchId) {
+        const matchAccess = await this.getMatchForUser(userId, sourceMatchId);
+        if (!matchAccess || !matchAccess.match || !matchAccess.match.state) return null;
+        const sourceMatch = matchAccess.match;
+        const participantIds = Object.keys(sourceMatch.seatsByUserId || {});
+        if (participantIds.length !== 2 || !participantIds.includes(userId)) return null;
+        const request = this.friendlyRematchRequests.get(sourceMatch.matchId)
+            || await this.hydrateFriendlyRematchRequest(sourceMatch.matchId, participantIds);
+        return {
+            sourceMatch,
+            participantIds,
+            request
+        };
+    }
+
+    async getFriendlyRematchStatus(userId, sourceMatchId) {
+        const access = await this.getFriendlyRematchAccess(userId, sourceMatchId);
+        if (!access || !access.request) return null;
+        if (this.isFriendlyRematchRequestExpired(access.request)) {
+            this.friendlyRematchRequests.delete(access.sourceMatch.matchId);
+            await this.deleteFriendlyRematchRequest(access.sourceMatch.matchId);
+            return {
+                status: 'expired',
+                reason: 'rematch_expired',
+                message: '低压力再战等待已过期，可回到复盘后重新发起。',
+                matchId: access.sourceMatch.matchId,
+                sourceMatchId: access.sourceMatch.matchId,
+                friendlySeries: this.makeFriendlySeriesForSource(
+                    access.sourceMatch,
+                    access.request,
+                    'expired',
+                    access.request.playersByUserId.size
+                )
+            };
+        }
+        return {
+            status: 'waiting_rematch',
+            matchId: access.sourceMatch.matchId,
+            sourceMatchId: access.sourceMatch.matchId,
+            friendlySeries: this.makeFriendlySeriesForSource(
+                access.sourceMatch,
+                access.request,
+                'waiting_rematch',
+                access.request.playersByUserId.size
+            )
+        };
+    }
+
+    async cancelFriendlyRematch(userId, sourceMatchId) {
+        const access = await this.getFriendlyRematchAccess(userId, sourceMatchId);
+        if (!access || !access.request) return null;
+        if (!access.request.playersByUserId || !access.request.playersByUserId.has(userId)) return null;
+        if (this.isFriendlyRematchRequestExpired(access.request)) {
+            this.friendlyRematchRequests.delete(access.sourceMatch.matchId);
+            await this.deleteFriendlyRematchRequest(access.sourceMatch.matchId);
+            return {
+                status: 'expired',
+                reason: 'rematch_expired',
+                message: '低压力再战等待已过期，可回到复盘后重新发起。',
+                matchId: access.sourceMatch.matchId,
+                sourceMatchId: access.sourceMatch.matchId,
+                friendlySeries: this.makeFriendlySeriesForSource(
+                    access.sourceMatch,
+                    access.request,
+                    'expired',
+                    access.request.playersByUserId.size
+                )
+            };
+        }
+        this.friendlyRematchRequests.delete(access.sourceMatch.matchId);
+        await this.deleteFriendlyRematchRequest(access.sourceMatch.matchId);
+        return {
+            status: 'cancelled',
+            reason: 'rematch_cancelled',
+            message: '已取消低压力再战等待；本局复盘保留，不写正式积分。',
+            matchId: access.sourceMatch.matchId,
+            sourceMatchId: access.sourceMatch.matchId,
+            friendlySeries: this.makeFriendlySeriesForSource(
+                access.sourceMatch,
+                access.request,
+                'cancelled',
+                access.request.playersByUserId.size
+            )
+        };
+    }
+
     async requestFriendlyRematch(userId, sourceMatchId, playerInput = {}) {
         const matchAccess = await this.getMatchForUser(userId, sourceMatchId);
         if (!matchAccess || !matchAccess.match || !matchAccess.match.state) return null;
@@ -1932,6 +2037,11 @@ class LivePvpStore {
         }, this.now);
         let request = this.friendlyRematchRequests.get(sourceMatch.matchId)
             || await this.hydrateFriendlyRematchRequest(sourceMatch.matchId, participantIds);
+        if (this.isFriendlyRematchRequestExpired(request)) {
+            this.friendlyRematchRequests.delete(sourceMatch.matchId);
+            await this.deleteFriendlyRematchRequest(sourceMatch.matchId);
+            request = null;
+        }
         if (!request) {
             const inheritedSeriesId = sourceState.mode === 'friendly' && sourceState.friendlySeries && sourceState.friendlySeries.seriesId
                 ? String(sourceState.friendlySeries.seriesId)
@@ -1939,7 +2049,8 @@ class LivePvpStore {
             request = {
                 sourceMatchId: sourceMatch.matchId,
                 seriesId: inheritedSeriesId || makeId('pvpls'),
-                createdAt: Math.max(0, Math.floor(Number(sourceState.friendlySeries && sourceState.friendlySeries.createdAt) || this.now())),
+                createdAt: this.now(),
+                seriesCreatedAt: Math.max(0, Math.floor(Number(sourceState.friendlySeries && sourceState.friendlySeries.createdAt) || this.now())),
                 playersByUserId: new Map()
             };
             this.friendlyRematchRequests.set(sourceMatch.matchId, request);
