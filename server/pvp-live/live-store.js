@@ -61,6 +61,19 @@ function normalizeWideMatchConsent(value) {
     return value === true || value === 'true' || value === 1 || value === '1';
 }
 
+function normalizeLivePvpTestMatchScope(value) {
+    const normalized = String(value || '')
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9_-]/g, '_')
+        .slice(0, 64);
+    return normalized && normalized !== 'none' ? normalized : '';
+}
+
+function getQueueEntryTestMatchScope(entry) {
+    return normalizeLivePvpTestMatchScope(entry && entry.testMatchScope);
+}
+
 function normalizeRatingScore(value) {
     const numeric = Number(value);
     return Math.max(0, Math.min(9999, Math.floor(Number.isFinite(numeric) ? numeric : DEFAULT_RATING_SCORE)));
@@ -469,6 +482,9 @@ class LivePvpStore {
             if (!existing.player.connectionHealth && queueEntry.player.connectionHealth) {
                 existing.player.connectionHealth = queueEntry.player.connectionHealth;
             }
+            if (!existing.testMatchScope && queueEntry.testMatchScope) {
+                existing.testMatchScope = queueEntry.testMatchScope;
+            }
             return existing;
         }
         const duplicateUserTicket = this.waitingQueue.find(entry => entry.player && entry.player.userId === queueEntry.player.userId);
@@ -481,6 +497,9 @@ class LivePvpStore {
             }
             if (!duplicateUserTicket.player.connectionHealth && queueEntry.player.connectionHealth) {
                 duplicateUserTicket.player.connectionHealth = queueEntry.player.connectionHealth;
+            }
+            if (!duplicateUserTicket.testMatchScope && queueEntry.testMatchScope) {
+                duplicateUserTicket.testMatchScope = queueEntry.testMatchScope;
             }
             return duplicateUserTicket;
         }
@@ -1024,19 +1043,25 @@ class LivePvpStore {
 
     async selectQueueOpponent(requesterEntry) {
         await this.ensureQueueEntryRating(requesterEntry);
-        const candidatePoolSize = this.waitingQueue.filter(ticket => ticket && ticket.player && ticket.player.userId !== requesterEntry.player.userId).length + 1;
+        const requesterTestMatchScope = getQueueEntryTestMatchScope(requesterEntry);
+        const candidatePoolSize = this.waitingQueue
+            .filter(ticket => ticket && ticket.player && ticket.player.userId !== requesterEntry.player.userId)
+            .filter(ticket => getQueueEntryTestMatchScope(ticket) === requesterTestMatchScope)
+            .length + 1;
         let openPoolChoice = null;
         const ratedChoices = [];
         const matchedAt = this.now();
         for (let index = 0; index < this.waitingQueue.length; index += 1) {
             const opponentTicket = this.waitingQueue[index];
             if (!opponentTicket || !opponentTicket.player || opponentTicket.player.userId === requesterEntry.player.userId) continue;
+            if (getQueueEntryTestMatchScope(opponentTicket) !== requesterTestMatchScope) continue;
             await this.ensureQueueEntryRating(opponentTicket);
             const useRatedMatching = shouldUseRatedMatching(opponentTicket.ratingSnapshot, requesterEntry.ratingSnapshot);
             if (!useRatedMatching) {
                 if (!openPoolChoice) {
                     openPoolChoice = {
                         index,
+                        testMatchScope: requesterTestMatchScope,
                         qualityInput: this.makeOpenPoolMatchQualityInput(opponentTicket, requesterEntry, matchedAt, candidatePoolSize)
                     };
                 }
@@ -1054,6 +1079,7 @@ class LivePvpStore {
                     index,
                     delta,
                     createdAt: Math.max(0, Math.floor(Number(opponentTicket.createdAt) || 0)),
+                    testMatchScope: requesterTestMatchScope,
                     qualityInput: this.makeRatedMatchQualityInput(opponentTicket, requesterEntry, matchedAt, candidatePoolSize, delta)
                 });
             } else if (
@@ -1066,6 +1092,7 @@ class LivePvpStore {
                     index,
                     delta,
                     createdAt: Math.max(0, Math.floor(Number(opponentTicket.createdAt) || 0)),
+                    testMatchScope: requesterTestMatchScope,
                     qualityInput: this.makeAcceptedWideMatchQualityInput(opponentTicket, requesterEntry, matchedAt, candidatePoolSize, delta)
                 });
             }
@@ -1142,7 +1169,9 @@ class LivePvpStore {
                         if (!pairClaim.claimed) {
                             return this.makeWaitingQueueResult(existingTicket);
                         }
-                        const match = await this.createMatch(opponentTicket.player, existingTicket.player, selectedOpponent.qualityInput);
+                        const match = await this.createMatch(opponentTicket.player, existingTicket.player, selectedOpponent.qualityInput, {
+                            testMatchScope: selectedOpponent.testMatchScope
+                        });
                         await this.saveMatchedQueueHandoff(opponentTicket, match);
                         await this.saveMatchedQueueHandoff(existingTicket, match);
                         await this.deleteQueueEntry(opponentTicket.queueTicket);
@@ -1163,6 +1192,7 @@ class LivePvpStore {
             player,
             ratingSnapshot: await this.resolveRatingSnapshot(player.userId),
             wideMatchConsent: normalizeWideMatchConsent(playerInput && playerInput.wideMatchConsent),
+            testMatchScope: normalizeLivePvpTestMatchScope(playerInput && playerInput.testMatchScope),
             createdAt: this.now()
         };
         await this.hydrateWaitingQueueEntriesExceptUser(identity.userId);
@@ -1171,7 +1201,9 @@ class LivePvpStore {
             const opponentTicket = this.waitingQueue[selectedOpponent.index];
             const opponentClaim = await this.claimQueueEntry(opponentTicket);
             if (opponentClaim.claimed) {
-                const match = await this.createMatch(opponentTicket.player, player, selectedOpponent.qualityInput);
+                const match = await this.createMatch(opponentTicket.player, player, selectedOpponent.qualityInput, {
+                    testMatchScope: selectedOpponent.testMatchScope
+                });
                 await this.saveMatchedQueueHandoff(opponentTicket, match);
                 await this.deleteQueueEntryForUser(player.userId);
                 const opponentResult = this.makeMatchedQueueResult(match, opponentTicket.player.userId);
@@ -1186,6 +1218,7 @@ class LivePvpStore {
             player,
             ratingSnapshot: requesterEntry.ratingSnapshot,
             wideMatchConsent: requesterEntry.wideMatchConsent,
+            testMatchScope: requesterEntry.testMatchScope,
             createdAt: this.now()
         };
         this.waitingQueue.push(queueEntry);
@@ -1819,9 +1852,16 @@ class LivePvpStore {
         return stateView;
     }
 
+    getMatchTestScope(match) {
+        return normalizeLivePvpTestMatchScope(
+            match && (match.testMatchScope || match.state && match.state.testMatchScope)
+        );
+    }
+
     async createMatch(playerA, playerB, qualityInput = {}, options = {}) {
         const matchId = makeId('pvplm');
         const mode = options && options.mode === 'friendly' ? 'friendly' : 'ranked';
+        const testMatchScope = normalizeLivePvpTestMatchScope(options && options.testMatchScope);
         const state = createInitialLiveState({
             matchId,
             matchQuality: makeMatchQualityReport(qualityInput),
@@ -1832,12 +1872,16 @@ class LivePvpStore {
                 { seatId: 'B', userId: playerB.userId, displayName: playerB.displayName, loadoutSnapshot: playerB.loadoutSnapshot }
             ]
         });
+        if (testMatchScope) {
+            state.testMatchScope = testMatchScope;
+        }
         const createdAt = this.now();
         state.setup.startedAt = createdAt;
         state.setup.readyDeadlineAt = createdAt + this.setupReadyTimeoutMs;
         const match = {
             matchId,
             mode,
+            ...(testMatchScope ? { testMatchScope } : {}),
             createdAt,
             updatedAt: createdAt,
             state,
@@ -2599,6 +2643,58 @@ class LivePvpStore {
             match,
             seatId,
             stateView: this.projectMatchStateView(match, seatId)
+        };
+    }
+
+    async forceSeatStateForTest(userId, matchId, targetSeatId, patch = {}) {
+        const matchAccess = await this.getMatchForUser(userId, matchId);
+        if (!matchAccess) return null;
+        const { match, seatId } = matchAccess;
+        const safeTargetSeatId = String(targetSeatId || '').trim().toUpperCase();
+        if (!(safeTargetSeatId === 'A' || safeTargetSeatId === 'B')) return null;
+        if (!match.state || this.isTerminalStatus(match.state.status)) return null;
+        const matchTestScope = this.getMatchTestScope(match);
+        const requestTestScope = normalizeLivePvpTestMatchScope(patch && patch.testMatchScope);
+        if (!matchTestScope || requestTestScope !== matchTestScope) return null;
+        const targetSeat = match.state.seats && match.state.seats[safeTargetSeatId];
+        if (!targetSeat) return null;
+        const changedFields = [];
+
+        const maxHp = Math.max(1, Math.floor(Number(targetSeat.maxHp) || RULES.startingHp));
+        if (Object.prototype.hasOwnProperty.call(patch, 'hp')) {
+            targetSeat.hp = Math.max(1, Math.min(maxHp, Math.floor(Number(patch.hp) || 1)));
+            changedFields.push('hp');
+        }
+        if (Object.prototype.hasOwnProperty.call(patch, 'block')) {
+            targetSeat.block = Math.max(0, Math.floor(Number(patch.block) || 0));
+            changedFields.push('block');
+        }
+        if (Object.prototype.hasOwnProperty.call(patch, 'energy')) {
+            const maxEnergy = Math.max(0, Math.floor(Number(targetSeat.maxEnergy) || RULES.startingEnergy));
+            targetSeat.energy = Math.max(0, Math.min(maxEnergy, Math.floor(Number(patch.energy) || 0)));
+            changedFields.push('energy');
+        }
+
+        const event = this.makeStoreEvent(match, 'test_state_forced', seatId, {
+            targetSeatId: safeTargetSeatId,
+            fields: changedFields,
+            scope: matchTestScope
+        });
+        match.state.eventSeq += 1;
+        match.state.events.push(event);
+        match.state.stateVersion += 1;
+        match.updatedAt = this.now();
+        const saveResult = await this.saveMatch(match);
+        if (this.isStaleStateSaveResult(saveResult)) {
+            const authoritative = await this.rehydrateAuthoritativeMatchForUser(userId, match.matchId);
+            return authoritative ? { ...authoritative, targetSeatId: safeTargetSeatId, saveResult } : null;
+        }
+        return {
+            match,
+            seatId,
+            targetSeatId: safeTargetSeatId,
+            stateView: this.projectMatchStateView(match, seatId),
+            saveResult
         };
     }
 

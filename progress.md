@@ -1,5 +1,22 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-21: V10-S9S live PVP protected counterplay real chain
+  - 本轮完成
+    - `tests/browser_pvp_live_real_backend_smoke.mjs` 将真实双账号主链从“普通首牌伤害 + 普通交权”升级为“测试态低血量护体触发 + A 交权 + B 获得反打缓冲 + B 真实出牌”。A 的 `pvp_burst` 会把 B 打到护体保底 1 血，B 页面必须看到公开护体回执；A 结束回合后，B 必须看到 `交权回执 / 反打缓冲 +8 / 当前 B / 自己行动窗口`，随后 B 必须提交 `play_card` 并让 A 页面同步到同一 `stateVersion`，不再允许用 `end_turn` 兜底通过。
+    - `server/routes/pvp-live.js` / `server/pvp-live/live-store.js` 新增只在非生产 `DEFIER_PVP_TEST_MODE=1` 下启用的认证测试入口 `POST /api/pvp/live/test/matches/:matchId/seats/:seatId`。该入口默认 404，`NODE_ENV=production` 即使误设测试开关也继续 404；测试注入还要求 match 创建时带同一个 `testMatchScope`，且请求体 scope 必须匹配，普通真人局不能被测试接口改写。
+    - `server/pvp-live/engine/state-view.js` / `server/pvp-live/live-persistence.js` / `server/pvp-live/live-ws.js` 为测试注入补 `test_state_forced` 公开事件白名单，只暴露 `targetSeatId / fields / scope`，避免 stateVersion 无事件跳变；`js/services/backend-client.js` 与 `js/scenes/pvp-scene.js` 补齐测试 scope 的端到端透传。
+    - `tests/sanity_pvp_live_route_checks.cjs` 不再直接改内存模拟保护链，而是先验证测试入口默认 404、生产 404、缺 matching scope 404，再开启 `DEFIER_PVP_TEST_MODE=1` 通过 HTTP 降低 B/A 血量，并用返回的新 `stateVersion` 继续提交 A 爆发、A 交权、B 反打终结，保证 route 级和浏览器 smoke 走同一套测试态机制。
+    - `tests/sanity_release_gate_coverage_checks.cjs` 钉住测试态入口、`DEFIER_PVP_TEST_MODE`、`testMatchScope`、`test_state_forced`、BackendClient 透传、真实浏览器新 finding、route 默认 404 / 生产 404 / 缺 scope 404 / 测试态 200 / stateView 同步断言，防止后续回归只保留 engine/route 静态证明而丢掉真实双端体验证明。
+  - 已验证
+    - 红测：`node tests/browser_pvp_live_real_backend_smoke.mjs http://127.0.0.1:4173 output/pvp-live-protected-counterplay-real-red-20260621` 在实现前失败于 `HTTP 404`，证明真实 smoke 需要测试态后端入口才能构造护体触发链。
+    - 绿测：`node --check server/pvp-live/live-store.js && node --check server/routes/pvp-live.js`
+    - 绿测：`node --check tests/browser_pvp_live_real_backend_smoke.mjs`
+    - 绿测：`node tests/browser_pvp_live_real_backend_smoke.mjs http://127.0.0.1:4173 output/pvp-live-protected-counterplay-real-scope-20260621-final`，50/50 findings、0 console error。
+    - 绿测：`node tests/sanity_pvp_live_route_checks.cjs`
+    - 绿测：`node tests/sanity_release_gate_coverage_checks.cjs`
+  - 当前结论
+    - live PVP 现在不只在 engine / route 层说明“先手不能秒杀”，也能在真实双浏览器链路里证明：B 被护体保到 1 血后，会收到公开 +8 反打缓冲和自己的行动窗口，并能实际行动推进权威局面。这更接近双方都能感知公平与可操作性的真人 PVP 体验；后续仍应继续补“复盘驱动改谱推荐 / 一键套用”和移动端同链路验收。
+
 - 2026-06-21: V10-S9R live PVP authoritative handoff receipt
   - 本轮完成
     - `js/scenes/pvp-scene.js` 将 `actionReceiptReport.actionType=end_turn` 的 UI 标签从泛化“行动回执”细分为“交权回执”，让结束回合后的权威结果明确表达“谁交权、交给谁、公开抽了几张、是否发放反打缓冲”。

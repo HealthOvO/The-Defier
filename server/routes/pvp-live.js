@@ -98,6 +98,11 @@ function getTargetUsername(req) {
     return String(req.body && req.body.targetUsername || '').trim();
 }
 
+function isLivePvpTestModeEnabled() {
+    if (String(process.env.NODE_ENV || '').toLowerCase() === 'production') return false;
+    return ['1', 'true', 'yes', 'on'].includes(String(process.env.DEFIER_PVP_TEST_MODE || '').toLowerCase());
+}
+
 async function resolveInviteTarget(req, res) {
     const targetUsername = getTargetUsername(req);
     if (!targetUsername) return null;
@@ -124,12 +129,30 @@ async function resolveInviteTarget(req, res) {
     };
 }
 
+router.post('/test/matches/:matchId/seats/:seatId', authenticate, asyncHandler(async (req, res) => {
+    if (!isLivePvpTestModeEnabled()) {
+        return res.status(404).json({ success: false, message: '实时论道测试入口不存在' });
+    }
+    const result = await livePvpStore.forceSeatStateForTest(req.user.id, req.params.matchId, req.params.seatId, req.body || {});
+    if (!result) {
+        return res.status(404).json({ success: false, message: '实时论道战局不存在' });
+    }
+    res.json({
+        success: true,
+        matchId: result.match.matchId,
+        seatId: result.seatId,
+        targetSeatId: result.targetSeatId,
+        stateView: result.stateView
+    });
+}));
+
 router.post('/queue/join', authenticate, asyncHandler(async (req, res) => {
     const result = await livePvpStore.joinQueue({
         userId: req.user.id,
         displayName: getDisplayName(req),
         loadout: req.body && req.body.loadout,
         wideMatchConsent: req.body && req.body.wideMatchConsent,
+        testMatchScope: isLivePvpTestModeEnabled() ? req.body && req.body.testMatchScope : '',
         connectionHealthProbe: req.body && req.body.connectionHealthProbe
     });
     if (result && result.status === 'blocked') {

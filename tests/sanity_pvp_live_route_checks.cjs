@@ -1262,17 +1262,22 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
         assert.equal(blockedAfterSeries.status, 404, 'completed Bo3 should reject another friendly rematch');
 
         pvpLiveRoutes.__livePvpStore.reset();
+        const routeTestMatchScope = 'route_protected_counterplay';
+        const previousQueueTestMode = process.env.DEFIER_PVP_TEST_MODE;
+        process.env.DEFIER_PVP_TEST_MODE = '1';
         const joinProtectA = await request(baseUrl, '/api/pvp/live/queue/join', {
             method: 'POST',
             token: tokenA,
-            body: { displayName: '甲', loadout: loadoutA }
+            body: { displayName: '甲', loadout: loadoutA, testMatchScope: routeTestMatchScope }
         });
         assert.equal(joinProtectA.payload.status, 'waiting', 'opening protection first player should wait');
         const joinProtectB = await request(baseUrl, '/api/pvp/live/queue/join', {
             method: 'POST',
             token: tokenB,
-            body: { displayName: '乙', loadout: loadoutB }
+            body: { displayName: '乙', loadout: loadoutB, testMatchScope: routeTestMatchScope }
         });
+        if (previousQueueTestMode === undefined) delete process.env.DEFIER_PVP_TEST_MODE;
+        else process.env.DEFIER_PVP_TEST_MODE = previousQueueTestMode;
         assert.equal(joinProtectB.payload.status, 'matched', 'opening protection second player should match');
         const readyProtect = await readyBoth(baseUrl, {
             matchId: joinProtectB.payload.matchId,
@@ -1302,8 +1307,45 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
         assert.equal(routePreviewB.payload.stateView.actionPreviewReport?.isViewerTurn, false, 'route non-acting preview should not mark viewer turn');
         assert.deepEqual(routePreviewB.payload.stateView.actionPreviewReport?.playableCards, [], 'route non-acting preview must not expose acting seat card projections');
         assert.equal(routePreviewB.payload.stateView.actionPreviewReport?.endTurn, null, 'route non-acting preview must not expose actionable end-turn projection');
-        const protectMatch = pvpLiveRoutes.__livePvpStore.matches.get(joinProtectB.payload.matchId);
-        protectMatch.state.seats.B.hp = 10;
+        const blockedTestForce = await request(baseUrl, `/api/pvp/live/test/matches/${joinProtectB.payload.matchId}/seats/B`, {
+            method: 'POST',
+            token: tokenA,
+            body: { hp: 10, testMatchScope: routeTestMatchScope }
+        });
+        assert.equal(blockedTestForce.status, 404, 'live PVP test-only state route should stay unavailable outside DEFIER_PVP_TEST_MODE');
+        const previousProdMode = process.env.NODE_ENV;
+        const previousProdTestMode = process.env.DEFIER_PVP_TEST_MODE;
+        process.env.NODE_ENV = 'production';
+        process.env.DEFIER_PVP_TEST_MODE = '1';
+        const blockedProductionTestForce = await request(baseUrl, `/api/pvp/live/test/matches/${joinProtectB.payload.matchId}/seats/B`, {
+            method: 'POST',
+            token: tokenA,
+            body: { hp: 10, testMatchScope: routeTestMatchScope }
+        });
+        if (previousProdMode === undefined) delete process.env.NODE_ENV;
+        else process.env.NODE_ENV = previousProdMode;
+        if (previousProdTestMode === undefined) delete process.env.DEFIER_PVP_TEST_MODE;
+        else process.env.DEFIER_PVP_TEST_MODE = previousProdTestMode;
+        assert.equal(blockedProductionTestForce.status, 404, 'live PVP test-only state route should stay unavailable in production even when test mode is set');
+        const previousTestMode = process.env.DEFIER_PVP_TEST_MODE;
+        process.env.DEFIER_PVP_TEST_MODE = '1';
+        const blockedMissingScopeForce = await request(baseUrl, `/api/pvp/live/test/matches/${joinProtectB.payload.matchId}/seats/B`, {
+            method: 'POST',
+            token: tokenA,
+            body: { hp: 10 }
+        });
+        const routeForceProtectedB = await request(baseUrl, `/api/pvp/live/test/matches/${joinProtectB.payload.matchId}/seats/B`, {
+            method: 'POST',
+            token: tokenA,
+            body: { hp: 10, testMatchScope: routeTestMatchScope }
+        });
+        if (previousTestMode === undefined) delete process.env.DEFIER_PVP_TEST_MODE;
+        else process.env.DEFIER_PVP_TEST_MODE = previousTestMode;
+        assert.equal(blockedMissingScopeForce.status, 404, 'live PVP test-only state route should reject scoped test matches without matching testMatchScope');
+        assert.equal(routeForceProtectedB.status, 200, 'live PVP test-only state route should allow authenticated participants in DEFIER_PVP_TEST_MODE');
+        assert.equal(routeForceProtectedB.payload.targetSeatId, 'B', 'live PVP test-only state route should identify the forced public seat');
+        assert.equal(routeForceProtectedB.payload.stateView.opponent.hp, 10, 'live PVP test-only state route should return the updated public opponent hp');
+        assert.ok(routeForceProtectedB.payload.stateView.recentEvents.some(event => event.eventType === 'test_state_forced' && event.publicData?.scope === routeTestMatchScope), 'live PVP test-only state route should expose a public scoped setup event');
         const routeLethalPreviewA = await request(baseUrl, `/api/pvp/live/matches/${joinProtectB.payload.matchId}`, {
             token: tokenA
         });
@@ -1314,7 +1356,7 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
         const protectedBurstA = await submitIntent(baseUrl, tokenA, joinProtectB.payload.matchId, {
             intentId: 'route-intent-opening-protected-burst-a',
             intentType: 'play_card',
-            stateVersion: readyProtect.payload.stateView.stateVersion,
+            stateVersion: routeForceProtectedB.payload.stateView.stateVersion,
             payload: { cardInstanceId: 'A-burst-1', targetSeat: 'B' }
         });
         assert.equal(protectedBurstA.payload.result, 'accepted', 'opening protected burst should be accepted');
@@ -1360,11 +1402,21 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
         assert.equal(protectedStateB.payload.stateView.actionReceiptReport?.viewerSeat, 'B', 'route GET should scope action receipt to protected viewer');
         assert.equal(protectedStateB.payload.stateView.actionReceiptReport?.actionType, 'end_turn', 'route GET should keep latest end-turn receipt');
         assert.equal(protectedStateB.payload.stateView.actionReceiptReport?.counterplay?.seatId, 'B', 'route GET should keep public counterplay receipt');
-        protectMatch.state.seats.A.hp = 10;
+        const previousFinishTestMode = process.env.DEFIER_PVP_TEST_MODE;
+        process.env.DEFIER_PVP_TEST_MODE = '1';
+        const routeForceFinishA = await request(baseUrl, `/api/pvp/live/test/matches/${joinProtectB.payload.matchId}/seats/A`, {
+            method: 'POST',
+            token: tokenB,
+            body: { hp: 10, testMatchScope: routeTestMatchScope }
+        });
+        if (previousFinishTestMode === undefined) delete process.env.DEFIER_PVP_TEST_MODE;
+        else process.env.DEFIER_PVP_TEST_MODE = previousFinishTestMode;
+        assert.equal(routeForceFinishA.status, 200, 'live PVP test-only state route should support protected defender follow-up setup');
+        assert.equal(routeForceFinishA.payload.stateView.opponent.hp, 10, 'live PVP test-only state route should return lowered opponent hp for protected defender');
         const normalFinishB = await submitIntent(baseUrl, tokenB, joinProtectB.payload.matchId, {
             intentId: 'route-intent-opening-normal-finish-b',
             intentType: 'play_card',
-            stateVersion: protectedEndTurnA.payload.stateView.stateVersion,
+            stateVersion: routeForceFinishA.payload.stateView.stateVersion,
             payload: { cardInstanceId: 'B-burst-1', targetSeat: 'A' }
         });
         assert.equal(normalFinishB.payload.result, 'accepted', 'normal lethal after opponent turn should be accepted');

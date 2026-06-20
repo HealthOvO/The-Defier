@@ -16,6 +16,7 @@ const isMobileViewport = viewportMode === 'mobile';
 const requireMobileViewport = process.env.BROWSER_PVP_LIVE_REAL_REQUIRE_MOBILE === '1';
 const runId = `${Date.now()}_${Math.random().toString(16).slice(2, 10)}`;
 const password = `pwd_${runId}`;
+const TEST_MATCH_SCOPE = `real_backend_smoke_${runId}`.replace(/[^a-z0-9_-]/gi, '_').toLowerCase();
 
 if (requireMobileViewport && !isMobileViewport) {
   throw new Error('BROWSER_PVP_LIVE_REAL_REQUIRE_MOBILE requires BROWSER_PVP_LIVE_REAL_VIEWPORT=mobile');
@@ -67,6 +68,7 @@ function startBackend() {
       JWT_SECRET: 'integration-jwt-secret-32-characters',
       DEFIER_HMAC_SECRET: 'integration-hmac-secret-32-characters',
       DEFIER_INTEGRITY_REQUIRED: '1',
+      DEFIER_PVP_TEST_MODE: '1',
       DEFIER_DB_PATH: dbPath,
       PVP_LIVE_SETUP_READY_TIMEOUT_MS: '10000',
       PVP_LIVE_LONG_WAIT_THRESHOLD_MS: '1000',
@@ -151,7 +153,7 @@ async function preparePage(browser, username, displayName) {
     null,
     { timeout: 15000 },
   );
-  await page.evaluate(async ({ username, password }) => {
+  await page.evaluate(async ({ username, password, testMatchScope }) => {
     const services = window.__THE_DEFIER_SERVICES__;
     const BackendClient = services.BackendClient;
     const AuthService = services.AuthService;
@@ -166,8 +168,18 @@ async function preparePage(browser, username, displayName) {
     if (!login?.success) throw new Error(`login failed: ${JSON.stringify(login)}`);
     window.PVPService.currentRankData = null;
     window.PVPService.clearActiveMatch?.();
+    window.__DEFIER_PVP_REAL_TEST_SCOPE = testMatchScope;
+    if (!window.PVPScene.__realSmokeOriginalJoinLiveQueue) {
+      window.PVPScene.__realSmokeOriginalJoinLiveQueue = window.PVPScene.joinLiveQueue.bind(window.PVPScene);
+      window.PVPScene.joinLiveQueue = async function scopedRealSmokeJoinLiveQueue(options = {}) {
+        return await window.PVPScene.__realSmokeOriginalJoinLiveQueue({
+          ...options,
+          testMatchScope: window.__DEFIER_PVP_REAL_TEST_SCOPE
+        });
+      };
+    }
     window.game.showScreen('pvp-screen');
-  }, { username, password });
+  }, { username, password, testMatchScope: TEST_MATCH_SCOPE });
   return { context, page, username, displayName };
 }
 
@@ -510,7 +522,11 @@ async function writeReport() {
     );
 
     const rejoinAChanged = await seatA.page.evaluate(async ({ displayName, loadout }) => {
-      return await window.PVPService.live.joinQueue({ displayName, loadout });
+      return await window.PVPService.live.joinQueue({
+        displayName,
+        loadout,
+        testMatchScope: window.__DEFIER_PVP_REAL_TEST_SCOPE
+      });
     }, { displayName: '甲', loadout: changedLoadoutA });
     add(
       'real browser repeated join cannot overwrite locked loadout hash',
@@ -818,6 +834,34 @@ async function writeReport() {
         && activeTimerProbe.payload?.isViewerTurn === true,
       JSON.stringify(activeTimerProbe),
     );
+    const forceOpeningProtectionProbe = await seatA.page.evaluate(async () => {
+      const BackendClient = window.__THE_DEFIER_SERVICES__?.BackendClient;
+      const before = window.PVPScene.getLiveSnapshot();
+      const response = await BackendClient.requestServer(`/api/pvp/live/test/matches/${before.matchId}/seats/B`, {
+        method: 'POST',
+        data: { hp: 10, testMatchScope: window.__DEFIER_PVP_REAL_TEST_SCOPE }
+      });
+      await window.PVPScene.refreshLiveMatch();
+      await new Promise(resolve => setTimeout(resolve, 300));
+      return {
+        response,
+        snapshot: window.PVPScene.getLiveSnapshot(),
+      };
+    });
+    await seatB.page.evaluate(async () => {
+      await window.PVPScene.refreshLiveMatch();
+    });
+    await seatB.page.waitForTimeout(300);
+    const protectedOpeningB = await getLiveSnapshot(seatB.page);
+    add(
+      'real browser test-mode match can enter protected lethal opening state',
+      forceOpeningProtectionProbe.response?.success === true
+        && forceOpeningProtectionProbe.response?.stateView?.opponent?.hp === 10
+        && forceOpeningProtectionProbe.response?.stateView?.recentEvents?.some(event => event.eventType === 'test_state_forced' && event.publicData?.scope === TEST_MATCH_SCOPE)
+        && forceOpeningProtectionProbe.snapshot?.opponent?.hp === 10
+        && protectedOpeningB?.self?.hp === 10,
+      JSON.stringify({ forceOpeningProtectionProbe, protectedOpeningB }),
+    );
     const activeOpeningPreviewProbe = await seatA.page.evaluate(() => {
       const snapshot = window.PVPScene.getLiveSnapshot();
       const textPayload = JSON.parse(window.render_game_to_text()).pvp?.live || null;
@@ -827,9 +871,9 @@ async function writeReport() {
         textActionPreview: textPayload?.actionPreviewReport || null,
       };
     });
-    const activeOpeningCardPreview = activeOpeningPreviewProbe.actionPreview?.playableCards?.find(card => card.targetHpAfter === 45 && card.budgetedDamage === 8);
+    const activeOpeningCardPreview = activeOpeningPreviewProbe.actionPreview?.playableCards?.find(card => card.targetHpAfter === 1 && card.openingProtection?.willTrigger === true);
     add(
-      'real browser live match exposes authoritative opening action preview without hidden opponent payloads',
+      'real browser live match previews protected lethal opening without hidden opponent payloads',
       /首动预算/.test(activeOpeningPreviewProbe.openingText)
         && /当前 A/.test(activeOpeningPreviewProbe.openingText)
         && /后手护盾/.test(activeOpeningPreviewProbe.openingText)
@@ -840,7 +884,9 @@ async function writeReport() {
         && activeOpeningPreviewProbe.actionPreview?.rankedImpact === 'none'
         && activeOpeningCardPreview?.damageBudget === 18
         && activeOpeningCardPreview?.blockedDamage === 3
-        && activeOpeningCardPreview?.hpDamage === 5
+        && activeOpeningCardPreview?.hpDamage === 9
+        && activeOpeningCardPreview?.openingProtection?.minimumHp === 1
+        && activeOpeningCardPreview?.openingProtection?.preventedDamage === 6
         && activeOpeningPreviewProbe.textActionPreview?.reportVersion === 'pvp-live-action-preview-v1'
         && !/deck|loadoutSnapshot|reward|rating|elo|opponentHand|opponentDeck/i.test(JSON.stringify(activeOpeningPreviewProbe.actionPreview || {})),
       JSON.stringify(activeOpeningPreviewProbe),
@@ -1053,8 +1099,8 @@ async function writeReport() {
     }, activeA.stateVersion);
     const afterPlayB = await waitForLiveSnapshot(seatB.page, previousHp => {
       const snapshot = window.PVPScene?.getLiveSnapshot?.();
-      return snapshot?.self?.hp < previousHp && Number(snapshot?.stateVersion || 0) > 0;
-    }, activeB.self?.hp);
+      return snapshot?.self?.hp <= 1 && Number(snapshot?.stateVersion || 0) > Number(previousHp || 0);
+    }, protectedOpeningB.stateVersion);
     add(
       'real browser accepted card intent auto-pushes opponent state without manual refresh',
       playA.stateVersion > activeA.stateVersion
@@ -1080,6 +1126,7 @@ async function writeReport() {
         && /预算后/.test(afterPlayReceiptProbe.text)
         && /破盾/.test(afterPlayReceiptProbe.text)
         && /生命伤害/.test(afterPlayReceiptProbe.text)
+        && /护体/.test(afterPlayReceiptProbe.text)
         && afterPlayReceiptProbe.sourceAttr === 'authoritative_public_projection'
         && afterPlayReceiptProbe.hiddenAttr === 'false'
         && afterPlayReceiptProbe.payload?.reportVersion === 'pvp-live-action-receipt-v1'
@@ -1095,6 +1142,11 @@ async function writeReport() {
         && Number.isFinite(afterPlayReceiptProbe.payload?.damage?.hpDamage)
         && afterPlayReceiptProbe.payload.damage.hpDamage > 0
         && afterPlayReceiptProbe.payload?.damage?.targetSeat === 'B'
+        && afterPlayReceiptProbe.payload?.damage?.targetHpAfter === 1
+        && afterPlayReceiptProbe.payload?.openingProtection?.triggered === true
+        && afterPlayReceiptProbe.payload?.openingProtection?.protectedSeat === 'B'
+        && afterPlayReceiptProbe.payload?.openingProtection?.minimumHp === 1
+        && afterPlayReceiptProbe.payload?.openingProtection?.preventedDamage === 6
         && afterPlayReceiptProbe.textPayload?.reportVersion === 'pvp-live-action-receipt-v1'
         && afterPlayReceiptProbe.textPayload?.sourceVisibility === afterPlayReceiptProbe.payload?.sourceVisibility
         && afterPlayReceiptProbe.textPayload?.latestSequence === afterPlayReceiptProbe.payload?.latestSequence
@@ -1185,6 +1237,10 @@ async function writeReport() {
         && afterEndTurnReceiptProbe.payload?.actingSeat === 'A'
         && afterEndTurnReceiptProbe.payload?.actionType === 'end_turn'
         && afterEndTurnReceiptProbe.payload?.nextSeat === 'B'
+        && afterEndTurnReceiptProbe.payload?.counterplay?.granted === true
+        && afterEndTurnReceiptProbe.payload?.counterplay?.seatId === 'B'
+        && afterEndTurnReceiptProbe.payload?.counterplay?.block === 8
+        && /反打缓冲\s*\+8/.test(afterEndTurnReceiptProbe.text)
         && Number(afterEndTurnReceiptProbe.seqAttr) === afterEndTurnReceiptProbe.payload?.latestSequence
         && Number.isFinite(afterEndTurnReceiptProbe.payload?.latestSequence)
         && afterEndTurnReceiptProbe.payload.latestSequence > 0
@@ -1195,6 +1251,66 @@ async function writeReport() {
         && afterEndTurnReceiptProbe.textPayload?.summaryLine === afterEndTurnReceiptProbe.payload?.summaryLine
         && !/hand|deck|cardId|instanceId|loadoutSnapshot|reward|rating|elo|opponentHand|opponentDeck/i.test(`${afterEndTurnReceiptProbe.text} ${JSON.stringify(afterEndTurnReceiptProbe.payload || {})}`),
       JSON.stringify(afterEndTurnReceiptProbe),
+    );
+    const protectedCounterplayActionProbe = await seatB.page.evaluate(async () => {
+      const before = window.PVPScene.getLiveSnapshot();
+      const sessionState = window.PVPScene.getLiveSession().getState();
+      const playable = before?.actionPreviewReport?.playableCards?.[0] || null;
+      const fallbackCard = sessionState.stateView?.self?.hand?.[0] || null;
+      const cardInstanceId = playable?.cardInstanceId || fallbackCard?.instanceId || '';
+      if (!cardInstanceId) {
+        return {
+          before,
+          after: before,
+          playable,
+          fallbackCard,
+          error: 'missing_playable_card'
+        };
+      }
+      await window.PVPScene.submitLiveCard(cardInstanceId);
+      await new Promise(resolve => setTimeout(resolve, 250));
+      const confirming = window.PVPScene.getLiveSnapshot();
+      if (confirming?.stateVersion === before?.stateVersion) {
+        await window.PVPScene.submitLiveCard(cardInstanceId);
+      }
+      await new Promise(resolve => setTimeout(resolve, 500));
+      const after = window.PVPScene.getLiveSnapshot();
+      const receiptEl = document.querySelector('[data-live-action-receipt]');
+      return {
+        before,
+        after,
+        playable,
+        fallbackCard,
+        cardInstanceId,
+        hint: document.querySelector('[data-live-last-error]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+        receiptText: receiptEl?.textContent?.replace(/\s+/g, ' ').trim() || '',
+        receiptType: receiptEl?.getAttribute('data-live-action-receipt-type') || '',
+        momentumText: document.querySelector('[data-live-duel-momentum]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+        events: document.querySelector('[data-live-event-log]')?.textContent || '',
+      };
+    });
+    const afterProtectedCounterplayA = await waitForLiveSnapshot(seatA.page, expectedVersion => {
+      const snapshot = window.PVPScene?.getLiveSnapshot?.();
+      return Number(snapshot?.stateVersion || 0) > expectedVersion;
+    }, afterEndTurnB.stateVersion);
+    add(
+      'real browser protected defender can spend the +8 counterplay window on a real action',
+      protectedCounterplayActionProbe.before?.currentSeat === 'B'
+        && protectedCounterplayActionProbe.before?.self?.hp === 1
+        && protectedCounterplayActionProbe.before?.self?.block >= 8
+        && protectedCounterplayActionProbe.before?.duelMomentumReport?.pressureState === 'reversal_window'
+        && protectedCounterplayActionProbe.before?.duelMomentumReport?.isViewerTurn === true
+        && /你的反打窗口|反打窗口/.test(protectedCounterplayActionProbe.momentumText)
+        && !!protectedCounterplayActionProbe.cardInstanceId
+        && !protectedCounterplayActionProbe.error
+        && protectedCounterplayActionProbe.after?.stateVersion > protectedCounterplayActionProbe.before?.stateVersion
+        && protectedCounterplayActionProbe.after?.actionReceiptReport?.actingSeat === 'B'
+        && protectedCounterplayActionProbe.after?.actionReceiptReport?.actionType === 'play_card'
+        && protectedCounterplayActionProbe.receiptType === 'play_card'
+        && afterProtectedCounterplayA.stateVersion === protectedCounterplayActionProbe.after?.stateVersion
+        && afterProtectedCounterplayA.currentSeat === protectedCounterplayActionProbe.after?.currentSeat
+        && !/hand|deck|cardId|instanceId|loadoutSnapshot|reward|rating|elo|opponentHand|opponentDeck/i.test(`${protectedCounterplayActionProbe.receiptText} ${protectedCounterplayActionProbe.momentumText} ${JSON.stringify(protectedCounterplayActionProbe.after?.actionReceiptReport || {})}`),
+      JSON.stringify({ protectedCounterplayActionProbe, afterProtectedCounterplayA }),
     );
 
     const realSurrenderConfirmProbe = await seatB.page.evaluate(async () => {

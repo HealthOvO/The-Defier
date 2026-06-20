@@ -177,6 +177,7 @@ const PUBLIC_EVENT_DATA_KEYS = {
     ready_timeout: ['unreadySeats', 'readyDeadlineAt', 'elapsedMs'],
     match_invalidated: ['reason'],
     automation_action: ['seatId', 'actionType', 'reason', 'automationCount'],
+    test_state_forced: ['targetSeatId', 'fields', 'scope'],
     emote_sent: ['seatId', 'emoteId', 'label']
 };
 

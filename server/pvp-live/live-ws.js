@@ -24,7 +24,8 @@ const PUBLIC_EVENT_DATA_KEYS = Object.freeze({
     emote_sent: ['seatId', 'emoteId', 'label'],
     ready_timeout: ['unreadySeats', 'readyDeadlineAt', 'elapsedMs'],
     match_invalidated: ['reason'],
-    automation_action: ['seatId', 'actionType', 'reason', 'automationCount']
+    automation_action: ['seatId', 'actionType', 'reason', 'automationCount'],
+    test_state_forced: ['targetSeatId', 'fields', 'scope']
 });
 
 function makeConnectionId() {

@@ -11,6 +11,7 @@ const browserReleaseScript = read('tests/run_browser_release_checks.sh');
 const browserReleaseSummary = read('tests/summarize_browser_release_reports.cjs');
 const backendSecurityChecks = read('tests/backend_security_checks.cjs');
 const backendClientSmoke = read('tests/browser_backend_client_smoke.mjs');
+const backendClientSource = read('js/services/backend-client.js');
 const browserAudit = read('tests/browser_audit.mjs');
 const browserPvpAudit = read('tests/browser_pvp_audit.mjs');
 const browserPvpLiveAudit = read('tests/browser_pvp_live_audit.mjs');
@@ -739,7 +740,11 @@ const layoutAudit = read('tests/browser_frontend_layout_audit.mjs');
   'real browser state exposes snapshot_locked without leaking opponent hidden data',
   'real browser setup ready flow reaches active on both seats',
   'real browser live match renders authoritative active action countdown',
-  'real browser live match exposes authoritative opening action preview without hidden opponent payloads',
+  'real browser test-mode match can enter protected lethal opening state',
+  'TEST_MATCH_SCOPE',
+  'testMatchScope: window.__DEFIER_PVP_REAL_TEST_SCOPE',
+  "event.eventType === 'test_state_forced'",
+  'real browser live match previews protected lethal opening without hidden opponent payloads',
   'real browser non-acting seat receives no playable action preview payload',
   'real browser live match renders active duel momentum report',
   'real browser opening-window end turn confirmation blocks authoritative submit until second click',
@@ -756,6 +761,8 @@ const layoutAudit = read('tests/browser_frontend_layout_audit.mjs');
   'waitForLiveSnapshot(seatB.page, previousHp',
   'waitForLiveSnapshot(seatB.page, expectedVersion',
   'real browser end turn switches authoritative action countdown to opponent',
+  'real browser protected defender can spend the +8 counterplay window on a real action',
+  "protectedCounterplayActionProbe.after?.actionReceiptReport?.actionType === 'play_card'",
   'real browser surrender confirmation blocks terminal submit until second click',
   'real browser live match renders public post-match review after surrender',
   'real browser live match renders fairness receipt from public post-match checks',
@@ -1231,6 +1238,14 @@ assert.ok(
   'opening protected burst should return public protection event',
   'opening protected burst should expose minimum hp',
   'opening protected burst should expose prevented lethal damage',
+  'live PVP test-only state route should stay unavailable outside DEFIER_PVP_TEST_MODE',
+  'live PVP test-only state route should stay unavailable in production even when test mode is set',
+  'live PVP test-only state route should reject scoped test matches without matching testMatchScope',
+  'live PVP test-only state route should allow authenticated participants in DEFIER_PVP_TEST_MODE',
+  'live PVP test-only state route should return the updated public opponent hp',
+  'live PVP test-only state route should expose a public scoped setup event',
+  'live PVP test-only state route should support protected defender follow-up setup',
+  'live PVP test-only state route should return lowered opponent hp for protected defender',
   'opening protected defender should receive counterplay buffer on first turn',
   'opening protected defender should expose public counterplay buffer event',
   'opening protected defender should read own counterplay block through route state view',
@@ -1666,6 +1681,10 @@ assert.ok(
   'const opponentClaim = await this.claimQueueEntry(opponentTicket)',
   'if (opponentClaim.claimed)',
   'await this.persistence.saveMatchEvents(match.matchId, match.state.events)',
+  'normalizeLivePvpTestMatchScope',
+  'getMatchTestScope',
+  'requestTestScope !== matchTestScope',
+  'test_state_forced',
 ].forEach((needle) => {
   assert.ok(
     pvpLiveStore.includes(needle),
@@ -1773,10 +1792,25 @@ assert.ok(
 
 [
   'longWaitThresholdMs: Number(process.env.PVP_LIVE_LONG_WAIT_THRESHOLD_MS)',
+  'DEFIER_PVP_TEST_MODE',
+  'testMatchScope: isLivePvpTestModeEnabled()',
+  "process.env.NODE_ENV || '').toLowerCase() === 'production'",
+  "router.post('/test/matches/:matchId/seats/:seatId'",
+  'forceSeatStateForTest(',
 ].forEach((needle) => {
   assert.ok(
     pvpLiveRoute.includes(needle),
-    `PVP live route should expose real-backend long-wait threshold config marker: ${needle}`,
+    `PVP live route should expose real-backend config/test-mode marker: ${needle}`,
+  );
+});
+
+[
+  "typeof options.testMatchScope === 'string'",
+  'data.testMatchScope = options.testMatchScope.trim().slice(0, 64)'
+].forEach((needle) => {
+  assert.ok(
+    backendClientSource.includes(needle),
+    `BackendClient should forward live PVP scoped test marker: ${needle}`,
   );
 });
 

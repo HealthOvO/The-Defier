@@ -2467,6 +2467,7 @@ export const PVPScene = {
       match_invalidated: '无效局',
       match_finished: '对局结束',
       snapshot_locked: '斗法谱锁定',
+      test_state_forced: '测试态校准',
       emote_sent: '预设表情'
     };
     let detail = actor;
@@ -3535,7 +3536,10 @@ export const PVPScene = {
       displayName,
       loadout: this.getLiveQueueLoadoutCandidate(selectedPreset.id),
       connectionHealthProbe,
-      ...(options && options.wideMatchConsent === true ? { wideMatchConsent: true } : {})
+      ...(options && options.wideMatchConsent === true ? { wideMatchConsent: true } : {}),
+      ...(options && typeof options.testMatchScope === 'string' && options.testMatchScope.trim()
+        ? { testMatchScope: options.testMatchScope }
+        : {})
     });
     this.liveLongWaitPollUntil = 0;
     this.renderLivePanel();

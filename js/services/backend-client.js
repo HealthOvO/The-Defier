@@ -808,6 +808,9 @@ export const BackendClient = {
       if (options.wideMatchConsent === true) {
         data.wideMatchConsent = true;
       }
+      if (typeof options.testMatchScope === 'string' && options.testMatchScope.trim()) {
+        data.testMatchScope = options.testMatchScope.trim().slice(0, 64);
+      }
       const result = await this.requestServer(`${this.getLivePvpPathPrefix()}/queue/join`, {
         method: 'POST',
         data
