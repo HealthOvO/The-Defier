@@ -821,6 +821,11 @@ assert.match(
   /data-live-waiting-action="accept-wide-match"/,
   'recent-opponent waiting report should preserve explicit wide-match consent action',
 );
+assert.match(
+  recentOpponentWaitingMarkup,
+  /<button[^>]*data-live-waiting-action="accept-wide-match"[^>]*onclick="PVPScene\.acceptLiveWideMatch\(\)"/,
+  'unaccepted wide-match consent action should remain a clickable accept button',
+);
 const acceptedWideWaitingState = {
   ...recentOpponentWaitingState,
   queueTicket: 'pvplq-ui-wide-consent',

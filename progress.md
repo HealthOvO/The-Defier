@@ -6,12 +6,13 @@ Original prompt: 进入全自动审查与修复模式，按顺序审查并修复
     - `makeWaitingQueueResult()` 与 `getQueueStatus()` 都投影同一份宽分差同意状态；这只读现有 waiting ticket 和候选池，不改变 `selectQueueOpponent()` 的正式匹配选择、评分分桶、长等待策略或双方显式同意成局规则。
     - `js/scenes/pvp-scene.js` 保留 `wideMatchConsent` 到 live waiting snapshot，并在 `viewerAccepted=true` 后把 `accept_wide_match` 从可重复点击按钮切成“已确认宽分差：等待对方确认”的稳定状态，DOM 同步写入 `data-live-wide-match-consent-status`。
     - `tests/sanity_pvp_live_route_checks.cjs` 在已有 later-consent 流程中补服务端合同断言：首个等待者后来确认宽分差后仍为 waiting，但 `waitingReport.wideMatchConsent.viewerAccepted === true`、`requiresBothPlayers === true`、`matchReady === false`、`status === 'waiting_for_peer'`。
-    - `tests/sanity_pvp_live_ui_runtime_checks.mjs` 补前端合同断言：UI 必须保留 viewer consent 状态，已确认后渲染稳定 DOM 状态和确认文案，且不再保留重复 `acceptLiveWideMatch()` 点击按钮。
+    - `tests/sanity_pvp_live_ui_runtime_checks.mjs` 补前端合同断言：UI 必须保留 viewer consent 状态；未确认时 `accept_wide_match` 仍是可点击 `button + acceptLiveWideMatch()`，已确认后渲染稳定 DOM 状态和确认文案，且不再保留重复点击按钮。
   - 已验证
     - 红测：`node tests/sanity_pvp_live_route_checks.cjs` 在实现前失败于 `wide consent waiting report should remember the viewer acceptance`，实际为 undefined。
     - 绿测：`node tests/sanity_pvp_live_route_checks.cjs`
     - 红测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs` 在前端实现前失败于 `live UI waiting report should preserve viewer wide-match consent state`，实际为 undefined。
     - 绿测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs`
+    - 挑战者补测：`tests/sanity_pvp_live_ui_runtime_checks.mjs` 追加未确认 `accept_wide_match` 必须是可点击 `button` 的断言，避免只检查共用 marker。
     - 语法：`node --check server/pvp-live/live-store.js`
     - 语法：`node --check js/scenes/pvp-scene.js`
     - 语法：`node --check tests/sanity_pvp_live_route_checks.cjs`
