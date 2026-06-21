@@ -6,11 +6,13 @@ Original prompt: 进入全自动审查与修复模式，按顺序审查并修复
     - `resumeCurrentMatch()` 在服务端返回 `no_current_match` 后，会先用本地保存的 queue ticket 调 `getQueueStatus()` 恢复 waiting / matched 状态；只有确认没有可恢复队列时，才继续走 terminal review 或 idle 分支。
     - 队列恢复不调用 `joinQueue()`，不会改写既有 ticket 的 `wideMatchConsent`、loadout lock 或排队时间；刷新/重开页面后仍能保留 `waitingReport`、`recent_opponent_suppression`、`low_sample_protection`、`wideMatchConsent.waiting_for_peer` 等等待合同。
     - `tests/sanity_pvp_live_session_checks.mjs` 新增刷新恢复红测：旧 session 入队并保存 ticket，新 session 在 `getCurrentMatch=no_current_match` 后必须调用 `getQueueStatus(storedTicket)`，恢复 `phase='waiting'`、原 queue ticket 与 `wideMatchConsent.viewerAccepted=true`，且不能重新入队。
+    - 挑战者补测：`tests/sanity_pvp_live_session_checks.mjs` 追加跨 `userScope` 负例；同一浏览器 storage 中 `queue-user-A` 的 waiting ticket 不会被 `queue-user-B` 恢复，也不会触发 `getQueueStatus()`。
   - 已验证
     - 红测：`node tests/sanity_pvp_live_session_checks.mjs` 在实现前失败于 `resumeCurrentMatch should restore stored waiting queue ticket after page refresh`，实际为 `idle`。
     - 绿测：`node tests/sanity_pvp_live_session_checks.mjs`
     - 语法：`node --check js/services/pvp-live-session.js`
     - 语法：`node --check tests/sanity_pvp_live_session_checks.mjs`
+    - 挑战者补测：`node tests/sanity_pvp_live_session_checks.mjs`
     - 绿测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs`
     - 文档同步：`node tests/sanity_intro_progress_sync_checks.cjs`
     - 全量 Node 门禁：`npm run test:node`，All node checks passed。

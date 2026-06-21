@@ -1452,6 +1452,32 @@ assert.deepEqual(waitingQueueResumeCalls, [
   { method: 'getQueueStatus', queueTicket: 'pvplq-refresh-wait' }
 ], 'waiting queue recovery should read queue status without rejoining');
 
+const waitingQueueOtherUserCalls = [];
+const waitingQueueOtherUserReader = createPvpLiveSession({
+  storage: waitingQueueResumeStorage,
+  userScope: () => 'queue-user-B',
+  liveService: {
+    getCurrentMatch: async () => {
+      waitingQueueOtherUserCalls.push({ method: 'getCurrentMatch' });
+      return { success: false, reason: 'no_current_match', message: '当前没有进行中的实时论道' };
+    },
+    getQueueStatus: async (queueTicket) => {
+      waitingQueueOtherUserCalls.push({ method: 'getQueueStatus', queueTicket });
+      return {
+        success: true,
+        status: 'waiting',
+        queueTicket,
+        waitingReport: { reportVersion: 'pvp-live-waiting-report-v1' }
+      };
+    }
+  }
+});
+const otherUserWaitingQueue = await waitingQueueOtherUserReader.resumeCurrentMatch();
+assert.equal(otherUserWaitingQueue.phase, 'idle', 'different user should not restore another user waiting queue ticket');
+assert.deepEqual(waitingQueueOtherUserCalls, [
+  { method: 'getCurrentMatch' }
+], 'different user should not poll another user scoped waiting queue ticket');
+
 const scopedTerminalStorage = createMemoryStorage();
 const scopedWriter = createPvpLiveSession({
   storage: scopedTerminalStorage,
