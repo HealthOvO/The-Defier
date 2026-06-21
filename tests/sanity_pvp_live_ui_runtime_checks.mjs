@@ -375,9 +375,10 @@ const localDisconnectedConnectionCopy = PVPScene.formatLiveConnectionStatus({
   }
 });
 assert.match(localDisconnectedConnectionCopy, /我方断线/, 'live UI local disconnected state should name the viewer as disconnected');
-assert.match(localDisconnectedConnectionCopy, /刷新同步权威结果|同步权威结果/, 'live UI local disconnected state prefers authoritative sync guidance before connection_timeout');
+assert.match(localDisconnectedConnectionCopy, /刷新同步权威结果|同步权威结果/, 'live UI local disconnected state prefers authoritative sync guidance before connection timeout settlement');
 assert.match(localDisconnectedConnectionCopy, /仍在可恢复窗口会自动重连/, 'live UI local disconnected state keeps recovery conditional');
-assert.match(localDisconnectedConnectionCopy, /权威|connection_timeout|超时结算/, 'live UI local disconnected state should explain authoritative terminal boundary');
+assert.match(localDisconnectedConnectionCopy, /权威|连接超时|超时结算/, 'live UI local disconnected state should explain authoritative terminal boundary in player copy');
+assert.doesNotMatch(localDisconnectedConnectionCopy, /connection_timeout|turn_timeout|ranked_authoritative|swap_sides|forfeit_disconnect/, 'live UI local disconnected state should not expose internal protocol codes');
 
 const localDisconnectedTempoMarkup = PVPScene.renderLiveConnectionTempo({
   status: 'active',
@@ -427,7 +428,62 @@ const opponentDisconnectedCurrentTurnCopy = PVPScene.formatLiveConnectionStatus(
     opponent: { seatId: 'B', status: 'disconnected', isViewer: false, remainingGraceMs: 0 }
   }
 });
-assert.match(opponentDisconnectedCurrentTurnCopy, /当前行动|connection_timeout|超时结算/, 'live UI should name the authoritative timeout boundary when the disconnected opponent owns the action window');
+assert.match(opponentDisconnectedCurrentTurnCopy, /当前行动|连接超时|超时结算/, 'live UI should name the authoritative timeout boundary when the disconnected opponent owns the action window');
+assert.doesNotMatch(opponentDisconnectedCurrentTurnCopy, /connection_timeout|turn_timeout|ranked_authoritative|swap_sides|forfeit_disconnect/, 'live UI opponent disconnect copy should not expose internal protocol codes');
+
+const rawProtocolPattern = /connection_timeout|turn_timeout|ready_timeout|ranked_authoritative|swap_sides|forfeit_disconnect/;
+
+const protocolLabelReviewMarkup = PVPScene.renderLivePostMatchReview({
+  status: 'finished',
+  postMatchReview: {
+    reportVersion: 'pvp-live-post-match-review-v1',
+    title: '连接复盘',
+    result: 'loss',
+    finishReason: 'connection_timeout',
+    summary: '连接中断后进入复盘。',
+    evidence: [
+      { eventType: 'turn_timeout', sequence: 4, actingSeat: 'A', publicData: { seatId: 'A', finishReason: 'connection_timeout' } },
+      { eventType: 'match_invalidated', sequence: 5, actingSeat: 'system', publicData: { reason: 'ready_timeout' } }
+    ],
+    keyTurnReplay: {
+      reportVersion: 'pvp-live-key-turn-replay-v1',
+      sourceVisibility: 'public_events',
+      usesHiddenInformation: false,
+      rankedImpact: 'none',
+      turns: [
+        { id: 'terminal', label: '终局窗口', sequence: 4, eventType: 'turn_timeout', lesson: '重连宽限结束。' }
+      ]
+    },
+    settlementReport: {
+      reportVersion: 'pvp-live-settlement-report-v1',
+      result: 'loss',
+      formalResultPolicy: 'ranked_authoritative',
+      ratingDelta: -10,
+      coinsAwarded: 0,
+      oldScore: 1000,
+      scoreAfter: 990,
+      summaryLine: '正式积分 -10 · 当前 990 · 天道币 +0'
+    },
+    friendlySeries: {
+      reportVersion: 'pvp-live-friendly-series-v1',
+      sourceMatchId: 'pvpm-ui-runtime-raw-labels',
+      seriesId: 'series-raw-labels',
+      status: 'waiting_rematch',
+      roundLabel: 'Bo3 第 2 局',
+      rankedImpact: 'none',
+      seatPolicy: 'swap_sides',
+      sourceParticipants: { A: { displayName: '甲' }, B: { displayName: '乙' } },
+      scoreBySourceSeat: { A: 1, B: 0 }
+    },
+    nextActions: []
+  }
+});
+assert.match(protocolLabelReviewMarkup, /连接超时/, 'post-match review should map connection timeout to player copy');
+assert.match(protocolLabelReviewMarkup, /行动超时/, 'key turn replay should map turn timeout to player copy');
+assert.match(protocolLabelReviewMarkup, /准备超时/, 'invalidated event reason should map ready timeout to player copy');
+assert.match(protocolLabelReviewMarkup, /服务端权威结算/, 'settlement report should map ranked authoritative policy to player copy');
+assert.match(protocolLabelReviewMarkup, /换边再战/, 'friendly series should map swap-side policy to player copy');
+assert.doesNotMatch(protocolLabelReviewMarkup, rawProtocolPattern, 'post-match visible review should not expose internal protocol codes');
 
 const authoritativeConnectionTempoView = {
   matchId: 'pvpm-ui-runtime-authoritative-tempo',

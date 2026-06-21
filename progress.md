@@ -1,5 +1,29 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-21: V10-S32 live PVP player-facing protocol label cleanup
+  - 本轮完成
+    - `js/scenes/pvp-scene.js` 新增 live PVP 展示层 formatter：`formatLiveFinishReasonLabel()`、`formatLiveEventTypeLabel()`、`formatLivePolicyLabel()`，把 `connection_timeout`、`turn_timeout`、`ready_timeout`、`ranked_authoritative`、`swap_sides` 等内部协议码转成玩家可读中文。
+    - 连接状态、当前行动方断线提示、赛后复盘 chip、关键回合复盘、无效局证据、正式结算头、好友 Bo3 换边说明都改为中文标签；raw enum 仍保留在 snapshot / payload / data 边界，方便审计和回归，不进入玩家可见文案。
+    - `getLivePublicEventData()` 只额外白名单公开 `reason` 字段，用于把无效局原因显示为“准备超时”等中文，不透出隐藏手牌、牌库或原始 payload。
+    - `tests/sanity_pvp_live_ui_runtime_checks.mjs` 增加玩家可见复盘整块禁协议码断言，覆盖连接超时复盘、行动超时关键回合、准备超时无效局、正式结算策略、好友换边策略。
+    - `tests/browser_pvp_live_audit.mjs` 扩展真实页面审计：本地断线、当前行动方断线、关键回合、好友再战、无效局、连接超时复盘的可见文本都不得出现内部协议码。
+    - `tests/sanity_pvp_live_ui_contract_checks.cjs` 与 `tests/sanity_release_gate_coverage_checks.cjs` 增加 formatter / 禁 raw enum 静态门禁，防止后续直接把 `turn.eventType`、`report.formalResultPolicy` 或 `series.seatPolicy` 拼回 UI。
+  - 已验证
+    - 红测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs` 在实现前失败于 `live UI local disconnected state should not expose internal protocol codes`，实际可见文本包含 `connection_timeout`。
+    - 红测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs` 在关键回合 / 无效局映射前失败于 `invalidated event reason should map ready timeout to player copy`，实际复盘仍显示 `turn_timeout` 且无“准备超时”。
+    - 绿测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs`
+    - 语法：`node --check js/scenes/pvp-scene.js`
+    - 语法：`node --check tests/browser_pvp_live_audit.mjs`
+    - 语法：`node --check tests/sanity_pvp_live_ui_runtime_checks.mjs`
+    - 绿测：`node tests/sanity_pvp_live_ui_contract_checks.cjs`
+    - 绿测：`node tests/sanity_release_gate_coverage_checks.cjs`
+    - 文档同步：`node tests/sanity_intro_progress_sync_checks.cjs`
+    - 浏览器审计：`node tests/browser_pvp_live_audit.mjs http://127.0.0.1:4173 output/pvp-live-protocol-label-cleanup-audit`，103/103 findings、0 failed、0 console error。
+    - 全量 Node 门禁：`npm run test:node`，All node checks passed。
+    - 构建：`npm run build:pages`
+  - 当前结论
+    - live PVP 的玩家前台不再把服务端/协议内部码当文案露出，断线、超时、无效局、正式结算和 Bo3 换边都用玩家能理解的语言表达。这一刀只改展示层和测试门禁，不改变匹配、心跳、终局、结算、奖励、先后手或 payload 审计合同。
+
 - 2026-06-21: V10-S31 live PVP consecutive bad-experience recovery loop
   - 本轮完成
     - `js/services/pvp-live-session.js` 为本地 `seasonGoal` 增加跨局恢复状态：按用户 / 赛季隔离记录 `badExperienceStreak`、`recoveryState`、`recoveryReason`、`recoveryLine`、`recoveryActions` 和 `dismissedForMatchId`，只使用公开 `postMatchReview.experienceReport` 判断低行动感败局，不读取隐藏手牌、牌库或原始 payload。

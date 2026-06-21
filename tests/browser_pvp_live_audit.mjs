@@ -8,6 +8,7 @@ fs.mkdirSync(outDir, { recursive: true });
 
 const findings = [];
 const consoleErrors = [];
+const visibleProtocolPattern = /connection_timeout|turn_timeout|ready_timeout|ranked_authoritative|swap_sides|forfeit_disconnect/;
 
 function add(name, pass, detail = '') {
   findings.push({ name, pass, detail });
@@ -2145,7 +2146,8 @@ async function safeElementScreenshot(page, selector, outputPath) {
     /我方断线/.test(localDisconnectedProbe.connectionStatus)
       && /刷新同步权威结果|同步权威结果/.test(localDisconnectedProbe.connectionStatus)
       && /仍在可恢复窗口会自动重连/.test(localDisconnectedProbe.connectionStatus)
-      && /权威|超时结算|connection_timeout/.test(localDisconnectedProbe.connectionStatus)
+      && /权威|连接超时|超时结算/.test(localDisconnectedProbe.connectionStatus)
+      && !visibleProtocolPattern.test(`${localDisconnectedProbe.connectionStatus} ${localDisconnectedProbe.connectionTempo}`)
       && /刷新权威状态/.test(localDisconnectedProbe.tempoAction)
       && localDisconnectedProbe.tempoDuplicateGlobalRefreshCount === 0
       && localDisconnectedProbe.globalRefreshActionCount === 1
@@ -2253,8 +2255,9 @@ async function safeElementScreenshot(page, selector, outputPath) {
     activeCurrentTurnDisconnectProbe.phase === 'active'
       && activeCurrentTurnDisconnectProbe.currentSeat === 'B'
       && /对方断线/.test(activeCurrentTurnDisconnectProbe.connectionStatus)
-      && /当前行动|connection_timeout|超时结算/.test(activeCurrentTurnDisconnectProbe.connectionStatus)
-      && /当前行动|connection_timeout|超时结算/.test(activeCurrentTurnDisconnectProbe.connectionTempo)
+      && /当前行动|连接超时|超时结算/.test(activeCurrentTurnDisconnectProbe.connectionStatus)
+      && /当前行动|连接超时|超时结算/.test(activeCurrentTurnDisconnectProbe.connectionTempo)
+      && !visibleProtocolPattern.test(`${activeCurrentTurnDisconnectProbe.connectionStatus} ${activeCurrentTurnDisconnectProbe.connectionTempo}`)
       && activeCurrentTurnDisconnectProbe.connectionTempoState === 'opponent_action_timeout_pending'
       && activeCurrentTurnDisconnectProbe.payload?.connectionTempoReport?.tempoState === 'opponent_action_timeout_pending'
       && activeCurrentTurnDisconnectProbe.payload?.connectionTempoReport?.affectedSeat === 'B',
@@ -3621,6 +3624,7 @@ async function safeElementScreenshot(page, selector, outputPath) {
       && surrenderProbe.keyTurnSource === 'public_events'
       && surrenderProbe.keyTurnHidden === 'false'
       && surrenderProbe.keyTurnCount >= 2
+      && !visibleProtocolPattern.test(surrenderProbe.keyTurnText)
       && surrenderProbe.reviewPayload?.keyTurnReplay?.reportVersion === 'pvp-live-key-turn-replay-v1'
       && surrenderProbe.reviewPayload?.keyTurnReplay?.sourceVisibility === 'public_events'
       && surrenderProbe.reviewPayload?.keyTurnReplay?.usesHiddenInformation === false
@@ -4651,6 +4655,7 @@ async function safeElementScreenshot(page, selector, outputPath) {
       && /Bo3 第 2 局/.test(friendlyRematchProbe.friendlyText)
       && /甲 1 : 0 乙/.test(friendlyRematchProbe.friendlyText)
       && /不写正式积分/.test(friendlyRematchProbe.friendlyText)
+      && !visibleProtocolPattern.test(friendlyRematchProbe.friendlyText)
       && friendlyRematchProbe.snapshot?.reportVersion === 'pvp-live-friendly-series-v1'
       && friendlyRematchProbe.snapshot?.sourceMatchId === 'pvplm-browser-live'
       && friendlyRematchProbe.snapshot?.targetWins === 2
@@ -5068,7 +5073,8 @@ async function safeElementScreenshot(page, selector, outputPath) {
       && /不计正式积分/.test(`${invalidatedProbe.summary} ${invalidatedProbe.hint}`)
       && /不计正式积分/.test(invalidatedProbe.firstGuide)
       && /无效局/.test(invalidatedProbe.events)
-      && /ready_timeout/.test(invalidatedProbe.events)
+      && /准备超时/.test(invalidatedProbe.events)
+      && !visibleProtocolPattern.test(invalidatedProbe.events)
       && invalidatedProbe.postReviewHidden === true
       && !invalidatedProbe.payload?.postMatchReview
       && invalidatedProbe.buttons['join-queue'] === false
@@ -5198,6 +5204,7 @@ async function safeElementScreenshot(page, selector, outputPath) {
       && /重连宽限结束/.test(connectionTimeoutProbe.events)
       && /connection_timeout/.test(JSON.stringify(connectionTimeoutProbe.payload?.postMatchReview || {}))
       && /连接超时|网络|前后台/.test(connectionTimeoutProbe.review)
+      && !visibleProtocolPattern.test(`${connectionTimeoutProbe.events} ${connectionTimeoutProbe.review}`)
       && connectionTimeoutProbe.fairnessReceiptVisible === false
       && connectionTimeoutProbe.payload?.postMatchReview?.finishReason === 'connection_timeout',
     JSON.stringify(connectionTimeoutProbe),

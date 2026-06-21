@@ -803,6 +803,75 @@ export const PVPScene = {
       opponent: normalizeSeat(report.opponent)
     };
   },
+  formatLiveFinishReasonLabel(reason = '') {
+    const key = String(reason || '').trim();
+    const labels = {
+      surrender: '认输',
+      lethal: '伤害终结',
+      timeout: '行动超时',
+      turn_timeout: '行动超时',
+      connection_timeout: '连接超时',
+      ready_timeout: '准备超时',
+      forfeit_disconnect: '断线判负',
+      match_invalidated: '无效局',
+      invalidated: '无效局',
+      queue_cooldown: '排队冷却',
+      connection_health_failed: '连接健康不足',
+      long_wait: '长等待保护'
+    };
+    if (labels[key]) return labels[key];
+    return key ? '规则终局' : '终局';
+  },
+  formatLiveEventTypeLabel(eventType = '') {
+    const key = String(eventType || '').trim();
+    const labels = {
+      opening_protection_triggered: '开局护体触发',
+      opening_second_seat_buffer_granted: '后手护盾发放',
+      opening_counterplay_granted: '反打缓冲发放',
+      budget_clamped: '首动伤害压制',
+      damage_applied: '伤害结算',
+      status_applied: '公开状态施加',
+      status_consumed: '公开状态兑现',
+      status_mitigated: '公开状态缓解',
+      hp_recovered: '公开恢复',
+      card_cycled: '公开抽滤',
+      block_gained: '护盾结算',
+      card_played: '术式打出',
+      turn_ended: '回合交替',
+      mulligan_completed: '调息完成',
+      player_ready: '准备确认',
+      battle_started: '开战',
+      player_surrendered: '认输',
+      ready_timeout: '准备超时',
+      connection_timeout: '连接超时',
+      turn_timeout: '行动超时',
+      match_invalidated: '无效局',
+      match_finished: '对局结束',
+      snapshot_locked: '斗法谱锁定',
+      test_state_forced: '测试态校准',
+      emote_sent: '预设表情'
+    };
+    return labels[key] || (key ? '公开事件' : '事件');
+  },
+  formatLivePolicyLabel(policy = '') {
+    const key = String(policy || '').trim();
+    const labels = {
+      ranked_authoritative: '服务端权威结算',
+      practice_only: '仅练习不计分',
+      friendly_only: '好友局不计分',
+      swap_sides: '换边再战',
+      same_sides: '固定席位',
+      friendly_series_rotating_opener: '轮换先手',
+      per_game_change_allowed: '每局可换谱',
+      no_ranked_change: '不改正式积分',
+      official: '正式结算',
+      honor_only: '仅赛季荣誉',
+      candidate_only: '候选意图'
+    };
+    if (labels[key]) return labels[key];
+    if (key === 'none') return '不写正式积分';
+    return key ? '公开规则' : '公开规则';
+  },
   getLiveConnectionTempo(view, sourceState = null) {
     const authoritative = view && view.connectionTempoReport && typeof view.connectionTempoReport === 'object'
       ? view.connectionTempoReport
@@ -887,7 +956,7 @@ export const PVPScene = {
         'viewer_refresh_required',
         viewerSeat,
         'danger',
-        `连接：我方断线 · 刷新同步权威结果；若仍在可恢复窗口会自动重连，否则按 connection_timeout 结算 · 对方${opponentLabel}`,
+        `连接：我方断线 · 刷新同步权威结果；若仍在可恢复窗口会自动重连，否则按连接超时结算 · 对方${opponentLabel}`,
         '先刷新权威局面，避免本地旧状态覆盖真实回合。',
         { id: 'refresh_match', label: '刷新权威状态' }
       );
@@ -907,7 +976,7 @@ export const PVPScene = {
           'opponent_action_grace',
           opponentSeat,
           'warning',
-          `连接：我方${viewerLabel} · 对方重连宽限 ${opponentGraceSec}s · 对方当前行动，宽限结束才会按 connection_timeout 权威结算`,
+          `连接：我方${viewerLabel} · 对方重连宽限 ${opponentGraceSec}s · 对方当前行动，宽限结束才会按连接超时权威结算`,
           '胜负仍等服务端终局事件，不由前端提前判定。'
         );
       }
@@ -926,7 +995,7 @@ export const PVPScene = {
           opponentSeat,
           'info',
           `连接：我方${viewerLabel} · 对方断线 · 对局继续，当前行动仍可提交；轮到对手仍未恢复才会由服务端处理`,
-          '对局继续：非当前行动方断线不会立刻触发 connection_timeout；当前行动仍可提交，轮到对手仍未恢复才会处理。'
+          '对局继续：非当前行动方断线不会立刻触发连接超时；当前行动仍可提交，轮到对手仍未恢复才会处理。'
         );
       }
       if (phase === 'active' && currentSeat === opponentSeat) {
@@ -934,8 +1003,8 @@ export const PVPScene = {
           'opponent_action_timeout_pending',
           opponentSeat,
           'warning',
-          `连接：我方${viewerLabel} · 对方断线 · 对方当前行动，等待 connection_timeout 权威超时结算`,
-          '只有当前行动方断线超过宽限，服务端才会发布终局；胜负以 match_finished 为准。'
+          `连接：我方${viewerLabel} · 对方断线 · 对方当前行动，等待连接超时权威结算`,
+          '只有当前行动方断线超过宽限，服务端才会发布终局；胜负以对局结束事件为准。'
         );
       }
       if (phase === 'setup' || phase === 'matched') {
@@ -2505,6 +2574,7 @@ export const PVPScene = {
     if (!report) return '';
     const deltaText = report.ratingDelta > 0 ? `+${report.ratingDelta}` : `${report.ratingDelta}`;
     const resultLabel = report.result === 'win' ? '胜局结算' : report.result === 'loss' ? '败局结算' : '终局结算';
+    const policyLabel = this.formatLivePolicyLabel(report.formalResultPolicy);
     const honor = report.seasonHonorReport;
     const getCollectionLabel = (state) => state === 'newly_unlocked' ? '新入库' : state === 'owned' ? '已入库' : '待入库';
     return `
@@ -2516,7 +2586,7 @@ export const PVPScene = {
       >
         <div class="pvp-live-settlement-head">
           <span>${this.escapeHtml(resultLabel)}</span>
-          <span>${this.escapeHtml(report.formalResultPolicy)}</span>
+          <span>${this.escapeHtml(policyLabel)}</span>
         </div>
         <div class="pvp-live-settlement-summary">${this.escapeHtml(report.summaryLine)}</div>
         <div class="pvp-live-settlement-grid">
@@ -2566,7 +2636,8 @@ export const PVPScene = {
   renderLiveFriendlySeries(report) {
     const series = this.getLiveFriendlySeries(report);
     if (!series) return '';
-    const impactLabel = series.rankedImpact === 'none' ? '不写正式积分' : series.rankedImpact;
+    const impactLabel = this.formatLivePolicyLabel(series.rankedImpact);
+    const seatPolicyLabel = this.formatLivePolicyLabel(series.seatPolicy);
     const nameA = series.sourceParticipants.A.displayName || '甲方';
     const nameB = series.sourceParticipants.B.displayName || '乙方';
     const scoreLabel = `${nameA} ${series.scoreBySourceSeat.A} : ${series.scoreBySourceSeat.B} ${nameB}`;
@@ -2591,7 +2662,7 @@ export const PVPScene = {
       >
         <span>${this.escapeHtml(series.roundLabel)} · ${this.escapeHtml(scoreLabel)}</span>
         <span>${this.escapeHtml(seriesLabel)} · ${this.escapeHtml(impactLabel)}</span>
-        <span>系列 ${this.escapeHtml(series.seriesId.slice(0, 12) || '--')} · ${this.escapeHtml(series.seatPolicy)}</span>
+        <span>系列 ${this.escapeHtml(series.seriesId.slice(0, 12) || '--')} · ${this.escapeHtml(seatPolicyLabel)}</span>
         ${canCancel ? `
           <button
             type="button"
@@ -2629,6 +2700,7 @@ export const PVPScene = {
       'winnerSeat',
       'loserSeat',
       'finishReason',
+      'reason',
       'cost',
       'remainingEnergy'
     ];
@@ -2878,7 +2950,7 @@ export const PVPScene = {
             <div class="pvp-live-key-turn severity-${this.escapeHtml(turn.severity)}" data-live-key-turn="${this.escapeHtml(turn.id)}">
               <div class="pvp-live-key-turn-meta">
                 <span>${this.escapeHtml(turn.label)}</span>
-                <span>${turn.sequence !== null ? `#${this.escapeHtml(turn.sequence)}` : '--'} · ${this.escapeHtml(turn.eventType)}</span>
+                <span>${turn.sequence !== null ? `#${this.escapeHtml(turn.sequence)}` : '--'} · ${this.escapeHtml(this.formatLiveEventTypeLabel(turn.eventType))}</span>
               </div>
               <div class="pvp-live-key-turn-lesson">${this.escapeHtml(turn.lesson)}</div>
             </div>
@@ -3222,12 +3294,7 @@ export const PVPScene = {
     const review = this.getLivePostMatchReview(view);
     if (!review) return '';
     const resultLabel = review.result === 'win' ? '胜局' : review.result === 'loss' ? '败局' : '终局';
-    const finishLabels = {
-      surrender: '认输',
-      lethal: '伤害终结',
-      timeout: '行动超时'
-    };
-    const finishLabel = finishLabels[review.finishReason] || review.finishReason || '终局';
+    const finishLabel = this.formatLiveFinishReasonLabel(review.finishReason);
     return `
       <div class="pvp-live-review-head">
         <span class="pvp-live-guide-title">${this.escapeHtml(review.title)}</span>
@@ -3377,33 +3444,6 @@ export const PVPScene = {
       ? event.publicData
       : event && event.payload && typeof event.payload === 'object' ? event.payload : {};
     const actor = event && event.actingSeat ? `席位 ${event.actingSeat}` : '';
-    const eventMap = {
-      opening_protection_triggered: '开局护体触发',
-      opening_second_seat_buffer_granted: '后手护盾发放',
-      opening_counterplay_granted: '反打缓冲发放',
-      budget_clamped: '首动伤害压制',
-      damage_applied: '伤害结算',
-      status_applied: '公开状态施加',
-      status_consumed: '公开状态兑现',
-      status_mitigated: '公开状态缓解',
-      hp_recovered: '公开恢复',
-      card_cycled: '公开抽滤',
-      block_gained: '护盾结算',
-      card_played: '术式打出',
-      turn_ended: '回合交替',
-      mulligan_completed: '调息完成',
-      player_ready: '准备确认',
-      battle_started: '开战',
-      player_surrendered: '认输',
-      ready_timeout: '准备超时',
-      connection_timeout: '连接超时',
-      turn_timeout: '行动超时',
-      match_invalidated: '无效局',
-      match_finished: '对局结束',
-      snapshot_locked: '斗法谱锁定',
-      test_state_forced: '测试态校准',
-      emote_sent: '预设表情'
-    };
     let detail = actor;
     if (type === 'opening_protection_triggered') {
       const protectedSeat = String(payload.protectedSeat || '');
@@ -3483,7 +3523,7 @@ export const PVPScene = {
           ? `${seatId || '行动方'} · 抽滤 ${count} 张 · 当前手牌 ${handCount} · 牌库 ${deckCount}`
           : `${seatId || '行动方'} · 牌库已空，抽滤暂停 · 当前手牌 ${handCount} · 牌库 ${deckCount}`;
     } else if (type === 'match_invalidated' && payload.reason) {
-      detail = `原因：${String(payload.reason)}`;
+      detail = `原因：${this.formatLiveFinishReasonLabel(payload.reason)}`;
     } else if (type === 'match_finished') {
       detail = `胜者 ${String(payload.winnerSeat || '--')} · 败者 ${String(payload.loserSeat || '--')}`;
     } else if (type === 'battle_started') {
@@ -3510,7 +3550,7 @@ export const PVPScene = {
     }
     return {
       type,
-      label: eventMap[type] || type,
+      label: this.formatLiveEventTypeLabel(type),
       detail: detail || actor || '公共事件'
     };
   },

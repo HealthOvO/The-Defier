@@ -705,6 +705,15 @@ assert.ok(!/\.pvp-live-first-guide\s*\{[\s\S]*?max-height:\s*60px[\s\S]*?overflo
   assert.ok(scene.includes(needle), `PVPScene should render invalidated live match marker: ${needle}`);
 });
 
+assert.ok(scene.includes('formatLiveFinishReasonLabel(reason = \'\')'), 'PVPScene should centralize finish reason labels for visible live PVP copy');
+assert.ok(scene.includes('formatLiveEventTypeLabel(eventType = \'\')'), 'PVPScene should centralize event type labels for visible live PVP copy');
+assert.ok(scene.includes('formatLivePolicyLabel(policy = \'\')'), 'PVPScene should centralize policy labels for visible live PVP copy');
+assert.ok(scene.includes('formatLiveEventTypeLabel(turn.eventType)'), 'renderLiveKeyTurnReplay should map event types before rendering player-visible text');
+assert.ok(!scene.includes('${this.escapeHtml(turn.eventType)}'), 'renderLiveKeyTurnReplay must not render raw eventType protocol strings');
+assert.ok(scene.includes('formatLiveFinishReasonLabel(payload.reason)'), 'formatLiveEvent should map public terminal reasons before rendering event details');
+assert.ok(scene.includes('formatLivePolicyLabel(report.formalResultPolicy)'), 'renderLiveSettlementReport should map formal result policy before rendering player-visible text');
+assert.ok(scene.includes('formatLivePolicyLabel(series.seatPolicy)'), 'renderLiveFriendlySeries should map seat policy before rendering player-visible text');
+
 assert.ok(game.includes('getLiveSnapshot'), 'render_game_to_text should expose live PVP snapshot');
 assert.ok(nodeGate.includes('node tests/sanity_pvp_live_ui_contract_checks.cjs'), 'node gate should run live UI contract check');
 assert.ok(browserGate.includes('node tests/browser_pvp_live_audit.mjs "$BASE_URL" "$OUTPUT_ROOT/pvp-live"'), 'browser release gate should run live PVP audit');
