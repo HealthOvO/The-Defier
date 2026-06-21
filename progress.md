@@ -1,5 +1,27 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-21: V10-S20 live PVP low-sample waiting contract
+  - 本轮完成
+    - `server/pvp-live/live-store.js` 将低样本等待从单纯文案升级为结构化 `waitingReport` 合同：新增 `protectionReason / releaseMode / releaseAt / releaseInMs / requiresPoolSize / candidatePoolSize / currentEligibleActions`，让服务端响应和前端 snapshot 都能区分“需要第三名真人”“长等待已放行”和普通等待。
+    - 低样本保护未达到阈值时返回 `releaseMode='need_third_player'`、`requiresPoolSize=3` 和当前候选池人数；达到长等待阈值后切到 `releaseMode='long_wait_release'`、`releaseInMs=0`，不再只靠泛化 message 表达。
+    - `js/scenes/pvp-scene.js` 保留结构化字段到前端 live snapshot；browser audit 的低样本 waiting fixture 和断言同步升级，确认 `currentEligibleActions` 包含问道练习和宽分差选择。
+    - route / cross-process / release coverage 补齐字段级断言，且仍保持不泄漏 `rankedGames`、rating、ELO、奖励承诺或残影 fallback。
+  - 已验证
+    - 红测：`node tests/sanity_pvp_live_cross_process_queue_checks.cjs` 在实现前失败于 `protectionReason` 缺失。
+    - 绿测：`node tests/sanity_pvp_live_cross_process_queue_checks.cjs`
+    - 绿测：`node tests/sanity_pvp_live_route_checks.cjs`
+    - 绿测：`node tests/sanity_pvp_live_persistence_checks.cjs`
+    - 绿测：`node tests/sanity_pvp_live_session_checks.mjs`
+    - 绿测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs`
+    - 绿测：`node tests/sanity_release_gate_coverage_checks.cjs`
+    - 文档同步：`node tests/sanity_intro_progress_sync_checks.cjs`
+    - 全量 Node 门禁：`npm run test:node`，All node checks passed。
+    - 构建：`npm run build:pages`
+    - 浏览器审计：`node tests/browser_pvp_live_audit.mjs http://127.0.0.1:4173 output/pvp-live-low-sample-contract-audit`，95/95 findings、0 failed、0 console error。
+    - Diff 检查：`git diff --check`
+  - 当前结论
+    - live PVP 的低样本等待现在不再是黑箱合同：服务端会明确说明系统是在保护首战质量、还差多大真人池、何时长等待放行，以及当前可做的练习/宽分差/取消动作；前端已保留这些字段到 snapshot。这个切片只补排队合同和前端投影，不改变卡牌、先手护体、正式积分、奖励或结算。
+
 - 2026-06-21: V10-S19 live PVP friendly Bo3 alternating opener
   - 本轮完成
     - `server/pvp-live/live-store.js` 为友谊 Bo3 再战新增 `friendly_series_rotating_opener` 合同：先手不再每局重新随机，也不绑定房主、排队顺序或当前座位，而是按源对局玩家 A/B 在 Bo3 中轮换，避免换边后同一名玩家连续吃到首动窗口。

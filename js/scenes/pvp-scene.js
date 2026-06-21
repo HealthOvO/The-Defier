@@ -1696,6 +1696,15 @@ export const PVPScene = {
       waitMs: Math.max(0, Math.floor(Number(report.waitMs) || 0)),
       longWaitThresholdMs: Math.max(0, Math.floor(Number(report.longWaitThresholdMs) || 120000)),
       longWait: !!report.longWait,
+      protectionReason: String(report.protectionReason || ''),
+      releaseMode: String(report.releaseMode || ''),
+      releaseAt: Math.max(0, Math.floor(Number(report.releaseAt) || 0)),
+      releaseInMs: Math.max(0, Math.floor(Number(report.releaseInMs) || 0)),
+      requiresPoolSize: Math.max(0, Math.floor(Number(report.requiresPoolSize) || 0)),
+      candidatePoolSize: Math.max(0, Math.floor(Number(report.candidatePoolSize) || 0)),
+      currentEligibleActions: Array.isArray(report.currentEligibleActions)
+        ? report.currentEligibleActions.map(item => String(item || '')).filter(Boolean).slice(0, 8)
+        : [],
       message: String(report.message || ''),
       safeguards: Array.isArray(report.safeguards) ? report.safeguards.map(item => String(item || '')).filter(Boolean).slice(0, 8) : [],
       actions: actions.slice(0, 4).map(action => ({

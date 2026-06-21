@@ -960,6 +960,13 @@ async function safeElementScreenshot(page, selector, outputPath) {
               waitMs: 5000,
               longWaitThresholdMs: 120000,
               longWait: false,
+              protectionReason: 'low_sample_protection',
+              releaseMode: 'need_third_player',
+              releaseAt: Date.now() + 115000,
+              releaseInMs: 115000,
+              requiresPoolSize: 3,
+              candidatePoolSize: 2,
+              currentEligibleActions: ['continue_waiting', 'accept_wide_match', 'practice', 'cancel_queue'],
               message: '低样本保护正在优先寻找更稳妥的真人对手；可继续等待、接受宽分差或先进入问道练习，不会自动切残影。',
               safeguards: ['real_player_only', 'low_sample_protection', 'no_score_change'],
               actions: [
@@ -1625,6 +1632,13 @@ async function safeElementScreenshot(page, selector, outputPath) {
       && lowSampleWaitingProbe.buttons['cancel-queue'] === false
       && lowSampleWaitingProbe.payload?.waitingReport?.reportVersion === 'pvp-live-waiting-report-v1'
       && lowSampleWaitingProbe.payload?.waitingReport?.longWait === false
+      && lowSampleWaitingProbe.payload?.waitingReport?.protectionReason === 'low_sample_protection'
+      && lowSampleWaitingProbe.payload?.waitingReport?.releaseMode === 'need_third_player'
+      && lowSampleWaitingProbe.payload?.waitingReport?.releaseAt > Date.now()
+      && lowSampleWaitingProbe.payload?.waitingReport?.releaseInMs > 0
+      && lowSampleWaitingProbe.payload?.waitingReport?.requiresPoolSize === 3
+      && lowSampleWaitingProbe.payload?.waitingReport?.candidatePoolSize === 2
+      && lowSampleWaitingProbe.payload?.waitingReport?.currentEligibleActions?.includes('practice')
       && lowSampleWaitingProbe.payload?.waitingReport?.safeguards?.includes('low_sample_protection')
       && lowSampleWaitingProbe.payload?.waitingReport?.actions?.some(action => action.id === 'accept_wide_match')
       && !/GhostEnemy|reward|rating|elo|rankedGames/i.test(`${lowSampleWaitingProbe.report} ${JSON.stringify(lowSampleWaitingProbe.payload?.waitingReport || {})}`),

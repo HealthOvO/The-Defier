@@ -356,6 +356,14 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
         });
         assert.equal(defaultMatureVsLowJoin.payload.status, 'waiting', 'default rating provider should not immediately pair no-rank low-sample user into mature player');
         assert.ok(defaultMatureVsLowJoin.payload.waitingReport?.safeguards?.includes('low_sample_protection'), 'default provider low-sample waiting report should expose low-sample protection');
+        assert.equal(defaultMatureVsLowJoin.payload.waitingReport?.protectionReason, 'low_sample_protection', 'default provider low-sample waiting report should expose structured protection reason');
+        assert.equal(defaultMatureVsLowJoin.payload.waitingReport?.releaseMode, 'need_third_player', 'default provider low-sample waiting report should explain that a third player can release the pool');
+        assert.equal(defaultMatureVsLowJoin.payload.waitingReport?.requiresPoolSize, 3, 'default provider low-sample waiting report should expose required pool size');
+        assert.ok(defaultMatureVsLowJoin.payload.waitingReport?.candidatePoolSize >= 2, 'default provider low-sample waiting report should expose current candidate pool size');
+        assert.ok(defaultMatureVsLowJoin.payload.waitingReport?.releaseAt > Date.now(), 'default provider low-sample waiting report should expose long-wait release timestamp');
+        assert.ok(defaultMatureVsLowJoin.payload.waitingReport?.releaseInMs > 0, 'default provider low-sample waiting report should expose remaining release time before threshold');
+        assert.ok(defaultMatureVsLowJoin.payload.waitingReport?.currentEligibleActions?.includes('accept_wide_match'), 'default provider low-sample waiting report should expose explicit wide-match action id');
+        assert.ok(defaultMatureVsLowJoin.payload.waitingReport?.currentEligibleActions?.includes('practice'), 'default provider low-sample waiting report should expose explicit practice action id');
         assert.ok(!/rankedGames|ranked_games|lowSampleProtected|low_sample_protected/.test(JSON.stringify(defaultMatureVsLowJoin.payload)), 'default provider low-sample waiting payload should not leak rating sample counters');
         pvpLiveRoutes.__livePvpStore.reset();
 

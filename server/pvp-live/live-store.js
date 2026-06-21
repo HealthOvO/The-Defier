@@ -507,9 +507,12 @@ function makeInviteReport({ inviteCode, status = 'waiting', host = null, target 
     };
 }
 
-function makeWaitingReport({ waitMs = 0, thresholdMs = DEFAULT_LONG_WAIT_THRESHOLD_MS, safeguards = [] } = {}) {
+function makeWaitingReport({ waitMs = 0, thresholdMs = DEFAULT_LONG_WAIT_THRESHOLD_MS, safeguards = [], createdAt = 0, now = Date.now(), candidatePoolSize = 1 } = {}) {
     const safeWaitMs = Math.max(0, Math.floor(Number(waitMs) || 0));
     const safeThresholdMs = Math.max(1000, Math.floor(Number(thresholdMs) || DEFAULT_LONG_WAIT_THRESHOLD_MS));
+    const safeNow = Math.max(0, Math.floor(Number(now) || Date.now()));
+    const safeCreatedAt = Math.max(0, Math.floor(Number(createdAt) || Math.max(0, safeNow - safeWaitMs)));
+    const safeCandidatePoolSize = Math.max(1, Math.floor(Number(candidatePoolSize) || 1));
     const longWait = safeWaitMs >= safeThresholdMs;
     const mergedSafeguards = [
         'real_player_only',
@@ -519,11 +522,49 @@ function makeWaitingReport({ waitMs = 0, thresholdMs = DEFAULT_LONG_WAIT_THRESHO
     ].reduce((items, item) => appendUniqueString(items, item, 12), []);
     const hasRecentOpponentSuppression = mergedSafeguards.includes('recent_opponent_suppression');
     const hasLowSampleProtection = mergedSafeguards.includes('low_sample_protection');
+    const releaseAt = hasLowSampleProtection ? safeCreatedAt + safeThresholdMs : 0;
+    const releaseInMs = hasLowSampleProtection ? Math.max(0, releaseAt - safeNow) : 0;
+    const protectionReason = hasLowSampleProtection
+        ? 'low_sample_protection'
+        : hasRecentOpponentSuppression ? 'recent_opponent_suppression' : '';
+    const releaseMode = hasLowSampleProtection
+        ? longWait ? 'long_wait_release' : 'need_third_player'
+        : hasRecentOpponentSuppression ? 'quality_safeguard_wait' : longWait ? 'long_wait_no_real_player' : 'standard_wait';
+    const requiresPoolSize = hasLowSampleProtection ? 3 : 2;
+    const actions = [
+        {
+            id: 'continue_waiting',
+            label: '继续等待',
+            detail: '继续等待真人，不自动切残影。'
+        },
+        {
+            id: 'accept_wide_match',
+            label: '接受宽分差',
+            detail: '仅在双方都确认后，才允许 200-399 分差真人局。'
+        },
+        {
+            id: 'practice',
+            label: '问道练习',
+            detail: '练习不写正式积分。'
+        },
+        {
+            id: 'cancel_queue',
+            label: '取消匹配',
+            detail: '取消本次排队，不影响正式积分。'
+        }
+    ];
     return {
         reportVersion: 'pvp-live-waiting-report-v1',
         waitMs: safeWaitMs,
         longWaitThresholdMs: safeThresholdMs,
         longWait,
+        protectionReason,
+        releaseMode,
+        releaseAt,
+        releaseInMs,
+        requiresPoolSize,
+        candidatePoolSize: safeCandidatePoolSize,
+        currentEligibleActions: actions.map(action => action.id),
         message: hasRecentOpponentSuppression
             ? '刚刚交手的近期对手会被暂时跳过，正在为你换一位真人；不会自动切残影。'
             : hasLowSampleProtection
@@ -532,28 +573,7 @@ function makeWaitingReport({ waitMs = 0, thresholdMs = DEFAULT_LONG_WAIT_THRESHO
                 ? '当前真人较少，可继续等待、进入问道练习或取消匹配；不会自动切残影。'
                 : '正在等待真实玩家加入；不会自动切残影。',
         safeguards: mergedSafeguards,
-        actions: [
-            {
-                id: 'continue_waiting',
-                label: '继续等待',
-                detail: '继续等待真人，不自动切残影。'
-            },
-            {
-                id: 'accept_wide_match',
-                label: '接受宽分差',
-                detail: '仅在双方都确认后，才允许 200-399 分差真人局。'
-            },
-            {
-                id: 'practice',
-                label: '问道练习',
-                detail: '练习不写正式积分。'
-            },
-            {
-                id: 'cancel_queue',
-                label: '取消匹配',
-                detail: '取消本次排队，不影响正式积分。'
-            }
-        ]
+        actions
     };
 }
 
@@ -1723,7 +1743,10 @@ class LivePvpStore {
             waitingReport: makeWaitingReport({
                 waitMs,
                 thresholdMs: this.longWaitThresholdMs,
-                safeguards: queueEntry.matchmakingSuppressionReasons || []
+                safeguards: queueEntry.matchmakingSuppressionReasons || [],
+                createdAt,
+                now: this.now(),
+                candidatePoolSize: this.waitingQueue.length
             })
         };
     }
@@ -1778,6 +1801,13 @@ class LivePvpStore {
         }
 
         if (!queueEntry) return null;
+        if (!localQueueEntry) {
+            await this.hydrateWaitingQueueEntriesExceptUser(queueEntry.player.userId);
+        }
+        const candidatePoolSize = Math.max(
+            1,
+            this.waitingQueue.filter(entry => entry && entry.player && !this.consumedQueueTickets.has(entry.queueTicket)).length
+        );
         return {
             status: 'waiting',
             queueTicket: ticket,
@@ -1786,7 +1816,10 @@ class LivePvpStore {
             waitingReport: makeWaitingReport({
                 waitMs: Math.max(0, this.now() - Math.floor(Number(queueEntry.createdAt) || this.now())),
                 thresholdMs: this.longWaitThresholdMs,
-                safeguards: queueEntry.matchmakingSuppressionReasons || []
+                safeguards: queueEntry.matchmakingSuppressionReasons || [],
+                createdAt: Math.floor(Number(queueEntry.createdAt) || this.now()),
+                now: this.now(),
+                candidatePoolSize
             })
         };
     }

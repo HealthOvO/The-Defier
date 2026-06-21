@@ -79,6 +79,10 @@ const friendlySeriesSource = pvpLiveStore.slice(
   pvpLiveStore.indexOf('function makeFriendlySeriesReport'),
   pvpLiveStore.indexOf('class LivePvpStore')
 );
+const waitingReportSource = pvpLiveStore.slice(
+  pvpLiveStore.indexOf('function makeWaitingReport'),
+  pvpLiveStore.indexOf('const FRIENDLY_SERIES_TARGET_WINS')
+);
 [
   'routes/pvp.js',
   'routes/ghosts.js',
@@ -527,6 +531,11 @@ const layoutAudit = read('tests/browser_frontend_layout_audit.mjs');
   'live UI renders low-sample waiting safeguard before long-wait threshold',
   'recent_opponent_suppression',
   'low_sample_protection',
+  'protectionReason',
+  'releaseMode',
+  'need_third_player',
+  'requiresPoolSize',
+  'currentEligibleActions',
   '匹配样本保护',
   '匹配质量护栏',
   'live UI renders 120s no-real-player waiting branch without ghost fallback',
@@ -944,6 +953,22 @@ assert.ok(
   assert.ok(
     friendlySeriesSource.includes(needle),
     `live PVP friendly series should pin alternating opener marker: ${needle}`,
+  );
+});
+[
+  'protectionReason',
+  'releaseMode',
+  'releaseAt',
+  'releaseInMs',
+  'requiresPoolSize',
+  'candidatePoolSize',
+  'currentEligibleActions',
+  'need_third_player',
+  'long_wait_release',
+].forEach((needle) => {
+  assert.ok(
+    waitingReportSource.includes(needle),
+    `live PVP waiting report should pin structured low-sample marker: ${needle}`,
   );
 });
 [

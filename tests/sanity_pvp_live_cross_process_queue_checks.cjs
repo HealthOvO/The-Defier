@@ -521,10 +521,12 @@ function makeSharedPersistence({ keepQueueRowsOnDelete = false } = {}) {
     'open-pool-low-b': { score: 1000, rankedGames: 0, provisional: true },
     'open-pool-low-c': { score: 1000, rankedGames: 0, provisional: true },
   });
+  const lowSampleOpenPoolPersistence = makeSharedPersistence();
   const lowSampleOpenPoolStore = createLivePvpStore({
     now: () => now,
     ratingProvider: lowSampleOpenPoolRatings,
     longWaitThresholdMs: 120000,
+    persistence: lowSampleOpenPoolPersistence,
   });
   now += 1000;
   const openPoolLowA = await lowSampleOpenPoolStore.joinQueue({
@@ -547,6 +549,63 @@ function makeSharedPersistence({ keepQueueRowsOnDelete = false } = {}) {
   assert.ok(
     openPoolLowB.waitingReport?.safeguards?.includes('low_sample_protection'),
     'two-player low-sample open pool should expose low-sample protection while waiting',
+  );
+  assert.equal(
+    openPoolLowB.waitingReport?.protectionReason,
+    'low_sample_protection',
+    'two-player low-sample open pool should expose structured protection reason',
+  );
+  assert.equal(
+    openPoolLowB.waitingReport?.releaseMode,
+    'need_third_player',
+    'two-player low-sample open pool should explain it is waiting for a third player',
+  );
+  assert.equal(
+    openPoolLowB.waitingReport?.requiresPoolSize,
+    3,
+    'two-player low-sample open pool should expose the release pool size',
+  );
+  assert.equal(
+    openPoolLowB.waitingReport?.candidatePoolSize,
+    2,
+    'two-player low-sample open pool should expose the current candidate pool size',
+  );
+  assert.ok(
+    openPoolLowB.waitingReport?.releaseAt > now,
+    'two-player low-sample open pool should expose the long-wait release timestamp',
+  );
+  assert.ok(
+    openPoolLowB.waitingReport?.currentEligibleActions?.includes('practice'),
+    'two-player low-sample open pool should expose practice as a structured action',
+  );
+  const lowSampleFreshStatusStore = createLivePvpStore({
+    now: () => now,
+    ratingProvider: lowSampleOpenPoolRatings,
+    longWaitThresholdMs: 120000,
+    persistence: lowSampleOpenPoolPersistence,
+  });
+  const openPoolLowBFreshStatus = await lowSampleFreshStatusStore.getQueueStatus('open-pool-low-b', openPoolLowB.queueTicket);
+  assert.equal(
+    openPoolLowBFreshStatus?.waitingReport?.candidatePoolSize,
+    2,
+    'fresh process low-sample queue status should hydrate peer tickets before reporting candidate pool size',
+  );
+  assert.equal(
+    openPoolLowBFreshStatus?.waitingReport?.releaseMode,
+    'need_third_player',
+    'fresh process low-sample queue status should preserve need_third_player release mode before threshold',
+  );
+  now += 120000;
+  const openPoolLowBLongWait = await lowSampleOpenPoolStore.getQueueStatus('open-pool-low-b', openPoolLowB.queueTicket);
+  assert.equal(
+    openPoolLowBLongWait?.waitingReport?.releaseMode,
+    'long_wait_release',
+    'low-sample waiting report should switch to long_wait_release after the threshold',
+  );
+  assert.equal(
+    openPoolLowBLongWait?.waitingReport?.releaseInMs,
+    0,
+    'low-sample long-wait release should expose zero remaining release time',
   );
   now += 1000;
   const openPoolLowC = await lowSampleOpenPoolStore.joinQueue({
