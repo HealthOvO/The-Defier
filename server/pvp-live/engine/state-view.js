@@ -7,7 +7,8 @@ const POST_GAME_AUDIT_ACTION_BY_UI_ACTION = Object.freeze({
     friendly_rematch: 'friendly_rematch',
     adjust_loadout: 'apply_loadout_recommendation',
     practice: 'practice_topic',
-    queue_again: 'queue_again'
+    queue_again: 'queue_again',
+    report_issue: 'report_issue'
 });
 
 function withAuditAction(action) {
@@ -884,6 +885,11 @@ function projectPostMatchReview(state, seatId) {
             id: 'queue_again',
             label: isFriendly ? '回到真人排位' : '继续真人排位',
             detail: isFriendly ? '结束友谊局，回到真人排位队列。' : '带着本局结论重新入队。'
+        },
+        {
+            id: 'report_issue',
+            label: '举报异常',
+            detail: '提交异常反馈；系统只附带公开证据包，不立即改写积分、奖励或匹配评分。'
         }
     ].map(withAuditAction);
     const postGameActionBridge = buildPostGameActionBridge(nextActions);

@@ -1836,6 +1836,45 @@
     opacity: 0.62;
 }
 
+.pvp-live-dispute-receipt {
+    margin-top: 8px;
+    padding: 8px;
+    border-radius: 8px;
+    border: 1px solid rgba(243, 194, 107, 0.2);
+    background: rgba(70, 48, 18, 0.22);
+    overflow-wrap: anywhere;
+}
+
+.pvp-live-dispute-receipt-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    min-width: 0;
+    color: rgba(247, 237, 215, 0.92);
+    font-size: 0.72rem;
+    font-weight: 700;
+}
+
+.pvp-live-dispute-receipt-head span:last-child {
+    color: rgba(243, 194, 107, 0.78);
+    text-align: right;
+}
+
+.pvp-live-dispute-receipt-line,
+.pvp-live-dispute-receipt-evidence,
+.pvp-live-dispute-receipt-boundary {
+    margin-top: 5px;
+    color: rgba(242, 232, 210, 0.78);
+    font-size: 0.68rem;
+    line-height: 1.35;
+}
+
+.pvp-live-dispute-receipt-evidence,
+.pvp-live-dispute-receipt-boundary {
+    color: rgba(228, 211, 177, 0.66);
+}
+
 .pvp-live-settlement-report {
     margin-top: 8px;
     padding: 8px;

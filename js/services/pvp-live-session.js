@@ -11,6 +11,7 @@ const DEFAULT_STATE = Object.freeze({
   rematchReport: null,
   lastReplay: null,
   lastReplayMatchId: '',
+  lastDisputeReport: null,
   lastEvents: [],
   lastError: null,
   realtimeStatus: 'idle',
@@ -29,7 +30,8 @@ const ALLOWED_SEASON_GOAL_ACTIONS = Object.freeze([
   'friendly_rematch',
   'adjust_loadout',
   'review_events',
-  'review_key_turns'
+  'review_key_turns',
+  'report_issue'
 ]);
 
 function cloneData(value) {
@@ -217,6 +219,7 @@ export function createPvpLiveSession({
     if (matchIdentityTouched && previousMatchId && previousMatchId !== nextMatchId) {
       nextState.lastReplay = null;
       nextState.lastReplayMatchId = '';
+      nextState.lastDisputeReport = null;
     }
     state = nextState;
     if (typeof onChange === 'function') {
@@ -761,6 +764,7 @@ export function createPvpLiveSession({
       stateView: null,
       lastReplay: null,
       lastReplayMatchId: '',
+      lastDisputeReport: null,
       lastError: null,
       lastEvents: []
     });
@@ -1095,6 +1099,28 @@ export function createPvpLiveSession({
       lastReplay: cloneData(result.replay),
       lastReplayMatchId: matchId,
       lastError: null
+    });
+  }
+
+  async function submitReport(report = {}) {
+    const matchId = getSnapshotMatchId(state);
+    if (!matchId) {
+      return fail('report_match_missing', '实时论道异常反馈战局缺失', state.phase);
+    }
+    const result = await callLive('submitReport', matchId, report);
+    if (!result || result.success !== true || !result.report) {
+      return fail(result && result.reason || 'report_issue_failed', result && result.message || '实时论道异常反馈提交失败', state.phase);
+    }
+    if (getSnapshotMatchId(state) !== matchId) {
+      return getState();
+    }
+    const receipt = cloneData(result.report);
+    return publish({
+      lastDisputeReport: receipt,
+      lastError: {
+        reason: 'report_issue_submitted',
+        message: receipt.nextStepLine || '异常反馈已提交；复核不会立即改写本局结算。'
+      }
     });
   }
 
@@ -1539,6 +1565,7 @@ export function createPvpLiveSession({
     recordSeasonGoalAction,
     dismissSeasonGoal,
     getReplay,
+    submitReport,
     requestRematch,
     pollRematch,
     cancelRematch,

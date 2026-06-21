@@ -43,6 +43,15 @@ function dbRun(sql, params = []) {
     });
 }
 
+function dbGet(sql, params = []) {
+    return new Promise((resolve, reject) => {
+        db.get(sql, params, (err, row) => {
+            if (err) reject(err);
+            else resolve(row || null);
+        });
+    });
+}
+
 async function setRouteRank({ userId, username, score = 1000, wins = 6, losses = 0, division = '玄阶' }) {
     const now = Date.now();
     await dbRun(
@@ -2100,6 +2109,44 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
         });
         assert.equal(round14ScoreAView.payload.stateView.postMatchReview?.result, 'win', 'round14 score winner should receive win review');
         assert.equal(round14ScoreAView.payload.stateView.postMatchReview?.finishReason, 'round14_score', 'round14 score review should expose round14_score');
+        const reportAction = round14ScoreAView.payload.stateView.postMatchReview?.nextActions
+            ?.find(action => action.id === 'report_issue');
+        assert.equal(reportAction?.auditActionId, 'report_issue', 'finished review should expose a real dispute report action');
+        assert.ok(
+            round14ScoreAView.payload.stateView.postMatchReview?.postGameActionBridge?.uiActionIdsByAuditAction?.report_issue?.includes('report_issue'),
+            'post-game action bridge should map report_issue to the report UI action'
+        );
+        const disputeReport = await request(baseUrl, `/api/pvp/live/matches/${joinRound14ScoreB.payload.matchId}/reports`, {
+            method: 'POST',
+            token: tokenA,
+            body: {
+                reason: 'fairness_review',
+                message: '第 14 轮判分窗口需要复核公开事件。'
+            }
+        });
+        assert.equal(disputeReport.status, 200, 'finished live match should accept an audit-safe dispute report');
+        assert.equal(disputeReport.payload.report?.reportVersion, 'pvp-live-dispute-report-receipt-v1', 'dispute report should return a stable receipt contract');
+        assert.equal(disputeReport.payload.report?.status, 'reported', 'dispute report should be received without immediate punishment');
+        assert.equal(disputeReport.payload.report?.rankedImpact, 'none', 'dispute report should not immediately change ranked state');
+        assert.equal(disputeReport.payload.report?.evidencePackage?.reportVersion, 'pvp-live-dispute-evidence-v1', 'dispute report should include an audit-safe evidence package');
+        assert.equal(disputeReport.payload.report?.evidencePackage?.usesHiddenInformation, false, 'dispute evidence package should not use hidden information');
+        assert.ok(disputeReport.payload.report?.evidencePackage?.eventCount >= 1, 'dispute evidence package should reference public event evidence');
+        assert.ok(disputeReport.payload.report?.evidencePackage?.riskTags?.includes('fairness_review_requested'), 'fairness dispute should carry a review risk tag');
+        assert.doesNotMatch(JSON.stringify(disputeReport.payload), /hand|deck|cardId|instanceId|loadoutSnapshot|randomSeed/i, 'dispute receipt must not leak hidden cards, decks, loadouts, or seeds');
+        const persistedDisputeReport = await dbGet(
+            'SELECT report_id, status, reason, evidence_json FROM pvp_live_dispute_reports WHERE match_id = ? AND reporter_user_id = ? LIMIT 1',
+            [joinRound14ScoreB.payload.matchId, 'live-user-a']
+        );
+        assert.equal(persistedDisputeReport?.report_id, disputeReport.payload.report.reportId, 'dispute report should be persisted for later review');
+        assert.equal(persistedDisputeReport?.status, 'reported', 'persisted dispute report should stay in reported status');
+        assert.equal(persistedDisputeReport?.reason, 'fairness_review', 'persisted dispute report should store the player reason');
+        assert.ok(JSON.parse(persistedDisputeReport?.evidence_json || '{}').riskTags.includes('fairness_review_requested'), 'persisted dispute evidence should keep risk tags');
+        const outsiderDispute = await request(baseUrl, `/api/pvp/live/matches/${joinRound14ScoreB.payload.matchId}/reports`, {
+            method: 'POST',
+            token: tokenC,
+            body: { reason: 'fairness_review' }
+        });
+        assert.equal(outsiderDispute.status, 404, 'non-participant should not be able to report or inspect another live match');
 
         pvpLiveRoutes.__livePvpStore.reset();
         const joinSetupTimeoutA = await request(baseUrl, '/api/pvp/live/queue/join', {

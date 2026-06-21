@@ -1846,13 +1846,14 @@ const bridgedReview = PVPScene.getLivePostMatchReview({
     nextActions: [
       { id: 'review_key_turns', auditActionId: 'key_turn_replay', label: '关键回合复盘', detail: '按公开事件复盘。' },
       { id: 'adjust_loadout', auditActionId: 'apply_loadout_recommendation', label: '调整斗法谱', detail: '按公开推荐改谱。' },
-      { id: 'practice', auditActionId: 'practice_topic', label: '问道练习', detail: '练习不写正式结果。' }
+      { id: 'practice', auditActionId: 'practice_topic', label: '问道练习', detail: '练习不写正式结果。' },
+      { id: 'report_issue', auditActionId: 'report_issue', label: '举报异常', detail: '提交异常反馈。' }
     ]
   }
 });
 assert.deepEqual(
   bridgedReview.nextActions.map(action => `${action.id}:${action.auditActionId}`),
-  ['review_key_turns:key_turn_replay', 'adjust_loadout:apply_loadout_recommendation', 'practice:practice_topic'],
+  ['review_key_turns:key_turn_replay', 'adjust_loadout:apply_loadout_recommendation', 'practice:practice_topic', 'report_issue:report_issue'],
   'post-match review normalizer should preserve audit action ids for real UI buttons'
 );
 
@@ -1918,5 +1919,77 @@ assert.equal(replaySnapshot.lastReplay?.reportVersion, 'pvp-live-replay-v1', 'li
 assert.equal(replaySnapshot.lastReplay?.visibilityLayer, 'replay_self', 'fetched key-turn replay should stay viewer-scoped');
 assert.equal(replaySnapshot.lastReplay?.hiddenScan?.forbiddenTokenCount, 0, 'fetched replay summary should preserve the hidden-token scan result');
 assert.match(PVPScene.liveInlineHint, /权威回放|关键回合/, 'key-turn replay fetch should explain the authoritative replay focus');
+
+let reportReviewState = {
+  phase: 'finished',
+  matchId: 'pvpm-ui-runtime-report-issue',
+  seatId: 'A',
+  stateView: {
+    matchId: 'pvpm-ui-runtime-report-issue',
+    status: 'finished',
+    stateVersion: 88,
+    postMatchReview: {
+      reportVersion: 'pvp-live-post-match-review-v1',
+      result: 'loss',
+      finishReason: 'lethal',
+      summary: '公开轨迹显示终局。',
+      nextActions: [
+        { id: 'report_issue', auditActionId: 'report_issue', label: '举报异常', detail: '提交异常反馈；不即时改分。' }
+      ]
+    }
+  },
+  lastDisputeReport: null,
+  lastEvents: []
+};
+const disputeCalls = [];
+PVPScene.liveReviewFocus = '';
+PVPScene.liveInlineHint = '';
+PVPScene.renderLivePanel = () => {};
+PVPScene.getLiveSession = () => ({
+  getState: () => reportReviewState,
+  submitReport: async (report = {}) => {
+    disputeCalls.push(report);
+    reportReviewState = {
+      ...reportReviewState,
+      lastDisputeReport: {
+        reportVersion: 'pvp-live-dispute-report-receipt-v1',
+        reportId: 'pvplr-ui-runtime-1',
+        status: 'reported',
+        reason: report.reason,
+        sourceVisibility: 'audit_safe_public_state',
+        usesHiddenInformation: false,
+        rankedImpact: 'none',
+        nextStepLine: '异常反馈已提交；复核不会立即改写本局结算。',
+        evidencePackage: {
+          reportVersion: 'pvp-live-dispute-evidence-v1',
+          sourceVisibility: 'audit_safe_public_state',
+          usesHiddenInformation: false,
+          rankedImpact: 'none',
+          matchId: 'pvpm-ui-runtime-report-issue',
+          reporterSeat: 'A',
+          finishReason: 'lethal',
+          eventCount: 3,
+          riskTags: ['player_reported', 'fairness_review_requested']
+        },
+        boundary: '提交异常反馈不会即时改变正式积分、奖励或匹配评分。'
+      },
+      lastError: {
+        reason: 'report_issue_submitted',
+        message: '异常反馈已提交；复核不会立即改写本局结算。'
+      }
+    };
+    return reportReviewState;
+  }
+});
+await PVPScene.handleLivePostReviewAction('report_issue');
+const disputeSnapshot = PVPScene.getLiveSnapshot();
+assert.deepEqual(disputeCalls.map(call => call.reason), ['fairness_review'], 'report_issue action should submit a fairness dispute report');
+assert.equal(disputeSnapshot.lastDisputeReport?.reportVersion, 'pvp-live-dispute-report-receipt-v1', 'live snapshot should expose the submitted dispute receipt');
+assert.equal(disputeSnapshot.lastDisputeReport?.rankedImpact, 'none', 'dispute receipt should not affect ranked state');
+assert.equal(disputeSnapshot.lastDisputeReport?.evidencePackage?.usesHiddenInformation, false, 'dispute receipt evidence should stay audit-safe');
+assert.equal(disputeSnapshot.lastDisputeReport?.evidencePackage?.eventCount, 3, 'dispute receipt should summarize public evidence count');
+assert.match(PVPScene.liveInlineHint, /不会立即改写本局结算/, 'report_issue action should explain non-immediate settlement impact');
+assert.match(PVPScene.renderLiveDisputeReportReceipt(), /data-live-dispute-report/, 'dispute receipt should render a stable DOM marker');
+assert.doesNotMatch(PVPScene.renderLiveDisputeReportReceipt(), /hand|deck|cardId|instanceId|loadoutSnapshot/i, 'dispute receipt UI should not render hidden card or loadout tokens');
 
 console.log('PVP live UI runtime checks passed.');

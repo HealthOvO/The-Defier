@@ -150,6 +150,32 @@ const liveService = {
       }
     };
   },
+  submitReport: async (matchId, report) => {
+    calls.push({ method: 'submitReport', matchId, report });
+    return {
+      success: true,
+      report: {
+        reportVersion: 'pvp-live-dispute-report-receipt-v1',
+        reportId: 'pvplr-session-1',
+        status: 'reported',
+        reason: report.reason || 'fairness_review',
+        sourceVisibility: 'audit_safe_public_state',
+        usesHiddenInformation: false,
+        rankedImpact: 'none',
+        nextStepLine: '异常反馈已提交；复核不会立即改写本局结算。',
+        evidencePackage: {
+          reportVersion: 'pvp-live-dispute-evidence-v1',
+          sourceVisibility: 'audit_safe_public_state',
+          usesHiddenInformation: false,
+          rankedImpact: 'none',
+          matchId,
+          reporterSeat: 'B',
+          eventCount: 2,
+          riskTags: ['player_reported', 'fairness_review_requested']
+        }
+      }
+    };
+  },
   createInvite: async (options) => {
     calls.push({ method: 'createInvite', options });
     return {
@@ -264,6 +290,7 @@ assert.equal(typeof session.cancelInvite, 'function', 'live session should expos
 assert.equal(typeof session.pollInvite, 'function', 'live session should expose private invite polling API');
 assert.equal(typeof session.resumeCurrentInvite, 'function', 'live session should expose private invite resume API');
 assert.equal(typeof session.refreshInviteInbox, 'function', 'live session should expose targeted private invite inbox refresh API');
+assert.equal(typeof session.submitReport, 'function', 'live session should expose audit-safe dispute report API');
 
 const recoveredSession = createPvpLiveSession({ liveService });
 const recovered = await recoveredSession.resumeCurrentMatch();
@@ -280,9 +307,19 @@ assert.equal(replayState.lastError, null, 'successful getReplay should clear rep
 assert.equal(calls.at(-1).method, 'getReplay', 'getReplay should call live service replay bridge');
 assert.deepEqual(calls.at(-1).options, { visibility: 'replay_public' }, 'getReplay should forward replay visibility options');
 
+const reportState = await recoveredSession.submitReport({ reason: 'fairness_review', message: '请复核公开事件。' });
+assert.equal(reportState.lastDisputeReport?.reportVersion, 'pvp-live-dispute-report-receipt-v1', 'submitReport should store the dispute receipt');
+assert.equal(reportState.lastDisputeReport?.rankedImpact, 'none', 'dispute receipt should not change ranked state');
+assert.equal(reportState.lastDisputeReport?.evidencePackage?.usesHiddenInformation, false, 'dispute receipt should preserve hidden-information boundary');
+assert.equal(reportState.lastError?.reason, 'report_issue_submitted', 'submitReport should publish a readable submitted state');
+assert.equal(calls.at(-1).method, 'submitReport', 'submitReport should call live service report bridge');
+assert.equal(calls.at(-1).matchId, 'pvplm-current', 'submitReport should bind the report to the current match');
+assert.deepEqual(calls.at(-1).report, { reason: 'fairness_review', message: '请复核公开事件。' }, 'submitReport should forward the player report payload');
+
 const replayClearedByQueue = await recoveredSession.joinQueue({ displayName: '乙' });
 assert.equal(replayClearedByQueue.lastReplay, null, 'joining a new queue should clear the previous match replay payload');
 assert.equal(replayClearedByQueue.lastReplayMatchId, '', 'joining a new queue should clear the previous replay match binding');
+assert.equal(replayClearedByQueue.lastDisputeReport, null, 'joining a new queue should clear the previous dispute report receipt');
 
 const recoveredInviteSession = createPvpLiveSession({ liveService });
 const recoveredInvite = await recoveredInviteSession.resumeCurrentInvite();

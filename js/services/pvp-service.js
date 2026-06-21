@@ -183,6 +183,13 @@ export const PVPService = {
       }
       return await client.submitLivePvpIntent(matchId, intent);
     },
+    async submitReport(matchId = '', report = {}) {
+      const client = this.getClient();
+      if (!client || typeof client.submitLivePvpReport !== 'function') {
+        return { success: false, message: '实时论道服务未就绪' };
+      }
+      return await client.submitLivePvpReport(matchId, report);
+    },
     connectRealtime(handlers = {}) {
       const client = this.getClient();
       if (!client || typeof client.connectLivePvpWebSocket !== 'function') {

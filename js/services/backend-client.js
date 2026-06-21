@@ -1321,6 +1321,39 @@ export const BackendClient = {
       };
     }
   },
+  async submitLivePvpReport(matchId = '', report = {}) {
+    const user = this.getCurrentUser();
+    if (!user) return {
+      success: false,
+      message: '未登录'
+    };
+    const id = String(matchId || '').trim();
+    if (!id) return {
+      success: false,
+      message: '实时论道战局缺失'
+    };
+    const payload = {
+      reason: String(report.reason || 'player_report').trim().slice(0, 48),
+      message: String(report.message || '').trim().slice(0, 240)
+    };
+    try {
+      const result = await this.requestServer(`${this.getLivePvpPathPrefix()}/matches/${encodeURIComponent(id)}/reports`, {
+        method: 'POST',
+        data: payload
+      });
+      return result && typeof result === 'object' ? result : {
+        success: false,
+        message: '实时论道异常反馈返回异常'
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error,
+        reason: error && error.reason || undefined,
+        message: error.message || '实时论道异常反馈提交失败'
+      };
+    }
+  },
   async getPvpEconomy() {
     const user = this.getCurrentUser();
     if (!user) return {

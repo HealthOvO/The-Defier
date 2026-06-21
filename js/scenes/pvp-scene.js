@@ -2168,7 +2168,7 @@ export const PVPScene = {
           ]).filter(([key]) => key))
           : {}
       } : null,
-      nextActions: nextActions.slice(0, 6).map(action => ({
+      nextActions: nextActions.slice(0, 7).map(action => ({
         id: String(action && action.id || ''),
         auditActionId: String(action && action.auditActionId || ''),
         label: String(action && action.label || ''),
@@ -2197,6 +2197,37 @@ export const PVPScene = {
         forbiddenKeyCount: Math.max(0, Math.floor(Number(hiddenScan.forbiddenKeyCount) || 0)),
         forbiddenStringCount: Math.max(0, Math.floor(Number(hiddenScan.forbiddenStringCount) || 0))
       }
+    };
+  },
+  getLiveDisputeReportReceipt(source) {
+    const report = source && typeof source === 'object' ? source : null;
+    if (!report) return null;
+    const evidence = report.evidencePackage && typeof report.evidencePackage === 'object'
+      ? report.evidencePackage
+      : {};
+    return {
+      reportVersion: String(report.reportVersion || 'pvp-live-dispute-report-receipt-v1'),
+      reportId: String(report.reportId || ''),
+      status: String(report.status || 'reported'),
+      reason: String(report.reason || 'player_report'),
+      sourceVisibility: String(report.sourceVisibility || 'audit_safe_public_state'),
+      usesHiddenInformation: report.usesHiddenInformation === true,
+      rankedImpact: String(report.rankedImpact || 'none'),
+      nextStepLine: String(report.nextStepLine || '异常反馈已提交；复核不会立即改写本局结算。'),
+      evidencePackage: {
+        reportVersion: String(evidence.reportVersion || 'pvp-live-dispute-evidence-v1'),
+        sourceVisibility: String(evidence.sourceVisibility || 'audit_safe_public_state'),
+        usesHiddenInformation: evidence.usesHiddenInformation === true,
+        rankedImpact: String(evidence.rankedImpact || 'none'),
+        matchId: String(evidence.matchId || ''),
+        reporterSeat: String(evidence.reporterSeat || ''),
+        finishReason: String(evidence.finishReason || ''),
+        eventCount: Math.max(0, Math.floor(Number(evidence.eventCount) || 0)),
+        riskTags: Array.isArray(evidence.riskTags)
+          ? evidence.riskTags.map(item => String(item || '')).filter(Boolean).slice(0, 8)
+          : []
+      },
+      boundary: String(report.boundary || '提交异常反馈不会即时改变正式积分、奖励或匹配评分。')
     };
   },
   getLiveLoadoutRecommendation(source) {
@@ -3003,6 +3034,34 @@ export const PVPScene = {
       Utils.showBattleLog(message);
     }
   },
+  renderLiveDisputeReportReceipt() {
+    const state = this.getLiveSession().getState();
+    const activeMatchId = String(state && (state.matchId || state.stateView && state.stateView.matchId) || '');
+    const receipt = this.getLiveDisputeReportReceipt(state && state.lastDisputeReport);
+    if (!receipt || (receipt.evidencePackage.matchId && activeMatchId && receipt.evidencePackage.matchId !== activeMatchId)) {
+      return '';
+    }
+    const tags = receipt.evidencePackage.riskTags.length
+      ? receipt.evidencePackage.riskTags.join(' / ')
+      : 'player_reported';
+    return `
+      <div
+        class="pvp-live-dispute-receipt"
+        data-live-dispute-report
+        data-live-dispute-report-status="${this.escapeHtml(receipt.status)}"
+        data-live-dispute-report-hidden="${receipt.usesHiddenInformation ? 'true' : 'false'}"
+        data-live-dispute-report-ranked-impact="${this.escapeHtml(receipt.rankedImpact)}"
+      >
+        <div class="pvp-live-dispute-receipt-head">
+          <span>异常反馈已提交</span>
+          <span>${this.escapeHtml(receipt.reportId || 'reported')}</span>
+        </div>
+        <div class="pvp-live-dispute-receipt-line">${this.escapeHtml(receipt.nextStepLine)}</div>
+        <div class="pvp-live-dispute-receipt-evidence">公开证据 ${this.escapeHtml(receipt.evidencePackage.eventCount)} 条 · ${this.escapeHtml(tags)}</div>
+        <div class="pvp-live-dispute-receipt-boundary">${this.escapeHtml(receipt.boundary)}</div>
+      </div>
+    `;
+  },
   renderLivePostMatchReview(view, phase = 'idle') {
     const review = this.getLivePostMatchReview(view);
     if (!review) return '';
@@ -3051,6 +3110,7 @@ export const PVPScene = {
           >${this.escapeHtml(action.label)}</button>
         `).join('')}
       </div>
+      ${this.renderLiveDisputeReportReceipt()}
     `;
   },
   buildLivePostReviewDrillScenario(state = null) {
@@ -3507,6 +3567,7 @@ export const PVPScene = {
       postMatchReview: this.getLivePostMatchReview(view),
       seasonGoal: this.getLiveSeasonGoalCard(view),
       lastReplay: replayMatchId && replayMatchId === activeLiveSourceId ? this.getLiveReplaySummary(state.lastReplay) : null,
+      lastDisputeReport: state.lastDisputeReport ? this.getLiveDisputeReportReceipt(state.lastDisputeReport) : null,
       drillScenario,
       waitingReport: this.getLiveWaitingReport(state),
       inviteReport: state.inviteReport || null,
@@ -4639,6 +4700,32 @@ export const PVPScene = {
       setHint(replayFetched
         ? '已拉取权威回放并定位关键回合；这里只使用 replay_self 与公开事件序列，不读取隐藏手牌、牌库或事件 payload。'
         : '已定位关键回合；这里只使用公开事件序列，不读取隐藏手牌、牌库或事件 payload。');
+      return;
+    }
+    if (id === 'report_issue') {
+      const session = this.getLiveSession();
+      if (!session || typeof session.submitReport !== 'function') {
+        setHint('实时论道异常反馈服务未就绪。');
+        return;
+      }
+      const state = session.getState();
+      const review = this.getLivePostMatchReview(state && state.stateView ? state.stateView : null);
+      const reason = review && (review.finishReason === 'connection_timeout' || review.finishReason === 'timeout')
+        ? 'connection_review'
+        : 'fairness_review';
+      await session.submitReport({
+        reason,
+        message: review
+          ? `玩家从赛后复盘提交异常反馈：${review.finishReason || 'finished'} / ${review.result || 'result'}`
+          : '玩家从赛后复盘提交异常反馈'
+      });
+      this.liveReviewFocus = this.liveReviewFocus || 'events';
+      this.renderLivePanel();
+      const next = session.getState();
+      const receipt = this.getLiveDisputeReportReceipt(next.lastDisputeReport);
+      setHint(receipt
+        ? receipt.nextStepLine
+        : next.lastError && next.lastError.message || '异常反馈提交失败，请稍后重试。');
       return;
     }
     if (id === 'adjust_loadout') {

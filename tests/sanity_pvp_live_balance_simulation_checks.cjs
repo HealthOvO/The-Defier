@@ -155,12 +155,13 @@ assert.ok(
   'every entertainment audit post-game action should be covered by the audit-to-UI action bridge'
 );
 assert.ok(
-  postGameActionRows.flatMap(row => row.actions).every(actionId => actionId !== 'report_issue'),
-  'post-game action coverage should only contain implemented public review UI actions'
+  postGameActionRows.flatMap(row => row.actions).includes('report_issue'),
+  'post-game action coverage should include the implemented dispute report handoff'
 );
 assert.ok(
-  !bridgedAuditActions.has('report_issue'),
-  'post-game action bridge must not claim an unimplemented report_issue UI handoff'
+  bridgedAuditActions.has('report_issue')
+    && postGameActionBridge.uiActionIdsByAuditAction.report_issue.includes('report_issue'),
+  'post-game action bridge should map report_issue to the real dispute report UI button'
 );
 assert.ok(
   deckEditFollowThroughRate.trackable === true

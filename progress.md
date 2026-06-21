@@ -1,5 +1,34 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-21: V10-S21 live PVP dispute report receipt
+  - 本轮完成
+    - `server/routes/pvp-live.js` 新增 `/matches/:matchId/reports` 异常反馈入口：只有战局参与者能在 `finished / invalidated` 后提交，服务端返回 `pvp-live-dispute-report-receipt-v1` 和 `pvp-live-dispute-evidence-v1`，并持久化到 `pvp_live_dispute_reports`。
+    - 证据包只来自公开 state / 公开 post-match review evidence / 脱敏结算摘要 / 匹配质量摘要，固定 `sourceVisibility='audit_safe_public_state'`、`usesHiddenInformation=false`、`rankedImpact='none'`，不读取隐藏手牌、牌库顺序、随机种子或完整斗法谱。
+    - `server/pvp-live/engine/state-view.js` 与 `server/pvp-live/balance-simulation.js` 将 `report_issue` 从“未实现不得声明”升级为真实赛后 action bridge；娱乐性 quick / artifact / full gate 都要求 `report_issue -> report_issue` UI handoff 存在。
+    - `js/services/backend-client.js`、`js/services/pvp-service.js`、`js/services/pvp-live-session.js` 和 `js/scenes/pvp-scene.js` 接入异常反馈提交、session 回执、snapshot 回执和 `[data-live-dispute-report]` DOM；提交后只显示“已收到、不会立即改写结算”，不触发旧 PVP、残影、排队、奖励或自动处罚链。
+    - `css/pvp.css` 补轻量回执样式，确保举报回执不遮挡复盘、再战、练习、继续排位等核心赛后动作。
+    - subagent 巡检指出下一条高优先切片应转向 `setup/active` 对手构筑信息揭示脱敏：当前旧口径仍可能暴露 `loadoutHash / loadoutSummary / identitySlot`，这比继续叠 queue 护栏更接近真人 PVP 信任边界。
+  - 已验证
+    - 红测：`node tests/sanity_pvp_live_balance_simulation_checks.cjs` 在实现前失败于 post-game action coverage 缺少 `report_issue`。
+    - 红测：`node tests/sanity_pvp_live_route_checks.cjs` 在实现前失败于 finished review 缺少真实 `report_issue` action。
+    - 绿测：`node tests/sanity_pvp_live_balance_simulation_checks.cjs`
+    - 绿测：`node tests/sanity_pvp_live_route_checks.cjs`
+    - 绿测：`node tests/sanity_pvp_live_session_checks.mjs`
+    - 绿测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs`
+    - 绿测：`node tests/sanity_pvp_live_balance_artifact_checks.cjs`
+    - 绿测：`node tests/sanity_pvp_live_full_gate_balance_checks.cjs`
+    - 绿测：`node tests/sanity_release_gate_coverage_checks.cjs`
+    - 绿测：`node tests/sanity_pvp_live_ui_contract_checks.cjs`
+    - 语法：`node --check server/routes/pvp-live.js`
+    - 语法：`node --check js/scenes/pvp-scene.js`
+    - 语法：`node --check tests/browser_pvp_live_audit.mjs`
+    - 构建：`npm run build:pages`
+    - 浏览器审计：`node tests/browser_pvp_live_audit.mjs http://127.0.0.1:4173 output/pvp-live-dispute-report-audit`，97/97 findings、0 failed、0 console error。
+    - 全量 Node 门禁：`npm run test:node`，All node checks passed。
+    - Release 浏览器过滤门禁：`AUDIT_FILTER=pvp-live npm run test:browser:release`，All browser release audits passed。
+  - 当前结论
+    - live PVP 现在有了第一层可复核异常反馈闭环：玩家能在赛后提交异常，系统能保存脱敏证据包并给出稳定回执，但不会因为一次举报即时改分、发奖、处罚或泄露隐藏信息。这一片补的是结果可信度和申诉入口，不改变卡牌、先手护体、匹配、结算公式、正式积分或奖励。
+
 - 2026-06-21: V10-S20 live PVP low-sample waiting contract
   - 本轮完成
     - `server/pvp-live/live-store.js` 将低样本等待从单纯文案升级为结构化 `waitingReport` 合同：新增 `protectionReason / releaseMode / releaseAt / releaseInMs / requiresPoolSize / candidatePoolSize / currentEligibleActions`，让服务端响应和前端 snapshot 都能区分“需要第三名真人”“长等待已放行”和普通等待。

@@ -92,8 +92,8 @@ assert.strictEqual(artifactPostGameActionBridge.reportVersion, 'pvp-live-post-ga
 assert.ok(artifactPostGameActionBridge.uiActionIdsByAuditAction.key_turn_replay.includes('review_key_turns'), 'artifact action bridge should map key_turn_replay to the real review_key_turns UI button');
 assert.ok(artifactPostGameActionBridge.uiActionIdsByAuditAction.apply_loadout_recommendation.includes('adjust_loadout'), 'artifact action bridge should map loadout recommendation to the real adjust_loadout UI button');
 assert.ok(artifactPostGameActionBridge.uiActionIdsByAuditAction.practice_topic.includes('practice'), 'artifact action bridge should map practice_topic to the real practice UI button');
-assert.ok(!artifactPostGameActionBridge.coveredAuditActions.includes('report_issue'), 'artifact action bridge must not claim an unimplemented report_issue UI handoff');
-assert.ok(artifactPostGameRows.flatMap(row => row.actions).every(actionId => actionId !== 'report_issue'), 'artifact post-game action coverage should only contain implemented public review UI actions');
+assert.ok(artifactPostGameActionBridge.coveredAuditActions.includes('report_issue'), 'artifact action bridge should include the real dispute report handoff');
+assert.ok(artifactPostGameRows.flatMap(row => row.actions).includes('report_issue'), 'artifact post-game action coverage should include report_issue');
 assert.ok(
   Object.values(artifacts.simulationReport.archetypeSpread).every(report => !report.dominantRisk && !report.falseArchetypeRisk),
   'artifact quick report should keep the stabilized quick-gate archetype spread; full helper owns the S2-C pass gate'
