@@ -547,6 +547,35 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
         assert.equal(laterRequesterConsent.payload.stateView.matchQuality?.tag, 'wide_but_accepted', 'later accepted wide match should expose wide_but_accepted quality tag');
         assert.equal(laterRequesterConsent.payload.stateView.matchQuality?.wideMatchReason, 'two_sided_explicit_consent', 'later accepted wide match should explain explicit two-sided consent');
         pvpLiveRoutes.__livePvpStore.reset();
+
+        const previousWideScopeTestMode = process.env.DEFIER_PVP_TEST_MODE;
+        process.env.DEFIER_PVP_TEST_MODE = '1';
+        try {
+            const scopedWideA = await request(baseUrl, '/api/pvp/live/queue/join', {
+                method: 'POST',
+                token: tokenJ,
+                body: { displayName: '分池宽差甲', loadout: loadoutA, wideMatchConsent: true, testMatchScope: 'wide-scope-a' }
+            });
+            assert.equal(scopedWideA.payload.status, 'waiting', 'first scoped wide consent player should wait in its own pool');
+            const scopedWideB = await request(baseUrl, '/api/pvp/live/queue/join', {
+                method: 'POST',
+                token: tokenK,
+                body: { displayName: '分池宽差乙', loadout: loadoutB, wideMatchConsent: true, testMatchScope: 'wide-scope-b' }
+            });
+            assert.equal(scopedWideB.payload.status, 'waiting', 'different scoped wide consent player should not match across pools');
+            assert.equal(scopedWideB.payload.waitingReport?.candidatePoolSize, 1, 'wide consent waiting report should count only the scoped candidate pool');
+            assert.equal(scopedWideB.payload.waitingReport?.wideMatchConsent?.acceptedPlayerCount, 1, 'wide consent report should count only accepted players in the same scoped pool');
+            const scopedWideAStatus = await request(baseUrl, `/api/pvp/live/queue/status/${scopedWideA.payload.queueTicket}`, {
+                token: tokenJ
+            });
+            assert.equal(scopedWideAStatus.payload.status, 'waiting', 'scoped wide queue status should remain waiting in its own pool');
+            assert.equal(scopedWideAStatus.payload.waitingReport?.candidatePoolSize, 1, 'queue status waiting report should keep scoped candidate pool size');
+            assert.equal(scopedWideAStatus.payload.waitingReport?.wideMatchConsent?.acceptedPlayerCount, 1, 'queue status wide consent report should keep scoped accepted count');
+        } finally {
+            if (previousWideScopeTestMode === undefined) delete process.env.DEFIER_PVP_TEST_MODE;
+            else process.env.DEFIER_PVP_TEST_MODE = previousWideScopeTestMode;
+            pvpLiveRoutes.__livePvpStore.reset();
+        }
         pvpLiveRoutes.__attachServices({ ratingProvider: null });
 
         const inviteC = await request(baseUrl, '/api/pvp/live/invites', {

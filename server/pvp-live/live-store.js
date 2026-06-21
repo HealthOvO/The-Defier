@@ -1783,10 +1783,21 @@ class LivePvpStore {
         return this.makeWaitingQueueResult(queueEntry);
     }
 
-    makeWideMatchConsentWaitingInput(queueEntry, candidatePoolSize = 1) {
-        const activeQueueEntries = this.waitingQueue.filter(entry =>
-            entry && entry.player && entry.queueTicket && !this.consumedQueueTickets.has(entry.queueTicket)
+    getWaitingEntriesForQueuePool(queueEntry) {
+        const queueScope = getQueueEntryTestMatchScope(queueEntry);
+        return this.waitingQueue.filter(entry =>
+            entry
+            && entry.player
+            && entry.queueTicket
+            && !this.consumedQueueTickets.has(entry.queueTicket)
+            && getQueueEntryTestMatchScope(entry) === queueScope
         );
+    }
+
+    makeWideMatchConsentWaitingInput(queueEntry, candidatePoolSize = 1, poolEntries = null) {
+        const activeQueueEntries = Array.isArray(poolEntries)
+            ? poolEntries
+            : this.getWaitingEntriesForQueuePool(queueEntry);
         return {
             viewerAccepted: queueEntry && queueEntry.wideMatchConsent === true,
             acceptedPlayerCount: activeQueueEntries.filter(entry => entry && entry.wideMatchConsent === true).length,
@@ -1798,10 +1809,8 @@ class LivePvpStore {
     makeWaitingQueueResult(queueEntry) {
         const createdAt = Math.floor(Number(queueEntry && queueEntry.createdAt) || this.now());
         const waitMs = Math.max(0, this.now() - createdAt);
-        const candidatePoolSize = Math.max(
-            1,
-            this.waitingQueue.filter(entry => entry && entry.player && !this.consumedQueueTickets.has(entry.queueTicket)).length
-        );
+        const poolEntries = this.getWaitingEntriesForQueuePool(queueEntry);
+        const candidatePoolSize = Math.max(1, poolEntries.length);
         return {
             status: 'waiting',
             queueTicket: queueEntry.queueTicket,
@@ -1814,7 +1823,7 @@ class LivePvpStore {
                 createdAt,
                 now: this.now(),
                 candidatePoolSize,
-                wideMatchConsent: this.makeWideMatchConsentWaitingInput(queueEntry, candidatePoolSize)
+                wideMatchConsent: this.makeWideMatchConsentWaitingInput(queueEntry, candidatePoolSize, poolEntries)
             })
         };
     }
@@ -1872,10 +1881,8 @@ class LivePvpStore {
         if (!localQueueEntry) {
             await this.hydrateWaitingQueueEntriesExceptUser(queueEntry.player.userId);
         }
-        const candidatePoolSize = Math.max(
-            1,
-            this.waitingQueue.filter(entry => entry && entry.player && !this.consumedQueueTickets.has(entry.queueTicket)).length
-        );
+        const poolEntries = this.getWaitingEntriesForQueuePool(queueEntry);
+        const candidatePoolSize = Math.max(1, poolEntries.length);
         return {
             status: 'waiting',
             queueTicket: ticket,
@@ -1888,7 +1895,7 @@ class LivePvpStore {
                 createdAt: Math.floor(Number(queueEntry.createdAt) || this.now()),
                 now: this.now(),
                 candidatePoolSize,
-                wideMatchConsent: this.makeWideMatchConsentWaitingInput(queueEntry, candidatePoolSize)
+                wideMatchConsent: this.makeWideMatchConsentWaitingInput(queueEntry, candidatePoolSize, poolEntries)
             })
         };
     }

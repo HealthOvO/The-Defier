@@ -1,5 +1,22 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-21: V10-S28 live PVP scoped wide-match consent counts
+  - 本轮完成
+    - `server/pvp-live/live-store.js` 将 `waitingReport.candidatePoolSize` 与 `wideMatchConsent.acceptedPlayerCount` 从全 waiting queue 统计收紧为同一个可匹配池统计：只计算与当前票据 `testMatchScope` 一致、未 consumed、仍 active waiting 的队列项。
+    - 新增 `getWaitingEntriesForQueuePool()` 作为 waiting report 的单点来源，`makeWaitingQueueResult()` 与 `/queue/status` 的 `getQueueStatus()` 复用同一池，避免 join 响应和轮询状态口径分叉。
+    - `makeWideMatchConsentWaitingInput()` 现在接收已筛好的 pool entries，宽分差同意数不再把另一个匹配池里的已确认玩家算进来；这只修正展示合同，不改变 `selectQueueOpponent()` 的真实匹配放行规则。
+    - `tests/sanity_pvp_live_route_checks.cjs` 新增 scoped queue 回归：在 `DEFIER_PVP_TEST_MODE=1` 下构造两个已确认宽分差但 `testMatchScope` 不同的等待者，断言双方不跨池匹配，join response 与 `/queue/status` 都只显示 `candidatePoolSize=1 / acceptedPlayerCount=1`。
+  - 已验证
+    - 红测：`node tests/sanity_pvp_live_route_checks.cjs` 在 scoped wide consent 计数收口前失败于 `wide consent waiting report should count only the scoped candidate pool`，实际为 2。
+    - 绿测：`node tests/sanity_pvp_live_route_checks.cjs`
+    - 语法：`node --check server/pvp-live/live-store.js`
+    - 语法：`node --check tests/sanity_pvp_live_route_checks.cjs`
+    - 文档同步：`node tests/sanity_intro_progress_sync_checks.cjs`
+    - 全量 Node 门禁：`npm run test:node`，All node checks passed。
+    - 构建：`npm run build:pages`
+  - 当前结论
+    - live PVP 的宽分差等待合同现在不只“能看到我已确认”，还会避免把其他匹配池的确认人数混进本池，减少玩家看到“好像双方都确认了但仍不成局”的误解。正式成局门槛、评分分桶、长等待策略、奖励和结算都未改变。
+
 - 2026-06-21: V10-S27 live PVP wide-match consent visibility
   - 本轮完成
     - `server/pvp-live/live-store.js` 为 `waitingReport` 新增 `wideMatchConsent` 合同：公开 `viewerAccepted / requiresBothPlayers / requiredAcceptedPlayers / acceptedPlayerCount / candidatePoolSize / matchReady / status / detail`，让玩家能看到“我已确认宽分差、仍需对方也确认、等待态还没满足成局”。
