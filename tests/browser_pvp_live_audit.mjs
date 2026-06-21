@@ -3538,6 +3538,7 @@ async function safeElementScreenshot(page, selector, outputPath) {
     seasonGoalSource: document.querySelector('[data-live-season-goal]')?.getAttribute('data-live-season-goal-source') || '',
     seasonGoalHidden: document.querySelector('[data-live-season-goal]')?.getAttribute('data-live-season-goal-hidden') || '',
     seasonGoalActionIds: Array.from(document.querySelectorAll('[data-live-season-goal-action]')).map(button => button.getAttribute('data-live-season-goal-action')),
+    seasonGoalDismissText: document.querySelector('[data-live-season-goal-dismiss]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
     loadoutRecommendationText: document.querySelector('[data-live-loadout-recommendation]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
     loadoutRecommendationSource: document.querySelector('[data-live-loadout-recommendation]')?.getAttribute('data-live-loadout-recommendation-source') || '',
     loadoutRecommendationHidden: document.querySelector('[data-live-loadout-recommendation]')?.getAttribute('data-live-loadout-recommendation-hidden') || '',
@@ -3659,6 +3660,7 @@ async function safeElementScreenshot(page, selector, outputPath) {
       && surrenderProbe.seasonGoalSource === 'public_review'
       && surrenderProbe.seasonGoalHidden === 'false'
       && surrenderProbe.seasonGoalActionIds.includes('practice')
+      && /本次不再提示/.test(surrenderProbe.seasonGoalDismissText)
       && surrenderProbe.seasonGoalPayload?.reportVersion === 'pvp-live-season-goal-v1'
       && surrenderProbe.seasonGoalPayload?.sourceVisibility === 'public_review'
       && surrenderProbe.seasonGoalPayload?.usesHiddenInformation === false
@@ -3681,11 +3683,126 @@ async function safeElementScreenshot(page, selector, outputPath) {
   add(
     'live UI dismisses season goal locally without hiding post-match review',
     seasonGoalDismissProbe.visibleGoalCount === 0
-      && /已关闭本赛季复盘目标提示/.test(seasonGoalDismissProbe.hint)
-      && seasonGoalDismissProbe.seasonGoalPayload?.dismissState === 'dismissed_until_season'
+      && /已关闭当前复盘目标提示/.test(seasonGoalDismissProbe.hint)
+      && seasonGoalDismissProbe.seasonGoalPayload?.dismissState === 'dismissed_for_trigger'
       && seasonGoalDismissProbe.seasonGoalPayload?.rankedImpact === 'none'
       && seasonGoalDismissProbe.postReviewStillVisible === true,
     JSON.stringify(seasonGoalDismissProbe),
+  );
+
+  const seasonGoalRecoveryProbe = await page.evaluate(() => {
+    const scene = window.PVPScene;
+    const session = scene.getLiveSession();
+    const seasonId = 's1-browser-recovery';
+    const makeBadReview = (matchId, reasons) => ({
+      reportVersion: 'pvp-live-post-match-review-v1',
+      result: 'loss',
+      winnerSeat: 'B',
+      loserSeat: 'A',
+      finishReason: 'lethal',
+      title: '短局复盘 MVP',
+      summary: '本局公开行动窗口偏短，先复盘再决定是否继续排位。',
+      evidence: [
+        { eventType: 'battle_started', sequence: 1, actingSeat: 'A', publicData: { firstSeat: 'A' } },
+        { eventType: 'match_finished', sequence: 2, actingSeat: 'A', publicData: { winnerSeat: 'B', loserSeat: 'A', finishReason: 'lethal' } },
+      ],
+      experienceReport: {
+        reportVersion: 'pvp-live-experience-report-v1',
+        sourceVisibility: 'public_events',
+        usesHiddenInformation: false,
+        rankedImpact: 'none',
+        nonGameRisk: 'watch',
+        nonGameRiskReasons: reasons,
+        agencyLabel: '败方窗口偏短',
+        decisionWindowCount: 1,
+        seatWindowSummary: {
+          firstSeat: 'A',
+          secondSeat: 'B',
+          secondSeatWindowObserved: false,
+          terminalBeforeSecondSeatWindow: true,
+        },
+        effectiveActionReport: {
+          reportVersion: 'pvp-live-effective-action-report-v1',
+          sourceVisibility: 'public_events',
+          usesHiddenInformation: false,
+          rankedImpact: 'none',
+          secondSeat: 'B',
+          secondSeatState: 'missing_window',
+          reasons: ['missing_public_second_seat_window'],
+          evidence: [],
+          summary: '公开事件未证明后手获得过有效行动窗口。',
+        },
+        safeguardSummary: {
+          setupReady: 'confirmed',
+          firstActionBudget: 'not_observable',
+          openingProtection: 'not_observable',
+          effectiveAction: 'missing_window',
+        },
+        summary: '本局公开决策窗口偏短，建议先复盘关键回合再继续排位。',
+        recommendedAction: 'review_key_turns',
+        fairnessChecks: [
+          {
+            id: 'decision_windows',
+            label: '公开决策窗口',
+            passed: false,
+            detail: '公开窗口偏短，下一局优先看是否存在过早终结。',
+            linkedEvidence: [{ eventType: 'battle_started', sequence: 1, actingSeat: 'A', publicData: { firstSeat: 'A' } }],
+          },
+          {
+            id: 'second_seat_effective_action',
+            label: '后手有效行动',
+            passed: false,
+            detail: '公开事件未证明后手获得过有效行动窗口。',
+            linkedEvidence: [{ eventType: 'match_finished', sequence: 2, actingSeat: 'A', publicData: { winnerSeat: 'B', loserSeat: 'A' } }],
+          },
+        ],
+      },
+      nextActions: [
+        { id: 'review_events', label: '查看权威事件' },
+        { id: 'practice', label: '问道练习' },
+        { id: 'queue_again', label: '继续真人排位' },
+      ],
+    });
+    const viewFor = (matchId, reasons) => ({
+      matchId,
+      status: 'finished',
+      matchQuality: { seasonId },
+      postMatchReview: makeBadReview(matchId, reasons),
+    });
+    const firstView = viewFor('pvplm-browser-recovery-001', ['short_public_decision_window', 'missing_public_second_seat_window']);
+    const firstGoal = scene.getLiveSeasonGoalCard(firstView);
+    const dismissed = session.dismissSeasonGoal(seasonId);
+    const secondView = viewFor('pvplm-browser-recovery-002', ['terminal_before_second_seat_window', 'missing_public_second_seat_window']);
+    const secondGoal = scene.getLiveSeasonGoalCard(secondView);
+    const host = document.createElement('div');
+    host.innerHTML = scene.renderLiveSeasonGoalCard(secondView);
+    const card = host.querySelector('[data-live-season-goal]');
+    return {
+      firstGoal,
+      dismissed,
+      secondGoal,
+      cardText: card?.textContent?.replace(/\s+/g, ' ').trim() || '',
+      cardMode: card?.getAttribute('data-live-season-goal-mode') || '',
+      cardDismissState: card?.getAttribute('data-live-season-goal-dismiss-state') || '',
+      actionIds: Array.from(host.querySelectorAll('[data-live-season-goal-action]')).map(button => button.getAttribute('data-live-season-goal-action')),
+    };
+  });
+  add(
+    'live UI reactivates local recovery goal after consecutive low-agency losses',
+    seasonGoalRecoveryProbe.firstGoal?.badExperienceStreak === 1
+      && seasonGoalRecoveryProbe.dismissed?.dismissedUntilSeason === 's1-browser-recovery'
+      && seasonGoalRecoveryProbe.secondGoal?.badExperienceStreak === 2
+      && seasonGoalRecoveryProbe.secondGoal?.recoveryState === 'practice_recommended'
+      && seasonGoalRecoveryProbe.secondGoal?.recoveryReason === 'consecutive_low_agency_losses'
+      && seasonGoalRecoveryProbe.secondGoal?.dismissState === 'active'
+      && seasonGoalRecoveryProbe.secondGoal?.recommendedMode === 'practice'
+      && /连续短局先练再排|连续 2 场低行动感失败/.test(seasonGoalRecoveryProbe.cardText)
+      && /问道练习/.test(seasonGoalRecoveryProbe.cardText)
+      && seasonGoalRecoveryProbe.cardMode === 'practice'
+      && seasonGoalRecoveryProbe.cardDismissState === 'active'
+      && seasonGoalRecoveryProbe.actionIds.includes('practice')
+      && !/payload|hand|deck|cardId|instanceId|loadoutSnapshot|reward|rating|elo/i.test(JSON.stringify(seasonGoalRecoveryProbe.secondGoal || {})),
+    JSON.stringify(seasonGoalRecoveryProbe),
   );
 
   await page.click('[data-live-experience-check="decision_windows"]', { timeout: 5000, force: true });

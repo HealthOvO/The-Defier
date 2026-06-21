@@ -34,6 +34,11 @@ const ALLOWED_SEASON_GOAL_ACTIONS = Object.freeze([
   'review_key_turns',
   'report_issue'
 ]);
+const ALLOWED_SEASON_GOAL_RECOVERY_STATES = Object.freeze([
+  'stable',
+  'observing',
+  'practice_recommended'
+]);
 
 function cloneData(value) {
   if (value === undefined || value === null) return value;
@@ -329,12 +334,34 @@ export function createPvpLiveSession({
     const recommendedMode = ['queue_again', 'practice', 'friendly_rematch', 'adjust_loadout'].includes(String(source.recommendedMode || ''))
       ? String(source.recommendedMode)
       : '';
+    const recoveryState = ALLOWED_SEASON_GOAL_RECOVERY_STATES.includes(String(source.recoveryState || ''))
+      ? String(source.recoveryState)
+      : 'stable';
+    const recoveryActions = Array.isArray(source.recoveryActions)
+      ? source.recoveryActions
+        .map(item => String(item || ''))
+        .filter(item => ALLOWED_SEASON_GOAL_ACTIONS.includes(item))
+        .slice(0, 6)
+      : [];
+    const lastBadExperienceReasons = Array.isArray(source.lastBadExperienceReasons)
+      ? source.lastBadExperienceReasons.map(item => String(item || '').trim()).filter(Boolean).slice(0, 6)
+      : [];
     return {
       version: 1,
       seasonId: safeSeasonId,
       lastReviewAction: actionId,
       recommendedMode,
       lastMatchId: String(source.lastMatchId || '').slice(0, 96),
+      lastReviewResult: String(source.lastReviewResult || '').slice(0, 32),
+      lastReviewRisk: String(source.lastReviewRisk || '').slice(0, 32),
+      badExperienceStreak: Math.max(0, Math.min(9, Math.floor(Number(source.badExperienceStreak) || 0))),
+      lastBadExperienceMatchId: String(source.lastBadExperienceMatchId || '').slice(0, 96),
+      lastBadExperienceReasons,
+      recoveryState,
+      recoveryReason: String(source.recoveryReason || '').slice(0, 64),
+      recoveryLine: String(source.recoveryLine || '').slice(0, 180),
+      recoveryActions,
+      dismissedForMatchId: String(source.dismissedForMatchId || '').slice(0, 96),
       dismissedUntilSeason: source.dismissedUntilSeason && normalizeSeasonId(source.dismissedUntilSeason) === safeSeasonId ? safeSeasonId : '',
       updatedAt: Math.max(0, Math.floor(Number(source.updatedAt) || 0))
     };
@@ -385,8 +412,115 @@ export function createPvpLiveSession({
     });
   };
 
+  const getReviewActionIds = (review = {}) => {
+    const actions = Array.isArray(review && review.nextActions) ? review.nextActions : [];
+    const ids = actions
+      .map(action => String(action && action.id || '').trim())
+      .filter(actionId => ALLOWED_SEASON_GOAL_ACTIONS.includes(actionId));
+    return Array.from(new Set(ids));
+  };
+
+  const getReviewExperienceRisk = (review = {}) => {
+    const report = review && review.experienceReport && typeof review.experienceReport === 'object'
+      ? review.experienceReport
+      : {};
+    return String(report.nonGameRisk || '').trim();
+  };
+
+  const getReviewBadExperienceReasons = (review = {}) => {
+    const report = review && review.experienceReport && typeof review.experienceReport === 'object'
+      ? review.experienceReport
+      : {};
+    const reasons = Array.isArray(report.nonGameRiskReasons)
+      ? report.nonGameRiskReasons.map(item => String(item || '').trim()).filter(Boolean)
+      : [];
+    const effectiveReport = report.effectiveActionReport && typeof report.effectiveActionReport === 'object'
+      ? report.effectiveActionReport
+      : {};
+    const secondSeatState = String(effectiveReport.secondSeatState || report.safeguardSummary && report.safeguardSummary.effectiveAction || '').trim();
+    if (secondSeatState && secondSeatState !== 'confirmed') {
+      reasons.push(`effective_action_${secondSeatState}`);
+    }
+    return Array.from(new Set(reasons)).slice(0, 6);
+  };
+
+  const isBadExperienceReview = (review = {}) => {
+    const result = String(review && review.result || '').trim();
+    if (result !== 'loss') return false;
+    const risk = getReviewExperienceRisk(review);
+    const reasons = getReviewBadExperienceReasons(review);
+    if (risk === 'watch') return true;
+    return reasons.some(reason => /short_public_decision_window|missing_public_second_seat_window|second_seat_window_without_public_positive_change|effective_action_(watch|missing_window)/.test(reason));
+  };
+
+  const resolveReviewRecommendedMode = (review = {}, actionIds = [], forcePractice = false) => {
+    const actions = new Set(actionIds);
+    const result = String(review && review.result || '').trim();
+    const risk = getReviewExperienceRisk(review);
+    if (forcePractice && actions.has('practice')) return 'practice';
+    if ((result === 'loss' || risk === 'watch') && actions.has('practice')) return 'practice';
+    if ((result === 'loss' || risk === 'watch') && actions.has('adjust_loadout')) return 'adjust_loadout';
+    if (result === 'win' && actions.has('queue_again')) return 'queue_again';
+    if (actions.has('friendly_rematch')) return 'friendly_rematch';
+    if (actions.has('adjust_loadout')) return 'adjust_loadout';
+    if (actions.has('queue_again')) return 'queue_again';
+    if (actions.has('practice')) return 'practice';
+    return '';
+  };
+
+  const syncSeasonGoalFromReview = ({
+    seasonId = '',
+    matchId = '',
+    review = {}
+  } = {}) => {
+    const safeSeasonId = normalizeSeasonId(seasonId);
+    const sourceReview = review && typeof review === 'object' ? review : {};
+    const reviewMatchId = String(matchId || sourceReview.matchId || '').slice(0, 96);
+    const stored = readSeasonGoalState(safeSeasonId);
+    if (!reviewMatchId) {
+      return stored;
+    }
+    if (reviewMatchId && stored.lastMatchId === reviewMatchId) {
+      return stored;
+    }
+    const actionIds = getReviewActionIds(sourceReview);
+    const badExperience = isBadExperienceReview(sourceReview);
+    const nextBadExperienceStreak = badExperience ? stored.badExperienceStreak + 1 : 0;
+    const recoveryState = badExperience
+      ? nextBadExperienceStreak >= 2 ? 'practice_recommended' : 'observing'
+      : 'stable';
+    const recoveryReason = recoveryState === 'practice_recommended'
+      ? 'consecutive_low_agency_losses'
+      : badExperience ? 'low_agency_loss_observed' : '';
+    const recoveryActions = actionIds.length > 0
+      ? actionIds
+      : recoveryState === 'practice_recommended' ? ['practice', 'queue_again'] : [];
+    const recommendedMode = resolveReviewRecommendedMode(sourceReview, recoveryActions, recoveryState === 'practice_recommended');
+    const recoveryLine = recoveryState === 'practice_recommended'
+      ? `连续 ${nextBadExperienceStreak} 场低行动感失败，先进入问道练习复刻公开窗口，再手动决定是否继续真人排位。`
+      : badExperience
+        ? '本局公开行动窗口偏短，先观察下一局是否重复出现。'
+        : '';
+    return writeSeasonGoalState(safeSeasonId, {
+      lastMatchId: reviewMatchId,
+      lastReviewResult: String(sourceReview.result || ''),
+      lastReviewRisk: getReviewExperienceRisk(sourceReview),
+      recommendedMode,
+      badExperienceStreak: nextBadExperienceStreak,
+      lastBadExperienceMatchId: badExperience ? reviewMatchId : '',
+      lastBadExperienceReasons: badExperience ? getReviewBadExperienceReasons(sourceReview) : [],
+      recoveryState,
+      recoveryReason,
+      recoveryLine,
+      recoveryActions,
+      dismissedUntilSeason: recoveryState === 'practice_recommended' ? '' : stored.dismissedUntilSeason,
+      dismissedForMatchId: recoveryState === 'practice_recommended' ? '' : stored.dismissedForMatchId
+    });
+  };
+
   const dismissSeasonGoal = (seasonId = '') => writeSeasonGoalState(seasonId, {
-    dismissedUntilSeason: normalizeSeasonId(seasonId)
+    dismissedUntilSeason: normalizeSeasonId(seasonId),
+    dismissedForMatchId: readSeasonGoalState(seasonId).lastMatchId
   });
 
   const readStoredTerminalMatchId = () => {
@@ -1661,6 +1795,7 @@ export function createPvpLiveSession({
     heartbeatRealtime,
     disconnectRealtime,
     getSeasonGoalState: readSeasonGoalState,
+    syncSeasonGoalFromReview,
     recordSeasonGoalAction,
     dismissSeasonGoal,
     getReplay,

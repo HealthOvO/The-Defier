@@ -1975,6 +1975,105 @@ await staleHttpSession.submitIntent({
 assert.equal(staleHttpSession.getState().stateView.stateVersion, 9, 'stale HTTP intent result should not downgrade authoritative stateVersion');
 assert.equal(staleHttpSession.getState().lastEvents[0].eventType, 'fresh_http_anchor', 'stale HTTP intent result should not downgrade public events');
 
+const recoveryStorage = createMemoryStorage();
+const recoverySession = createPvpLiveSession({
+  storage: recoveryStorage,
+  userScope: 'low-sample-user',
+  now: () => 1781871000000
+});
+const firstBadReview = {
+  reportVersion: 'pvp-live-post-match-review-v1',
+  result: 'loss',
+  matchId: 'pvplm-recovery-001',
+  finishReason: 'lethal',
+  experienceReport: {
+    reportVersion: 'pvp-live-experience-report-v1',
+    nonGameRisk: 'watch',
+    nonGameRiskReasons: ['short_public_decision_window', 'missing_public_second_seat_window'],
+    effectiveActionReport: {
+      reportVersion: 'pvp-live-effective-action-report-v1',
+      secondSeatState: 'missing_window'
+    }
+  },
+  nextActions: [
+    { id: 'practice', label: '问道练习' },
+    { id: 'queue_again', label: '继续真人排位' }
+  ]
+};
+const firstRecoveryGoal = recoverySession.syncSeasonGoalFromReview({
+  seasonId: 's1-genesis',
+  matchId: 'pvplm-recovery-001',
+  review: firstBadReview
+});
+assert.equal(firstRecoveryGoal.badExperienceStreak, 1, 'first low-agency loss should start the bad-experience streak');
+assert.equal(firstRecoveryGoal.recoveryState, 'observing', 'first low-agency loss should stay in observing recovery state');
+assert.equal(firstRecoveryGoal.recommendedMode, 'practice', 'first low-agency loss should still recommend practice from public review');
+
+const duplicateRecoveryGoal = recoverySession.syncSeasonGoalFromReview({
+  seasonId: 's1-genesis',
+  matchId: 'pvplm-recovery-001',
+  review: firstBadReview
+});
+assert.equal(duplicateRecoveryGoal.badExperienceStreak, 1, 'same terminal review should not double-count the bad-experience streak');
+const missingMatchRecoveryGoal = recoverySession.syncSeasonGoalFromReview({
+  seasonId: 's1-missing-match',
+  review: {
+    ...firstBadReview,
+    matchId: ''
+  }
+});
+assert.equal(missingMatchRecoveryGoal.badExperienceStreak, 0, 'review without a match id should not mutate local bad-experience streak during render');
+assert.equal(missingMatchRecoveryGoal.recoveryState, 'stable', 'review without a match id should remain a read-only season goal snapshot');
+const dismissedRecoveryGoal = recoverySession.dismissSeasonGoal('s1-genesis');
+assert.equal(dismissedRecoveryGoal.dismissedUntilSeason, 's1-genesis', 'manual dismiss should still hide the current season goal before a stronger trigger appears');
+
+const secondRecoveryGoal = recoverySession.syncSeasonGoalFromReview({
+  seasonId: 's1-genesis',
+  matchId: 'pvplm-recovery-002',
+  review: {
+    ...firstBadReview,
+    matchId: 'pvplm-recovery-002',
+    experienceReport: {
+      ...firstBadReview.experienceReport,
+      nonGameRiskReasons: ['second_seat_window_without_public_positive_change']
+    }
+  }
+});
+assert.equal(secondRecoveryGoal.badExperienceStreak, 2, 'second consecutive low-agency loss should retain the streak count');
+assert.equal(secondRecoveryGoal.recoveryState, 'practice_recommended', 'second consecutive low-agency loss should open the recovery diversion');
+assert.equal(secondRecoveryGoal.recoveryReason, 'consecutive_low_agency_losses', 'recovery diversion should expose a structured reason');
+assert.equal(secondRecoveryGoal.recommendedMode, 'practice', 'recovery diversion should prefer practice over default queue again');
+assert.equal(secondRecoveryGoal.dismissedUntilSeason, '', 'new consecutive bad-experience trigger should reactivate a previously dismissed season goal');
+assert.equal(secondRecoveryGoal.dismissedForMatchId, '', 'new consecutive bad-experience trigger should not inherit the previous match dismissal');
+assert.ok(secondRecoveryGoal.recoveryActions.includes('practice'), 'recovery diversion should preserve a no-score practice action');
+assert.ok(secondRecoveryGoal.recoveryActions.includes('queue_again'), 'recovery diversion should keep manual real-queue agency instead of auto-queueing');
+assert.ok(/连续/.test(secondRecoveryGoal.recoveryLine || '') && /练习/.test(secondRecoveryGoal.recoveryLine || ''), 'recovery diversion should explain why practice comes first');
+assert.ok(!/rating|elo|reward|hand|deck|payload/i.test(JSON.stringify(secondRecoveryGoal)), 'local recovery goal must not leak hidden data or imply ranked compensation');
+
+const recoveredGoal = recoverySession.syncSeasonGoalFromReview({
+  seasonId: 's1-genesis',
+  matchId: 'pvplm-recovery-003',
+  review: {
+    reportVersion: 'pvp-live-post-match-review-v1',
+    result: 'win',
+    matchId: 'pvplm-recovery-003',
+    finishReason: 'lethal',
+    experienceReport: {
+      reportVersion: 'pvp-live-experience-report-v1',
+      nonGameRisk: 'low',
+      nonGameRiskReasons: ['public_events_show_readable_windows'],
+      effectiveActionReport: {
+        reportVersion: 'pvp-live-effective-action-report-v1',
+        secondSeatState: 'confirmed'
+      }
+    },
+    nextActions: [{ id: 'queue_again', label: '继续真人排位' }]
+  }
+});
+assert.equal(recoveredGoal.badExperienceStreak, 0, 'readable win should clear the bad-experience streak');
+assert.equal(recoveredGoal.recoveryState, 'stable', 'readable win should return the local recovery state to stable');
+assert.equal(recoveredGoal.recommendedMode, 'queue_again', 'stable readable win can recommend queue again');
+
 assert.ok(!calls.some(call => call.method === 'reportMatchResult' || call.method === 'findOpponent'), 'live session should not use legacy PVP paths');
 
 console.log('sanity_pvp_live_session_checks passed');

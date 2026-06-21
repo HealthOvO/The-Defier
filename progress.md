@@ -1,5 +1,28 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-21: V10-S31 live PVP consecutive bad-experience recovery loop
+  - 本轮完成
+    - `js/services/pvp-live-session.js` 为本地 `seasonGoal` 增加跨局恢复状态：按用户 / 赛季隔离记录 `badExperienceStreak`、`recoveryState`、`recoveryReason`、`recoveryLine`、`recoveryActions` 和 `dismissedForMatchId`，只使用公开 `postMatchReview.experienceReport` 判断低行动感败局，不读取隐藏手牌、牌库或原始 payload。
+    - 新增 `syncSeasonGoalFromReview()`：同一 `matchId` 不重复累计；连续第二场 `nonGameRisk=watch`、短公开窗口或后手无有效行动的败局，会从 `observing` 升级为 `practice_recommended`，默认推荐 `practice`，但仍保留 `queue_again` 作为手动真人排位入口。
+    - “本次不再提示”会隐藏当前复盘目标卡；当新 `matchId` 触发连续坏体验恢复闭环时，会清空旧 dismiss，让更强恢复提示重新出现，避免玩家第一次关闭后后续更糟糕样本被静默，同时不再承诺整季关闭。
+    - `js/scenes/pvp-scene.js` 将赛后目标卡接入 `syncSeasonGoalFromReview()`，并把 `badExperienceStreak / recoveryState / recoveryReason / recoveryLine` 投影到 snapshot；连续恢复态文案变为“连续短局先练再排”，强调先问道练习复刻公开窗口，再手动决定是否继续真人排位。
+    - `tests/browser_pvp_live_audit.mjs` 新增真实页面 probe：同一浏览器 session 先写入第一场坏体验并 dismiss，再注入第二场坏体验，断言 season goal 重新 active、`badExperienceStreak=2`、`recoveryState=practice_recommended`、按钮默认 `practice`，且不含 hidden / rating / ELO 泄漏。
+  - 已验证
+    - 红测：`node tests/sanity_pvp_live_session_checks.mjs` 在实现前失败于 `syncSeasonGoalFromReview is not a function`。
+    - 红测：`node tests/sanity_pvp_live_session_checks.mjs` 在 dismiss 失效收口前失败于 `new consecutive bad-experience trigger should reactivate a previously dismissed season goal`，实际 `dismissedUntilSeason='s1-genesis'`。
+    - 红测：`node tests/sanity_pvp_live_session_checks.mjs` 在无 `matchId` 幂等保护前失败于 `review without a match id should not mutate local bad-experience streak during render`，实际 `badExperienceStreak=1`。
+    - 红测：`node tests/sanity_pvp_live_ui_contract_checks.cjs` 在场景层接入前失败于缺少 `syncSeasonGoalFromReview({` marker。
+    - challenger 修复：按钮与 payload 从“本赛季不再提示 / dismissed_until_season”收口为“本次不再提示 / dismissed_for_trigger”，并在浏览器审计里补按钮文案和 `reward` 泄漏断言。
+    - 绿测：`node tests/sanity_pvp_live_session_checks.mjs`
+    - 绿测：`node tests/sanity_pvp_live_ui_contract_checks.cjs`
+    - 绿测：`node tests/sanity_release_gate_coverage_checks.cjs`
+    - 浏览器审计：`node tests/browser_pvp_live_audit.mjs http://127.0.0.1:4173 output/pvp-live-recovery-loop-audit`，103/103 findings、0 failed、0 console error。
+    - 浏览器审计复跑：`node tests/browser_pvp_live_audit.mjs http://127.0.0.1:4173 output/pvp-live-recovery-loop-audit-rerun`，103/103 findings、0 failed、0 console error。
+    - 全量 Node 门禁：`npm run test:node`，All node checks passed。
+    - 构建：`npm run build:pages`
+  - 当前结论
+    - live PVP 已有的单局公平 / 有效行动诊断现在能闭到跨局恢复体验：连续低行动感失败不会继续把“再排一局”当作唯一前台节奏，而是把无分练习作为默认建议，同时保留玩家手动继续真人排位的选择。该切片只改本地复盘目标和前端推荐，不改变服务端匹配、战斗数值、先后手、正式结算、奖励或积分。
+
 - 2026-06-21: V10-S30 live PVP matched queue ticket cleanup
   - 本轮完成
     - `js/services/pvp-live-session.js` 收口 waiting -> matched 与 immediate matched 两条 session 入口：一旦服务端已返回 matched / setup 状态，前端 session 会显式清空 `queueTicket`，不再把已成局玩家继续标成持有排队票据。

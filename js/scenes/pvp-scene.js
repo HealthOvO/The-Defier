@@ -2999,8 +2999,16 @@ export const PVPScene = {
     if (actionIds.has('queue_again')) return 'queue_again';
     return 'practice';
   },
-  getLiveSeasonGoalCopy(mode, review) {
+  getLiveSeasonGoalCopy(mode, review, goalState = null) {
     const result = String(review && review.result || '');
+    const recoveryState = String(goalState && goalState.recoveryState || '');
+    if (recoveryState === 'practice_recommended') {
+      return {
+        label: '问道练习',
+        title: '本赛季下一局目标：连续短局先练再排',
+        detail: String(goalState && goalState.recoveryLine || '') || '连续低行动感失败后，先用练习复刻公开窗口，再手动决定是否继续真人排位。'
+      };
+    }
     const copies = {
       practice: {
         label: '问道练习',
@@ -3032,11 +3040,24 @@ export const PVPScene = {
     if (!review) return null;
     const seasonId = this.getLiveSeasonGoalSeasonId(view);
     const session = this.getLiveSession();
-    const stored = session && typeof session.getSeasonGoalState === 'function'
-      ? session.getSeasonGoalState(seasonId)
-      : { seasonId, lastReviewAction: '', recommendedMode: '', dismissedUntilSeason: '' };
-    const recommendedMode = this.getLiveSeasonGoalRecommendedMode(review);
-    const copy = this.getLiveSeasonGoalCopy(recommendedMode, review);
+    const matchId = String(view && view.matchId || review && review.matchId || '');
+    const stored = session && typeof session.syncSeasonGoalFromReview === 'function'
+      ? session.syncSeasonGoalFromReview({
+        seasonId,
+        matchId,
+        review
+      })
+      : session && typeof session.getSeasonGoalState === 'function'
+        ? session.getSeasonGoalState(seasonId)
+        : { seasonId, lastReviewAction: '', recommendedMode: '', dismissedUntilSeason: '' };
+    const actionIds = new Set((Array.isArray(review && review.nextActions) ? review.nextActions : [])
+      .map(action => String(action && action.id || ''))
+      .filter(Boolean));
+    const storedRecommendedMode = String(stored && stored.recommendedMode || '');
+    const recommendedMode = storedRecommendedMode && actionIds.has(storedRecommendedMode)
+      ? storedRecommendedMode
+      : this.getLiveSeasonGoalRecommendedMode(review);
+    const copy = this.getLiveSeasonGoalCopy(recommendedMode, review, stored);
     const dismissed = stored && stored.dismissedUntilSeason === seasonId;
     return {
       reportVersion: 'pvp-live-season-goal-v1',
@@ -3044,19 +3065,23 @@ export const PVPScene = {
       usesHiddenInformation: false,
       rankedImpact: 'none',
       seasonId,
-      dismissState: dismissed ? 'dismissed_until_season' : 'active',
+      dismissState: dismissed ? 'dismissed_for_trigger' : 'active',
       recommendedMode,
       actionLabel: copy.label,
       title: copy.title,
       detail: copy.detail,
       boundary: '只记录本地复盘目标，不写正式积分或奖励。',
       lastReviewAction: String(stored && stored.lastReviewAction || ''),
+      badExperienceStreak: Math.max(0, Math.floor(Number(stored && stored.badExperienceStreak) || 0)),
+      recoveryState: String(stored && stored.recoveryState || 'stable'),
+      recoveryReason: String(stored && stored.recoveryReason || ''),
+      recoveryLine: String(stored && stored.recoveryLine || ''),
       updatedAt: Math.max(0, Math.floor(Number(stored && stored.updatedAt) || 0))
     };
   },
   renderLiveSeasonGoalCard(view) {
     const goal = this.getLiveSeasonGoalCard(view);
-    if (!goal || goal.dismissState === 'dismissed_until_season') return '';
+    if (!goal || goal.dismissState !== 'active') return '';
     return `
       <div
         class="pvp-live-season-goal"
@@ -3083,7 +3108,7 @@ export const PVPScene = {
             type="button"
             data-live-season-goal-dismiss="${this.escapeHtml(goal.seasonId)}"
             onclick="PVPScene.dismissLiveSeasonGoal('${this.escapeHtml(goal.seasonId)}')"
-          >本赛季不再提示</button>
+          >本次不再提示</button>
         </div>
       </div>
     `;
@@ -3106,7 +3131,7 @@ export const PVPScene = {
     if (session && typeof session.dismissSeasonGoal === 'function') {
       session.dismissSeasonGoal(seasonId || this.getLiveSeasonGoalSeasonId(this.getLiveSession().getState()?.stateView));
     }
-    this.liveInlineHint = '已关闭本赛季复盘目标提示；这只影响本地显示，不写正式积分或奖励。';
+    this.liveInlineHint = '已关闭当前复盘目标提示；这只影响本地显示，不写正式积分或奖励。';
     this.renderLivePanel();
     const root = document.querySelector('[data-live-pvp-root]');
     const hint = root ? root.querySelector('[data-live-last-error]') : null;
