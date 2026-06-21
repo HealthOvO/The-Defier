@@ -765,7 +765,8 @@ export function createPvpLiveSession({
         lastError: {
           reason: result && result.reason || 'queue_join_failed',
           message: result && result.message || '实时论道入队失败',
-          connectionHealth: result && result.connectionHealth || null
+          connectionHealth: result && result.connectionHealth || null,
+          matchmakingGuard: result && result.matchmakingGuard || null
         }
       });
     }

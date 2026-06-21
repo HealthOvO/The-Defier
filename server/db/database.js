@@ -325,6 +325,19 @@ const initDb = () => {
             db.run(`CREATE INDEX IF NOT EXISTS idx_pvp_live_recent_opponents_b ON pvp_live_recent_opponents(user_id_b, last_matched_at)`, (err) => {
                 if (err) fail(err);
             });
+            db.run(`CREATE TABLE IF NOT EXISTS pvp_live_matchmaking_guards (
+                user_id TEXT PRIMARY KEY,
+                cooldown_until INTEGER NOT NULL DEFAULT 0,
+                cooldown_source TEXT NOT NULL DEFAULT '',
+                cancel_window_started_at INTEGER NOT NULL DEFAULT 0,
+                cancel_count INTEGER NOT NULL DEFAULT 0,
+                updated_at INTEGER NOT NULL
+            )`, (err) => {
+                if (err) fail(err);
+            });
+            db.run(`CREATE INDEX IF NOT EXISTS idx_pvp_live_matchmaking_guards_cooldown ON pvp_live_matchmaking_guards(cooldown_until)`, (err) => {
+                if (err) fail(err);
+            });
             db.run(`CREATE TABLE IF NOT EXISTS pvp_live_match_settlements (
                 match_id TEXT PRIMARY KEY,
                 winner_user_id TEXT NOT NULL,

@@ -1000,6 +1000,35 @@ assert.equal(blockedConnection.lastError.reason, 'connection_health_failed', 'co
 assert.equal(blockedConnection.lastError.connectionHealth?.status, 'blocked', 'connection health block should retain structured health report');
 assert.ok(blockedConnection.lastError.connectionHealth?.actions?.some(action => action.id === 'practice' && /不写正式积分/.test(action.detail)), 'connection health block should retain no-score practice action');
 
+const queueCooldownSession = createPvpLiveSession({
+  liveService: {
+    joinQueue: async () => ({
+      success: false,
+      reason: 'queue_cooldown',
+      message: '排队取消过于频繁，正式真人排位短暂冷却中。',
+      matchmakingGuard: {
+        reportVersion: 'pvp-live-matchmaking-guard-v1',
+        status: 'blocked',
+        cooldownSource: 'queue_cancel_abuse',
+        sourceLabel: '频繁取消冷却',
+        retryAt: Date.now() + 60000,
+        cooldownRemainingMs: 60000,
+        rankedImpact: 'none',
+        actions: [
+          { id: 'retry_queue_later', label: '稍后重试', detail: '冷却结束后再进入正式排位。' },
+          { id: 'practice', label: '问道练习', detail: '练习不写正式积分。' },
+        ],
+      },
+    })
+  }
+});
+const blockedQueueCooldown = await queueCooldownSession.joinQueue({ displayName: '甲' });
+assert.equal(blockedQueueCooldown.phase, 'idle', 'queue cooldown block should leave session in idle phase');
+assert.equal(blockedQueueCooldown.lastError.reason, 'queue_cooldown', 'queue cooldown block should preserve stable reason');
+assert.equal(blockedQueueCooldown.lastError.matchmakingGuard?.reportVersion, 'pvp-live-matchmaking-guard-v1', 'queue cooldown block should retain structured matchmaking guard report');
+assert.equal(blockedQueueCooldown.lastError.matchmakingGuard?.cooldownSource, 'queue_cancel_abuse', 'queue cooldown block should retain cooldown source');
+assert.ok(blockedQueueCooldown.lastError.matchmakingGuard?.actions?.some(action => action.id === 'practice' && /不写正式积分/.test(action.detail)), 'queue cooldown block should retain no-score practice action');
+
 const successfulRequeueStorage = createMemoryStorage([
   ['theDefierPvpLiveLastTerminalMatchV1', 'pvplm-finished-stale']
 ]);

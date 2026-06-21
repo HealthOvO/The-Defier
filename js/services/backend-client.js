@@ -826,12 +826,18 @@ export const BackendClient = {
         : error && error.connectionHealth && typeof error.connectionHealth === 'object'
           ? this.cloneData(error.connectionHealth)
           : undefined;
+      const matchmakingGuard = payload && payload.matchmakingGuard && typeof payload.matchmakingGuard === 'object'
+        ? this.cloneData(payload.matchmakingGuard)
+        : error && error.matchmakingGuard && typeof error.matchmakingGuard === 'object'
+          ? this.cloneData(error.matchmakingGuard)
+          : undefined;
       return {
         success: false,
         error,
         reason: error && error.reason || payload && payload.reason || undefined,
         message: error && error.message || payload && payload.message || '实时论道入队失败',
-        ...(connectionHealth ? { connectionHealth } : {})
+        ...(connectionHealth ? { connectionHealth } : {}),
+        ...(matchmakingGuard ? { matchmakingGuard } : {})
       };
     }
   },

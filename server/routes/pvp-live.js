@@ -161,7 +161,11 @@ router.post('/queue/join', authenticate, asyncHandler(async (req, res) => {
             success: false,
             reason: result.reason,
             message: result.message || '当前无法进入公共匹配',
-            connectionHealth: result.connectionHealth || null
+            connectionHealth: result.connectionHealth || null,
+            matchmakingGuard: result.matchmakingGuard || null,
+            retryAt: result.retryAt || result.matchmakingGuard && result.matchmakingGuard.retryAt || 0,
+            cooldownUntil: result.cooldownUntil || result.matchmakingGuard && result.matchmakingGuard.cooldownUntil || 0,
+            cooldownSource: result.cooldownSource || result.matchmakingGuard && result.matchmakingGuard.cooldownSource || ''
         });
     }
     res.json({ success: true, ...result });

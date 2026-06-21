@@ -717,6 +717,45 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
         assert.ok(!mixedProbeJoin.payload.stateView.matchQuality.safeguards.includes('connection_health_gate'), 'mixed measured/no-probe pair should not claim connection health gate safeguard');
 
         pvpLiveRoutes.__livePvpStore.reset();
+        const cancelCooldownTickets = [];
+        for (let index = 0; index < 3; index += 1) {
+            const joinForCancel = await request(baseUrl, '/api/pvp/live/queue/join', {
+                method: 'POST',
+                token: tokenA,
+                body: {
+                    displayName: '甲',
+                    loadout: loadoutA
+                }
+            });
+            assert.equal(joinForCancel.status, 200, `cancel cooldown seed join ${index + 1} should enter queue`);
+            assert.equal(joinForCancel.payload.status, 'waiting', `cancel cooldown seed join ${index + 1} should wait`);
+            cancelCooldownTickets.push(joinForCancel.payload.queueTicket);
+            const cancelForCooldown = await request(baseUrl, '/api/pvp/live/queue/cancel', {
+                method: 'POST',
+                token: tokenA,
+                body: { queueTicket: joinForCancel.payload.queueTicket }
+            });
+            assert.equal(cancelForCooldown.status, 200, `cancel cooldown cancel ${index + 1} should succeed`);
+            assert.equal(cancelForCooldown.payload.status, 'cancelled', `cancel cooldown cancel ${index + 1} should return cancelled`);
+        }
+        assert.equal(new Set(cancelCooldownTickets).size, 3, 'cancel cooldown seed should create three distinct queue tickets before blocking');
+        const cooldownBlockedJoin = await request(baseUrl, '/api/pvp/live/queue/join', {
+            method: 'POST',
+            token: tokenA,
+            body: {
+                displayName: '甲',
+                loadout: loadoutA
+            }
+        });
+        assert.equal(cooldownBlockedJoin.status, 409, 'frequent queue cancellation should block the next ranked join');
+        assert.equal(cooldownBlockedJoin.payload.reason, 'queue_cooldown', 'cancel abuse block should expose queue_cooldown reason');
+        assert.equal(cooldownBlockedJoin.payload.matchmakingGuard?.reportVersion, 'pvp-live-matchmaking-guard-v1', 'queue cooldown response should expose matchmaking guard report');
+        assert.equal(cooldownBlockedJoin.payload.matchmakingGuard?.cooldownSource, 'queue_cancel_abuse', 'cancel abuse cooldown should expose the source');
+        assert.ok(cooldownBlockedJoin.payload.matchmakingGuard?.retryAt > Date.now(), 'queue cooldown should expose a future retryAt');
+        assert.ok(cooldownBlockedJoin.payload.matchmakingGuard?.actions?.some(action => action.id === 'practice' && /不写正式积分/.test(action.detail)), 'queue cooldown should offer no-score practice');
+        assert.ok(!/reward|rating|elo/i.test(JSON.stringify(cooldownBlockedJoin.payload.matchmakingGuard)), 'queue cooldown guard should not imply reward or rating compensation');
+
+        pvpLiveRoutes.__livePvpStore.reset();
 
         const joinA = await request(baseUrl, '/api/pvp/live/queue/join', {
             method: 'POST',
@@ -1936,17 +1975,37 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
             body: { displayName: '丁' }
         });
         assert.equal(joinSetupTimeoutB.payload.status, 'matched', 'setup timeout second player should match');
+        const setupReadyC = await submitIntent(baseUrl, tokenC, joinSetupTimeoutB.payload.matchId, {
+            intentId: 'setup-timeout-ready-c',
+            intentType: 'ready',
+            stateVersion: joinSetupTimeoutB.payload.stateView.stateVersion,
+            payload: {}
+        });
+        assert.equal(setupReadyC.payload.result, 'accepted', 'setup timeout ready participant should be accepted before opponent timeout');
+        assert.equal(setupReadyC.payload.stateView.status, 'setup', 'single ready should keep match in setup before timeout');
         const setupTimeoutMatch = pvpLiveRoutes.__livePvpStore.matches.get(joinSetupTimeoutB.payload.matchId);
-        setupTimeoutMatch.state.setup.readyDeadlineAt = Date.now() - 1;
-        setupTimeoutMatch.updatedAt = Date.now() - 10 * 60 * 1000;
+        const originalSetupTimeoutNow = pvpLiveRoutes.__livePvpStore.now;
+        const setupTimeoutBaseNow = Date.now();
+        const setupTimeoutTickMs = 30 * 1000;
+        let setupTimeoutTick = 0;
+        setupTimeoutMatch.state.setup.readyDeadlineAt = setupTimeoutBaseNow - 1;
+        setupTimeoutMatch.updatedAt = setupTimeoutBaseNow - 10 * 60 * 1000;
+        pvpLiveRoutes.__livePvpStore.now = () => setupTimeoutBaseNow + (++setupTimeoutTick * setupTimeoutTickMs);
         const setupTimeoutStateB = await request(baseUrl, `/api/pvp/live/matches/${joinSetupTimeoutB.payload.matchId}`, {
             token: tokenD
         });
+        const readyTimeoutGuardAfterInvalidation = await pvpLiveRoutes.__livePvpStore.loadMatchmakingGuard('live-user-d');
+        pvpLiveRoutes.__livePvpStore.now = originalSetupTimeoutNow;
         assert.equal(setupTimeoutStateB.status, 200, 'setup timeout participant should receive invalidated match state');
         assert.equal(setupTimeoutStateB.payload.stateView.status, 'invalidated', 'stale setup live match should invalidate instead of finishing as a win/loss');
         assert.equal(setupTimeoutStateB.payload.stateView.postMatchReview, null, 'invalidated setup timeout should not expose post-match review');
         assert.ok(setupTimeoutStateB.payload.stateView.recentEvents.some(event => event.eventType === 'ready_timeout'), 'setup timeout should emit public ready_timeout event');
         assert.ok(setupTimeoutStateB.payload.stateView.recentEvents.some(event => event.eventType === 'match_invalidated' && eventPublicData(event).reason === 'ready_timeout'), 'setup timeout should emit match_invalidated ready_timeout reason');
+        assert.ok(readyTimeoutGuardAfterInvalidation, 'setup timeout should persist a matchmaking guard for the unready participant');
+        assert.ok(
+            readyTimeoutGuardAfterInvalidation.cooldownUntil <= setupTimeoutMatch.updatedAt + pvpLiveRoutes.__livePvpStore.readyTimeoutCooldownMs + setupTimeoutTickMs + 1000,
+            'setup timeout should record unready cooldown only once during a single invalidation release chain'
+        );
         const staleSetupTicket = await request(baseUrl, `/api/pvp/live/queue/status/${joinSetupTimeoutA.payload.queueTicket}`, {
             token: tokenC
         });
@@ -1956,7 +2015,16 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
             token: tokenC,
             body: { displayName: '丙' }
         });
-        assert.equal(requeueAfterSetupTimeout.payload.status, 'waiting', 'invalidated setup timeout should release player for a new queue without settlement');
+        assert.equal(requeueAfterSetupTimeout.status, 200, 'ready participant should not be punished after opponent setup timeout');
+        assert.equal(requeueAfterSetupTimeout.payload.status, 'waiting', 'ready participant should be released for a new queue without settlement');
+        const blockedUnreadyAfterSetupTimeout = await request(baseUrl, '/api/pvp/live/queue/join', {
+            method: 'POST',
+            token: tokenD,
+            body: { displayName: '丁' }
+        });
+        assert.equal(blockedUnreadyAfterSetupTimeout.status, 409, 'unready setup timeout participant should receive queue cooldown');
+        assert.equal(blockedUnreadyAfterSetupTimeout.payload.reason, 'queue_cooldown', 'unready setup timeout block should expose queue_cooldown reason');
+        assert.equal(blockedUnreadyAfterSetupTimeout.payload.matchmakingGuard?.cooldownSource, 'ready_timeout', 'unready setup timeout block should expose ready_timeout source');
 
         console.log('sanity_pvp_live_route_checks passed');
     } finally {

@@ -558,6 +558,55 @@ assert.equal(liveButtons.get('join-queue').textContent, '入队', 'healthy idle 
 assert.equal(liveButtons.get('practice-live').disabled, true, 'healthy idle live entry should not expose practice without a blocked safeguard action');
 documentStub.querySelector = oldDocumentQuerySelector;
 
+const queueCooldownState = {
+  phase: 'idle',
+  queueTicket: '',
+  matchId: '',
+  lastError: {
+    reason: 'queue_cooldown',
+    message: '你刚刚多次取消或错过准备，真人排位需要短暂冷却；可先进入问道练习。',
+    matchmakingGuard: {
+      reportVersion: 'pvp-live-matchmaking-guard-v1',
+      status: 'blocked',
+      cooldownSource: 'queue_cancel_abuse',
+      retryAt: Date.now() + 60000,
+      cooldownRemainingMs: 60000,
+      rankedImpact: 'none',
+      actions: [
+        { id: 'retry_queue_later', label: '稍后重试', detail: '冷却结束后重新检测并入队。' },
+        { id: 'practice', label: '问道练习', detail: '练习不写正式积分。' }
+      ]
+    }
+  },
+  stateView: null,
+  lastEvents: []
+};
+PVPScene.getLiveSession = () => ({ getState: () => queueCooldownState });
+assert.equal(PVPScene.isLiveEntrySafeguardBlocked(), true, 'queue cooldown should mark live entry safeguard as active');
+assert.equal(PVPScene.hasLiveEntrySafeguardAction(null, 'practice'), true, 'queue cooldown should expose no-score practice action');
+const queueCooldownScenario = PVPScene.buildLiveEntrySafeguardPracticeScenario();
+assert.equal(queueCooldownScenario?.sourceMatchId, 'entry_safeguard:queue_cooldown', 'queue cooldown drill should use a stable source id');
+assert.equal(queueCooldownScenario?.finishReason, 'queue_cooldown', 'queue cooldown drill should expose queue_cooldown finish reason');
+assert.equal(queueCooldownScenario?.rankedImpact, 'none', 'queue cooldown practice must not write ranked score');
+assert.ok(queueCooldownScenario?.trainingTags?.includes('排队冷却练习'), 'queue cooldown practice should be labeled as queue cooldown practice');
+const queueCooldownButtons = new Map([
+  ['join-queue', { disabled: true, textContent: '入队', querySelector() { return null; } }],
+  ['practice-live', { disabled: true, textContent: '问道练习', querySelector() { return null; } }],
+]);
+const queueCooldownRootStub = {
+  querySelector(selector) {
+    const actionMatch = String(selector || '').match(/^\[data-live-action="([^"]+)"\]$/);
+    return actionMatch ? queueCooldownButtons.get(actionMatch[1]) || null : null;
+  },
+  querySelectorAll() { return []; }
+};
+documentStub.querySelector = (selector) => selector === '[data-live-pvp-root]' ? queueCooldownRootStub : null;
+PVPScene.updateLiveButtons('idle', false, null);
+assert.equal(queueCooldownButtons.get('join-queue').disabled, false, 'queue cooldown should keep retry join button enabled');
+assert.equal(queueCooldownButtons.get('join-queue').textContent, '稍后重试', 'queue cooldown should relabel join button to retry later');
+assert.equal(queueCooldownButtons.get('practice-live').disabled, false, 'queue cooldown should enable no-score practice');
+documentStub.querySelector = oldDocumentQuerySelector;
+
 const recentOpponentWaitingState = {
   phase: 'waiting',
   queueTicket: 'pvplq-ui-recent-opponent',

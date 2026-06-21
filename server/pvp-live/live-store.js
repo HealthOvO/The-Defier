@@ -12,6 +12,10 @@ const DEFAULT_RECONNECT_GRACE_MS = 30 * 1000;
 const DEFAULT_INVITE_TTL_MS = 15 * 60 * 1000;
 const DEFAULT_REMATCH_TTL_MS = 10 * 60 * 1000;
 const DEFAULT_RECENT_OPPONENT_COOLDOWN_MS = 10 * 60 * 1000;
+const DEFAULT_QUEUE_CANCEL_WINDOW_MS = 2 * 60 * 1000;
+const DEFAULT_QUEUE_CANCEL_COOLDOWN_MS = 60 * 1000;
+const DEFAULT_QUEUE_CANCEL_COOLDOWN_THRESHOLD = 3;
+const DEFAULT_READY_TIMEOUT_COOLDOWN_MS = 60 * 1000;
 const DEFAULT_RATING_SCORE = 1000;
 const STRICT_RATING_DELTA = 99;
 const FAIR_RATING_DELTA = 199;
@@ -130,6 +134,57 @@ function appendUniqueString(list, value, limit = 12) {
     const normalized = String(value || '').trim();
     if (normalized && !items.includes(normalized)) items.push(normalized);
     return items.slice(0, limit);
+}
+
+function normalizeMatchmakingGuardProfile(profile = {}) {
+    const source = profile && typeof profile === 'object' ? profile : {};
+    const userId = String(source.userId || source.user_id || '').trim();
+    if (!userId) return null;
+    return {
+        userId,
+        cooldownUntil: Math.max(0, Math.floor(Number(source.cooldownUntil || source.cooldown_until) || 0)),
+        cooldownSource: String(source.cooldownSource || source.cooldown_source || '').slice(0, 40),
+        cancelWindowStartedAt: Math.max(0, Math.floor(Number(source.cancelWindowStartedAt || source.cancel_window_started_at) || 0)),
+        cancelCount: Math.max(0, Math.floor(Number(source.cancelCount || source.cancel_count) || 0))
+    };
+}
+
+function makeMatchmakingGuardReport(profile, now = Date.now()) {
+    const normalized = normalizeMatchmakingGuardProfile(profile);
+    if (!normalized) return null;
+    const retryAt = Math.max(0, Math.floor(Number(normalized.cooldownUntil) || 0));
+    const cooldownRemainingMs = Math.max(0, retryAt - Math.max(0, Math.floor(Number(now) || Date.now())));
+    const source = normalized.cooldownSource || 'queue_cooldown';
+    const sourceLabel = source === 'ready_timeout'
+        ? '准备超时'
+        : source === 'queue_cancel_abuse' ? '频繁取消' : '排队冷却';
+    return {
+        reportVersion: 'pvp-live-matchmaking-guard-v1',
+        status: cooldownRemainingMs > 0 ? 'blocked' : 'clear',
+        reason: 'queue_cooldown',
+        cooldownSource: source,
+        sourceLabel,
+        retryAt,
+        cooldownUntil: retryAt,
+        cooldownRemainingMs,
+        rankedImpact: 'none',
+        message: cooldownRemainingMs > 0
+            ? `${sourceLabel}触发真人排位短暂冷却；可先进入问道练习，不写正式积分。`
+            : '真人排位冷却已结束，可以重新入队。',
+        safeguards: ['temporary_queue_cooldown', 'no_score_change', 'practice_available'],
+        actions: [
+            {
+                id: 'retry_queue_later',
+                label: '稍后重试',
+                detail: '冷却结束后重新检测并进入真人排位。'
+            },
+            {
+                id: 'practice',
+                label: '问道练习',
+                detail: '练习不写正式积分。'
+            }
+        ]
+    };
 }
 
 function normalizeRatingScore(value) {
@@ -491,6 +546,10 @@ class LivePvpStore {
         inviteTtlMs = DEFAULT_INVITE_TTL_MS,
         rematchTtlMs = DEFAULT_REMATCH_TTL_MS,
         recentOpponentCooldownMs = DEFAULT_RECENT_OPPONENT_COOLDOWN_MS,
+        queueCancelWindowMs = DEFAULT_QUEUE_CANCEL_WINDOW_MS,
+        queueCancelCooldownMs = DEFAULT_QUEUE_CANCEL_COOLDOWN_MS,
+        queueCancelCooldownThreshold = DEFAULT_QUEUE_CANCEL_COOLDOWN_THRESHOLD,
+        readyTimeoutCooldownMs = DEFAULT_READY_TIMEOUT_COOLDOWN_MS,
         persistence = null,
         settlement = null,
         ratingProvider = null
@@ -507,6 +566,10 @@ class LivePvpStore {
         this.recentOpponentCooldownMs = Number.isFinite(Number(recentOpponentCooldownMs))
             ? Math.max(0, Math.floor(Number(recentOpponentCooldownMs)))
             : DEFAULT_RECENT_OPPONENT_COOLDOWN_MS;
+        this.queueCancelWindowMs = Math.max(1000, Math.floor(Number(queueCancelWindowMs) || DEFAULT_QUEUE_CANCEL_WINDOW_MS));
+        this.queueCancelCooldownMs = Math.max(0, Math.floor(Number(queueCancelCooldownMs) || DEFAULT_QUEUE_CANCEL_COOLDOWN_MS));
+        this.queueCancelCooldownThreshold = Math.max(1, Math.floor(Number(queueCancelCooldownThreshold) || DEFAULT_QUEUE_CANCEL_COOLDOWN_THRESHOLD));
+        this.readyTimeoutCooldownMs = Math.max(0, Math.floor(Number(readyTimeoutCooldownMs) || DEFAULT_READY_TIMEOUT_COOLDOWN_MS));
         this.persistence = persistence;
         this.settlement = settlement;
         this.ratingProvider = ratingProvider;
@@ -524,6 +587,7 @@ class LivePvpStore {
         this.inviteRooms = new Map();
         this.inviteCodeByHostUserId = new Map();
         this.recentOpponentPairs = new Map();
+        this.matchmakingGuards = new Map();
     }
 
     setPersistence(persistence = null) {
@@ -647,6 +711,94 @@ class LivePvpStore {
         if (!this.persistence || typeof this.persistence.loadRecentOpponentPair !== 'function') return null;
         const pair = await this.persistence.loadRecentOpponentPair(userIdA, userIdB);
         return normalizeRecentOpponentPair(pair);
+    }
+
+    async saveMatchmakingGuard(profile) {
+        const normalized = normalizeMatchmakingGuardProfile(profile);
+        if (!normalized) return null;
+        this.matchmakingGuards.set(normalized.userId, normalized);
+        if (this.persistence && typeof this.persistence.saveMatchmakingGuard === 'function') {
+            await this.persistence.saveMatchmakingGuard(normalized);
+        }
+        return normalized;
+    }
+
+    async loadMatchmakingGuard(userId) {
+        const id = String(userId || '').trim();
+        if (!id) return null;
+        const local = normalizeMatchmakingGuardProfile(this.matchmakingGuards.get(id));
+        if (local) return local;
+        if (!this.persistence || typeof this.persistence.loadMatchmakingGuard !== 'function') return null;
+        const persisted = normalizeMatchmakingGuardProfile(await this.persistence.loadMatchmakingGuard(id));
+        if (persisted) this.matchmakingGuards.set(id, persisted);
+        return persisted;
+    }
+
+    async getActiveMatchmakingGuard(userId) {
+        const profile = await this.loadMatchmakingGuard(userId);
+        if (!profile) return null;
+        const report = makeMatchmakingGuardReport(profile, this.now());
+        if (!report || report.status !== 'blocked') return null;
+        return report;
+    }
+
+    async recordQueueCancellation(userId) {
+        const id = String(userId || '').trim();
+        if (!id) return null;
+        const now = this.now();
+        const existing = normalizeMatchmakingGuardProfile(await this.loadMatchmakingGuard(id)) || { userId: id };
+        const withinWindow = existing.cancelWindowStartedAt > 0 && now - existing.cancelWindowStartedAt <= this.queueCancelWindowMs;
+        const nextCount = (withinWindow ? existing.cancelCount : 0) + 1;
+        const nextProfile = {
+            ...existing,
+            userId: id,
+            cancelWindowStartedAt: withinWindow ? existing.cancelWindowStartedAt : now,
+            cancelCount: nextCount
+        };
+        if (this.queueCancelCooldownMs > 0 && nextCount >= this.queueCancelCooldownThreshold) {
+            nextProfile.cooldownUntil = now + this.queueCancelCooldownMs;
+            nextProfile.cooldownSource = 'queue_cancel_abuse';
+            nextProfile.cancelWindowStartedAt = 0;
+            nextProfile.cancelCount = 0;
+        }
+        await this.saveMatchmakingGuard(nextProfile);
+        return makeMatchmakingGuardReport(nextProfile, now);
+    }
+
+    async applyQueueCooldown(userId, cooldownSource, durationMs) {
+        const id = String(userId || '').trim();
+        const duration = Math.max(0, Math.floor(Number(durationMs) || 0));
+        if (!id || duration <= 0) return null;
+        const now = this.now();
+        const existing = normalizeMatchmakingGuardProfile(await this.loadMatchmakingGuard(id)) || { userId: id };
+        const cooldownUntil = now + duration;
+        const nextProfile = {
+            ...existing,
+            userId: id,
+            cooldownUntil: Math.max(existing.cooldownUntil || 0, cooldownUntil),
+            cooldownSource: cooldownUntil >= (existing.cooldownUntil || 0) ? String(cooldownSource || 'queue_cooldown').slice(0, 40) : existing.cooldownSource,
+            cancelWindowStartedAt: 0,
+            cancelCount: 0
+        };
+        await this.saveMatchmakingGuard(nextProfile);
+        return makeMatchmakingGuardReport(nextProfile, now);
+    }
+
+    async recordReadyTimeoutCooldowns(match) {
+        if (!match || !match.state || match.state.status !== 'invalidated' || this.readyTimeoutCooldownMs <= 0) return [];
+        const events = Array.isArray(match.state.events) ? match.state.events : [];
+        const timeoutEvent = events.slice().reverse().find(event => event && event.eventType === 'ready_timeout' && event.payload);
+        const unreadySeats = Array.isArray(timeoutEvent && timeoutEvent.payload && timeoutEvent.payload.unreadySeats)
+            ? timeoutEvent.payload.unreadySeats.map(seatId => String(seatId || '')).filter(Boolean)
+            : [];
+        const uniqueUserIds = Array.from(new Set(unreadySeats
+            .map(seatId => this.getSourceSeatUserId(match, seatId))
+            .filter(Boolean)));
+        const reports = [];
+        for (const userId of uniqueUserIds) {
+            reports.push(await this.applyQueueCooldown(userId, 'ready_timeout', this.readyTimeoutCooldownMs));
+        }
+        return reports.filter(Boolean);
     }
 
     async rememberRecentOpponentPair(match) {
@@ -1302,6 +1454,19 @@ class LivePvpStore {
             }
         }
 
+        const matchmakingGuard = await this.getActiveMatchmakingGuard(identity.userId);
+        if (matchmakingGuard) {
+            return {
+                status: 'blocked',
+                reason: 'queue_cooldown',
+                message: matchmakingGuard.message,
+                matchmakingGuard,
+                retryAt: matchmakingGuard.retryAt,
+                cooldownUntil: matchmakingGuard.cooldownUntil,
+                cooldownSource: matchmakingGuard.cooldownSource
+            };
+        }
+
         const existingTicket = this.waitingQueue.find(ticket => ticket.player.userId === identity.userId)
             || await this.hydrateWaitingQueueEntryForUser(identity.userId);
         if (existingTicket) {
@@ -1465,12 +1630,25 @@ class LivePvpStore {
     async cancelQueue(userId, queueTicket) {
         const ticket = String(queueTicket || '').trim();
         if (!ticket) return null;
-        const queueEntry = this.queueTickets.get(ticket)
+        const localQueueEntry = this.queueTickets.get(ticket);
+        const queueEntry = localQueueEntry
             || await this.hydrateWaitingQueueEntryByTicket(ticket);
         if (!queueEntry || queueEntry.player.userId !== userId) return null;
+
+        const handoff = await this.loadQueueHandoff(ticket, userId);
+        const activeMatch = await this.getActiveMatchForUser(userId);
+        const hasActiveMatch = activeMatch && activeMatch.match && !this.isTerminalStatus(activeMatch.match.state && activeMatch.match.state.status);
+        if ((handoff && handoff.matchId) || hasActiveMatch) {
+            this.queueTickets.delete(ticket);
+            this.waitingQueue = this.waitingQueue.filter(entry => entry.queueTicket !== ticket);
+            await this.deleteQueueEntry(ticket);
+            return null;
+        }
+
         this.queueTickets.delete(ticket);
         this.waitingQueue = this.waitingQueue.filter(entry => entry.queueTicket !== ticket);
         await this.deleteQueueEntry(ticket);
+        await this.recordQueueCancellation(userId);
         return {
             status: 'cancelled',
             queueTicket: ticket
@@ -1795,9 +1973,14 @@ class LivePvpStore {
         if (!match || !match.state || match.state.status !== 'invalidated') {
             return { completed: false, saveResult: null };
         }
+        const hasActiveParticipants = Object.keys(match.seatsByUserId || {})
+            .some(userId => this.activeMatchByUserId.get(userId) === match.matchId);
         const saveResult = await this.saveMatch(match);
         if (saveResult && saveResult.saved === false) {
             return { completed: false, saveResult };
+        }
+        if (hasActiveParticipants) {
+            await this.recordReadyTimeoutCooldowns(match);
         }
         await this.releaseMatch(match);
         return { completed: true, saveResult };

@@ -1755,15 +1755,44 @@ export const PVPScene = {
       }
     };
   },
+  getLiveQueueCooldownError(state = null) {
+    const source = state && typeof state === 'object' ? state : this.getLiveSession().getState();
+    const error = source && source.lastError && typeof source.lastError === 'object' ? source.lastError : null;
+    const guard = error && error.matchmakingGuard && typeof error.matchmakingGuard === 'object' ? error.matchmakingGuard : null;
+    if (!error || String(error.reason || '') !== 'queue_cooldown' || !guard) return null;
+    const actions = Array.isArray(guard.actions) ? guard.actions : [];
+    return {
+      reason: 'queue_cooldown',
+      message: String(error.message || guard.message || ''),
+      matchmakingGuard: {
+        reportVersion: String(guard.reportVersion || 'pvp-live-matchmaking-guard-v1'),
+        status: String(guard.status || 'blocked'),
+        cooldownSource: String(guard.cooldownSource || 'queue_cooldown'),
+        sourceLabel: String(guard.sourceLabel || '排队冷却'),
+        retryAt: Math.max(0, Math.floor(Number(guard.retryAt || guard.cooldownUntil) || 0)),
+        cooldownRemainingMs: Math.max(0, Math.floor(Number(guard.cooldownRemainingMs) || 0)),
+        rankedImpact: String(guard.rankedImpact || 'none'),
+        actions: actions.slice(0, 4).map(action => ({
+          id: String(action && action.id || ''),
+          label: String(action && action.label || ''),
+          detail: String(action && action.detail || '')
+        })).filter(action => action.id && action.label)
+      }
+    };
+  },
   isLiveEntrySafeguardBlocked(state = null) {
     const report = this.getLiveConnectionHealthError(state);
     const status = String(report && report.connectionHealth && report.connectionHealth.status || '');
-    return status === 'blocked' || status === 'risky';
+    if (status === 'blocked' || status === 'risky') return true;
+    const cooldownReport = this.getLiveQueueCooldownError(state);
+    return String(cooldownReport && cooldownReport.matchmakingGuard && cooldownReport.matchmakingGuard.status || '') === 'blocked';
   },
   hasLiveEntrySafeguardAction(state = null, actionId = '') {
-    const report = this.getLiveConnectionHealthError(state);
     const id = String(actionId || '');
-    return !!(report && report.connectionHealth.actions.some(action => action.id === id));
+    const report = this.getLiveConnectionHealthError(state);
+    if (report && report.connectionHealth.actions.some(action => action.id === id)) return true;
+    const cooldownReport = this.getLiveQueueCooldownError(state);
+    return !!(cooldownReport && cooldownReport.matchmakingGuard.actions.some(action => action.id === id));
   },
   shouldLivePoll(state) {
     if (!state) return false;
@@ -1831,25 +1860,32 @@ export const PVPScene = {
     const sourceState = state && typeof state === 'object' ? state : this.getLiveSession().getState();
     if (!this.isLiveEntrySafeguardBlocked(sourceState) || !this.hasLiveEntrySafeguardAction(sourceState, 'practice')) return null;
     const report = this.getLiveConnectionHealthError(sourceState);
+    const cooldownReport = this.getLiveQueueCooldownError(sourceState);
+    const isCooldown = !!cooldownReport && !report;
+    const cooldownSource = cooldownReport && cooldownReport.matchmakingGuard && cooldownReport.matchmakingGuard.cooldownSource || 'queue_cooldown';
     const selectedLoadout = this.getLiveSelectedLoadoutPreset();
     return {
       reportVersion: 'pvp-live-drill-scenario-v1',
-      sourceMatchId: 'entry_safeguard:connection_health_failed',
+      sourceMatchId: isCooldown ? 'entry_safeguard:queue_cooldown' : 'entry_safeguard:connection_health_failed',
       sourceVisibility: 'replay_self',
       usesHiddenInformation: false,
       rankedImpact: 'none',
-      result: 'entry_safeguard_blocked',
-      finishReason: 'connection_health_failed',
+      result: isCooldown ? 'queue_cooldown_blocked' : 'entry_safeguard_blocked',
+      finishReason: isCooldown ? 'queue_cooldown' : 'connection_health_failed',
       recommendedLoadoutId: selectedLoadout.id,
       recommendedLoadoutLabel: selectedLoadout.label,
-      themeKey: 'connection_health',
-      themeLabel: '入场保障',
-      trainingAdvice: '连接健康入场保障：当前连接未稳定，先练首轮调息、稳血和低费节奏；不写正式积分。',
-      drillObjective: `${selectedLoadout.label}：连接恢复前先练首轮稳血和出牌节奏，不写正式积分。`,
-      trainingTags: ['真人 PVP', '连接健康练习', '不计积分', '入场保障'],
-      publicEventTypes: ['connection_health_failed'],
+      themeKey: isCooldown ? 'queue_cooldown' : 'connection_health',
+      themeLabel: isCooldown ? '排队冷却' : '入场保障',
+      trainingAdvice: isCooldown
+        ? '真人排位短暂冷却：先用问道练习保持手感，练首轮调息、稳血和低费节奏；不写正式积分。'
+        : '连接健康入场保障：当前连接未稳定，先练首轮调息、稳血和低费节奏；不写正式积分。',
+      drillObjective: isCooldown
+        ? `${selectedLoadout.label}：排队冷却期间先练首轮稳血和出牌节奏，不写正式积分。`
+        : `${selectedLoadout.label}：连接恢复前先练首轮稳血和出牌节奏，不写正式积分。`,
+      trainingTags: ['真人 PVP', isCooldown ? '排队冷却练习' : '连接健康练习', '不计积分', isCooldown ? '排队冷却' : '入场保障'],
+      publicEventTypes: [isCooldown ? cooldownSource : 'connection_health_failed'],
       sourceEventSequences: [],
-      connectionHealth: report ? report.connectionHealth : null
+      ...(isCooldown ? { matchmakingGuard: cooldownReport.matchmakingGuard } : { connectionHealth: report ? report.connectionHealth : null })
     };
   },
   async commitLiveEntrySafeguardPracticeHandoff() {
@@ -1868,15 +1904,17 @@ export const PVPScene = {
       sourceTitle: scenario.recommendedLoadoutLabel,
       themeKey: scenario.themeKey,
       themeLabel: scenario.themeLabel,
-      ratingLabel: '连接健康练习',
+      ratingLabel: scenario.finishReason === 'queue_cooldown' ? '排队冷却练习' : '连接健康练习',
       ratingTone: 'selected',
       trainingAdvice: scenario.trainingAdvice,
       highlightLine: scenario.drillObjective,
-      routeFocusLine: '未进入正式排位队列；练习不写正式积分，恢复后再重试检测。',
+      routeFocusLine: scenario.finishReason === 'queue_cooldown'
+        ? '未进入正式排位队列；练习不写正式积分，冷却结束后再重试排位。'
+        : '未进入正式排位队列；练习不写正式积分，恢复后再重试检测。',
       compareHint: '练习只使用入场保障和公开规则，不读取对手隐藏手牌或牌库。',
       trainingTags: scenario.trainingTags,
       goalHighlights: [
-        '入场保障：connection_health_failed',
+        `入场保障：${scenario.finishReason === 'queue_cooldown' ? 'queue_cooldown' : 'connection_health_failed'}`,
         `推荐谱：${scenario.recommendedLoadoutLabel}`,
         '正式积分：不变'
       ]
@@ -1887,7 +1925,9 @@ export const PVPScene = {
     if (gameRef && typeof gameRef.setObservatoryTrainingFocus === 'function') {
       gameRef.setObservatoryTrainingFocus(focus, { silent: true });
     }
-    const message = '已进入真人 PVP 连接健康练习：练习不写正式积分，恢复后可重试正式排位。';
+    const message = scenario.finishReason === 'queue_cooldown'
+      ? '已进入真人 PVP 排队冷却练习：练习不写正式积分，冷却结束后可重试正式排位。'
+      : '已进入真人 PVP 连接健康练习：练习不写正式积分，恢复后可重试正式排位。';
     this.liveInlineHint = message;
     const root = document.querySelector('[data-live-pvp-root]');
     const hint = root ? root.querySelector('[data-live-last-error]') : null;
@@ -3425,6 +3465,24 @@ export const PVPScene = {
               })).filter(action => action.id && action.label)
               : []
           }
+        } : {}),
+        ...(state.lastError.matchmakingGuard && typeof state.lastError.matchmakingGuard === 'object' ? {
+          matchmakingGuard: {
+            reportVersion: String(state.lastError.matchmakingGuard.reportVersion || 'pvp-live-matchmaking-guard-v1'),
+            status: String(state.lastError.matchmakingGuard.status || 'blocked'),
+            cooldownSource: String(state.lastError.matchmakingGuard.cooldownSource || 'queue_cooldown'),
+            sourceLabel: String(state.lastError.matchmakingGuard.sourceLabel || '排队冷却'),
+            retryAt: Math.max(0, Math.floor(Number(state.lastError.matchmakingGuard.retryAt || state.lastError.matchmakingGuard.cooldownUntil) || 0)),
+            cooldownRemainingMs: Math.max(0, Math.floor(Number(state.lastError.matchmakingGuard.cooldownRemainingMs) || 0)),
+            rankedImpact: String(state.lastError.matchmakingGuard.rankedImpact || 'none'),
+            actions: Array.isArray(state.lastError.matchmakingGuard.actions)
+              ? state.lastError.matchmakingGuard.actions.slice(0, 4).map(action => ({
+                id: String(action && action.id || ''),
+                label: String(action && action.label || ''),
+                detail: String(action && action.detail || '')
+              })).filter(action => action.id && action.label)
+              : []
+          }
         } : {})
       } : null,
       lastEvents: Array.isArray(state.lastEvents) ? state.lastEvents.slice(0, 8).map(event => ({
@@ -3735,6 +3793,7 @@ export const PVPScene = {
       this.clearLiveOpeningActionConfirm();
     }
     const entrySafeguardBlocked = phase === 'idle' && this.isLiveEntrySafeguardBlocked(state);
+    const queueCooldownBlocked = entrySafeguardBlocked && !!this.getLiveQueueCooldownError(state);
     const surrenderConfirmArmed = this.isLiveSurrenderConfirmArmed(state);
     const endTurnConfirmArmed = this.isLiveOpeningActionConfirmArmed(state, 'end_turn', {});
     const intentLocked = this.isLiveIntentInFlight(null, 'action');
@@ -3755,7 +3814,7 @@ export const PVPScene = {
     setDisabled('cancel-queue', phase !== 'waiting');
     setDisabled('practice-live', !(entrySafeguardBlocked && this.hasLiveEntrySafeguardAction(state, 'practice')) && !(phase === 'waiting' && (this.getLiveWaitingReport(state)?.longWait || this.getLiveWaitingQualitySafeguard(state))));
     setDisabled('refresh-match', phase === 'queueing' || phase === 'idle' || phase === 'finished' || phase === 'invalidated');
-    setButtonText('join-queue', entrySafeguardBlocked && this.hasLiveEntrySafeguardAction(state, 'retry_connection_check') ? '重试检测' : '入队');
+    setButtonText('join-queue', queueCooldownBlocked ? '稍后重试' : entrySafeguardBlocked && this.hasLiveEntrySafeguardAction(state, 'retry_connection_check') ? '重试检测' : '入队');
     setButtonText('end-turn', endTurnConfirmArmed ? '确认结束' : '结束回合');
     setButtonText('surrender', surrenderConfirmArmed ? '确认认输' : '认输');
     setDisabled('confirm-mulligan', intentLocked || !(phase === 'setup' && self && !self.mulliganUsed));
@@ -4366,7 +4425,9 @@ export const PVPScene = {
     const scenario = entryScenario || await this.commitLiveWaitingPracticeHandoff();
     const message = scenario
       ? entryScenario
-        ? '已打开真人 PVP 连接健康练习；练习不写正式积分，恢复后可重试正式排位。'
+        ? entryScenario.finishReason === 'queue_cooldown'
+          ? '已打开真人 PVP 排队冷却练习；练习不写正式积分，冷却结束后可重试正式排位。'
+          : '已打开真人 PVP 连接健康练习；练习不写正式积分，恢复后可重试正式排位。'
         : '已打开真人 PVP 长等待练习；练习不写正式积分，返回真人排位需重新入队。'
       : this.liveInlineHint || '问道练习不会写正式积分；当前未进入长等待，继续等待真人或取消匹配后再练习。';
     this.liveInlineHint = message;

@@ -119,6 +119,38 @@ assert.equal(blockedHealthJoin.connectionHealth?.status, 'blocked', 'blocked con
 assert.ok(blockedHealthJoin.connectionHealth?.actions?.some(action => action.id === 'practice'), 'blocked connection health join should preserve practice action');
 BackendClient.requestServer = originalQueueRequestServer;
 
+BackendClient.requestServer = async (path, options = {}) => {
+  calls.push({ path, options });
+  const error = new Error('排队取消过于频繁，正式真人排位短暂冷却中。');
+  error.reason = 'queue_cooldown';
+  error.payload = {
+    success: false,
+    reason: 'queue_cooldown',
+    message: error.message,
+    matchmakingGuard: {
+      reportVersion: 'pvp-live-matchmaking-guard-v1',
+      status: 'blocked',
+      cooldownSource: 'queue_cancel_abuse',
+      sourceLabel: '频繁取消冷却',
+      retryAt: Date.now() + 60000,
+      cooldownRemainingMs: 60000,
+      rankedImpact: 'none',
+      actions: [
+        { id: 'retry_queue_later', label: '稍后重试', detail: '冷却结束后再进入正式排位。' },
+        { id: 'practice', label: '问道练习', detail: '练习不写正式积分。' }
+      ]
+    }
+  };
+  throw error;
+};
+const blockedQueueCooldownJoin = await BackendClient.joinLivePvpQueue({ displayName: '甲' });
+assert.equal(blockedQueueCooldownJoin.success, false, 'live queue join should surface queue cooldown failure');
+assert.equal(blockedQueueCooldownJoin.reason, 'queue_cooldown', 'queue cooldown join should preserve stable reason');
+assert.equal(blockedQueueCooldownJoin.matchmakingGuard?.reportVersion, 'pvp-live-matchmaking-guard-v1', 'queue cooldown join should preserve backend matchmaking guard report');
+assert.equal(blockedQueueCooldownJoin.matchmakingGuard?.cooldownSource, 'queue_cancel_abuse', 'queue cooldown join should preserve cooldown source');
+assert.ok(blockedQueueCooldownJoin.matchmakingGuard?.actions?.some(action => action.id === 'practice' && /不写正式积分/.test(action.detail)), 'queue cooldown join should preserve no-score practice action');
+BackendClient.requestServer = originalQueueRequestServer;
+
 const measuredHealth = await BackendClient.measureLivePvpConnectionHealth();
 assert.equal(measuredHealth.reportVersion, 'pvp-live-queue-connection-health-v1', 'live connection preflight should return stable report version');
 assert.equal(measuredHealth.status, 'pass', 'live connection preflight should pass when health endpoint responds');

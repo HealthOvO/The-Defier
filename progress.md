@@ -1,5 +1,28 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-21: V10-S16 live PVP queue cooldown guard
+  - 本轮完成
+    - `server/pvp-live/live-store.js` 新增 user-level matchmaking guard：同一用户短时间内连续取消正式排位队列会触发 `queue_cooldown`，返回稳定 `pvp-live-matchmaking-guard-v1` 报告、`retry_queue_later` 与 `practice` 行动建议；已有匹配交接或非终局对局时取消只做清理，不计入滥用冷却，避免 matched race 误罚。
+    - `ready_timeout` 从“所有 invalidated 都直接释放”细化为“已准备者可重新排队，未准备者短冷却”：`completeInvalidatedMatch()` 在权威保存成功后只对未 ready 席位写入一次 `ready_timeout` guard，不写结算、不发奖励、不改变正式积分，也不会因同一失效链重复 release 而延长冷却。
+    - `server/db/database.js` 与 `server/pvp-live/live-persistence.js` 新增 `pvp_live_matchmaking_guards` 表和 `saveMatchmakingGuard / loadMatchmakingGuard` 接口；频繁取消和准备超时冷却可跨进程、重启后继续生效。
+    - `js/services/backend-client.js`、`js/services/pvp-live-session.js` 与 `js/scenes/pvp-scene.js` 保留并渲染结构化 `matchmakingGuard`：idle blocked 状态下 `join-queue` 显示“稍后重试”，`practice-live` 启用“问道练习”，练习进入 `entry_safeguard:queue_cooldown` 的 no-score drill，不取消队列、不调用旧镜像 PVP、不读取隐藏手牌或牌库。
+    - route / persistence / client / session / UI runtime / UI contract / browser audit / release coverage 全部钉住新合同：三次取消后下一次入队 409，重启后未 ready 的 invalidated 用户仍收到 `queue_cooldown/ready_timeout`，已 ready 用户可重新排队，前端快照只暴露脱敏 guard、actions 和 no-score 练习入口。
+  - 已验证
+    - 红测：`node tests/sanity_pvp_live_route_checks.cjs` 在实现前失败于频繁取消后仍可入队，期望 409、实际 200。
+    - 红测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs` 在实现前失败于 `queue_cooldown` 未激活 entry safeguard 练习入口。
+    - 绿测：`node tests/sanity_pvp_live_route_checks.cjs`
+    - 绿测：`node tests/sanity_pvp_live_persistence_checks.cjs`
+    - 绿测：`node tests/sanity_pvp_live_client_checks.mjs`
+    - 绿测：`node tests/sanity_pvp_live_session_checks.mjs`
+    - 绿测：`node tests/sanity_pvp_live_ui_contract_checks.cjs`
+    - 绿测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs`
+    - 绿测：`node tests/sanity_release_gate_coverage_checks.cjs`
+    - 构建：`npm run build:pages`
+    - 浏览器审计：`node tests/browser_pvp_live_audit.mjs http://127.0.0.1:4173 output/pvp-live-queue-cooldown-audit`，94/94 findings、0 failed、0 console error。
+    - 全量 Node 门禁：`npm run test:node`，All node checks passed。
+  - 当前结论
+    - live PVP 的公共匹配现在有了可解释、可恢复的轻量防滥用层：频繁取消者和准备阶段拖超时者不会立刻破坏下一位真人的排位体验，但也不会被永久惩罚，系统会给出稍后重试和不计分练习出口。该切片仍不改变卡牌数值、先后手保护、正式结算、奖励或赛季验证；下一步可以继续打磨低样本放行、冷却倒计时展示和生产监控。
+
 - 2026-06-21: V10-S15 live PVP recent-opponent matchmaking safeguard
   - 本轮完成
     - `server/pvp-live/live-store.js` 新增 `recentOpponentCooldownMs` 与 `recent_opponent_suppression` 匹配护栏：正式真人局结束后会记录双方近期对手关系，在冷却窗口内公共匹配会跳过刚刚交手的同一对，避免低人数池里反复秒排同一个人造成体验疲劳。

@@ -843,6 +843,26 @@ async function safeElementScreenshot(page, selector, outputPath) {
             },
           };
         }
+        if (healthMode === 'queue-cooldown') {
+          return {
+            success: false,
+            reason: 'queue_cooldown',
+            message: '排队取消过于频繁，正式真人排位短暂冷却中。',
+            matchmakingGuard: {
+              reportVersion: 'pvp-live-matchmaking-guard-v1',
+              status: 'blocked',
+              cooldownSource: 'queue_cancel_abuse',
+              sourceLabel: '频繁取消冷却',
+              retryAt: Date.now() + 60000,
+              cooldownRemainingMs: 60000,
+              rankedImpact: 'none',
+              actions: [
+                { id: 'retry_queue_later', label: '稍后重试', detail: '冷却结束后再进入正式排位。' },
+                { id: 'practice', label: '问道练习', detail: '练习不写正式积分。' },
+              ],
+            },
+          };
+        }
         return { success: true, status: 'waiting', queueTicket: 'pvplq-browser-live' };
       },
       measureConnectionHealth: async () => {
@@ -1369,6 +1389,87 @@ async function safeElementScreenshot(page, selector, outputPath) {
       && !/GhostEnemy|didWin|matchTicket/i.test(JSON.stringify(blockedHealthPracticeProbe.pending || {}))
       && !/ratingDelta|scoreAfter|coinsAwarded|formalResultPolicy|elo/i.test(JSON.stringify(blockedHealthPracticeProbe.drillScenario || {})),
     JSON.stringify(blockedHealthPracticeProbe),
+  );
+  await page.evaluate(async () => {
+    window.game.showScreen('pvp-screen');
+    if (window.game) {
+      window.game.pendingChallengeStart = null;
+      window.game.activeChallengeRun = null;
+    }
+    window.PVPScene.switchTab('live');
+    if (typeof window.PVPScene.loadLivePanel === 'function') {
+      await window.PVPScene.loadLivePanel();
+    }
+  });
+  await page.waitForTimeout(100);
+  await page.evaluate(() => {
+    window.__livePvpAuditCalls = [];
+    window.__livePvpAuditConnectionHealthMode = 'queue-cooldown';
+  });
+  await page.click('[data-live-action="join-queue"]', { timeout: 5000, force: true });
+  await page.waitForTimeout(200);
+  const queueCooldownProbe = await page.evaluate(() => ({
+    phase: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-phase') || '',
+    lastError: document.querySelector('[data-live-last-error]')?.textContent || '',
+    buttons: Object.fromEntries(Array.from(document.querySelectorAll('[data-live-action]')).map(button => [
+      button.getAttribute('data-live-action'),
+      { disabled: button.disabled, text: button.textContent?.replace(/\s+/g, ' ').trim() || '' },
+    ])),
+    payload: JSON.parse(window.render_game_to_text()).pvp?.live || null,
+    calls: window.__livePvpAuditCalls,
+  }));
+  add(
+    'live UI queue cooldown keeps retry practice actions without reward or rating promise',
+    queueCooldownProbe.phase === 'idle'
+      && /排队取消过于频繁|短暂冷却/.test(queueCooldownProbe.lastError)
+      && queueCooldownProbe.payload?.lastError?.reason === 'queue_cooldown'
+      && queueCooldownProbe.payload?.lastError?.matchmakingGuard?.reportVersion === 'pvp-live-matchmaking-guard-v1'
+      && queueCooldownProbe.payload?.lastError?.matchmakingGuard?.status === 'blocked'
+      && queueCooldownProbe.payload?.lastError?.matchmakingGuard?.cooldownSource === 'queue_cancel_abuse'
+      && queueCooldownProbe.payload?.lastError?.matchmakingGuard?.rankedImpact === 'none'
+      && queueCooldownProbe.payload?.lastError?.matchmakingGuard?.actions?.some(action => action.id === 'retry_queue_later')
+      && queueCooldownProbe.payload?.lastError?.matchmakingGuard?.actions?.some(action => action.id === 'practice' && /不写正式积分/.test(action.detail))
+      && queueCooldownProbe.buttons['join-queue']?.disabled === false
+      && /稍后重试/.test(queueCooldownProbe.buttons['join-queue']?.text || '')
+      && queueCooldownProbe.buttons['practice-live']?.disabled === false
+      && !/reward|rating|elo/i.test(JSON.stringify(queueCooldownProbe.payload?.lastError?.matchmakingGuard || {})),
+    JSON.stringify(queueCooldownProbe),
+  );
+  await page.click('[data-live-action="practice-live"]', { timeout: 5000, force: true });
+  await page.waitForTimeout(350);
+  const queueCooldownPracticeProbe = await page.evaluate(() => {
+    const payload = typeof window.render_game_to_text === 'function'
+      ? JSON.parse(window.render_game_to_text())
+      : null;
+    return {
+      currentScreen: window.game?.currentScreen || '',
+      pending: payload?.challenge?.pending || null,
+      focus: payload?.challenge?.trainingFocus || null,
+      drillScenario: payload?.pvp?.live?.drillScenario || window.PVPScene.getLiveSnapshot()?.drillScenario || null,
+      calls: window.__livePvpAuditCalls,
+    };
+  });
+  add(
+    'live UI queue cooldown practice opens no-score entry safeguard drill without queue cancellation',
+    queueCooldownPracticeProbe.currentScreen === 'character-selection-screen'
+      && queueCooldownPracticeProbe.pending?.replayOnly === true
+      && queueCooldownPracticeProbe.pending?.practiceOnly === true
+      && /^pvp_live_drill_/.test(queueCooldownPracticeProbe.pending?.ruleId || '')
+      && queueCooldownPracticeProbe.focus?.sourceRunId === 'pvp_live:entry_safeguard:queue_cooldown'
+      && /短暂冷却|排队冷却/.test(queueCooldownPracticeProbe.focus?.trainingAdvice || '')
+      && queueCooldownPracticeProbe.drillScenario?.reportVersion === 'pvp-live-drill-scenario-v1'
+      && queueCooldownPracticeProbe.drillScenario?.sourceMatchId === 'entry_safeguard:queue_cooldown'
+      && queueCooldownPracticeProbe.drillScenario?.sourceVisibility === 'replay_self'
+      && queueCooldownPracticeProbe.drillScenario?.usesHiddenInformation === false
+      && queueCooldownPracticeProbe.drillScenario?.rankedImpact === 'none'
+      && queueCooldownPracticeProbe.drillScenario?.finishReason === 'queue_cooldown'
+      && (queueCooldownPracticeProbe.drillScenario?.trainingTags || []).includes('排队冷却练习')
+      && queueCooldownPracticeProbe.drillScenario?.matchmakingGuard?.cooldownSource === 'queue_cancel_abuse'
+      && !queueCooldownPracticeProbe.calls.some(call => call.method === 'cancelQueue')
+      && !queueCooldownPracticeProbe.calls.some(call => /findOpponent|reportMatchResult|startPVPBattle/i.test(call.method || ''))
+      && !/GhostEnemy|didWin|matchTicket/i.test(JSON.stringify(queueCooldownPracticeProbe.pending || {}))
+      && !/ratingDelta|scoreAfter|coinsAwarded|formalResultPolicy|elo/i.test(JSON.stringify(queueCooldownPracticeProbe.drillScenario || {})),
+    JSON.stringify(queueCooldownPracticeProbe),
   );
   await page.evaluate(async () => {
     window.game.showScreen('pvp-screen');

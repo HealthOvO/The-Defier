@@ -529,12 +529,15 @@ assert.ok(
 const entrySafeguardPracticeBody = methodBody(scene, 'buildLiveEntrySafeguardPracticeScenario');
 [
   "reportVersion: 'pvp-live-drill-scenario-v1'",
-  "sourceMatchId: 'entry_safeguard:connection_health_failed'",
+  "'entry_safeguard:connection_health_failed'",
+  "'entry_safeguard:queue_cooldown'",
   "sourceVisibility: 'replay_self'",
   'usesHiddenInformation: false',
   "rankedImpact: 'none'",
   'connectionHealth',
+  'matchmakingGuard',
   '连接健康练习',
+  '排队冷却练习',
   '入场保障',
 ].forEach((needle) => {
   assert.ok(entrySafeguardPracticeBody.includes(needle), `buildLiveEntrySafeguardPracticeScenario should create no-score connection drill scenario: ${needle}`);

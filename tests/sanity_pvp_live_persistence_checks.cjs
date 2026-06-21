@@ -2500,6 +2500,15 @@ async function readyBoth({ matchId, tokenA, tokenB, stateVersionA, prefix }) {
     assert.equal(joinB.payload.status, 'matched', 'second invalidated persistence user should match');
     invalidatedMatchId = joinB.payload.matchId;
 
+    const readyA = await submitIntent(invalidatedMatchId, invalidatedUserA.token, {
+      intentId: 'persistence-setup-timeout-ready-a',
+      intentType: 'ready',
+      stateVersion: joinB.payload.stateView.stateVersion,
+      payload: {},
+    });
+    assert.equal(readyA.status, 200, 'ready invalidated persistence user should submit ready before opponent timeout');
+    assert.equal(readyA.payload.result, 'accepted', 'ready invalidated persistence user intent should be accepted');
+
     await new Promise(resolve => setTimeout(resolve, 1150));
     const invalidatedRead = await request('/api/pvp/live/matches/current', {
       token: invalidatedUserA.token,
@@ -2519,9 +2528,19 @@ async function readyBoth({ matchId, tokenA, tokenB, stateVersionA, prefix }) {
       token: invalidatedUserA.token,
       body: { displayName: '丙' },
     });
-    assert.equal(rejoinInvalidated.status, 200, 'invalidated user should be able to queue after restart');
-    assert.equal(rejoinInvalidated.payload.status, 'waiting', 'restarted invalidated match should not block fresh queue');
+    assert.equal(rejoinInvalidated.status, 200, 'ready invalidated user should be able to queue after restart');
+    assert.equal(rejoinInvalidated.payload.status, 'waiting', 'restarted ready invalidated match should not block fresh queue');
     assert.notEqual(rejoinInvalidated.payload.matchId, invalidatedMatchId, 'restarted queue should not return old invalidated match id');
+
+    const blockedUnreadyInvalidated = await request('/api/pvp/live/queue/join', {
+      method: 'POST',
+      token: invalidatedUserB.token,
+      body: { displayName: '丁' },
+    });
+    assert.equal(blockedUnreadyInvalidated.status, 409, 'restarted unready invalidated user should receive queue cooldown');
+    assert.equal(blockedUnreadyInvalidated.payload.reason, 'queue_cooldown', 'restarted unready invalidated user should expose queue_cooldown reason');
+    assert.equal(blockedUnreadyInvalidated.payload.matchmakingGuard?.reportVersion, 'pvp-live-matchmaking-guard-v1', 'restarted unready invalidated user should expose matchmaking guard report');
+    assert.equal(blockedUnreadyInvalidated.payload.matchmakingGuard?.cooldownSource, 'ready_timeout', 'restarted unready invalidated user should preserve ready_timeout cooldown source');
   });
 
   console.log('sanity_pvp_live_persistence_checks passed');

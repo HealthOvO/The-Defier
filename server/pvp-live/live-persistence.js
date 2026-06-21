@@ -60,6 +60,19 @@ function normalizeRecentOpponentPair(pair = {}) {
     };
 }
 
+function normalizeMatchmakingGuardProfile(profile = {}) {
+    const source = profile && typeof profile === 'object' ? profile : {};
+    const userId = String(source.userId || source.user_id || '').trim();
+    if (!userId) return null;
+    return {
+        userId,
+        cooldownUntil: Math.max(0, Math.floor(Number(source.cooldownUntil || source.cooldown_until) || 0)),
+        cooldownSource: String(source.cooldownSource || source.cooldown_source || '').slice(0, 40),
+        cancelWindowStartedAt: Math.max(0, Math.floor(Number(source.cancelWindowStartedAt || source.cancel_window_started_at) || 0)),
+        cancelCount: Math.max(0, Math.floor(Number(source.cancelCount || source.cancel_count) || 0))
+    };
+}
+
 function normalizeRatingScore(value) {
     const numeric = Number(value);
     return Math.max(0, Math.min(9999, Math.floor(Number.isFinite(numeric) ? numeric : 1000)));
@@ -483,6 +496,17 @@ function makeRecentOpponentPairFromRow(row) {
     return normalized;
 }
 
+function makeMatchmakingGuardProfileFromRow(row) {
+    if (!row || !row.user_id) return null;
+    return normalizeMatchmakingGuardProfile({
+        userId: row.user_id,
+        cooldownUntil: row.cooldown_until,
+        cooldownSource: row.cooldown_source,
+        cancelWindowStartedAt: row.cancel_window_started_at,
+        cancelCount: row.cancel_count
+    });
+}
+
 function makeSqliteLivePvpPersistence() {
     return {
         async saveQueueEntry(queueEntry) {
@@ -689,6 +713,41 @@ function makeSqliteLivePvpPersistence() {
                 [pairKey]
             );
             return makeRecentOpponentPairFromRow(row);
+        },
+        async saveMatchmakingGuard(profile) {
+            const normalized = normalizeMatchmakingGuardProfile(profile);
+            if (!normalized) return;
+            await dbRun(
+                `INSERT INTO pvp_live_matchmaking_guards
+                    (user_id, cooldown_until, cooldown_source, cancel_window_started_at, cancel_count, updated_at)
+                 VALUES (?, ?, ?, ?, ?, ?)
+                 ON CONFLICT(user_id) DO UPDATE SET
+                    cooldown_until = excluded.cooldown_until,
+                    cooldown_source = excluded.cooldown_source,
+                    cancel_window_started_at = excluded.cancel_window_started_at,
+                    cancel_count = excluded.cancel_count,
+                    updated_at = excluded.updated_at`,
+                [
+                    normalized.userId,
+                    normalized.cooldownUntil,
+                    normalized.cooldownSource,
+                    normalized.cancelWindowStartedAt,
+                    normalized.cancelCount,
+                    Date.now()
+                ]
+            );
+        },
+        async loadMatchmakingGuard(userId) {
+            const id = String(userId || '').trim();
+            if (!id) return null;
+            const row = await dbGet(
+                `SELECT *
+                 FROM pvp_live_matchmaking_guards
+                 WHERE user_id = ?
+                 LIMIT 1`,
+                [id]
+            );
+            return makeMatchmakingGuardProfileFromRow(row);
         },
         async saveMatch(match, { liveWsSourceInstanceId = '', forceConnectionSnapshot = false } = {}) {
             if (!match || !match.state || !match.matchId || !match.state.seats) return { saved: false, skipped: true, reason: 'invalid_match' };
