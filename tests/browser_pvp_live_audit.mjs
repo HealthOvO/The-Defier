@@ -1339,6 +1339,8 @@ async function safeElementScreenshot(page, selector, outputPath) {
                   safeguards: ['server_authoritative', 'snapshot_locked', 'setup_ready_required', 'invite_only_match', 'friendly_no_ranked_impact'],
                 },
               }
+            : window.__livePvpAuditHeartbeatStateView
+            ? JSON.parse(JSON.stringify(window.__livePvpAuditHeartbeatStateView))
             : makeStateView(1, 'A', 'setup'),
         };
       },
@@ -2473,123 +2475,6 @@ async function safeElementScreenshot(page, selector, outputPath) {
     window.__livePvpAuditConnectionMode = 'online';
     window.PVPScene.renderLivePanel();
   });
-  const foregroundResumeProbe = await page.evaluate(async () => {
-    const delay = (ms = 0) => new Promise(resolve => window.setTimeout(resolve, ms));
-    const session = window.PVPScene.getLiveSession();
-    window.__livePvpAuditConnectionMode = 'online';
-    window.PVPScene.activeTab = 'live';
-    window.PVPScene.liveForegroundResumeDebounceMs = 80;
-    if (window.PVPScene.liveForegroundResumeTimer) {
-      window.clearTimeout(window.PVPScene.liveForegroundResumeTimer);
-      window.PVPScene.liveForegroundResumeTimer = null;
-    }
-    window.PVPScene.liveForegroundResumeQueued = false;
-
-    const counters = {
-      resumeRealtime: 0,
-      heartbeat: 0,
-      sendLiveHeartbeat: 0,
-    };
-    const originalResumeRealtime = session.resumeRealtime ? session.resumeRealtime.bind(session) : null;
-    const originalHeartbeat = session.heartbeat ? session.heartbeat.bind(session) : null;
-    const originalSendLiveHeartbeat = window.PVPScene.sendLiveHeartbeat.bind(window.PVPScene);
-    const originalHiddenDescriptor = Object.getOwnPropertyDescriptor(document, 'hidden');
-    let hidden = false;
-
-    session.resumeRealtime = (...args) => {
-      counters.resumeRealtime += 1;
-      return originalResumeRealtime ? originalResumeRealtime(...args) : false;
-    };
-    session.heartbeat = async (...args) => {
-      counters.heartbeat += 1;
-      return originalHeartbeat ? await originalHeartbeat(...args) : null;
-    };
-    window.PVPScene.sendLiveHeartbeat = async (...args) => {
-      counters.sendLiveHeartbeat += 1;
-      return await originalSendLiveHeartbeat(...args);
-    };
-    Object.defineProperty(document, 'hidden', {
-      configurable: true,
-      get: () => hidden,
-    });
-
-    session.connectRealtime?.();
-    session.joinRealtimeMatch?.('pvplm-browser-live');
-    await delay(20);
-    window.__livePvpAuditRealtimeHandlers?.onClose?.();
-    await delay(0);
-    const beforeResumeStatus = session.getState?.()?.realtimeStatus || '';
-    window.__livePvpAuditRecordRealtime = true;
-    const callsBeforeResume = window.__livePvpAuditCalls.length;
-
-    hidden = true;
-    document.dispatchEvent(new Event('visibilitychange'));
-    await delay(0);
-    const hiddenCounters = { ...counters };
-
-    hidden = false;
-    document.dispatchEvent(new Event('visibilitychange'));
-    await delay(0);
-    window.dispatchEvent(new Event('focus'));
-    await delay(0);
-    window.dispatchEvent(new Event('pageshow'));
-    await delay(160);
-    for (let attempt = 0; attempt < 10; attempt += 1) {
-      const realtimeState = document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-realtime-state') || '';
-      const realtimeStatus = document.querySelector('[data-live-realtime-status]')?.textContent || '';
-      if (realtimeState === 'connected' && /实时通道已连接/.test(realtimeStatus)) break;
-      await delay(50);
-    }
-
-    const probe = {
-      beforeResumeStatus,
-      hiddenCounters,
-      counters: { ...counters },
-      realtimeState: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-realtime-state') || '',
-      realtimeStatus: document.querySelector('[data-live-realtime-status]')?.textContent || '',
-      connectionStatus: document.querySelector('[data-live-connection-status]')?.textContent || '',
-      payload: JSON.parse(window.render_game_to_text()).pvp?.live || null,
-      calls: window.__livePvpAuditCalls.slice(callsBeforeResume),
-    };
-
-    session.resumeRealtime = originalResumeRealtime;
-    session.heartbeat = originalHeartbeat;
-    window.PVPScene.sendLiveHeartbeat = originalSendLiveHeartbeat;
-    window.__livePvpAuditRecordRealtime = false;
-    if (originalHiddenDescriptor) {
-      Object.defineProperty(document, 'hidden', originalHiddenDescriptor);
-    } else {
-      delete document.hidden;
-    }
-    return probe;
-  });
-  add(
-    'live UI foreground resume catches up reconnecting match without manual refresh',
-    foregroundResumeProbe.beforeResumeStatus === 'reconnecting'
-      && foregroundResumeProbe.hiddenCounters.resumeRealtime === 0
-      && foregroundResumeProbe.hiddenCounters.heartbeat === 0
-      && foregroundResumeProbe.hiddenCounters.sendLiveHeartbeat === 0
-      && foregroundResumeProbe.counters.sendLiveHeartbeat === 1
-      && foregroundResumeProbe.counters.resumeRealtime === 1
-      && foregroundResumeProbe.counters.heartbeat === 1
-      && /连接：我方在线 · 对方在线/.test(foregroundResumeProbe.connectionStatus)
-      && foregroundResumeProbe.realtimeState === 'connected'
-      && /传输：实时通道已连接/.test(foregroundResumeProbe.realtimeStatus)
-      && foregroundResumeProbe.payload?.connectionReport?.opponent?.status === 'online'
-      && foregroundResumeProbe.payload?.realtimeStatus === 'connected'
-      && foregroundResumeProbe.payload?.realtimeReport?.connectionId === 'audit-live-ws-1'
-      && foregroundResumeProbe.calls.some(call => call.method === 'connectRealtime')
-      && foregroundResumeProbe.calls.some(call => call.method === 'realtimeSend'
-        && call.payload?.type === 'join_match'
-        && call.payload?.matchId === 'pvplm-browser-live'
-        && Number.isFinite(Number(call.payload?.lastSeenRevision)))
-      && foregroundResumeProbe.calls.some(call => call.method === 'realtimeSend'
-        && call.payload?.type === 'heartbeat'
-        && call.payload?.matchId === 'pvplm-browser-live'
-        && Number.isFinite(Number(call.payload?.lastSeenRevision)))
-      && foregroundResumeProbe.calls.some(call => call.method === 'heartbeat' && call.matchId === 'pvplm-browser-live'),
-    JSON.stringify(foregroundResumeProbe),
-  );
   await page.evaluate(() => {
     window.__livePvpAuditConnectionMode = 'online';
   });
@@ -2808,19 +2693,179 @@ async function safeElementScreenshot(page, selector, outputPath) {
       && !/payload|hand|deck|cardId|instanceId|loadoutSnapshot|reward|rating|elo/i.test(`${setupProbe.intentSignal} ${JSON.stringify(setupProbe.payload?.intentSignalReport || {})}`),
     JSON.stringify(setupProbe),
   );
-  const lowTimerProbe = await page.evaluate(() => {
-    window.__livePvpAuditTurnTimerMode = 'low';
-    return window.PVPScene?.refreshLiveMatch?.().then(() => {
-      window.__livePvpAuditTurnTimerMode = '';
-      const timer = document.querySelector('[data-live-turn-timer]');
-      const endTurn = document.querySelector('[data-live-action="end-turn"]');
-      return {
-        text: timer?.textContent || '',
-        urgency: timer?.getAttribute('data-live-turn-timer-urgency') || '',
-        endTurnDisabled: !!endTurn?.disabled,
-        payload: JSON.parse(window.render_game_to_text()).pvp?.live?.turnTimer || null,
-      };
+  const foregroundResumeProbe = await page.evaluate(async () => {
+    const delay = (ms = 0) => new Promise(resolve => window.setTimeout(resolve, ms));
+    const session = window.PVPScene.getLiveSession();
+    window.__livePvpAuditConnectionMode = 'online';
+    window.PVPScene.activeTab = 'live';
+    const originalForegroundResumeDebounceMs = window.PVPScene.liveForegroundResumeDebounceMs;
+    window.PVPScene.liveForegroundResumeDebounceMs = 80;
+    if (window.PVPScene.liveForegroundResumeTimer) {
+      window.clearTimeout(window.PVPScene.liveForegroundResumeTimer);
+      window.PVPScene.liveForegroundResumeTimer = null;
+    }
+    window.PVPScene.liveForegroundResumeQueued = false;
+
+    const counters = {
+      resumeRealtime: 0,
+      heartbeat: 0,
+      sendLiveHeartbeat: 0,
+    };
+    const originalResumeRealtime = session.resumeRealtime ? session.resumeRealtime.bind(session) : null;
+    const originalHeartbeat = session.heartbeat ? session.heartbeat.bind(session) : null;
+    const originalSendLiveHeartbeat = window.PVPScene.sendLiveHeartbeat.bind(window.PVPScene);
+    const originalHiddenDescriptor = Object.getOwnPropertyDescriptor(document, 'hidden');
+    const originalHeartbeatStateView = window.__livePvpAuditHeartbeatStateView;
+    const stateBeforeReconnect = session.getState?.()?.stateView || null;
+    let hidden = false;
+
+    session.resumeRealtime = (...args) => {
+      counters.resumeRealtime += 1;
+      return originalResumeRealtime ? originalResumeRealtime(...args) : false;
+    };
+    session.heartbeat = async (...args) => {
+      counters.heartbeat += 1;
+      return originalHeartbeat ? await originalHeartbeat(...args) : null;
+    };
+    window.PVPScene.sendLiveHeartbeat = async (...args) => {
+      counters.sendLiveHeartbeat += 1;
+      return await originalSendLiveHeartbeat(...args);
+    };
+    Object.defineProperty(document, 'hidden', {
+      configurable: true,
+      get: () => hidden,
     });
+
+    window.__livePvpAuditHeartbeatStateView = stateBeforeReconnect
+      ? JSON.parse(JSON.stringify(stateBeforeReconnect))
+      : window.__makeLivePvpAuditStateView?.(3, 'A', 'active');
+    session.connectRealtime?.();
+    session.joinRealtimeMatch?.('pvplm-browser-live');
+    await delay(20);
+    window.__livePvpAuditRealtimeHandlers?.onClose?.();
+    await delay(0);
+    const beforeResumeStatus = session.getState?.()?.realtimeStatus || '';
+    const beforeResumePayload = JSON.parse(window.render_game_to_text()).pvp?.live || null;
+    window.__livePvpAuditRecordRealtime = true;
+    const callsBeforeResume = window.__livePvpAuditCalls.length;
+
+    hidden = true;
+    document.dispatchEvent(new Event('visibilitychange'));
+    await delay(0);
+    const hiddenCounters = { ...counters };
+
+    hidden = false;
+    document.dispatchEvent(new Event('visibilitychange'));
+    await delay(0);
+    window.dispatchEvent(new Event('focus'));
+    await delay(0);
+    window.dispatchEvent(new Event('pageshow'));
+    await delay(160);
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+      const realtimeState = document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-realtime-state') || '';
+      const realtimeStatus = document.querySelector('[data-live-realtime-status]')?.textContent || '';
+      if (realtimeState === 'connected' && /实时通道已连接/.test(realtimeStatus)) break;
+      await delay(50);
+    }
+
+    const probe = {
+      beforeResumeStatus,
+      hiddenCounters,
+      counters: { ...counters },
+      beforePayload: beforeResumePayload,
+      realtimeState: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-realtime-state') || '',
+      realtimeStatus: document.querySelector('[data-live-realtime-status]')?.textContent || '',
+      connectionStatus: document.querySelector('[data-live-connection-status]')?.textContent || '',
+      payload: JSON.parse(window.render_game_to_text()).pvp?.live || null,
+      calls: window.__livePvpAuditCalls.slice(callsBeforeResume),
+    };
+
+    session.resumeRealtime = originalResumeRealtime;
+    session.heartbeat = originalHeartbeat;
+    window.PVPScene.sendLiveHeartbeat = originalSendLiveHeartbeat;
+    window.__livePvpAuditRecordRealtime = false;
+    window.PVPScene.liveForegroundResumeDebounceMs = originalForegroundResumeDebounceMs;
+    if (originalHeartbeatStateView == null) {
+      delete window.__livePvpAuditHeartbeatStateView;
+    } else {
+      window.__livePvpAuditHeartbeatStateView = originalHeartbeatStateView;
+    }
+    if (originalHiddenDescriptor) {
+      Object.defineProperty(document, 'hidden', originalHiddenDescriptor);
+    } else {
+      delete document.hidden;
+    }
+    return probe;
+  });
+  add(
+    'live UI foreground resume catches up reconnecting match without manual refresh',
+    foregroundResumeProbe.beforeResumeStatus === 'reconnecting'
+      && foregroundResumeProbe.hiddenCounters.resumeRealtime === 0
+      && foregroundResumeProbe.hiddenCounters.heartbeat === 0
+      && foregroundResumeProbe.hiddenCounters.sendLiveHeartbeat === 0
+      && foregroundResumeProbe.counters.sendLiveHeartbeat === 1
+      && foregroundResumeProbe.counters.resumeRealtime === 1
+      && foregroundResumeProbe.counters.heartbeat === 1
+      && /连接：我方在线 · 对方在线/.test(foregroundResumeProbe.connectionStatus)
+      && foregroundResumeProbe.realtimeState === 'connected'
+      && /传输：实时通道已连接/.test(foregroundResumeProbe.realtimeStatus)
+      && foregroundResumeProbe.payload?.connectionReport?.opponent?.status === 'online'
+      && foregroundResumeProbe.payload?.realtimeStatus === 'connected'
+      && foregroundResumeProbe.payload?.realtimeReport?.connectionId === 'audit-live-ws-1'
+      && foregroundResumeProbe.calls.some(call => call.method === 'connectRealtime')
+      && foregroundResumeProbe.calls.some(call => call.method === 'realtimeSend'
+        && call.payload?.type === 'join_match'
+        && call.payload?.matchId === 'pvplm-browser-live'
+        && Number.isFinite(Number(call.payload?.lastSeenRevision)))
+      && foregroundResumeProbe.calls.some(call => call.method === 'realtimeSend'
+        && call.payload?.type === 'heartbeat'
+        && call.payload?.matchId === 'pvplm-browser-live'
+        && Number.isFinite(Number(call.payload?.lastSeenRevision)))
+      && foregroundResumeProbe.calls.some(call => call.method === 'heartbeat' && call.matchId === 'pvplm-browser-live'),
+    JSON.stringify(foregroundResumeProbe),
+  );
+  add(
+    'live UI foreground resume preserves active turn window without terminal fallout',
+    foregroundResumeProbe.beforePayload?.phase === 'active'
+      && foregroundResumeProbe.payload?.phase === 'active'
+      && foregroundResumeProbe.payload?.currentSeat === foregroundResumeProbe.beforePayload?.currentSeat
+      && foregroundResumeProbe.payload?.turnTimer?.startedAt === foregroundResumeProbe.beforePayload?.turnTimer?.startedAt
+      && foregroundResumeProbe.payload?.turnTimer?.deadlineAt === foregroundResumeProbe.beforePayload?.turnTimer?.deadlineAt
+      && foregroundResumeProbe.payload?.postMatchReview == null
+      && !(foregroundResumeProbe.payload?.lastEvents || []).some(event => ['connection_timeout', 'turn_timeout', 'match_finished'].includes(event.eventType)),
+    JSON.stringify(foregroundResumeProbe),
+  );
+  const lowTimerProbe = await page.evaluate(async () => {
+    const session = window.PVPScene?.getLiveSession?.();
+    const originalGetState = session?.getState?.bind(session);
+    const baseState = originalGetState?.() || {};
+    const currentVersion = Number(baseState?.stateView?.stateVersion || 3);
+    window.__livePvpAuditTurnTimerMode = 'low';
+    const lowStateView = window.__makeLivePvpAuditStateView?.(currentVersion + 1, 'A', 'active') || null;
+    window.__livePvpAuditTurnTimerMode = '';
+    if (session && originalGetState && lowStateView) {
+      session.getState = () => ({
+        ...baseState,
+        phase: 'active',
+        matchId: baseState.matchId || lowStateView.matchId || 'pvplm-browser-live',
+        seatId: baseState.seatId || 'A',
+        stateView: lowStateView,
+      });
+    }
+    window.PVPScene?.renderLivePanel?.();
+    const timer = document.querySelector('[data-live-turn-timer]');
+    const endTurn = document.querySelector('[data-live-action="end-turn"]');
+    const probe = {
+      text: timer?.textContent || '',
+      urgency: timer?.getAttribute('data-live-turn-timer-urgency') || '',
+      endTurnDisabled: !!endTurn?.disabled,
+      payload: JSON.parse(window.render_game_to_text()).pvp?.live?.turnTimer || null,
+    };
+    if (session && originalGetState) {
+      session.getState = originalGetState;
+    }
+    window.PVPScene?.renderLivePanel?.();
+    return probe;
   });
   add(
     'live UI warns the acting player during the final 10 seconds without hiding action controls',
@@ -3809,7 +3854,14 @@ async function safeElementScreenshot(page, selector, outputPath) {
     JSON.stringify(seasonGoalRecoveryProbe),
   );
 
-  await page.click('[data-live-experience-check="decision_windows"]', { timeout: 5000, force: true });
+  const experienceCheckClicked = await page.evaluate(() => {
+    const button = document.querySelector('[data-live-experience-check="decision_windows"]');
+    if (!button) return false;
+    button.scrollIntoView({ block: 'center', inline: 'nearest' });
+    button.click();
+    return true;
+  });
+  if (!experienceCheckClicked) throw new Error('expected decision window experience check button');
   await page.waitForTimeout(100);
   const experienceFocusProbe = await page.evaluate(() => ({
     phase: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-phase') || '',

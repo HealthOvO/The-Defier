@@ -1,5 +1,23 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-21: V10-S35 live PVP foreground resume active continuity browser contract
+  - 本轮完成
+    - `tests/browser_pvp_live_audit.mjs` 将前台恢复探针移动到 setup -> active 之后：真实页面先完成调息/准备进入战斗，再模拟切后台、实时通道断开、回前台、focus/pageshow。
+    - 新增浏览器 finding：`live UI foreground resume preserves active turn window without terminal fallout`，通过 `render_game_to_text().pvp.live.lastEvents` 钉住恢复后仍是 `active`，`currentSeat`、`turnTimer.startedAt / deadlineAt` 不变，且不出现 `connection_timeout`、`turn_timeout`、`match_finished` 或 `postMatchReview`。
+    - fake live heartbeat 支持注入当前 active 权威快照，避免浏览器审计把前台恢复误测成 setup 回包；该浏览器切片证明 foreground resume wiring 与 UI 连续性，同版本脏 heartbeat 防回退仍由 V10-S34 session 合同覆盖。
+    - 低倒计时 probe 改为临时渲染，不污染后续出牌/交权会话状态；前台恢复 probe 会恢复原 `liveForegroundResumeDebounceMs`，避免顺序耦合。
+    - `tests/sanity_release_gate_coverage_checks.cjs` 增加 foreground continuity marker，扫描 active phase、currentSeat、turnTimer、postMatchReview、lastEvents 终局码和 realtime 恢复调用，确保 release gate 会持续钉住这条双方体验合同。
+  - 已验证
+    - 语法：`node --check tests/browser_pvp_live_audit.mjs`
+    - 语法：`node --check tests/sanity_release_gate_coverage_checks.cjs`
+    - 绿测：`node tests/sanity_release_gate_coverage_checks.cjs`
+    - 浏览器审计：`node tests/browser_pvp_live_audit.mjs http://127.0.0.1:4173 output/pvp-live-foreground-continuity-audit-final3`，104/104 findings、0 failed、0 console error。
+    - 文档同步：`node tests/sanity_intro_progress_sync_checks.cjs`
+    - 全量 Node 门禁：`npm run test:node`，All node checks passed。
+    - 构建：`npm run build:pages`
+  - 当前结论
+    - live PVP 的 active 弱网恢复现在有真实页面级证据：玩家从后台回到前台时，UI 会恢复实时通道并同步权威心跳，同时保留原行动方和原倒计时窗口，不会突然刷新成 setup、重置行动时间或展示陈旧终局。该切片只补浏览器审计与 release marker，不改变匹配、战斗数值、心跳协议、结算、奖励或 UI 文案。
+
 - 2026-06-21: V10-S34 live PVP active reconnect grace session contract
   - 本轮完成
     - `tests/sanity_pvp_live_session_checks.mjs` 扩展 session heartbeat 合同：active reconnect grace 下的权威 `turnTimer.startedAt / deadlineAt`、`connectionTempoReport.tempoState='opponent_action_grace'`、`connectionReport` 必须被前端会话保存，且不能把 `connection_timeout`、`turn_timeout`、`match_finished` 或 `postMatchReview` 当成当前 active 局展示。
