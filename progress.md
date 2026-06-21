@@ -1,5 +1,25 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-21: V10-S15 live PVP recent-opponent matchmaking safeguard
+  - 本轮完成
+    - `server/pvp-live/live-store.js` 新增 `recentOpponentCooldownMs` 与 `recent_opponent_suppression` 匹配护栏：正式真人局结束后会记录双方近期对手关系，在冷却窗口内公共匹配会跳过刚刚交手的同一对，避免低人数池里反复秒排同一个人造成体验疲劳。
+    - `server/db/database.js` 与 `server/pvp-live/live-persistence.js` 新增 `pvp_live_recent_opponents` 持久化表和 `saveRecentOpponentPair / loadRecentOpponentPair` 接口；跨进程、重启后仍能识别近期对手，不再依赖单进程内存。
+    - waiting report 现在会把 `recent_opponent_suppression` 作为公开 safeguard 返回，并用“近期对手会被暂时跳过，正在换一位真人”解释等待原因；不会自动切残影、不会写正式积分，也不会泄漏具体 rating / elo。
+    - `js/scenes/pvp-scene.js` 新增 `getLiveWaitingQualitySafeguard()`：近期对手/低样本这类匹配质量护栏未达到长等待阈值时也会显示 waiting report，保留取消排队、问道练习和双方同意宽分差入口；练习 handoff 使用 `replay_self` / `rankedImpact=none` 的公开等待场景。
+    - `tests/sanity_pvp_live_cross_process_queue_checks.cjs` 增加红绿链：刚结束的一对不能立即复配，第三名真人仍可匹配进等待池；同一规则在共享持久化的 fresh store 中也必须生效。
+    - UI runtime、UI contract、浏览器审计与 release coverage 同步钉住 `recent_opponent_suppression`、`匹配质量护栏` 和跨进程持久化接口，防止后续只剩后端规则或只剩前端文案。
+  - 已验证
+    - 红测：`node tests/sanity_pvp_live_cross_process_queue_checks.cjs` 在实现前失败于刚结束的一对会立即 `matched`。
+    - 红测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs` 在 UI 修复前失败于非长等待的近期对手 waiting report 不渲染。
+    - 绿测：`node tests/sanity_pvp_live_cross_process_queue_checks.cjs`
+    - 绿测：`node tests/sanity_pvp_live_ui_contract_checks.cjs`
+    - 绿测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs`
+    - 绿测：`node tests/sanity_release_gate_coverage_checks.cjs`
+    - 构建：`npm run build:pages`
+    - 浏览器审计：`node tests/browser_pvp_live_audit.mjs http://127.0.0.1:4173 output/pvp-live-recent-opponent-audit`，92/92 findings、0 failed、0 console error。
+  - 当前结论
+    - live PVP 匹配已经从“有真人就立刻配”推进到“有真人也要照顾双方体验”：近期刚交手的一对会被临时拆开，系统公开解释等待原因并保留练习/取消/宽分差选择。这个切片不改变卡牌数值、先后手规则或结算，只补匹配质量合同；下一步应继续落 `queue cooldown`、`ready_timeout` 惩罚和低样本放行策略。
+
 - 2026-06-21: V10-S14 live PVP replay-backed post-game action bridge
   - 本轮完成
     - `server/pvp-live/engine/state-view.js` 为赛后 `nextActions` 补齐 `auditActionId`，并新增 `postGameActionBridge.reportVersion=pvp-live-post-game-action-bridge-v1`；现在 `key_turn_replay -> review_key_turns`、`apply_loadout_recommendation -> adjust_loadout`、`practice_topic -> practice`、`queue_again -> queue_again` 都是可校验合同，不再停留在模拟审计里的抽象动作名。

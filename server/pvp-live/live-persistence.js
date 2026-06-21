@@ -39,6 +39,27 @@ function serializeQueueConnectionHealth(report) {
     return JSON.stringify(report && typeof report === 'object' ? report : {});
 }
 
+function makeRecentOpponentPairKey(userIdA, userIdB) {
+    const ids = [String(userIdA || '').trim(), String(userIdB || '').trim()]
+        .filter(Boolean)
+        .sort();
+    return ids.length === 2 && ids[0] !== ids[1] ? `${ids[0]}::${ids[1]}` : '';
+}
+
+function normalizeRecentOpponentPair(pair = {}) {
+    const source = pair && typeof pair === 'object' ? pair : {};
+    const pairKey = makeRecentOpponentPairKey(source.userIdA || source.user_id_a, source.userIdB || source.user_id_b);
+    if (!pairKey) return null;
+    const [userIdA, userIdB] = pairKey.split('::');
+    return {
+        pairKey,
+        userIdA,
+        userIdB,
+        lastMatchId: String(source.lastMatchId || source.last_match_id || ''),
+        lastMatchedAt: Math.max(0, Math.floor(Number(source.lastMatchedAt || source.last_matched_at) || 0))
+    };
+}
+
 function normalizeRatingScore(value) {
     const numeric = Number(value);
     return Math.max(0, Math.min(9999, Math.floor(Number.isFinite(numeric) ? numeric : 1000)));
@@ -450,6 +471,18 @@ function makeInviteRoomFromRow(row) {
     };
 }
 
+function makeRecentOpponentPairFromRow(row) {
+    if (!row || !row.pair_key || !row.user_id_a || !row.user_id_b) return null;
+    const normalized = normalizeRecentOpponentPair({
+        userIdA: row.user_id_a,
+        userIdB: row.user_id_b,
+        lastMatchId: row.last_match_id,
+        lastMatchedAt: row.last_matched_at
+    });
+    if (!normalized || normalized.pairKey !== row.pair_key) return null;
+    return normalized;
+}
+
 function makeSqliteLivePvpPersistence() {
     return {
         async saveQueueEntry(queueEntry) {
@@ -622,6 +655,40 @@ function makeSqliteLivePvpPersistence() {
                 );
             });
             return rows.map(makeQueueEntryFromRow).filter(Boolean);
+        },
+        async saveRecentOpponentPair(pair) {
+            const normalized = normalizeRecentOpponentPair(pair);
+            if (!normalized || !normalized.lastMatchedAt) return;
+            const now = Date.now();
+            await dbRun(
+                `INSERT INTO pvp_live_recent_opponents
+                    (pair_key, user_id_a, user_id_b, last_match_id, last_matched_at, updated_at)
+                 VALUES (?, ?, ?, ?, ?, ?)
+                 ON CONFLICT(pair_key) DO UPDATE SET
+                    last_match_id = excluded.last_match_id,
+                    last_matched_at = excluded.last_matched_at,
+                    updated_at = excluded.updated_at`,
+                [
+                    normalized.pairKey,
+                    normalized.userIdA,
+                    normalized.userIdB,
+                    normalized.lastMatchId,
+                    normalized.lastMatchedAt,
+                    now
+                ]
+            );
+        },
+        async loadRecentOpponentPair(userIdA, userIdB) {
+            const pairKey = makeRecentOpponentPairKey(userIdA, userIdB);
+            if (!pairKey) return null;
+            const row = await dbGet(
+                `SELECT *
+                 FROM pvp_live_recent_opponents
+                 WHERE pair_key = ?
+                 LIMIT 1`,
+                [pairKey]
+            );
+            return makeRecentOpponentPairFromRow(row);
         },
         async saveMatch(match, { liveWsSourceInstanceId = '', forceConnectionSnapshot = false } = {}) {
             if (!match || !match.state || !match.matchId || !match.state.seats) return { saved: false, skipped: true, reason: 'invalid_match' };

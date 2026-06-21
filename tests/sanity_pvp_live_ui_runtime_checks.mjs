@@ -558,6 +558,63 @@ assert.equal(liveButtons.get('join-queue').textContent, '入队', 'healthy idle 
 assert.equal(liveButtons.get('practice-live').disabled, true, 'healthy idle live entry should not expose practice without a blocked safeguard action');
 documentStub.querySelector = oldDocumentQuerySelector;
 
+const recentOpponentWaitingState = {
+  phase: 'waiting',
+  queueTicket: 'pvplq-ui-recent-opponent',
+  matchId: '',
+  waitingReport: {
+    reportVersion: 'pvp-live-waiting-report-v1',
+    waitMs: 6000,
+    longWaitThresholdMs: 120000,
+    longWait: false,
+    message: '刚刚交手的近期对手会被暂时跳过，正在为你换一位真人；不会自动切残影。',
+    safeguards: ['real_player_only', 'recent_opponent_suppression', 'no_score_change'],
+    actions: [
+      { id: 'continue_waiting', label: '继续等待', detail: '继续等待真人，不自动切残影。' },
+      { id: 'accept_wide_match', label: '接受宽分差', detail: '仅在双方都确认后，才允许 200-399 分差真人局。' },
+      { id: 'practice', label: '问道练习', detail: '练习不写正式积分。' },
+      { id: 'cancel_queue', label: '取消匹配', detail: '取消本次排队，不影响正式积分。' }
+    ]
+  },
+  stateView: null,
+  lastEvents: []
+};
+const recentOpponentWaitingMarkup = PVPScene.renderLiveWaitingReport(recentOpponentWaitingState);
+assert.match(
+  recentOpponentWaitingMarkup,
+  /匹配质量护栏|近期对手/,
+  'live UI should render recent-opponent waiting report before the long-wait threshold',
+);
+assert.match(
+  recentOpponentWaitingMarkup,
+  /data-live-waiting-action="accept-wide-match"/,
+  'recent-opponent waiting report should preserve explicit wide-match consent action',
+);
+const recentOpponentButtons = new Map([
+  ['join-queue', { disabled: true, textContent: '入队', querySelector() { return null; } }],
+  ['practice-live', { disabled: true, textContent: '问道练习', querySelector() { return null; } }],
+  ['cancel-queue', { disabled: true, textContent: '取消匹配', querySelector() { return null; } }],
+]);
+const recentOpponentRootStub = {
+  querySelector(selector) {
+    const actionMatch = String(selector || '').match(/^\[data-live-action="([^"]+)"\]$/);
+    return actionMatch ? recentOpponentButtons.get(actionMatch[1]) || null : null;
+  },
+  querySelectorAll() { return []; }
+};
+documentStub.querySelector = (selector) => selector === '[data-live-pvp-root]' ? recentOpponentRootStub : null;
+PVPScene.getLiveSession = () => ({ getState: () => recentOpponentWaitingState });
+PVPScene.updateLiveButtons('waiting', false, null);
+assert.equal(recentOpponentButtons.get('practice-live').disabled, false, 'recent-opponent waiting safeguard should keep no-score practice available');
+assert.equal(recentOpponentButtons.get('cancel-queue').disabled, false, 'recent-opponent waiting safeguard should keep cancellation available');
+const recentOpponentPracticeScenario = PVPScene.buildLiveWaitingPracticeScenario(recentOpponentWaitingState);
+assert.equal(
+  recentOpponentPracticeScenario?.finishReason,
+  'recent_opponent_suppression',
+  'recent-opponent waiting safeguard should create a no-score practice handoff scenario',
+);
+documentStub.querySelector = oldDocumentQuerySelector;
+
 let currentState = {
   phase: 'active',
   matchId: 'pvpm-ui-runtime-heartbeat',

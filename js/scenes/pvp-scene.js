@@ -1707,6 +1707,29 @@ export const PVPScene = {
   isLiveLongWait(state) {
     return !!this.getLiveWaitingReport(state)?.longWait;
   },
+  getLiveWaitingQualitySafeguard(state) {
+    const report = this.getLiveWaitingReport(state);
+    const safeguards = report && Array.isArray(report.safeguards) ? report.safeguards : [];
+    if (safeguards.includes('recent_opponent_suppression')) {
+      return {
+        reason: 'recent_opponent_suppression',
+        title: '匹配质量护栏',
+        themeLabel: '近期对手轮换',
+        trainingTag: '近期对手轮换',
+        advice: '近期对手练习：系统正在跳过刚刚交手的对手，先练首轮稳血、反制和低费节奏；不写正式积分。'
+      };
+    }
+    if (safeguards.includes('low_sample_protection')) {
+      return {
+        reason: 'low_sample_protection',
+        title: '匹配质量护栏',
+        themeLabel: '匹配样本保护',
+        trainingTag: '匹配样本保护',
+        advice: '样本保护练习：系统正在等待更稳妥的真人匹配，先练起手调息和防秒杀节奏；不写正式积分。'
+      };
+    }
+    return null;
+  },
   getLiveConnectionHealthError(state = null) {
     const source = state && typeof state === 'object' ? state : this.getLiveSession().getState();
     const error = source && source.lastError && typeof source.lastError === 'object' ? source.lastError : null;
@@ -1753,12 +1776,13 @@ export const PVPScene = {
   },
   renderLiveWaitingReport(state) {
     const report = this.getLiveWaitingReport(state);
-    if (!report || !report.longWait) return '';
+    const qualitySafeguard = this.getLiveWaitingQualitySafeguard(state);
+    if (!report || (!report.longWait && !qualitySafeguard)) return '';
     const waitSec = Math.ceil(report.waitMs / 1000);
     const thresholdSec = Math.max(1, Math.ceil(report.longWaitThresholdMs / 1000));
     return `
       <div class="pvp-live-waiting-head">
-        <span>${this.escapeHtml(thresholdSec)} 秒无真人</span>
+        <span>${this.escapeHtml(report.longWait ? `${thresholdSec} 秒无真人` : qualitySafeguard.title)}</span>
         <span>已等待 ${this.escapeHtml(waitSec)}s</span>
       </div>
       <div>${this.escapeHtml(report.message || '当前真人较少，可继续等待、进入问道练习或取消匹配；不会自动切残影。')}</div>
@@ -1772,11 +1796,17 @@ export const PVPScene = {
   buildLiveWaitingPracticeScenario(state = null) {
     const sourceState = state && typeof state === 'object' ? state : this.getLiveSession().getState();
     const waitingReport = this.getLiveWaitingReport(sourceState);
-    if (!waitingReport || !waitingReport.longWait) return null;
+    const qualitySafeguard = this.getLiveWaitingQualitySafeguard(sourceState);
+    if (!waitingReport || (!waitingReport.longWait && !qualitySafeguard)) return null;
     const queueTicket = String(sourceState && sourceState.queueTicket || '').trim();
-    const sourceId = queueTicket || `long-wait-${Date.now()}`;
+    const finishReason = qualitySafeguard ? qualitySafeguard.reason : 'long_wait';
+    const sourceId = queueTicket || `${finishReason}-${Date.now()}`;
     const selectedLoadout = this.getLiveSelectedLoadoutPreset();
     const waitSec = Math.ceil(waitingReport.waitMs / 1000);
+    const themeLabel = qualitySafeguard ? qualitySafeguard.themeLabel : '等待真人';
+    const trainingAdvice = qualitySafeguard
+      ? qualitySafeguard.advice
+      : `长等待练习：已等待 ${waitSec}s，先练调息、首轮稳血和低费节奏；不写正式积分。`;
     return {
       reportVersion: 'pvp-live-drill-scenario-v1',
       sourceMatchId: `waiting:${sourceId}`,
@@ -1784,15 +1814,15 @@ export const PVPScene = {
       usesHiddenInformation: false,
       rankedImpact: 'none',
       result: 'waiting',
-      finishReason: 'long_wait',
+      finishReason,
       recommendedLoadoutId: selectedLoadout.id,
       recommendedLoadoutLabel: selectedLoadout.label,
       themeKey: 'tempo',
-      themeLabel: '等待真人',
-      trainingAdvice: `长等待练习：已等待 ${waitSec}s，先练调息、首轮稳血和低费节奏；不写正式积分。`,
-      drillObjective: `${selectedLoadout.label}：等待真人时练首轮调息和出牌节奏，不写正式积分。`,
-      trainingTags: ['真人 PVP', '长等待练习', '不计积分', '等待真人'],
-      publicEventTypes: ['queue_long_wait'],
+      themeLabel,
+      trainingAdvice,
+      drillObjective: `${selectedLoadout.label}：${themeLabel}时练首轮调息和出牌节奏，不写正式积分。`,
+      trainingTags: ['真人 PVP', qualitySafeguard ? qualitySafeguard.trainingTag : '长等待练习', '不计积分', '等待真人'],
+      publicEventTypes: [qualitySafeguard ? 'queue_quality_safeguard' : 'queue_long_wait'],
       sourceEventSequences: [],
       waitingReport
     };
@@ -3723,7 +3753,7 @@ export const PVPScene = {
     setDisabled('join-invite', phase === 'queueing' || phase === 'waiting' || phase === 'waiting_invite' || phase === 'waiting_rematch' || phase === 'matched' || phase === 'setup' || phase === 'active');
     setDisabled('cancel-invite', phase !== 'waiting_invite');
     setDisabled('cancel-queue', phase !== 'waiting');
-    setDisabled('practice-live', !(entrySafeguardBlocked && this.hasLiveEntrySafeguardAction(state, 'practice')) && !(phase === 'waiting' && this.getLiveWaitingReport(state)?.longWait));
+    setDisabled('practice-live', !(entrySafeguardBlocked && this.hasLiveEntrySafeguardAction(state, 'practice')) && !(phase === 'waiting' && (this.getLiveWaitingReport(state)?.longWait || this.getLiveWaitingQualitySafeguard(state))));
     setDisabled('refresh-match', phase === 'queueing' || phase === 'idle' || phase === 'finished' || phase === 'invalidated');
     setButtonText('join-queue', entrySafeguardBlocked && this.hasLiveEntrySafeguardAction(state, 'retry_connection_check') ? '重试检测' : '入队');
     setButtonText('end-turn', endTurnConfirmArmed ? '确认结束' : '结束回合');

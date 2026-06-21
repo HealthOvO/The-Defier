@@ -884,6 +884,27 @@ async function safeElementScreenshot(page, selector, outputPath) {
       getQueueStatus: async (queueTicket) => {
         push({ method: 'getQueueStatus', queueTicket });
         queueStatusPolls += 1;
+        if (String(window.__livePvpAuditQueueStatusMode || '') === 'recent-opponent') {
+          return {
+            success: true,
+            status: 'waiting',
+            queueTicket,
+            waitingReport: {
+              reportVersion: 'pvp-live-waiting-report-v1',
+              waitMs: 6000,
+              longWaitThresholdMs: 120000,
+              longWait: false,
+              message: '刚刚交手的近期对手会被暂时跳过，正在为你换一位真人；不会自动切残影。',
+              safeguards: ['real_player_only', 'recent_opponent_suppression', 'no_score_change'],
+              actions: [
+                { id: 'continue_waiting', label: '继续等待', detail: '继续等待真人，不自动切残影。' },
+                { id: 'accept_wide_match', label: '接受宽分差', detail: '仅在双方都确认后，才允许 200-399 分差真人局。' },
+                { id: 'practice', label: '问道练习', detail: '练习不写正式积分。' },
+                { id: 'cancel_queue', label: '取消匹配', detail: '取消本次排队，不影响正式积分。' },
+              ],
+            },
+          };
+        }
         if (queueStatusPolls === 1) {
           return {
             success: true,
@@ -1399,6 +1420,42 @@ async function safeElementScreenshot(page, selector, outputPath) {
     JSON.stringify(waitingProbe),
   );
 
+  await page.evaluate(() => {
+    window.__setLivePvpAuditQueueStatusPolls(0);
+    window.__livePvpAuditQueueStatusMode = 'recent-opponent';
+  });
+  await page.click('[data-live-action="refresh-match"]', { timeout: 5000, force: true });
+  await page.waitForTimeout(200);
+  const recentWaitingProbe = await page.evaluate(() => ({
+    phase: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-phase') || '',
+    report: document.querySelector('[data-live-waiting-report]')?.textContent || '',
+    buttons: Object.fromEntries(Array.from(document.querySelectorAll('[data-live-action]')).map(button => [button.getAttribute('data-live-action'), button.disabled])),
+    payload: JSON.parse(window.render_game_to_text()).pvp?.live || null,
+    calls: window.__livePvpAuditCalls,
+  }));
+  add(
+    'live UI renders recent-opponent waiting safeguard before long-wait threshold',
+    recentWaitingProbe.phase === 'waiting'
+      && /匹配质量护栏/.test(recentWaitingProbe.report)
+      && /近期对手|换一位/.test(recentWaitingProbe.report)
+      && /接受宽分差/.test(recentWaitingProbe.report)
+      && /问道练习/.test(recentWaitingProbe.report)
+      && /取消匹配/.test(recentWaitingProbe.report)
+      && /不会自动切残影/.test(recentWaitingProbe.report)
+      && recentWaitingProbe.buttons['practice-live'] === false
+      && recentWaitingProbe.buttons['cancel-queue'] === false
+      && recentWaitingProbe.payload?.waitingReport?.reportVersion === 'pvp-live-waiting-report-v1'
+      && recentWaitingProbe.payload?.waitingReport?.longWait === false
+      && recentWaitingProbe.payload?.waitingReport?.safeguards?.includes('recent_opponent_suppression')
+      && recentWaitingProbe.payload?.waitingReport?.actions?.some(action => action.id === 'accept_wide_match')
+      && !/GhostEnemy|reward|rating|elo/i.test(`${recentWaitingProbe.report} ${JSON.stringify(recentWaitingProbe.payload?.waitingReport || {})}`),
+    JSON.stringify(recentWaitingProbe),
+  );
+
+  await page.evaluate(() => {
+    window.__setLivePvpAuditQueueStatusPolls(0);
+    window.__livePvpAuditQueueStatusMode = '';
+  });
   await page.click('[data-live-action="refresh-match"]', { timeout: 5000, force: true });
   await page.waitForTimeout(200);
   const longWaitProbe = await page.evaluate(() => ({

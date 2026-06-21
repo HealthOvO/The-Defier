@@ -11,6 +11,7 @@ const DEFAULT_HEARTBEAT_STALE_MS = 15 * 1000;
 const DEFAULT_RECONNECT_GRACE_MS = 30 * 1000;
 const DEFAULT_INVITE_TTL_MS = 15 * 60 * 1000;
 const DEFAULT_REMATCH_TTL_MS = 10 * 60 * 1000;
+const DEFAULT_RECENT_OPPONENT_COOLDOWN_MS = 10 * 60 * 1000;
 const DEFAULT_RATING_SCORE = 1000;
 const STRICT_RATING_DELTA = 99;
 const FAIR_RATING_DELTA = 199;
@@ -101,6 +102,34 @@ function normalizeLivePvpTestMatchScope(value) {
 
 function getQueueEntryTestMatchScope(entry) {
     return normalizeLivePvpTestMatchScope(entry && entry.testMatchScope);
+}
+
+function makeRecentOpponentPairKey(userIdA, userIdB) {
+    const ids = [String(userIdA || '').trim(), String(userIdB || '').trim()]
+        .filter(Boolean)
+        .sort();
+    return ids.length === 2 && ids[0] !== ids[1] ? `${ids[0]}::${ids[1]}` : '';
+}
+
+function normalizeRecentOpponentPair(pair = {}) {
+    const source = pair && typeof pair === 'object' ? pair : {};
+    const pairKey = makeRecentOpponentPairKey(source.userIdA || source.user_id_a, source.userIdB || source.user_id_b);
+    if (!pairKey) return null;
+    const [userIdA, userIdB] = pairKey.split('::');
+    return {
+        pairKey,
+        userIdA,
+        userIdB,
+        lastMatchId: String(source.lastMatchId || source.last_match_id || ''),
+        lastMatchedAt: Math.max(0, Math.floor(Number(source.lastMatchedAt || source.last_matched_at) || 0))
+    };
+}
+
+function appendUniqueString(list, value, limit = 12) {
+    const items = Array.isArray(list) ? list.map(item => String(item || '')).filter(Boolean) : [];
+    const normalized = String(value || '').trim();
+    if (normalized && !items.includes(normalized)) items.push(normalized);
+    return items.slice(0, limit);
 }
 
 function normalizeRatingScore(value) {
@@ -300,19 +329,28 @@ function makeInviteReport({ inviteCode, status = 'waiting', host = null, target 
     };
 }
 
-function makeWaitingReport({ waitMs = 0, thresholdMs = DEFAULT_LONG_WAIT_THRESHOLD_MS } = {}) {
+function makeWaitingReport({ waitMs = 0, thresholdMs = DEFAULT_LONG_WAIT_THRESHOLD_MS, safeguards = [] } = {}) {
     const safeWaitMs = Math.max(0, Math.floor(Number(waitMs) || 0));
     const safeThresholdMs = Math.max(1000, Math.floor(Number(thresholdMs) || DEFAULT_LONG_WAIT_THRESHOLD_MS));
     const longWait = safeWaitMs >= safeThresholdMs;
+    const mergedSafeguards = [
+        'real_player_only',
+        'no_ghost_fallback',
+        'no_score_change',
+        ...(Array.isArray(safeguards) ? safeguards.map(item => String(item || '')).filter(Boolean) : [])
+    ].reduce((items, item) => appendUniqueString(items, item, 12), []);
+    const hasRecentOpponentSuppression = mergedSafeguards.includes('recent_opponent_suppression');
     return {
         reportVersion: 'pvp-live-waiting-report-v1',
         waitMs: safeWaitMs,
         longWaitThresholdMs: safeThresholdMs,
         longWait,
-        message: longWait
-            ? '当前真人较少，可继续等待、进入问道练习或取消匹配；不会自动切残影。'
-            : '正在等待真实玩家加入；不会自动切残影。',
-        safeguards: ['real_player_only', 'no_ghost_fallback', 'no_score_change'],
+        message: hasRecentOpponentSuppression
+            ? '刚刚交手的近期对手会被暂时跳过，正在为你换一位真人；不会自动切残影。'
+            : longWait
+                ? '当前真人较少，可继续等待、进入问道练习或取消匹配；不会自动切残影。'
+                : '正在等待真实玩家加入；不会自动切残影。',
+        safeguards: mergedSafeguards,
         actions: [
             {
                 id: 'continue_waiting',
@@ -452,6 +490,7 @@ class LivePvpStore {
         reconnectGraceMs = DEFAULT_RECONNECT_GRACE_MS,
         inviteTtlMs = DEFAULT_INVITE_TTL_MS,
         rematchTtlMs = DEFAULT_REMATCH_TTL_MS,
+        recentOpponentCooldownMs = DEFAULT_RECENT_OPPONENT_COOLDOWN_MS,
         persistence = null,
         settlement = null,
         ratingProvider = null
@@ -465,6 +504,9 @@ class LivePvpStore {
         this.reconnectGraceMs = Math.max(1000, Math.floor(Number(reconnectGraceMs) || DEFAULT_RECONNECT_GRACE_MS));
         this.inviteTtlMs = Math.max(5000, Math.floor(Number(inviteTtlMs) || DEFAULT_INVITE_TTL_MS));
         this.rematchTtlMs = Math.max(5000, Math.floor(Number(rematchTtlMs) || DEFAULT_REMATCH_TTL_MS));
+        this.recentOpponentCooldownMs = Number.isFinite(Number(recentOpponentCooldownMs))
+            ? Math.max(0, Math.floor(Number(recentOpponentCooldownMs)))
+            : DEFAULT_RECENT_OPPONENT_COOLDOWN_MS;
         this.persistence = persistence;
         this.settlement = settlement;
         this.ratingProvider = ratingProvider;
@@ -481,6 +523,7 @@ class LivePvpStore {
         this.friendlyRematchRequests = new Map();
         this.inviteRooms = new Map();
         this.inviteCodeByHostUserId = new Map();
+        this.recentOpponentPairs = new Map();
     }
 
     setPersistence(persistence = null) {
@@ -514,6 +557,12 @@ class LivePvpStore {
             if (!existing.testMatchScope && queueEntry.testMatchScope) {
                 existing.testMatchScope = queueEntry.testMatchScope;
             }
+            if (queueEntry.matchmakingSuppressionReasons && queueEntry.matchmakingSuppressionReasons.length > 0) {
+                existing.matchmakingSuppressionReasons = this.mergeQueueSuppressionReasons(
+                    existing.matchmakingSuppressionReasons,
+                    queueEntry.matchmakingSuppressionReasons
+                );
+            }
             return existing;
         }
         const duplicateUserTicket = this.waitingQueue.find(entry => entry.player && entry.player.userId === queueEntry.player.userId);
@@ -529,6 +578,12 @@ class LivePvpStore {
             }
             if (!duplicateUserTicket.testMatchScope && queueEntry.testMatchScope) {
                 duplicateUserTicket.testMatchScope = queueEntry.testMatchScope;
+            }
+            if (queueEntry.matchmakingSuppressionReasons && queueEntry.matchmakingSuppressionReasons.length > 0) {
+                duplicateUserTicket.matchmakingSuppressionReasons = this.mergeQueueSuppressionReasons(
+                    duplicateUserTicket.matchmakingSuppressionReasons,
+                    queueEntry.matchmakingSuppressionReasons
+                );
             }
             return duplicateUserTicket;
         }
@@ -567,6 +622,70 @@ class LivePvpStore {
     async saveQueueEntry(queueEntry) {
         if (!this.persistence || typeof this.persistence.saveQueueEntry !== 'function') return;
         await this.persistence.saveQueueEntry(queueEntry);
+    }
+
+    mergeQueueSuppressionReasons(existingReasons, incomingReasons) {
+        const existing = Array.isArray(existingReasons) ? existingReasons : [];
+        const incoming = Array.isArray(incomingReasons) ? incomingReasons : [incomingReasons];
+        return incoming.reduce((items, reason) => appendUniqueString(items, reason, 12), existing);
+    }
+
+    markQueueSuppression(queueEntry, reason) {
+        if (!queueEntry || !reason) return;
+        queueEntry.matchmakingSuppressionReasons = this.mergeQueueSuppressionReasons(
+            queueEntry.matchmakingSuppressionReasons,
+            [reason]
+        );
+    }
+
+    async saveRecentOpponentPair(pair) {
+        if (!this.persistence || typeof this.persistence.saveRecentOpponentPair !== 'function') return;
+        await this.persistence.saveRecentOpponentPair(pair);
+    }
+
+    async loadRecentOpponentPair(userIdA, userIdB) {
+        if (!this.persistence || typeof this.persistence.loadRecentOpponentPair !== 'function') return null;
+        const pair = await this.persistence.loadRecentOpponentPair(userIdA, userIdB);
+        return normalizeRecentOpponentPair(pair);
+    }
+
+    async rememberRecentOpponentPair(match) {
+        if (!match || !match.seatsByUserId || !match.state || match.state.status !== 'finished') return;
+        if (match.mode === 'friendly' || match.state.mode === 'friendly') return;
+        const participants = Object.keys(match.seatsByUserId).filter(Boolean);
+        if (participants.length !== 2) return;
+        const pairKey = makeRecentOpponentPairKey(participants[0], participants[1]);
+        if (!pairKey) return;
+        const [userIdA, userIdB] = pairKey.split('::');
+        const pair = {
+            pairKey,
+            userIdA,
+            userIdB,
+            lastMatchId: String(match.matchId || ''),
+            lastMatchedAt: this.now()
+        };
+        this.recentOpponentPairs.set(pairKey, pair);
+        await this.saveRecentOpponentPair(pair);
+    }
+
+    isRecentOpponentPairFresh(pair) {
+        const normalized = normalizeRecentOpponentPair(pair);
+        if (!normalized || !normalized.lastMatchedAt || this.recentOpponentCooldownMs <= 0) return false;
+        return this.now() - normalized.lastMatchedAt < this.recentOpponentCooldownMs;
+    }
+
+    async isRecentOpponentPair(userIdA, userIdB) {
+        if (this.recentOpponentCooldownMs <= 0) return false;
+        const pairKey = makeRecentOpponentPairKey(userIdA, userIdB);
+        if (!pairKey) return false;
+        const localPair = this.recentOpponentPairs.get(pairKey);
+        if (this.isRecentOpponentPairFresh(localPair)) return true;
+        if (localPair) this.recentOpponentPairs.delete(pairKey);
+        const persistedPair = await this.loadRecentOpponentPair(userIdA, userIdB);
+        if (!persistedPair) return false;
+        if (!this.isRecentOpponentPairFresh(persistedPair)) return false;
+        this.recentOpponentPairs.set(pairKey, persistedPair);
+        return true;
     }
 
     async deleteQueueEntry(queueTicket) {
@@ -1084,6 +1203,12 @@ class LivePvpStore {
             const opponentTicket = this.waitingQueue[index];
             if (!opponentTicket || !opponentTicket.player || opponentTicket.player.userId === requesterEntry.player.userId) continue;
             if (getQueueEntryTestMatchScope(opponentTicket) !== requesterTestMatchScope) continue;
+            if (await this.isRecentOpponentPair(opponentTicket.player.userId, requesterEntry.player.userId)) {
+                this.markQueueSuppression(opponentTicket, 'recent_opponent_suppression');
+                this.markQueueSuppression(requesterEntry, 'recent_opponent_suppression');
+                await this.saveQueueEntry(opponentTicket);
+                continue;
+            }
             await this.ensureQueueEntryRating(opponentTicket);
             const useRatedMatching = shouldUseRatedMatching(opponentTicket.ratingSnapshot, requesterEntry.ratingSnapshot);
             if (!useRatedMatching) {
@@ -1222,6 +1347,7 @@ class LivePvpStore {
             ratingSnapshot: await this.resolveRatingSnapshot(player.userId),
             wideMatchConsent: normalizeWideMatchConsent(playerInput && playerInput.wideMatchConsent),
             testMatchScope: normalizeLivePvpTestMatchScope(playerInput && playerInput.testMatchScope),
+            matchmakingSuppressionReasons: [],
             createdAt: this.now()
         };
         await this.hydrateWaitingQueueEntriesExceptUser(identity.userId);
@@ -1248,6 +1374,7 @@ class LivePvpStore {
             ratingSnapshot: requesterEntry.ratingSnapshot,
             wideMatchConsent: requesterEntry.wideMatchConsent,
             testMatchScope: requesterEntry.testMatchScope,
+            matchmakingSuppressionReasons: requesterEntry.matchmakingSuppressionReasons || [],
             createdAt: this.now()
         };
         this.waitingQueue.push(queueEntry);
@@ -1266,7 +1393,8 @@ class LivePvpStore {
             loadoutSummary: publicLoadoutSummary(queueEntry.player && queueEntry.player.loadoutSnapshot),
             waitingReport: makeWaitingReport({
                 waitMs,
-                thresholdMs: this.longWaitThresholdMs
+                thresholdMs: this.longWaitThresholdMs,
+                safeguards: queueEntry.matchmakingSuppressionReasons || []
             })
         };
     }
@@ -1328,7 +1456,8 @@ class LivePvpStore {
             loadoutSummary: publicLoadoutSummary(queueEntry.player && queueEntry.player.loadoutSnapshot),
             waitingReport: makeWaitingReport({
                 waitMs: Math.max(0, this.now() - Math.floor(Number(queueEntry.createdAt) || this.now())),
-                thresholdMs: this.longWaitThresholdMs
+                thresholdMs: this.longWaitThresholdMs,
+                safeguards: queueEntry.matchmakingSuppressionReasons || []
             })
         };
     }
@@ -1627,7 +1756,7 @@ class LivePvpStore {
         match.updatedAt = authoritativeMatch.updatedAt;
         match.connection = authoritativeMatch.connection;
         match.seatsByUserId = authoritativeMatch.seatsByUserId;
-        this.releaseMatch(authoritativeMatch);
+        await this.releaseMatch(authoritativeMatch);
         return { completed: true, saveResult: compensationSaveResult, match: authoritativeMatch };
     }
 
@@ -1645,7 +1774,7 @@ class LivePvpStore {
             return { completed: false, saveResult: initialSaveResult };
         }
         if (match.state.settlementReport && match.state.settlementReport.reportVersion === 'pvp-live-settlement-report-v1') {
-            this.releaseMatch(match);
+            await this.releaseMatch(match);
             return { completed: true, saveResult: initialSaveResult };
         }
         const settlementResult = await this.settleFinishedMatch(match);
@@ -1658,7 +1787,7 @@ class LivePvpStore {
                 return { completed: false, saveResult: settlementSaveResult };
             }
         }
-        this.releaseMatch(match);
+        await this.releaseMatch(match);
         return { completed: true, saveResult: settlementSaveResult || initialSaveResult };
     }
 
@@ -1670,7 +1799,7 @@ class LivePvpStore {
         if (saveResult && saveResult.saved === false) {
             return { completed: false, saveResult };
         }
-        this.releaseMatch(match);
+        await this.releaseMatch(match);
         return { completed: true, saveResult };
     }
 
@@ -2292,8 +2421,9 @@ class LivePvpStore {
         };
     }
 
-    releaseMatch(match) {
+    async releaseMatch(match) {
         if (!match || !match.seatsByUserId) return;
+        await this.rememberRecentOpponentPair(match);
         Object.keys(match.seatsByUserId).forEach(participantUserId => {
             this.activeMatchByUserId.delete(participantUserId);
         });

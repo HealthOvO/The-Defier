@@ -30,9 +30,29 @@ function makeRatingProvider(scoresByUserId) {
   };
 }
 
+function makeRecentOpponentPairKey(userIdA, userIdB) {
+  const ids = [String(userIdA || '').trim(), String(userIdB || '').trim()].filter(Boolean).sort();
+  return ids.length === 2 && ids[0] !== ids[1] ? `${ids[0]}::${ids[1]}` : '';
+}
+
+function finishStoreMatch(store, matchId, { winnerSeat = 'A', finishReason = 'surrender' } = {}) {
+  const match = store.matches.get(matchId);
+  assert.ok(match, `test match should exist before finishing: ${matchId}`);
+  const loserSeat = winnerSeat === 'A' ? 'B' : 'A';
+  match.state.status = 'finished';
+  match.state.events.push({
+    eventType: 'match_finished',
+    sequence: (match.state.eventSeq || 0) + 1,
+    payload: { winnerSeat, loserSeat, finishReason },
+  });
+  match.state.eventSeq = (match.state.eventSeq || 0) + 1;
+  return store.releaseIfTerminal(match);
+}
+
 function makeSharedPersistence({ keepQueueRowsOnDelete = false } = {}) {
   const queueEntries = new Map();
   const queueHandoffs = new Map();
+  const recentOpponents = new Map();
   const matches = new Map();
   const activeStatuses = new Set(['setup', 'active']);
   const claimHooks = new Map();
@@ -121,6 +141,20 @@ function makeSharedPersistence({ keepQueueRowsOnDelete = false } = {}) {
       const handoff = queueHandoffs.get(String(queueTicket || '')) || null;
       if (!handoff || handoff.userId !== userId) return null;
       return clone(handoff);
+    },
+    async saveRecentOpponentPair(pair) {
+      const key = makeRecentOpponentPairKey(pair && pair.userIdA, pair && pair.userIdB);
+      if (!key) return;
+      recentOpponents.set(key, clone({
+        pairKey: key,
+        userIdA: key.split('::')[0],
+        userIdB: key.split('::')[1],
+        lastMatchId: String(pair.lastMatchId || ''),
+        lastMatchedAt: Number(pair.lastMatchedAt) || 0,
+      }));
+    },
+    async loadRecentOpponentPair(userIdA, userIdB) {
+      return clone(recentOpponents.get(makeRecentOpponentPairKey(userIdA, userIdB)) || null);
     },
     async loadActiveMatchForUser(userId) {
       const id = String(userId || '');
@@ -349,6 +383,127 @@ function makeSharedPersistence({ keepQueueRowsOnDelete = false } = {}) {
     interleavedPairJoinC.matchId,
     pairJoinAConsent.matchId,
     'existing waiting ticket should not appear in two live matches after pair claim',
+  );
+
+  const recentStore = createLivePvpStore({
+    now: () => now,
+    recentOpponentCooldownMs: 10 * 60 * 1000,
+  });
+  const recentJoinA1 = await recentStore.joinQueue({
+    userId: 'recent-opponent-a',
+    displayName: '近期甲',
+    loadout: makeLoadout('sword', ['pvp_burst', 'pvp_strike', 'pvp_guard', 'pvp_strike']),
+  });
+  assert.equal(recentJoinA1.status, 'waiting', 'recent opponent seed should wait before first match');
+  now += 1000;
+  const recentJoinB1 = await recentStore.joinQueue({
+    userId: 'recent-opponent-b',
+    displayName: '近期乙',
+    loadout: makeLoadout('shield', ['pvp_guard', 'pvp_strike', 'pvp_burst', 'pvp_guard']),
+  });
+  assert.equal(recentJoinB1.status, 'matched', 'recent opponent pair should match before any recent history exists');
+  await finishStoreMatch(recentStore, recentJoinB1.matchId, { winnerSeat: 'A', finishReason: 'surrender' });
+  now += 1000;
+  const recentJoinA2 = await recentStore.joinQueue({
+    userId: 'recent-opponent-a',
+    displayName: '近期甲',
+    loadout: makeLoadout('sword', ['pvp_burst', 'pvp_strike', 'pvp_guard', 'pvp_strike']),
+  });
+  assert.equal(recentJoinA2.status, 'waiting', 'recent opponent returning player should wait for a new opponent');
+  now += 1000;
+  const recentJoinB2 = await recentStore.joinQueue({
+    userId: 'recent-opponent-b',
+    displayName: '近期乙',
+    loadout: makeLoadout('shield', ['pvp_guard', 'pvp_strike', 'pvp_burst', 'pvp_guard']),
+  });
+  assert.equal(recentJoinB2.status, 'waiting', 'recent opponent should not be rematched immediately after a finished match');
+  assert.ok(
+    recentJoinB2.waitingReport?.safeguards?.includes('recent_opponent_suppression'),
+    'recent opponent waiting report should expose recent-opponent suppression safeguard',
+  );
+  assert.match(
+    recentJoinB2.waitingReport?.message || '',
+    /近期对手|换一位/,
+    'recent opponent waiting report should explain why the player is still waiting',
+  );
+  const recentAStatus = await recentStore.getQueueStatus('recent-opponent-a', recentJoinA2.queueTicket);
+  assert.equal(recentAStatus?.status, 'waiting', 'original recent opponent queue ticket should stay waiting');
+  assert.ok(
+    recentAStatus?.waitingReport?.safeguards?.includes('recent_opponent_suppression'),
+    'both sides should see the recent-opponent suppression safeguard while waiting',
+  );
+  now += 1000;
+  const recentJoinC = await recentStore.joinQueue({
+    userId: 'recent-opponent-c',
+    displayName: '近期丙',
+    loadout: makeLoadout('mirror', ['pvp_guard', 'pvp_strike', 'pvp_burst', 'pvp_guard']),
+  });
+  assert.equal(recentJoinC.status, 'matched', 'a third player should still be able to match into the waiting pool');
+  const recentMatchedNames = [recentJoinC.stateView.self.displayName, recentJoinC.stateView.opponent.displayName].sort();
+  assert.notDeepStrictEqual(
+    recentMatchedNames,
+    ['近期甲', '近期乙'].sort(),
+    'recent opponent suppression should avoid recreating the just-finished pair',
+  );
+  assert.ok(recentMatchedNames.includes('近期丙'), 'third player should be one side of the resolved match');
+
+  const persistedRecentPairs = makeSharedPersistence();
+  const persistedRecentStoreA = createLivePvpStore({
+    now: () => now,
+    persistence: persistedRecentPairs,
+    recentOpponentCooldownMs: 10 * 60 * 1000,
+  });
+  const persistedRecentStoreB = createLivePvpStore({
+    now: () => now,
+    persistence: persistedRecentPairs,
+    recentOpponentCooldownMs: 10 * 60 * 1000,
+  });
+  const persistedRecentStoreC = createLivePvpStore({
+    now: () => now,
+    persistence: persistedRecentPairs,
+    recentOpponentCooldownMs: 10 * 60 * 1000,
+  });
+  const persistedRecentStoreD = createLivePvpStore({
+    now: () => now,
+    persistence: persistedRecentPairs,
+    recentOpponentCooldownMs: 10 * 60 * 1000,
+  });
+  now += 1000;
+  const persistedRecentA1 = await persistedRecentStoreA.joinQueue({
+    userId: 'persisted-recent-a',
+    displayName: '持久甲',
+    loadout: makeLoadout('sword', ['pvp_burst', 'pvp_strike', 'pvp_guard', 'pvp_strike']),
+  });
+  assert.equal(persistedRecentA1.status, 'waiting', 'persisted recent seed should wait before first match');
+  now += 1000;
+  const persistedRecentB1 = await persistedRecentStoreB.joinQueue({
+    userId: 'persisted-recent-b',
+    displayName: '持久乙',
+    loadout: makeLoadout('shield', ['pvp_guard', 'pvp_strike', 'pvp_burst', 'pvp_guard']),
+  });
+  assert.equal(persistedRecentB1.status, 'matched', 'persisted recent pair should match before history exists');
+  await finishStoreMatch(persistedRecentStoreB, persistedRecentB1.matchId, { winnerSeat: 'A', finishReason: 'surrender' });
+  now += 1000;
+  const persistedRecentA2 = await persistedRecentStoreC.joinQueue({
+    userId: 'persisted-recent-a',
+    displayName: '持久甲',
+    loadout: makeLoadout('sword', ['pvp_burst', 'pvp_strike', 'pvp_guard', 'pvp_strike']),
+  });
+  assert.equal(persistedRecentA2.status, 'waiting', 'persisted recent returning player should wait in a fresh process');
+  now += 1000;
+  const persistedRecentB2 = await persistedRecentStoreD.joinQueue({
+    userId: 'persisted-recent-b',
+    displayName: '持久乙',
+    loadout: makeLoadout('shield', ['pvp_guard', 'pvp_strike', 'pvp_burst', 'pvp_guard']),
+  });
+  assert.equal(
+    persistedRecentB2.status,
+    'waiting',
+    'recent opponent suppression should survive process boundaries through persistence',
+  );
+  assert.ok(
+    persistedRecentB2.waitingReport?.safeguards?.includes('recent_opponent_suppression'),
+    'persisted recent opponent suppression should still expose the waiting safeguard',
   );
 
   console.log('sanity_pvp_live_cross_process_queue_checks passed');
