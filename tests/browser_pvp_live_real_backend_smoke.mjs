@@ -3,8 +3,12 @@ import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
+import { createRequire } from 'node:module';
 import { chromium } from 'playwright';
 import { safeAuditScreenshot } from './helpers/safe_audit_screenshot.mjs';
+
+const require = createRequire(import.meta.url);
+const sqlite3 = require('../server/node_modules/sqlite3').verbose();
 
 const appUrl = process.argv[2] || 'http://127.0.0.1:4173';
 const outDir = process.argv[3] || 'output/browser-pvp-live-real-backend-smoke';
@@ -73,6 +77,48 @@ function removeDbFiles() {
   for (const suffix of ['', '-wal', '-shm']) {
     fs.rmSync(`${dbPath}${suffix}`, { force: true });
   }
+}
+
+function dbRun(sql, params = []) {
+  const db = new sqlite3.Database(dbPath);
+  return new Promise((resolve, reject) => {
+    db.run(sql, params, function(err) {
+      db.close();
+      if (err) reject(err);
+      else resolve(this);
+    });
+  });
+}
+
+function dbGet(sql, params = []) {
+  const db = new sqlite3.Database(dbPath);
+  return new Promise((resolve, reject) => {
+    db.get(sql, params, (err, row) => {
+      db.close();
+      if (err) reject(err);
+      else resolve(row || null);
+    });
+  });
+}
+
+async function seedRankedHistory(username, score = 1000, rankedGames = 6) {
+  const user = await dbGet('SELECT id, username FROM users WHERE username = ?', [username]);
+  if (!user || !user.id) throw new Error(`cannot seed rank for missing user: ${username}`);
+  const now = Date.now();
+  const games = Math.max(0, Math.floor(Number(rankedGames) || 0));
+  await dbRun(
+    `INSERT INTO pvp_ranks
+      (id, user_id, user_name, score, wins, losses, realm, division, season_id, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, 0, 1, '玄阶', 's1-genesis', ?, ?)
+     ON CONFLICT(user_id) DO UPDATE SET
+      user_name = excluded.user_name,
+      score = excluded.score,
+      wins = excluded.wins,
+      losses = excluded.losses,
+      division = excluded.division,
+      updated_at = excluded.updated_at`,
+    [`rank-${user.id}`, user.id, user.username || username, score, games, now, now],
+  );
 }
 
 function startBackend() {
@@ -501,6 +547,8 @@ async function writeReport() {
     await waitForHealth(backend);
     seatA = await preparePage(browser, `live_real_a_${runId}`, '甲');
     seatB = await preparePage(browser, `live_real_b_${runId}`, '乙');
+    await seedRankedHistory(seatA.username, 1000, 6);
+    await seedRankedHistory(seatB.username, 1000, 6);
     const longWaitSeat = await preparePage(browser, `live_real_wait_${runId}`, '候');
     await longWaitSeat.page.evaluate(() => {
       window.game.player.name = '候';
@@ -666,7 +714,7 @@ async function writeReport() {
         && matchedA.self?.loadout?.identitySlot === 'sword'
         && matchedB.self?.loadout?.identitySlot === 'shield'
         && matchedA.matchQuality?.tag === matchedB.matchQuality?.tag
-        && matchedA.matchQuality?.ratingDeltaBucket === 'unrated_mvp',
+        && matchedA.matchQuality?.ratingDeltaBucket === 'near_0_99',
       JSON.stringify({ matchedA, matchedB }),
     );
 
@@ -674,8 +722,8 @@ async function writeReport() {
       'real browser live match exposes public match quality report',
       matchedA.matchQuality?.reportVersion === 'pvp-live-match-quality-v1'
         && matchedA.matchQuality?.tag === 'good'
-        && matchedA.matchQuality?.expansionStage === 'mvp_open_pool'
-        && matchedA.matchQuality?.ratingDeltaBucket === 'unrated_mvp'
+        && matchedA.matchQuality?.expansionStage === 'strict_rating'
+        && matchedA.matchQuality?.ratingDeltaBucket === 'near_0_99'
         && matchedA.matchQuality?.connectionHealth === 'pass'
         && matchedA.matchQuality?.connectionHealthSummary?.sampleTag === 'client_preflight'
         && (matchedA.matchQuality?.safeguards || []).includes('connection_health_gate')
@@ -2309,6 +2357,8 @@ async function writeReport() {
 
     const seatC = await preparePage(browser, `live_real_c_${runId}`, '丙');
     const seatD = await preparePage(browser, `live_real_d_${runId}`, '丁');
+    await seedRankedHistory(seatC.username, 1000, 6);
+    await seedRankedHistory(seatD.username, 1000, 6);
     await seatC.page.evaluate(() => {
       window.game.player.name = '丙';
       window.PVPScene.switchTab('live');

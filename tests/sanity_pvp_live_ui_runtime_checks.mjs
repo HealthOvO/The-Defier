@@ -429,6 +429,65 @@ const opponentDisconnectedCurrentTurnCopy = PVPScene.formatLiveConnectionStatus(
 });
 assert.match(opponentDisconnectedCurrentTurnCopy, /当前行动|connection_timeout|超时结算/, 'live UI should name the authoritative timeout boundary when the disconnected opponent owns the action window');
 
+const authoritativeConnectionTempoView = {
+  matchId: 'pvpm-ui-runtime-authoritative-tempo',
+  status: 'active',
+  currentSeat: 'A',
+  stateVersion: 12,
+  connectionReport: {
+    reportVersion: 'pvp-live-connection-v1',
+    viewerSeat: 'A',
+    opponentSeat: 'B',
+    heartbeatIntervalMs: 1000,
+    heartbeatStaleMs: 1000,
+    graceMs: 30000,
+    viewer: { seatId: 'A', status: 'online', isViewer: true, remainingGraceMs: 0 },
+    opponent: { seatId: 'B', status: 'online', isViewer: false, remainingGraceMs: 0 }
+  },
+  connectionTempoReport: {
+    reportVersion: 'pvp-live-connection-tempo-v1',
+    sourceVisibility: 'server_authoritative_connection_state',
+    usesHiddenInformation: false,
+    rankedImpact: 'none',
+    tempoState: 'opponent_action_timeout_pending',
+    severity: 'warning',
+    phase: 'active',
+    currentSeat: 'B',
+    viewerSeat: 'A',
+    opponentSeat: 'B',
+    affectedSeat: 'B',
+    statusLine: '连接：服务端权威判定对方行动超时等待中',
+    detailLine: '服务端权威连接节奏优先于客户端本地推导。',
+    actionBoundary: 'wait_for_authoritative_timeout',
+    canSubmitIntent: false,
+    shouldWaitForAuthority: true,
+    safeguards: ['server_authoritative_projection']
+  }
+};
+const authoritativeConnectionTempo = PVPScene.getLiveConnectionTempo(authoritativeConnectionTempoView, { phase: 'active' });
+assert.equal(authoritativeConnectionTempo.tempoState, 'opponent_action_timeout_pending', 'live UI should prefer server connection tempo over local connectionReport inference');
+assert.equal(authoritativeConnectionTempo.sourceVisibility, 'server_authoritative_connection_state', 'live UI should preserve server-authoritative connection tempo source');
+assert.equal(authoritativeConnectionTempo.actionBoundary, 'wait_for_authoritative_timeout', 'live UI should preserve authoritative tempo action boundary');
+assert.match(PVPScene.formatLiveConnectionStatus(authoritativeConnectionTempoView), /服务端权威判定/, 'live UI connection status should render authoritative tempo copy');
+assert.match(PVPScene.renderLiveConnectionTempo(authoritativeConnectionTempoView), /服务端权威连接节奏优先/, 'live UI connection tempo body should render authoritative tempo copy');
+const previousGetLiveSessionForTempo = PVPScene.getLiveSession;
+PVPScene.getLiveSession = () => ({
+  getState: () => ({
+    phase: 'active',
+    matchId: authoritativeConnectionTempoView.matchId,
+    seatId: 'A',
+    stateView: authoritativeConnectionTempoView,
+    realtimeStatus: 'connected',
+    lastRealtimeSyncAt: 1781871234999,
+    realtimeReport: null,
+    lastEvents: []
+  })
+});
+const authoritativeConnectionSnapshot = PVPScene.getLiveSnapshot();
+PVPScene.getLiveSession = previousGetLiveSessionForTempo;
+assert.equal(authoritativeConnectionSnapshot.connectionTempoReport.tempoState, 'opponent_action_timeout_pending', 'live snapshot should expose authoritative connection tempo');
+assert.equal(authoritativeConnectionSnapshot.connectionTempoReport.sourceVisibility, 'server_authoritative_connection_state', 'live snapshot should keep authoritative connection tempo provenance');
+
 const lowViewerActionTimerCopy = PVPScene.formatLiveTurnTimer({
   turnTimer: {
     reportVersion: 'pvp-live-turn-timer-v1',

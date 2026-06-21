@@ -438,6 +438,25 @@ async function runHeartbeatEventsReplayCheck() {
             opponent: { seatId: 'A', status: 'online' },
             heartbeatIntervalMs: 1500
           },
+          connectionTempoReport: {
+            reportVersion: 'pvp-live-connection-tempo-v1',
+            sourceVisibility: 'server_authoritative_connection_state',
+            usesHiddenInformation: false,
+            rankedImpact: 'none',
+            tempoState: 'stable',
+            severity: 'normal',
+            phase: 'active',
+            currentSeat: 'A',
+            viewerSeat: 'B',
+            opponentSeat: 'A',
+            affectedSeat: '',
+            statusLine: '连接：我方在线 · 对方在线',
+            detailLine: '双方在线，按当前行动窗口继续。',
+            actionBoundary: 'continue',
+            canSubmitIntent: false,
+            shouldWaitForAuthority: false,
+            safeguards: ['server_authoritative_projection']
+          },
           self: { seatId: 'B', hand: [] },
           opponent: { seatId: 'A', handCount: 3 }
         }
@@ -488,6 +507,9 @@ async function runHeartbeatEventsReplayCheck() {
     sendJson(socketB, { type: 'heartbeat', matchId: fakeMatchId, lastSeenRevision: 1 });
     const presenceB = await waitForMessage(socketB, message => message.type === 'presence' && message.matchId === fakeMatchId, 'heartbeat replay presence B');
     assert.equal(presenceB.connectionReport?.viewer?.status, 'online', 'WS heartbeat replay should still return presence before replay');
+    assert.equal(presenceB.connectionTempoReport?.reportVersion, 'pvp-live-connection-tempo-v1', 'WS heartbeat replay presence should forward server connection tempo');
+    assert.equal(presenceB.connectionTempoReport?.sourceVisibility, 'server_authoritative_connection_state', 'WS heartbeat replay presence should keep server-authoritative tempo source');
+    assert.equal(presenceB.connectionTempoReport?.usesHiddenInformation, false, 'WS heartbeat replay presence should not expose hidden tempo information');
     const replayB = await waitForMessage(socketB, message => message.type === 'events_replay' && message.matchId === fakeMatchId, 'heartbeat replay events_replay B');
     assert.equal(replayB.fromRevision, 1, 'WS heartbeat should replay missed public events after lastSeenRevision');
     assert.deepEqual(replayB.events.map(event => event.sequence), [2], 'WS heartbeat replay should only include missed public events');

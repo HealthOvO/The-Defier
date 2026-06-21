@@ -192,6 +192,18 @@ function assertConnectionReport(report, messagePrefix) {
     assert.ok(Number.isFinite(report.graceMs) && report.graceMs >= 1000, `${messagePrefix} should expose reconnect grace budget`);
 }
 
+function assertConnectionTempoReport(report, expectedTempoState, messagePrefix) {
+    assert.equal(report?.reportVersion, 'pvp-live-connection-tempo-v1', `${messagePrefix} should expose connection tempo report version`);
+    assert.equal(report.sourceVisibility, 'server_authoritative_connection_state', `${messagePrefix} should be server-authoritative`);
+    assert.equal(report.usesHiddenInformation, false, `${messagePrefix} should not use hidden information`);
+    assert.equal(report.rankedImpact, 'none', `${messagePrefix} should not affect ranked state`);
+    assert.equal(report.tempoState, expectedTempoState, `${messagePrefix} should expose ${expectedTempoState} tempo state`);
+    assert.ok(['normal', 'info', 'warning', 'danger'].includes(report.severity), `${messagePrefix} should expose a UI severity`);
+    assert.ok(typeof report.statusLine === 'string' && report.statusLine.length > 0, `${messagePrefix} should expose readable status`);
+    assert.ok(typeof report.detailLine === 'string' && report.detailLine.length > 0, `${messagePrefix} should expose readable detail`);
+    assert.ok(!/hand|deck|cardId|instanceId|sourceCardId|loadoutSnapshot|rating|elo|reward/i.test(JSON.stringify(report)), `${messagePrefix} must not leak hidden combat or matchmaking data`);
+}
+
 async function heartbeat(baseUrl, token, matchId) {
     return request(baseUrl, `/api/pvp/live/matches/${matchId}/heartbeat`, {
         method: 'POST',
@@ -937,6 +949,9 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
         assert.equal(joinB.payload.stateView.status, 'setup', 'matched live route should expose setup before battle starts');
         assertTurnTimer(joinB.payload.stateView.turnTimer, 'setup', 'matched setup view');
         assertConnectionReport(joinB.payload.stateView.connectionReport, 'matched setup view');
+        assertConnectionTempoReport(joinB.payload.stateView.connectionTempoReport, 'stable', 'matched setup view');
+        assert.equal(joinB.payload.stateView.connectionTempoReport.canSubmitIntent, true, 'matched setup tempo should allow ready and mulligan intents');
+        assert.equal(joinB.payload.stateView.connectionTempoReport.actionBoundary, 'continue_setup_action', 'matched setup tempo should name setup action boundary');
         assert.equal(joinB.payload.stateView.connectionReport.opponent.status, 'online', 'matched setup view should treat the opponent as online initially');
         assert.equal(joinB.payload.stateView.self.loadoutSummary.identitySlot, 'shield', 'matched self view should expose own locked identity slot');
         assert.equal(joinB.payload.stateView.opponent.loadoutHash, joinA.payload.loadoutHash, 'matched opponent view should expose original locked loadout hash');
@@ -1005,6 +1020,8 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
         assert.equal(pollA.payload.stateView.status, 'setup', 'first player matched status should begin in setup');
         assertTurnTimer(pollA.payload.stateView.turnTimer, 'setup', 'first player setup poll');
         assertConnectionReport(pollA.payload.stateView.connectionReport, 'first player setup poll');
+        assertConnectionTempoReport(pollA.payload.stateView.connectionTempoReport, 'stable', 'first player setup poll');
+        assert.equal(pollA.payload.stateView.connectionTempoReport.canSubmitIntent, true, 'first player setup poll tempo should allow setup intents');
         assert.equal(pollA.payload.stateView.connectionReport.viewer.status, 'online', 'first player setup poll should treat viewer as online');
         assert.equal(pollA.payload.stateView.self.loadoutHash, joinA.payload.loadoutHash, 'first player matched status should expose own locked loadout hash');
         assert.equal(pollA.payload.stateView.opponent.loadoutSummary.identitySlot, 'shield', 'first player should see opponent public locked loadout summary');
@@ -1012,6 +1029,8 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
         const heartbeatA = await heartbeat(baseUrl, tokenA, joinB.payload.matchId);
         assert.equal(heartbeatA.status, 200, 'heartbeat route should accept a participant heartbeat');
         assertConnectionReport(heartbeatA.payload.stateView.connectionReport, 'heartbeat response');
+        assertConnectionTempoReport(heartbeatA.payload.stateView.connectionTempoReport, 'stable', 'heartbeat response');
+        assert.equal(heartbeatA.payload.stateView.connectionTempoReport.canSubmitIntent, true, 'setup heartbeat tempo should allow setup intents');
         assert.equal(heartbeatA.payload.stateView.connectionReport.viewer.status, 'online', 'heartbeat response should mark the sender online');
 
         const connectionMatch = pvpLiveRoutes.__livePvpStore.matches.get(joinB.payload.matchId);
@@ -1021,6 +1040,9 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
         });
         assert.equal(connectionGraceA.status, 200, 'opponent grace state should stay readable');
         assertConnectionReport(connectionGraceA.payload.stateView.connectionReport, 'opponent grace state');
+        assertConnectionTempoReport(connectionGraceA.payload.stateView.connectionTempoReport, 'opponent_setup_grace', 'opponent grace state');
+        assert.equal(connectionGraceA.payload.stateView.connectionTempoReport.canSubmitIntent, true, 'opponent setup grace should still allow the connected viewer to submit setup intents');
+        assert.equal(connectionGraceA.payload.stateView.connectionTempoReport.actionBoundary, 'continue_setup_action', 'opponent setup grace should keep the connected viewer setup action boundary');
         assert.equal(connectionGraceA.payload.stateView.connectionReport.opponent.status, 'grace', 'stale opponent should enter reconnect grace instead of immediate loss');
         assert.ok(connectionGraceA.payload.stateView.connectionReport.opponent.remainingGraceMs > 0, 'opponent grace state should expose remaining grace time');
         assert.equal(connectionGraceA.payload.stateView.status, 'setup', 'opponent grace should not end the match immediately');
@@ -1028,10 +1050,12 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
         const heartbeatB = await heartbeat(baseUrl, tokenB, joinB.payload.matchId);
         assert.equal(heartbeatB.status, 200, 'stale participant should be able to reconnect with heartbeat');
         assert.equal(heartbeatB.payload.stateView.connectionReport.viewer.status, 'online', 'reconnected participant should become online');
+        assertConnectionTempoReport(heartbeatB.payload.stateView.connectionTempoReport, 'stable', 'reconnected participant heartbeat');
         const connectionRecoveredA = await request(baseUrl, `/api/pvp/live/matches/${joinB.payload.matchId}`, {
             token: tokenA
         });
         assert.equal(connectionRecoveredA.payload.stateView.connectionReport.opponent.status, 'online', 'opponent heartbeat should recover the viewer-facing connection status');
+        assertConnectionTempoReport(connectionRecoveredA.payload.stateView.connectionTempoReport, 'stable', 'opponent recovered state');
 
         const pollASecondRead = await request(baseUrl, `/api/pvp/live/queue/status/${joinA.payload.queueTicket}`, {
             token: tokenA
@@ -1839,6 +1863,9 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
         assert.equal(nonBlockingRead.status, 200, 'current actor should still read active match when non-current opponent is disconnected');
         assert.equal(nonBlockingRead.payload.stateView.status, 'active', 'non-current disconnected seat should not auto-finish before becoming the action owner');
         assert.equal(nonBlockingRead.payload.stateView.connectionReport.opponent.status, 'disconnected', 'current actor should still see non-current opponent disconnected');
+        assertConnectionTempoReport(nonBlockingRead.payload.stateView.connectionTempoReport, 'opponent_non_turn_disconnected', 'active non-current disconnect state');
+        assert.equal(nonBlockingRead.payload.stateView.connectionTempoReport.actionBoundary, 'continue_current_action', 'non-current disconnected tempo should keep the current action window usable');
+        assert.equal(nonBlockingRead.payload.stateView.connectionTempoReport.canSubmitIntent, true, 'current actor should be allowed to submit while non-current opponent is disconnected');
         const nonBlockingHandoff = await submitIntent(baseUrl, currentToken, joinNonBlockingDisconnectB.payload.matchId, {
             intentId: `route-nonblocking-disconnect-end-turn-${currentSeat.toLowerCase()}`,
             intentType: 'end_turn',
@@ -1848,6 +1875,8 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
         assert.equal(nonBlockingHandoff.payload.result, 'accepted', 'current actor should still submit end_turn while non-current opponent is disconnected');
         assert.equal(nonBlockingHandoff.payload.stateView.status, 'active', 'handoff to disconnected opponent should not finish inside the accepted end_turn response');
         assert.equal(nonBlockingHandoff.payload.stateView.currentSeat, nonCurrentSeat, 'handoff should move the action window to the disconnected seat');
+        assertConnectionTempoReport(nonBlockingHandoff.payload.stateView.connectionTempoReport, 'opponent_action_timeout_pending', 'handoff disconnected action owner state');
+        assert.equal(nonBlockingHandoff.payload.stateView.connectionTempoReport.actionBoundary, 'wait_for_authoritative_timeout', 'handoff tempo should wait for authoritative timeout');
         const nonBlockingTimeoutRead = await request(baseUrl, `/api/pvp/live/matches/${joinNonBlockingDisconnectB.payload.matchId}`, {
             token: currentToken
         });

@@ -706,7 +706,10 @@ const layoutAudit = read('tests/browser_frontend_layout_audit.mjs');
   'live UI local disconnected state names authoritative sync path before timeout',
   'live UI explains active non-turn opponent disconnect without pre-announcing timeout settlement',
   'live UI explains active current-turn opponent disconnect as authoritative timeout pending',
+  'live UI prefers server connection tempo over local online inference',
   'pvp-live-connection-tempo-v1',
+  'server_authoritative_connection_state',
+  'connectionTempoReport',
   'data-live-connection-tempo-state',
   'tempoDuplicateGlobalRefreshCount',
   'live UI foreground resume catches up reconnecting match without manual refresh',
@@ -2431,6 +2434,7 @@ assert.ok(
   'stale HTTP refresh should not downgrade authoritative stateVersion',
   'stale HTTP heartbeat should not downgrade authoritative stateVersion',
   'stale HTTP intent result should not downgrade authoritative stateVersion',
+  'presence WS message should update authoritative connection tempo report',
   'queue cooldown block should retain structured matchmaking guard report',
   'queue cooldown block should retain cooldown source',
 ].forEach((needle) => {

@@ -1808,6 +1808,9 @@ async function readyBoth({ matchId, tokenA, tokenB, stateVersionA, prefix }) {
     });
     assert.equal(heartbeatB.status, 200, 'pre-restart heartbeat should be accepted');
     assert.equal(heartbeatB.payload.stateView.connectionReport.reportVersion, 'pvp-live-connection-v1', 'pre-restart heartbeat should expose connection report');
+    assert.equal(heartbeatB.payload.stateView.connectionTempoReport?.reportVersion, 'pvp-live-connection-tempo-v1', 'pre-restart heartbeat should expose connection tempo report');
+    assert.equal(heartbeatB.payload.stateView.connectionTempoReport?.sourceVisibility, 'server_authoritative_connection_state', 'pre-restart heartbeat connection tempo should be server-authoritative');
+    assert.equal(heartbeatB.payload.stateView.connectionTempoReport?.tempoState, 'stable', 'pre-restart heartbeat connection tempo should treat both recent seats as stable');
   });
 
   const connectionRow = await dbGet('SELECT connection_json FROM pvp_live_matches WHERE match_id = ?', [matchId]);
@@ -2224,6 +2227,9 @@ async function readyBoth({ matchId, tokenA, tokenB, stateVersionA, prefix }) {
     assert.equal(currentA.payload.stateView.self.loadoutSummary.identitySlot, userAIdentitySlot, 'restarted current match should keep locked identity slot');
     assert.equal(currentA.payload.stateView.connectionReport.reportVersion, 'pvp-live-connection-v1', 'restarted current match should restore connection report');
     assert.equal(currentA.payload.stateView.connectionReport.opponent.status, 'online', 'restarted current match should preserve recently heartbeated opponent as online');
+    assert.equal(currentA.payload.stateView.connectionTempoReport?.reportVersion, 'pvp-live-connection-tempo-v1', 'restarted current match should restore connection tempo report');
+    assert.equal(currentA.payload.stateView.connectionTempoReport?.sourceVisibility, 'server_authoritative_connection_state', 'restarted current match connection tempo should stay server-authoritative');
+    assert.equal(currentA.payload.stateView.connectionTempoReport?.tempoState, 'stable', 'restarted current match should keep online opponent as stable connection tempo');
     assert.notEqual(currentA.payload.stateView.turnTimer.startedAt, corruptedActiveUpdatedAt, 'restarted active match with missing turnTiming must not derive turn start from updated_at');
     assert.equal(currentA.payload.stateView.turnTimer.startedAt, activeMatchCreatedAt, 'restarted active match with missing turnTiming should fall back to match createdAt');
     assert.ok(!Array.isArray(currentA.payload.stateView.opponent.hand), 'restarted current match must not leak opponent hand');

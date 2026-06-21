@@ -2383,10 +2383,217 @@ class LivePvpStore {
         };
     }
 
+    makeConnectionTempoReport(match, viewerSeat, connectionReport = null) {
+        const state = match && match.state;
+        const report = connectionReport || this.makeConnectionReport(match, viewerSeat);
+        if (!state || !report || !report.viewer || !report.opponent) return null;
+        const phase = String(state.status || state.phase || 'unknown').trim() || 'unknown';
+        const currentSeat = String(state.currentSeat || '').trim();
+        const viewerStatus = ['online', 'grace', 'disconnected'].includes(report.viewer.status)
+            ? report.viewer.status
+            : 'online';
+        const opponentStatus = ['online', 'grace', 'disconnected'].includes(report.opponent.status)
+            ? report.opponent.status
+            : 'online';
+        const viewerSeatId = String(report.viewerSeat || report.viewer.seatId || viewerSeat || '').trim();
+        const opponentSeatId = String(report.opponentSeat || report.opponent.seatId || (viewerSeatId === 'A' ? 'B' : 'A')).trim();
+        const labels = {
+            online: '在线',
+            grace: '重连宽限',
+            disconnected: '断线'
+        };
+        const viewerLabel = labels[viewerStatus] || viewerStatus;
+        const opponentLabel = labels[opponentStatus] || opponentStatus;
+        const viewerGraceSec = Math.ceil(Math.max(0, Math.floor(Number(report.viewer.remainingGraceMs) || 0)) / 1000);
+        const opponentGraceSec = Math.ceil(Math.max(0, Math.floor(Number(report.opponent.remainingGraceMs) || 0)) / 1000);
+        const setupCanAct = (phase === 'setup' || phase === 'matched') && viewerStatus !== 'disconnected';
+        const viewerCanAct = (
+            (phase === 'active' && currentSeat === viewerSeatId)
+            || setupCanAct
+        ) && viewerStatus !== 'disconnected';
+        const makeTempo = (tempoState, affectedSeat, severity, statusLine, detailLine, action = null, options = {}) => ({
+            reportVersion: 'pvp-live-connection-tempo-v1',
+            sourceVisibility: 'server_authoritative_connection_state',
+            usesHiddenInformation: false,
+            rankedImpact: 'none',
+            tempoState,
+            severity,
+            phase,
+            currentSeat,
+            viewerSeat: viewerSeatId,
+            opponentSeat: opponentSeatId,
+            affectedSeat: String(affectedSeat || ''),
+            statusLine,
+            detailLine,
+            action,
+            actionBoundary: String(options.actionBoundary || 'continue'),
+            canSubmitIntent: Object.prototype.hasOwnProperty.call(options, 'canSubmitIntent')
+                ? options.canSubmitIntent === true
+                : viewerCanAct,
+            shouldWaitForAuthority: options.shouldWaitForAuthority === true,
+            remainingGraceMs: Math.max(0, Math.floor(Number(options.remainingGraceMs) || 0)),
+            safeguards: [
+                'server_authoritative_projection',
+                'public_connection_state_only',
+                'ranked_settlement_unaffected'
+            ]
+        });
+        if (viewerStatus === 'grace') {
+            return makeTempo(
+                'viewer_reconnect_grace',
+                viewerSeatId,
+                'warning',
+                `连接：我方重连宽限 ${viewerGraceSec}s · 切回页面将自动恢复权威连接 · 对方${opponentLabel}`,
+                '本地画面可能落后，恢复后会同步服务端权威状态；不要用旧画面判断胜负。',
+                { id: 'refresh_match', label: '刷新权威状态' },
+                {
+                    actionBoundary: 'recover_connection',
+                    canSubmitIntent: false,
+                    shouldWaitForAuthority: true,
+                    remainingGraceMs: Math.max(0, Math.floor(Number(report.viewer.remainingGraceMs) || 0))
+                }
+            );
+        }
+        if (viewerStatus === 'disconnected') {
+            return makeTempo(
+                'viewer_refresh_required',
+                viewerSeatId,
+                'danger',
+                `连接：我方断线 · 刷新同步权威结果；若仍在可恢复窗口会自动重连，否则按 connection_timeout 结算 · 对方${opponentLabel}`,
+                '先刷新权威局面，避免本地旧状态覆盖真实回合。',
+                { id: 'refresh_match', label: '刷新权威状态' },
+                {
+                    actionBoundary: 'recover_connection',
+                    canSubmitIntent: false,
+                    shouldWaitForAuthority: true
+                }
+            );
+        }
+        if (opponentStatus === 'grace') {
+            if (phase === 'active' && currentSeat && currentSeat !== opponentSeatId) {
+                return makeTempo(
+                    'opponent_non_turn_grace',
+                    opponentSeatId,
+                    'info',
+                    `连接：我方${viewerLabel} · 对方重连宽限 ${opponentGraceSec}s · 当前行动仍可提交；轮到对手仍未恢复才会处理`,
+                    '对局继续：对手不在当前行动窗口，服务端不会提前宣判胜负；本方当前行动仍可提交。',
+                    null,
+                    {
+                        actionBoundary: 'continue_current_action',
+                        canSubmitIntent: viewerCanAct,
+                        remainingGraceMs: Math.max(0, Math.floor(Number(report.opponent.remainingGraceMs) || 0))
+                    }
+                );
+            }
+            if (phase === 'active' && currentSeat === opponentSeatId) {
+                return makeTempo(
+                    'opponent_action_grace',
+                    opponentSeatId,
+                    'warning',
+                    `连接：我方${viewerLabel} · 对方重连宽限 ${opponentGraceSec}s · 对方当前行动，宽限结束才会按 connection_timeout 权威结算`,
+                    '胜负仍等服务端终局事件，不由前端提前判定。',
+                    null,
+                    {
+                        actionBoundary: 'wait_for_authoritative_timeout',
+                        canSubmitIntent: false,
+                        shouldWaitForAuthority: true,
+                        remainingGraceMs: Math.max(0, Math.floor(Number(report.opponent.remainingGraceMs) || 0))
+                    }
+                );
+            }
+            return makeTempo(
+                'opponent_setup_grace',
+                opponentSeatId,
+                'warning',
+                `连接：我方${viewerLabel} · 对方重连宽限 ${opponentGraceSec}s · 不会立即判负`,
+                '准备阶段断线会等待权威判定；若未开战成功，本局不写正式积分。',
+                null,
+                {
+                    actionBoundary: setupCanAct ? 'continue_setup_action' : 'wait_for_setup_resolution',
+                    canSubmitIntent: setupCanAct,
+                    shouldWaitForAuthority: true,
+                    remainingGraceMs: Math.max(0, Math.floor(Number(report.opponent.remainingGraceMs) || 0))
+                }
+            );
+        }
+        if (opponentStatus === 'disconnected') {
+            if (phase === 'active' && currentSeat && currentSeat !== opponentSeatId) {
+                return makeTempo(
+                    'opponent_non_turn_disconnected',
+                    opponentSeatId,
+                    'info',
+                    `连接：我方${viewerLabel} · 对方断线 · 对局继续，当前行动仍可提交；轮到对手仍未恢复才会由服务端处理`,
+                    '对局继续：非当前行动方断线不会立刻触发 connection_timeout；当前行动仍可提交，轮到对手仍未恢复才会处理。',
+                    null,
+                    {
+                        actionBoundary: 'continue_current_action',
+                        canSubmitIntent: viewerCanAct
+                    }
+                );
+            }
+            if (phase === 'active' && currentSeat === opponentSeatId) {
+                return makeTempo(
+                    'opponent_action_timeout_pending',
+                    opponentSeatId,
+                    'warning',
+                    `连接：我方${viewerLabel} · 对方断线 · 对方当前行动，等待 connection_timeout 权威超时结算`,
+                    '只有当前行动方断线超过宽限，服务端才会发布终局；胜负以 match_finished 为准。',
+                    null,
+                    {
+                        actionBoundary: 'wait_for_authoritative_timeout',
+                        canSubmitIntent: false,
+                        shouldWaitForAuthority: true
+                    }
+                );
+            }
+            if (phase === 'setup' || phase === 'matched') {
+                return makeTempo(
+                    'opponent_setup_disconnected',
+                    opponentSeatId,
+                    'warning',
+                    `连接：我方${viewerLabel} · 对方断线 · 准备阶段等待权威无效局判定`,
+                    '若未开战成功，本局不计正式积分，也不会把断线方直接判成正式败局。',
+                    null,
+                    {
+                        actionBoundary: setupCanAct ? 'continue_setup_action' : 'wait_for_setup_resolution',
+                        canSubmitIntent: setupCanAct,
+                        shouldWaitForAuthority: true
+                    }
+                );
+            }
+            return makeTempo(
+                'opponent_disconnected',
+                opponentSeatId,
+                'warning',
+                `连接：我方${viewerLabel} · 对方断线 · 等待权威同步`,
+                '连接状态只作为公开提示，终局仍以服务端事件为准。',
+                null,
+                {
+                    actionBoundary: 'wait_for_authoritative_timeout',
+                    canSubmitIntent: false,
+                    shouldWaitForAuthority: true
+                }
+            );
+        }
+        return makeTempo(
+            'stable',
+            '',
+            'normal',
+            `连接：我方${viewerLabel} · 对方${opponentLabel}`,
+            '双方在线，按当前行动窗口继续。',
+            null,
+            {
+                actionBoundary: setupCanAct ? 'continue_setup_action' : viewerCanAct ? 'continue_current_action' : 'continue',
+                canSubmitIntent: viewerCanAct
+            }
+        );
+    }
+
     projectMatchStateView(match, seatId) {
         const stateView = projectStateView(match.state, seatId);
         stateView.turnTimer = this.makeTurnTimer(match, seatId);
         stateView.connectionReport = this.makeConnectionReport(match, seatId);
+        stateView.connectionTempoReport = this.makeConnectionTempoReport(match, seatId, stateView.connectionReport);
         return stateView;
     }
 

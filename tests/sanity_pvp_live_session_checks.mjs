@@ -1475,9 +1475,29 @@ realtimeHandlers.onMessage({
     viewer: { seatId: 'A', status: 'online' },
     opponent: { seatId: 'B', status: 'grace' },
     heartbeatIntervalMs: 1200
+  },
+  connectionTempoReport: {
+    reportVersion: 'pvp-live-connection-tempo-v1',
+    sourceVisibility: 'server_authoritative_connection_state',
+    usesHiddenInformation: false,
+    rankedImpact: 'none',
+    tempoState: 'opponent_action_grace',
+    severity: 'warning',
+    phase: 'active',
+    currentSeat: 'B',
+    viewerSeat: 'A',
+    opponentSeat: 'B',
+    affectedSeat: 'B',
+    statusLine: '连接：对方重连宽限中',
+    detailLine: '等待服务端权威连接节奏。',
+    actionBoundary: 'wait_for_authoritative_timeout',
+    canSubmitIntent: false,
+    shouldWaitForAuthority: true
   }
 });
 assert.equal(realtimeSession.getState().stateView.connectionReport.opponent.status, 'grace', 'presence WS message should update connection report');
+assert.equal(realtimeSession.getState().stateView.connectionTempoReport.tempoState, 'opponent_action_grace', 'presence WS message should update authoritative connection tempo report');
+assert.equal(realtimeSession.getState().stateView.connectionTempoReport.sourceVisibility, 'server_authoritative_connection_state', 'presence WS connection tempo should keep authoritative source');
 
 realtimeHandlers.onMessage({
   type: 'intent_result',

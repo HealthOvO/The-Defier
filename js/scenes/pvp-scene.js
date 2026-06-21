@@ -804,6 +804,43 @@ export const PVPScene = {
     };
   },
   getLiveConnectionTempo(view, sourceState = null) {
+    const authoritative = view && view.connectionTempoReport && typeof view.connectionTempoReport === 'object'
+      ? view.connectionTempoReport
+      : null;
+    if (authoritative && String(authoritative.reportVersion || '') === 'pvp-live-connection-tempo-v1') {
+      const safeSeverity = ['normal', 'info', 'warning', 'danger'].includes(authoritative.severity)
+        ? authoritative.severity
+        : 'normal';
+      const action = authoritative.action && typeof authoritative.action === 'object'
+        ? {
+          id: String(authoritative.action.id || ''),
+          label: String(authoritative.action.label || '')
+        }
+        : null;
+      return {
+        reportVersion: 'pvp-live-connection-tempo-v1',
+        sourceVisibility: String(authoritative.sourceVisibility || 'server_authoritative_connection_state'),
+        usesHiddenInformation: authoritative.usesHiddenInformation === true,
+        rankedImpact: String(authoritative.rankedImpact || 'none'),
+        tempoState: String(authoritative.tempoState || 'stable'),
+        severity: safeSeverity,
+        phase: String(authoritative.phase || view.status || sourceState && sourceState.phase || 'unknown'),
+        currentSeat: String(authoritative.currentSeat || view.currentSeat || ''),
+        viewerSeat: String(authoritative.viewerSeat || ''),
+        opponentSeat: String(authoritative.opponentSeat || ''),
+        affectedSeat: String(authoritative.affectedSeat || ''),
+        statusLine: String(authoritative.statusLine || '连接：等待权威状态'),
+        detailLine: String(authoritative.detailLine || authoritative.statusLine || '连接节奏：等待权威状态'),
+        action,
+        actionBoundary: String(authoritative.actionBoundary || ''),
+        canSubmitIntent: authoritative.canSubmitIntent === true,
+        shouldWaitForAuthority: authoritative.shouldWaitForAuthority === true,
+        remainingGraceMs: Math.max(0, Math.floor(Number(authoritative.remainingGraceMs) || 0)),
+        safeguards: Array.isArray(authoritative.safeguards)
+          ? authoritative.safeguards.map(item => String(item || '')).filter(Boolean).slice(0, 8)
+          : []
+      };
+    }
     const report = this.getLiveConnectionReport(view);
     if (!report || !report.viewer || !report.opponent) return null;
     const phase = String(view && view.status || sourceState && sourceState.phase || '').trim();

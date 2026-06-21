@@ -2003,6 +2003,91 @@ async function safeElementScreenshot(page, selector, outputPath) {
       && activeCurrentTurnDisconnectProbe.payload?.connectionTempoReport?.affectedSeat === 'B',
     JSON.stringify(activeCurrentTurnDisconnectProbe),
   );
+  const authoritativeTempoPriorityProbe = await page.evaluate(() => {
+    const view = {
+      matchId: 'pvpm-browser-authoritative-tempo',
+      status: 'active',
+      currentSeat: 'B',
+      stateVersion: 18,
+      connectionReport: {
+        reportVersion: 'pvp-live-connection-v1',
+        connectionHealth: 'good',
+        viewerSeat: 'A',
+        opponentSeat: 'B',
+        heartbeatIntervalMs: 5000,
+        heartbeatStaleMs: 15000,
+        graceMs: 30000,
+        viewer: { seatId: 'A', status: 'online', isViewer: true, remainingGraceMs: 0 },
+        opponent: { seatId: 'B', status: 'online', isViewer: false, remainingGraceMs: 0 },
+      },
+      connectionTempoReport: {
+        reportVersion: 'pvp-live-connection-tempo-v1',
+        sourceVisibility: 'server_authoritative_connection_state',
+        usesHiddenInformation: false,
+        rankedImpact: 'none',
+        tempoState: 'opponent_action_timeout_pending',
+        severity: 'warning',
+        phase: 'active',
+        currentSeat: 'B',
+        viewerSeat: 'A',
+        opponentSeat: 'B',
+        affectedSeat: 'B',
+        statusLine: '连接：服务端权威 tempo 优先',
+        detailLine: '服务端权威连接节奏覆盖本地在线推导。',
+        actionBoundary: 'wait_for_authoritative_timeout',
+        canSubmitIntent: false,
+        shouldWaitForAuthority: true,
+        safeguards: ['server_authoritative_projection'],
+      },
+    };
+    const scene = window.PVPScene;
+    const originalGetLiveSession = scene.getLiveSession;
+    scene.getLiveSession = () => ({
+      getState: () => ({
+        phase: 'active',
+        matchId: view.matchId,
+        seatId: 'A',
+        stateView: view,
+        realtimeStatus: 'connected',
+        lastRealtimeSyncAt: Date.now(),
+        realtimeReport: null,
+        lastEvents: [],
+      }),
+    });
+    const tempo = scene.getLiveConnectionTempo(view, { phase: 'active' });
+    const textPayload = JSON.parse(window.render_game_to_text()).pvp?.live || null;
+    scene.getLiveSession = originalGetLiveSession;
+    const el = document.querySelector('[data-live-connection-tempo]');
+    if (el) {
+      el.hidden = !tempo || tempo.tempoState === 'stable';
+      el.setAttribute('data-live-connection-tempo-state', tempo?.tempoState || '');
+      el.setAttribute('data-live-connection-tempo-actor', tempo?.affectedSeat || '');
+      el.setAttribute('data-live-connection-tempo-severity', tempo?.severity || '');
+      el.innerHTML = scene.renderLiveConnectionTempo(view, { phase: 'active' });
+    }
+    return {
+      connectionStatus: scene.formatLiveConnectionStatus(view),
+      connectionTempo: el?.textContent?.replace(/\s+/g, ' ').trim() || '',
+      connectionTempoState: el?.getAttribute('data-live-connection-tempo-state') || '',
+      connectionTempoActor: el?.getAttribute('data-live-connection-tempo-actor') || '',
+      connectionTempoSeverity: el?.getAttribute('data-live-connection-tempo-severity') || '',
+      tempo,
+      textTempo: textPayload?.connectionTempoReport || null,
+    };
+  });
+  add(
+    'live UI prefers server connection tempo over local online inference',
+    /服务端权威 tempo 优先/.test(authoritativeTempoPriorityProbe.connectionStatus)
+      && /服务端权威连接节奏覆盖本地在线推导/.test(authoritativeTempoPriorityProbe.connectionTempo)
+      && authoritativeTempoPriorityProbe.connectionTempoState === 'opponent_action_timeout_pending'
+      && authoritativeTempoPriorityProbe.connectionTempoActor === 'B'
+      && authoritativeTempoPriorityProbe.connectionTempoSeverity === 'warning'
+      && authoritativeTempoPriorityProbe.tempo?.sourceVisibility === 'server_authoritative_connection_state'
+      && authoritativeTempoPriorityProbe.tempo?.actionBoundary === 'wait_for_authoritative_timeout'
+      && authoritativeTempoPriorityProbe.textTempo?.tempoState === 'opponent_action_timeout_pending'
+      && authoritativeTempoPriorityProbe.textTempo?.sourceVisibility === 'server_authoritative_connection_state',
+    JSON.stringify(authoritativeTempoPriorityProbe),
+  );
   await page.evaluate(() => {
     window.__livePvpAuditConnectionMode = 'online';
     window.PVPScene.renderLivePanel();

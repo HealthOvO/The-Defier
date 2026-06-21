@@ -369,6 +369,7 @@ function attachLivePvpWebSocket(server, {
             matchId: matchAccess.match.matchId,
             seatId: matchAccess.seatId,
             connectionReport: matchAccess.stateView && matchAccess.stateView.connectionReport || null,
+            connectionTempoReport: matchAccess.stateView && matchAccess.stateView.connectionTempoReport || null,
             serverTime: now()
         });
         if (Object.prototype.hasOwnProperty.call(message || {}, 'lastSeenRevision')) {

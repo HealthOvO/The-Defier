@@ -509,12 +509,19 @@ export function createPvpLiveSession({
       const connectionReport = message.connectionReport && typeof message.connectionReport === 'object'
         ? cloneData(message.connectionReport)
         : null;
+      const connectionTempoReport = message.connectionTempoReport && typeof message.connectionTempoReport === 'object'
+        ? cloneData(message.connectionTempoReport)
+        : null;
       return publish({
         matchId: String(message.matchId || state.matchId || ''),
         seatId: String(message.seatId || state.seatId || ''),
         realtimeStatus: state.realtimeStatus === 'idle' ? 'connected' : state.realtimeStatus,
-        stateView: state.stateView && connectionReport
-          ? { ...state.stateView, connectionReport }
+        stateView: state.stateView && (connectionReport || connectionTempoReport)
+          ? {
+            ...state.stateView,
+            ...(connectionReport ? { connectionReport } : {}),
+            ...(connectionTempoReport ? { connectionTempoReport } : {})
+          }
           : state.stateView,
         lastError: null
       });
