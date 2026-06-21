@@ -1379,6 +1379,79 @@ const missingTerminalSession = createPvpLiveSession({
 await missingTerminalSession.resumeCurrentMatch();
 assert.ok(!missingTerminalStorage.values().includes('pvplm-terminal-review'), 'missing terminal match should clear stale recovery anchor');
 
+const waitingQueueResumeStorage = createMemoryStorage();
+const waitingQueueWriter = createPvpLiveSession({
+  storage: waitingQueueResumeStorage,
+  userScope: () => 'queue-user-A',
+  liveService: {
+    joinQueue: async () => ({
+      success: true,
+      status: 'waiting',
+      queueTicket: 'pvplq-refresh-wait',
+      waitingReport: {
+        reportVersion: 'pvp-live-waiting-report-v1',
+        waitMs: 15000,
+        longWait: false,
+        message: '你已确认接受宽分差，仍需对方也确认才会放行。',
+        safeguards: ['real_player_only', 'no_score_change'],
+        wideMatchConsent: {
+          reportVersion: 'pvp-live-wide-match-consent-v1',
+          viewerAccepted: true,
+          requiresBothPlayers: true,
+          acceptedPlayerCount: 1,
+          candidatePoolSize: 1,
+          matchReady: false,
+          status: 'waiting_for_peer'
+        }
+      }
+    })
+  }
+});
+await waitingQueueWriter.joinQueue({ displayName: '甲', wideMatchConsent: true });
+const waitingQueueResumeCalls = [];
+const waitingQueueReader = createPvpLiveSession({
+  storage: waitingQueueResumeStorage,
+  userScope: () => 'queue-user-A',
+  liveService: {
+    getCurrentMatch: async () => {
+      waitingQueueResumeCalls.push({ method: 'getCurrentMatch' });
+      return { success: false, reason: 'no_current_match', message: '当前没有进行中的实时论道' };
+    },
+    getQueueStatus: async (queueTicket) => {
+      waitingQueueResumeCalls.push({ method: 'getQueueStatus', queueTicket });
+      return {
+        success: true,
+        status: 'waiting',
+        queueTicket,
+        waitingReport: {
+          reportVersion: 'pvp-live-waiting-report-v1',
+          waitMs: 18000,
+          longWait: false,
+          message: '你已确认接受宽分差，仍需对方也确认才会放行。',
+          safeguards: ['real_player_only', 'no_score_change'],
+          wideMatchConsent: {
+            reportVersion: 'pvp-live-wide-match-consent-v1',
+            viewerAccepted: true,
+            requiresBothPlayers: true,
+            acceptedPlayerCount: 1,
+            candidatePoolSize: 1,
+            matchReady: false,
+            status: 'waiting_for_peer'
+          }
+        }
+      };
+    }
+  }
+});
+const restoredWaitingQueue = await waitingQueueReader.resumeCurrentMatch();
+assert.equal(restoredWaitingQueue.phase, 'waiting', 'resumeCurrentMatch should restore stored waiting queue ticket after page refresh');
+assert.equal(restoredWaitingQueue.queueTicket, 'pvplq-refresh-wait', 'restored waiting queue should retain stored queue ticket');
+assert.equal(restoredWaitingQueue.waitingReport?.wideMatchConsent?.viewerAccepted, true, 'restored waiting queue should retain wide-match consent report');
+assert.deepEqual(waitingQueueResumeCalls, [
+  { method: 'getCurrentMatch' },
+  { method: 'getQueueStatus', queueTicket: 'pvplq-refresh-wait' }
+], 'waiting queue recovery should read queue status without rejoining');
+
 const scopedTerminalStorage = createMemoryStorage();
 const scopedWriter = createPvpLiveSession({
   storage: scopedTerminalStorage,

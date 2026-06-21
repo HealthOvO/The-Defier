@@ -1,5 +1,23 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-21: V10-S29 live PVP waiting queue refresh recovery
+  - 本轮完成
+    - `js/services/pvp-live-session.js` 新增按 `userScope` 分桶的 waiting queue ticket 本地恢复锚点：入队返回 `waiting` 时保存 queue ticket，匹配、取消、票据过期或进入权威战局后清除，避免同浏览器不同账号串恢复。
+    - `resumeCurrentMatch()` 在服务端返回 `no_current_match` 后，会先用本地保存的 queue ticket 调 `getQueueStatus()` 恢复 waiting / matched 状态；只有确认没有可恢复队列时，才继续走 terminal review 或 idle 分支。
+    - 队列恢复不调用 `joinQueue()`，不会改写既有 ticket 的 `wideMatchConsent`、loadout lock 或排队时间；刷新/重开页面后仍能保留 `waitingReport`、`recent_opponent_suppression`、`low_sample_protection`、`wideMatchConsent.waiting_for_peer` 等等待合同。
+    - `tests/sanity_pvp_live_session_checks.mjs` 新增刷新恢复红测：旧 session 入队并保存 ticket，新 session 在 `getCurrentMatch=no_current_match` 后必须调用 `getQueueStatus(storedTicket)`，恢复 `phase='waiting'`、原 queue ticket 与 `wideMatchConsent.viewerAccepted=true`，且不能重新入队。
+  - 已验证
+    - 红测：`node tests/sanity_pvp_live_session_checks.mjs` 在实现前失败于 `resumeCurrentMatch should restore stored waiting queue ticket after page refresh`，实际为 `idle`。
+    - 绿测：`node tests/sanity_pvp_live_session_checks.mjs`
+    - 语法：`node --check js/services/pvp-live-session.js`
+    - 语法：`node --check tests/sanity_pvp_live_session_checks.mjs`
+    - 绿测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs`
+    - 文档同步：`node tests/sanity_intro_progress_sync_checks.cjs`
+    - 全量 Node 门禁：`npm run test:node`，All node checks passed。
+    - 构建：`npm run build:pages`
+  - 当前结论
+    - live PVP 等待阶段不再是一刷新就变成“看起来没在排队”：玩家能找回等待原因、宽分差同意状态和练习/取消选择，服务端保留的排队席位也不会因为前端误判 idle 而让另一位真人白等准备超时。这一刀只补 session 恢复和本地票据锚点，不改变匹配规则、正式结算、奖励或后端队列语义。
+
 - 2026-06-21: V10-S28 live PVP scoped wide-match consent counts
   - 本轮完成
     - `server/pvp-live/live-store.js` 将 `waitingReport.candidatePoolSize` 与 `wideMatchConsent.acceptedPlayerCount` 从全 waiting queue 统计收紧为同一个可匹配池统计：只计算与当前票据 `testMatchScope` 一致、未 consumed、仍 active waiting 的队列项。

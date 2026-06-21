@@ -24,6 +24,7 @@ const DEFAULT_STATE = Object.freeze({
 });
 const LAST_TERMINAL_MATCH_STORAGE_KEY = 'theDefierPvpLiveLastTerminalMatchV1';
 const SEASON_GOAL_STORAGE_KEY = 'theDefierPvpLiveSeasonGoalV1';
+const WAITING_QUEUE_TICKET_STORAGE_KEY = 'theDefierPvpLiveWaitingQueueTicketV1';
 const ALLOWED_SEASON_GOAL_ACTIONS = Object.freeze([
   'queue_again',
   'practice',
@@ -306,6 +307,11 @@ export function createPvpLiveSession({
     return scope ? `${LAST_TERMINAL_MATCH_STORAGE_KEY}:${scope}` : LAST_TERMINAL_MATCH_STORAGE_KEY;
   };
 
+  const getWaitingQueueStorageKey = () => {
+    const scope = normalizeStorageScope(typeof userScope === 'function' ? userScope() : userScope);
+    return scope ? `${WAITING_QUEUE_TICKET_STORAGE_KEY}:${scope}` : WAITING_QUEUE_TICKET_STORAGE_KEY;
+  };
+
   const normalizeSeasonId = (seasonId = '') => normalizeStorageScope(seasonId || 's1-genesis');
 
   const getSeasonGoalStorageKey = (seasonId = '') => {
@@ -402,10 +408,44 @@ export function createPvpLiveSession({
     }
   };
 
+  const readStoredWaitingQueueTicket = () => {
+    if (!storage || typeof storage.getItem !== 'function') return '';
+    try {
+      return String(storage.getItem(getWaitingQueueStorageKey()) || '').trim();
+    } catch (error) {
+      return '';
+    }
+  };
+
+  const rememberWaitingQueueTicket = (queueTicket = '') => {
+    const ticket = String(queueTicket || '').trim();
+    if (!ticket || !storage || typeof storage.setItem !== 'function') return;
+    try {
+      const key = getWaitingQueueStorageKey();
+      storage.setItem(key, ticket);
+      if (key !== WAITING_QUEUE_TICKET_STORAGE_KEY && typeof storage.removeItem === 'function') {
+        storage.removeItem(WAITING_QUEUE_TICKET_STORAGE_KEY);
+      }
+    } catch (error) {
+      // Queue recovery is a refresh convenience only; live PVP still works without storage.
+    }
+  };
+
+  const clearStoredWaitingQueueTicket = () => {
+    if (!storage || typeof storage.removeItem !== 'function') return;
+    try {
+      storage.removeItem(getWaitingQueueStorageKey());
+      storage.removeItem(WAITING_QUEUE_TICKET_STORAGE_KEY);
+    } catch (error) {
+      // Best effort only.
+    }
+  };
+
   const rememberTerminalReviewMatch = (nextState = state) => {
     const view = nextState && nextState.stateView ? nextState.stateView : null;
     const matchId = String(nextState && nextState.matchId || view && view.matchId || '').trim();
     if (!matchId || !view || view.status !== 'finished' || !view.postMatchReview) return;
+    clearStoredWaitingQueueTicket();
     if (!storage || typeof storage.setItem !== 'function') return;
     try {
       const key = getTerminalStorageKey();
@@ -783,6 +823,7 @@ export function createPvpLiveSession({
     }
     clearStoredTerminalMatchId();
     if (result.status === 'matched') {
+      clearStoredWaitingQueueTicket();
       const stateView = result.stateView || null;
       return publish({
         phase: normalizePhaseFromView(stateView, 'matched'),
@@ -798,6 +839,7 @@ export function createPvpLiveSession({
         lastError: null
       });
     }
+    rememberWaitingQueueTicket(result.queueTicket || '');
     return publish({
       phase: 'waiting',
       queueTicket: result.queueTicket || '',
@@ -819,6 +861,7 @@ export function createPvpLiveSession({
     const result = await callLive('getQueueStatus', state.queueTicket);
     if (!result || result.success === false) {
       if (isQueueTicketExpired(result)) {
+        clearStoredWaitingQueueTicket();
         return publish({
           phase: 'idle',
           queueTicket: '',
@@ -836,6 +879,7 @@ export function createPvpLiveSession({
       return fail(result && result.reason || 'queue_status_failed', result && result.message || '实时论道队列状态读取失败');
     }
     if (result.status === 'matched') {
+      clearStoredWaitingQueueTicket();
       const stateView = result.stateView || null;
       return publish({
         phase: normalizePhaseFromView(stateView, 'matched'),
@@ -847,8 +891,10 @@ export function createPvpLiveSession({
         lastError: null
       });
     }
+    rememberWaitingQueueTicket(result.queueTicket || state.queueTicket);
     return publish({
       phase: 'waiting',
+      queueTicket: result.queueTicket || state.queueTicket || '',
       waitingReport: result.waitingReport || state.waitingReport || null,
       rematchReport: null,
       lastError: null
@@ -863,6 +909,7 @@ export function createPvpLiveSession({
     if (!result || result.success === false) {
       return fail(result && result.reason || 'queue_cancel_failed', result && result.message || '实时论道取消排队失败');
     }
+    clearStoredWaitingQueueTicket();
     clearStoredTerminalMatchId();
     return publish({
       ...DEFAULT_STATE,
@@ -891,8 +938,56 @@ export function createPvpLiveSession({
       lastError: null,
       lastEvents: resolveAuthoritativeEvents(null, nextView, resolved.accepted)
     });
+    if (resolved.accepted) clearStoredWaitingQueueTicket();
     rememberTerminalReviewMatch(next);
     return next;
+  }
+
+  async function resumeStoredWaitingQueue() {
+    const queueTicket = readStoredWaitingQueueTicket();
+    if (!queueTicket) return null;
+    const result = await callLive('getQueueStatus', queueTicket);
+    if (!result || result.success === false) {
+      if (isQueueTicketExpired(result)) {
+        clearStoredWaitingQueueTicket();
+      }
+      return null;
+    }
+    if (result.status === 'matched') {
+      clearStoredWaitingQueueTicket();
+      const stateView = result.stateView || null;
+      return publish({
+        phase: normalizePhaseFromView(stateView, 'matched'),
+        queueTicket: '',
+        inviteCode: '',
+        matchId: result.matchId || '',
+        seatId: result.seatId || '',
+        stateView,
+        waitingReport: null,
+        inviteReport: null,
+        rematchReport: null,
+        lastEvents: stateView && Array.isArray(stateView.recentEvents) ? stateView.recentEvents.slice(-8) : [],
+        lastError: null
+      });
+    }
+    if (result.status === 'waiting') {
+      const nextTicket = result.queueTicket || queueTicket;
+      rememberWaitingQueueTicket(nextTicket);
+      return publish({
+        phase: 'waiting',
+        queueTicket: nextTicket,
+        inviteCode: '',
+        matchId: '',
+        seatId: '',
+        stateView: null,
+        waitingReport: result.waitingReport || null,
+        inviteReport: null,
+        rematchReport: null,
+        lastError: null,
+        lastEvents: []
+      });
+    }
+    return null;
   }
 
   async function resumeStoredTerminalReview() {
@@ -961,6 +1056,8 @@ export function createPvpLiveSession({
     const result = await callLive('getCurrentMatch');
     if (!result || result.success === false) {
       if (isNoCurrentMatch(result)) {
+        const waitingQueue = await resumeStoredWaitingQueue();
+        if (waitingQueue) return waitingQueue;
         const terminalReview = await resumeStoredTerminalReview();
         if (terminalReview) return terminalReview;
       }
@@ -975,6 +1072,7 @@ export function createPvpLiveSession({
         lastEvents: []
       });
     }
+    clearStoredWaitingQueueTicket();
     const stateView = result.stateView || null;
     const next = publish({
       phase: normalizePhaseFromView(stateView, 'active'),
