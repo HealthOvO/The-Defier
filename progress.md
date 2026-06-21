@@ -1,5 +1,32 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-21: V10-S25 live PVP setup disconnect dodge cooldown
+  - 本轮完成
+    - `server/pvp-live/live-store.js` 新增 setup `connection_timeout` 责任方短冷却：匹配进入 setup 后若一方在已公开先后手/准备窗口中断线并触发无效局，服务端会只给 ranked/public queue 场景下的 `disconnectedSeats` 对应用户写入 `connection_timeout` matchmaking guard；未断线方释放后可重新入队，不产生结算、奖励或正式积分变化。
+    - friendly/no-ranked 约战继续保持低压力语义：私密邀请或友谊再战在 setup 连接超时无效后，不写 ranked queue cooldown，避免把好友局断线误伤到正式排位入场。
+    - `makeMatchmakingGuardReport()` 将 `ready_timeout / connection_timeout / queue_cancel_abuse` 的 `sourceLabel` 拆为“准备超时冷却 / 连接超时冷却 / 频繁取消冷却”，前端不再只能显示泛化排队冷却原因。
+    - `js/scenes/pvp-scene.js` 的入场保障练习场景新增 source-specific cooldown 映射：`ready_timeout` 进入 `entry_safeguard:ready_timeout`，`connection_timeout` 进入 `entry_safeguard:connection_timeout`，频繁取消仍保持 `entry_safeguard:queue_cooldown` 兼容旧审计。
+    - `tests/sanity_pvp_live_route_checks.cjs` 将旧“setup 断线方可直接重排”的断言改为红测：A 读到 `connection_timeout` 无效局后可重排，B 作为断线责任方必须收到 409 `queue_cooldown`，`cooldownSource === 'connection_timeout'` 且 `rankedImpact === 'none'`。
+    - `tests/sanity_pvp_live_route_checks.cjs` 新增 friendly invite setup 断线负测：guest 断线导致 friendly match invalidated 后，guest 仍可 200/`waiting` 进入公开队列，证明 no-ranked 断线不触发 ranked cooldown。
+    - `tests/browser_pvp_live_audit.mjs` 新增 `ready-timeout-cooldown` 与 `connection-timeout-cooldown` 两个 UI 场景，钉住错误提示、倒计时按钮、问道练习、drillScenario、trainingFocus 和无奖励/无积分承诺。
+  - 已验证
+    - 红测：`node tests/sanity_pvp_live_route_checks.cjs` 在实现前失败于 `setup disconnected participant should receive queue cooldown`，实际为 200。
+    - 绿测：`node tests/sanity_pvp_live_route_checks.cjs`
+    - 红测：`node tests/sanity_pvp_live_route_checks.cjs` 在 friendly guard 前失败于 `friendly setup connection timeout should not apply ranked queue cooldown`，实际为 409。
+    - 绿测：`node tests/sanity_pvp_live_route_checks.cjs`
+    - 红测：`node tests/browser_pvp_live_audit.mjs http://127.0.0.1:5173 output/pvp-live-connection-timeout-cooldown-red`，102 项里仅 `live UI connection timeout cooldown practice opens a source-specific no-score drill` 失败。
+    - 绿测：`node tests/browser_pvp_live_audit.mjs http://127.0.0.1:5173 output/pvp-live-connection-timeout-cooldown-green`，102/102 findings、0 failed、0 console error。
+    - 语法：`node --check server/pvp-live/live-store.js`
+    - 语法：`node --check js/scenes/pvp-scene.js`
+    - 语法：`node --check tests/sanity_pvp_live_route_checks.cjs`
+    - 语法：`node --check tests/browser_pvp_live_audit.mjs`
+    - 绿测：`node tests/sanity_pvp_live_ui_contract_checks.cjs`
+    - 全量 Node 门禁：`npm run test:node`，All node checks passed。
+    - 构建：`npm run build:pages`
+    - 真实后端浏览器 smoke：`node tests/browser_pvp_live_real_backend_smoke.mjs http://127.0.0.1:5173 output/pvp-live-setup-disconnect-cooldown-real-backend-smoke`，57/57 findings、0 failed、0 console error。
+  - 当前结论
+    - 排位真人 PVP 的 setup reveal-dodge 口子进一步收紧：玩家不能在看到先后手后通过关页/断线绕过 `ready_timeout` 冷却；断线责任方会进入短暂排队冷却，非责任方仍可立刻重排。friendly/no-ranked 对局不会被这条 ranked guard 误伤。冷却期间的练习入口也会明确区分准备超时、连接超时和频繁取消，让双方都能看到“为什么被挡、可以先练什么、正式积分不变”。
+
 - 2026-06-21: V10-S24 live PVP connection tempo input gate
   - 本轮完成
     - `js/scenes/pvp-scene.js` 新增 `getLiveConnectionSubmitBlock()` / `blockLiveConnectionSubmit()`：前端现在会消费服务端权威 `connectionTempoReport` 的 `actionBoundary / canSubmitIntent / shouldWaitForAuthority`，当我方处于重连宽限、断线刷新、或需要等待服务端权威结算时，行动不再只停留在提示文案层。

@@ -669,6 +669,39 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
             body: { queueTicket: queueAfterInviteCancel.payload.queueTicket }
         });
 
+        const friendlyDisconnectInvite = await request(baseUrl, '/api/pvp/live/invites', {
+            method: 'POST',
+            token: tokenE,
+            body: { displayName: '戊', loadout: loadoutB }
+        });
+        assert.equal(friendlyDisconnectInvite.payload.status, 'waiting_invite', 'friendly setup disconnect invite should enter waiting invite state');
+        const friendlyDisconnectJoin = await request(baseUrl, `/api/pvp/live/invites/${encodeURIComponent(friendlyDisconnectInvite.payload.inviteCode)}/join`, {
+            method: 'POST',
+            token: tokenF,
+            body: { displayName: '己', loadout: loadoutA }
+        });
+        assert.equal(friendlyDisconnectJoin.payload.status, 'matched', 'friendly setup disconnect guest should create friendly match');
+        assert.equal(friendlyDisconnectJoin.payload.stateView.mode, 'friendly', 'friendly setup disconnect match should stay no-ranked mode');
+        const friendlyDisconnectMatch = pvpLiveRoutes.__livePvpStore.matches.get(friendlyDisconnectJoin.payload.matchId);
+        forceSeatDisconnected(friendlyDisconnectMatch, 'B');
+        const friendlyDisconnectState = await request(baseUrl, `/api/pvp/live/matches/${friendlyDisconnectJoin.payload.matchId}`, {
+            token: tokenE
+        });
+        assert.equal(friendlyDisconnectState.payload.stateView.status, 'invalidated', 'friendly setup connection timeout should invalidate without settlement');
+        assert.ok(friendlyDisconnectState.payload.stateView.recentEvents.some(event => event.eventType === 'connection_timeout' && eventPublicData(event).seatId === 'B'), 'friendly setup disconnect should still emit public connection_timeout evidence');
+        const friendlyDisconnectGuestQueue = await request(baseUrl, '/api/pvp/live/queue/join', {
+            method: 'POST',
+            token: tokenF,
+            body: { displayName: '己', loadout: loadoutA }
+        });
+        assert.equal(friendlyDisconnectGuestQueue.status, 200, 'friendly setup connection timeout should not apply ranked queue cooldown');
+        assert.equal(friendlyDisconnectGuestQueue.payload.status, 'waiting', 'friendly setup disconnected guest should be able to enter public queue after no-score invalidation');
+        await request(baseUrl, '/api/pvp/live/queue/cancel', {
+            method: 'POST',
+            token: tokenF,
+            body: { queueTicket: friendlyDisconnectGuestQueue.payload.queueTicket }
+        });
+
         const expiringInvite = await request(baseUrl, '/api/pvp/live/invites', {
             method: 'POST',
             token: tokenF,
@@ -1855,12 +1888,23 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
         assert.equal(setupDisconnectStateA.payload.stateView.postMatchReview, null, 'setup connection invalidation should not expose post-match review');
         assert.ok(setupDisconnectStateA.payload.stateView.recentEvents.some(event => event.eventType === 'connection_timeout' && eventPublicData(event).seatId === 'B'), 'setup disconnect should emit public connection_timeout event for stale seat');
         assert.ok(setupDisconnectStateA.payload.stateView.recentEvents.some(event => event.eventType === 'match_invalidated' && eventPublicData(event).reason === 'connection_timeout'), 'setup disconnect should invalidate with connection_timeout reason');
-        const requeueAfterSetupDisconnect = await request(baseUrl, '/api/pvp/live/queue/join', {
+        const requeueReadySideAfterSetupDisconnect = await request(baseUrl, '/api/pvp/live/queue/join', {
+            method: 'POST',
+            token: tokenA,
+            body: { displayName: '甲' }
+        });
+        assert.equal(requeueReadySideAfterSetupDisconnect.status, 200, 'connected setup participant should be released after opponent setup connection invalidation');
+        assert.equal(requeueReadySideAfterSetupDisconnect.payload.status, 'waiting', 'connected setup participant should be able to queue again without settlement');
+        const blockedDisconnectSideAfterSetupTimeout = await request(baseUrl, '/api/pvp/live/queue/join', {
             method: 'POST',
             token: tokenB,
             body: { displayName: '乙' }
         });
-        assert.equal(requeueAfterSetupDisconnect.payload.status, 'waiting', 'setup connection invalidation should release disconnected player without settlement');
+        assert.equal(blockedDisconnectSideAfterSetupTimeout.status, 409, 'setup disconnected participant should receive queue cooldown');
+        assert.equal(blockedDisconnectSideAfterSetupTimeout.payload.reason, 'queue_cooldown', 'setup disconnected participant block should expose queue_cooldown reason');
+        assert.equal(blockedDisconnectSideAfterSetupTimeout.payload.matchmakingGuard?.reportVersion, 'pvp-live-matchmaking-guard-v1', 'setup disconnected participant block should expose matchmaking guard report');
+        assert.equal(blockedDisconnectSideAfterSetupTimeout.payload.matchmakingGuard?.cooldownSource, 'connection_timeout', 'setup disconnected participant block should expose connection_timeout source');
+        assert.equal(blockedDisconnectSideAfterSetupTimeout.payload.matchmakingGuard?.rankedImpact, 'none', 'setup disconnect cooldown should not change ranked score');
 
         pvpLiveRoutes.__livePvpStore.reset();
         const joinNonBlockingDisconnectA = await request(baseUrl, '/api/pvp/live/queue/join', {

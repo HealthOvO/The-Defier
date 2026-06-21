@@ -207,8 +207,10 @@ function makeMatchmakingGuardReport(profile, now = Date.now()) {
     const cooldownRemainingMs = Math.max(0, retryAt - Math.max(0, Math.floor(Number(now) || Date.now())));
     const source = normalized.cooldownSource || 'queue_cooldown';
     const sourceLabel = source === 'ready_timeout'
-        ? '准备超时'
-        : source === 'queue_cancel_abuse' ? '频繁取消' : '排队冷却';
+        ? '准备超时冷却'
+        : source === 'connection_timeout'
+            ? '连接超时冷却'
+            : source === 'queue_cancel_abuse' ? '频繁取消冷却' : '排队冷却';
     return {
         reportVersion: 'pvp-live-matchmaking-guard-v1',
         status: cooldownRemainingMs > 0 ? 'blocked' : 'clear',
@@ -953,6 +955,26 @@ class LivePvpStore {
         const reports = [];
         for (const userId of uniqueUserIds) {
             reports.push(await this.applyQueueCooldown(userId, 'ready_timeout', this.readyTimeoutCooldownMs));
+        }
+        return reports.filter(Boolean);
+    }
+
+    async recordSetupConnectionTimeoutCooldowns(match) {
+        if (!match || !match.state || match.state.status !== 'invalidated' || this.readyTimeoutCooldownMs <= 0) return [];
+        if (match.mode === 'friendly' || match.state.mode === 'friendly') return [];
+        const events = Array.isArray(match.state.events) ? match.state.events : [];
+        const invalidatedEvent = events.slice().reverse().find(event => event && event.eventType === 'match_invalidated' && event.payload);
+        if (!invalidatedEvent || invalidatedEvent.payload.reason !== 'connection_timeout') return [];
+        const timeoutEvent = events.slice().reverse().find(event => event && event.eventType === 'connection_timeout' && event.payload && event.payload.phase === 'setup');
+        const disconnectedSeats = Array.isArray(timeoutEvent && timeoutEvent.payload && timeoutEvent.payload.disconnectedSeats)
+            ? timeoutEvent.payload.disconnectedSeats.map(seatId => String(seatId || '')).filter(Boolean)
+            : [];
+        const uniqueUserIds = Array.from(new Set(disconnectedSeats
+            .map(seatId => this.getSourceSeatUserId(match, seatId))
+            .filter(Boolean)));
+        const reports = [];
+        for (const userId of uniqueUserIds) {
+            reports.push(await this.applyQueueCooldown(userId, 'connection_timeout', this.readyTimeoutCooldownMs));
         }
         return reports.filter(Boolean);
     }
@@ -2178,6 +2200,7 @@ class LivePvpStore {
         }
         if (hasActiveParticipants) {
             await this.recordReadyTimeoutCooldowns(match);
+            await this.recordSetupConnectionTimeoutCooldowns(match);
         }
         await this.releaseMatch(match);
         return { completed: true, saveResult };

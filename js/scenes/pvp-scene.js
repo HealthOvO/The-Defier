@@ -1964,10 +1964,31 @@ export const PVPScene = {
     const cooldownReport = this.getLiveQueueCooldownError(sourceState);
     const isCooldown = !!cooldownReport && !report;
     const cooldownSource = cooldownReport && cooldownReport.matchmakingGuard && cooldownReport.matchmakingGuard.cooldownSource || 'queue_cooldown';
+    const isReadyTimeoutCooldown = isCooldown && cooldownSource === 'ready_timeout';
+    const isConnectionTimeoutCooldown = isCooldown && cooldownSource === 'connection_timeout';
+    const cooldownScenarioKey = isReadyTimeoutCooldown
+      ? 'ready_timeout'
+      : isConnectionTimeoutCooldown ? 'connection_timeout' : 'queue_cooldown';
+    const cooldownScenarioLabel = isReadyTimeoutCooldown
+      ? '准备超时冷却'
+      : isConnectionTimeoutCooldown ? '连接超时冷却' : '排队冷却';
+    const cooldownTrainingTag = isReadyTimeoutCooldown
+      ? '准备超时练习'
+      : isConnectionTimeoutCooldown ? '连接超时练习' : '排队冷却练习';
+    const cooldownTrainingAdvice = isReadyTimeoutCooldown
+      ? '准备阶段未确认触发短暂冷却：先用问道练习补首轮调息、确认准备和稳血节奏；不写正式积分。'
+      : isConnectionTimeoutCooldown
+        ? '准备阶段连接超时触发短暂冷却：先用问道练习补重连前后的调息、稳血和低费节奏；不写正式积分。'
+        : '真人排位短暂冷却：先用问道练习保持手感，练首轮调息、稳血和低费节奏；不写正式积分。';
+    const cooldownDrillObjective = isReadyTimeoutCooldown
+      ? '准备超时冷却期间先练调息确认、稳血和低费节奏，不写正式积分。'
+      : isConnectionTimeoutCooldown
+        ? '连接超时冷却期间先练断线恢复后的调息确认、稳血和低费节奏，不写正式积分。'
+        : '排队冷却期间先练首轮稳血和出牌节奏，不写正式积分。';
     const selectedLoadout = this.getLiveSelectedLoadoutPreset();
     return {
       reportVersion: 'pvp-live-drill-scenario-v1',
-      sourceMatchId: isCooldown ? 'entry_safeguard:queue_cooldown' : 'entry_safeguard:connection_health_failed',
+      sourceMatchId: isCooldown ? `entry_safeguard:${cooldownScenarioKey}` : 'entry_safeguard:connection_health_failed',
       sourceVisibility: 'replay_self',
       usesHiddenInformation: false,
       rankedImpact: 'none',
@@ -1975,15 +1996,15 @@ export const PVPScene = {
       finishReason: isCooldown ? 'queue_cooldown' : 'connection_health_failed',
       recommendedLoadoutId: selectedLoadout.id,
       recommendedLoadoutLabel: selectedLoadout.label,
-      themeKey: isCooldown ? 'queue_cooldown' : 'connection_health',
-      themeLabel: isCooldown ? '排队冷却' : '入场保障',
+      themeKey: isCooldown ? cooldownScenarioKey : 'connection_health',
+      themeLabel: isCooldown ? cooldownScenarioLabel : '入场保障',
       trainingAdvice: isCooldown
-        ? '真人排位短暂冷却：先用问道练习保持手感，练首轮调息、稳血和低费节奏；不写正式积分。'
+        ? cooldownTrainingAdvice
         : '连接健康入场保障：当前连接未稳定，先练首轮调息、稳血和低费节奏；不写正式积分。',
       drillObjective: isCooldown
-        ? `${selectedLoadout.label}：排队冷却期间先练首轮稳血和出牌节奏，不写正式积分。`
+        ? `${selectedLoadout.label}：${cooldownDrillObjective}`
         : `${selectedLoadout.label}：连接恢复前先练首轮稳血和出牌节奏，不写正式积分。`,
-      trainingTags: ['真人 PVP', isCooldown ? '排队冷却练习' : '连接健康练习', '不计积分', isCooldown ? '排队冷却' : '入场保障'],
+      trainingTags: ['真人 PVP', isCooldown ? cooldownTrainingTag : '连接健康练习', '不计积分', isCooldown ? cooldownScenarioLabel : '入场保障'],
       publicEventTypes: [isCooldown ? cooldownSource : 'connection_health_failed'],
       sourceEventSequences: [],
       ...(isCooldown ? { matchmakingGuard: cooldownReport.matchmakingGuard } : { connectionHealth: report ? report.connectionHealth : null })
@@ -2010,12 +2031,12 @@ export const PVPScene = {
       trainingAdvice: scenario.trainingAdvice,
       highlightLine: scenario.drillObjective,
       routeFocusLine: scenario.finishReason === 'queue_cooldown'
-        ? '未进入正式排位队列；练习不写正式积分，冷却结束后再重试排位。'
+        ? `${scenario.themeLabel}期间未进入正式排位队列；练习不写正式积分，冷却结束后再重试排位。`
         : '未进入正式排位队列；练习不写正式积分，恢复后再重试检测。',
       compareHint: '练习只使用入场保障和公开规则，不读取对手隐藏手牌或牌库。',
       trainingTags: scenario.trainingTags,
       goalHighlights: [
-        `入场保障：${scenario.finishReason === 'queue_cooldown' ? 'queue_cooldown' : 'connection_health_failed'}`,
+        `入场保障：${scenario.finishReason === 'queue_cooldown' ? scenario.themeKey : 'connection_health_failed'}`,
         `推荐谱：${scenario.recommendedLoadoutLabel}`,
         '正式积分：不变'
       ]

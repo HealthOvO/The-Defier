@@ -912,6 +912,46 @@ async function safeElementScreenshot(page, selector, outputPath) {
             },
           };
         }
+        if (healthMode === 'ready-timeout-cooldown') {
+          return {
+            success: false,
+            reason: 'queue_cooldown',
+            message: '准备阶段未确认，正式真人排位短暂冷却中。',
+            matchmakingGuard: {
+              reportVersion: 'pvp-live-matchmaking-guard-v1',
+              status: 'blocked',
+              cooldownSource: 'ready_timeout',
+              sourceLabel: '准备超时冷却',
+              retryAt: Date.now() + 45000,
+              cooldownRemainingMs: 45000,
+              rankedImpact: 'none',
+              actions: [
+                { id: 'retry_queue_later', label: '稍后重试', detail: '冷却结束后再进入正式排位。' },
+                { id: 'practice', label: '问道练习', detail: '练习不写正式积分。' },
+              ],
+            },
+          };
+        }
+        if (healthMode === 'connection-timeout-cooldown') {
+          return {
+            success: false,
+            reason: 'queue_cooldown',
+            message: '准备阶段连接超时，正式真人排位短暂冷却中。',
+            matchmakingGuard: {
+              reportVersion: 'pvp-live-matchmaking-guard-v1',
+              status: 'blocked',
+              cooldownSource: 'connection_timeout',
+              sourceLabel: '连接超时冷却',
+              retryAt: Date.now() + 30000,
+              cooldownRemainingMs: 30000,
+              rankedImpact: 'none',
+              actions: [
+                { id: 'retry_queue_later', label: '稍后重试', detail: '冷却结束后再进入正式排位。' },
+                { id: 'practice', label: '问道练习', detail: '练习不写正式积分。' },
+              ],
+            },
+          };
+        }
         return { success: true, status: 'waiting', queueTicket: 'pvplq-browser-live' };
       },
       measureConnectionHealth: async () => {
@@ -1576,6 +1616,171 @@ async function safeElementScreenshot(page, selector, outputPath) {
       && !/GhostEnemy|didWin|matchTicket/i.test(JSON.stringify(queueCooldownPracticeProbe.pending || {}))
       && !/ratingDelta|scoreAfter|coinsAwarded|formalResultPolicy|elo/i.test(JSON.stringify(queueCooldownPracticeProbe.drillScenario || {})),
     JSON.stringify(queueCooldownPracticeProbe),
+  );
+
+  await page.evaluate(async () => {
+    window.game.showScreen('pvp-screen');
+    if (window.game) {
+      window.game.pendingChallengeStart = null;
+      window.game.activeChallengeRun = null;
+    }
+    window.PVPScene.switchTab('live');
+    if (typeof window.PVPScene.loadLivePanel === 'function') {
+      await window.PVPScene.loadLivePanel();
+    }
+    window.__livePvpAuditCalls = [];
+    window.__livePvpAuditConnectionHealthMode = 'ready-timeout-cooldown';
+  });
+  await page.waitForTimeout(100);
+  await page.click('[data-live-action="join-queue"]', { timeout: 5000, force: true });
+  await page.waitForTimeout(200);
+  const readyTimeoutCooldownProbe = await page.evaluate(() => ({
+    phase: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-phase') || '',
+    lastError: document.querySelector('[data-live-last-error]')?.textContent || '',
+    buttons: Object.fromEntries(Array.from(document.querySelectorAll('[data-live-action]')).map(button => [
+      button.getAttribute('data-live-action'),
+      { disabled: button.disabled, text: button.textContent?.replace(/\s+/g, ' ').trim() || '' },
+    ])),
+    payload: JSON.parse(window.render_game_to_text()).pvp?.live || null,
+    calls: window.__livePvpAuditCalls,
+  }));
+  add(
+    'live UI ready timeout cooldown names the setup-dodge source without reward or rating promise',
+    readyTimeoutCooldownProbe.phase === 'idle'
+      && /准备阶段未确认|准备超时冷却/.test(readyTimeoutCooldownProbe.lastError)
+      && /剩余 45 秒/.test(readyTimeoutCooldownProbe.lastError)
+      && readyTimeoutCooldownProbe.payload?.lastError?.reason === 'queue_cooldown'
+      && readyTimeoutCooldownProbe.payload?.lastError?.matchmakingGuard?.reportVersion === 'pvp-live-matchmaking-guard-v1'
+      && readyTimeoutCooldownProbe.payload?.lastError?.matchmakingGuard?.status === 'blocked'
+      && readyTimeoutCooldownProbe.payload?.lastError?.matchmakingGuard?.cooldownSource === 'ready_timeout'
+      && readyTimeoutCooldownProbe.payload?.lastError?.matchmakingGuard?.sourceLabel === '准备超时冷却'
+      && readyTimeoutCooldownProbe.payload?.lastError?.matchmakingGuard?.rankedImpact === 'none'
+      && readyTimeoutCooldownProbe.payload?.lastError?.matchmakingGuard?.actions?.some(action => action.id === 'retry_queue_later')
+      && readyTimeoutCooldownProbe.payload?.lastError?.matchmakingGuard?.actions?.some(action => action.id === 'practice' && /不写正式积分/.test(action.detail))
+      && readyTimeoutCooldownProbe.buttons['join-queue']?.disabled === false
+      && /45s 后重试/.test(readyTimeoutCooldownProbe.buttons['join-queue']?.text || '')
+      && readyTimeoutCooldownProbe.buttons['practice-live']?.disabled === false
+      && !/reward|rating|elo/i.test(JSON.stringify(readyTimeoutCooldownProbe.payload?.lastError?.matchmakingGuard || {})),
+    JSON.stringify(readyTimeoutCooldownProbe),
+  );
+  await page.click('[data-live-action="practice-live"]', { timeout: 5000, force: true });
+  await page.waitForTimeout(350);
+  const readyTimeoutPracticeProbe = await page.evaluate(() => {
+    const payload = typeof window.render_game_to_text === 'function'
+      ? JSON.parse(window.render_game_to_text())
+      : null;
+    return {
+      currentScreen: window.game?.currentScreen || '',
+      pending: payload?.challenge?.pending || null,
+      focus: payload?.challenge?.trainingFocus || null,
+      drillScenario: payload?.pvp?.live?.drillScenario || window.PVPScene.getLiveSnapshot()?.drillScenario || null,
+      calls: window.__livePvpAuditCalls,
+    };
+  });
+  add(
+    'live UI ready timeout cooldown practice opens a source-specific no-score drill',
+    readyTimeoutPracticeProbe.currentScreen === 'character-selection-screen'
+      && readyTimeoutPracticeProbe.pending?.replayOnly === true
+      && readyTimeoutPracticeProbe.pending?.practiceOnly === true
+      && /^pvp_live_drill_/.test(readyTimeoutPracticeProbe.pending?.ruleId || '')
+      && readyTimeoutPracticeProbe.focus?.sourceRunId === 'pvp_live:entry_safeguard:ready_timeout'
+      && /准备超时|未确认/.test(readyTimeoutPracticeProbe.focus?.trainingAdvice || '')
+      && readyTimeoutPracticeProbe.drillScenario?.reportVersion === 'pvp-live-drill-scenario-v1'
+      && readyTimeoutPracticeProbe.drillScenario?.sourceMatchId === 'entry_safeguard:ready_timeout'
+      && readyTimeoutPracticeProbe.drillScenario?.sourceVisibility === 'replay_self'
+      && readyTimeoutPracticeProbe.drillScenario?.usesHiddenInformation === false
+      && readyTimeoutPracticeProbe.drillScenario?.rankedImpact === 'none'
+      && readyTimeoutPracticeProbe.drillScenario?.finishReason === 'queue_cooldown'
+      && readyTimeoutPracticeProbe.drillScenario?.themeKey === 'ready_timeout'
+      && readyTimeoutPracticeProbe.drillScenario?.themeLabel === '准备超时冷却'
+      && (readyTimeoutPracticeProbe.drillScenario?.trainingTags || []).includes('准备超时练习')
+      && readyTimeoutPracticeProbe.drillScenario?.matchmakingGuard?.cooldownSource === 'ready_timeout'
+      && !readyTimeoutPracticeProbe.calls.some(call => call.method === 'cancelQueue')
+      && !readyTimeoutPracticeProbe.calls.some(call => /findOpponent|reportMatchResult|startPVPBattle/i.test(call.method || ''))
+      && !/GhostEnemy|didWin|matchTicket/i.test(JSON.stringify(readyTimeoutPracticeProbe.pending || {}))
+      && !/ratingDelta|scoreAfter|coinsAwarded|formalResultPolicy|elo/i.test(JSON.stringify(readyTimeoutPracticeProbe.drillScenario || {})),
+    JSON.stringify(readyTimeoutPracticeProbe),
+  );
+  await page.evaluate(async () => {
+    window.game.showScreen('pvp-screen');
+    if (window.game) {
+      window.game.pendingChallengeStart = null;
+      window.game.activeChallengeRun = null;
+    }
+    window.PVPScene.switchTab('live');
+    if (typeof window.PVPScene.loadLivePanel === 'function') {
+      await window.PVPScene.loadLivePanel();
+    }
+    window.__livePvpAuditCalls = [];
+    window.__livePvpAuditConnectionHealthMode = 'connection-timeout-cooldown';
+  });
+  await page.waitForTimeout(100);
+  await page.click('[data-live-action="join-queue"]', { timeout: 5000, force: true });
+  await page.waitForTimeout(200);
+  const connectionTimeoutCooldownProbe = await page.evaluate(() => ({
+    phase: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-phase') || '',
+    lastError: document.querySelector('[data-live-last-error]')?.textContent || '',
+    buttons: Object.fromEntries(Array.from(document.querySelectorAll('[data-live-action]')).map(button => [
+      button.getAttribute('data-live-action'),
+      { disabled: button.disabled, text: button.textContent?.replace(/\s+/g, ' ').trim() || '' },
+    ])),
+    payload: JSON.parse(window.render_game_to_text()).pvp?.live || null,
+    calls: window.__livePvpAuditCalls,
+  }));
+  add(
+    'live UI connection timeout cooldown names the setup-disconnect source without reward or rating promise',
+    connectionTimeoutCooldownProbe.phase === 'idle'
+      && /准备阶段连接超时|连接超时冷却/.test(connectionTimeoutCooldownProbe.lastError)
+      && /剩余 30 秒/.test(connectionTimeoutCooldownProbe.lastError)
+      && connectionTimeoutCooldownProbe.payload?.lastError?.reason === 'queue_cooldown'
+      && connectionTimeoutCooldownProbe.payload?.lastError?.matchmakingGuard?.reportVersion === 'pvp-live-matchmaking-guard-v1'
+      && connectionTimeoutCooldownProbe.payload?.lastError?.matchmakingGuard?.status === 'blocked'
+      && connectionTimeoutCooldownProbe.payload?.lastError?.matchmakingGuard?.cooldownSource === 'connection_timeout'
+      && connectionTimeoutCooldownProbe.payload?.lastError?.matchmakingGuard?.sourceLabel === '连接超时冷却'
+      && connectionTimeoutCooldownProbe.payload?.lastError?.matchmakingGuard?.rankedImpact === 'none'
+      && connectionTimeoutCooldownProbe.buttons['join-queue']?.disabled === false
+      && /30s 后重试/.test(connectionTimeoutCooldownProbe.buttons['join-queue']?.text || '')
+      && connectionTimeoutCooldownProbe.buttons['practice-live']?.disabled === false
+      && !/reward|rating|elo/i.test(JSON.stringify(connectionTimeoutCooldownProbe.payload?.lastError?.matchmakingGuard || {})),
+    JSON.stringify(connectionTimeoutCooldownProbe),
+  );
+  await page.click('[data-live-action="practice-live"]', { timeout: 5000, force: true });
+  await page.waitForTimeout(350);
+  const connectionTimeoutPracticeProbe = await page.evaluate(() => {
+    const payload = typeof window.render_game_to_text === 'function'
+      ? JSON.parse(window.render_game_to_text())
+      : null;
+    return {
+      currentScreen: window.game?.currentScreen || '',
+      pending: payload?.challenge?.pending || null,
+      focus: payload?.challenge?.trainingFocus || null,
+      drillScenario: payload?.pvp?.live?.drillScenario || window.PVPScene.getLiveSnapshot()?.drillScenario || null,
+      calls: window.__livePvpAuditCalls,
+    };
+  });
+  add(
+    'live UI connection timeout cooldown practice opens a source-specific no-score drill',
+    connectionTimeoutPracticeProbe.currentScreen === 'character-selection-screen'
+      && connectionTimeoutPracticeProbe.pending?.replayOnly === true
+      && connectionTimeoutPracticeProbe.pending?.practiceOnly === true
+      && /^pvp_live_drill_/.test(connectionTimeoutPracticeProbe.pending?.ruleId || '')
+      && connectionTimeoutPracticeProbe.focus?.sourceRunId === 'pvp_live:entry_safeguard:connection_timeout'
+      && /连接超时|断线/.test(connectionTimeoutPracticeProbe.focus?.trainingAdvice || '')
+      && connectionTimeoutPracticeProbe.drillScenario?.reportVersion === 'pvp-live-drill-scenario-v1'
+      && connectionTimeoutPracticeProbe.drillScenario?.sourceMatchId === 'entry_safeguard:connection_timeout'
+      && connectionTimeoutPracticeProbe.drillScenario?.sourceVisibility === 'replay_self'
+      && connectionTimeoutPracticeProbe.drillScenario?.usesHiddenInformation === false
+      && connectionTimeoutPracticeProbe.drillScenario?.rankedImpact === 'none'
+      && connectionTimeoutPracticeProbe.drillScenario?.finishReason === 'queue_cooldown'
+      && connectionTimeoutPracticeProbe.drillScenario?.themeKey === 'connection_timeout'
+      && connectionTimeoutPracticeProbe.drillScenario?.themeLabel === '连接超时冷却'
+      && (connectionTimeoutPracticeProbe.drillScenario?.trainingTags || []).includes('连接超时练习')
+      && connectionTimeoutPracticeProbe.drillScenario?.matchmakingGuard?.cooldownSource === 'connection_timeout'
+      && !connectionTimeoutPracticeProbe.calls.some(call => call.method === 'cancelQueue')
+      && !connectionTimeoutPracticeProbe.calls.some(call => /findOpponent|reportMatchResult|startPVPBattle/i.test(call.method || ''))
+      && !/GhostEnemy|didWin|matchTicket/i.test(JSON.stringify(connectionTimeoutPracticeProbe.pending || {}))
+      && !/ratingDelta|scoreAfter|coinsAwarded|formalResultPolicy|elo/i.test(JSON.stringify(connectionTimeoutPracticeProbe.drillScenario || {})),
+    JSON.stringify(connectionTimeoutPracticeProbe),
   );
   await page.evaluate(async () => {
     window.game.showScreen('pvp-screen');
