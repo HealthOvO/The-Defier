@@ -1089,6 +1089,11 @@ function projectFriendlySeries(series, status = '') {
     const winnerSourceSeat = series.winnerSourceSeat === 'A' || series.winnerSourceSeat === 'B'
         ? series.winnerSourceSeat
         : score.A >= targetWins && score.A > score.B ? 'A' : score.B >= targetWins && score.B > score.A ? 'B' : '';
+    const normalizedSafeguards = (safeguards.length > 0
+        ? safeguards
+        : ['both_participants_confirmed', 'friendly_no_ranked_impact', 'seat_rotation', 'loadout_change_allowed'])
+        .map(item => String(item || '')).filter(Boolean);
+    if (!normalizedSafeguards.includes('alternating_opener')) normalizedSafeguards.push('alternating_opener');
     return {
         reportVersion: 'pvp-live-friendly-series-v1',
         sourceMatchId,
@@ -1105,13 +1110,11 @@ function projectFriendlySeries(series, status = '') {
         sourceParticipants: {
             A: {
                 sourceSeat: 'A',
-                userId: String(sourceParticipants.A && sourceParticipants.A.userId || ''),
-                displayName: String(sourceParticipants.A && (sourceParticipants.A.displayName || sourceParticipants.A.userId) || 'A').slice(0, 40)
+                displayName: String(sourceParticipants.A && sourceParticipants.A.displayName || 'A').slice(0, 40)
             },
             B: {
                 sourceSeat: 'B',
-                userId: String(sourceParticipants.B && sourceParticipants.B.userId || ''),
-                displayName: String(sourceParticipants.B && (sourceParticipants.B.displayName || sourceParticipants.B.userId) || 'B').slice(0, 40)
+                displayName: String(sourceParticipants.B && sourceParticipants.B.displayName || 'B').slice(0, 40)
             }
         },
         leaderSourceSeat: series.leaderSourceSeat === 'A' || series.leaderSourceSeat === 'B'
@@ -1122,9 +1125,12 @@ function projectFriendlySeries(series, status = '') {
         rankedImpact: 'none',
         formalResultPolicy: 'practice_only',
         seatPolicy: String(series.seatPolicy || 'swap_sides'),
+        openerPolicy: String(series.openerPolicy || 'friendly_series_rotating_opener'),
+        openingFirstSourceSeat: series.openingFirstSourceSeat === 'B' ? 'B' : 'A',
+        roundFirstSourceSeat: series.roundFirstSourceSeat === 'B' ? 'B' : 'A',
         loadoutPolicy: String(series.loadoutPolicy || 'per_game_change_allowed'),
         confirmationCount: Math.max(1, Math.min(2, Math.floor(Number(series.confirmationCount) || 2))),
-        safeguards: safeguards.map(item => String(item || '')).filter(Boolean).slice(0, 8)
+        safeguards: normalizedSafeguards.slice(0, 8)
     };
 }
 

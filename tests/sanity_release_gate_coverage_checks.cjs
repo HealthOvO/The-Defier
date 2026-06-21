@@ -75,6 +75,10 @@ const openerAssignmentSource = pvpLiveStore.slice(
   pvpLiveStore.indexOf('function makeAuthoritativeOpenerAssignment'),
   pvpLiveStore.indexOf('function normalizeInviteCode')
 );
+const friendlySeriesSource = pvpLiveStore.slice(
+  pvpLiveStore.indexOf('function makeFriendlySeriesReport'),
+  pvpLiveStore.indexOf('class LivePvpStore')
+);
 [
   'routes/pvp.js',
   'routes/ghosts.js',
@@ -922,12 +926,24 @@ assert.ok(
   'const serverSeed = crypto.randomBytes(16).toString(\'hex\');',
   'pvp-live-opener-v1',
   'server_seeded_fair_opener',
+  'friendly_series_rotating_opener',
   'queueOrderBinding: false',
   'hostBinding: false',
 ].forEach((needle) => {
   assert.ok(
     openerAssignmentSource.includes(needle),
     `live PVP opener assignment should pin public-seed source marker: ${needle}`,
+  );
+});
+[
+  'openerPolicy',
+  'openingFirstSourceSeat',
+  'roundFirstSourceSeat',
+  'alternating_opener',
+].forEach((needle) => {
+  assert.ok(
+    friendlySeriesSource.includes(needle),
+    `live PVP friendly series should pin alternating opener marker: ${needle}`,
   );
 });
 [

@@ -1633,13 +1633,11 @@ export const PVPScene = {
       sourceParticipants: {
         A: {
           sourceSeat: 'A',
-          userId: String(report.sourceParticipants && report.sourceParticipants.A && report.sourceParticipants.A.userId || ''),
-          displayName: String(report.sourceParticipants && report.sourceParticipants.A && (report.sourceParticipants.A.displayName || report.sourceParticipants.A.userId) || '甲方')
+          displayName: String(report.sourceParticipants && report.sourceParticipants.A && report.sourceParticipants.A.displayName || '甲方')
         },
         B: {
           sourceSeat: 'B',
-          userId: String(report.sourceParticipants && report.sourceParticipants.B && report.sourceParticipants.B.userId || ''),
-          displayName: String(report.sourceParticipants && report.sourceParticipants.B && (report.sourceParticipants.B.displayName || report.sourceParticipants.B.userId) || '乙方')
+          displayName: String(report.sourceParticipants && report.sourceParticipants.B && report.sourceParticipants.B.displayName || '乙方')
         }
       },
       leaderSourceSeat: String(report.leaderSourceSeat || ''),
@@ -1648,6 +1646,9 @@ export const PVPScene = {
       rankedImpact: String(report.rankedImpact || 'none'),
       formalResultPolicy: String(report.formalResultPolicy || 'practice_only'),
       seatPolicy: String(report.seatPolicy || 'swap_sides'),
+      openerPolicy: String(report.openerPolicy || 'friendly_series_rotating_opener'),
+      openingFirstSourceSeat: String(report.openingFirstSourceSeat || 'A') === 'B' ? 'B' : 'A',
+      roundFirstSourceSeat: String(report.roundFirstSourceSeat || 'A') === 'B' ? 'B' : 'A',
       loadoutPolicy: String(report.loadoutPolicy || 'per_game_change_allowed'),
       confirmationCount: Math.max(1, Math.min(2, Math.floor(Number(report.confirmationCount) || 1))),
       safeguards: Array.isArray(report.safeguards) ? report.safeguards.map(item => String(item || '')).filter(Boolean).slice(0, 8) : []

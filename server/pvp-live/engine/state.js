@@ -165,6 +165,11 @@ function normalizeFriendlySeries(input = null) {
         ? input.winnerSourceSeat
         : score.A >= targetWins && score.A > score.B ? 'A' : score.B >= targetWins && score.B > score.A ? 'B' : '';
     const seriesStatus = winnerSourceSeat ? 'complete' : 'ongoing';
+    const normalizedSafeguards = (safeguards.length > 0
+        ? safeguards
+        : ['both_participants_confirmed', 'friendly_no_ranked_impact', 'seat_rotation', 'loadout_change_allowed'])
+        .map(item => String(item || '')).filter(Boolean);
+    if (!normalizedSafeguards.includes('alternating_opener')) normalizedSafeguards.push('alternating_opener');
     return {
         reportVersion: 'pvp-live-friendly-series-v1',
         sourceMatchId,
@@ -198,12 +203,13 @@ function normalizeFriendlySeries(input = null) {
         rankedImpact: 'none',
         formalResultPolicy: 'practice_only',
         seatPolicy: 'swap_sides',
+        openerPolicy: String(input.openerPolicy || 'friendly_series_rotating_opener'),
+        openingFirstSourceSeat: input.openingFirstSourceSeat === 'B' ? 'B' : 'A',
+        roundFirstSourceSeat: input.roundFirstSourceSeat === 'B' ? 'B' : 'A',
         loadoutPolicy: 'per_game_change_allowed',
         confirmationCount: Math.max(1, Math.min(2, Math.floor(Number(input.confirmationCount) || 1))),
         createdAt: Math.max(0, Math.floor(Number(input.createdAt) || Date.now())),
-        safeguards: safeguards.length > 0
-            ? safeguards.map(item => String(item || '')).filter(Boolean).slice(0, 8)
-            : ['both_participants_confirmed', 'friendly_no_ranked_impact', 'seat_rotation', 'loadout_change_allowed'],
+        safeguards: normalizedSafeguards.slice(0, 8),
         lastRecordedMatchId: String(input.lastRecordedMatchId || '')
     };
 }

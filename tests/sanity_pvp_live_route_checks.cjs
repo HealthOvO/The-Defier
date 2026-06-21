@@ -78,6 +78,13 @@ function eventPublicData(event) {
     return event && (event.publicData || event.payload) || {};
 }
 
+function currentSeatUserId(stateView, seatId) {
+    if (!stateView || !seatId) return '';
+    if (stateView.self && stateView.self.seatId === seatId) return stateView.self.userId || '';
+    if (stateView.opponent && stateView.opponent.seatId === seatId) return stateView.opponent.userId || '';
+    return '';
+}
+
 function makeLoadout(identitySlot, pattern) {
     const deck = [];
     for (let index = 0; index < 20; index += 1) {
@@ -1357,7 +1364,18 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
         assert.deepEqual(rematchB.payload.stateView.friendlySeries?.scoreBySourceSeat, firstSeat === 'A' ? { A: 1, B: 0 } : { A: 0, B: 1 }, 'friendly rematch match should carry source score into Bo3');
         assert.equal(rematchB.payload.stateView.friendlySeries?.roundIndex, 2, 'friendly rematch match should be Bo3 round 2');
         assert.ok(rematchB.payload.stateView.firstMatchGuide?.safeguards?.includes('friendly_no_ranked_impact'), 'friendly rematch guide should explain no-ranked-impact safeguard');
-        assert.ok(!/reward|rating|elo/i.test(JSON.stringify(rematchB.payload.stateView.friendlySeries || {})), 'friendly rematch match report must not promise reward or exact rating compensation');
+        assert.equal(rematchB.payload.stateView.openerAssignment?.policy, 'friendly_series_rotating_opener', 'friendly rematch should use source-seat alternating opener policy');
+        assert.equal(rematchB.payload.stateView.openerAssignment?.firstSeat, joinB.payload.stateView.openerAssignment?.firstSeat, 'friendly rematch should keep the first-seat slot so swapped source players alternate opening windows');
+        assert.equal(rematchB.payload.stateView.friendlySeries?.openerPolicy, 'friendly_series_rotating_opener', 'friendly rematch series should expose alternating opener policy');
+        assert.equal(rematchB.payload.stateView.friendlySeries?.openingFirstSourceSeat, joinB.payload.stateView.openerAssignment?.firstSeat, 'friendly rematch should remember the source match opening source seat');
+        assert.equal(rematchB.payload.stateView.friendlySeries?.roundFirstSourceSeat, secondSeat, 'friendly rematch round 2 should rotate first source seat');
+        assert.equal(rematchB.payload.stateView.self?.seatId, firstSeat === 'A' ? 'B' : 'A', 'friendly rematch requester should swap seats from the source match');
+        assert.equal(currentSeatUserId(rematchB.payload.stateView, 'A'), 'live-user-b', 'friendly rematch round 2 should put original source B on runtime seat A');
+        assert.equal(currentSeatUserId(rematchB.payload.stateView, 'B'), 'live-user-a', 'friendly rematch round 2 should put original source A on runtime seat B');
+        assert.equal(currentSeatUserId(rematchB.payload.stateView, firstSeat), firstSeat === 'A' ? 'live-user-b' : 'live-user-a', 'friendly rematch first-seat slot should now belong to the opposite source player');
+        assert.ok(/换边|轮换/.test(rematchB.payload.stateView.openerAssignment?.boundaryLine || ''), 'friendly rematch opener assignment should explain seat rotation boundary');
+        assert.ok(rematchB.payload.stateView.friendlySeries?.safeguards?.includes('alternating_opener'), 'friendly series should expose alternating opener safeguard');
+        assert.ok(!/userId|reward|rating|elo/i.test(JSON.stringify(rematchB.payload.stateView.friendlySeries || {})), 'friendly rematch match report must not expose userId, reward, or exact rating compensation');
 
         const currentAfterRematchA = await request(baseUrl, '/api/pvp/live/matches/current', {
             token: secondToken
@@ -1476,6 +1494,15 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
         assert.equal(deciderMatch.payload.stateView.mode, 'friendly', 'Bo3 decider should stay friendly');
         assert.equal(deciderMatch.payload.stateView.friendlySeries?.seriesId, rematchB.payload.stateView.friendlySeries?.seriesId, 'Bo3 decider match should keep same series id');
         assert.equal(deciderMatch.payload.stateView.friendlySeries?.roundIndex, 3, 'Bo3 decider should be round 3');
+        assert.equal(deciderMatch.payload.stateView.openerAssignment?.policy, 'friendly_series_rotating_opener', 'Bo3 decider should keep source-seat alternating opener policy');
+        assert.equal(deciderMatch.payload.stateView.openerAssignment?.firstSeat, joinB.payload.stateView.openerAssignment?.firstSeat, 'Bo3 decider should keep the first-seat slot so source players alternate across the seat-rotation series');
+        assert.equal(deciderMatch.payload.stateView.friendlySeries?.openingFirstSourceSeat, joinB.payload.stateView.openerAssignment?.firstSeat, 'Bo3 decider should preserve the original source opening seat');
+        assert.equal(deciderMatch.payload.stateView.friendlySeries?.roundFirstSourceSeat, joinB.payload.stateView.openerAssignment?.firstSeat, 'Bo3 decider should rotate source first seat back for round 3');
+        assert.equal(currentSeatUserId(deciderMatch.payload.stateView, 'A'), 'live-user-a', 'Bo3 decider should put original source A back on runtime seat A');
+        assert.equal(currentSeatUserId(deciderMatch.payload.stateView, 'B'), 'live-user-b', 'Bo3 decider should put original source B back on runtime seat B');
+        assert.equal(currentSeatUserId(deciderMatch.payload.stateView, firstSeat), firstSeat === 'A' ? 'live-user-a' : 'live-user-b', 'Bo3 decider first-seat slot should swap back to the original source first-seat player');
+        assert.ok(deciderMatch.payload.stateView.friendlySeries?.safeguards?.includes('alternating_opener'), 'Bo3 decider series should preserve alternating opener safeguard');
+        assert.ok(!/userId|reward|rating|elo/i.test(JSON.stringify(deciderMatch.payload.stateView.friendlySeries || {})), 'Bo3 decider report must not expose userId, reward, or exact rating compensation');
 
         const deciderReady = await readyBoth(baseUrl, {
             matchId: deciderMatch.payload.matchId,

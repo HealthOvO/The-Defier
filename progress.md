@@ -1,5 +1,28 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-21: V10-S19 live PVP friendly Bo3 alternating opener
+  - 本轮完成
+    - `server/pvp-live/live-store.js` 为友谊 Bo3 再战新增 `friendly_series_rotating_opener` 合同：先手不再每局重新随机，也不绑定房主、排队顺序或当前座位，而是按源对局玩家 A/B 在 Bo3 中轮换，避免换边后同一名玩家连续吃到首动窗口。
+    - `friendlySeries` 新增 `openerPolicy / openingFirstSourceSeat / roundFirstSourceSeat`，服务端会在第 2 局、决胜局继承系列首局源先手并按轮次推导本局源先手，再映射到当前实际座位；第 2 局换边后实际 firstSeat 会保持源局首动座位，从玩家视角实现先手机会轮换。
+    - `server/pvp-live/engine/state.js`、`state-view.js` 和 `js/scenes/pvp-scene.js` 同步保留轮换先手字段，`safeguards` 增加 `alternating_opener`；这只暴露源座位级公开合同，不泄漏 userId、手牌、牌库、斗法谱、rating 或 ELO。
+    - route 与 release gate 补齐断言：友谊再战和 Bo3 决胜局都必须返回 `policy='friendly_series_rotating_opener'`，并保留“换边 / 轮换”边界说明，防止后续退回每局随机或连续同源玩家先手。
+  - 已验证
+    - 红测：`node tests/sanity_pvp_live_route_checks.cjs` 在实现前失败于 friendly rematch 仍返回 `server_seeded_fair_opener`。
+    - 绿测：`node tests/sanity_pvp_live_route_checks.cjs`
+    - 绿测：`node tests/sanity_pvp_live_settlement_checks.cjs`
+    - 绿测：`node tests/sanity_pvp_live_engine_checks.cjs`
+    - 绿测：`node tests/sanity_pvp_live_persistence_checks.cjs`
+    - 绿测：`node tests/sanity_pvp_live_ui_contract_checks.cjs`
+    - 绿测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs`
+    - 绿测：`node tests/sanity_pvp_live_session_checks.mjs`
+    - 绿测：`node tests/sanity_release_gate_coverage_checks.cjs`
+    - 全量 Node 门禁：`npm run test:node`，All node checks passed。
+    - 构建：`npm run build:pages`
+    - 浏览器审计：`node tests/browser_pvp_live_audit.mjs http://127.0.0.1:4173 output/pvp-live-friendly-opener-audit`，95/95 findings、0 failed、0 console error。
+    - Diff 检查：`git diff --check`
+  - 当前结论
+    - 友谊 Bo3 现在更像一组公平练习赛：双方仍可换谱、无正式积分压力，同时首手机会按源玩家轮换，减少“换边再战但还是同一个人先压制”的挫败。该切片不改变卡牌数值、正式匹配、奖励、赛季结算或排位分，只把友谊系列的先手合同做实。
+
 - 2026-06-21: V10-S18 live PVP low-sample matchmaking protection
   - 本轮完成
     - `server/pvp-live/live-store.js` 将低样本保护从 UI 半截分支补成真实 queue 合同：rating snapshot 现在会识别 `rankedGames < 5` 或 provisional 玩家，并在候选池不足 3 人且未达到长等待阈值时先返回 waiting，不让两个低样本真人立刻开一局脆弱首战。

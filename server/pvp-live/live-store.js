@@ -33,10 +33,60 @@ function makeInviteCode() {
     return `TD${crypto.randomBytes(3).toString('hex').toUpperCase()}`;
 }
 
+function normalizeSourceSeat(value, fallback = 'A') {
+    if (value === 'A' || value === 'B') return value;
+    if (fallback === 'A' || fallback === 'B') return fallback;
+    return '';
+}
+
+function otherSourceSeat(seatId) {
+    return seatId === 'A' ? 'B' : 'A';
+}
+
+function getFriendlySeriesOpenerSeat({ playerA, playerB, friendlySeries = null } = {}) {
+    if (!friendlySeries || typeof friendlySeries !== 'object') return '';
+    const sourceSeat = normalizeSourceSeat(friendlySeries.roundFirstSourceSeat || friendlySeries.round_first_source_seat, '');
+    if (sourceSeat !== 'A' && sourceSeat !== 'B') return '';
+    const participants = friendlySeries.sourceParticipants && typeof friendlySeries.sourceParticipants === 'object'
+        ? friendlySeries.sourceParticipants
+        : {};
+    const firstUserId = String(participants[sourceSeat] && participants[sourceSeat].userId || '');
+    if (!firstUserId) return '';
+    if (playerA && playerA.userId === firstUserId) return 'A';
+    if (playerB && playerB.userId === firstUserId) return 'B';
+    return '';
+}
+
 function makeAuthoritativeOpenerAssignment({ matchId, playerA, playerB, mode = 'ranked', friendlySeries = null } = {}) {
     const seriesTag = friendlySeries && typeof friendlySeries === 'object'
         ? `${friendlySeries.seriesId || ''}:${friendlySeries.roundIndex || ''}:${friendlySeries.sourceMatchId || ''}`
         : '';
+    const friendlyFirstSeat = mode === 'friendly'
+        ? getFriendlySeriesOpenerSeat({ playerA, playerB, friendlySeries })
+        : '';
+    if (friendlyFirstSeat === 'A' || friendlyFirstSeat === 'B') {
+        const seedInput = [
+            'pvp-live-friendly-opener-v1',
+            String(matchId || ''),
+            seriesTag,
+            String(friendlySeries.roundFirstSourceSeat || ''),
+            String(friendlySeries.openingFirstSourceSeat || '')
+        ].join('|');
+        const digest = crypto.createHash('sha256').update(seedInput).digest('hex');
+        return {
+            reportVersion: 'pvp-live-opener-assignment-v1',
+            sourceVisibility: 'server_authoritative_series_contract',
+            usesHiddenInformation: false,
+            rankedImpact: 'none',
+            firstSeat: friendlyFirstSeat,
+            secondSeat: friendlyFirstSeat === 'A' ? 'B' : 'A',
+            policy: 'friendly_series_rotating_opener',
+            seedTag: digest.slice(0, 12),
+            queueOrderBinding: false,
+            hostBinding: false,
+            boundaryLine: '友谊 Bo3 按源对局席位轮换先手；换边再战时，首动窗口也会随源玩家轮换。'
+        };
+    }
     const serverSeed = crypto.randomBytes(16).toString('hex');
     const seedInput = [
         'pvp-live-opener-v1',
@@ -572,6 +622,8 @@ function makeFriendlySeriesReport({
     scoreBySourceSeat = null,
     targetWins = FRIENDLY_SERIES_TARGET_WINS,
     roundIndex = null,
+    openingFirstSourceSeat = 'A',
+    roundFirstSourceSeat = '',
     lastRecordedMatchId = ''
 } = {}) {
     const safeTargetWins = normalizeTargetWins(targetWins);
@@ -582,6 +634,11 @@ function makeFriendlySeriesReport({
     const safeStatus = ['matched', 'finished', 'cancelled', 'expired'].includes(status) ? status : 'waiting_rematch';
     const safeRoundIndex = Math.max(1, Math.min(maxRounds, Math.floor(Number(roundIndex) || Math.min(maxRounds, gamesAccountedFor + 1) || 2)));
     const winnerSourceSeat = getFriendlySeriesWinnerSeat(score, safeTargetWins);
+    const safeOpeningFirstSourceSeat = normalizeSourceSeat(openingFirstSourceSeat, 'A');
+    const defaultRoundFirstSourceSeat = safeRoundIndex % 2 === 1
+        ? safeOpeningFirstSourceSeat
+        : otherSourceSeat(safeOpeningFirstSourceSeat);
+    const safeRoundFirstSourceSeat = normalizeSourceSeat(roundFirstSourceSeat, defaultRoundFirstSourceSeat);
     return {
         reportVersion: 'pvp-live-friendly-series-v1',
         sourceMatchId: String(sourceMatchId || ''),
@@ -602,10 +659,13 @@ function makeFriendlySeriesReport({
         rankedImpact: 'none',
         formalResultPolicy: 'practice_only',
         seatPolicy: 'swap_sides',
+        openerPolicy: 'friendly_series_rotating_opener',
+        openingFirstSourceSeat: safeOpeningFirstSourceSeat,
+        roundFirstSourceSeat: safeRoundFirstSourceSeat,
         loadoutPolicy: 'per_game_change_allowed',
         confirmationCount: Math.max(1, Math.min(2, Math.floor(Number(confirmationCount) || 1))),
         createdAt: Math.max(0, Math.floor(Number(createdAt) || Date.now())),
-        safeguards: ['both_participants_confirmed', 'friendly_no_ranked_impact', 'seat_rotation', 'loadout_change_allowed'],
+        safeguards: ['both_participants_confirmed', 'friendly_no_ranked_impact', 'seat_rotation', 'alternating_opener', 'loadout_change_allowed'],
         lastRecordedMatchId: String(lastRecordedMatchId || '')
     };
 }
@@ -2418,6 +2478,7 @@ class LivePvpStore {
         let originMatchId = previousSeries && previousSeries.originMatchId
             ? String(previousSeries.originMatchId)
             : sourceMatch.matchId;
+        let openingFirstSourceSeat = normalizeSourceSeat(previousSeries && previousSeries.openingFirstSourceSeat, '');
 
         if (!isFriendly && finishedPayload && finishedPayload.winnerSeat !== 'draw') {
             const winnerSourceSeat = finishedPayload.winnerSeat === 'B' ? 'B' : 'A';
@@ -2427,6 +2488,21 @@ class LivePvpStore {
             });
             sourceParticipants = this.makeSourceParticipantsFromMatch(sourceMatch);
             originMatchId = sourceMatch.matchId;
+        }
+        if (!openingFirstSourceSeat) {
+            const sourceFirstSeat = sourceState && sourceState.openerAssignment && sourceState.openerAssignment.firstSeat
+                || sourceState && sourceState.setup && sourceState.setup.firstSeat;
+            if (isFriendly && previousSeries) {
+                const previousRoundFirstSourceSeat = this.getSourceSeatForMatchSeat(sourceMatch, previousSeries, sourceFirstSeat);
+                const previousRoundIndex = Math.max(1, Math.floor(Number(previousSeries.roundIndex) || 1));
+                openingFirstSourceSeat = previousRoundFirstSourceSeat === 'A' || previousRoundFirstSourceSeat === 'B'
+                    ? previousRoundIndex % 2 === 1
+                        ? previousRoundFirstSourceSeat
+                        : otherSourceSeat(previousRoundFirstSourceSeat)
+                    : 'A';
+            } else {
+                openingFirstSourceSeat = normalizeSourceSeat(sourceFirstSeat, 'A');
+            }
         }
 
         const maxRounds = getFriendlyMaxRounds(targetWins);
@@ -2450,7 +2526,8 @@ class LivePvpStore {
             sourceParticipants,
             scoreBySourceSeat,
             targetWins,
-            roundIndex: nextRoundIndex
+            roundIndex: nextRoundIndex,
+            openingFirstSourceSeat
         });
     }
 

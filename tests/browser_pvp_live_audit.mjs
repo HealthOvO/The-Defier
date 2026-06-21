@@ -684,6 +684,22 @@ async function safeElementScreenshot(page, selector, outputPath) {
       recentEvents: [{ eventType: 'snapshot_locked', payload: { seats: { A: selfLoadoutSummary, B: opponentLoadoutSummary } } }],
     });
     window.__makeLivePvpAuditStateView = makeStateView;
+    const makeFriendlyOpenerAssignment = (firstSeat = 'A') => ({
+      reportVersion: 'pvp-live-opener-assignment-v1',
+      sourceVisibility: 'server_authoritative_series_contract',
+      usesHiddenInformation: false,
+      rankedImpact: 'none',
+      firstSeat,
+      secondSeat: firstSeat === 'A' ? 'B' : 'A',
+      viewerSeat: 'A',
+      opponentSeat: 'B',
+      viewerStarts: firstSeat === 'A',
+      policy: 'friendly_series_rotating_opener',
+      seedTag: 'browser-friendly',
+      queueOrderBinding: false,
+      hostBinding: false,
+      boundaryLine: '友谊 Bo3 按源对局席位轮换先手；换边再战时，首动窗口也会随源玩家轮换。',
+    });
     const makeFriendlySeries = (status = 'matched', confirmationCount = 2, overrides = {}) => ({
       reportVersion: 'pvp-live-friendly-series-v1',
       sourceMatchId: 'pvplm-browser-live',
@@ -698,8 +714,8 @@ async function safeElementScreenshot(page, selector, outputPath) {
       seriesStatus: 'ongoing',
       scoreBySourceSeat: { A: 1, B: 0 },
       sourceParticipants: {
-        A: { sourceSeat: 'A', userId: 'browser-a', displayName: '甲' },
-        B: { sourceSeat: 'B', userId: 'browser-b', displayName: '乙' },
+        A: { sourceSeat: 'A', displayName: '甲' },
+        B: { sourceSeat: 'B', displayName: '乙' },
       },
       leaderSourceSeat: 'A',
       winnerSourceSeat: '',
@@ -707,9 +723,12 @@ async function safeElementScreenshot(page, selector, outputPath) {
       rankedImpact: 'none',
       formalResultPolicy: 'practice_only',
       seatPolicy: 'swap_sides',
+      openerPolicy: 'friendly_series_rotating_opener',
+      openingFirstSourceSeat: 'A',
+      roundFirstSourceSeat: 'B',
       loadoutPolicy: 'per_game_change_allowed',
       confirmationCount,
-      safeguards: ['friendly_no_ranked_impact', 'seat_rotation'],
+      safeguards: ['friendly_no_ranked_impact', 'seat_rotation', 'alternating_opener'],
       ...overrides,
     });
     window.__makeLivePvpAuditFriendlySeries = makeFriendlySeries;
@@ -717,6 +736,7 @@ async function safeElementScreenshot(page, selector, outputPath) {
       ...makeStateView(1, 'B', 'setup'),
       matchId: 'pvplm-browser-friendly',
       mode: 'friendly',
+      openerAssignment: makeFriendlyOpenerAssignment('A'),
       friendlySeries: makeFriendlySeries('matched', 2),
     });
     window.__makeLivePvpAuditFriendlyFinishedView = () => {
@@ -730,6 +750,7 @@ async function safeElementScreenshot(page, selector, outputPath) {
         ...makeStateView(6, 'B', 'finished'),
         matchId: 'pvplm-browser-friendly',
         mode: 'friendly',
+        openerAssignment: makeFriendlyOpenerAssignment('A'),
         friendlySeries,
         postMatchReview: {
           ...makePostMatchReview('finished'),
@@ -749,12 +770,14 @@ async function safeElementScreenshot(page, selector, outputPath) {
       ...makeStateView(1, 'A', 'setup'),
       matchId: 'pvplm-browser-friendly-decider',
       mode: 'friendly',
+      openerAssignment: makeFriendlyOpenerAssignment('A'),
       friendlySeries: makeFriendlySeries('matched', 2, {
         sourceMatchId: 'pvplm-browser-friendly',
         roundIndex: 3,
         roundLabel: 'Bo3 决胜局 · 换边再战',
         scoreBySourceSeat: { A: 1, B: 1 },
         leaderSourceSeat: '',
+        roundFirstSourceSeat: 'A',
       }),
     });
     window.__makeLivePvpAuditFriendlyCompleteView = () => {
@@ -767,11 +790,13 @@ async function safeElementScreenshot(page, selector, outputPath) {
         leaderSourceSeat: 'A',
         winnerSourceSeat: 'A',
         canRequestNextRound: false,
+        roundFirstSourceSeat: 'A',
       });
       return {
         ...makeStateView(8, 'B', 'finished'),
         matchId: 'pvplm-browser-friendly-decider',
         mode: 'friendly',
+        openerAssignment: makeFriendlyOpenerAssignment('A'),
         friendlySeries,
         postMatchReview: {
           ...makePostMatchReview('finished'),
@@ -4022,6 +4047,11 @@ async function safeElementScreenshot(page, selector, outputPath) {
       && friendlyRecoveryProbe.snapshot?.scoreBySourceSeat?.A === 1
       && friendlyRecoveryProbe.snapshot?.scoreBySourceSeat?.B === 0
       && friendlyRecoveryProbe.snapshot?.status === 'matched'
+      && friendlyRecoveryProbe.snapshot?.openerPolicy === 'friendly_series_rotating_opener'
+      && friendlyRecoveryProbe.snapshot?.openingFirstSourceSeat === 'A'
+      && friendlyRecoveryProbe.snapshot?.roundFirstSourceSeat === 'B'
+      && (friendlyRecoveryProbe.snapshot?.safeguards || []).includes('alternating_opener')
+      && !/userId|rating|elo|loadoutSnapshot/i.test(JSON.stringify(friendlyRecoveryProbe.snapshot || {}))
       && friendlyRecoveryProbe.calls.some(call => call.method === 'getCurrentMatch' && call.rematchAccepted === true)
       && !/findOpponent|reportMatchResult|GhostEnemy|startPVPBattle|didWin|matchTicket/.test(JSON.stringify(friendlyRecoveryProbe.calls)),
     JSON.stringify(friendlyRecoveryProbe),
@@ -4205,6 +4235,11 @@ async function safeElementScreenshot(page, selector, outputPath) {
       && friendlyDeciderRecoveryProbe.snapshot?.roundIndex === 3
       && friendlyDeciderRecoveryProbe.snapshot?.scoreBySourceSeat?.A === 1
       && friendlyDeciderRecoveryProbe.snapshot?.scoreBySourceSeat?.B === 1
+      && friendlyDeciderRecoveryProbe.snapshot?.openerPolicy === 'friendly_series_rotating_opener'
+      && friendlyDeciderRecoveryProbe.snapshot?.openingFirstSourceSeat === 'A'
+      && friendlyDeciderRecoveryProbe.snapshot?.roundFirstSourceSeat === 'A'
+      && (friendlyDeciderRecoveryProbe.snapshot?.safeguards || []).includes('alternating_opener')
+      && !/userId|rating|elo|loadoutSnapshot/i.test(JSON.stringify(friendlyDeciderRecoveryProbe.snapshot || {}))
       && friendlyDeciderRecoveryProbe.calls.some(call => call.method === 'requestRematch' && call.decider === true)
       && friendlyDeciderRecoveryProbe.calls.some(call => call.method === 'getCurrentMatch' && call.deciderAccepted === true)
       && !/findOpponent|reportMatchResult|GhostEnemy|startPVPBattle|didWin|matchTicket/.test(JSON.stringify(friendlyDeciderRecoveryProbe.calls)),
@@ -4237,7 +4272,10 @@ async function safeElementScreenshot(page, selector, outputPath) {
       && /系列结束/.test(friendlyCompleteProbe.friendlyText)
       && friendlyCompleteProbe.snapshot?.seriesStatus === 'complete'
       && friendlyCompleteProbe.snapshot?.winnerSourceSeat === 'A'
+      && friendlyCompleteProbe.snapshot?.openerPolicy === 'friendly_series_rotating_opener'
+      && friendlyCompleteProbe.snapshot?.roundFirstSourceSeat === 'A'
       && friendlyCompleteProbe.snapshot?.canRequestNextRound === false
+      && !/userId|rating|elo|loadoutSnapshot/i.test(JSON.stringify(friendlyCompleteProbe.snapshot || {}))
       && !friendlyCompleteProbe.actionIds.includes('friendly_rematch')
       && friendlyCompleteProbe.actionIds.includes('queue_again'),
     JSON.stringify(friendlyCompleteProbe),
