@@ -1,6 +1,45 @@
 const { cloneLoadoutSnapshot, publicLoadoutSummary } = require('../loadout');
 const { RULES, getCardDefinition } = require('./rules');
 
+const POST_GAME_AUDIT_ACTION_BY_UI_ACTION = Object.freeze({
+    review_events: 'review_events',
+    review_key_turns: 'key_turn_replay',
+    friendly_rematch: 'friendly_rematch',
+    adjust_loadout: 'apply_loadout_recommendation',
+    practice: 'practice_topic',
+    queue_again: 'queue_again'
+});
+
+function withAuditAction(action) {
+    const id = String(action && action.id || '');
+    return {
+        ...action,
+        auditActionId: POST_GAME_AUDIT_ACTION_BY_UI_ACTION[id] || id
+    };
+}
+
+function buildPostGameActionBridge(actions) {
+    const actionRows = Array.isArray(actions) ? actions : [];
+    const uiActionIdsByAuditAction = {};
+    actionRows.forEach(action => {
+        const uiActionId = String(action && action.id || '');
+        const auditActionId = String(action && action.auditActionId || POST_GAME_AUDIT_ACTION_BY_UI_ACTION[uiActionId] || '');
+        if (!uiActionId || !auditActionId) return;
+        if (!uiActionIdsByAuditAction[auditActionId]) uiActionIdsByAuditAction[auditActionId] = [];
+        if (!uiActionIdsByAuditAction[auditActionId].includes(uiActionId)) {
+            uiActionIdsByAuditAction[auditActionId].push(uiActionId);
+        }
+    });
+    return {
+        reportVersion: 'pvp-live-post-game-action-bridge-v1',
+        sourceVisibility: 'public_review_action_contract',
+        usesHiddenInformation: false,
+        rankedImpact: 'none',
+        coveredAuditActions: Object.keys(uiActionIdsByAuditAction),
+        uiActionIdsByAuditAction
+    };
+}
+
 function publicCard(card) {
     return {
         instanceId: card.instanceId,
@@ -846,7 +885,8 @@ function projectPostMatchReview(state, seatId) {
             label: isFriendly ? '回到真人排位' : '继续真人排位',
             detail: isFriendly ? '结束友谊局，回到真人排位队列。' : '带着本局结论重新入队。'
         }
-    ];
+    ].map(withAuditAction);
+    const postGameActionBridge = buildPostGameActionBridge(nextActions);
     return {
         reportVersion: 'pvp-live-post-match-review-v1',
         audience: 'seat',
@@ -864,6 +904,7 @@ function projectPostMatchReview(state, seatId) {
         loadoutRecommendation,
         friendlySeries,
         suggestions: copy.suggestions.slice(0, 2),
+        postGameActionBridge,
         nextActions
     };
 }

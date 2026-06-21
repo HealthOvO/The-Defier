@@ -275,9 +275,14 @@ assert.equal(calls.at(-1).method, 'getCurrentMatch', 'resumeCurrentMatch should 
 
 const replayState = await recoveredSession.getReplay({ visibility: 'replay_public' });
 assert.equal(replayState.lastReplay?.visibilityLayer, 'replay_public', 'getReplay should store returned public replay payload');
+assert.equal(replayState.lastReplayMatchId, 'pvplm-current', 'getReplay should bind stored replay payload to the current match id');
 assert.equal(replayState.lastError, null, 'successful getReplay should clear replay errors');
 assert.equal(calls.at(-1).method, 'getReplay', 'getReplay should call live service replay bridge');
 assert.deepEqual(calls.at(-1).options, { visibility: 'replay_public' }, 'getReplay should forward replay visibility options');
+
+const replayClearedByQueue = await recoveredSession.joinQueue({ displayName: '乙' });
+assert.equal(replayClearedByQueue.lastReplay, null, 'joining a new queue should clear the previous match replay payload');
+assert.equal(replayClearedByQueue.lastReplayMatchId, '', 'joining a new queue should clear the previous replay match binding');
 
 const recoveredInviteSession = createPvpLiveSession({ liveService });
 const recoveredInvite = await recoveredInviteSession.resumeCurrentInvite();
@@ -1011,6 +1016,49 @@ const successfulRequeueSession = createPvpLiveSession({
 const successfulRequeue = await successfulRequeueSession.joinQueue({ displayName: '甲' });
 assert.equal(successfulRequeue.phase, 'waiting', 'successful queue again should enter waiting phase');
 assert.ok(!successfulRequeueStorage.values().includes('pvplm-finished-stale'), 'successful queue again should clear old terminal recovery anchor');
+
+let resolveLateReplay;
+const lateReplaySession = createPvpLiveSession({
+  liveService: {
+    getCurrentMatch: async () => ({
+      success: true,
+      matchId: 'pvplm-late-replay-a',
+      seatId: 'A',
+      stateView: {
+        matchId: 'pvplm-late-replay-a',
+        status: 'finished',
+        stateVersion: 9,
+        self: { seatId: 'A', hand: [] },
+        opponent: { seatId: 'B', handCount: 3 }
+      }
+    }),
+    getReplay: async () => new Promise(resolve => {
+      resolveLateReplay = resolve;
+    }),
+    joinQueue: async () => ({
+      success: true,
+      status: 'waiting',
+      queueTicket: 'pvplq-late-replay-b'
+    })
+  }
+});
+await lateReplaySession.resumeCurrentMatch();
+const lateReplayPromise = lateReplaySession.getReplay({ visibility: 'replay_self' });
+const waitingAfterLateReplayRequest = await lateReplaySession.joinQueue({ displayName: '甲' });
+assert.equal(waitingAfterLateReplayRequest.phase, 'waiting', 'late replay race setup should move the session to a new queue');
+resolveLateReplay({
+  success: true,
+  replay: {
+    reportVersion: 'pvp-live-replay-v1',
+    visibilityLayer: 'replay_self',
+    publicSummary: { status: 'finished', finishReason: 'lethal' },
+    hiddenScan: { forbiddenTokenCount: 0 }
+  }
+});
+const afterLateReplay = await lateReplayPromise;
+assert.equal(afterLateReplay.phase, 'waiting', 'late replay response should not roll the session back from the new queue');
+assert.equal(afterLateReplay.lastReplay, null, 'late replay response from an old match should not publish stale replay data');
+assert.equal(afterLateReplay.lastReplayMatchId, '', 'late replay response from an old match should keep replay match binding clear');
 
 const invalidatedSession = createPvpLiveSession({
   liveService: {

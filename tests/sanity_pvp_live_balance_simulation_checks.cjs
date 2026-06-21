@@ -127,6 +127,8 @@ const deckEditFollowThroughRate = entertainmentAudit.deckEditFollowThroughRate |
 const deckEditActions = Array.isArray(deckEditFollowThroughRate.actions) ? deckEditFollowThroughRate.actions : [];
 const rematchIntentRate = entertainmentAudit.rematchIntentRate || {};
 const rematchActions = Array.isArray(rematchIntentRate.actions) ? rematchIntentRate.actions : [];
+const postGameActionBridge = entertainmentAudit.postGameActionBridge || {};
+const bridgedAuditActions = new Set(Array.isArray(postGameActionBridge.coveredAuditActions) ? postGameActionBridge.coveredAuditActions : []);
 assert.strictEqual(entertainmentAudit.reportVersion, 'pvp-live-entertainment-audit-v1', 'quick gate should expose a live PVP entertainment audit report');
 assert.strictEqual(entertainmentAudit.sourceVisibility, 'simulation_public_metrics', 'entertainment audit should be derived from public simulation metrics');
 assert.strictEqual(entertainmentAudit.usesHiddenInformation, false, 'entertainment audit must not require hidden hands or deck order');
@@ -140,6 +142,25 @@ assert.ok(postGameActionRows.length >= 1, 'entertainment audit should include at
 assert.ok(
   postGameActionRows.every(row => row.reason && row.covered === true && row.actions.length >= 1),
   'entertainment audit post-game coverage rows should be actionable per finish reason'
+);
+assert.strictEqual(postGameActionBridge.reportVersion, 'pvp-live-post-game-action-bridge-v1', 'entertainment audit should expose a post-game audit-to-UI action bridge');
+assert.strictEqual(postGameActionBridge.sourceVisibility, 'public_review_action_contract', 'post-game action bridge should be derived from public review UI contracts');
+assert.strictEqual(postGameActionBridge.usesHiddenInformation, false, 'post-game action bridge must not require hidden hands or deck order');
+assert.strictEqual(postGameActionBridge.rankedImpact, 'none', 'post-game action bridge must not write ranked state or rewards');
+assert.ok(postGameActionBridge.uiActionIdsByAuditAction.key_turn_replay.includes('review_key_turns'), 'post-game action bridge should map key_turn_replay to the real review_key_turns UI button');
+assert.ok(postGameActionBridge.uiActionIdsByAuditAction.apply_loadout_recommendation.includes('adjust_loadout'), 'post-game action bridge should map apply_loadout_recommendation to the real adjust_loadout UI button');
+assert.ok(postGameActionBridge.uiActionIdsByAuditAction.practice_topic.includes('practice'), 'post-game action bridge should map practice_topic to the real practice UI button');
+assert.ok(
+  postGameActionRows.flatMap(row => row.actions).every(actionId => bridgedAuditActions.has(actionId)),
+  'every entertainment audit post-game action should be covered by the audit-to-UI action bridge'
+);
+assert.ok(
+  postGameActionRows.flatMap(row => row.actions).every(actionId => actionId !== 'report_issue'),
+  'post-game action coverage should only contain implemented public review UI actions'
+);
+assert.ok(
+  !bridgedAuditActions.has('report_issue'),
+  'post-game action bridge must not claim an unimplemented report_issue UI handoff'
 );
 assert.ok(
   deckEditFollowThroughRate.trackable === true

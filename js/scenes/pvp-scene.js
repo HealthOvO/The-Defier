@@ -2001,6 +2001,7 @@ export const PVPScene = {
     const evidence = Array.isArray(report.evidence) ? report.evidence : [];
     const suggestions = Array.isArray(report.suggestions) ? report.suggestions : [];
     const nextActions = Array.isArray(report.nextActions) ? report.nextActions : [];
+    const actionBridge = report.postGameActionBridge && typeof report.postGameActionBridge === 'object' ? report.postGameActionBridge : null;
     return {
       reportVersion: String(report.reportVersion || 'pvp-live-post-match-review-v1'),
       title: String(report.title || '赛后复盘 MVP'),
@@ -2017,11 +2018,50 @@ export const PVPScene = {
       loadoutRecommendation: this.getLiveLoadoutRecommendation(report.loadoutRecommendation),
       friendlySeries: this.getLiveFriendlySeries(report.friendlySeries),
       suggestions: suggestions.slice(0, 2).map(item => String(item || '')).filter(Boolean),
+      postGameActionBridge: actionBridge ? {
+        reportVersion: String(actionBridge.reportVersion || 'pvp-live-post-game-action-bridge-v1'),
+        sourceVisibility: String(actionBridge.sourceVisibility || 'public_review_action_contract'),
+        usesHiddenInformation: actionBridge.usesHiddenInformation === true,
+        rankedImpact: String(actionBridge.rankedImpact || 'none'),
+        coveredAuditActions: Array.isArray(actionBridge.coveredAuditActions)
+          ? actionBridge.coveredAuditActions.map(item => String(item || '')).filter(Boolean).slice(0, 8)
+          : [],
+        uiActionIdsByAuditAction: actionBridge.uiActionIdsByAuditAction && typeof actionBridge.uiActionIdsByAuditAction === 'object'
+          ? Object.fromEntries(Object.entries(actionBridge.uiActionIdsByAuditAction).map(([key, value]) => [
+            String(key || ''),
+            Array.isArray(value) ? value.map(item => String(item || '')).filter(Boolean).slice(0, 4) : []
+          ]).filter(([key]) => key))
+          : {}
+      } : null,
       nextActions: nextActions.slice(0, 6).map(action => ({
         id: String(action && action.id || ''),
+        auditActionId: String(action && action.auditActionId || ''),
         label: String(action && action.label || ''),
         detail: String(action && action.detail || '')
       })).filter(action => action.id && action.label)
+    };
+  },
+  getLiveReplaySummary(source) {
+    const replay = source && typeof source === 'object' ? source : null;
+    if (!replay) return null;
+    const hiddenScan = replay.hiddenScan && typeof replay.hiddenScan === 'object' ? replay.hiddenScan : {};
+    const publicSummary = replay.publicSummary && typeof replay.publicSummary === 'object' ? replay.publicSummary : {};
+    const events = Array.isArray(replay.events) ? replay.events : [];
+    return {
+      reportVersion: String(replay.reportVersion || 'pvp-live-replay-v1'),
+      visibilityLayer: String(replay.visibilityLayer || ''),
+      publicSummary: {
+        status: String(publicSummary.status || ''),
+        winnerSeat: String(publicSummary.winnerSeat || ''),
+        loserSeat: String(publicSummary.loserSeat || ''),
+        finishReason: String(publicSummary.finishReason || '')
+      },
+      eventCount: Math.max(0, Math.floor(Number(replay.eventCount) || events.length)),
+      hiddenScan: {
+        forbiddenTokenCount: Math.max(0, Math.floor(Number(hiddenScan.forbiddenTokenCount) || 0)),
+        forbiddenKeyCount: Math.max(0, Math.floor(Number(hiddenScan.forbiddenKeyCount) || 0)),
+        forbiddenStringCount: Math.max(0, Math.floor(Number(hiddenScan.forbiddenStringCount) || 0))
+      }
     };
   },
   getLiveLoadoutRecommendation(source) {
@@ -2869,6 +2909,7 @@ export const PVPScene = {
           <button
             type="button"
             data-live-post-review-action="${this.escapeHtml(action.id)}"
+            data-live-post-review-audit-action="${this.escapeHtml(action.auditActionId || action.id)}"
             onclick="PVPScene.handleLivePostReviewAction('${this.escapeHtml(action.id)}')"
             title="${this.escapeHtml(action.detail || action.label)}"
             ${this.isLivePostReviewActionDisabled(action.id, phase) ? 'disabled' : ''}
@@ -3278,6 +3319,7 @@ export const PVPScene = {
     const view = state.stateView || null;
     const liveDrillSourceId = String(this.liveDrillScenario && this.liveDrillScenario.sourceMatchId || '');
     const activeLiveSourceId = String(state.matchId || (view && view.matchId) || '');
+    const replayMatchId = String(state.lastReplayMatchId || '');
     const waitingLiveSourceId = state.queueTicket ? `waiting:${state.queueTicket}` : '';
     const drillScenario = this.liveDrillScenario && (
       liveDrillSourceId === activeLiveSourceId
@@ -3329,6 +3371,7 @@ export const PVPScene = {
       loadoutExplorationReport: this.getLiveLoadoutExplorationReport(view),
       postMatchReview: this.getLivePostMatchReview(view),
       seasonGoal: this.getLiveSeasonGoalCard(view),
+      lastReplay: replayMatchId && replayMatchId === activeLiveSourceId ? this.getLiveReplaySummary(state.lastReplay) : null,
       drillScenario,
       waitingReport: this.getLiveWaitingReport(state),
       inviteReport: state.inviteReport || null,
@@ -4408,6 +4451,16 @@ export const PVPScene = {
     }
     if (id === 'review_key_turns') {
       this.liveReviewFocus = 'key_turns';
+      const session = this.getLiveSession();
+      let replayFetched = false;
+      if (session && typeof session.getReplay === 'function') {
+        try {
+          const replayState = await session.getReplay({ visibility: 'replay_self' });
+          replayFetched = !!(replayState && replayState.lastReplay);
+        } catch (error) {
+          console.warn('[PVP Live] replay fetch failed', error);
+        }
+      }
       const eventPanel = root ? root.querySelector('[data-live-event-panel]') : null;
       const keyTurnPanel = root ? root.querySelector('[data-live-key-turn-replay]') : null;
       if (eventPanel) {
@@ -4425,7 +4478,9 @@ export const PVPScene = {
       if (focusedPanel && typeof focusedPanel.scrollIntoView === 'function') {
         focusedPanel.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
       }
-      setHint('已定位关键回合；这里只使用公开事件序列，不读取隐藏手牌、牌库或事件 payload。');
+      setHint(replayFetched
+        ? '已拉取权威回放并定位关键回合；这里只使用 replay_self 与公开事件序列，不读取隐藏手牌、牌库或事件 payload。'
+        : '已定位关键回合；这里只使用公开事件序列，不读取隐藏手牌、牌库或事件 payload。');
       return;
     }
     if (id === 'adjust_loadout') {

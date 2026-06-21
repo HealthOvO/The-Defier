@@ -10,6 +10,7 @@ const DEFAULT_STATE = Object.freeze({
   inviteInbox: [],
   rematchReport: null,
   lastReplay: null,
+  lastReplayMatchId: '',
   lastEvents: [],
   lastError: null,
   realtimeStatus: 'idle',
@@ -201,12 +202,23 @@ export function createPvpLiveSession({
     updatedAt: now()
   };
 
+  const getSnapshotMatchId = (snapshot) => String(snapshot && (snapshot.matchId || snapshot.stateView && snapshot.stateView.matchId) || '').trim();
+
   const publish = (patch = {}) => {
-    state = {
+    const previousMatchId = getSnapshotMatchId(state);
+    const nextState = {
       ...state,
       ...patch,
       updatedAt: now()
     };
+    const nextMatchId = getSnapshotMatchId(nextState);
+    const matchIdentityTouched = Object.prototype.hasOwnProperty.call(patch, 'matchId')
+      || Object.prototype.hasOwnProperty.call(patch, 'stateView');
+    if (matchIdentityTouched && previousMatchId && previousMatchId !== nextMatchId) {
+      nextState.lastReplay = null;
+      nextState.lastReplayMatchId = '';
+    }
+    state = nextState;
     if (typeof onChange === 'function') {
       try {
         onChange(getState());
@@ -735,7 +747,16 @@ export function createPvpLiveSession({
   }
 
   async function joinQueue(options = {}) {
-    publish({ phase: 'queueing', lastError: null, lastEvents: [] });
+    publish({
+      phase: 'queueing',
+      matchId: '',
+      seatId: '',
+      stateView: null,
+      lastReplay: null,
+      lastReplayMatchId: '',
+      lastError: null,
+      lastEvents: []
+    });
     const result = await callLive('joinQueue', options);
     if (!result || result.success === false) {
       return publish({
@@ -1051,7 +1072,7 @@ export function createPvpLiveSession({
   }
 
   async function getReplay(options = {}) {
-    const matchId = String(state.matchId || state.stateView && state.stateView.matchId || '').trim();
+    const matchId = getSnapshotMatchId(state);
     if (!matchId) {
       return fail('replay_match_missing', '实时论道回放战局缺失', state.phase);
     }
@@ -1059,8 +1080,12 @@ export function createPvpLiveSession({
     if (!result || result.success !== true || !result.replay) {
       return fail(result && result.reason || 'replay_failed', result && result.message || '实时论道回放读取失败', state.phase);
     }
+    if (getSnapshotMatchId(state) !== matchId) {
+      return getState();
+    }
     return publish({
       lastReplay: cloneData(result.replay),
+      lastReplayMatchId: matchId,
       lastError: null
     });
   }

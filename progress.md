@@ -1,5 +1,33 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-21: V10-S14 live PVP replay-backed post-game action bridge
+  - 本轮完成
+    - `server/pvp-live/engine/state-view.js` 为赛后 `nextActions` 补齐 `auditActionId`，并新增 `postGameActionBridge.reportVersion=pvp-live-post-game-action-bridge-v1`；现在 `key_turn_replay -> review_key_turns`、`apply_loadout_recommendation -> adjust_loadout`、`practice_topic -> practice`、`queue_again -> queue_again` 都是可校验合同，不再停留在模拟审计里的抽象动作名。
+    - `server/pvp-live/balance-simulation.js` 同步输出同一份赛后 action bridge，让 quick gate、冻结 artifact 和 full gate 都能证明“娱乐性审计要求的下一步”确实有真实 UI 按钮承接；桥接来源固定为 `public_review_action_contract`，`usesHiddenInformation=false`，`rankedImpact=none`，且不再把尚未实现的 `report_issue` 伪装成 `review_events`。
+    - `js/scenes/pvp-scene.js` 的赛后复盘归一化现在保留 `auditActionId`，按钮 DOM 新增 `data-live-post-review-audit-action`；点击“关键回合复盘”会通过当前 live session 拉取 `getReplay({ visibility: 'replay_self' })`，并只把当前 `matchId` 绑定的脱敏 `lastReplay` 摘要暴露给 runtime/browser 审计。
+    - `js/services/pvp-live-session.js` 新增 `lastReplayMatchId` 生命周期：入队/跨局会清空旧 replay，请求晚到且当前 match 已变化时直接丢弃旧回放，避免 A 局关键回合摘要粘到 B 局。
+    - 新的 replay 摘要只保留 `reportVersion / visibilityLayer / publicSummary / eventCount / hiddenScan`，用于证明赛后复盘用的是权威回放和公开事件序列，不读取隐藏手牌、牌库或事件 payload；本轮不改变对局结算、匹配、奖励、ranked 写入或卡牌数值。
+    - `tests/browser_pvp_live_audit.mjs`、UI runtime/contract、engine、session、balance simulation/artifact/full gate 和 release coverage 全部补上 bridge 与 `replay_self` 红绿链，后续删除按钮映射、漏传 audit action、伪造未实现 handoff、旧 replay 跨局粘连，或把关键回合按钮退化成纯本地聚焦都会被门禁拦下。
+  - 已验证
+    - 红测：`node tests/sanity_pvp_live_engine_checks.cjs` 在实现前失败于缺少赛后 audit-to-UI action bridge。
+    - 红测：`node tests/sanity_pvp_live_balance_simulation_checks.cjs` 在实现前失败于娱乐性审计缺少 post-game action bridge。
+    - 红测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs` 在实现前失败于 UI 归一化没有保留真实按钮的 `auditActionId`。
+    - 红测：`node tests/sanity_pvp_live_balance_simulation_checks.cjs` 在 review 修复前失败于 `postGameActionBridge` 仍声明未实现的 `report_issue` UI handoff。
+    - 红测：`node tests/sanity_pvp_live_session_checks.mjs` 在 review 修复前失败于 `getReplay` 没有把回放绑定到当前 `matchId`。
+    - 绿测：`node tests/sanity_pvp_live_engine_checks.cjs`
+    - 绿测：`node tests/sanity_pvp_live_balance_simulation_checks.cjs`
+    - 绿测：`node tests/sanity_pvp_live_balance_artifact_checks.cjs`
+    - 绿测：`node tests/sanity_pvp_live_full_gate_balance_checks.cjs`
+    - 绿测：`node tests/sanity_pvp_live_session_checks.mjs`
+    - 绿测：`node tests/sanity_pvp_live_ui_contract_checks.cjs`
+    - 绿测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs`
+    - 绿测：`node tests/sanity_release_gate_coverage_checks.cjs`
+    - 构建：`npm run build:pages`
+    - 浏览器审计：`node tests/browser_pvp_live_audit.mjs http://127.0.0.1:4173 output/web-pvp-live-audit-replay-bridge-v2`，91/91 findings、0 failed、0 console error。
+    - 全量 Node 门禁：`npm run test:node`，All node checks passed。
+  - 当前结论
+    - V10 live PVP 的赛后娱乐性审计现在能落到玩家真实可点的复盘入口：模拟报告证明应该给玩家关键回合、换组建议、练习或继续排位，状态视图和 UI 又能证明这些抽象动作已经桥接到按钮，并且关键回合入口会拉取 `replay_self` 权威回放。双方体验上，败方不再只看到泛泛建议，可以用公开事件和权威回放定位下一局怎么改；胜方/系统仍不会泄漏隐藏信息或改写正式积分。
+
 - 2026-06-21: V10-S13 live PVP fairness / entertainment audit report
   - 本轮完成
     - `server/pvp-live/balance-simulation.js` 新增正式 `experienceFairness.reportVersion=pvp-live-experience-fairness-audit-v1`，把非游戏失败、不可读爆发、控制锁、P05 双方行动窗口、响应窗口、拒绝摩擦率和负面体验标签目录统一纳入可校验审计对象；来源固定为 `simulation_public_metrics`，不读取隐藏手牌/牌库顺序，不写 ranked、奖励或匹配状态。

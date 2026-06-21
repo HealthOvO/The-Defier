@@ -81,9 +81,18 @@ const POST_GAME_NEXT_ACTIONS_BY_REASON = Object.freeze({
     resource_draw: ['queue_again', 'practice_topic', 'apply_loadout_recommendation', 'key_turn_replay'],
     round14_draw: ['queue_again', 'practice_topic', 'apply_loadout_recommendation', 'key_turn_replay'],
     round14_score: ['queue_again', 'practice_topic', 'apply_loadout_recommendation', 'key_turn_replay'],
-    connection_timeout: ['queue_again', 'key_turn_replay', 'report_issue'],
-    invalidated: ['queue_again', 'key_turn_replay', 'report_issue'],
+    connection_timeout: ['queue_again', 'key_turn_replay'],
+    invalidated: ['queue_again'],
     surrender: ['queue_again', 'practice_topic', 'apply_loadout_recommendation']
+});
+
+const POST_GAME_UI_ACTION_IDS_BY_AUDIT_ACTION = Object.freeze({
+    review_events: Object.freeze(['review_events']),
+    key_turn_replay: Object.freeze(['review_key_turns']),
+    friendly_rematch: Object.freeze(['friendly_rematch']),
+    apply_loadout_recommendation: Object.freeze(['adjust_loadout']),
+    practice_topic: Object.freeze(['practice']),
+    queue_again: Object.freeze(['queue_again'])
 });
 
 function validatePolicyVocabularyCoverage() {
@@ -663,7 +672,7 @@ function buildPostGameActionCoverage(samples) {
     });
     if (observedReasons.size === 0) observedReasons.add('round14_draw');
     const commonNextActions = Array.from(observedReasons).sort().map(reason => {
-        const actions = POST_GAME_NEXT_ACTIONS_BY_REASON[reason] || ['queue_again', 'key_turn_replay', 'report_issue'];
+        const actions = POST_GAME_NEXT_ACTIONS_BY_REASON[reason] || ['queue_again', 'key_turn_replay'];
         return {
             reason,
             covered: actions.length > 0,
@@ -705,6 +714,19 @@ function buildRematchIntentRate() {
     };
 }
 
+function buildPostGameActionBridge() {
+    const uiActionIdsByAuditAction = Object.fromEntries(Object.entries(POST_GAME_UI_ACTION_IDS_BY_AUDIT_ACTION)
+        .map(([auditActionId, uiActionIds]) => [auditActionId, Array.from(uiActionIds)]));
+    return {
+        reportVersion: 'pvp-live-post-game-action-bridge-v1',
+        sourceVisibility: 'public_review_action_contract',
+        usesHiddenInformation: false,
+        rankedImpact: 'none',
+        coveredAuditActions: Object.keys(uiActionIdsByAuditAction),
+        uiActionIdsByAuditAction
+    };
+}
+
 function buildEntertainmentAudit(samples, totalMatches) {
     const rows = Array.isArray(samples) ? samples : [];
     const qualified = rows.filter(sample => sample && !NON_GAME_FINISH_REASONS.includes(sample.finishReason));
@@ -719,6 +741,7 @@ function buildEntertainmentAudit(samples, totalMatches) {
         closeGameRate: rate(qualified.filter(sample => sample.closeGameWindow).length, qualified.length),
         leadChangeOrThreatShiftRate: rate(qualified.filter(sample => sample.leadChangeOrThreatShiftObserved).length, qualified.length),
         postGameActionCoverage: buildPostGameActionCoverage(rows),
+        postGameActionBridge: buildPostGameActionBridge(),
         deckEditFollowThroughRate: buildDeckEditFollowThroughRate(),
         rematchIntentRate: buildRematchIntentRate()
     };
@@ -1353,6 +1376,11 @@ function validateSimulationReport(report, { mode = 'quick' } = {}) {
     const entertainment = report.entertainmentAudit || {};
     const postGameActionCoverage = entertainment.postGameActionCoverage || {};
     const postGameRows = Array.isArray(postGameActionCoverage.commonNextActions) ? postGameActionCoverage.commonNextActions : [];
+    const postGameActionBridge = entertainment.postGameActionBridge || {};
+    const coveredAuditActions = new Set(Array.isArray(postGameActionBridge.coveredAuditActions) ? postGameActionBridge.coveredAuditActions : []);
+    const uiActionIdsByAuditAction = postGameActionBridge.uiActionIdsByAuditAction && typeof postGameActionBridge.uiActionIdsByAuditAction === 'object'
+        ? postGameActionBridge.uiActionIdsByAuditAction
+        : {};
     const deckEditFollowThrough = entertainment.deckEditFollowThroughRate || {};
     const deckEditActions = Array.isArray(deckEditFollowThrough.actions) ? deckEditFollowThrough.actions : [];
     const rematchIntent = entertainment.rematchIntentRate || {};
@@ -1367,6 +1395,17 @@ function validateSimulationReport(report, { mode = 'quick' } = {}) {
     if (!(Number(entertainment.leadChangeOrThreatShiftRate) >= 0.30)) failures.push('lead_shift_rate_too_low');
     if (postGameActionCoverage.coverageRate !== 1 || postGameRows.length < 1 || postGameRows.some(row => !row || !row.reason || row.covered !== true || !Array.isArray(row.actions) || row.actions.length < 1)) {
         failures.push('post_game_action_coverage');
+    }
+    if (postGameActionBridge.reportVersion !== 'pvp-live-post-game-action-bridge-v1'
+        || postGameActionBridge.sourceVisibility !== 'public_review_action_contract'
+        || postGameActionBridge.usesHiddenInformation !== false
+        || postGameActionBridge.rankedImpact !== 'none'
+        || postGameRows.flatMap(row => row.actions).some(actionId => !coveredAuditActions.has(actionId))
+        || Object.entries(POST_GAME_UI_ACTION_IDS_BY_AUDIT_ACTION).some(([auditActionId, uiActionIds]) => (
+            !Array.isArray(uiActionIdsByAuditAction[auditActionId])
+            || uiActionIds.some(uiActionId => !uiActionIdsByAuditAction[auditActionId].includes(uiActionId))
+        ))) {
+        failures.push('post_game_action_bridge');
     }
     if (deckEditFollowThrough.trackable !== true || !deckEditActions.includes('apply_loadout_recommendation') || !deckEditActions.includes('practice_topic')) {
         failures.push('deck_edit_follow_through_untracked');
