@@ -1955,7 +1955,7 @@ async function writeReport() {
     );
     add(
       'real browser live match renders fairness receipt from public post-match checks',
-      /公平回执|先手秒杀|首动预算|行动窗口|反打/.test(postMatchProbe.fairnessText)
+      /公平回执|先手秒杀|首动预算|行动窗口|反打|有效行动/.test(postMatchProbe.fairnessText)
         && postMatchProbe.fairnessSource === 'public_events'
         && postMatchProbe.fairnessHidden === 'false'
         && ['accepted', 'watch'].includes(postMatchProbe.fairnessState)
@@ -1965,7 +1965,9 @@ async function writeReport() {
         && postMatchProbe.payload?.fairnessReceipt?.rankedImpact === 'none'
         && postMatchProbe.payload?.fairnessReceipt?.result === 'loss'
         && postMatchProbe.payload?.fairnessReceipt?.finishReason === 'surrender'
+        && /有效行动/.test(postMatchProbe.payload?.fairnessReceipt?.effectiveActionVerdict || '')
         && (postMatchProbe.payload?.fairnessReceipt?.evidenceSummary || []).length >= 3
+        && (postMatchProbe.payload?.fairnessReceipt?.evidenceSummary || []).some(item => item.id === 'second_seat_effective_action')
         && postMatchParity?.fairnessReceipt === true
         && !/payload|hand|deck|cardId|instanceId|loadoutSnapshot|reward|rating|elo/i.test(`${postMatchProbe.fairnessText} ${JSON.stringify(postMatchProbe.payload?.fairnessReceipt || {})}`),
       JSON.stringify({ winnerSeat, loserSeat, finishedWinner, finishedLoser, postMatchProbe, postMatchParity }),
@@ -1991,7 +1993,7 @@ async function writeReport() {
       /双方体验诊断|公开|窗口/.test(postMatchProbe.experienceText)
         && postMatchProbe.experienceSource === 'public_events'
         && postMatchProbe.experienceHidden === 'false'
-        && ['setup_ready_required', 'first_action_budget', 'opening_protection', 'decision_windows'].every(id => postMatchProbe.experienceCheckIds.includes(id))
+        && ['setup_ready_required', 'first_action_budget', 'opening_protection', 'decision_windows', 'second_seat_effective_action'].every(id => postMatchProbe.experienceCheckIds.includes(id))
         && postMatchProbe.payload?.experienceReport?.reportVersion === 'pvp-live-experience-report-v1'
         && postMatchProbe.payload?.experienceReport?.sourceVisibility === 'public_events'
         && postMatchProbe.payload?.experienceReport?.usesHiddenInformation === false
@@ -1999,6 +2001,9 @@ async function writeReport() {
         && ['low', 'watch'].includes(postMatchProbe.payload?.experienceReport?.nonGameRisk)
         && postMatchProbe.payload?.experienceReport?.decisionWindowCount >= 1
         && postMatchProbe.payload?.experienceReport?.seatWindowSummary?.firstSeat
+        && postMatchProbe.payload?.experienceReport?.effectiveActionReport?.reportVersion === 'pvp-live-effective-action-report-v1'
+        && ['confirmed', 'watch', 'missing_window'].includes(postMatchProbe.payload?.experienceReport?.effectiveActionReport?.secondSeatState)
+        && ['confirmed', 'watch', 'missing_window'].includes(postMatchProbe.payload?.experienceReport?.safeguardSummary?.effectiveAction)
         && postMatchProbe.payload?.experienceReport?.safeguardSummary?.setupReady === 'confirmed'
         && (postMatchProbe.payload?.experienceReport?.fairnessChecks || []).every(item => Array.isArray(item.linkedEvidence) && item.linkedEvidence.length >= 1)
         && postMatchParity?.experienceChecks === true

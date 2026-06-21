@@ -679,6 +679,84 @@ function linkedEvidence(evidence, eventTypes, limit = 4) {
     return Array.from(unique.values()).slice(0, limit);
 }
 
+function positiveNumber(value) {
+    return Number.isFinite(Number(value)) && Number(value) > 0;
+}
+
+function publicEventSeat(event, key) {
+    if (!event || !event.publicData || typeof event.publicData !== 'object') return '';
+    return event.publicData[key] ? String(event.publicData[key]) : '';
+}
+
+function isEffectiveSecondSeatEvent(event, secondSeat) {
+    if (!event || !secondSeat) return false;
+    const actingSeat = event.actingSeat ? String(event.actingSeat) : '';
+    const eventType = String(event.eventType || '');
+    const data = event.publicData && typeof event.publicData === 'object' ? event.publicData : {};
+    if (eventType === 'damage_applied') {
+        return actingSeat === secondSeat
+            && (positiveNumber(data.hpDamage) || positiveNumber(data.blockedDamage) || positiveNumber(data.actualDamage));
+    }
+    if (eventType === 'block_gained') {
+        return (actingSeat === secondSeat || publicEventSeat(event, 'seatId') === secondSeat)
+            && positiveNumber(data.block);
+    }
+    if (eventType === 'hp_recovered') {
+        return (actingSeat === secondSeat || publicEventSeat(event, 'seatId') === secondSeat)
+            && positiveNumber(data.recoveredHp);
+    }
+    if (eventType === 'card_cycled') {
+        return (actingSeat === secondSeat || publicEventSeat(event, 'seatId') === secondSeat)
+            && positiveNumber(data.count);
+    }
+    if (eventType === 'status_applied' || eventType === 'status_consumed') {
+        return actingSeat === secondSeat || publicEventSeat(event, 'sourceSeat') === secondSeat;
+    }
+    if (eventType === 'status_mitigated') {
+        return actingSeat === secondSeat || publicEventSeat(event, 'mitigatedBySeat') === secondSeat;
+    }
+    return false;
+}
+
+function buildEffectiveActionReport(evidence, seatWindowSummary) {
+    const safeEvidence = Array.isArray(evidence) ? evidence : [];
+    const windowSummary = seatWindowSummary && typeof seatWindowSummary === 'object' ? seatWindowSummary : getSeatWindowSummary(safeEvidence);
+    const secondSeat = windowSummary.secondSeat || '';
+    const secondSeatEvents = safeEvidence
+        .filter(event => isEffectiveSecondSeatEvent(event, secondSeat))
+        .map(compactPublicEventRef)
+        .filter(Boolean)
+        .slice(0, 4);
+    const secondSeatState = secondSeatEvents.length > 0
+        ? 'confirmed'
+        : windowSummary.secondSeatWindowObserved ? 'watch' : 'missing_window';
+    const reasons = [];
+    if (secondSeatState === 'confirmed') {
+        reasons.push('public_positive_second_seat_action');
+    } else if (secondSeatState === 'watch') {
+        reasons.push('second_seat_window_without_public_positive_change');
+    } else {
+        reasons.push('missing_public_second_seat_window');
+    }
+    const observedActionKinds = Array.from(new Set(secondSeatEvents.map(event => String(event.eventType || '')).filter(Boolean)));
+    return {
+        reportVersion: 'pvp-live-effective-action-report-v1',
+        sourceVisibility: 'public_events',
+        usesHiddenInformation: false,
+        rankedImpact: 'none',
+        secondSeat: secondSeat || null,
+        secondSeatState,
+        observedActionKinds,
+        reasons,
+        evidence: secondSeatEvents,
+        summary: secondSeatState === 'confirmed'
+            ? '公开事件显示后手窗口产生了伤害、护盾、恢复、抽滤或公开状态变化。'
+            : secondSeatState === 'watch'
+                ? '公开事件显示后手获得窗口，但暂未看到能改变局面的正向公开行动。'
+                : '公开事件未证明后手获得过有效行动窗口，本局需要重点复查。'
+    };
+}
+
 function makeFairnessCheck(id, label, passed, detail, evidenceRefs) {
     return {
         id,
@@ -694,6 +772,7 @@ function buildExperienceReport(evidence, { result, finishReason }) {
     const evidenceTypes = new Set(safeEvidence.map(event => event.eventType));
     const readyCount = safeEvidence.filter(event => event.eventType === 'player_ready').length;
     const seatWindowSummary = getSeatWindowSummary(safeEvidence);
+    const effectiveActionReport = buildEffectiveActionReport(safeEvidence, seatWindowSummary);
     const decisionWindowCount = seatWindowSummary.decisionWindowCount;
     const setupReady = evidenceTypes.has('battle_started') && readyCount >= 2;
     const budgetObserved = evidenceTypes.has('budget_clamped');
@@ -706,11 +785,13 @@ function buildExperienceReport(evidence, { result, finishReason }) {
         : !seatWindowSummary.terminalBeforeSecondSeatWindow && decisionWindowCount >= 2 ? 'not_needed' : 'not_observable';
     const timeoutLikeFinish = finishReason === 'timeout' || finishReason === 'connection_timeout';
     const shortDecisionWindow = decisionWindowCount < 2 || timeoutLikeFinish || seatWindowSummary.terminalBeforeSecondSeatWindow;
-    const nonGameRisk = shortDecisionWindow && !protectionObserved ? 'watch' : 'low';
+    const ineffectiveSecondSeat = effectiveActionReport.secondSeatState !== 'confirmed';
+    const nonGameRisk = (shortDecisionWindow && !protectionObserved) || ineffectiveSecondSeat ? 'watch' : 'low';
     const nonGameRiskReasons = [];
     if (!setupReady) nonGameRiskReasons.push('missing_setup_ready_public_signal');
     if (decisionWindowCount < 2) nonGameRiskReasons.push('short_public_decision_window');
     if (seatWindowSummary.terminalBeforeSecondSeatWindow) nonGameRiskReasons.push('terminal_before_second_seat_window');
+    if (ineffectiveSecondSeat) nonGameRiskReasons.push(...effectiveActionReport.reasons);
     if (finishReason === 'timeout') nonGameRiskReasons.push('timeout_finish');
     if (finishReason === 'connection_timeout') nonGameRiskReasons.push('connection_timeout_finish');
     if (nonGameRiskReasons.length === 0) nonGameRiskReasons.push('public_events_show_readable_windows');
@@ -744,6 +825,19 @@ function buildExperienceReport(evidence, { result, finishReason }) {
             decisionWindowCount >= 2,
             decisionWindowCount >= 2 ? `公开事件至少覆盖 ${decisionWindowCount} 个行动席位。` : '公开窗口偏短，下一局优先看是否存在过早放弃或超时。',
             linkedEvidence(safeEvidence, ['battle_started', 'turn_ended', 'card_played', 'player_surrendered', 'match_finished'])
+        ),
+        makeFairnessCheck(
+            'second_seat_effective_action',
+            '后手有效行动',
+            effectiveActionReport.secondSeatState === 'confirmed',
+            effectiveActionReport.secondSeatState === 'confirmed'
+                ? '公开事件显示后手窗口产生了能改变局面的正向行动。'
+                : effectiveActionReport.secondSeatState === 'watch'
+                    ? '后手获得过公开窗口，但未看到伤害、护盾、恢复、抽滤或公开状态变化。'
+                    : '公开事件未证明后手获得过有效行动窗口。',
+            effectiveActionReport.evidence.length > 0
+                ? effectiveActionReport.evidence
+                : linkedEvidence(safeEvidence, ['battle_started', 'turn_ended', 'player_surrendered', 'turn_timeout', 'connection_timeout', 'match_finished'])
         )
     ];
     if (finishReason === 'round14_score' || finishReason === 'round14_draw') {
@@ -776,10 +870,12 @@ function buildExperienceReport(evidence, { result, finishReason }) {
             secondSeatWindowObserved: !!seatWindowSummary.secondSeatWindowObserved,
             terminalBeforeSecondSeatWindow: !!seatWindowSummary.terminalBeforeSecondSeatWindow
         },
+        effectiveActionReport,
         safeguardSummary: {
             setupReady: setupReady ? 'confirmed' : 'missing_signal',
             firstActionBudget: firstActionBudgetState,
-            openingProtection: openingProtectionState
+            openingProtection: openingProtectionState,
+            effectiveAction: effectiveActionReport.secondSeatState
         },
         summary: nonGameRisk === 'low'
             ? '本局公开轨迹能解释开战、压力和终局，不属于无解释先手秒杀。'
@@ -800,12 +896,13 @@ function buildFairnessReceipt(experienceReport, { result, finishReason }) {
     const budgetCheck = checks.find(check => check && check.id === 'first_action_budget');
     const protectionCheck = checks.find(check => check && check.id === 'opening_protection');
     const windowCheck = checks.find(check => check && check.id === 'decision_windows');
+    const effectiveActionCheck = checks.find(check => check && check.id === 'second_seat_effective_action');
     const round14Check = checks.find(check => check && check.id === 'round14_resolution');
     const safeguard = report && report.safeguardSummary && typeof report.safeguardSummary === 'object'
         ? report.safeguardSummary
         : {};
     const decisionWindowCount = Math.max(0, Math.floor(Number(report && report.decisionWindowCount) || 0));
-    const evidenceSummary = checks.slice(0, 5).map(check => {
+    const evidenceSummary = checks.slice(0, 6).map(check => {
         const linked = Array.isArray(check && check.linkedEvidence) ? check.linkedEvidence : [];
         return {
             id: String(check && check.id || ''),
@@ -831,6 +928,11 @@ function buildFairnessReceipt(experienceReport, { result, finishReason }) {
     const windowVerdict = windowCheck && windowCheck.passed
         ? `行动窗口：公开事件至少覆盖 ${decisionWindowCount} 个行动席位。`
         : '行动窗口：公开窗口偏短，先确认是否认输、超时或连接中断导致。';
+    const effectiveActionVerdict = effectiveActionCheck && effectiveActionCheck.passed
+        ? '有效行动：后手公开窗口已产生能改变局面的正向行动。'
+        : safeguard.effectiveAction === 'watch'
+            ? '有效行动：后手有窗口但正向行动证据不足，建议复盘是否只能空过。'
+            : '有效行动：未看到后手有效行动窗口，本局不能只按“没被秒”判定体验公平。';
     const terminalVerdict = finishReason === 'round14_draw' || finishReason === 'round14_score'
         ? String(round14Check && round14Check.detail || '长局终局来自公开轮次评分。')
         : finishReason === 'connection_timeout'
@@ -860,6 +962,7 @@ function buildFairnessReceipt(experienceReport, { result, finishReason }) {
         budgetVerdict,
         counterplayVerdict,
         windowVerdict,
+        effectiveActionVerdict,
         terminalVerdict,
         nextStepLine,
         evidenceSummary,

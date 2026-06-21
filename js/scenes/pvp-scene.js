@@ -2572,14 +2572,33 @@ export const PVPScene = {
         secondSeatWindowObserved: !!(report.seatWindowSummary && report.seatWindowSummary.secondSeatWindowObserved),
         terminalBeforeSecondSeatWindow: !!(report.seatWindowSummary && report.seatWindowSummary.terminalBeforeSecondSeatWindow)
       },
+      effectiveActionReport: report.effectiveActionReport && typeof report.effectiveActionReport === 'object' ? {
+        reportVersion: String(report.effectiveActionReport.reportVersion || 'pvp-live-effective-action-report-v1'),
+        sourceVisibility: String(report.effectiveActionReport.sourceVisibility || 'public_events'),
+        usesHiddenInformation: report.effectiveActionReport.usesHiddenInformation === true,
+        rankedImpact: String(report.effectiveActionReport.rankedImpact || 'none'),
+        secondSeat: report.effectiveActionReport.secondSeat ? String(report.effectiveActionReport.secondSeat) : '',
+        secondSeatState: String(report.effectiveActionReport.secondSeatState || 'watch'),
+        observedActionKinds: Array.isArray(report.effectiveActionReport.observedActionKinds)
+          ? report.effectiveActionReport.observedActionKinds.map(item => String(item || '')).filter(Boolean).slice(0, 6)
+          : [],
+        reasons: Array.isArray(report.effectiveActionReport.reasons)
+          ? report.effectiveActionReport.reasons.map(item => String(item || '')).filter(Boolean).slice(0, 6)
+          : [],
+        evidence: Array.isArray(report.effectiveActionReport.evidence)
+          ? report.effectiveActionReport.evidence.map(event => this.getLivePublicEventRef(event)).filter(Boolean).slice(0, 4)
+          : [],
+        summary: String(report.effectiveActionReport.summary || '')
+      } : null,
       safeguardSummary: {
         setupReady: String(report.safeguardSummary && report.safeguardSummary.setupReady || ''),
         firstActionBudget: String(report.safeguardSummary && report.safeguardSummary.firstActionBudget || ''),
-        openingProtection: String(report.safeguardSummary && report.safeguardSummary.openingProtection || '')
+        openingProtection: String(report.safeguardSummary && report.safeguardSummary.openingProtection || ''),
+        effectiveAction: String(report.safeguardSummary && report.safeguardSummary.effectiveAction || '')
       },
       summary: String(report.summary || ''),
       recommendedAction: String(report.recommendedAction || ''),
-      fairnessChecks: checks.slice(0, 5).map(check => ({
+      fairnessChecks: checks.slice(0, 6).map(check => ({
         id: String(check && check.id || ''),
         label: String(check && check.label || ''),
         passed: check && check.passed === true,
@@ -2612,10 +2631,11 @@ export const PVPScene = {
       budgetVerdict: String(report.budgetVerdict || ''),
       counterplayVerdict: String(report.counterplayVerdict || ''),
       windowVerdict: String(report.windowVerdict || ''),
+      effectiveActionVerdict: String(report.effectiveActionVerdict || ''),
       terminalVerdict: String(report.terminalVerdict || ''),
       nextStepLine: String(report.nextStepLine || ''),
       boundary: String(report.boundary || '公平回执只汇总公开复盘证据，不读取隐藏手牌、牌库或原始事件明细。'),
-      evidenceSummary: evidenceSummary.slice(0, 5).map(item => ({
+      evidenceSummary: evidenceSummary.slice(0, 6).map(item => ({
         id: String(item && item.id || ''),
         label: String(item && item.label || ''),
         passed: item && item.passed === true,
@@ -2697,6 +2717,7 @@ export const PVPScene = {
       receipt.budgetVerdict,
       receipt.counterplayVerdict,
       receipt.windowVerdict,
+      receipt.effectiveActionVerdict,
       receipt.terminalVerdict,
       receipt.nextStepLine
     ].filter(Boolean);
@@ -2713,7 +2734,7 @@ export const PVPScene = {
           <span>${this.escapeHtml(stateLabel)} · ${this.escapeHtml(receipt.agencyLabel)}</span>
         </div>
         <div class="pvp-live-fairness-verdicts">
-          ${verdicts.slice(0, 6).map(line => `<span>${this.escapeHtml(line)}</span>`).join('')}
+          ${verdicts.slice(0, 7).map(line => `<span>${this.escapeHtml(line)}</span>`).join('')}
         </div>
         <div class="pvp-live-fairness-evidence">
           ${receipt.evidenceSummary.map(item => `

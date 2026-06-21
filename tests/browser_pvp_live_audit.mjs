@@ -178,8 +178,9 @@ async function safeElementScreenshot(page, selector, outputPath) {
         { eventType: 'battle_started', sequence: 5, actingSeat: 'B', publicData: { firstSeat: 'A' } },
         { eventType: 'card_played', sequence: 6, actingSeat: 'A', publicData: { cost: 1, remainingEnergy: 2 } },
         { eventType: 'turn_ended', sequence: 7, actingSeat: 'A', publicData: { nextSeat: 'B' } },
-        { eventType: 'player_surrendered', sequence: 8, actingSeat: 'A', publicData: { loserSeat: 'A', winnerSeat: 'B' } },
-        { eventType: 'match_finished', sequence: 9, actingSeat: 'A', publicData: { winnerSeat: 'B', loserSeat: 'A', finishReason: 'surrender' } },
+        { eventType: 'block_gained', sequence: 8, actingSeat: 'B', publicData: { block: 3, seatId: 'B', totalBlock: 3 } },
+        { eventType: 'player_surrendered', sequence: 9, actingSeat: 'A', publicData: { loserSeat: 'A', winnerSeat: 'B' } },
+        { eventType: 'match_finished', sequence: 10, actingSeat: 'A', publicData: { winnerSeat: 'B', loserSeat: 'A', finishReason: 'surrender' } },
       ],
       keyTurnReplay: {
         reportVersion: 'pvp-live-key-turn-replay-v1',
@@ -192,7 +193,7 @@ async function safeElementScreenshot(page, selector, outputPath) {
         turns: [
           { id: 'opening_window', label: '开战窗口', sequence: 5, eventType: 'battle_started', actingSeat: 'B', severity: 'setup', lesson: '先确认首动预算和调息结果。' },
           { id: 'pressure_window', label: '压力窗口', sequence: 6, eventType: 'card_played', actingSeat: 'A', severity: 'swing', lesson: '这里决定是否需要改成守势谱。' },
-          { id: 'terminal_window', label: '终局选择', sequence: 9, eventType: 'match_finished', actingSeat: 'A', severity: 'terminal', lesson: '终局只记录结果，真正要练的是前一手。' },
+          { id: 'terminal_window', label: '终局选择', sequence: 10, eventType: 'match_finished', actingSeat: 'A', severity: 'terminal', lesson: '终局只记录结果，真正要练的是前一手。' },
         ],
       },
       experienceReport: {
@@ -211,10 +212,25 @@ async function safeElementScreenshot(page, selector, outputPath) {
           secondSeatWindowObserved: true,
           terminalBeforeSecondSeatWindow: false,
         },
+        effectiveActionReport: {
+          reportVersion: 'pvp-live-effective-action-report-v1',
+          sourceVisibility: 'public_events',
+          usesHiddenInformation: false,
+          rankedImpact: 'none',
+          secondSeat: 'B',
+          secondSeatState: 'confirmed',
+          observedActionKinds: ['block_gained'],
+          reasons: ['public_positive_second_seat_action'],
+          evidence: [
+            { eventType: 'block_gained', sequence: 8, actingSeat: 'B', publicData: { block: 3, seatId: 'B', totalBlock: 3 } },
+          ],
+          summary: '公开事件显示后手窗口产生了护盾等正向行动。',
+        },
         safeguardSummary: {
           setupReady: 'confirmed',
           firstActionBudget: 'not_triggered',
           openingProtection: 'not_needed',
+          effectiveAction: 'confirmed',
         },
         summary: '本局公开轨迹能解释开战、压力和终局，不属于无解释先手秒杀。',
         recommendedAction: 'queue_again',
@@ -236,6 +252,9 @@ async function safeElementScreenshot(page, selector, outputPath) {
             { eventType: 'battle_started', sequence: 5, actingSeat: 'B', publicData: { firstSeat: 'A' } },
             { eventType: 'turn_ended', sequence: 7, actingSeat: 'A', publicData: { nextSeat: 'B' } },
           ] },
+          { id: 'second_seat_effective_action', label: '后手有效行动', passed: true, detail: '公开事件显示后手窗口产生了能改变局面的正向行动。', linkedEvidence: [
+            { eventType: 'block_gained', sequence: 8, actingSeat: 'B', publicData: { block: 3, seatId: 'B', totalBlock: 3 } },
+          ] },
         ],
       },
       fairnessReceipt: {
@@ -253,6 +272,7 @@ async function safeElementScreenshot(page, selector, outputPath) {
         budgetVerdict: '本局按首动预算规则运行。',
         counterplayVerdict: '反打回执：护体未触发，但公开事件显示双方已有行动窗口。',
         windowVerdict: '行动窗口：公开事件至少覆盖 2 个行动席位。',
+        effectiveActionVerdict: '有效行动：后手公开窗口已产生能改变局面的正向行动。',
         terminalVerdict: '终局边界：认输只说明本局提前结束，真正要复盘的是认输前公开压力。',
         nextStepLine: '下一步：按回执里的压力窗口调整斗法谱或进入问道练习。',
         evidenceSummary: [
@@ -260,6 +280,7 @@ async function safeElementScreenshot(page, selector, outputPath) {
           { id: 'first_action_budget', label: '首动爆发预算', passed: true, evidenceSequences: [5, 6] },
           { id: 'opening_protection', label: '开局护体', passed: true, evidenceSequences: [5, 7] },
           { id: 'decision_windows', label: '公开决策窗口', passed: true, evidenceSequences: [5, 7] },
+          { id: 'second_seat_effective_action', label: '后手有效行动', passed: true, evidenceSequences: [8] },
         ],
         boundary: '公平回执只汇总公开复盘证据，不读取隐藏手牌、牌库或原始事件明细，也不改正式积分或结算。',
       },
@@ -3251,7 +3272,7 @@ async function safeElementScreenshot(page, selector, outputPath) {
   );
   add(
     'live UI renders post-match fairness receipt from public experience checks',
-    /公平回执|无解释先手秒杀|首动预算|行动窗口|反打回执/.test(surrenderProbe.fairnessText)
+    /公平回执|无解释先手秒杀|首动预算|行动窗口|反打回执|有效行动/.test(surrenderProbe.fairnessText)
       && surrenderProbe.fairnessSource === 'public_events'
       && surrenderProbe.fairnessHidden === 'false'
       && surrenderProbe.fairnessState === 'accepted'
@@ -3260,7 +3281,9 @@ async function safeElementScreenshot(page, selector, outputPath) {
       && surrenderProbe.reviewPayload?.fairnessReceipt?.usesHiddenInformation === false
       && surrenderProbe.reviewPayload?.fairnessReceipt?.rankedImpact === 'none'
       && surrenderProbe.reviewPayload?.fairnessReceipt?.receiptState === 'accepted'
+      && /有效行动/.test(surrenderProbe.reviewPayload?.fairnessReceipt?.effectiveActionVerdict || '')
       && (surrenderProbe.reviewPayload?.fairnessReceipt?.evidenceSummary || []).length >= 3
+      && (surrenderProbe.reviewPayload?.fairnessReceipt?.evidenceSummary || []).some(item => item.id === 'second_seat_effective_action')
       && reviewParity?.fairnessReceipt === true
       && !/payload|hand|deck|cardId|instanceId|loadoutSnapshot|reward|rating|elo/i.test(`${surrenderProbe.fairnessText} ${JSON.stringify(surrenderProbe.reviewPayload?.fairnessReceipt || {})}`),
     JSON.stringify({ ...surrenderProbe, reviewParity }),
@@ -3283,16 +3306,19 @@ async function safeElementScreenshot(page, selector, outputPath) {
   );
   add(
     'live UI renders post-match experience report from public events',
-    /双方体验诊断|低风险|双方均有可读窗口|公开轨迹/.test(surrenderProbe.experienceText)
+    /双方体验诊断|低风险|双方均有可读窗口|公开轨迹|后手有效行动/.test(surrenderProbe.experienceText)
       && surrenderProbe.experienceSource === 'public_events'
       && surrenderProbe.experienceHidden === 'false'
-      && ['setup_ready_required', 'first_action_budget', 'opening_protection', 'decision_windows'].every(id => surrenderProbe.experienceCheckIds.includes(id))
+      && ['setup_ready_required', 'first_action_budget', 'opening_protection', 'decision_windows', 'second_seat_effective_action'].every(id => surrenderProbe.experienceCheckIds.includes(id))
       && surrenderProbe.reviewPayload?.experienceReport?.reportVersion === 'pvp-live-experience-report-v1'
       && surrenderProbe.reviewPayload?.experienceReport?.sourceVisibility === 'public_events'
       && surrenderProbe.reviewPayload?.experienceReport?.usesHiddenInformation === false
       && surrenderProbe.reviewPayload?.experienceReport?.rankedImpact === 'none'
       && surrenderProbe.reviewPayload?.experienceReport?.nonGameRisk === 'low'
       && surrenderProbe.reviewPayload?.experienceReport?.decisionWindowCount >= 1
+      && surrenderProbe.reviewPayload?.experienceReport?.effectiveActionReport?.reportVersion === 'pvp-live-effective-action-report-v1'
+      && surrenderProbe.reviewPayload?.experienceReport?.effectiveActionReport?.secondSeatState === 'confirmed'
+      && surrenderProbe.reviewPayload?.experienceReport?.safeguardSummary?.effectiveAction === 'confirmed'
       && reviewParity?.experienceChecks === true
       && !/payload|hand|deck|cardId|instanceId|loadoutSnapshot|reward|rating|elo/i.test(JSON.stringify(surrenderProbe.reviewPayload?.experienceReport || {})),
     JSON.stringify({ ...surrenderProbe, reviewParity }),

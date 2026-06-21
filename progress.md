@@ -1,5 +1,34 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-21: V10-S23 live PVP effective action receipt
+  - 本轮完成
+    - `server/pvp-live/engine/state-view.js` 在 `experienceReport` 中新增 `pvp-live-effective-action-report-v1`：只基于脱敏公开事件判断后手是否产生过正向局面变化，支持 `confirmed / watch / missing_window` 三档，不读取手牌、牌库、随机种子、构筑快照或隐藏 payload。
+    - 新增 `second_seat_effective_action` 公平检查，把“后手没被秒”推进为“后手是否真的有有效行动”：伤害、护盾、恢复、抽滤、公开状态建立/缓解等公开正向变化会被计入；只有窗口但无正向变化会进入待观察。
+    - `fairnessReceipt` 新增 `effectiveActionVerdict` 和对应 evidence summary；赛后 UI 会显示“有效行动”回执，玩家能看到本局是否只是没死，还是确实发生了可改变局面的后手行动。
+    - `js/scenes/pvp-scene.js` 保留并渲染 `effectiveActionReport / safeguardSummary.effectiveAction / effectiveActionVerdict`，并将体验检查与公平回执摘要上限扩到 6 项，避免新检查被前端截断。
+    - fake browser audit 与真实后端 smoke 同步钉住 DOM、snapshot、`render_game_to_text()` 的 `second_seat_effective_action`，防止后续赛后复盘退回“只数窗口、不看有效行动”的弱口径。
+    - subagent 本轮只读巡检给出下一优先级候选：`ranked setup reveal-dodge guard` 与“连接节奏接管输入门禁”。本轮先收口有效行动回执，避免中途切换留下半成品；下一刀优先从这两项里选。
+  - 已验证
+    - 红测：`node tests/sanity_pvp_live_engine_checks.cjs` 在实现前失败于 `experience report should expose an effective-action report`。
+    - 绿测：`node tests/sanity_pvp_live_engine_checks.cjs`
+    - 绿测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs`
+    - 绿测：`node tests/sanity_pvp_live_route_checks.cjs`
+    - 绿测：`node tests/sanity_pvp_live_session_checks.mjs`
+    - 绿测：`node tests/sanity_pvp_live_ui_contract_checks.cjs`
+    - 绿测：`node tests/sanity_release_gate_coverage_checks.cjs`
+    - 文档同步：`node tests/sanity_intro_progress_sync_checks.cjs`
+    - 语法：`node --check server/pvp-live/engine/state-view.js`
+    - 语法：`node --check js/scenes/pvp-scene.js`
+    - 语法：`node --check tests/browser_pvp_live_audit.mjs`
+    - 语法：`node --check tests/browser_pvp_live_real_backend_smoke.mjs`
+    - 构建：`npm run build:pages`
+    - 浏览器审计：`node tests/browser_pvp_live_audit.mjs http://127.0.0.1:4173 output/pvp-live-effective-action-audit`，97/97 findings、0 failed、0 console error。
+    - Release 浏览器过滤门禁：`AUDIT_FILTER=pvp-live npm run test:browser:release`，All browser release audits passed。
+    - 真实后端浏览器 smoke：`node tests/browser_pvp_live_real_backend_smoke.mjs http://127.0.0.1:4173 output/pvp-live-effective-action-real-backend-smoke`，57/57 findings、0 failed、0 console error。
+    - 移动真实后端浏览器 smoke：`BROWSER_PVP_LIVE_REAL_VIEWPORT=mobile BROWSER_PVP_LIVE_REAL_REQUIRE_MOBILE=1 node tests/browser_pvp_live_real_backend_smoke.mjs http://127.0.0.1:4173 output/pvp-live-effective-action-mobile-real-backend-smoke`，58/58 findings、0 failed、0 console error。
+  - 当前结论
+    - live PVP 的赛后公平回执现在不再只证明“后手没有马上死”，而是会从公开事件里判断后手是否真的获得并使用过能改变局面的有效行动窗口。这更贴近用户要求的双方体验：先手不能靠一套压制把对方留在“活着但只能空过”的局里；若出现短窗口或无效行动样本，系统会把它标为待复查并引导关键回合复盘。
+
 - 2026-06-21: V10-S22 ranked live PVP opponent reveal hardening
   - 本轮完成
     - `server/pvp-live/engine/state-view.js` 将 `ranked` 对手席位从旧 `projectPublicSeat()` 拆为独立 ranked opponent 投影：保留 hp / energy / block / ready / handCount / deckCount / discardCount / publicStatuses 等公开战斗信息，移除对手 `userId / displayName / loadoutHash / loadoutSummary / loadoutSnapshot / hand / deck`。
