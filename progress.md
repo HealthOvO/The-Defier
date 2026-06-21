@@ -1,5 +1,23 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-21: V10-S34 live PVP active reconnect grace session contract
+  - 本轮完成
+    - `tests/sanity_pvp_live_session_checks.mjs` 扩展 session heartbeat 合同：active reconnect grace 下的权威 `turnTimer.startedAt / deadlineAt`、`connectionTempoReport.tempoState='opponent_action_grace'`、`connectionReport` 必须被前端会话保存，且不能把 `connection_timeout`、`turn_timeout`、`match_finished` 或 `postMatchReview` 当成当前 active 局展示。
+    - 陈旧 HTTP heartbeat 防回退测试新增 deadline / stale terminal 断言：当本地已有更高 `stateVersion` 的 active 状态时，低版本 heartbeat 即使带着旧 `connection_timeout` 事件和终局复盘，也不能覆盖当前行动窗口、终局复盘或公开事件。
+    - 新增同版本 active heartbeat 红测：连接恢复回包可以把 `connectionReport.viewer.status` 更新为 `online`，但不能用同 `stateVersion` 的旧 `turnTimer`、旧 `connection_timeout` 事件或旧 `postMatchReview` 污染当前 active 快照。
+    - 新增同版本真实终局放行测试：若同 `stateVersion` 的权威回包状态已经是 `finished` 并带 `postMatchReview`，session 仍必须进入 finished、保存终局回看锚点，避免 active-only 保护误伤真实结算。
+    - `js/services/pvp-live-session.js` 在 `resolveAuthoritativeStateView()` / `resolveAuthoritativeEvents()` 上加同版本 active 净化：同版本 active 快照会净化 stale terminal fallout，并保留连接状态恢复；行动窗口和 active 事件锚点不被旧终局字段覆盖。真实 `finished` / `invalidated` 状态仍走原权威状态流。
+    - `tests/sanity_release_gate_coverage_checks.cjs` 增加 session 层 marker，确保 release gate 持续钉住“弱网恢复不误判终局、不重置行动窗口、不回退到旧终局”的双方体验语义。
+  - 已验证
+    - 定向合同：`node tests/sanity_pvp_live_session_checks.mjs`
+    - 前端链路：`node tests/sanity_pvp_live_client_checks.mjs`、`node tests/sanity_pvp_live_service_bridge_checks.cjs`、`node tests/sanity_pvp_live_ui_runtime_checks.mjs`
+    - 绿测：`node tests/sanity_release_gate_coverage_checks.cjs`
+    - 文档同步：`node tests/sanity_intro_progress_sync_checks.cjs`
+    - 全量 Node 门禁：`npm run test:node`，All node checks passed。
+    - 构建：`npm run build:pages`
+  - 当前结论
+    - live PVP 的 reconnect grace 现在不仅有服务端 route 合同，也有前端 session 合同：当前行动方或对手短暂断线恢复时，前台会继续沿用服务端权威的 active 回合窗口，不会因为陈旧或同版本污染心跳把玩家带进“突然判负/突然终局”的体验。该切片只补 session 状态保护与门禁，不改变匹配、心跳协议、战斗数值、正式结算、奖励或 UI 文案。
+
 - 2026-06-21: V10-S33 live PVP active reconnect grace route contract
   - 本轮完成
     - `tests/sanity_pvp_live_route_checks.cjs` 新增当前行动方短暂断线恢复合同：真人 active match 中，当前行动方进入 reconnect grace 后，对手视角必须仍为 `active`，`currentSeat` 不变，`connectionTempoReport.tempoState='opponent_action_grace'`，不会提前发出终局。

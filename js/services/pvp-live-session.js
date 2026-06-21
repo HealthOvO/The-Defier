@@ -39,6 +39,11 @@ const ALLOWED_SEASON_GOAL_RECOVERY_STATES = Object.freeze([
   'observing',
   'practice_recommended'
 ]);
+const ACTIVE_TERMINAL_EVENT_TYPES = Object.freeze([
+  'connection_timeout',
+  'turn_timeout',
+  'match_finished'
+]);
 
 function cloneData(value) {
   if (value === undefined || value === null) return value;
@@ -49,6 +54,45 @@ function cloneData(value) {
     if (typeof value === 'object') return { ...value };
     return value;
   }
+}
+
+function hasActiveTerminalEvents(events) {
+  return Array.isArray(events) && events.some(event => ACTIVE_TERMINAL_EVENT_TYPES.includes(String(event && event.eventType || '')));
+}
+
+function normalizeTimerValue(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? Math.max(0, Math.floor(number)) : 0;
+}
+
+function sameTurnTimer(left, right) {
+  if (!left || typeof left !== 'object' || !right || typeof right !== 'object') return false;
+  return normalizeTimerValue(left.startedAt) === normalizeTimerValue(right.startedAt)
+    && normalizeTimerValue(left.deadlineAt) === normalizeTimerValue(right.deadlineAt)
+    && normalizeTimerValue(left.durationMs) === normalizeTimerValue(right.durationMs);
+}
+
+function sanitizeSameVersionActiveStateView(currentStateView, incomingStateView) {
+  const currentStatus = String(currentStateView && currentStateView.status || '').trim();
+  const incomingStatus = String(incomingStateView && incomingStateView.status || '').trim();
+  if (currentStatus !== 'active' || incomingStatus !== 'active') return incomingStateView;
+  const patch = {};
+  if (currentStateView && currentStateView.turnTimer && !sameTurnTimer(currentStateView.turnTimer, incomingStateView && incomingStateView.turnTimer)) {
+    patch.turnTimer = cloneData(currentStateView.turnTimer);
+  }
+  if (incomingStateView && incomingStateView.postMatchReview) {
+    patch.postMatchReview = currentStateView && Object.prototype.hasOwnProperty.call(currentStateView, 'postMatchReview')
+      ? cloneData(currentStateView.postMatchReview)
+      : null;
+  }
+  if (hasActiveTerminalEvents(incomingStateView && incomingStateView.recentEvents)) {
+    patch.recentEvents = currentStateView && Array.isArray(currentStateView.recentEvents)
+      ? cloneData(currentStateView.recentEvents)
+      : [];
+  }
+  return Object.keys(patch).length > 0
+    ? { ...incomingStateView, ...patch }
+    : incomingStateView;
 }
 
 function normalizePhaseFromView(stateView, fallback = 'active') {
@@ -270,10 +314,17 @@ export function createPvpLiveSession({
       && currentVersion !== null
       && incomingVersion !== null
       && incomingVersion < currentVersion;
+    const isSameVersion = isSameLiveMatch(incomingStateView)
+      && currentVersion !== null
+      && incomingVersion !== null
+      && incomingVersion === currentVersion;
     const movesMatchForward = getStateViewProgressRank(incomingStateView) > getStateViewProgressRank(state.stateView);
     const isStale = isLowerVersion && !movesMatchForward;
+    const nextStateView = !isStale && isSameVersion
+      ? sanitizeSameVersionActiveStateView(state.stateView, incomingStateView)
+      : incomingStateView;
     return {
-      stateView: isStale ? state.stateView : incomingStateView,
+      stateView: isStale ? state.stateView : nextStateView,
       accepted: !isStale
     };
   };
@@ -291,6 +342,21 @@ export function createPvpLiveSession({
         ? incomingStateView.recentEvents.slice(-8)
         : null;
     if (!candidate) return Array.isArray(state.lastEvents) ? state.lastEvents : [];
+    const currentVersion = getStateViewVersion(state.stateView);
+    const incomingVersion = getStateViewVersion(incomingStateView);
+    const currentStatus = String(state.stateView && state.stateView.status || '').trim();
+    const incomingStatus = String(incomingStateView && incomingStateView.status || '').trim();
+    if (
+      isSameLiveMatch(incomingStateView)
+      && currentVersion !== null
+      && incomingVersion !== null
+      && incomingVersion === currentVersion
+      && currentStatus === 'active'
+      && incomingStatus === 'active'
+      && hasActiveTerminalEvents(candidate)
+    ) {
+      return Array.isArray(state.lastEvents) ? state.lastEvents : [];
+    }
     const currentMax = getMaxEventSequence(state.lastEvents);
     const candidateMax = getMaxEventSequence(candidate);
     if (isSameLiveMatch(incomingStateView) && currentMax > 0 && candidate.length === 0) {

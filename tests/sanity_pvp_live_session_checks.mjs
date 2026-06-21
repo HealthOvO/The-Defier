@@ -139,6 +139,11 @@ const liveService = {
         status: 'active',
         stateVersion: 6,
         currentSeat: 'A',
+        turnTimer: {
+          startedAt: 1782022000000,
+          deadlineAt: 1782022060000,
+          durationMs: 60000
+        },
         connectionReport: {
           reportVersion: 'pvp-live-connection-v1',
           connectionHealth: 'opponent_grace',
@@ -147,6 +152,15 @@ const liveService = {
           heartbeatIntervalMs: 5000,
           graceMs: 30000
         },
+        connectionTempoReport: {
+          reportVersion: 'pvp-live-connection-tempo-v1',
+          tempoState: 'opponent_action_grace',
+          actionBoundary: 'opponent_turn',
+          canSubmitIntent: false,
+          shouldWaitForAuthority: true
+        },
+        recentEvents: [{ eventType: 'player_reconnected', sequence: 6 }],
+        postMatchReview: null,
         self: { seatId: 'A', hand: [] },
         opponent: { seatId: 'B', handCount: 3 }
       }
@@ -487,6 +501,11 @@ assert.equal(heartbeat.phase, 'active', 'heartbeat should keep active match phas
 assert.equal(heartbeat.stateView.connectionReport.reportVersion, 'pvp-live-connection-v1', 'heartbeat should store authoritative connection report');
 assert.equal(heartbeat.stateView.connectionReport.heartbeatIntervalMs, 5000, 'heartbeat should retain authoritative heartbeat interval for scene scheduling');
 assert.equal(heartbeat.stateView.connectionReport.opponent.status, 'grace', 'heartbeat should preserve opponent grace status for UI');
+assert.equal(heartbeat.stateView.turnTimer.startedAt, 1782022000000, 'heartbeat should preserve active reconnect grace turn timer start');
+assert.equal(heartbeat.stateView.turnTimer.deadlineAt, 1782022060000, 'heartbeat should preserve active reconnect grace turn deadline');
+assert.equal(heartbeat.stateView.connectionTempoReport.tempoState, 'opponent_action_grace', 'heartbeat should preserve active reconnect grace tempo state');
+assert.equal(heartbeat.stateView.postMatchReview, null, 'heartbeat should not surface terminal review during active reconnect grace');
+assert.ok(!heartbeat.stateView.recentEvents.some(event => ['connection_timeout', 'turn_timeout', 'match_finished'].includes(event.eventType)), 'heartbeat should not surface terminal events during active reconnect grace');
 assert.equal(calls.at(-1).method, 'heartbeat', 'heartbeat should call live service heartbeat');
 
 const submitted = await session.submitIntent({
@@ -1909,7 +1928,13 @@ const staleHttpSession = createPvpLiveSession({
         status: 'active',
         stateVersion: 9,
         currentSeat: 'B',
+        turnTimer: {
+          startedAt: 1781870000000,
+          deadlineAt: 1781870060000,
+          durationMs: 60000
+        },
         recentEvents: [{ eventType: 'fresh_http_anchor', sequence: 9 }],
+        postMatchReview: null,
         self: { seatId: 'A', hand: [] },
         opponent: { seatId: 'B', handCount: 2 }
       }
@@ -1937,8 +1962,18 @@ const staleHttpSession = createPvpLiveSession({
         status: 'active',
         stateVersion: 7,
         currentSeat: 'A',
-        recentEvents: [{ eventType: 'stale_http_heartbeat', sequence: 7 }],
+        turnTimer: {
+          startedAt: 1781869900000,
+          deadlineAt: 1781869960000,
+          durationMs: 60000
+        },
+        recentEvents: [{ eventType: 'connection_timeout', sequence: 7 }],
         connectionReport: { reportVersion: 'pvp-live-connection-v1', heartbeatIntervalMs: 1000 },
+        postMatchReview: {
+          reportVersion: 'pvp-live-post-match-review-v1',
+          finishReason: 'connection_timeout',
+          result: 'loss'
+        },
         self: { seatId: 'A', hand: [{ instanceId: 'old-heartbeat-card' }] },
         opponent: { seatId: 'B', handCount: 3 }
       }
@@ -1966,6 +2001,9 @@ assert.equal(staleHttpSession.getState().stateView.stateVersion, 9, 'stale HTTP 
 assert.equal(staleHttpSession.getState().lastEvents[0].eventType, 'fresh_http_anchor', 'stale HTTP refresh should not downgrade public events');
 await staleHttpSession.heartbeat();
 assert.equal(staleHttpSession.getState().stateView.stateVersion, 9, 'stale HTTP heartbeat should not downgrade authoritative stateVersion');
+assert.equal(staleHttpSession.getState().stateView.turnTimer.deadlineAt, 1781870060000, 'stale HTTP heartbeat should not downgrade active reconnect grace deadline');
+assert.equal(staleHttpSession.getState().stateView.postMatchReview, null, 'stale HTTP heartbeat should not surface stale terminal review');
+assert.ok(!staleHttpSession.getState().stateView.recentEvents.some(event => event.eventType === 'connection_timeout'), 'stale HTTP heartbeat should not surface stale terminal reconnect events');
 await staleHttpSession.submitIntent({
   intentId: 'stale-http-intent',
   intentType: 'end_turn',
@@ -1974,6 +2012,184 @@ await staleHttpSession.submitIntent({
 });
 assert.equal(staleHttpSession.getState().stateView.stateVersion, 9, 'stale HTTP intent result should not downgrade authoritative stateVersion');
 assert.equal(staleHttpSession.getState().lastEvents[0].eventType, 'fresh_http_anchor', 'stale HTTP intent result should not downgrade public events');
+
+const sameVersionRecoverySession = createPvpLiveSession({
+  liveService: {
+    joinQueue: async () => ({
+      success: true,
+      status: 'matched',
+      matchId: 'pvplm-same-version-recovery',
+      seatId: 'A',
+      stateView: {
+        matchId: 'pvplm-same-version-recovery',
+        status: 'active',
+        stateVersion: 11,
+        currentSeat: 'A',
+        turnTimer: {
+          startedAt: 1782023000000,
+          deadlineAt: 1782023060000,
+          durationMs: 60000
+        },
+        recentEvents: [{ eventType: 'active_recovery_anchor', sequence: 11 }],
+        connectionReport: {
+          reportVersion: 'pvp-live-connection-v1',
+          connectionHealth: 'viewer_grace',
+          viewer: { seatId: 'A', status: 'grace', remainingGraceMs: 9000 },
+          opponent: { seatId: 'B', status: 'online' },
+          heartbeatIntervalMs: 5000,
+          graceMs: 30000
+        },
+        postMatchReview: null,
+        self: { seatId: 'A', hand: [] },
+        opponent: { seatId: 'B', handCount: 2 }
+      }
+    }),
+    getMatch: async (matchId) => ({
+      success: true,
+      matchId,
+      seatId: 'A',
+      stateView: {
+        matchId,
+        status: 'active',
+        stateVersion: 11,
+        currentSeat: 'A',
+        turnTimer: {
+          startedAt: 1782023000000,
+          deadlineAt: 1782023060000,
+          durationMs: 60000
+        },
+        recentEvents: [{ eventType: 'active_recovery_anchor', sequence: 11 }],
+        connectionReport: {
+          reportVersion: 'pvp-live-connection-v1',
+          connectionHealth: 'viewer_grace',
+          viewer: { seatId: 'A', status: 'grace', remainingGraceMs: 9000 },
+          opponent: { seatId: 'B', status: 'online' },
+          heartbeatIntervalMs: 5000,
+          graceMs: 30000
+        },
+        postMatchReview: null,
+        self: { seatId: 'A', hand: [] },
+        opponent: { seatId: 'B', handCount: 2 }
+      }
+    }),
+    heartbeat: async (matchId) => ({
+      success: true,
+      matchId,
+      seatId: 'A',
+      stateView: {
+        matchId,
+        status: 'active',
+        stateVersion: 11,
+        currentSeat: 'A',
+        turnTimer: {
+          startedAt: 1782022900000,
+          deadlineAt: 1782022960000,
+          durationMs: 60000
+        },
+        recentEvents: [{ eventType: 'connection_timeout', sequence: 12 }],
+        connectionReport: {
+          reportVersion: 'pvp-live-connection-v1',
+          connectionHealth: 'healthy',
+          viewer: { seatId: 'A', status: 'online' },
+          opponent: { seatId: 'B', status: 'online' },
+          heartbeatIntervalMs: 5000,
+          graceMs: 30000
+        },
+        postMatchReview: {
+          reportVersion: 'pvp-live-post-match-review-v1',
+          finishReason: 'connection_timeout',
+          result: 'loss'
+        },
+        self: { seatId: 'A', hand: [] },
+        opponent: { seatId: 'B', handCount: 2 }
+      }
+    })
+  },
+  now: () => 1782023000000
+});
+await sameVersionRecoverySession.joinQueue({ displayName: '同版本恢复守卫' });
+await sameVersionRecoverySession.refreshMatch();
+const sameVersionHeartbeat = await sameVersionRecoverySession.heartbeat();
+assert.equal(sameVersionHeartbeat.phase, 'active', 'same-version reconnect heartbeat should keep active phase');
+assert.equal(sameVersionHeartbeat.stateView.connectionReport.viewer.status, 'online', 'same-version reconnect heartbeat should still accept recovered online presence');
+assert.equal(sameVersionHeartbeat.stateView.turnTimer.deadlineAt, 1782023060000, 'same-version reconnect heartbeat should not regress active turn deadline');
+assert.equal(sameVersionHeartbeat.stateView.postMatchReview, null, 'same-version reconnect heartbeat should not surface stale terminal review');
+assert.equal(sameVersionHeartbeat.lastEvents[0].eventType, 'active_recovery_anchor', 'same-version reconnect heartbeat should not replace active public events with stale terminal events');
+assert.ok(!sameVersionHeartbeat.stateView.recentEvents.some(event => ['connection_timeout', 'turn_timeout', 'match_finished'].includes(event.eventType)), 'same-version reconnect heartbeat should not surface stale terminal reconnect events');
+
+const sameVersionTerminalStorage = createMemoryStorage();
+const sameVersionTerminalSession = createPvpLiveSession({
+  storage: sameVersionTerminalStorage,
+  liveService: {
+    joinQueue: async () => ({
+      success: true,
+      status: 'matched',
+      matchId: 'pvplm-same-version-terminal',
+      seatId: 'A',
+      stateView: {
+        matchId: 'pvplm-same-version-terminal',
+        status: 'active',
+        stateVersion: 15,
+        currentSeat: 'A',
+        turnTimer: {
+          startedAt: 1782023100000,
+          deadlineAt: 1782023160000,
+          durationMs: 60000
+        },
+        recentEvents: [{ eventType: 'active_terminal_anchor', sequence: 15 }],
+        self: { seatId: 'A', hand: [] },
+        opponent: { seatId: 'B', handCount: 2 }
+      }
+    }),
+    getMatch: async (matchId) => ({
+      success: true,
+      matchId,
+      seatId: 'A',
+      stateView: {
+        matchId,
+        status: 'active',
+        stateVersion: 15,
+        currentSeat: 'A',
+        turnTimer: {
+          startedAt: 1782023100000,
+          deadlineAt: 1782023160000,
+          durationMs: 60000
+        },
+        recentEvents: [{ eventType: 'active_terminal_anchor', sequence: 15 }],
+        self: { seatId: 'A', hand: [] },
+        opponent: { seatId: 'B', handCount: 2 }
+      }
+    }),
+    heartbeat: async (matchId) => ({
+      success: true,
+      matchId,
+      seatId: 'A',
+      stateView: {
+        matchId,
+        status: 'finished',
+        stateVersion: 15,
+        currentSeat: 'A',
+        recentEvents: [{ eventType: 'match_finished', sequence: 16 }],
+        postMatchReview: {
+          reportVersion: 'pvp-live-post-match-review-v1',
+          matchId,
+          finishReason: 'lethal',
+          result: 'win'
+        },
+        self: { seatId: 'A', hand: [] },
+        opponent: { seatId: 'B', handCount: 0 }
+      }
+    })
+  },
+  now: () => 1782023100000
+});
+await sameVersionTerminalSession.joinQueue({ displayName: '同版本终局守卫' });
+await sameVersionTerminalSession.refreshMatch();
+const sameVersionTerminal = await sameVersionTerminalSession.heartbeat();
+assert.equal(sameVersionTerminal.phase, 'finished', 'same-version authoritative terminal heartbeat should still enter finished phase');
+assert.equal(sameVersionTerminal.stateView.postMatchReview.finishReason, 'lethal', 'same-version authoritative terminal heartbeat should retain post-match review');
+assert.equal(sameVersionTerminal.lastEvents[0].eventType, 'match_finished', 'same-version authoritative terminal heartbeat should retain terminal public events');
+assert.ok(sameVersionTerminalStorage.values().includes('pvplm-same-version-terminal'), 'same-version authoritative terminal heartbeat should persist terminal recovery anchor');
 
 const recoveryStorage = createMemoryStorage();
 const recoverySession = createPvpLiveSession({
