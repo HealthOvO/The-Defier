@@ -534,6 +534,10 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
         });
         assert.equal(laterSeedConsent.payload.status, 'waiting', 'first later wide consent should only update consent and preserve waiting');
         assert.equal(laterSeedConsent.payload.loadoutHash, laterConsentSeed.payload.loadoutHash, 'first later wide consent should not overwrite the locked waiting loadout');
+        assert.equal(laterSeedConsent.payload.waitingReport?.wideMatchConsent?.viewerAccepted, true, 'wide consent waiting report should remember the viewer acceptance');
+        assert.equal(laterSeedConsent.payload.waitingReport?.wideMatchConsent?.requiresBothPlayers, true, 'wide consent waiting report should expose two-sided consent requirement');
+        assert.equal(laterSeedConsent.payload.waitingReport?.wideMatchConsent?.matchReady, false, 'one-sided wide consent should remain visibly not ready to match');
+        assert.equal(laterSeedConsent.payload.waitingReport?.wideMatchConsent?.status, 'waiting_for_peer', 'one-sided wide consent should explain that it is waiting for the peer acceptance');
         const laterRequesterConsent = await request(baseUrl, '/api/pvp/live/queue/join', {
             method: 'POST',
             token: tokenK,

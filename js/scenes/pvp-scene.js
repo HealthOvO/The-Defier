@@ -1764,6 +1764,20 @@ export const PVPScene = {
     const report = state && state.waitingReport && typeof state.waitingReport === 'object' ? state.waitingReport : null;
     if (!report) return null;
     const actions = Array.isArray(report.actions) ? report.actions : [];
+    const wideMatchConsentSource = report.wideMatchConsent && typeof report.wideMatchConsent === 'object'
+      ? report.wideMatchConsent
+      : null;
+    const wideMatchConsent = wideMatchConsentSource ? {
+      reportVersion: String(wideMatchConsentSource.reportVersion || 'pvp-live-wide-match-consent-v1'),
+      viewerAccepted: wideMatchConsentSource.viewerAccepted === true,
+      requiresBothPlayers: wideMatchConsentSource.requiresBothPlayers !== false,
+      requiredAcceptedPlayers: Math.max(2, Math.floor(Number(wideMatchConsentSource.requiredAcceptedPlayers) || 2)),
+      acceptedPlayerCount: Math.max(0, Math.floor(Number(wideMatchConsentSource.acceptedPlayerCount) || 0)),
+      candidatePoolSize: Math.max(1, Math.floor(Number(wideMatchConsentSource.candidatePoolSize) || 1)),
+      matchReady: wideMatchConsentSource.matchReady === true,
+      status: String(wideMatchConsentSource.status || ''),
+      detail: String(wideMatchConsentSource.detail || '')
+    } : null;
     return {
       reportVersion: String(report.reportVersion || 'pvp-live-waiting-report-v1'),
       waitMs: Math.max(0, Math.floor(Number(report.waitMs) || 0)),
@@ -1780,6 +1794,7 @@ export const PVPScene = {
         : [],
       message: String(report.message || ''),
       safeguards: Array.isArray(report.safeguards) ? report.safeguards.map(item => String(item || '')).filter(Boolean).slice(0, 8) : [],
+      wideMatchConsent,
       actions: actions.slice(0, 4).map(action => ({
         id: String(action && action.id || ''),
         label: String(action && action.label || ''),
@@ -1910,6 +1925,18 @@ export const PVPScene = {
     if (!report || (!report.longWait && !qualitySafeguard)) return '';
     const waitSec = Math.ceil(report.waitMs / 1000);
     const thresholdSec = Math.max(1, Math.ceil(report.longWaitThresholdMs / 1000));
+    const wideConsent = report.wideMatchConsent;
+    const renderWaitingAction = (action) => {
+      if (action.id !== 'accept_wide_match') {
+        return `<span class="pvp-live-waiting-action" title="${this.escapeHtml(action.detail)}">${this.escapeHtml(action.label)}：${this.escapeHtml(action.detail)}</span>`;
+      }
+      if (wideConsent && wideConsent.viewerAccepted) {
+        const status = wideConsent.status || 'waiting_for_peer';
+        const detail = wideConsent.detail || action.detail;
+        return `<span class="pvp-live-waiting-action is-accepted" data-live-waiting-action="accept-wide-match" data-live-wide-match-consent-status="${this.escapeHtml(status)}" title="${this.escapeHtml(detail)}">已确认宽分差：等待对方确认</span>`;
+      }
+      return `<button class="pvp-live-waiting-action challenge-btn secondary" type="button" data-live-waiting-action="accept-wide-match" data-live-wide-match-consent-status="${this.escapeHtml(wideConsent && wideConsent.status || 'waiting_for_viewer')}" title="${this.escapeHtml(action.detail)}" onclick="PVPScene.acceptLiveWideMatch()">${this.escapeHtml(action.label)}</button>`;
+    };
     return `
       <div class="pvp-live-waiting-head">
         <span>${this.escapeHtml(report.longWait ? `${thresholdSec} 秒无真人` : qualitySafeguard.title)}</span>
@@ -1917,9 +1944,7 @@ export const PVPScene = {
       </div>
       <div>${this.escapeHtml(report.message || '当前真人较少，可继续等待、进入问道练习或取消匹配；不会自动切残影。')}</div>
       <div class="pvp-live-waiting-actions">
-        ${report.actions.map(action => action.id === 'accept_wide_match'
-          ? `<button class="pvp-live-waiting-action challenge-btn secondary" type="button" data-live-waiting-action="accept-wide-match" title="${this.escapeHtml(action.detail)}" onclick="PVPScene.acceptLiveWideMatch()">${this.escapeHtml(action.label)}</button>`
-          : `<span class="pvp-live-waiting-action" title="${this.escapeHtml(action.detail)}">${this.escapeHtml(action.label)}：${this.escapeHtml(action.detail)}</span>`).join('')}
+        ${report.actions.map(action => renderWaitingAction(action)).join('')}
       </div>
     `;
   },

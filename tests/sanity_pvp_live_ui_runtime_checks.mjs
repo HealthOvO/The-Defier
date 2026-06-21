@@ -821,6 +821,46 @@ assert.match(
   /data-live-waiting-action="accept-wide-match"/,
   'recent-opponent waiting report should preserve explicit wide-match consent action',
 );
+const acceptedWideWaitingState = {
+  ...recentOpponentWaitingState,
+  queueTicket: 'pvplq-ui-wide-consent',
+  waitingReport: {
+    ...recentOpponentWaitingState.waitingReport,
+    wideMatchConsent: {
+      reportVersion: 'pvp-live-wide-match-consent-v1',
+      viewerAccepted: true,
+      requiresBothPlayers: true,
+      requiredAcceptedPlayers: 2,
+      acceptedPlayerCount: 1,
+      candidatePoolSize: 2,
+      matchReady: false,
+      status: 'waiting_for_peer',
+      detail: '你已确认接受宽分差，仍需对方也确认才会放行 200-399 分差真人局。'
+    }
+  }
+};
+const acceptedWideReport = PVPScene.getLiveWaitingReport(acceptedWideWaitingState);
+assert.equal(
+  acceptedWideReport?.wideMatchConsent?.viewerAccepted,
+  true,
+  'live UI waiting report should preserve viewer wide-match consent state',
+);
+const acceptedWideMarkup = PVPScene.renderLiveWaitingReport(acceptedWideWaitingState);
+assert.match(
+  acceptedWideMarkup,
+  /data-live-wide-match-consent-status="waiting_for_peer"/,
+  'accepted wide-match waiting report should expose a stable consent status in the DOM',
+);
+assert.match(
+  acceptedWideMarkup,
+  /已确认宽分差/,
+  'accepted wide-match waiting report should render confirmation instead of another generic CTA',
+);
+assert.doesNotMatch(
+  acceptedWideMarkup,
+  /onclick="PVPScene\.acceptLiveWideMatch\(\)"/,
+  'accepted wide-match waiting report should not keep a repeated accept button',
+);
 const recentOpponentButtons = new Map([
   ['join-queue', { disabled: true, textContent: '入队', querySelector() { return null; } }],
   ['practice-live', { disabled: true, textContent: '问道练习', querySelector() { return null; } }],

@@ -146,6 +146,28 @@ function normalizeWideMatchConsent(value) {
     return value === true || value === 'true' || value === 1 || value === '1';
 }
 
+function makeWideMatchConsentReport({ viewerAccepted = false, acceptedPlayerCount = 0, candidatePoolSize = 1, matchReady = false } = {}) {
+    const safeAcceptedPlayerCount = Math.max(0, Math.floor(Number(acceptedPlayerCount) || 0));
+    const safeCandidatePoolSize = Math.max(1, Math.floor(Number(candidatePoolSize) || 1));
+    const accepted = viewerAccepted === true;
+    const ready = accepted && matchReady === true;
+    return {
+        reportVersion: 'pvp-live-wide-match-consent-v1',
+        viewerAccepted: accepted,
+        requiresBothPlayers: true,
+        requiredAcceptedPlayers: 2,
+        acceptedPlayerCount: Math.min(safeCandidatePoolSize, safeAcceptedPlayerCount),
+        candidatePoolSize: safeCandidatePoolSize,
+        matchReady: ready,
+        status: ready ? 'ready' : accepted ? 'waiting_for_peer' : 'waiting_for_viewer',
+        detail: ready
+            ? '双方已确认宽分差，正在等待服务端撮合。'
+            : accepted
+                ? '你已确认接受宽分差，仍需对方也确认才会放行 200-399 分差真人局。'
+                : '仅在双方都确认后，才允许 200-399 分差真人局。'
+    };
+}
+
 function normalizeLivePvpTestMatchScope(value) {
     const normalized = String(value || '')
         .trim()
@@ -509,7 +531,7 @@ function makeInviteReport({ inviteCode, status = 'waiting', host = null, target 
     };
 }
 
-function makeWaitingReport({ waitMs = 0, thresholdMs = DEFAULT_LONG_WAIT_THRESHOLD_MS, safeguards = [], createdAt = 0, now = Date.now(), candidatePoolSize = 1 } = {}) {
+function makeWaitingReport({ waitMs = 0, thresholdMs = DEFAULT_LONG_WAIT_THRESHOLD_MS, safeguards = [], createdAt = 0, now = Date.now(), candidatePoolSize = 1, wideMatchConsent = null } = {}) {
     const safeWaitMs = Math.max(0, Math.floor(Number(waitMs) || 0));
     const safeThresholdMs = Math.max(1000, Math.floor(Number(thresholdMs) || DEFAULT_LONG_WAIT_THRESHOLD_MS));
     const safeNow = Math.max(0, Math.floor(Number(now) || Date.now()));
@@ -567,6 +589,12 @@ function makeWaitingReport({ waitMs = 0, thresholdMs = DEFAULT_LONG_WAIT_THRESHO
         requiresPoolSize,
         candidatePoolSize: safeCandidatePoolSize,
         currentEligibleActions: actions.map(action => action.id),
+        wideMatchConsent: wideMatchConsent && typeof wideMatchConsent === 'object'
+            ? makeWideMatchConsentReport({
+                ...wideMatchConsent,
+                candidatePoolSize: safeCandidatePoolSize
+            })
+            : null,
         message: hasRecentOpponentSuppression
             ? '刚刚交手的近期对手会被暂时跳过，正在为你换一位真人；不会自动切残影。'
             : hasLowSampleProtection
@@ -1755,9 +1783,25 @@ class LivePvpStore {
         return this.makeWaitingQueueResult(queueEntry);
     }
 
+    makeWideMatchConsentWaitingInput(queueEntry, candidatePoolSize = 1) {
+        const activeQueueEntries = this.waitingQueue.filter(entry =>
+            entry && entry.player && entry.queueTicket && !this.consumedQueueTickets.has(entry.queueTicket)
+        );
+        return {
+            viewerAccepted: queueEntry && queueEntry.wideMatchConsent === true,
+            acceptedPlayerCount: activeQueueEntries.filter(entry => entry && entry.wideMatchConsent === true).length,
+            candidatePoolSize,
+            matchReady: false
+        };
+    }
+
     makeWaitingQueueResult(queueEntry) {
         const createdAt = Math.floor(Number(queueEntry && queueEntry.createdAt) || this.now());
         const waitMs = Math.max(0, this.now() - createdAt);
+        const candidatePoolSize = Math.max(
+            1,
+            this.waitingQueue.filter(entry => entry && entry.player && !this.consumedQueueTickets.has(entry.queueTicket)).length
+        );
         return {
             status: 'waiting',
             queueTicket: queueEntry.queueTicket,
@@ -1769,7 +1813,8 @@ class LivePvpStore {
                 safeguards: queueEntry.matchmakingSuppressionReasons || [],
                 createdAt,
                 now: this.now(),
-                candidatePoolSize: this.waitingQueue.length
+                candidatePoolSize,
+                wideMatchConsent: this.makeWideMatchConsentWaitingInput(queueEntry, candidatePoolSize)
             })
         };
     }
@@ -1842,7 +1887,8 @@ class LivePvpStore {
                 safeguards: queueEntry.matchmakingSuppressionReasons || [],
                 createdAt: Math.floor(Number(queueEntry.createdAt) || this.now()),
                 now: this.now(),
-                candidatePoolSize
+                candidatePoolSize,
+                wideMatchConsent: this.makeWideMatchConsentWaitingInput(queueEntry, candidatePoolSize)
             })
         };
     }

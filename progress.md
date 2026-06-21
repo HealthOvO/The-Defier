@@ -1,5 +1,28 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-21: V10-S27 live PVP wide-match consent visibility
+  - 本轮完成
+    - `server/pvp-live/live-store.js` 为 `waitingReport` 新增 `wideMatchConsent` 合同：公开 `viewerAccepted / requiresBothPlayers / requiredAcceptedPlayers / acceptedPlayerCount / candidatePoolSize / matchReady / status / detail`，让玩家能看到“我已确认宽分差、仍需对方也确认、等待态还没满足成局”。
+    - `makeWaitingQueueResult()` 与 `getQueueStatus()` 都投影同一份宽分差同意状态；这只读现有 waiting ticket 和候选池，不改变 `selectQueueOpponent()` 的正式匹配选择、评分分桶、长等待策略或双方显式同意成局规则。
+    - `js/scenes/pvp-scene.js` 保留 `wideMatchConsent` 到 live waiting snapshot，并在 `viewerAccepted=true` 后把 `accept_wide_match` 从可重复点击按钮切成“已确认宽分差：等待对方确认”的稳定状态，DOM 同步写入 `data-live-wide-match-consent-status`。
+    - `tests/sanity_pvp_live_route_checks.cjs` 在已有 later-consent 流程中补服务端合同断言：首个等待者后来确认宽分差后仍为 waiting，但 `waitingReport.wideMatchConsent.viewerAccepted === true`、`requiresBothPlayers === true`、`matchReady === false`、`status === 'waiting_for_peer'`。
+    - `tests/sanity_pvp_live_ui_runtime_checks.mjs` 补前端合同断言：UI 必须保留 viewer consent 状态，已确认后渲染稳定 DOM 状态和确认文案，且不再保留重复 `acceptLiveWideMatch()` 点击按钮。
+  - 已验证
+    - 红测：`node tests/sanity_pvp_live_route_checks.cjs` 在实现前失败于 `wide consent waiting report should remember the viewer acceptance`，实际为 undefined。
+    - 绿测：`node tests/sanity_pvp_live_route_checks.cjs`
+    - 红测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs` 在前端实现前失败于 `live UI waiting report should preserve viewer wide-match consent state`，实际为 undefined。
+    - 绿测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs`
+    - 语法：`node --check server/pvp-live/live-store.js`
+    - 语法：`node --check js/scenes/pvp-scene.js`
+    - 语法：`node --check tests/sanity_pvp_live_route_checks.cjs`
+    - 语法：`node --check tests/sanity_pvp_live_ui_runtime_checks.mjs`
+    - 全量 Node 门禁：`npm run test:node`，All node checks passed。
+    - 文档同步：`node tests/sanity_intro_progress_sync_checks.cjs`
+    - 构建：`npm run build:pages`
+    - 浏览器审计：`node tests/browser_pvp_live_audit.mjs http://127.0.0.1:4173 output/pvp-live-wide-consent-visibility-audit`，102/102 findings、0 failed、0 console error。
+  - 当前结论
+    - live PVP 的宽分差放行不再只是后端黑箱规则：玩家确认后能看到系统已经记住该选择，也能看到当前仍在等对方确认，不会误以为按钮没生效或队列卡住。这提升了真人排队阶段的信任感和掌控感，同时不改变正式排位胜负、奖励、评分结算或实际宽分差成局门槛。
+
 - 2026-06-21: V10-S26 live PVP friendly ready timeout no-ranked guard
   - 本轮完成
     - `server/pvp-live/live-store.js` 将 setup `ready_timeout` 的短冷却语义继续收口到 ranked/public queue：`recordReadyTimeoutCooldowns()` 现在遇到 `friendly` / no-ranked match 会直接早退，不再把好友约战或友谊再战里的未准备超时误写成正式排位排队冷却。
