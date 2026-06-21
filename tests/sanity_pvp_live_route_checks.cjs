@@ -244,6 +244,13 @@ function forceSeatDisconnected(match, seatId) {
     return elapsedMs;
 }
 
+function forceSeatIntoReconnectGrace(match, seatId) {
+    const store = pvpLiveRoutes.__livePvpStore;
+    const elapsedMs = store.heartbeatStaleMs + 1000;
+    match.connection.seats[seatId].lastHeartbeatAt = Date.now() - elapsedMs;
+    return elapsedMs;
+}
+
 function forceActiveTurnStartedAt(match, startedAt) {
     const store = pvpLiveRoutes.__livePvpStore;
     const safeStartedAt = Math.max(0, Math.floor(Number(startedAt) || Date.now()));
@@ -2036,6 +2043,59 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
         assert.ok(nonBlockingTimeoutRead.payload.stateView.recentEvents.some(event => event.eventType === 'turn_timeout' && eventPublicData(event).seatId === nonCurrentSeat && eventPublicData(event).finishReason === 'connection_timeout'), 'handoff connection timeout should emit public turn_timeout for the disconnected action owner');
         assert.ok(nonBlockingTimeoutRead.payload.stateView.recentEvents.some(event => event.eventType === 'match_finished' && eventPublicData(event).winnerSeat === currentSeat && eventPublicData(event).finishReason === 'connection_timeout'), 'handoff connection timeout should award the previous active seat only after authority passes');
         assert.equal(nonBlockingTimeoutRead.payload.stateView.postMatchReview?.finishReason, 'connection_timeout', 'handoff connection timeout review should expose connection timeout reason');
+
+        pvpLiveRoutes.__livePvpStore.reset();
+        const joinActiveReconnectA = await request(baseUrl, '/api/pvp/live/queue/join', {
+            method: 'POST',
+            token: tokenA,
+            body: { displayName: '甲' }
+        });
+        const joinActiveReconnectB = await request(baseUrl, '/api/pvp/live/queue/join', {
+            method: 'POST',
+            token: tokenB,
+            body: { displayName: '乙' }
+        });
+        const activeReconnect = await readyBoth(baseUrl, {
+            matchId: joinActiveReconnectB.payload.matchId,
+            tokenA,
+            tokenB,
+            stateVersionA: joinActiveReconnectB.payload.stateView.stateVersion,
+            prefix: 'route-active-reconnect-grace'
+        });
+        const activeReconnectMatch = pvpLiveRoutes.__livePvpStore.matches.get(joinActiveReconnectB.payload.matchId);
+        const reconnectSeat = activeReconnect.payload.stateView.currentSeat;
+        const reconnectToken = reconnectSeat === 'A' ? tokenA : tokenB;
+        const observingToken = reconnectSeat === 'A' ? tokenB : tokenA;
+        const reconnectStartedAt = activeReconnect.payload.stateView.turnTimer.startedAt;
+        const reconnectDeadlineAt = activeReconnect.payload.stateView.turnTimer.deadlineAt;
+        forceSeatIntoReconnectGrace(activeReconnectMatch, reconnectSeat);
+        const activeGraceObserverRead = await request(baseUrl, `/api/pvp/live/matches/${joinActiveReconnectB.payload.matchId}`, {
+            token: observingToken
+        });
+        assert.equal(activeGraceObserverRead.status, 200, 'opponent should read active match while current actor is still in reconnect grace');
+        assert.equal(activeGraceObserverRead.payload.stateView.status, 'active', 'current actor reconnect grace should not finish the match before grace expires');
+        assert.equal(activeGraceObserverRead.payload.stateView.currentSeat, reconnectSeat, 'current actor reconnect grace should preserve the action owner');
+        assert.equal(activeGraceObserverRead.payload.stateView.connectionReport.opponent.status, 'grace', 'observer should see the current actor in reconnect grace');
+        assertConnectionTempoReport(activeGraceObserverRead.payload.stateView.connectionTempoReport, 'opponent_action_grace', 'active current actor reconnect grace state');
+        assert.equal(activeGraceObserverRead.payload.stateView.turnTimer.startedAt, reconnectStartedAt, 'current actor reconnect grace should not reset turn timer start');
+        assert.equal(activeGraceObserverRead.payload.stateView.turnTimer.deadlineAt, reconnectDeadlineAt, 'current actor reconnect grace should not extend turn timer deadline');
+        const activeReconnectHeartbeat = await heartbeat(baseUrl, reconnectToken, joinActiveReconnectB.payload.matchId);
+        assert.equal(activeReconnectHeartbeat.status, 200, 'current actor should be able to heartbeat back before reconnect grace expires');
+        assert.equal(activeReconnectHeartbeat.payload.stateView.status, 'active', 'current actor heartbeat inside reconnect grace should keep match active');
+        assert.equal(activeReconnectHeartbeat.payload.stateView.currentSeat, reconnectSeat, 'current actor heartbeat inside reconnect grace should preserve action owner');
+        assert.equal(activeReconnectHeartbeat.payload.stateView.connectionReport.viewer.status, 'online', 'heartbeat sender should become online after reconnect');
+        assert.equal(activeReconnectHeartbeat.payload.stateView.turnTimer.startedAt, reconnectStartedAt, 'current actor heartbeat should keep original turn timer start');
+        assert.equal(activeReconnectHeartbeat.payload.stateView.turnTimer.deadlineAt, reconnectDeadlineAt, 'current actor heartbeat should not extend original turn deadline');
+        assert.equal(activeReconnectHeartbeat.payload.stateView.postMatchReview, null, 'current actor heartbeat inside reconnect grace should not create a terminal review');
+        assert.equal(activeReconnectHeartbeat.payload.stateView.recentEvents.some(event => ['turn_timeout', 'connection_timeout', 'match_finished'].includes(event.eventType)), false, 'current actor heartbeat inside reconnect grace should not emit terminal timeout events');
+        const activeReconnectObserverRead = await request(baseUrl, `/api/pvp/live/matches/${joinActiveReconnectB.payload.matchId}`, {
+            token: observingToken
+        });
+        assert.equal(activeReconnectObserverRead.status, 200, 'opponent should read active match after current actor reconnects');
+        assert.equal(activeReconnectObserverRead.payload.stateView.status, 'active', 'opponent should still see active match after current actor reconnects');
+        assert.equal(activeReconnectObserverRead.payload.stateView.connectionReport.opponent.status, 'online', 'opponent should see the current actor back online after heartbeat');
+        assert.equal(activeReconnectObserverRead.payload.stateView.turnTimer.deadlineAt, reconnectDeadlineAt, 'opponent view should preserve the original turn deadline after reconnect');
+        assert.equal(activeReconnectObserverRead.payload.stateView.recentEvents.some(event => ['turn_timeout', 'connection_timeout', 'match_finished'].includes(event.eventType)), false, 'opponent view after reconnect should not contain terminal timeout events');
 
         pvpLiveRoutes.__livePvpStore.reset();
         const joinDoubleDisconnectA = await request(baseUrl, '/api/pvp/live/queue/join', {

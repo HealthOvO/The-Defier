@@ -1,5 +1,20 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-21: V10-S33 live PVP active reconnect grace route contract
+  - 本轮完成
+    - `tests/sanity_pvp_live_route_checks.cjs` 新增当前行动方短暂断线恢复合同：真人 active match 中，当前行动方进入 reconnect grace 后，对手视角必须仍为 `active`，`currentSeat` 不变，`connectionTempoReport.tempoState='opponent_action_grace'`，不会提前发出终局。
+    - 当前行动方在 reconnect grace 内提交 `heartbeat` 后，服务端必须恢复其 `connectionReport.viewer.status='online'`，并保持原 `turnTimer.startedAt / deadlineAt` 不变，防止弱网恢复被偷偷延长或重置行动窗口。
+    - 心跳恢复后双方视角都必须没有 `turn_timeout`、`connection_timeout`、`match_finished` 终局事件，也不生成 `postMatchReview`，确保短暂弱网恢复不会被误判成败局。
+    - `tests/sanity_release_gate_coverage_checks.cjs` 增加该 route 合同的 marker，确保全量 Node 门禁会继续钉住“宽限内恢复不判负、不重置倒计时”的双方体验语义。
+  - 已验证
+    - 定向合同：`node tests/sanity_pvp_live_route_checks.cjs`，通过；当前实现已满足该语义，本轮补的是缺失防回归覆盖，没有修改生产服务端逻辑。
+    - 绿测：`node tests/sanity_release_gate_coverage_checks.cjs`
+    - 文档同步：`node tests/sanity_intro_progress_sync_checks.cjs`
+    - 全量 Node 门禁：`npm run test:node`，All node checks passed。
+    - 构建：`npm run build:pages`
+  - 当前结论
+    - live PVP 的弱网公平合同更完整：当前行动方短暂断线只进入重连宽限，宽限内回心跳会继续原行动窗口，不会延长倒计时，也不会让对手获得提前胜利。该切片只增加服务端 route 回归覆盖和 release gate，不改变匹配、心跳实现、战斗数值、正式结算、奖励或 UI。
+
 - 2026-06-21: V10-S32 live PVP player-facing protocol label cleanup
   - 本轮完成
     - `js/scenes/pvp-scene.js` 新增 live PVP 展示层 formatter：`formatLiveFinishReasonLabel()`、`formatLiveEventTypeLabel()`、`formatLivePolicyLabel()`，把 `connection_timeout`、`turn_timeout`、`ready_timeout`、`ranked_authoritative`、`swap_sides` 等内部协议码转成玩家可读中文。
