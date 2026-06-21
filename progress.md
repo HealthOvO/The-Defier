@@ -1,5 +1,37 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-21: V10-S22 ranked live PVP opponent reveal hardening
+  - 本轮完成
+    - `server/pvp-live/engine/state-view.js` 将 `ranked` 对手席位从旧 `projectPublicSeat()` 拆为独立 ranked opponent 投影：保留 hp / energy / block / ready / handCount / deckCount / discardCount / publicStatuses 等公开战斗信息，移除对手 `userId / displayName / loadoutHash / loadoutSummary / loadoutSnapshot / hand / deck`。
+    - ranked 对手新增 `pvp-live-ranked-opponent-profile-v1` 粗粒度公开画像，只表达“流派待观察 / 公开战况观察中”、匹配桶和揭示边界，不携带身份槽、构筑标签、hash、完整牌表或账号标识；`friendly` 私人约战继续保留更高可见性，避免破坏好友房恢复与席位映射。
+    - `server/pvp-live/engine/state.js` 的 `snapshot_locked` 原始事件不再保存双方 `publicLoadoutSummary`，只记录规则版本、锁定策略和座位数，降低 replay / audit / 调试链路误用 raw event 时的构筑泄露风险。
+    - `js/scenes/pvp-scene.js` 将 ranked 对手 UI 从“公开谱”改为“公开画像：流派待观察 · 构筑隐藏”；`getLiveSnapshot()` 在 ranked 下即便上游误传 opponent loadout 字段，也不再序列化 `opponent.loadout`，只导出脱敏 `publicProfile`。
+    - route / persistence / cross-process / session / browser / release coverage 测试里的旧“用对手名字/hash 证明匹配正确”改为票据、DB claim、matchQuality 和自身席位侧证，避免测试继续把排位开局对手构筑揭示当作正常行为。
+  - 已验证
+    - 红测：`node tests/sanity_pvp_live_engine_checks.cjs` 在实现前失败于 ranked opponent 仍暴露 raw `userId`。
+    - 红测：`node tests/sanity_pvp_live_route_checks.cjs` 在实现前失败于 matched ranked opponent 缺少粗粒度 `publicProfile`。
+    - 红测：`node tests/sanity_pvp_live_persistence_checks.cjs` 在实现前失败于重启恢复后 ranked opponent 缺少粗粒度 `publicProfile`。
+    - 绿测：`node tests/sanity_pvp_live_engine_checks.cjs`
+    - 绿测：`node tests/sanity_pvp_live_route_checks.cjs`
+    - 绿测：`node tests/sanity_pvp_live_persistence_checks.cjs`
+    - 绿测：`node tests/sanity_pvp_live_session_checks.mjs`
+    - 绿测：`node tests/sanity_pvp_live_cross_process_queue_checks.cjs`
+    - 绿测：`node tests/sanity_pvp_live_ui_contract_checks.cjs`
+    - 绿测：`node tests/sanity_release_gate_coverage_checks.cjs`
+    - 语法：`node --check js/scenes/pvp-scene.js`
+    - 语法：`node --check server/pvp-live/engine/state-view.js`
+    - 语法：`node --check server/pvp-live/engine/state.js`
+    - 语法：`node --check tests/browser_pvp_live_audit.mjs`
+    - 语法：`node --check tests/browser_pvp_live_real_backend_smoke.mjs`
+    - 全量 Node 门禁：`npm run test:node`，All node checks passed。
+    - 构建：`npm run build:pages`
+    - 浏览器审计：`node tests/browser_pvp_live_audit.mjs http://127.0.0.1:4173 output/pvp-live-ranked-reveal-audit`，97/97 findings、0 failed、0 console error。
+    - Release 浏览器过滤门禁：`AUDIT_FILTER=pvp-live npm run test:browser:release`，All browser release audits passed。
+    - 真实后端浏览器 smoke：`node tests/browser_pvp_live_real_backend_smoke.mjs http://127.0.0.1:4173 output/pvp-live-ranked-reveal-real-backend-smoke`，57/57 findings、0 failed、0 console error。
+    - 移动真实后端浏览器 smoke：`BROWSER_PVP_LIVE_REAL_VIEWPORT=mobile BROWSER_PVP_LIVE_REAL_REQUIRE_MOBILE=1 node tests/browser_pvp_live_real_backend_smoke.mjs http://127.0.0.1:4173 output/pvp-live-ranked-reveal-mobile-real-backend-smoke`，58/58 findings、0 failed、0 console error。
+  - 当前结论
+    - 排位真人 PVP 的开局信息边界已从“对手公开构筑摘要”收紧为“只看公开战斗状态和粗粒度画像”。这能减少先手玩家根据对手身份槽/hash 做开局秒杀或硬针对的空间，同时仍保留准备、连接、血量、手牌数量、公开状态等双方体验必需信息。
+
 - 2026-06-21: V10-S21 live PVP dispute report receipt
   - 本轮完成
     - `server/routes/pvp-live.js` 新增 `/matches/:matchId/reports` 异常反馈入口：只有战局参与者能在 `finished / invalidated` 后提交，服务端返回 `pvp-live-dispute-report-receipt-v1` 和 `pvp-live-dispute-evidence-v1`，并持久化到 `pvp_live_dispute_reports`。
@@ -2077,7 +2109,7 @@ Original prompt: 进入全自动审查与修复模式，按顺序审查并修复
 - 2026-06-18: V10 真 PVP live 真实双账号浏览器联调证据切片
   - 本轮完成
     - 新增 `tests/browser_pvp_live_real_backend_smoke.mjs`，脚本会启动真实 Node 后端和临时 SQLite，打开两个独立浏览器上下文，分别注册 / 登录两名真实用户，并通过页面中的真实 `BackendClient`、`AuthService`、`PVPService.live` 和 `PVPScene` 完成 live PVP 主路径。
-    - 双账号浏览器 smoke 覆盖：A 入队并锁定斗法谱、A 等待中重复提交不同斗法谱但不能覆盖旧 hash、B 入队匹配、双方看到同一 `matchId` 和互为公开摘要的 loadout hash、`snapshot_locked` 事件可见且对手完整快照 / 手牌不泄露、双方 ready 进入 active、A 出牌后 B 侧状态被真实后端更新。
+    - 双账号浏览器 smoke 覆盖：A 入队并锁定斗法谱、A 等待中重复提交不同斗法谱但不能覆盖旧 hash、B 入队匹配、双方看到同一 `matchId`、本方锁定谱不漂移、`snapshot_locked` 事件可见且对手完整快照 / 手牌不泄露、双方 ready 进入 active、A 出牌后 B 侧状态被真实后端更新；后续 V10-S22 已进一步收口为排位对手不再互看 loadout hash / identitySlot。
     - 该 smoke 不 patch fake live service，不走旧残影匹配或客户端结算路径；它使用真实 `/api/pvp/live/*`、真实登录态、真实浏览器 localStorage API 配置和真实服务端状态机。
     - `tests/run_browser_release_checks.sh` 新增 `pvp-live-real` audit filter；`tests/sanity_release_gate_coverage_checks.cjs` 固定双账号 smoke 的关键 finding，防止后续只保留 fake UI 审计却误报真人联调已覆盖。
   - 当前结论
@@ -2087,9 +2119,9 @@ Original prompt: 进入全自动审查与修复模式，按顺序审查并修复
   - 本轮完成
     - 新增 `server/pvp-live/loadout.js`，服务端在入队时归一化斗法谱：固定 20 张卡、校验 PVP 合法卡池、记录规则版本、合法池 hash、身份槽、构筑标签、`loadoutHash` 和锁定时间；非法构筑返回 `400 + reason`，不进入队列。
     - `server/pvp-live/live-store.js` 将 `loadoutSnapshot` 锁在 waiting queue entry 上；重复入队、已匹配或已有 active match 时始终复用旧快照，即使客户端后续带了不同或非法斗法谱，也不会覆盖这局的规则、身份槽或 hash。
-    - `server/pvp-live/engine/state.js` 从锁定快照生成起手和牌库，并在初始 setup 事件中写入公开 `snapshot_locked`；`state-view.js` 对本方暴露完整快照，对对手只暴露 `loadoutHash/loadoutSummary`，不泄露完整牌表、手牌或牌库顺序。
+    - `server/pvp-live/engine/state.js` 从锁定快照生成起手和牌库，并在初始 setup 事件中写入公开 `snapshot_locked`；本切片当时只隐藏完整牌表、手牌和牌库顺序，后续 V10-S22 已进一步改为排位对手只看粗粒度公开画像，不再暴露 `loadoutHash/loadoutSummary`。
     - `server/routes/pvp-live.js` 透传 `req.body.loadout` 并把斗法谱校验错误映射为可读的 `loadout_illegal` 响应；`js/services/backend-client.js`、`js/scenes/pvp-scene.js` 现在会提交 live 入队斗法谱候选，但服务端仍是唯一锁定和校验方。
-    - `index.html`、`css/pvp.css`、`js/scenes/pvp-scene.js` 在 live 面板展示本方锁定斗法谱和对手公开摘要；`render_game_to_text()` 也只输出双方公开摘要，不把对手完整快照写入浏览器审计 payload。
+    - `index.html`、`css/pvp.css`、`js/scenes/pvp-scene.js` 在 live 面板展示本方锁定斗法谱；本切片当时还展示对手公开摘要，后续 V10-S22 已改为排位对手只显示“公开画像 / 构筑隐藏”，`render_game_to_text()` 不再输出对手 loadout 摘要。
     - `tests/sanity_pvp_live_engine_checks.cjs`、`tests/sanity_pvp_live_route_checks.cjs`、`tests/sanity_pvp_live_persistence_checks.cjs`、`tests/sanity_pvp_live_client_checks.mjs`、`tests/sanity_pvp_live_ui_contract_checks.cjs`、`tests/browser_pvp_live_audit.mjs` 和 `tests/sanity_release_gate_coverage_checks.cjs` 已覆盖快照事件、重复入队不改谱、非法构筑拒绝、重启恢复不漂移、对手完整快照不泄露和 release gate marker。
   - 当前结论
     - live PVP 的准备房已经具备“入队即锁定规则版本 / 合法池 / 身份槽 / 斗法谱 hash，整局复用快照”的最小闭环；真实双账号浏览器联调证据、入队前 MVP 基准谱选择、waiting queue 单 SQLite 重启恢复和 MVP 匹配质量公开报告已由后续切片补上，但仍不是完整 V10-S3，后续还需要多实例共享队列声明、正式评分 / 宽跨度审计、首战引导报告、对局手感审计、生产 smoke 和线上部署。

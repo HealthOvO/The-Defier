@@ -3506,6 +3506,27 @@ export const PVPScene = {
     const deckSize = summary.deckSize ? ` · ${summary.deckSize}张` : '';
     return `${summary.label}${identity}${deckSize} · ${hash}${summary.locked ? ' · 已锁定' : ''}`;
   },
+  getLiveOpponentPublicProfile(seat) {
+    const profile = seat && seat.publicProfile && typeof seat.publicProfile === 'object' ? seat.publicProfile : {};
+    return {
+      reportVersion: String(profile.reportVersion || 'pvp-live-ranked-opponent-profile-v1'),
+      sourceVisibility: String(profile.sourceVisibility || 'ranked_public_boundary'),
+      usesHiddenInformation: false,
+      rankedImpact: 'none',
+      alias: String(profile.alias || '对手'),
+      archetypeLabel: String(profile.archetypeLabel || '流派待观察'),
+      divisionBucket: String(profile.divisionBucket || ''),
+      revealPolicy: String(profile.revealPolicy || 'no_precombat_build_reveal'),
+      boundaryLine: String(profile.boundaryLine || '排位只展示公开状态，不展示对手斗法谱、hash 或身份槽。')
+    };
+  },
+  formatLiveOpponentPublicProfile(seat, fallback = '公开画像：仅显示公开状态') {
+    if (!seat) return fallback;
+    const profile = this.getLiveOpponentPublicProfile(seat);
+    const archetype = profile.archetypeLabel || '流派待观察';
+    const bucket = profile.divisionBucket ? ` · ${profile.divisionBucket}` : '';
+    return `公开画像：${archetype}${bucket} · 构筑隐藏`;
+  },
   getLiveSnapshot() {
     this.ensureLiveSocialPreferencesLoaded();
     const session = this.getLiveSession();
@@ -3516,6 +3537,7 @@ export const PVPScene = {
     const activeLiveSourceId = String(state.matchId || (view && view.matchId) || '');
     const replayMatchId = String(state.lastReplayMatchId || '');
     const waitingLiveSourceId = state.queueTicket ? `waiting:${state.queueTicket}` : '';
+    const mode = view && view.mode === 'friendly' ? 'friendly' : 'ranked';
     const drillScenario = this.liveDrillScenario && (
       liveDrillSourceId === activeLiveSourceId
       || liveDrillSourceId === waitingLiveSourceId
@@ -3535,7 +3557,7 @@ export const PVPScene = {
       inviteCode: state.inviteCode || '',
       matchId: state.matchId || '',
       seatId: state.seatId || '',
-      mode: view && view.mode === 'friendly' ? 'friendly' : 'ranked',
+      mode,
       stateVersion: view && Number.isFinite(Number(view.stateVersion)) ? Math.floor(Number(view.stateVersion)) : null,
       currentSeat: view ? view.currentSeat || '' : '',
       status: view ? view.status || '' : '',
@@ -3640,7 +3662,9 @@ export const PVPScene = {
         mulliganUsed: !!view.opponent.mulliganUsed,
         handCount: Math.max(0, Math.floor(Number(view.opponent.handCount) || 0)),
         publicStatuses: this.getLivePublicStatuses(view.opponent),
-        loadout: this.getLiveLoadoutSummary(view.opponent)
+        ...(mode === 'friendly'
+          ? { loadout: this.getLiveLoadoutSummary(view.opponent) }
+          : { publicProfile: this.getLiveOpponentPublicProfile(view.opponent) })
       } : null
     };
   },
@@ -3843,7 +3867,11 @@ export const PVPScene = {
     const opponentStatusesEl = root.querySelector('[data-live-opponent-statuses]');
     if (opponentStatusesEl) opponentStatusesEl.innerHTML = opponent ? this.renderLivePublicStatuses(opponent) : '状态：无公开状态';
     setText('[data-live-self-loadout]', self ? `斗法谱：${this.formatLiveLoadoutSummary(self, '未锁定')}` : '斗法谱：--');
-    setText('[data-live-opponent-loadout]', opponent ? `公开谱：${this.formatLiveLoadoutSummary(opponent, '仅显示公开摘要')}` : '公开谱：--');
+    setText('[data-live-opponent-loadout]', opponent
+      ? (view && view.mode === 'friendly'
+        ? `公开谱：${this.formatLiveLoadoutSummary(opponent, '仅显示公开摘要')}`
+        : this.formatLiveOpponentPublicProfile(opponent))
+      : '公开画像：--');
     setText('[data-live-opponent-hand]', opponent ? `手牌：${Math.max(0, Number(opponent.handCount) || 0)} 张（隐藏）` : '手牌：--');
 
     const handEl = root.querySelector('[data-live-hand]');

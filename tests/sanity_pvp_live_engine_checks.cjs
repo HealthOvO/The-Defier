@@ -223,8 +223,16 @@ assert(/不计正式积分/.test(invalidatedViewA.duelMomentumReport.counterplay
 assert(invalidatedViewA.duelMomentumReport.safeguards.includes('invalidated_no_score'), 'invalidated duel momentum should expose invalidated no-score safeguard');
 assert(viewA.self.ready === false && viewA.opponent.ready === false, 'state view should expose public ready status');
 assert(viewA.self.loadoutHash === baseState.seats.A.loadoutSnapshot.loadoutHash, 'self view should expose own locked loadout hash');
-assert(viewA.opponent.loadoutHash === baseState.seats.B.loadoutSnapshot.loadoutHash, 'opponent view should expose only public locked loadout hash');
-assert(!viewA.opponent.loadoutSnapshot, 'opponent public view must not expose full loadout snapshot');
+assert(!Object.prototype.hasOwnProperty.call(viewA.opponent, 'userId'), 'ranked opponent view must not expose raw user id');
+assert(!Object.prototype.hasOwnProperty.call(viewA.opponent, 'displayName'), 'ranked opponent view must not expose raw display name before social reveal');
+assert(!Object.prototype.hasOwnProperty.call(viewA.opponent, 'loadoutHash'), 'ranked opponent view must not expose locked loadout hash');
+assert(!Object.prototype.hasOwnProperty.call(viewA.opponent, 'loadoutSummary'), 'ranked opponent view must not expose locked loadout summary');
+assert(!viewA.opponent.loadoutSnapshot, 'ranked opponent public view must not expose full loadout snapshot');
+assert(viewA.opponent.publicProfile?.reportVersion === 'pvp-live-ranked-opponent-profile-v1', 'ranked opponent view should expose a coarse public profile');
+assert(viewA.opponent.publicProfile?.usesHiddenInformation === false, 'ranked opponent public profile must not use hidden information');
+assert(viewA.opponent.publicProfile?.rankedImpact === 'none', 'ranked opponent public profile should not write ranked state');
+assert(!/loadoutHash|identitySlot|loadoutSummary|loadoutSnapshot|deck|hand|userId/i.test(JSON.stringify(viewA.opponent.publicProfile)), 'ranked opponent profile must not leak build, identity, or account identifiers');
+assert(!/loadoutHash|identitySlot|loadoutSummary|loadoutSnapshot|deck|hand|userId/i.test(JSON.stringify(baseState.events.find(event => event.eventType === 'snapshot_locked') || {})), 'raw snapshot_locked event must not carry either player loadout identity');
 assert(viewA.recentEvents.some(event => event.eventType === 'snapshot_locked'), 'initial setup view should include public snapshot_locked event');
 assert(Array.isArray(viewA.self.hand) && viewA.self.hand.length > 0, 'self view should include own hand');
 assert(typeof viewA.opponent.handCount === 'number', 'opponent view should expose hand count');

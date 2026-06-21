@@ -45,6 +45,20 @@ function makeRecentOpponentPairKey(userIdA, userIdB) {
   return ids.length === 2 && ids[0] !== ids[1] ? `${ids[0]}::${ids[1]}` : '';
 }
 
+function assertRankedOpponentConcealed(opponent, messagePrefix) {
+  assert.ok(opponent, `${messagePrefix} should expose an opponent seat`);
+  assert.equal(opponent.publicProfile?.reportVersion, 'pvp-live-ranked-opponent-profile-v1', `${messagePrefix} should expose coarse ranked opponent profile`);
+  assert.equal(opponent.publicProfile?.usesHiddenInformation, false, `${messagePrefix} public profile must not use hidden information`);
+  assert.equal(opponent.publicProfile?.rankedImpact, 'none', `${messagePrefix} public profile should not write ranked state`);
+  assert.ok(!Object.prototype.hasOwnProperty.call(opponent, 'userId'), `${messagePrefix} must not expose opponent user id`);
+  assert.ok(!Object.prototype.hasOwnProperty.call(opponent, 'displayName'), `${messagePrefix} must not expose raw opponent display name`);
+  assert.ok(!Object.prototype.hasOwnProperty.call(opponent, 'loadoutHash'), `${messagePrefix} must not expose opponent loadout hash`);
+  assert.ok(!Object.prototype.hasOwnProperty.call(opponent, 'loadoutSummary'), `${messagePrefix} must not expose opponent loadout summary`);
+  assert.ok(!opponent.loadoutSnapshot, `${messagePrefix} must not expose full opponent loadout snapshot`);
+  assert.ok(!Array.isArray(opponent.hand), `${messagePrefix} must not expose opponent hand`);
+  assert.ok(!Array.isArray(opponent.deck), `${messagePrefix} must not expose opponent deck order`);
+}
+
 function finishStoreMatch(store, matchId, { winnerSeat = 'A', finishReason = 'surrender' } = {}) {
   const match = store.matches.get(matchId);
   assert.ok(match, `test match should exist before finishing: ${matchId}`);
@@ -449,13 +463,8 @@ function makeSharedPersistence({ keepQueueRowsOnDelete = false } = {}) {
     loadout: makeLoadout('mirror', ['pvp_guard', 'pvp_strike', 'pvp_burst', 'pvp_guard']),
   });
   assert.equal(recentJoinC.status, 'matched', 'a third player should still be able to match into the waiting pool');
-  const recentMatchedNames = [recentJoinC.stateView.self.displayName, recentJoinC.stateView.opponent.displayName].sort();
-  assert.notDeepStrictEqual(
-    recentMatchedNames,
-    ['近期甲', '近期乙'].sort(),
-    'recent opponent suppression should avoid recreating the just-finished pair',
-  );
-  assert.ok(recentMatchedNames.includes('近期丙'), 'third player should be one side of the resolved match');
+  assert.equal(recentJoinC.stateView.self.displayName, '近期丙', 'third player should be the requester side of the resolved match');
+  assertRankedOpponentConcealed(recentJoinC.stateView.opponent, 'recent-opponent resolved ranked opponent view');
 
   const persistedRecentPairs = makeSharedPersistence();
   const persistedRecentStoreA = createLivePvpStore({
@@ -668,12 +677,8 @@ function makeSharedPersistence({ keepQueueRowsOnDelete = false } = {}) {
     loadout: makeLoadout('mirror', ['pvp_guard', 'pvp_strike', 'pvp_burst', 'pvp_guard']),
   });
   assert.equal(lowRequesterJoin.status, 'matched', 'low-sample requester should match another low-sample candidate');
-  const lowSampleMatchedNames = [lowRequesterJoin.stateView.self.displayName, lowRequesterJoin.stateView.opponent.displayName].sort();
-  assert.deepEqual(
-    lowSampleMatchedNames,
-    ['低样本候选', '低样本请求者'].sort(),
-    'low-sample protection should prefer a low-sample pair over an established same-score player',
-  );
+  assert.equal(lowRequesterJoin.stateView.self.displayName, '低样本请求者', 'low-sample requester should be the requester side of the resolved match');
+  assertRankedOpponentConcealed(lowRequesterJoin.stateView.opponent, 'low-sample resolved ranked opponent view');
   assert.equal(
     lowRequesterJoin.stateView.matchQuality?.expansionStage,
     'low_sample_pairing',

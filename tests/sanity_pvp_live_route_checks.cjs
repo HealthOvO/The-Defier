@@ -213,6 +213,22 @@ function assertConnectionTempoReport(report, expectedTempoState, messagePrefix) 
     assert.ok(!/hand|deck|cardId|instanceId|sourceCardId|loadoutSnapshot|rating|elo|reward/i.test(JSON.stringify(report)), `${messagePrefix} must not leak hidden combat or matchmaking data`);
 }
 
+function assertRankedOpponentConcealed(opponent, messagePrefix) {
+    assert.ok(opponent, `${messagePrefix} should expose an opponent seat`);
+    assert.equal(opponent.publicProfile?.reportVersion, 'pvp-live-ranked-opponent-profile-v1', `${messagePrefix} should expose coarse ranked opponent profile`);
+    assert.equal(opponent.publicProfile?.usesHiddenInformation, false, `${messagePrefix} public profile must not use hidden information`);
+    assert.equal(opponent.publicProfile?.rankedImpact, 'none', `${messagePrefix} public profile should not write ranked state`);
+    assert.ok(typeof opponent.publicProfile?.archetypeLabel === 'string' && opponent.publicProfile.archetypeLabel.length > 0, `${messagePrefix} should expose a readable archetype label`);
+    assert.ok(!Object.prototype.hasOwnProperty.call(opponent, 'userId'), `${messagePrefix} must not expose opponent user id`);
+    assert.ok(!Object.prototype.hasOwnProperty.call(opponent, 'displayName'), `${messagePrefix} must not expose raw opponent display name`);
+    assert.ok(!Object.prototype.hasOwnProperty.call(opponent, 'loadoutHash'), `${messagePrefix} must not expose opponent loadout hash`);
+    assert.ok(!Object.prototype.hasOwnProperty.call(opponent, 'loadoutSummary'), `${messagePrefix} must not expose opponent loadout summary`);
+    assert.ok(!opponent.loadoutSnapshot, `${messagePrefix} must not expose full opponent loadout snapshot`);
+    assert.ok(!Array.isArray(opponent.hand), `${messagePrefix} must not leak opponent hand`);
+    assert.ok(!Array.isArray(opponent.deck), `${messagePrefix} must not leak opponent deck order`);
+    assert.doesNotMatch(JSON.stringify(opponent), /"userId"|"displayName"|"loadoutHash"|"loadoutSummary"|"loadoutSnapshot"|"identitySlot"|"label"|"hand":|"deck":|"cardId"|"instanceId"/i, `${messagePrefix} must not leak hidden opponent build or account fields`);
+}
+
 async function heartbeat(baseUrl, token, matchId) {
     return request(baseUrl, `/api/pvp/live/matches/${matchId}/heartbeat`, {
         method: 'POST',
@@ -420,12 +436,17 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
             body: { displayName: '新入近分', loadout: loadoutAChanged }
         });
         assert.equal(ratedRequesterJoin.payload.status, 'matched', 'rated requester should match an existing waiting player');
-        assert.equal(ratedRequesterJoin.payload.stateView.opponent.displayName, '近分对手', 'rated requester should prefer the closest rating candidate over first queued far candidate');
+        assertRankedOpponentConcealed(ratedRequesterJoin.payload.stateView.opponent, 'rated requester closest-candidate opponent view');
         assert.equal(ratedRequesterJoin.payload.stateView.matchQuality?.ratingDeltaBucket, 'near_0_99', 'matched view should expose near rating delta bucket');
         assert.equal(ratedRequesterJoin.payload.stateView.matchQuality?.expansionStage, 'strict_rating', 'matched view should expose strict rating expansion stage');
         assert.equal(ratedRequesterJoin.payload.stateView.matchQuality?.candidatePoolSize, 3, 'matched view should count rated candidate pool');
         assert.ok(ratedRequesterJoin.payload.stateView.matchQuality?.safeguards?.includes('closest_rating_candidate'), 'matched quality should explain closest rating safeguard');
         assert.ok(!/1800|1040|1000/.test(JSON.stringify(ratedRequesterJoin.payload.stateView.matchQuality || {})), 'matched quality should not expose exact player ratings');
+        const nearRatedMatched = await request(baseUrl, `/api/pvp/live/queue/status/${nearRatedJoin.payload.queueTicket}`, {
+            token: tokenD
+        });
+        assert.equal(nearRatedMatched.payload.status, 'matched', 'near-rated candidate should be the consumed matched ticket');
+        assert.equal(nearRatedMatched.payload.matchId, ratedRequesterJoin.payload.matchId, 'near-rated candidate should match the requester match id');
         const farRatedStillWaiting = await request(baseUrl, `/api/pvp/live/queue/status/${farRatedJoin.payload.queueTicket}`, {
             token: tokenC
         });
@@ -963,9 +984,7 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
         assert.equal(joinB.payload.stateView.connectionTempoReport.actionBoundary, 'continue_setup_action', 'matched setup tempo should name setup action boundary');
         assert.equal(joinB.payload.stateView.connectionReport.opponent.status, 'online', 'matched setup view should treat the opponent as online initially');
         assert.equal(joinB.payload.stateView.self.loadoutSummary.identitySlot, 'shield', 'matched self view should expose own locked identity slot');
-        assert.equal(joinB.payload.stateView.opponent.loadoutHash, joinA.payload.loadoutHash, 'matched opponent view should expose original locked loadout hash');
-        assert.ok(!joinB.payload.stateView.opponent.loadoutSnapshot, 'matched opponent view must not expose full loadout snapshot');
-        assert.ok(!Array.isArray(joinB.payload.stateView.opponent.hand), 'matched view must not leak opponent hand');
+        assertRankedOpponentConcealed(joinB.payload.stateView.opponent, 'matched ranked opponent view');
         assert.equal(joinB.payload.stateView.matchQuality.reportVersion, 'pvp-live-match-quality-v1', 'matched view should expose match quality report version');
         assert.equal(joinB.payload.stateView.matchQuality.tag, 'good', 'matched view should expose good match quality tag for MVP open pool');
         assert.equal(joinB.payload.stateView.matchQuality.expansionStage, 'mvp_open_pool', 'matched view should expose MVP open-pool expansion stage');
@@ -1033,7 +1052,7 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
         assert.equal(pollA.payload.stateView.connectionTempoReport.canSubmitIntent, true, 'first player setup poll tempo should allow setup intents');
         assert.equal(pollA.payload.stateView.connectionReport.viewer.status, 'online', 'first player setup poll should treat viewer as online');
         assert.equal(pollA.payload.stateView.self.loadoutHash, joinA.payload.loadoutHash, 'first player matched status should expose own locked loadout hash');
-        assert.equal(pollA.payload.stateView.opponent.loadoutSummary.identitySlot, 'shield', 'first player should see opponent public locked loadout summary');
+        assertRankedOpponentConcealed(pollA.payload.stateView.opponent, 'first player ranked status opponent view');
 
         const heartbeatA = await heartbeat(baseUrl, tokenA, joinB.payload.matchId);
         assert.equal(heartbeatA.status, 200, 'heartbeat route should accept a participant heartbeat');

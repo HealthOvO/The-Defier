@@ -74,6 +74,41 @@ function projectPublicSeat(seat) {
     };
 }
 
+function projectRankedOpponentProfile(state) {
+    const status = String(state && state.status || 'setup');
+    const matchQuality = projectMatchQuality(state && state.matchQuality);
+    return {
+        reportVersion: 'pvp-live-ranked-opponent-profile-v1',
+        sourceVisibility: 'ranked_public_boundary',
+        usesHiddenInformation: false,
+        rankedImpact: 'none',
+        alias: '对手',
+        archetypeLabel: status === 'active' ? '公开战况观察中' : '流派待观察',
+        divisionBucket: matchQuality.ratingDeltaBucket || 'unrated_mvp',
+        revealPolicy: 'no_precombat_build_reveal',
+        connectionDisclosure: 'connection_and_ready_only',
+        boundaryLine: '只展示公开战斗状态、连接与准备信息；不展示对手谱 hash、身份槽、标签或完整牌表。'
+    };
+}
+
+function projectRankedOpponentSeat(seat, state) {
+    return {
+        seatId: seat.seatId,
+        hp: seat.hp,
+        maxHp: seat.maxHp,
+        energy: seat.energy,
+        maxEnergy: seat.maxEnergy,
+        block: seat.block,
+        ready: !!seat.ready,
+        mulliganUsed: !!seat.mulliganUsed,
+        handCount: seat.hand.length,
+        deckCount: seat.deck.length,
+        discardCount: seat.discard.length,
+        publicStatuses: seat.publicStatuses.slice(),
+        publicProfile: projectRankedOpponentProfile(state)
+    };
+}
+
 function projectSelfSeat(seat) {
     return {
         ...projectPublicSeat(seat),
@@ -2029,10 +2064,11 @@ function projectStateView(state, seatId) {
     }
     const opponentSeatId = seatId === 'A' ? 'B' : 'A';
     const openingSafeguardReport = projectOpeningSafeguardReport(state, seatId);
+    const mode = state.mode === 'friendly' ? 'friendly' : 'ranked';
     return {
         matchId: state.matchId,
         ruleVersion: state.ruleVersion,
-        mode: state.mode === 'friendly' ? 'friendly' : 'ranked',
+        mode,
         status: state.status,
         phase: state.phase,
         stateVersion: state.stateVersion,
@@ -2057,7 +2093,9 @@ function projectStateView(state, seatId) {
         settlementReport: projectSettlementReport(state, seatId),
         postMatchReview: projectPostMatchReview(state, seatId),
         self: projectSelfSeat(state.seats[seatId]),
-        opponent: projectPublicSeat(state.seats[opponentSeatId]),
+        opponent: mode === 'friendly'
+            ? projectPublicSeat(state.seats[opponentSeatId])
+            : projectRankedOpponentSeat(state.seats[opponentSeatId], state),
         recentEvents: state.events.slice(-20).map(sanitizePublicEvent)
     };
 }

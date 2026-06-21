@@ -61,12 +61,16 @@ async function safeElementScreenshot(page, selector, outputPath) {
       deckSize: 20,
       locked: true,
     };
-    const opponentLoadoutSummary = {
-      loadoutHash: 'hash-opponent-shield-654321',
-      label: '守势斗法谱',
-      identitySlot: 'shield',
-      deckSize: 20,
-      locked: true,
+    const opponentPublicProfile = {
+      reportVersion: 'pvp-live-ranked-opponent-profile-v1',
+      sourceVisibility: 'ranked_public_boundary',
+      usesHiddenInformation: false,
+      rankedImpact: 'none',
+      alias: '对手',
+      archetypeLabel: '流派待观察',
+      divisionBucket: 'unrated_mvp',
+      revealPolicy: 'no_precombat_build_reveal',
+      boundaryLine: '排位只展示公开状态，不展示对手斗法谱、hash 或身份槽。',
     };
     const makeFirstMatchGuide = (status = 'setup') => ({
       reportVersion: 'pvp-live-first-match-guide-v1',
@@ -669,9 +673,6 @@ async function safeElementScreenshot(page, selector, outputPath) {
       },
       opponent: {
         seatId: 'B',
-        displayName: '乙',
-        loadoutHash: opponentLoadoutSummary.loadoutHash,
-        loadoutSummary: opponentLoadoutSummary,
         hp: stateVersion > 1 ? 42 : 50,
         maxHp: 50,
         energy: 3,
@@ -681,8 +682,9 @@ async function safeElementScreenshot(page, selector, outputPath) {
         deckCount: 12,
         discardCount: 0,
         ready: status === 'active',
+        publicProfile: opponentPublicProfile,
       },
-      recentEvents: [{ eventType: 'snapshot_locked', payload: { seats: { A: selfLoadoutSummary, B: opponentLoadoutSummary } } }],
+      recentEvents: [{ eventType: 'snapshot_locked', publicData: { ruleVersion: 'pvp-live-v1', snapshotPolicy: 'server_locked_hidden_until_self_view', seatCount: 2 } }],
     });
     window.__makeLivePvpAuditStateView = makeStateView;
     const makeFriendlyOpenerAssignment = (firstSeat = 'A') => ({
@@ -2244,18 +2246,20 @@ async function safeElementScreenshot(page, selector, outputPath) {
   await page.click('[data-live-action="refresh-match"]', { timeout: 5000, force: true });
   await page.waitForTimeout(200);
   add(
-    'live UI renders snapshot_locked loadout summaries without opponent deck leak',
+    'live UI renders ranked opponent public profile without build reveal',
     /破阵斗法谱/.test(matchedProbe.selfLoadout)
       && /sword/.test(matchedProbe.selfLoadout)
       && /已锁定/.test(matchedProbe.selfLoadout)
-      && /守势斗法谱/.test(matchedProbe.opponentLoadout)
-      && /shield/.test(matchedProbe.opponentLoadout)
-      && /已锁定/.test(matchedProbe.opponentLoadout)
+      && /公开画像/.test(matchedProbe.opponentLoadout)
+      && /流派待观察/.test(matchedProbe.opponentLoadout)
+      && /构筑隐藏/.test(matchedProbe.opponentLoadout)
+      && !/守势斗法谱|shield|hash-opponent/.test(matchedProbe.opponentLoadout)
       && matchedProbe.payload?.self?.loadout?.loadoutHash === 'hash-self-sword-123456'
-      && matchedProbe.payload?.opponent?.loadout?.loadoutHash === 'hash-opponent-shield-654321'
+      && matchedProbe.payload?.opponent?.publicProfile?.reportVersion === 'pvp-live-ranked-opponent-profile-v1'
+      && !Object.prototype.hasOwnProperty.call(matchedProbe.payload?.opponent || {}, 'loadout')
       && !matchedProbe.payload?.opponent?.loadoutSnapshot
       && !matchedProbe.payload?.opponent?.deck
-      && !matchedProbe.payload?.opponent?.loadout?.deck,
+      && !/hash-opponent|守势斗法谱|identitySlot|loadoutHash|loadoutSummary|loadoutSnapshot/.test(JSON.stringify(matchedProbe.payload?.opponent || {})),
     JSON.stringify(matchedProbe),
   );
   add(
@@ -3905,7 +3909,7 @@ async function safeElementScreenshot(page, selector, outputPath) {
     await window.PVPScene.loadLivePanel();
   });
   await page.waitForTimeout(100);
-  await page.click('[data-live-post-review-action="queue_again"]', { timeout: 5000, force: true });
+  await page.click('[data-live-post-match-review]:visible [data-live-post-review-action="queue_again"]', { timeout: 5000, force: true });
   await page.waitForTimeout(200);
   const postReviewRequeueProbe = await page.evaluate(() => ({
     phase: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-phase') || '',
@@ -4071,7 +4075,7 @@ async function safeElementScreenshot(page, selector, outputPath) {
       && !/findOpponent|reportMatchResult|GhostEnemy|startPVPBattle|didWin|matchTicket/.test(JSON.stringify(inviteInboxProbe.calls)),
     JSON.stringify(inviteInboxProbe),
   );
-  await page.click('[data-live-inbox-join="TDIN42"]', { timeout: 5000, force: true });
+  await page.click('[data-live-invite-inbox]:visible [data-live-inbox-join="TDIN42"]', { timeout: 5000, force: true });
   await page.waitForTimeout(150);
   const inviteInboxJoinProbe = await page.evaluate(() => ({
     phase: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-phase') || '',
@@ -4753,12 +4757,16 @@ async function safeElementScreenshot(page, selector, outputPath) {
       deckSize: 20,
       locked: true,
     };
-    const opponentLoadoutSummary = {
-      loadoutHash: 'hash-mobile-opponent-sword',
-      label: '攻击斗法谱',
-      identitySlot: 'sword',
-      deckSize: 20,
-      locked: true,
+    const opponentPublicProfile = {
+      reportVersion: 'pvp-live-ranked-opponent-profile-v1',
+      sourceVisibility: 'ranked_public_boundary',
+      usesHiddenInformation: false,
+      rankedImpact: 'none',
+      alias: '对手',
+      archetypeLabel: '流派待观察',
+      divisionBucket: 'unrated_mvp',
+      revealPolicy: 'no_precombat_build_reveal',
+      boundaryLine: '排位只展示公开状态，不展示对手斗法谱、hash 或身份槽。',
     };
     const firstMatchGuide = {
       reportVersion: 'pvp-live-first-match-guide-v1',
@@ -4846,8 +4854,6 @@ async function safeElementScreenshot(page, selector, outputPath) {
       },
       opponent: {
         seatId: 'A',
-        loadoutHash: opponentLoadoutSummary.loadoutHash,
-        loadoutSummary: opponentLoadoutSummary,
         hp: 50,
         maxHp: 50,
         energy: 3,
@@ -4857,8 +4863,9 @@ async function safeElementScreenshot(page, selector, outputPath) {
         deckCount: 12,
         discardCount: 0,
         ready: status === 'active',
+        publicProfile: opponentPublicProfile,
       },
-      recentEvents: [{ eventType: 'snapshot_locked', payload: { seats: { A: opponentLoadoutSummary, B: selfLoadoutSummary } } }],
+      recentEvents: [{ eventType: 'snapshot_locked', publicData: { ruleVersion: 'pvp-live-v1', snapshotPolicy: 'server_locked_hidden_until_self_view', seatCount: 2 } }],
     });
     window.__makeLivePvpMobileAuditStateView = makeStateView;
     window.PVPService.findOpponent = async () => {

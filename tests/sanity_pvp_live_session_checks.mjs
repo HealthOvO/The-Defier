@@ -19,6 +19,20 @@ function createMemoryStorage(initialEntries = []) {
   };
 }
 
+function makeRankedOpponentProfile() {
+  return {
+    reportVersion: 'pvp-live-ranked-opponent-profile-v1',
+    sourceVisibility: 'ranked_public_boundary',
+    usesHiddenInformation: false,
+    rankedImpact: 'none',
+    alias: '对手',
+    archetypeLabel: '流派待观察',
+    divisionBucket: 'unrated_mvp',
+    revealPolicy: 'no_precombat_build_reveal',
+    boundaryLine: '排位只展示公开状态，不展示对手斗法谱、hash 或身份槽。'
+  };
+}
+
 const calls = [];
 const liveService = {
   joinQueue: async (options) => {
@@ -43,7 +57,7 @@ const liveService = {
         currentSeat: 'A',
         setup: { readyDeadlineAt: Date.now() + 45000, mulliganLimit: 2 },
         self: { seatId: 'A', hand: [{ instanceId: 'A-strike-1' }] },
-        opponent: { seatId: 'B', handCount: 3, ready: false }
+        opponent: { seatId: 'B', handCount: 3, ready: false, publicProfile: makeRankedOpponentProfile() }
       }
     };
   },
@@ -420,6 +434,13 @@ assert.equal(matched.phase, 'setup', 'matched queue poll should enter setup phas
 assert.equal(matched.matchId, 'pvplm-session', 'matched queue poll should retain match id');
 assert.equal(matched.seatId, 'A', 'matched queue poll should retain seat id');
 assert.ok(!Array.isArray(matched.stateView.opponent.hand), 'live session state must not expose opponent hand');
+assert.equal(matched.stateView.opponent.publicProfile?.reportVersion, 'pvp-live-ranked-opponent-profile-v1', 'live session should retain ranked opponent public profile');
+assert.equal(matched.stateView.opponent.publicProfile?.usesHiddenInformation, false, 'live session ranked opponent profile must not use hidden information');
+assert.ok(!Object.prototype.hasOwnProperty.call(matched.stateView.opponent, 'userId'), 'live session ranked opponent must not expose user id');
+assert.ok(!Object.prototype.hasOwnProperty.call(matched.stateView.opponent, 'displayName'), 'live session ranked opponent must not expose raw display name');
+assert.ok(!Object.prototype.hasOwnProperty.call(matched.stateView.opponent, 'loadoutHash'), 'live session ranked opponent must not expose loadout hash');
+assert.ok(!Object.prototype.hasOwnProperty.call(matched.stateView.opponent, 'loadoutSummary'), 'live session ranked opponent must not expose loadout summary');
+assert.ok(!Object.prototype.hasOwnProperty.call(matched.stateView.opponent, 'loadoutSnapshot'), 'live session ranked opponent must not expose loadout snapshot');
 
 const mulligan = await session.mulligan({ cardInstanceIds: ['A-strike-1'], intentId: 'session-mulligan-1' });
 assert.equal(mulligan.phase, 'setup', 'mulligan should keep session in setup phase');

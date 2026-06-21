@@ -197,6 +197,8 @@ const liveBrowserAudit = read('tests/browser_pvp_live_audit.mjs');
   'renderLivePublicStatuses(',
   'formatLiveEvent(',
   'formatLiveLoadoutSummary(',
+  'getLiveOpponentPublicProfile(',
+  'formatLiveOpponentPublicProfile(',
   'getLiveEmoteOptions()',
   'getLiveSocialPreferenceStorageKey()',
   'loadLiveSocialPreferences()',
@@ -769,7 +771,7 @@ assert.ok(browserGate.includes('node tests/browser_pvp_live_audit.mjs "$BASE_URL
   'live UI mobile renders opening protection event without overflow',
   'live UI selects a baseline loadout before queue join',
   'live UI locks baseline loadout selector after queue join',
-  'live UI renders snapshot_locked loadout summaries without opponent deck leak',
+  'live UI renders ranked opponent public profile without build reveal',
   'live UI should not call legacy PVP matching or settlement',
   'live UI renders ready_timeout invalidated as no-score terminal state',
 ].forEach((needle) => {

@@ -61,6 +61,22 @@ function makeLivePvpPersistenceForTest() {
   return makeSqliteLivePvpPersistence();
 }
 
+function assertRankedOpponentConcealed(opponent, messagePrefix) {
+  assert.ok(opponent, `${messagePrefix} should expose an opponent seat`);
+  assert.equal(opponent.publicProfile?.reportVersion, 'pvp-live-ranked-opponent-profile-v1', `${messagePrefix} should expose coarse ranked opponent profile`);
+  assert.equal(opponent.publicProfile?.usesHiddenInformation, false, `${messagePrefix} public profile must not use hidden information`);
+  assert.equal(opponent.publicProfile?.rankedImpact, 'none', `${messagePrefix} public profile should not write ranked state`);
+  assert.ok(typeof opponent.publicProfile?.archetypeLabel === 'string' && opponent.publicProfile.archetypeLabel.length > 0, `${messagePrefix} should expose readable archetype label`);
+  assert.ok(!Object.prototype.hasOwnProperty.call(opponent, 'userId'), `${messagePrefix} must not expose opponent user id`);
+  assert.ok(!Object.prototype.hasOwnProperty.call(opponent, 'displayName'), `${messagePrefix} must not expose raw opponent display name`);
+  assert.ok(!Object.prototype.hasOwnProperty.call(opponent, 'loadoutHash'), `${messagePrefix} must not expose opponent loadout hash`);
+  assert.ok(!Object.prototype.hasOwnProperty.call(opponent, 'loadoutSummary'), `${messagePrefix} must not expose opponent loadout summary`);
+  assert.ok(!opponent.loadoutSnapshot, `${messagePrefix} must not expose full opponent loadout snapshot`);
+  assert.ok(!Array.isArray(opponent.hand), `${messagePrefix} must not expose opponent hand`);
+  assert.ok(!Array.isArray(opponent.deck), `${messagePrefix} must not expose opponent deck order`);
+  assert.doesNotMatch(JSON.stringify(opponent), /"userId"|"displayName"|"loadoutHash"|"loadoutSummary"|"loadoutSnapshot"|"identitySlot"|"label"|"hand":|"deck":|"cardId"|"instanceId"/i, `${messagePrefix} must not leak hidden opponent build or account fields`);
+}
+
 async function assertLegacyQueueTicketMigrationAddsRankedGames() {
   const legacyTicket = `legacy-low-sample-ticket-${process.pid}`;
   const legacyUserId = `legacy-low-sample-user-${process.pid}`;
@@ -1438,9 +1454,11 @@ async function readyBoth({ matchId, tokenA, tokenB, stateVersionA, prefix }) {
   let rankedNearUser;
   let rankedRequesterUser;
   let rankedFarQueueTicket;
+  let rankedNearQueueTicket;
   let saturatedRequesterUser;
   let wideAcceptedWaitingUser;
   let wideAcceptedRequesterUser;
+  let wideAcceptedWaitingQueueTicket;
 
   await withServer(async () => {
     waitingUserA = await registerUser('live_waiting_restart_a');
@@ -1508,8 +1526,7 @@ async function readyBoth({ matchId, tokenA, tokenB, stateVersionA, prefix }) {
     });
     assert.equal(joinB.payload.status, 'matched', 'restarted waiting queue should match second user after backend restart');
     assert.equal(joinB.payload.stateView.self.loadoutSummary.identitySlot, 'waiting-shield', 'second user should keep own locked waiting restart loadout');
-    assert.equal(joinB.payload.stateView.opponent.loadoutHash, waitingUserA.loadoutHash, 'second user should see restarted waiting opponent locked hash');
-    assert.ok(!joinB.payload.stateView.opponent.loadoutSnapshot, 'restarted waiting queue match must not leak opponent snapshot');
+    assertRankedOpponentConcealed(joinB.payload.stateView.opponent, 'restarted waiting queue ranked opponent view');
     assert.equal(joinB.payload.stateView.matchQuality.connectionHealth, 'pass', 'restarted waiting queue match should preserve connection health gate result');
     assert.equal(joinB.payload.stateView.matchQuality.connectionHealthSummary?.sampleTag, 'client_preflight', 'restarted waiting queue match should retain preflight connection health summary');
 
@@ -1627,6 +1644,7 @@ async function readyBoth({ matchId, tokenA, tokenB, stateVersionA, prefix }) {
     });
     assert.equal(nearJoin.payload.status, 'waiting', 'restarted initial rating stage should not match outside the base rating bucket');
     assert.ok(nearJoin.payload.queueTicket, 'restarted near candidate should keep its own queue ticket');
+    rankedNearQueueTicket = nearJoin.payload.queueTicket;
   });
 
   await withServer(async () => {
@@ -1636,10 +1654,16 @@ async function readyBoth({ matchId, tokenA, tokenB, stateVersionA, prefix }) {
       body: { displayName: '重启新入近分', loadout: makeLoadout('ranked-requester', ['pvp_guard', 'pvp_guard', 'pvp_strike', 'pvp_burst']) },
     });
     assert.equal(requesterJoin.payload.status, 'matched', 'restarted candidate search should honor persisted rating bucket before older wider-gap rows');
-    assert.equal(requesterJoin.payload.stateView.opponent.displayName, '重启近分候选', 'restarted candidate search should prefer the closest persisted rating snapshot');
+    assertRankedOpponentConcealed(requesterJoin.payload.stateView.opponent, 'restarted closest-candidate ranked opponent view');
     assert.equal(requesterJoin.payload.stateView.matchQuality?.ratingDeltaBucket, 'near_0_99', 'restarted ranked match quality should derive rating delta bucket from joined ratings');
     assert.equal(requesterJoin.payload.stateView.matchQuality?.expansionStage, 'strict_rating', 'restarted ranked match quality should expose strict rating stage');
     assert.ok(!/1800|1040|1000/.test(JSON.stringify(requesterJoin.payload.stateView.matchQuality || {})), 'restarted ranked match quality should not expose exact player ratings');
+
+    const nearStatus = await request(`/api/pvp/live/queue/status/${encodeURIComponent(rankedNearQueueTicket)}`, {
+      token: rankedNearUser.token,
+    });
+    assert.equal(nearStatus.payload.status, 'matched', 'restarted closest persisted rating candidate should be consumed as the matched ticket');
+    assert.equal(nearStatus.payload.matchId, requesterJoin.payload.matchId, 'restarted closest candidate should match the requester match id');
 
     const farStatus = await request(`/api/pvp/live/queue/status/${encodeURIComponent(rankedFarQueueTicket)}`, {
       token: rankedFarUser.token,
@@ -1687,9 +1711,14 @@ async function readyBoth({ matchId, tokenA, tokenB, stateVersionA, prefix }) {
       body: { displayName: '饱和新入近分', loadout: makeLoadout('ranked-saturated-requester', ['pvp_guard', 'pvp_guard', 'pvp_strike', 'pvp_burst']) },
     });
     assert.equal(saturatedRequesterJoin.payload.status, 'matched', `restarted saturated candidate search should restore beyond 32 candidates: ${JSON.stringify(saturatedRequesterJoin.payload)}`);
-    assert.equal(saturatedRequesterJoin.payload.stateView.opponent.displayName, '饱和近分候选', 'restarted saturated candidate search should prefer candidate after the first 32 waiting rows');
+    assertRankedOpponentConcealed(saturatedRequesterJoin.payload.stateView.opponent, 'restarted saturated ranked opponent view');
     assert.equal(saturatedRequesterJoin.payload.stateView.matchQuality?.ratingDeltaBucket, 'near_0_99', 'restarted saturated ranked match should still expose near rating bucket');
     assert.ok(saturatedRequesterJoin.payload.stateView.matchQuality?.candidatePoolSize > 32, 'restarted saturated match quality should count more than 32 queued candidates');
+    assert.equal(
+      await dbGet('SELECT queue_ticket FROM pvp_live_queue_tickets WHERE user_id = ?', [`saturated-near-${process.pid}`]),
+      null,
+      'restarted saturated candidate search should claim the near candidate row after the first 32 waiting rows',
+    );
   });
   await dbRun(
     `DELETE FROM pvp_live_queue_tickets
@@ -1716,6 +1745,7 @@ async function readyBoth({ matchId, tokenA, tokenB, stateVersionA, prefix }) {
        WHERE queue_ticket = ?`,
       [Date.now() - (4 * 60 * 1000), wideAcceptedWaitingJoin.payload.queueTicket],
     );
+    wideAcceptedWaitingQueueTicket = wideAcceptedWaitingJoin.payload.queueTicket;
   });
 
   await withServer(async () => {
@@ -1731,11 +1761,16 @@ async function readyBoth({ matchId, tokenA, tokenB, stateVersionA, prefix }) {
       },
     });
     assert.equal(wideAcceptedRestartJoin.payload.status, 'matched', `restarted two-sided wide consent should restore consent from the waiting queue row: ${JSON.stringify(wideAcceptedRestartJoin.payload)}`);
-    assert.equal(wideAcceptedRestartJoin.payload.stateView.opponent.displayName, '重启宽差同意等待者', 'restarted accepted wide match should pair with the persisted consenting waiting player');
+    assertRankedOpponentConcealed(wideAcceptedRestartJoin.payload.stateView.opponent, 'restarted accepted wide-match ranked opponent view');
     assert.equal(wideAcceptedRestartJoin.payload.stateView.matchQuality?.tag, 'wide_but_accepted', 'restarted accepted wide match should keep wide_but_accepted tag');
     assert.equal(wideAcceptedRestartJoin.payload.stateView.matchQuality?.expansionStage, 'accepted_200_399', 'restarted accepted wide match should keep accepted wide stage');
     assert.ok(wideAcceptedRestartJoin.payload.stateView.matchQuality?.safeguards?.includes('explicit_wide_match_consent'), 'restarted accepted wide match should keep explicit consent safeguard');
     assert.ok(!/1250|1000/.test(JSON.stringify(wideAcceptedRestartJoin.payload.stateView.matchQuality || {})), 'restarted accepted wide match quality should not expose exact ratings');
+    const wideAcceptedWaitingStatus = await request(`/api/pvp/live/queue/status/${encodeURIComponent(wideAcceptedWaitingQueueTicket)}`, {
+      token: wideAcceptedWaitingUser.token,
+    });
+    assert.equal(wideAcceptedWaitingStatus.payload.status, 'matched', 'restarted accepted wide match should consume the persisted consenting waiting ticket');
+    assert.equal(wideAcceptedWaitingStatus.payload.matchId, wideAcceptedRestartJoin.payload.matchId, 'restarted accepted wide waiting player should receive the requester match id');
   });
 
   await withServer(async () => {

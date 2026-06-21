@@ -1,5 +1,5 @@
 const { RULE_VERSION, RULES, getCardDefinition } = require('./rules');
-const { cloneLoadoutSnapshot, normalizeLoadoutSnapshot, publicLoadoutSummary } = require('../loadout');
+const { cloneLoadoutSnapshot, normalizeLoadoutSnapshot } = require('../loadout');
 const { buildLoadoutExplorationReport } = require('../content/pvp-live-v1-content');
 
 function cloneDeep(value) {
@@ -103,10 +103,8 @@ function makeSnapshotLockedEvent(matchId, seats) {
         visibility: 'public',
         payload: {
             ruleVersion: RULE_VERSION,
-            seats: {
-                A: publicLoadoutSummary(seats.A.loadoutSnapshot),
-                B: publicLoadoutSummary(seats.B.loadoutSnapshot)
-            }
+            snapshotPolicy: 'server_locked_hidden_until_self_view',
+            seatCount: Object.keys(seats || {}).length
         }
     };
 }

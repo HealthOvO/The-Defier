@@ -697,7 +697,8 @@ async function writeReport() {
         && !!joinB.matchId
         && joinB.seatId === 'B'
         && joinB.self?.loadout?.identitySlot === 'shield'
-        && joinB.opponent?.loadout?.loadoutHash === rejoinAChanged.loadoutHash
+        && joinB.opponent?.publicProfile?.reportVersion === 'pvp-live-ranked-opponent-profile-v1'
+        && !Object.prototype.hasOwnProperty.call(joinB.opponent || {}, 'loadout')
         && joinB.matchQuality?.reportVersion === 'pvp-live-match-quality-v1'
         && joinB.matchQuality?.tag === 'good'
         && !joinB.opponent?.loadoutSnapshot,
@@ -707,12 +708,14 @@ async function writeReport() {
     const matchedA = await refreshUntilLivePhase(seatA.page, 'setup');
     const matchedB = await getLiveSnapshot(seatB.page);
     add(
-      'real browser both seats agree on match id and public loadout hashes',
+      'real browser both seats agree on match id while ranked opponent build stays hidden',
       matchedA.matchId === matchedB.matchId
-        && matchedA.self?.loadout?.loadoutHash === matchedB.opponent?.loadout?.loadoutHash
-        && matchedB.self?.loadout?.loadoutHash === matchedA.opponent?.loadout?.loadoutHash
         && matchedA.self?.loadout?.identitySlot === 'sword'
         && matchedB.self?.loadout?.identitySlot === 'shield'
+        && matchedA.opponent?.publicProfile?.reportVersion === 'pvp-live-ranked-opponent-profile-v1'
+        && matchedB.opponent?.publicProfile?.reportVersion === 'pvp-live-ranked-opponent-profile-v1'
+        && !Object.prototype.hasOwnProperty.call(matchedA.opponent || {}, 'loadout')
+        && !Object.prototype.hasOwnProperty.call(matchedB.opponent || {}, 'loadout')
         && matchedA.matchQuality?.tag === matchedB.matchQuality?.tag
         && matchedA.matchQuality?.ratingDeltaBucket === 'near_0_99',
       JSON.stringify({ matchedA, matchedB }),
@@ -905,7 +908,9 @@ async function writeReport() {
       visibilityProbe.hasSnapshotLocked
         && !visibilityProbe.opponentHasSnapshot
         && !visibilityProbe.opponentHandArray
-        && /shield/.test(visibilityProbe.renderedOpponentLoadout),
+        && /公开画像/.test(visibilityProbe.renderedOpponentLoadout)
+        && /构筑隐藏/.test(visibilityProbe.renderedOpponentLoadout)
+        && !/shield|hash|斗法谱/.test(visibilityProbe.renderedOpponentLoadout),
       JSON.stringify(visibilityProbe),
     );
 
