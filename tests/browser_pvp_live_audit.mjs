@@ -2140,6 +2140,127 @@ async function safeElementScreenshot(page, selector, outputPath) {
       && authoritativeTempoPriorityProbe.textTempo?.sourceVisibility === 'server_authoritative_connection_state',
     JSON.stringify(authoritativeTempoPriorityProbe),
   );
+  const authoritativeSubmitBlockProbe = await page.evaluate(async () => {
+    const scene = window.PVPScene;
+    const originalGetLiveSession = scene.getLiveSession;
+    const originalStartLiveHeartbeat = scene.startLiveHeartbeat;
+    const originalStopLiveHeartbeat = scene.stopLiveHeartbeat;
+    originalStopLiveHeartbeat?.call(scene);
+    const blockedView = {
+      ...window.__makeLivePvpAuditStateView(18, 'A', 'active'),
+      matchId: 'pvpm-browser-authoritative-submit-block',
+      connectionTempoReport: {
+        reportVersion: 'pvp-live-connection-tempo-v1',
+        sourceVisibility: 'server_authoritative_connection_state',
+        usesHiddenInformation: false,
+        rankedImpact: 'none',
+        tempoState: 'viewer_reconnect_grace',
+        severity: 'warning',
+        phase: 'active',
+        currentSeat: 'A',
+        viewerSeat: 'A',
+        opponentSeat: 'B',
+        affectedSeat: 'A',
+        statusLine: '连接：我方重连宽限 12s',
+        detailLine: '本地画面可能落后，先刷新权威状态。',
+        action: { id: 'refresh_match', label: '刷新权威状态' },
+        actionBoundary: 'recover_connection',
+        canSubmitIntent: false,
+        shouldWaitForAuthority: true,
+        remainingGraceMs: 12000,
+        safeguards: ['server_authoritative_projection'],
+      },
+    };
+    const sentIntents = [];
+    const blockedState = {
+      phase: 'active',
+      matchId: blockedView.matchId,
+      seatId: 'A',
+      stateView: blockedView,
+      realtimeStatus: 'connected',
+      lastRealtimeSyncAt: Date.now(),
+      realtimeReport: null,
+      lastEvents: [],
+    };
+    const blockedSession = {
+      getState: () => blockedState,
+      connectRealtime: () => true,
+      joinRealtimeMatch: () => true,
+      disconnectRealtime: () => {},
+      submitRealtimeIntent: (intent, matchId) => {
+        sentIntents.push({ transport: 'realtime', intent, matchId });
+        return true;
+      },
+      submitIntent: async (intent) => {
+        sentIntents.push({ transport: 'http', intent });
+        return blockedState;
+      },
+    };
+    scene.getLiveSession = () => blockedSession;
+    scene.startLiveHeartbeat = () => {};
+    scene.stopLiveHeartbeat = () => {};
+    scene.liveInlineHint = '';
+    scene.clearLiveOpeningActionConfirm?.();
+    scene.clearLiveSurrenderConfirm?.();
+    scene.renderLivePanel();
+    const buttonDisabled = action => {
+      const button = document.querySelector(`[data-live-action="${action}"]`);
+      return button ? button.disabled : null;
+    };
+    const beforeGlobalCalls = window.__livePvpAuditCalls.length;
+    const beforeDirectProbe = {
+      buttons: {
+        refreshMatch: buttonDisabled('refresh-match'),
+        endTurn: buttonDisabled('end-turn'),
+        surrender: buttonDisabled('surrender'),
+        ready: buttonDisabled('ready'),
+        confirmMulligan: buttonDisabled('confirm-mulligan'),
+      },
+      handCardsDisabled: Array.from(document.querySelectorAll('[data-live-card]')).map(button => button.disabled),
+      emotesDisabled: Array.from(document.querySelectorAll('[data-live-emote]')).map(button => button.disabled),
+      tempoBoundary: document.querySelector('[data-live-connection-tempo]')?.getAttribute('data-live-connection-tempo-boundary') || '',
+      tempoCanSubmit: document.querySelector('[data-live-connection-tempo]')?.getAttribute('data-live-connection-tempo-can-submit') || '',
+      textTempo: JSON.parse(window.render_game_to_text()).pvp?.live?.connectionTempoReport || null,
+    };
+    await scene.endLiveTurn();
+    await scene.readyLiveMatch();
+    await scene.submitLiveEmote('respect');
+    await scene.submitLiveCard('A-strike-1');
+    const result = {
+      ...beforeDirectProbe,
+      sentIntents,
+      globalCallDelta: window.__livePvpAuditCalls.slice(beforeGlobalCalls),
+      hint: document.querySelector('[data-live-last-error]')?.textContent || '',
+    };
+    scene.getLiveSession = originalGetLiveSession;
+    scene.startLiveHeartbeat = originalStartLiveHeartbeat;
+    scene.stopLiveHeartbeat = originalStopLiveHeartbeat;
+    scene.liveInlineHint = '';
+    scene.clearLiveOpeningActionConfirm?.();
+    scene.clearLiveSurrenderConfirm?.();
+    scene.renderLivePanel();
+    return result;
+  });
+  add(
+    'live UI blocks stale inputs when server connection tempo requires authoritative recovery',
+    authoritativeSubmitBlockProbe.buttons.refreshMatch === false
+      && authoritativeSubmitBlockProbe.buttons.endTurn === true
+      && authoritativeSubmitBlockProbe.buttons.surrender === true
+      && authoritativeSubmitBlockProbe.buttons.ready === true
+      && authoritativeSubmitBlockProbe.buttons.confirmMulligan === true
+      && authoritativeSubmitBlockProbe.handCardsDisabled.length > 0
+      && authoritativeSubmitBlockProbe.handCardsDisabled.every(value => value === true)
+      && authoritativeSubmitBlockProbe.emotesDisabled.length > 0
+      && authoritativeSubmitBlockProbe.emotesDisabled.every(value => value === true)
+      && authoritativeSubmitBlockProbe.tempoBoundary === 'recover_connection'
+      && authoritativeSubmitBlockProbe.tempoCanSubmit === 'false'
+      && authoritativeSubmitBlockProbe.textTempo?.actionBoundary === 'recover_connection'
+      && authoritativeSubmitBlockProbe.textTempo?.canSubmitIntent === false
+      && authoritativeSubmitBlockProbe.sentIntents.length === 0
+      && authoritativeSubmitBlockProbe.globalCallDelta.length === 0
+      && /刷新权威状态|连接|权威/.test(authoritativeSubmitBlockProbe.hint),
+    JSON.stringify(authoritativeSubmitBlockProbe),
+  );
   await page.evaluate(() => {
     window.__livePvpAuditConnectionMode = 'online';
     window.PVPScene.renderLivePanel();

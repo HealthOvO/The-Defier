@@ -1,5 +1,25 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-21: V10-S24 live PVP connection tempo input gate
+  - 本轮完成
+    - `js/scenes/pvp-scene.js` 新增 `getLiveConnectionSubmitBlock()` / `blockLiveConnectionSubmit()`：前端现在会消费服务端权威 `connectionTempoReport` 的 `actionBoundary / canSubmitIntent / shouldWaitForAuthority`，当我方处于重连宽限、断线刷新、或需要等待服务端权威结算时，行动不再只停留在提示文案层。
+    - active / setup 的输入门禁统一接入连接节奏：手牌出牌、调息确认、准备、结束回合、认输、预设表情都会在权威 tempo 禁止提交时禁用；`refresh-match` 保持可用，玩家能先刷新权威状态，而不是用旧画面继续提交 stale intent。
+    - `submitLiveIntent()` 在 realtime / HTTP 发送前增加兜底拦截；`submitLiveCard()`、`confirmLiveMulligan()`、`readyLiveMatch()`、`endLiveTurn()`、`surrenderLiveMatch()` 的二次确认路径也会先检查连接门禁，避免按钮禁用之外的直接调用绕过。
+    - 连接节奏 DOM 增加 `data-live-connection-tempo-boundary` 与 `data-live-connection-tempo-can-submit`，浏览器门禁可以直接确认当前页面拿到的是权威输入边界，而不只是连接文案。
+    - `tests/sanity_pvp_live_ui_runtime_checks.mjs` 新增 viewer reconnect / refresh required 红测：断言 active / setup 的 stale 行动按钮禁用、刷新仍可用、直接 `submitLiveIntent()` / `submitLiveEmote()` 不产生 realtime 或 HTTP intent。
+    - `tests/browser_pvp_live_audit.mjs` 新增整屏 blocked tempo 审计：注入服务端权威 `viewer_reconnect_grace` 后，按钮、手牌、表情、DOM 元数据、`render_game_to_text()` snapshot 和直接调用零提交都会被钉住。
+  - 已验证
+    - 红测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs` 在实现前失败于 `viewer reconnect grace should disable active end-turn even when it is my turn`。
+    - 绿测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs`
+    - 绿测：`node tests/sanity_pvp_live_ui_contract_checks.cjs`
+    - 绿测：`node tests/sanity_release_gate_coverage_checks.cjs`
+    - 全量 Node 门禁：`npm run test:node`，All node checks passed。
+    - 构建：`npm run build:pages`
+    - 浏览器审计：`node tests/browser_pvp_live_audit.mjs`，98/98 findings、0 failed、0 console error。
+    - 真实后端浏览器 smoke：`node tests/browser_pvp_live_real_backend_smoke.mjs http://127.0.0.1:4173 output/pvp-live-connection-submit-block-real-backend-smoke`，57/57 findings、0 failed、0 console error。
+  - 当前结论
+    - live PVP 的“连接节奏”现在真正接管输入门禁：我方本地画面可能落后时，玩家只能刷新权威状态或等待服务端结算，不能再用旧状态提交行动、表情或二次确认。这能降低断线/重连窗口里的误操作和争议，同时不影响对方非行动窗口断线时当前玩家继续提交合法行动。
+
 - 2026-06-21: V10-S23 live PVP effective action receipt
   - 本轮完成
     - `server/pvp-live/engine/state-view.js` 在 `experienceReport` 中新增 `pvp-live-effective-action-report-v1`：只基于脱敏公开事件判断后手是否产生过正向局面变化，支持 `confirmed / watch / missing_window` 三档，不读取手牌、牌库、随机种子、构筑快照或隐藏 payload。

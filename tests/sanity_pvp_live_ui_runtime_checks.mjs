@@ -488,6 +488,116 @@ PVPScene.getLiveSession = previousGetLiveSessionForTempo;
 assert.equal(authoritativeConnectionSnapshot.connectionTempoReport.tempoState, 'opponent_action_timeout_pending', 'live snapshot should expose authoritative connection tempo');
 assert.equal(authoritativeConnectionSnapshot.connectionTempoReport.sourceVisibility, 'server_authoritative_connection_state', 'live snapshot should keep authoritative connection tempo provenance');
 
+const viewerReconnectBlockedView = {
+  matchId: 'pvpm-ui-runtime-viewer-reconnect-blocked',
+  status: 'active',
+  currentSeat: 'A',
+  stateVersion: 18,
+  connectionTempoReport: {
+    reportVersion: 'pvp-live-connection-tempo-v1',
+    sourceVisibility: 'server_authoritative_connection_state',
+    usesHiddenInformation: false,
+    rankedImpact: 'none',
+    tempoState: 'viewer_reconnect_grace',
+    severity: 'warning',
+    phase: 'active',
+    currentSeat: 'A',
+    viewerSeat: 'A',
+    opponentSeat: 'B',
+    affectedSeat: 'A',
+    statusLine: '连接：我方重连宽限 12s',
+    detailLine: '本地画面可能落后，先刷新权威状态。',
+    action: { id: 'refresh_match', label: '刷新权威状态' },
+    actionBoundary: 'recover_connection',
+    canSubmitIntent: false,
+    shouldWaitForAuthority: true,
+    remainingGraceMs: 12000,
+    safeguards: ['server_authoritative_projection']
+  }
+};
+const viewerReconnectBlockedState = {
+  phase: 'active',
+  matchId: viewerReconnectBlockedView.matchId,
+  seatId: 'A',
+  realtimeStatus: 'connected',
+  stateView: viewerReconnectBlockedView,
+  lastEvents: []
+};
+const blockedActiveButtons = new Map([
+  ['refresh-match', { disabled: true, textContent: '刷新', querySelector() { return null; } }],
+  ['end-turn', { disabled: true, textContent: '结束回合', querySelector() { return null; } }],
+  ['surrender', { disabled: true, textContent: '认输', querySelector() { return null; } }],
+  ['confirm-mulligan', { disabled: true, textContent: '确认调息', querySelector() { return null; } }],
+  ['ready', { disabled: true, textContent: '准备就绪', querySelector() { return null; } }],
+]);
+const blockedActiveRoot = {
+  querySelector(selector) {
+    const actionMatch = String(selector || '').match(/^\[data-live-action="([^"]+)"\]$/);
+    return actionMatch ? blockedActiveButtons.get(actionMatch[1]) || null : null;
+  },
+  querySelectorAll() { return []; }
+};
+const previousDocumentQuerySelectorForConnectionTempo = documentStub.querySelector;
+documentStub.querySelector = (selector) => selector === '[data-live-pvp-root]' ? blockedActiveRoot : null;
+PVPScene.getLiveSession = () => ({ getState: () => viewerReconnectBlockedState });
+PVPScene.liveIntentInFlight = null;
+PVPScene.updateLiveButtons('active', true, { seatId: 'A', ready: true, mulliganUsed: true });
+assert.equal(blockedActiveButtons.get('end-turn').disabled, true, 'viewer reconnect grace should disable active end-turn even when it is my turn');
+assert.equal(blockedActiveButtons.get('surrender').disabled, true, 'viewer reconnect grace should disable stale active surrender submits');
+assert.equal(blockedActiveButtons.get('refresh-match').disabled, false, 'viewer reconnect grace should keep authoritative refresh enabled');
+
+const viewerReconnectBlockedSetupState = {
+  ...viewerReconnectBlockedState,
+  phase: 'setup',
+  stateView: {
+    ...viewerReconnectBlockedView,
+    status: 'setup',
+    phase: 'setup',
+    currentSeat: 'A',
+    connectionTempoReport: {
+      ...viewerReconnectBlockedView.connectionTempoReport,
+      phase: 'setup',
+      tempoState: 'viewer_refresh_required',
+      severity: 'danger',
+      statusLine: '连接：我方断线，需要刷新权威状态'
+    }
+  }
+};
+PVPScene.getLiveSession = () => ({ getState: () => viewerReconnectBlockedSetupState });
+PVPScene.updateLiveButtons('setup', false, { seatId: 'A', ready: false, mulliganUsed: false });
+assert.equal(blockedActiveButtons.get('confirm-mulligan').disabled, true, 'viewer refresh required should disable stale mulligan submit');
+assert.equal(blockedActiveButtons.get('ready').disabled, true, 'viewer refresh required should disable stale ready submit');
+assert.equal(blockedActiveButtons.get('refresh-match').disabled, false, 'viewer refresh required setup should keep refresh enabled');
+const blockedIntentCalls = [];
+const previousStartLiveRealtimeForConnectionTempo = PVPScene.startLiveRealtime;
+const previousRenderLivePanelForConnectionTempo = PVPScene.renderLivePanel;
+const previousGetLiveSessionForConnectionTempo = PVPScene.getLiveSession;
+PVPScene.startLiveRealtime = () => {};
+PVPScene.renderLivePanel = () => {};
+PVPScene.getLiveSession = () => ({
+  getState: () => viewerReconnectBlockedState,
+  submitRealtimeIntent: (intent, matchId) => {
+    blockedIntentCalls.push({ type: 'realtime', intent, matchId });
+    return true;
+  },
+  submitIntent: async (intent) => {
+    blockedIntentCalls.push({ type: 'http', intent });
+    return viewerReconnectBlockedState;
+  }
+});
+await PVPScene.submitLiveIntent({
+  intentId: 'blocked-end-turn',
+  intentType: 'end_turn',
+  payload: {}
+});
+await PVPScene.submitLiveEmote('respect');
+assert.equal(blockedIntentCalls.length, 0, 'submitLiveIntent should not send stale intents while authoritative connection tempo blocks submits');
+assert.match(PVPScene.liveInlineHint, /刷新权威状态|连接|权威/, 'blocked connection tempo submit should tell the player to refresh authoritative state');
+documentStub.querySelector = previousDocumentQuerySelectorForConnectionTempo;
+PVPScene.startLiveRealtime = previousStartLiveRealtimeForConnectionTempo;
+PVPScene.renderLivePanel = previousRenderLivePanelForConnectionTempo;
+PVPScene.getLiveSession = previousGetLiveSessionForConnectionTempo;
+
 const lowViewerActionTimerCopy = PVPScene.formatLiveTurnTimer({
   turnTimer: {
     reportVersion: 'pvp-live-turn-timer-v1',

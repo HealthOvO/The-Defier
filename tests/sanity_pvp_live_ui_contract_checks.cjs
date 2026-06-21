@@ -414,8 +414,12 @@ assert.ok(resolveLiveIntentBody.includes('actionReleasedByEvent'), 'resolveLiveI
 assert.ok(scene.includes('lastSeenEventRevision'), 'PVPScene should record event high-water marks when realtime intents become pending');
 assert.ok(scene.includes('eventRevision <= pendingEventRevision'), 'PVPScene should ignore stale action events when social stateVersion changes arrive later');
 assert.ok(submitLiveIntentBody.includes('上一动作正在等待权威回执，请稍候。'), 'submitLiveIntent should surface a pending-action hint instead of sending duplicate live intents');
+assert.ok(scene.includes('getLiveConnectionSubmitBlock'), 'PVPScene should derive live input locks from authoritative connection tempo');
+assert.ok(scene.includes('blockLiveConnectionSubmit'), 'PVPScene should expose a shared connection tempo submit guard');
+assert.ok(submitLiveIntentBody.includes('this.blockLiveConnectionSubmit(state)'), 'submitLiveIntent should block stale inputs before realtime or HTTP submit');
+assert.ok(scene.includes('const connectionSubmitBlocked = !!this.getLiveConnectionSubmitBlock(state)'), 'live controls should share authoritative connection tempo input lock');
 assert.ok(scene.includes('const intentLocked = this.isLiveIntentInFlight(state)'), 'live hand rendering should disable card clicks while a realtime intent is pending');
-assert.ok(scene.includes('button.disabled = socialIntentLocked || !this.canSendLiveEmote(phase)'), 'live emote buttons should only be disabled while a social realtime intent is pending');
+assert.ok(scene.includes('button.disabled = connectionSubmitBlocked || socialIntentLocked || !this.canSendLiveEmote(phase)'), 'live emote buttons should be disabled by authoritative connection tempo or social realtime intent locks');
 const refreshLiveMatchBody = methodBody(scene, 'refreshLiveMatch');
 assert.ok(refreshLiveMatchBody.includes('if (!fromAutoPoll)'), 'manual live refresh should be distinct from auto polling when clearing pending intents');
 assert.ok(refreshLiveMatchBody.includes('this.clearLiveIntentInFlight()'), 'manual live refresh should clear local realtime intent locks after authoritative refresh');

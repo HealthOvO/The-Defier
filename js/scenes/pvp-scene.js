@@ -975,6 +975,42 @@ export const PVPScene = {
       : '';
     return `<span class="pvp-live-tempo-copy">${this.escapeHtml(tempo.detailLine || tempo.statusLine)}</span>${actionMarkup}`;
   },
+  getLiveConnectionSubmitBlock(stateOrView = null) {
+    const sourceState = stateOrView && stateOrView.stateView ? stateOrView : null;
+    const view = sourceState ? sourceState.stateView : stateOrView;
+    const tempo = this.getLiveConnectionTempo(view, sourceState);
+    if (!tempo || tempo.reportVersion !== 'pvp-live-connection-tempo-v1') return null;
+    if (tempo.sourceVisibility !== 'server_authoritative_connection_state') return null;
+    const tempoState = String(tempo.tempoState || '');
+    const actionBoundary = String(tempo.actionBoundary || '');
+    const explicitBlockedStates = new Set([
+      'viewer_reconnect_grace',
+      'viewer_refresh_required',
+      'opponent_action_grace',
+      'opponent_action_timeout_pending',
+      'opponent_setup_grace',
+      'opponent_setup_disconnected',
+      'opponent_disconnected'
+    ]);
+    const recoverConnection = actionBoundary === 'recover_connection';
+    const waitingForAuthority = tempo.shouldWaitForAuthority === true && tempo.canSubmitIntent === false;
+    const explicitCannotSubmit = tempo.canSubmitIntent === false && explicitBlockedStates.has(tempoState);
+    return recoverConnection || waitingForAuthority || explicitCannotSubmit ? tempo : null;
+  },
+  formatLiveConnectionSubmitBlockHint(block) {
+    if (!block) return '';
+    const detail = String(block.detailLine || block.statusLine || '连接状态等待权威同步').trim();
+    const action = block.action && block.action.id === 'refresh_match' ? '请先刷新权威状态后再操作。' : '请等待服务端权威状态后再操作。';
+    return `${detail}${detail.endsWith('。') ? '' : '。'}${action}`;
+  },
+  blockLiveConnectionSubmit(state = null) {
+    const block = this.getLiveConnectionSubmitBlock(state);
+    if (!block) return false;
+    this.liveInlineHint = this.formatLiveConnectionSubmitBlockHint(block);
+    this.clearLiveOpeningActionConfirm();
+    this.clearLiveSurrenderConfirm();
+    return true;
+  },
   getLiveRealtimeReport(state) {
     const report = state && state.realtimeReport && typeof state.realtimeReport === 'object' ? state.realtimeReport : null;
     if (!report) return null;
@@ -3788,6 +3824,8 @@ export const PVPScene = {
       connectionTempoEl.setAttribute('data-live-connection-tempo-state', tempo ? tempo.tempoState : '');
       connectionTempoEl.setAttribute('data-live-connection-tempo-actor', tempo ? tempo.affectedSeat : '');
       connectionTempoEl.setAttribute('data-live-connection-tempo-severity', tempo ? tempo.severity : '');
+      connectionTempoEl.setAttribute('data-live-connection-tempo-boundary', tempo ? tempo.actionBoundary : '');
+      connectionTempoEl.setAttribute('data-live-connection-tempo-can-submit', tempo ? String(tempo.canSubmitIntent === true) : '');
       connectionTempoEl.innerHTML = this.renderLiveConnectionTempo(view, state);
     }
     setText('[data-live-realtime-status]', this.formatLiveRealtimeStatus(state));
@@ -3906,8 +3944,9 @@ export const PVPScene = {
           if (!liveCardIds.has(cardId)) this.liveMulliganSelection.delete(cardId);
         });
         const intentLocked = this.isLiveIntentInFlight(state);
-        const canAct = phase === 'active' && view && view.currentSeat === state.seatId && !intentLocked;
-        const canSelectMulligan = phase === 'setup' && self && !self.mulliganUsed && !intentLocked;
+        const connectionSubmitBlocked = !!this.getLiveConnectionSubmitBlock(state);
+        const canAct = phase === 'active' && view && view.currentSeat === state.seatId && !intentLocked && !connectionSubmitBlocked;
+        const canSelectMulligan = phase === 'setup' && self && !self.mulliganUsed && !intentLocked && !connectionSubmitBlocked;
         handEl.innerHTML = cards.map(card => {
           const cardConfirming = !canSelectMulligan && this.isLiveOpeningActionConfirmArmed(state, 'play_card', { cardInstanceId: card.instanceId || '' });
           return `
@@ -3962,10 +4001,11 @@ export const PVPScene = {
     const root = document.querySelector('[data-live-pvp-root]');
     if (!root) return;
     const state = this.getLiveSession().getState();
-    if (!(phase === 'active' || phase === 'sync_required')) {
+    const connectionSubmitBlocked = !!this.getLiveConnectionSubmitBlock(state);
+    if (connectionSubmitBlocked || !(phase === 'active' || phase === 'sync_required')) {
       this.clearLiveSurrenderConfirm();
     }
-    if (phase !== 'active' || !this.isLiveOpeningActionConfirmArmed(state, this.liveOpeningActionConfirm?.actionType || '', this.liveOpeningActionConfirm?.payload || {})) {
+    if (connectionSubmitBlocked || phase !== 'active' || !this.isLiveOpeningActionConfirmArmed(state, this.liveOpeningActionConfirm?.actionType || '', this.liveOpeningActionConfirm?.payload || {})) {
       this.clearLiveOpeningActionConfirm();
     }
     const entrySafeguardBlocked = phase === 'idle' && this.isLiveEntrySafeguardBlocked(state);
@@ -3990,16 +4030,16 @@ export const PVPScene = {
     setDisabled('cancel-invite', phase !== 'waiting_invite');
     setDisabled('cancel-queue', phase !== 'waiting');
     setDisabled('practice-live', !(entrySafeguardBlocked && this.hasLiveEntrySafeguardAction(state, 'practice')) && !(phase === 'waiting' && (this.getLiveWaitingReport(state)?.longWait || this.getLiveWaitingQualitySafeguard(state))));
-    setDisabled('refresh-match', phase === 'queueing' || phase === 'idle' || phase === 'finished' || phase === 'invalidated');
+    setDisabled('refresh-match', !connectionSubmitBlocked && (phase === 'queueing' || phase === 'idle' || phase === 'finished' || phase === 'invalidated'));
     setButtonText('join-queue', queueCooldownBlocked ? queueCooldownCountdown && queueCooldownCountdown.buttonText || '稍后重试' : entrySafeguardBlocked && this.hasLiveEntrySafeguardAction(state, 'retry_connection_check') ? '重试检测' : '入队');
     setButtonText('end-turn', endTurnConfirmArmed ? '确认结束' : '结束回合');
     setButtonText('surrender', surrenderConfirmArmed ? '确认认输' : '认输');
-    setDisabled('confirm-mulligan', intentLocked || !(phase === 'setup' && self && !self.mulliganUsed));
-    setDisabled('ready', intentLocked || !(phase === 'setup' && self && !self.ready));
-    setDisabled('end-turn', intentLocked || !(phase === 'active' && isMyTurn));
-    setDisabled('surrender', intentLocked || !(phase === 'active' || phase === 'sync_required'));
+    setDisabled('confirm-mulligan', connectionSubmitBlocked || intentLocked || !(phase === 'setup' && self && !self.mulliganUsed));
+    setDisabled('ready', connectionSubmitBlocked || intentLocked || !(phase === 'setup' && self && !self.ready));
+    setDisabled('end-turn', connectionSubmitBlocked || intentLocked || !(phase === 'active' && isMyTurn));
+    setDisabled('surrender', connectionSubmitBlocked || intentLocked || !(phase === 'active' || phase === 'sync_required'));
     root.querySelectorAll('[data-live-emote]').forEach(button => {
-      button.disabled = socialIntentLocked || !this.canSendLiveEmote(phase);
+      button.disabled = connectionSubmitBlocked || socialIntentLocked || !this.canSendLiveEmote(phase);
       const emoteId = button.getAttribute('data-live-emote') || '';
       const option = this.getLiveEmoteOptions().find(item => item.id === emoteId);
       if (option) button.textContent = option.label;
@@ -4131,6 +4171,7 @@ export const PVPScene = {
     const session = this.getLiveSession();
     const state = session.getState();
     if (!state || !state.matchId) return state;
+    if (this.blockLiveConnectionSubmit(state)) return state;
     if (String(intent.intentType || '') !== 'surrender') {
       this.clearLiveSurrenderConfirm();
     }
@@ -4827,6 +4868,10 @@ export const PVPScene = {
     const session = this.getLiveSession();
     if (!cardInstanceId) return;
     const state = session.getState();
+    if (this.blockLiveConnectionSubmit(state)) {
+      this.renderLivePanel();
+      return state;
+    }
     const view = state && state.stateView ? state.stateView : null;
     const targetSeat = view && view.opponent && view.opponent.seatId
       ? view.opponent.seatId
@@ -4859,6 +4904,12 @@ export const PVPScene = {
     this.renderLivePanel();
   },
   async confirmLiveMulligan() {
+    const session = this.getLiveSession();
+    const state = session && typeof session.getState === 'function' ? session.getState() : null;
+    if (this.blockLiveConnectionSubmit(state)) {
+      this.renderLivePanel();
+      return state;
+    }
     await this.submitLiveIntent({
       intentId: this.makeLiveIntentId('mulligan'),
       intentType: 'mulligan',
@@ -4870,6 +4921,12 @@ export const PVPScene = {
     this.renderLivePanel();
   },
   async readyLiveMatch() {
+    const session = this.getLiveSession();
+    const state = session && typeof session.getState === 'function' ? session.getState() : null;
+    if (this.blockLiveConnectionSubmit(state)) {
+      this.renderLivePanel();
+      return state;
+    }
     await this.submitLiveIntent({
       intentId: this.makeLiveIntentId('ready'),
       intentType: 'ready',
@@ -4880,6 +4937,10 @@ export const PVPScene = {
   async endLiveTurn() {
     const session = this.getLiveSession();
     const state = session && typeof session.getState === 'function' ? session.getState() : null;
+    if (this.blockLiveConnectionSubmit(state)) {
+      this.renderLivePanel();
+      return state;
+    }
     if (this.isLiveOpeningActionConfirmRequired(state, 'end_turn', {}) && !this.isLiveOpeningActionConfirmArmed(state, 'end_turn', {})) {
       this.armLiveOpeningActionConfirm(state, 'end_turn', {}, this.formatLiveOpeningActionConfirmMessage(state, 'end_turn', {}));
       this.renderLivePanel();
@@ -4896,6 +4957,10 @@ export const PVPScene = {
     const session = this.getLiveSession();
     const state = session && typeof session.getState === 'function' ? session.getState() : null;
     if (!state || !state.matchId || !(state.phase === 'active' || state.phase === 'sync_required')) return state;
+    if (this.blockLiveConnectionSubmit(state)) {
+      this.renderLivePanel();
+      return state;
+    }
     if (!this.isLiveSurrenderConfirmArmed(state)) {
       this.armLiveSurrenderConfirm(state, '再次点击确认认输；本局会立刻结束，对手获胜，正式结果只按当前对局模式的服务端规则处理。');
       this.renderLivePanel();
