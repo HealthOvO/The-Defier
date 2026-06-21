@@ -1,5 +1,21 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-21: V10-S26 live PVP friendly ready timeout no-ranked guard
+  - 本轮完成
+    - `server/pvp-live/live-store.js` 将 setup `ready_timeout` 的短冷却语义继续收口到 ranked/public queue：`recordReadyTimeoutCooldowns()` 现在遇到 `friendly` / no-ranked match 会直接早退，不再把好友约战或友谊再战里的未准备超时误写成正式排位排队冷却。
+    - `tests/sanity_pvp_live_route_checks.cjs` 新增 friendly invite ready-timeout 负测：E 创建私密邀请、F 加入友谊赛，E 已准备、F 未准备直到 `ready_timeout`；服务端仍会公开 `ready_timeout` 和 `match_invalidated reason=ready_timeout` 证据，但 F 随后应能 200 / `waiting` 进入公开队列，证明 no-ranked 无效局不污染正式排位入口。
+    - ranked setup ready timeout 的责任冷却保持不变：正式排位里未准备方仍会收到 `ready_timeout` matchmaking guard，已准备方仍能释放重排；本轮只补 no-ranked 边界，避免低压力约战体验被排位惩罚语义误伤。
+  - 已验证
+    - 红测：`node tests/sanity_pvp_live_route_checks.cjs` 在实现前失败于 `friendly setup ready timeout should not apply ranked queue cooldown`，实际为 409。
+    - 绿测：`node tests/sanity_pvp_live_route_checks.cjs`
+    - 语法：`node --check server/pvp-live/live-store.js`
+    - 语法：`node --check tests/sanity_pvp_live_route_checks.cjs`
+    - 全量 Node 门禁：`npm run test:node`，All node checks passed。
+    - 文档同步：`node tests/sanity_intro_progress_sync_checks.cjs`
+    - 构建：`npm run build:pages`
+  - 当前结论
+    - live PVP 的 no-ranked 约战边界更完整：好友局可以保留公开超时证据和无效局解释，但不会把“低压力练习 / 约战”里的准备失误带进正式排位冷却。这样双方在友谊赛中仍能低成本试谱、沟通和再来一局，而 ranked 队列继续保留防拖延保护。
+
 - 2026-06-21: V10-S25 live PVP setup disconnect dodge cooldown
   - 本轮完成
     - `server/pvp-live/live-store.js` 新增 setup `connection_timeout` 责任方短冷却：匹配进入 setup 后若一方在已公开先后手/准备窗口中断线并触发无效局，服务端会只给 ranked/public queue 场景下的 `disconnectedSeats` 对应用户写入 `connection_timeout` matchmaking guard；未断线方释放后可重新入队，不产生结算、奖励或正式积分变化。

@@ -702,6 +702,52 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
             body: { queueTicket: friendlyDisconnectGuestQueue.payload.queueTicket }
         });
 
+        const friendlyReadyTimeoutInvite = await request(baseUrl, '/api/pvp/live/invites', {
+            method: 'POST',
+            token: tokenE,
+            body: { displayName: '戊', loadout: loadoutB }
+        });
+        assert.equal(friendlyReadyTimeoutInvite.payload.status, 'waiting_invite', 'friendly setup ready timeout invite should enter waiting invite state');
+        const friendlyReadyTimeoutJoin = await request(baseUrl, `/api/pvp/live/invites/${encodeURIComponent(friendlyReadyTimeoutInvite.payload.inviteCode)}/join`, {
+            method: 'POST',
+            token: tokenF,
+            body: { displayName: '己', loadout: loadoutA }
+        });
+        assert.equal(friendlyReadyTimeoutJoin.payload.status, 'matched', 'friendly ready timeout guest should create friendly match');
+        assert.equal(friendlyReadyTimeoutJoin.payload.stateView.mode, 'friendly', 'friendly ready timeout match should stay no-ranked mode');
+        const friendlyReadyTimeoutHostReady = await submitIntent(baseUrl, tokenE, friendlyReadyTimeoutJoin.payload.matchId, {
+            intentId: 'friendly-ready-timeout-host-ready',
+            intentType: 'ready',
+            stateVersion: friendlyReadyTimeoutJoin.payload.stateView.stateVersion,
+            payload: {}
+        });
+        assert.equal(friendlyReadyTimeoutHostReady.payload.result, 'accepted', 'friendly ready timeout host ready should be accepted before guest timeout');
+        const friendlyReadyTimeoutMatch = pvpLiveRoutes.__livePvpStore.matches.get(friendlyReadyTimeoutJoin.payload.matchId);
+        const originalFriendlyReadyTimeoutNow = pvpLiveRoutes.__livePvpStore.now;
+        const friendlyReadyTimeoutBaseNow = Date.now();
+        friendlyReadyTimeoutMatch.state.setup.readyDeadlineAt = friendlyReadyTimeoutBaseNow - 1;
+        friendlyReadyTimeoutMatch.updatedAt = friendlyReadyTimeoutBaseNow - 10 * 60 * 1000;
+        pvpLiveRoutes.__livePvpStore.now = () => friendlyReadyTimeoutBaseNow + 30 * 1000;
+        const friendlyReadyTimeoutState = await request(baseUrl, `/api/pvp/live/matches/${friendlyReadyTimeoutJoin.payload.matchId}`, {
+            token: tokenF
+        });
+        pvpLiveRoutes.__livePvpStore.now = originalFriendlyReadyTimeoutNow;
+        assert.equal(friendlyReadyTimeoutState.payload.stateView.status, 'invalidated', 'friendly setup ready timeout should invalidate without settlement');
+        assert.ok(friendlyReadyTimeoutState.payload.stateView.recentEvents.some(event => event.eventType === 'ready_timeout' && eventPublicData(event).unreadySeats?.includes('B')), 'friendly setup ready timeout should emit public ready_timeout evidence');
+        assert.ok(friendlyReadyTimeoutState.payload.stateView.recentEvents.some(event => event.eventType === 'match_invalidated' && eventPublicData(event).reason === 'ready_timeout'), 'friendly setup ready timeout should expose ready_timeout invalidation reason');
+        const friendlyReadyTimeoutGuestQueue = await request(baseUrl, '/api/pvp/live/queue/join', {
+            method: 'POST',
+            token: tokenF,
+            body: { displayName: '己', loadout: loadoutA }
+        });
+        assert.equal(friendlyReadyTimeoutGuestQueue.status, 200, 'friendly setup ready timeout should not apply ranked queue cooldown');
+        assert.equal(friendlyReadyTimeoutGuestQueue.payload.status, 'waiting', 'friendly setup unready guest should be able to enter public queue after no-score invalidation');
+        await request(baseUrl, '/api/pvp/live/queue/cancel', {
+            method: 'POST',
+            token: tokenF,
+            body: { queueTicket: friendlyReadyTimeoutGuestQueue.payload.queueTicket }
+        });
+
         const expiringInvite = await request(baseUrl, '/api/pvp/live/invites', {
             method: 'POST',
             token: tokenF,

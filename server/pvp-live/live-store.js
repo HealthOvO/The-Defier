@@ -944,6 +944,7 @@ class LivePvpStore {
 
     async recordReadyTimeoutCooldowns(match) {
         if (!match || !match.state || match.state.status !== 'invalidated' || this.readyTimeoutCooldownMs <= 0) return [];
+        if (match.mode === 'friendly' || match.state.mode === 'friendly') return [];
         const events = Array.isArray(match.state.events) ? match.state.events : [];
         const timeoutEvent = events.slice().reverse().find(event => event && event.eventType === 'ready_timeout' && event.payload);
         const unreadySeats = Array.isArray(timeoutEvent && timeoutEvent.payload && timeoutEvent.payload.unreadySeats)
