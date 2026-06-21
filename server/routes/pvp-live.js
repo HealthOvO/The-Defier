@@ -68,11 +68,11 @@ function makeDefaultRatingProvider() {
         async getLivePvpRating(userId) {
             const id = String(userId || '').trim();
             if (!id) {
-                return { score: 1000, division: '玄阶', seasonId: 's1-genesis', provisional: true };
+                return { score: 1000, division: '玄阶', seasonId: 's1-genesis', provisional: true, rankedGames: 0, lowSampleProtected: true };
             }
             const row = await new Promise((resolve, reject) => {
                 db.get(
-                    `SELECT score, division, season_id FROM pvp_ranks
+                    `SELECT score, division, season_id, wins, losses FROM pvp_ranks
                      WHERE user_id = ?
                      LIMIT 1`,
                     [id],
@@ -83,13 +83,14 @@ function makeDefaultRatingProvider() {
                 );
             });
             if (!row) {
-                return { score: 1000, division: '玄阶', seasonId: 's1-genesis', provisional: true };
+                return { score: 1000, division: '玄阶', seasonId: 's1-genesis', provisional: true, rankedGames: 0, lowSampleProtected: true };
             }
             return {
                 score: row.score,
                 division: row.division || '玄阶',
                 seasonId: row.season_id || 's1-genesis',
-                provisional: false
+                provisional: false,
+                rankedGames: Math.max(0, Math.floor(Number(row.wins) || 0) + Math.floor(Number(row.losses) || 0))
             };
         }
     };

@@ -32,6 +32,27 @@ function dbGet(sql, params = []) {
   });
 }
 
+function dbRun(sql, params = []) {
+  const db = new sqlite3.Database(DB_PATH);
+  return new Promise((resolve, reject) => {
+    db.run(sql, params, (err) => {
+      db.close();
+      if (err) reject(err);
+      else resolve();
+    });
+  });
+}
+
+async function setMatureRank(user, score = 1000, rankedGames = 6) {
+  const now = Date.now();
+  await dbRun(
+    `INSERT OR REPLACE INTO pvp_ranks
+      (id, user_id, user_name, score, wins, losses, realm, division, season_id, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [`rank-${user.userId}`, user.userId, user.username, score, rankedGames, 0, 1, '玄阶', 's1-genesis', now, now]
+  );
+}
+
 function makeLoadout(identitySlot, pattern) {
   const deck = [];
   for (let index = 0; index < 20; index += 1) {
@@ -279,6 +300,8 @@ async function pollMatchedQueueStatus(baseUrl, queueTicket, token) {
 
     const userA = await registerUser(baseUrlA, 'fanout_a');
     const userB = await registerUser(baseUrlB, 'fanout_b');
+    await setMatureRank(userA);
+    await setMatureRank(userB);
     const loadoutA = makeLoadout('sword', ['pvp_burst', 'doubleStrike', 'battleCry', 'defend']);
     const loadoutB = makeLoadout('shield', ['pvp_guard', 'defend', 'stormWard', 'quickSlash']);
 

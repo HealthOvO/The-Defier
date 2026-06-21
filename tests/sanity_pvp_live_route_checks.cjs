@@ -3,6 +3,7 @@ const express = require('../server/node_modules/express');
 const pvpLiveRoutes = require('../server/routes/pvp-live');
 const { generateToken } = require('../server/middleware/auth');
 const { RULES } = require('../server/pvp-live/engine/rules');
+const { db, initDb } = require('../server/db/database');
 
 function listen(app) {
     return new Promise((resolve, reject) => {
@@ -31,6 +32,38 @@ async function request(baseUrl, path, { method = 'GET', token, body } = {}) {
         payload = { raw: text };
     }
     return { status: response.status, ok: response.ok, payload };
+}
+
+function dbRun(sql, params = []) {
+    return new Promise((resolve, reject) => {
+        db.run(sql, params, function(err) {
+            if (err) reject(err);
+            else resolve(this);
+        });
+    });
+}
+
+async function setRouteRank({ userId, username, score = 1000, wins = 6, losses = 0, division = '玄阶' }) {
+    const now = Date.now();
+    await dbRun(
+        `INSERT INTO users (id, username, password_hash, created_at, global_updated_at)
+         VALUES (?, ?, 'pvp-live-route-default-rating-test', ?, 0)
+         ON CONFLICT(id) DO UPDATE SET username = excluded.username`,
+        [userId, username, now]
+    );
+    await dbRun(
+        `INSERT INTO pvp_ranks
+          (id, user_id, user_name, score, wins, losses, realm, division, season_id, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, 1, ?, 's1-genesis', ?, ?)
+         ON CONFLICT(user_id) DO UPDATE SET
+          user_name = excluded.user_name,
+          score = excluded.score,
+          wins = excluded.wins,
+          losses = excluded.losses,
+          division = excluded.division,
+          updated_at = excluded.updated_at`,
+        [`rank-${userId}`, userId, username, score, wins, losses, division, now, now]
+    );
 }
 
 async function submitIntent(baseUrl, token, matchId, body) {
@@ -206,6 +239,7 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
 }
 
 (async () => {
+    await initDb();
     pvpLiveRoutes.__livePvpStore.reset();
     pvpLiveRoutes.__attachServices({ settlement: makeRouteSettlementStub() });
 
@@ -276,6 +310,47 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
             token: tokenC
         });
         assert.equal(cancelledStatus.status, 404, 'cancelled queue ticket should not stay readable');
+
+        const routeRunId = `${Date.now()}-${process.pid}`;
+        const defaultMatureA = { userId: `route-default-mature-a-${routeRunId}`, username: `默甲_${routeRunId}` };
+        const defaultMatureB = { userId: `route-default-mature-b-${routeRunId}`, username: `默乙_${routeRunId}` };
+        const defaultLowSample = { userId: `route-default-low-${routeRunId}`, username: `默新_${routeRunId}` };
+        const tokenDefaultMatureA = generateToken({ id: defaultMatureA.userId, username: defaultMatureA.username });
+        const tokenDefaultMatureB = generateToken({ id: defaultMatureB.userId, username: defaultMatureB.username });
+        const tokenDefaultLowSample = generateToken({ id: defaultLowSample.userId, username: defaultLowSample.username });
+        await setRouteRank(defaultMatureA);
+        await setRouteRank(defaultMatureB);
+        const defaultMatureJoinA = await request(baseUrl, '/api/pvp/live/queue/join', {
+            method: 'POST',
+            token: tokenDefaultMatureA,
+            body: { displayName: defaultMatureA.username, loadout: loadoutA }
+        });
+        assert.equal(defaultMatureJoinA.payload.status, 'waiting', 'default rating provider first mature player should wait');
+        const defaultMatureJoinB = await request(baseUrl, '/api/pvp/live/queue/join', {
+            method: 'POST',
+            token: tokenDefaultMatureB,
+            body: { displayName: defaultMatureB.username, loadout: loadoutB }
+        });
+        assert.equal(defaultMatureJoinB.payload.status, 'matched', 'default rating provider should read ranked games from pvp_ranks and match mature players');
+        assert.equal(defaultMatureJoinB.payload.stateView.matchQuality?.expansionStage, 'strict_rating', 'default rating provider mature route should keep strict rating stage');
+        assert.ok(!/rankedGames|ranked_games|lowSampleProtected|low_sample_protected/.test(JSON.stringify(defaultMatureJoinB.payload)), 'default rating provider matched route should not leak rating sample counters');
+        pvpLiveRoutes.__livePvpStore.reset();
+
+        const defaultLowJoin = await request(baseUrl, '/api/pvp/live/queue/join', {
+            method: 'POST',
+            token: tokenDefaultLowSample,
+            body: { displayName: defaultLowSample.username, loadout: loadoutA }
+        });
+        assert.equal(defaultLowJoin.payload.status, 'waiting', 'default rating provider should treat no-rank route user as low-sample waiting player');
+        const defaultMatureVsLowJoin = await request(baseUrl, '/api/pvp/live/queue/join', {
+            method: 'POST',
+            token: tokenDefaultMatureB,
+            body: { displayName: defaultMatureB.username, loadout: loadoutB }
+        });
+        assert.equal(defaultMatureVsLowJoin.payload.status, 'waiting', 'default rating provider should not immediately pair no-rank low-sample user into mature player');
+        assert.ok(defaultMatureVsLowJoin.payload.waitingReport?.safeguards?.includes('low_sample_protection'), 'default provider low-sample waiting report should expose low-sample protection');
+        assert.ok(!/rankedGames|ranked_games|lowSampleProtected|low_sample_protected/.test(JSON.stringify(defaultMatureVsLowJoin.payload)), 'default provider low-sample waiting payload should not leak rating sample counters');
+        pvpLiveRoutes.__livePvpStore.reset();
 
         pvpLiveRoutes.__attachServices({
             ratingProvider: {

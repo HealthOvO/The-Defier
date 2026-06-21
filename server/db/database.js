@@ -160,6 +160,7 @@ const initDb = () => {
                 rating_bucket TEXT NOT NULL DEFAULT 'unrated',
                 rating_season_id TEXT NOT NULL DEFAULT 's1-genesis',
                 rating_provisional INTEGER NOT NULL DEFAULT 1,
+                rating_ranked_games INTEGER NOT NULL DEFAULT 0,
                 wide_match_consent INTEGER NOT NULL DEFAULT 0,
                 connection_health_json TEXT NOT NULL DEFAULT '{}',
                 created_at INTEGER NOT NULL,
@@ -172,6 +173,7 @@ const initDb = () => {
                 `ALTER TABLE pvp_live_queue_tickets ADD COLUMN rating_bucket TEXT NOT NULL DEFAULT 'unrated'`,
                 `ALTER TABLE pvp_live_queue_tickets ADD COLUMN rating_season_id TEXT NOT NULL DEFAULT 's1-genesis'`,
                 `ALTER TABLE pvp_live_queue_tickets ADD COLUMN rating_provisional INTEGER NOT NULL DEFAULT 1`,
+                `ALTER TABLE pvp_live_queue_tickets ADD COLUMN rating_ranked_games INTEGER NOT NULL DEFAULT 0`,
                 `ALTER TABLE pvp_live_queue_tickets ADD COLUMN wide_match_consent INTEGER NOT NULL DEFAULT 0`,
                 `ALTER TABLE pvp_live_queue_tickets ADD COLUMN connection_health_json TEXT NOT NULL DEFAULT '{}'`
             ].forEach((sql) => {

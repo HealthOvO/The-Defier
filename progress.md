@@ -1,5 +1,29 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-21: V10-S18 live PVP low-sample matchmaking protection
+  - 本轮完成
+    - `server/pvp-live/live-store.js` 将低样本保护从 UI 半截分支补成真实 queue 合同：rating snapshot 现在会识别 `rankedGames < 5` 或 provisional 玩家，并在候选池不足 3 人且未达到长等待阈值时先返回 waiting，不让两个低样本真人立刻开一局脆弱首战。
+    - 低样本等待报告新增 `low_sample_protection`，文案说明“优先寻找更稳妥的真人对手”，并保留继续等待、双方显式接受宽分差、问道练习和取消匹配；不会自动切残影，不写奖励/积分，也不泄漏精确 rating 或 rankedGames。
+    - 当第三名低样本玩家进入池子，或达到长等待放行条件后，匹配质量会标记 `low_sample_pairing` / `low_sample_protection`，证明这是匹配层的体验保护，不改战斗数值、先后手、护体、奖励或正式结算。
+    - `server/routes/pvp-live.js` 默认 rating provider 读取 `pvp_ranks.wins + losses` 作为 rankedGames；路由测试已覆盖成熟玩家可正常严格匹配、无排位记录用户会进入低样本保护，且响应不泄漏 rankedGames / lowSampleProtected。
+    - `server/db/database.js` 与 `server/pvp-live/live-persistence.js` 为等待队列持久化 `rating_ranked_games`；persistence 测试已补旧表迁移用例，确认缺列旧库启动后会补列并按 0 局低样本恢复 waiting ticket。
+    - UI runtime / browser audit / contract / release coverage 补齐低样本等待报告断言：`匹配样本保护` 必须渲染为匹配质量护栏，练习/取消/接受宽分差入口不能丢，waiting payload 不得暴露 `rankedGames`。
+  - 已验证
+    - 红测：`node tests/sanity_pvp_live_cross_process_queue_checks.cjs` 在实现前失败于两个低样本 open-pool 玩家直接 `matched`。
+    - 红测：`node tests/sanity_pvp_live_cross_process_queue_checks.cjs` 在实现前失败于低样本玩家被同分老玩家直接匹配。
+    - 绿测：`node tests/sanity_pvp_live_cross_process_queue_checks.cjs`
+    - 绿测：`node tests/sanity_pvp_live_persistence_checks.cjs`，覆盖旧库 `rating_ranked_games` additive migration 与重启恢复。
+    - 绿测：`node tests/sanity_pvp_live_route_checks.cjs`，覆盖生产默认 rating provider 的 `pvp_ranks.wins + losses` 取数和无排位低样本保护。
+    - 绿测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs`
+    - 绿测：`node tests/sanity_pvp_live_ui_contract_checks.cjs`
+    - 绿测：`node tests/sanity_release_gate_coverage_checks.cjs`
+    - 全量 Node 门禁：`npm run test:node`，All node checks passed。
+    - 构建：`npm run build:pages`
+    - 浏览器审计：`node tests/browser_pvp_live_audit.mjs http://127.0.0.1:4173 output/pvp-live-low-sample-audit`，95/95 findings、0 failed、0 console error。
+    - Diff 检查：`git diff --check`
+  - 当前结论
+    - live PVP 的新玩家/低样本首战不再只靠赛后解释兜底：系统会先在排队层减少小池子脆弱首战，把“等第三人、长等待放行、或选择问道练习”做成玩家可见合同。这个切片只改匹配质量与等待体验，不改变真人对局内的牌、伤害、先后手、结算、奖励或赛季积分。
+
 - 2026-06-21: V10-S17 live PVP queue cooldown countdown UX
   - 本轮完成
     - `js/scenes/pvp-scene.js` 新增 `getLiveQueueCooldownCountdown()`，只读取 `lastError.reason === 'queue_cooldown'` 下的 `matchmakingGuard.retryAt / cooldownRemainingMs`，把服务端冷却 guard 转成玩家可读的剩余秒数，不影响 `connection_health_failed`、waiting report、匹配、结算或卡牌数值。

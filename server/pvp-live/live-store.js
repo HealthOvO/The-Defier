@@ -20,6 +20,7 @@ const DEFAULT_RATING_SCORE = 1000;
 const STRICT_RATING_DELTA = 99;
 const FAIR_RATING_DELTA = 199;
 const EXPANDED_RATING_DELTA = 399;
+const LOW_SAMPLE_PROTECTION_MATCHES = 5;
 
 function makeId(prefix) {
     if (typeof crypto.randomUUID === 'function') {
@@ -204,11 +205,22 @@ function normalizeRatingSnapshot(snapshot = {}, { provisionalDefault = true } = 
     const provisional = source.provisional === true
         ? true
         : source.provisional === false ? false : provisionalDefault;
+    const rankedGamesSource = source.rankedGames ?? source.ranked_games;
+    const hasRankedGames = Number.isFinite(Number(rankedGamesSource));
+    const rankedGames = hasRankedGames
+        ? Math.max(0, Math.floor(Number(rankedGamesSource)))
+        : provisional ? 0 : LOW_SAMPLE_PROTECTION_MATCHES;
+    const lowSampleProtected = (source.lowSampleProtected === false || source.low_sample_protected === false)
+        ? false
+        : (source.lowSampleProtected === true || source.low_sample_protected === true || hasRankedGames || source.provisional === true)
+            && (provisional || rankedGames < LOW_SAMPLE_PROTECTION_MATCHES);
     return {
         score,
         bucket: String(source.bucket || makeRatingBucket(score)).slice(0, 24),
         seasonId: String(source.seasonId || source.season_id || 's1-genesis').slice(0, 40),
-        provisional
+        provisional,
+        rankedGames,
+        lowSampleProtected
     };
 }
 
@@ -217,7 +229,9 @@ function makeDefaultRatingSnapshot() {
         score: DEFAULT_RATING_SCORE,
         bucket: 'unrated',
         seasonId: 's1-genesis',
-        provisional: true
+        provisional: true,
+        rankedGames: LOW_SAMPLE_PROTECTION_MATCHES,
+        lowSampleProtected: false
     });
 }
 
@@ -225,6 +239,65 @@ function shouldUseRatedMatching(leftSnapshot, rightSnapshot) {
     const left = normalizeRatingSnapshot(leftSnapshot);
     const right = normalizeRatingSnapshot(rightSnapshot);
     return !(left.provisional && right.provisional);
+}
+
+function isLowSampleRatingSnapshot(snapshot) {
+    const rating = normalizeRatingSnapshot(snapshot);
+    return !!rating.lowSampleProtected;
+}
+
+function getLowSampleMatchPolicy(leftSnapshot, rightSnapshot, waitMsA, waitMsB, longWaitThresholdMs, candidatePoolSize = 2) {
+    const leftLowSample = isLowSampleRatingSnapshot(leftSnapshot);
+    const rightLowSample = isLowSampleRatingSnapshot(rightSnapshot);
+    const maxWaitMs = Math.max(
+        Math.max(0, Math.floor(Number(waitMsA) || 0)),
+        Math.max(0, Math.floor(Number(waitMsB) || 0))
+    );
+    const safeThresholdMs = Math.max(1000, Math.floor(Number(longWaitThresholdMs) || DEFAULT_LONG_WAIT_THRESHOLD_MS));
+    if (!leftLowSample && !rightLowSample) {
+        return { allowed: true, priority: 1, safeguards: [] };
+    }
+    if (leftLowSample && rightLowSample) {
+        if (Math.max(1, Math.floor(Number(candidatePoolSize) || 2)) < 3 && maxWaitMs < safeThresholdMs) {
+            return {
+                allowed: false,
+                priority: 2,
+                reason: 'low_sample_protection',
+                safeguards: ['low_sample_protection']
+            };
+        }
+        return {
+            allowed: true,
+            priority: 0,
+            expansionStage: 'low_sample_pairing',
+            safeguards: ['low_sample_protection', 'low_sample_pairing']
+        };
+    }
+    if (maxWaitMs >= safeThresholdMs) {
+        return {
+            allowed: true,
+            priority: 1,
+            safeguards: ['low_sample_protection', 'low_sample_long_wait_release']
+        };
+    }
+    return {
+        allowed: false,
+        priority: 2,
+        reason: 'low_sample_protection',
+        safeguards: ['low_sample_protection']
+    };
+}
+
+function applyMatchQualitySafeguards(qualityInput, policy = {}) {
+    if (!qualityInput || !policy || !Array.isArray(policy.safeguards) || policy.safeguards.length === 0) return qualityInput;
+    return {
+        ...qualityInput,
+        ...(policy.expansionStage ? { expansionStage: policy.expansionStage } : {}),
+        safeguards: policy.safeguards.reduce(
+            (items, item) => appendUniqueString(items, item, 12),
+            Array.isArray(qualityInput.safeguards) ? qualityInput.safeguards : []
+        )
+    };
 }
 
 function getRatingDeltaBucket(delta) {
@@ -395,6 +468,7 @@ function makeWaitingReport({ waitMs = 0, thresholdMs = DEFAULT_LONG_WAIT_THRESHO
         ...(Array.isArray(safeguards) ? safeguards.map(item => String(item || '')).filter(Boolean) : [])
     ].reduce((items, item) => appendUniqueString(items, item, 12), []);
     const hasRecentOpponentSuppression = mergedSafeguards.includes('recent_opponent_suppression');
+    const hasLowSampleProtection = mergedSafeguards.includes('low_sample_protection');
     return {
         reportVersion: 'pvp-live-waiting-report-v1',
         waitMs: safeWaitMs,
@@ -402,6 +476,8 @@ function makeWaitingReport({ waitMs = 0, thresholdMs = DEFAULT_LONG_WAIT_THRESHO
         longWait,
         message: hasRecentOpponentSuppression
             ? '刚刚交手的近期对手会被暂时跳过，正在为你换一位真人；不会自动切残影。'
+            : hasLowSampleProtection
+                ? '低样本保护正在优先寻找更稳妥的真人对手；可继续等待、接受宽分差或先进入问道练习，不会自动切残影。'
             : longWait
                 ? '当前真人较少，可继续等待、进入问道练习或取消匹配；不会自动切残影。'
                 : '正在等待真实玩家加入；不会自动切残影。',
@@ -1362,19 +1438,37 @@ class LivePvpStore {
                 continue;
             }
             await this.ensureQueueEntryRating(opponentTicket);
+            const waitMsA = Math.max(0, matchedAt - Math.floor(Number(opponentTicket.createdAt) || matchedAt));
+            const waitMsB = Math.max(0, matchedAt - Math.floor(Number(requesterEntry.createdAt) || matchedAt));
+            const lowSamplePolicy = getLowSampleMatchPolicy(
+                opponentTicket.ratingSnapshot,
+                requesterEntry.ratingSnapshot,
+                waitMsA,
+                waitMsB,
+                this.longWaitThresholdMs,
+                candidatePoolSize
+            );
+            if (!lowSamplePolicy.allowed) {
+                this.markQueueSuppression(opponentTicket, lowSamplePolicy.reason || 'low_sample_protection');
+                this.markQueueSuppression(requesterEntry, lowSamplePolicy.reason || 'low_sample_protection');
+                await this.saveQueueEntry(opponentTicket);
+                continue;
+            }
             const useRatedMatching = shouldUseRatedMatching(opponentTicket.ratingSnapshot, requesterEntry.ratingSnapshot);
             if (!useRatedMatching) {
                 if (!openPoolChoice) {
                     openPoolChoice = {
                         index,
                         testMatchScope: requesterTestMatchScope,
-                        qualityInput: this.makeOpenPoolMatchQualityInput(opponentTicket, requesterEntry, matchedAt, candidatePoolSize)
+                        lowSamplePriority: lowSamplePolicy.priority,
+                        qualityInput: applyMatchQualitySafeguards(
+                            this.makeOpenPoolMatchQualityInput(opponentTicket, requesterEntry, matchedAt, candidatePoolSize),
+                            lowSamplePolicy
+                        )
                     };
                 }
                 continue;
             }
-            const waitMsA = Math.max(0, matchedAt - Math.floor(Number(opponentTicket.createdAt) || matchedAt));
-            const waitMsB = Math.max(0, matchedAt - Math.floor(Number(requesterEntry.createdAt) || matchedAt));
             const policy = getRatingExpansionPolicy(waitMsA, waitMsB, this.longWaitThresholdMs);
             const delta = Math.abs(
                 normalizeRatingScore(opponentTicket.ratingSnapshot && opponentTicket.ratingSnapshot.score)
@@ -1386,7 +1480,11 @@ class LivePvpStore {
                     delta,
                     createdAt: Math.max(0, Math.floor(Number(opponentTicket.createdAt) || 0)),
                     testMatchScope: requesterTestMatchScope,
-                    qualityInput: this.makeRatedMatchQualityInput(opponentTicket, requesterEntry, matchedAt, candidatePoolSize, delta)
+                    lowSamplePriority: lowSamplePolicy.priority,
+                    qualityInput: applyMatchQualitySafeguards(
+                        this.makeRatedMatchQualityInput(opponentTicket, requesterEntry, matchedAt, candidatePoolSize, delta),
+                        lowSamplePolicy
+                    )
                 });
             } else if (
                 delta <= EXPANDED_RATING_DELTA
@@ -1399,15 +1497,21 @@ class LivePvpStore {
                     delta,
                     createdAt: Math.max(0, Math.floor(Number(opponentTicket.createdAt) || 0)),
                     testMatchScope: requesterTestMatchScope,
-                    qualityInput: this.makeAcceptedWideMatchQualityInput(opponentTicket, requesterEntry, matchedAt, candidatePoolSize, delta)
+                    lowSamplePriority: lowSamplePolicy.priority,
+                    qualityInput: applyMatchQualitySafeguards(
+                        this.makeAcceptedWideMatchQualityInput(opponentTicket, requesterEntry, matchedAt, candidatePoolSize, delta),
+                        lowSamplePolicy
+                    )
                 });
             }
         }
         if (ratedChoices.length > 0) {
             ratedChoices.sort((left, right) => {
+                if (left.lowSamplePriority !== right.lowSamplePriority) return left.lowSamplePriority - right.lowSamplePriority;
                 if (left.delta !== right.delta) return left.delta - right.delta;
                 return left.createdAt - right.createdAt;
             });
+            if (openPoolChoice && openPoolChoice.lowSamplePriority < ratedChoices[0].lowSamplePriority) return openPoolChoice;
             return ratedChoices[0];
         }
         return openPoolChoice;

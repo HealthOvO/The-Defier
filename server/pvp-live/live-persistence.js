@@ -87,11 +87,13 @@ function makeRatingBucket(score) {
 function normalizeRatingSnapshot(snapshot = {}) {
     const source = snapshot && typeof snapshot === 'object' ? snapshot : {};
     const score = normalizeRatingScore(source.score);
+    const rankedGamesSource = source.rankedGames ?? source.ranked_games;
     return {
         score,
         bucket: String(source.bucket || makeRatingBucket(score)).slice(0, 24),
         seasonId: String(source.seasonId || source.season_id || 's1-genesis').slice(0, 40),
-        provisional: source.provisional !== false
+        provisional: source.provisional !== false,
+        rankedGames: Math.max(0, Math.floor(Number(rankedGamesSource) || 0))
     };
 }
 
@@ -411,7 +413,8 @@ function makeQueueEntryFromRow(row) {
         score: row.rating_score,
         bucket: row.rating_bucket,
         seasonId: row.rating_season_id,
-        provisional: Number(row.rating_provisional) !== 0
+        provisional: Number(row.rating_provisional) !== 0,
+        rankedGames: row.rating_ranked_games
     });
     return {
         queueTicket: row.queue_ticket,
@@ -517,8 +520,8 @@ function makeSqliteLivePvpPersistence() {
             const connectionHealthJson = serializeQueueConnectionHealth(queueEntry.player.connectionHealth);
             await dbRun(
                 `INSERT INTO pvp_live_queue_tickets
-                    (queue_ticket, user_id, display_name, loadout_snapshot_json, rating_score, rating_bucket, rating_season_id, rating_provisional, wide_match_consent, connection_health_json, created_at)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    (queue_ticket, user_id, display_name, loadout_snapshot_json, rating_score, rating_bucket, rating_season_id, rating_provisional, rating_ranked_games, wide_match_consent, connection_health_json, created_at)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                  ON CONFLICT(user_id) DO UPDATE SET
                     queue_ticket = excluded.queue_ticket,
                     display_name = excluded.display_name,
@@ -527,6 +530,7 @@ function makeSqliteLivePvpPersistence() {
                     rating_bucket = excluded.rating_bucket,
                     rating_season_id = excluded.rating_season_id,
                     rating_provisional = excluded.rating_provisional,
+                    rating_ranked_games = excluded.rating_ranked_games,
                     wide_match_consent = excluded.wide_match_consent,
                     connection_health_json = excluded.connection_health_json,
                     created_at = excluded.created_at`,
@@ -539,6 +543,7 @@ function makeSqliteLivePvpPersistence() {
                     ratingSnapshot.bucket,
                     ratingSnapshot.seasonId,
                     ratingSnapshot.provisional ? 1 : 0,
+                    ratingSnapshot.rankedGames,
                     wideMatchConsent,
                     connectionHealthJson,
                     createdAt

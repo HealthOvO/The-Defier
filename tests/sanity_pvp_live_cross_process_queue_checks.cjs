@@ -20,7 +20,17 @@ function makeLoadout(identitySlot, pattern) {
 function makeRatingProvider(scoresByUserId) {
   return {
     async getLivePvpRating(userId) {
-      const score = Number(scoresByUserId[String(userId || '')]);
+      const value = scoresByUserId[String(userId || '')];
+      if (value && typeof value === 'object') {
+        return {
+          score: Number.isFinite(Number(value.score)) ? Number(value.score) : 1000,
+          division: value.division || '玄阶',
+          seasonId: value.seasonId || 's1-genesis',
+          provisional: value.provisional,
+          rankedGames: value.rankedGames,
+        };
+      }
+      const score = Number(value);
       return {
         score: Number.isFinite(score) ? score : 1000,
         division: '玄阶',
@@ -505,6 +515,121 @@ function makeSharedPersistence({ keepQueueRowsOnDelete = false } = {}) {
     persistedRecentB2.waitingReport?.safeguards?.includes('recent_opponent_suppression'),
     'persisted recent opponent suppression should still expose the waiting safeguard',
   );
+
+  const lowSampleOpenPoolRatings = makeRatingProvider({
+    'open-pool-low-a': { score: 1000, rankedGames: 0, provisional: true },
+    'open-pool-low-b': { score: 1000, rankedGames: 0, provisional: true },
+    'open-pool-low-c': { score: 1000, rankedGames: 0, provisional: true },
+  });
+  const lowSampleOpenPoolStore = createLivePvpStore({
+    now: () => now,
+    ratingProvider: lowSampleOpenPoolRatings,
+    longWaitThresholdMs: 120000,
+  });
+  now += 1000;
+  const openPoolLowA = await lowSampleOpenPoolStore.joinQueue({
+    userId: 'open-pool-low-a',
+    displayName: '开池低样本甲',
+    loadout: makeLoadout('sword', ['pvp_burst', 'pvp_strike', 'pvp_guard', 'pvp_strike']),
+  });
+  assert.equal(openPoolLowA.status, 'waiting', 'first low-sample open-pool player should seed the queue');
+  now += 1000;
+  const openPoolLowB = await lowSampleOpenPoolStore.joinQueue({
+    userId: 'open-pool-low-b',
+    displayName: '开池低样本乙',
+    loadout: makeLoadout('shield', ['pvp_guard', 'pvp_strike', 'pvp_burst', 'pvp_guard']),
+  });
+  assert.equal(
+    openPoolLowB.status,
+    'waiting',
+    'two-player low-sample open pool should wait instead of instantly starting a fragile first match',
+  );
+  assert.ok(
+    openPoolLowB.waitingReport?.safeguards?.includes('low_sample_protection'),
+    'two-player low-sample open pool should expose low-sample protection while waiting',
+  );
+  now += 1000;
+  const openPoolLowC = await lowSampleOpenPoolStore.joinQueue({
+    userId: 'open-pool-low-c',
+    displayName: '开池低样本丙',
+    loadout: makeLoadout('mirror', ['pvp_guard', 'pvp_strike', 'pvp_burst', 'pvp_guard']),
+  });
+  assert.equal(openPoolLowC.status, 'matched', 'third low-sample open-pool player should release the low-sample pool into a real match');
+  assert.equal(
+    openPoolLowC.stateView.matchQuality?.expansionStage,
+    'low_sample_pairing',
+    'released low-sample open-pool match should expose low_sample_pairing stage',
+  );
+  assert.ok(
+    openPoolLowC.stateView.matchQuality?.safeguards?.includes('low_sample_protection'),
+    'released low-sample open-pool match should keep low-sample protection in match quality',
+  );
+
+  const lowSampleRatings = makeRatingProvider({
+    'low-sample-established': { score: 1000, rankedGames: 12, provisional: false },
+    'low-sample-waiting': { score: 1000, rankedGames: 1, provisional: false },
+    'low-sample-requester': { score: 1000, rankedGames: 0, provisional: true },
+  });
+  const lowSampleStore = createLivePvpStore({
+    now: () => now,
+    ratingProvider: lowSampleRatings,
+    longWaitThresholdMs: 120000,
+  });
+  now += 1000;
+  const establishedJoin = await lowSampleStore.joinQueue({
+    userId: 'low-sample-established',
+    displayName: '老练同分',
+    loadout: makeLoadout('shield', ['pvp_guard', 'pvp_strike', 'pvp_burst', 'pvp_guard']),
+  });
+  assert.equal(establishedJoin.status, 'waiting', 'established same-score player should seed the low-sample protection test');
+  now += 1000;
+  const lowWaitingJoin = await lowSampleStore.joinQueue({
+    userId: 'low-sample-waiting',
+    displayName: '低样本候选',
+    loadout: makeLoadout('sword', ['pvp_burst', 'pvp_strike', 'pvp_guard', 'pvp_strike']),
+  });
+  assert.equal(
+    lowWaitingJoin.status,
+    'waiting',
+    'low-sample player should not be immediately paired into an established same-score opponent',
+  );
+  assert.ok(
+    lowWaitingJoin.waitingReport?.safeguards?.includes('low_sample_protection'),
+    'low-sample waiting report should expose the low-sample protection safeguard',
+  );
+  assert.match(
+    lowWaitingJoin.waitingReport?.message || '',
+    /低样本|样本保护|稳妥/,
+    'low-sample waiting report should explain why matchmaking is still waiting',
+  );
+  now += 1000;
+  const lowRequesterJoin = await lowSampleStore.joinQueue({
+    userId: 'low-sample-requester',
+    displayName: '低样本请求者',
+    loadout: makeLoadout('mirror', ['pvp_guard', 'pvp_strike', 'pvp_burst', 'pvp_guard']),
+  });
+  assert.equal(lowRequesterJoin.status, 'matched', 'low-sample requester should match another low-sample candidate');
+  const lowSampleMatchedNames = [lowRequesterJoin.stateView.self.displayName, lowRequesterJoin.stateView.opponent.displayName].sort();
+  assert.deepEqual(
+    lowSampleMatchedNames,
+    ['低样本候选', '低样本请求者'].sort(),
+    'low-sample protection should prefer a low-sample pair over an established same-score player',
+  );
+  assert.equal(
+    lowRequesterJoin.stateView.matchQuality?.expansionStage,
+    'low_sample_pairing',
+    'low-sample pair should expose a dedicated low-sample pairing stage',
+  );
+  assert.ok(
+    lowRequesterJoin.stateView.matchQuality?.safeguards?.includes('low_sample_protection'),
+    'low-sample matched quality should keep the low-sample protection safeguard',
+  );
+  assert.ok(
+    !/rankedGames|ranked_games/.test(JSON.stringify(lowRequesterJoin.stateView.matchQuality || {})),
+    'low-sample match quality should not expose exact ranked game count fields',
+  );
+  const establishedStillWaiting = await lowSampleStore.getQueueStatus('low-sample-established', establishedJoin.queueTicket);
+  assert.equal(establishedStillWaiting?.status, 'waiting', 'established same-score player should remain waiting after low-sample pair resolves');
 
   console.log('sanity_pvp_live_cross_process_queue_checks passed');
 })().catch((error) => {

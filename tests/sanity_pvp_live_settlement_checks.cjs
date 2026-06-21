@@ -176,6 +176,7 @@ function startServer() {
       DEFIER_HMAC_SECRET: HMAC_SECRET,
       DEFIER_DB_PATH: DB_PATH,
       PVP_LIVE_TURN_TIMEOUT_MS: '1000',
+      PVP_LIVE_LONG_WAIT_THRESHOLD_MS: '1000',
     },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
@@ -323,6 +324,7 @@ function dbGet(sql, params = []) {
       body: { displayName: userA.username },
     });
     assert.equal(joinA.payload.status, 'waiting', 'first settlement user should wait');
+    await sleep(1050);
 
     const joinB = await request('/api/pvp/live/queue/join', {
       method: 'POST',
@@ -619,6 +621,8 @@ function dbGet(sql, params = []) {
       body: { displayName: userC.username },
     });
     assert.equal(joinC.payload.status, 'waiting', 'first timeout settlement user should wait');
+    await sleep(1050);
+
     const joinD = await request('/api/pvp/live/queue/join', {
       method: 'POST',
       token: userD.token,
@@ -688,6 +692,8 @@ function dbGet(sql, params = []) {
       body: { displayName: userE.username },
     });
     assert.equal(joinE.payload.status, 'waiting', 'first setup timeout settlement user should wait');
+    await sleep(1050);
+
     const joinF = await request('/api/pvp/live/queue/join', {
       method: 'POST',
       token: userF.token,

@@ -677,6 +677,45 @@ assert.equal(
 );
 documentStub.querySelector = oldDocumentQuerySelector;
 
+const lowSampleWaitingState = {
+  phase: 'waiting',
+  queueTicket: 'pvplq-ui-low-sample',
+  matchId: '',
+  waitingReport: {
+    reportVersion: 'pvp-live-waiting-report-v1',
+    waitMs: 5000,
+    longWaitThresholdMs: 120000,
+    longWait: false,
+    message: '低样本保护正在优先寻找更稳妥的真人对手；可继续等待、接受宽分差或先进入问道练习，不会自动切残影。',
+    safeguards: ['real_player_only', 'low_sample_protection', 'no_score_change'],
+    actions: [
+      { id: 'continue_waiting', label: '继续等待', detail: '继续等待真人，不自动切残影。' },
+      { id: 'accept_wide_match', label: '接受宽分差', detail: '仅在双方都确认后，才允许 200-399 分差真人局。' },
+      { id: 'practice', label: '问道练习', detail: '练习不写正式积分。' },
+      { id: 'cancel_queue', label: '取消匹配', detail: '取消本次排队，不影响正式积分。' }
+    ]
+  },
+  stateView: null,
+  lastEvents: []
+};
+const lowSampleWaitingMarkup = PVPScene.renderLiveWaitingReport(lowSampleWaitingState);
+assert.match(
+  lowSampleWaitingMarkup,
+  /匹配质量护栏|匹配样本保护|低样本保护/,
+  'live UI should render low-sample waiting report before the long-wait threshold',
+);
+assert.match(
+  lowSampleWaitingMarkup,
+  /data-live-waiting-action="accept-wide-match"/,
+  'low-sample waiting report should preserve explicit wide-match consent action',
+);
+const lowSamplePracticeScenario = PVPScene.buildLiveWaitingPracticeScenario(lowSampleWaitingState);
+assert.equal(
+  lowSamplePracticeScenario?.finishReason,
+  'low_sample_protection',
+  'low-sample waiting safeguard should create a no-score practice handoff scenario',
+);
+
 let currentState = {
   phase: 'active',
   matchId: 'pvpm-ui-runtime-heartbeat',

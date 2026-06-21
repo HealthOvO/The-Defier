@@ -239,7 +239,14 @@ function assertPublicReplayShape(replay, visibilityLayer) {
 (async () => {
   assertPublicReplayArraySanitizer();
   pvpLiveRoutes.__livePvpStore.reset();
-  pvpLiveRoutes.__attachServices({ settlement: makeReplaySettlementStub() });
+  pvpLiveRoutes.__attachServices({
+    settlement: makeReplaySettlementStub(),
+    ratingProvider: {
+      async getLivePvpRating() {
+        return { score: 1000, division: '玄阶', seasonId: 's1-genesis', provisional: false, rankedGames: 6 };
+      }
+    }
+  });
 
   const app = express();
   app.use(express.json());

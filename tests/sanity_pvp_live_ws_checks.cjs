@@ -821,6 +821,13 @@ async function runCrossProcessPassiveStateFanoutCheck() {
   await runCrossProcessPassiveStateFanoutCheck();
 
   pvpLiveRoutes.__livePvpStore.reset();
+  pvpLiveRoutes.__attachServices({
+    ratingProvider: {
+      async getLivePvpRating() {
+        return { score: 1000, division: '玄阶', seasonId: 's1-genesis', provisional: false, rankedGames: 6 };
+      }
+    }
+  });
 
   const app = express();
   app.use(express.json());
@@ -900,6 +907,7 @@ async function runCrossProcessPassiveStateFanoutCheck() {
     if (socketB) socketB.close();
     await close(server);
     pvpLiveRoutes.__livePvpStore.reset();
+    pvpLiveRoutes.__attachServices({});
   }
 })().catch((error) => {
   console.error(error);

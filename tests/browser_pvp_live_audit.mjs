@@ -925,6 +925,27 @@ async function safeElementScreenshot(page, selector, outputPath) {
             },
           };
         }
+        if (String(window.__livePvpAuditQueueStatusMode || '') === 'low-sample') {
+          return {
+            success: true,
+            status: 'waiting',
+            queueTicket,
+            waitingReport: {
+              reportVersion: 'pvp-live-waiting-report-v1',
+              waitMs: 5000,
+              longWaitThresholdMs: 120000,
+              longWait: false,
+              message: '低样本保护正在优先寻找更稳妥的真人对手；可继续等待、接受宽分差或先进入问道练习，不会自动切残影。',
+              safeguards: ['real_player_only', 'low_sample_protection', 'no_score_change'],
+              actions: [
+                { id: 'continue_waiting', label: '继续等待', detail: '继续等待真人，不自动切残影。' },
+                { id: 'accept_wide_match', label: '接受宽分差', detail: '仅在双方都确认后，才允许 200-399 分差真人局。' },
+                { id: 'practice', label: '问道练习', detail: '练习不写正式积分。' },
+                { id: 'cancel_queue', label: '取消匹配', detail: '取消本次排队，不影响正式积分。' },
+              ],
+            },
+          };
+        }
         if (queueStatusPolls === 1) {
           return {
             success: true,
@@ -1552,6 +1573,37 @@ async function safeElementScreenshot(page, selector, outputPath) {
       && recentWaitingProbe.payload?.waitingReport?.actions?.some(action => action.id === 'accept_wide_match')
       && !/GhostEnemy|reward|rating|elo/i.test(`${recentWaitingProbe.report} ${JSON.stringify(recentWaitingProbe.payload?.waitingReport || {})}`),
     JSON.stringify(recentWaitingProbe),
+  );
+
+  await page.evaluate(() => {
+    window.__setLivePvpAuditQueueStatusPolls(0);
+    window.__livePvpAuditQueueStatusMode = 'low-sample';
+  });
+  await page.click('[data-live-action="refresh-match"]', { timeout: 5000, force: true });
+  await page.waitForTimeout(200);
+  const lowSampleWaitingProbe = await page.evaluate(() => ({
+    phase: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-phase') || '',
+    report: document.querySelector('[data-live-waiting-report]')?.textContent || '',
+    buttons: Object.fromEntries(Array.from(document.querySelectorAll('[data-live-action]')).map(button => [button.getAttribute('data-live-action'), button.disabled])),
+    payload: JSON.parse(window.render_game_to_text()).pvp?.live || null,
+  }));
+  add(
+    'live UI renders low-sample waiting safeguard before long-wait threshold',
+    lowSampleWaitingProbe.phase === 'waiting'
+      && /匹配质量护栏/.test(lowSampleWaitingProbe.report)
+      && /匹配样本保护|低样本保护|稳妥/.test(lowSampleWaitingProbe.report)
+      && /接受宽分差/.test(lowSampleWaitingProbe.report)
+      && /问道练习/.test(lowSampleWaitingProbe.report)
+      && /取消匹配/.test(lowSampleWaitingProbe.report)
+      && /不会自动切残影/.test(lowSampleWaitingProbe.report)
+      && lowSampleWaitingProbe.buttons['practice-live'] === false
+      && lowSampleWaitingProbe.buttons['cancel-queue'] === false
+      && lowSampleWaitingProbe.payload?.waitingReport?.reportVersion === 'pvp-live-waiting-report-v1'
+      && lowSampleWaitingProbe.payload?.waitingReport?.longWait === false
+      && lowSampleWaitingProbe.payload?.waitingReport?.safeguards?.includes('low_sample_protection')
+      && lowSampleWaitingProbe.payload?.waitingReport?.actions?.some(action => action.id === 'accept_wide_match')
+      && !/GhostEnemy|reward|rating|elo|rankedGames/i.test(`${lowSampleWaitingProbe.report} ${JSON.stringify(lowSampleWaitingProbe.payload?.waitingReport || {})}`),
+    JSON.stringify(lowSampleWaitingProbe),
   );
 
   await page.evaluate(() => {

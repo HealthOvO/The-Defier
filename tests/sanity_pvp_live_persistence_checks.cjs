@@ -44,10 +44,68 @@ function dbGet(sql, params = []) {
   });
 }
 
+function dbAll(sql, params = []) {
+  const db = new sqlite3.Database(DB_PATH);
+  return new Promise((resolve, reject) => {
+    db.all(sql, params, (err, rows) => {
+      db.close();
+      if (err) reject(err);
+      else resolve(rows || []);
+    });
+  });
+}
+
 function makeLivePvpPersistenceForTest() {
   process.env.DEFIER_DB_PATH = DB_PATH;
   const { makeSqliteLivePvpPersistence } = require('../server/pvp-live/live-persistence');
   return makeSqliteLivePvpPersistence();
+}
+
+async function assertLegacyQueueTicketMigrationAddsRankedGames() {
+  const legacyTicket = `legacy-low-sample-ticket-${process.pid}`;
+  const legacyUserId = `legacy-low-sample-user-${process.pid}`;
+  const legacyLoadoutSnapshot = {
+    loadoutHash: `legacy-low-sample-hash-${process.pid}`,
+    label: 'legacy-low-sample-row',
+    identitySlot: 'legacy-sword',
+    deckSize: 20,
+    locked: true,
+  };
+  await dbRun(
+    `CREATE TABLE pvp_live_queue_tickets (
+      queue_ticket TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL UNIQUE,
+      display_name TEXT NOT NULL,
+      loadout_snapshot_json TEXT NOT NULL,
+      rating_score INTEGER NOT NULL DEFAULT 1000,
+      rating_bucket TEXT NOT NULL DEFAULT 'unrated',
+      rating_season_id TEXT NOT NULL DEFAULT 's1-genesis',
+      rating_provisional INTEGER NOT NULL DEFAULT 1,
+      wide_match_consent INTEGER NOT NULL DEFAULT 0,
+      connection_health_json TEXT NOT NULL DEFAULT '{}',
+      created_at INTEGER NOT NULL
+    )`
+  );
+  await dbRun(
+    `INSERT INTO pvp_live_queue_tickets
+      (queue_ticket, user_id, display_name, loadout_snapshot_json, rating_score, rating_bucket, rating_season_id, rating_provisional, created_at)
+     VALUES (?, ?, ?, ?, 1000, '1000_1099', 's1-genesis', 1, ?)`,
+    [legacyTicket, legacyUserId, '旧库低样本', JSON.stringify(legacyLoadoutSnapshot), Date.now()]
+  );
+
+  process.env.DEFIER_DB_PATH = DB_PATH;
+  const { initDb } = require('../server/db/database');
+  await initDb();
+
+  const columns = await dbAll(`PRAGMA table_info(pvp_live_queue_tickets)`);
+  assert.ok(columns.some(column => column.name === 'rating_ranked_games'), 'legacy queue table migration should add rating_ranked_games column');
+  const migratedRow = await dbGet('SELECT rating_ranked_games FROM pvp_live_queue_tickets WHERE queue_ticket = ?', [legacyTicket]);
+  assert.equal(migratedRow.rating_ranked_games, 0, 'legacy queue table migration should backfill ranked games as zero');
+
+  const restoredEntry = await makeLivePvpPersistenceForTest().loadQueueEntryByTicket(legacyTicket);
+  assert.equal(restoredEntry.ratingSnapshot.rankedGames, 0, 'legacy queue row restore should treat missing ranked games as zero after migration');
+  assert.equal(restoredEntry.ratingSnapshot.provisional, true, 'legacy queue row restore should preserve provisional rating status');
+  await dbRun('DELETE FROM pvp_live_queue_tickets WHERE queue_ticket = ?', [legacyTicket]);
 }
 
 async function insertStaleWaitingQueueRow({ queueTicket, user, identitySlot, loadoutHash }) {
@@ -60,12 +118,14 @@ async function insertStaleWaitingQueueRow({ queueTicket, user, identitySlot, loa
   };
   await dbRun(
     `INSERT INTO pvp_live_queue_tickets
-      (queue_ticket, user_id, display_name, loadout_snapshot_json, created_at)
-     VALUES (?, ?, ?, ?, ?)
+      (queue_ticket, user_id, display_name, loadout_snapshot_json, rating_provisional, rating_ranked_games, created_at)
+     VALUES (?, ?, ?, ?, 0, 6, ?)
      ON CONFLICT(user_id) DO UPDATE SET
       queue_ticket = excluded.queue_ticket,
       display_name = excluded.display_name,
       loadout_snapshot_json = excluded.loadout_snapshot_json,
+      rating_provisional = excluded.rating_provisional,
+      rating_ranked_games = excluded.rating_ranked_games,
       created_at = excluded.created_at`,
     [
       queueTicket,
@@ -88,15 +148,18 @@ async function insertQueueClaimUser({ userId, username }) {
   );
 }
 
-async function setRank(user, score, division = '玄阶') {
+async function setRank(user, score, division = '玄阶', rankedGames = 6) {
   const now = Date.now();
+  const games = Math.max(0, Math.floor(Number(rankedGames) || 0));
   await dbRun(
     `INSERT INTO pvp_ranks
       (id, user_id, user_name, score, wins, losses, realm, division, season_id, created_at, updated_at)
-     VALUES (?, ?, ?, ?, 0, 0, 1, ?, 's1-genesis', ?, ?)
+     VALUES (?, ?, ?, ?, ?, 0, 1, ?, 's1-genesis', ?, ?)
      ON CONFLICT(user_id) DO UPDATE SET
       user_name = excluded.user_name,
       score = excluded.score,
+      wins = excluded.wins,
+      losses = excluded.losses,
       division = excluded.division,
       updated_at = excluded.updated_at`,
     [
@@ -104,6 +167,7 @@ async function setRank(user, score, division = '玄阶') {
       user.userId,
       user.username,
       score,
+      games,
       division,
       now,
       now,
@@ -127,8 +191,8 @@ async function insertRankedWaitingQueueRow({ queueTicket, userId, username, disp
   await setRank({ userId, username }, score);
   await dbRun(
     `INSERT INTO pvp_live_queue_tickets
-      (queue_ticket, user_id, display_name, loadout_snapshot_json, rating_score, rating_bucket, rating_season_id, rating_provisional, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, 's1-genesis', 0, ?)
+      (queue_ticket, user_id, display_name, loadout_snapshot_json, rating_score, rating_bucket, rating_season_id, rating_provisional, rating_ranked_games, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, 's1-genesis', 0, 6, ?)
      ON CONFLICT(user_id) DO UPDATE SET
       queue_ticket = excluded.queue_ticket,
       display_name = excluded.display_name,
@@ -137,6 +201,7 @@ async function insertRankedWaitingQueueRow({ queueTicket, userId, username, disp
       rating_bucket = excluded.rating_bucket,
       rating_season_id = excluded.rating_season_id,
       rating_provisional = excluded.rating_provisional,
+      rating_ranked_games = excluded.rating_ranked_games,
       created_at = excluded.created_at`,
     [
       queueTicket,
@@ -349,6 +414,7 @@ async function readyBoth({ matchId, tokenA, tokenB, stateVersionA, prefix }) {
 
 (async () => {
   removeDbFiles();
+  await assertLegacyQueueTicketMigrationAddsRankedGames();
   // The second server below reuses the same DB path to prove restart recovery
   // is SQLite-backed, not just in-memory activeMatchByUserId state.
   let skippedEventSaveCount = 0;
@@ -1379,6 +1445,8 @@ async function readyBoth({ matchId, tokenA, tokenB, stateVersionA, prefix }) {
   await withServer(async () => {
     waitingUserA = await registerUser('live_waiting_restart_a');
     waitingUserB = await registerUser('live_waiting_restart_b');
+    await setRank(waitingUserA, 1000, '玄阶', 6);
+    await setRank(waitingUserB, 1000, '玄阶', 6);
     const waitingLoadoutA = makeLoadout('waiting-sword', ['pvp_burst', 'pvp_strike', 'pvp_guard', 'pvp_strike']);
 
     const joinA = await request('/api/pvp/live/queue/join', {
@@ -1673,6 +1741,8 @@ async function readyBoth({ matchId, tokenA, tokenB, stateVersionA, prefix }) {
   await withServer(async () => {
     userA = await registerUser('live_persist_a');
     userB = await registerUser('live_persist_b');
+    await setRank(userA, 1000, '玄阶', 6);
+    await setRank(userB, 1000, '玄阶', 6);
     const loadoutA = makeLoadout('persist-sword', ['pvp_burst', 'pvp_strike', 'pvp_guard', 'pvp_strike']);
     const loadoutB = makeLoadout('persist-shield', ['pvp_guard', 'pvp_strike', 'pvp_burst', 'pvp_guard']);
 
@@ -2167,6 +2237,8 @@ async function readyBoth({ matchId, tokenA, tokenB, stateVersionA, prefix }) {
   await withServer(async () => {
     rematchUserA = await registerUser('live_rematch_restart_a');
     rematchUserB = await registerUser('live_rematch_restart_b');
+    await setRank(rematchUserA, 1000, '玄阶', 6);
+    await setRank(rematchUserB, 1000, '玄阶', 6);
     const loadoutA = makeLoadout('rematch-sword', ['pvp_burst', 'pvp_strike', 'pvp_guard', 'pvp_strike']);
     const loadoutB = makeLoadout('rematch-shield', ['pvp_guard', 'pvp_strike', 'pvp_burst', 'pvp_guard']);
 
@@ -2393,6 +2465,8 @@ async function readyBoth({ matchId, tokenA, tokenB, stateVersionA, prefix }) {
   await withServer(async () => {
     eventSourceUserA = await registerUser('live_event_source_a');
     eventSourceUserB = await registerUser('live_event_source_b');
+    await setRank(eventSourceUserA, 1000, '玄阶', 6);
+    await setRank(eventSourceUserB, 1000, '玄阶', 6);
 
     const joinA = await request('/api/pvp/live/queue/join', {
       method: 'POST',
@@ -2484,6 +2558,8 @@ async function readyBoth({ matchId, tokenA, tokenB, stateVersionA, prefix }) {
   await withServer(async () => {
     invalidatedUserA = await registerUser('live_invalidated_a');
     invalidatedUserB = await registerUser('live_invalidated_b');
+    await setRank(invalidatedUserA, 1000, '玄阶', 6);
+    await setRank(invalidatedUserB, 1000, '玄阶', 6);
 
     const joinA = await request('/api/pvp/live/queue/join', {
       method: 'POST',

@@ -441,6 +441,7 @@ assert.ok(scene.includes('acceptLiveWideMatch'), 'PVPScene should expose explici
 assert.ok(scene.includes("data-live-waiting-action=\"accept-wide-match\""), 'live waiting report should render an explicit wide match consent action marker');
 assert.ok(scene.includes('wideMatchConsent: true'), 'live wide match consent action should submit explicit wideMatchConsent to the server');
 assert.ok(scene.includes('recent_opponent_suppression'), 'live waiting report should recognize recent-opponent suppression as a public quality safeguard');
+assert.ok(scene.includes('low_sample_protection'), 'live waiting report should recognize low-sample protection as a public quality safeguard');
 
 const submitLiveCardBody = methodBody(scene, 'submitLiveCard');
 assert.ok(submitLiveCardBody.includes('view.opponent') && submitLiveCardBody.includes("state.seatId === 'B'"), 'submitLiveCard should target the opponent seat from live state, not hard-code seat B');
