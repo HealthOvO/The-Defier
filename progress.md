@@ -1,5 +1,23 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-21: V10-S17 live PVP queue cooldown countdown UX
+  - 本轮完成
+    - `js/scenes/pvp-scene.js` 新增 `getLiveQueueCooldownCountdown()`，只读取 `lastError.reason === 'queue_cooldown'` 下的 `matchmakingGuard.retryAt / cooldownRemainingMs`，把服务端冷却 guard 转成玩家可读的剩余秒数，不影响 `connection_health_failed`、waiting report、匹配、结算或卡牌数值。
+    - idle blocked 的 `[data-live-last-error]` 不再只显示泛化失败文案：现在会显示“频繁取消冷却触发真人排位短暂冷却，剩余 60 秒；可先进入问道练习，练习不写正式积分。”这类明确倒计时，让玩家知道何时能回到正式排位。
+    - `join-queue` 按钮从“稍后重试”升级为“60s 后重试”这类倒计时文案；`practice-live` 仍走 `entry_safeguard:queue_cooldown` 的 no-score drill，不走 waiting 分支、不调用 `cancelQueue()`、不触发旧残影 PVP 或正式积分写入。
+    - UI runtime / UI contract / browser audit / release coverage 同步钉住倒计时合同：helper 必须暴露 `remainingSeconds / buttonText / hint`，浏览器真实 DOM 必须显示“剩余 60 秒”和“60s 后重试”，并补充 `connection_health_failed` 不显示冷却倒计时的负例，防止冷却体验退回黑箱或串到连接健康护栏。
+  - 已验证
+    - 红测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs` 在实现前失败于 `PVPScene.getLiveQueueCooldownCountdown is not a function`。
+    - 红测：`node tests/sanity_pvp_live_ui_contract_checks.cjs` 在实现前失败于缺少 `getLiveQueueCooldownCountdown` 合同 marker。
+    - 绿测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs`
+    - 绿测：`node tests/sanity_pvp_live_ui_contract_checks.cjs`
+    - 绿测：`node tests/sanity_release_gate_coverage_checks.cjs`
+    - 构建：`npm run build:pages`
+    - 浏览器审计：`node tests/browser_pvp_live_audit.mjs http://127.0.0.1:4173 output/pvp-live-cooldown-countdown-audit`，94/94 findings、0 failed、0 console error。
+    - 全量 Node 门禁：`npm run test:node`，All node checks passed。
+  - 当前结论
+    - live PVP 冷却护栏现在不只是“挡住玩家”，而是给出明确恢复时间和不计分练习出口；被短冷却的玩家能理解等待成本并保持手感，正式排位双方体验仍被保护。该切片只改 idle blocked UI 可读性，不改变服务端冷却时长、匹配策略、正式积分、奖励、赛季验证或卡牌战斗规则。
+
 - 2026-06-21: V10-S16 live PVP queue cooldown guard
   - 本轮完成
     - `server/pvp-live/live-store.js` 新增 user-level matchmaking guard：同一用户短时间内连续取消正式排位队列会触发 `queue_cooldown`，返回稳定 `pvp-live-matchmaking-guard-v1` 报告、`retry_queue_later` 与 `practice` 行动建议；已有匹配交接或非终局对局时取消只做清理，不计入滥用冷却，避免 matched race 误罚。

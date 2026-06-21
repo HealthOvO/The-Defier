@@ -523,6 +523,7 @@ PVPScene.getLiveSession = () => ({ getState: () => entrySafeguardState });
 assert.equal(PVPScene.isLiveEntrySafeguardBlocked(), true, 'blocked connection health should mark live entry safeguard as active');
 assert.equal(PVPScene.hasLiveEntrySafeguardAction(null, 'retry_connection_check'), true, 'blocked connection health should expose retry action');
 assert.equal(PVPScene.hasLiveEntrySafeguardAction(null, 'practice'), true, 'blocked connection health should expose practice action');
+assert.equal(PVPScene.getLiveQueueCooldownCountdown(entrySafeguardState), null, 'blocked connection health should not expose queue cooldown countdown');
 const entryScenario = PVPScene.buildLiveEntrySafeguardPracticeScenario();
 assert.equal(entryScenario.sourceMatchId, 'entry_safeguard:connection_health_failed', 'entry safeguard drill should have a stable source id');
 assert.equal(entryScenario.sourceVisibility, 'replay_self', 'entry safeguard drill should use self-visible replay data only');
@@ -589,6 +590,18 @@ assert.equal(queueCooldownScenario?.sourceMatchId, 'entry_safeguard:queue_cooldo
 assert.equal(queueCooldownScenario?.finishReason, 'queue_cooldown', 'queue cooldown drill should expose queue_cooldown finish reason');
 assert.equal(queueCooldownScenario?.rankedImpact, 'none', 'queue cooldown practice must not write ranked score');
 assert.ok(queueCooldownScenario?.trainingTags?.includes('排队冷却练习'), 'queue cooldown practice should be labeled as queue cooldown practice');
+const queueCooldownCountdown = PVPScene.getLiveQueueCooldownCountdown(queueCooldownState);
+assert.equal(queueCooldownCountdown?.remainingSeconds, 60, 'queue cooldown countdown should expose rounded remaining seconds');
+assert.match(queueCooldownCountdown?.hint || '', /剩余 60 秒/, 'queue cooldown countdown hint should tell the player how long to wait');
+assert.equal(queueCooldownCountdown?.buttonText, '60s 后重试', 'queue cooldown countdown should make retry timing visible on the join button');
+const localCountdownState = JSON.parse(JSON.stringify(queueCooldownState));
+localCountdownState.lastError.matchmakingGuard.retryAt = Date.now() + 45000;
+localCountdownState.lastError.matchmakingGuard.cooldownRemainingMs = 60000;
+assert.equal(
+  PVPScene.getLiveQueueCooldownCountdown(localCountdownState)?.remainingSeconds,
+  45,
+  'queue cooldown countdown should prefer retryAt over stale server remaining time',
+);
 const queueCooldownButtons = new Map([
   ['join-queue', { disabled: true, textContent: '入队', querySelector() { return null; } }],
   ['practice-live', { disabled: true, textContent: '问道练习', querySelector() { return null; } }],
@@ -603,7 +616,7 @@ const queueCooldownRootStub = {
 documentStub.querySelector = (selector) => selector === '[data-live-pvp-root]' ? queueCooldownRootStub : null;
 PVPScene.updateLiveButtons('idle', false, null);
 assert.equal(queueCooldownButtons.get('join-queue').disabled, false, 'queue cooldown should keep retry join button enabled');
-assert.equal(queueCooldownButtons.get('join-queue').textContent, '稍后重试', 'queue cooldown should relabel join button to retry later');
+assert.equal(queueCooldownButtons.get('join-queue').textContent, '60s 后重试', 'queue cooldown should relabel join button with retry countdown');
 assert.equal(queueCooldownButtons.get('practice-live').disabled, false, 'queue cooldown should enable no-score practice');
 documentStub.querySelector = oldDocumentQuerySelector;
 

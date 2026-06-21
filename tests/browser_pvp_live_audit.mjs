@@ -1422,6 +1422,7 @@ async function safeElementScreenshot(page, selector, outputPath) {
     'live UI queue cooldown keeps retry practice actions without reward or rating promise',
     queueCooldownProbe.phase === 'idle'
       && /排队取消过于频繁|短暂冷却/.test(queueCooldownProbe.lastError)
+      && /剩余 60 秒/.test(queueCooldownProbe.lastError)
       && queueCooldownProbe.payload?.lastError?.reason === 'queue_cooldown'
       && queueCooldownProbe.payload?.lastError?.matchmakingGuard?.reportVersion === 'pvp-live-matchmaking-guard-v1'
       && queueCooldownProbe.payload?.lastError?.matchmakingGuard?.status === 'blocked'
@@ -1430,7 +1431,7 @@ async function safeElementScreenshot(page, selector, outputPath) {
       && queueCooldownProbe.payload?.lastError?.matchmakingGuard?.actions?.some(action => action.id === 'retry_queue_later')
       && queueCooldownProbe.payload?.lastError?.matchmakingGuard?.actions?.some(action => action.id === 'practice' && /不写正式积分/.test(action.detail))
       && queueCooldownProbe.buttons['join-queue']?.disabled === false
-      && /稍后重试/.test(queueCooldownProbe.buttons['join-queue']?.text || '')
+      && /60s 后重试/.test(queueCooldownProbe.buttons['join-queue']?.text || '')
       && queueCooldownProbe.buttons['practice-live']?.disabled === false
       && !/reward|rating|elo/i.test(JSON.stringify(queueCooldownProbe.payload?.lastError?.matchmakingGuard || {})),
     JSON.stringify(queueCooldownProbe),

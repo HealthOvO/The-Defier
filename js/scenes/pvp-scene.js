@@ -1780,6 +1780,24 @@ export const PVPScene = {
       }
     };
   },
+  getLiveQueueCooldownCountdown(state = null) {
+    const report = this.getLiveQueueCooldownError(state);
+    const guard = report && report.matchmakingGuard ? report.matchmakingGuard : null;
+    if (!guard || String(guard.status || '') !== 'blocked') return null;
+    const retryAt = Math.max(0, Math.floor(Number(guard.retryAt) || 0));
+    const reportedRemainingMs = Math.max(0, Math.floor(Number(guard.cooldownRemainingMs) || 0));
+    const derivedRemainingMs = retryAt > 0 ? Math.max(0, retryAt - Date.now()) : 0;
+    const remainingMs = retryAt > 0 ? derivedRemainingMs : reportedRemainingMs;
+    const remainingSeconds = Math.max(1, Math.ceil(remainingMs / 1000));
+    const sourceLabel = String(guard.sourceLabel || '排队冷却');
+    return {
+      remainingMs,
+      remainingSeconds,
+      retryAt,
+      buttonText: `${remainingSeconds}s 后重试`,
+      hint: `${sourceLabel}触发真人排位短暂冷却，剩余 ${remainingSeconds} 秒；可先进入问道练习，练习不写正式积分。`
+    };
+  },
   isLiveEntrySafeguardBlocked(state = null) {
     const report = this.getLiveConnectionHealthError(state);
     const status = String(report && report.connectionHealth && report.connectionHealth.status || '');
@@ -3773,7 +3791,8 @@ export const PVPScene = {
       }).join('') : '暂无事件';
     }
 
-    const errorText = this.liveInlineHint || (state.lastError ? `${state.lastError.message || state.lastError.reason}` : phase === 'invalidated' ? '本局在开战前无效，不写正式积分；可以重新匹配或先练习斗法谱。' : phase === 'setup' ? '准备阶段只能调息或确认准备，不能提前出牌。' : phase === 'waiting_rematch' ? '已发起低压力再战，等待本局对手确认；不写正式积分。' : phase === 'waiting' ? '等待真实玩家加入；不会自动切换残影。' : '实时论道不会自动匹配残影；没有真人时可取消排队。');
+    const queueCooldownCountdown = this.getLiveQueueCooldownCountdown(state);
+    const errorText = this.liveInlineHint || (queueCooldownCountdown ? queueCooldownCountdown.hint : state.lastError ? `${state.lastError.message || state.lastError.reason}` : phase === 'invalidated' ? '本局在开战前无效，不写正式积分；可以重新匹配或先练习斗法谱。' : phase === 'setup' ? '准备阶段只能调息或确认准备，不能提前出牌。' : phase === 'waiting_rematch' ? '已发起低压力再战，等待本局对手确认；不写正式积分。' : phase === 'waiting' ? '等待真实玩家加入；不会自动切换残影。' : '实时论道不会自动匹配残影；没有真人时可取消排队。');
     setText('[data-live-last-error]', errorText);
     this.updateLiveButtons(phase, !!view && view.currentSeat === state.seatId, self);
     if (this.shouldLiveHeartbeat(phase)) {
@@ -3794,6 +3813,7 @@ export const PVPScene = {
     }
     const entrySafeguardBlocked = phase === 'idle' && this.isLiveEntrySafeguardBlocked(state);
     const queueCooldownBlocked = entrySafeguardBlocked && !!this.getLiveQueueCooldownError(state);
+    const queueCooldownCountdown = this.getLiveQueueCooldownCountdown(state);
     const surrenderConfirmArmed = this.isLiveSurrenderConfirmArmed(state);
     const endTurnConfirmArmed = this.isLiveOpeningActionConfirmArmed(state, 'end_turn', {});
     const intentLocked = this.isLiveIntentInFlight(null, 'action');
@@ -3814,7 +3834,7 @@ export const PVPScene = {
     setDisabled('cancel-queue', phase !== 'waiting');
     setDisabled('practice-live', !(entrySafeguardBlocked && this.hasLiveEntrySafeguardAction(state, 'practice')) && !(phase === 'waiting' && (this.getLiveWaitingReport(state)?.longWait || this.getLiveWaitingQualitySafeguard(state))));
     setDisabled('refresh-match', phase === 'queueing' || phase === 'idle' || phase === 'finished' || phase === 'invalidated');
-    setButtonText('join-queue', queueCooldownBlocked ? '稍后重试' : entrySafeguardBlocked && this.hasLiveEntrySafeguardAction(state, 'retry_connection_check') ? '重试检测' : '入队');
+    setButtonText('join-queue', queueCooldownBlocked ? queueCooldownCountdown && queueCooldownCountdown.buttonText || '稍后重试' : entrySafeguardBlocked && this.hasLiveEntrySafeguardAction(state, 'retry_connection_check') ? '重试检测' : '入队');
     setButtonText('end-turn', endTurnConfirmArmed ? '确认结束' : '结束回合');
     setButtonText('surrender', surrenderConfirmArmed ? '确认认输' : '认输');
     setDisabled('confirm-mulligan', intentLocked || !(phase === 'setup' && self && !self.mulliganUsed));

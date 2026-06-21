@@ -543,6 +543,18 @@ const entrySafeguardPracticeBody = methodBody(scene, 'buildLiveEntrySafeguardPra
   assert.ok(entrySafeguardPracticeBody.includes(needle), `buildLiveEntrySafeguardPracticeScenario should create no-score connection drill scenario: ${needle}`);
 });
 
+const queueCooldownCountdownBody = methodBody(scene, 'getLiveQueueCooldownCountdown');
+[
+  'getLiveQueueCooldownError',
+  'remainingSeconds',
+  'buttonText',
+  '后重试',
+  '剩余',
+  '问道练习'
+].forEach((needle) => {
+  assert.ok(queueCooldownCountdownBody.includes(needle), `getLiveQueueCooldownCountdown should expose player-visible cooldown timing: ${needle}`);
+});
+
 const entrySafeguardPracticeCommitBody = methodBody(scene, 'commitLiveEntrySafeguardPracticeHandoff');
 [
   'buildLiveEntrySafeguardPracticeScenario',
