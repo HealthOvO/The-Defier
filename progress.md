@@ -1,5 +1,32 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-21: V10-S30 live PVP matched queue ticket cleanup
+  - 本轮完成
+    - `js/services/pvp-live-session.js` 收口 waiting -> matched 与 immediate matched 两条 session 入口：一旦服务端已返回 matched / setup 状态，前端 session 会显式清空 `queueTicket`，不再把已成局玩家继续标成持有排队票据。
+    - `tests/sanity_pvp_live_session_checks.mjs` 新增两条红测：`pollQueue()` 从 waiting 成局后必须清空 stale queue ticket / waiting report / queue error；`joinQueue()` 若直接 matched 且服务端附带 queue ticket，也必须清空 matched 状态里的 queue ticket。
+    - `js/scenes/pvp-scene.js` 将普通 `wideMatchConsent.waiting_for_peer` 也纳入 waiting report 渲染条件：即使没有 longWait、recent opponent 或 low-sample 护栏，玩家确认宽分差后仍能看到“已确认、等待对方”的前台状态。
+    - `css/pvp.css` 为 waiting report 增加结构化信号行，显示 `宽分差确认 1/2`、`候选池 2`、长等待放行剩余和当前可选动作，减少玩家把正常双方确认等待误判为系统卡住。
+  - 已验证
+    - 红测：`node tests/sanity_pvp_live_session_checks.mjs` 在实现前失败于 `matched queue poll should clear stale queue ticket from waiting state`，实际为 `pvplq-session`。
+    - 红测：`node tests/sanity_pvp_live_session_checks.mjs` 在 immediate matched 收口前失败于 `immediate matched queue join should clear service queue ticket from matched state`，实际为 `pvplq-instant-matched`。
+    - 红测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs` 在 UI 收口前失败于 `ordinary wide-match waiting_for_peer should render even without long-wait or quality safeguards`，实际为空字符串。
+    - 绿测：`node tests/sanity_pvp_live_session_checks.mjs`
+    - 绿测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs`
+    - 语法：`node --check js/services/pvp-live-session.js`
+    - 语法：`node --check js/scenes/pvp-scene.js`
+    - 语法：`node --check tests/browser_pvp_live_audit.mjs`
+    - 语法：`node --check tests/sanity_pvp_live_session_checks.mjs`
+    - 语法：`node --check tests/sanity_pvp_live_ui_runtime_checks.mjs`
+    - 文档同步：`node tests/sanity_intro_progress_sync_checks.cjs`
+    - 绿测：`node tests/sanity_pvp_live_ui_contract_checks.cjs`
+    - 绿测：`node tests/sanity_release_gate_coverage_checks.cjs`
+    - 全量 Node 门禁：`npm run test:node`，All node checks passed。
+    - 构建：`npm run build:pages`
+    - 浏览器审计：`node tests/browser_pvp_live_audit.mjs http://127.0.0.1:4173 output/pvp-live-waiting-contract-cleanup-audit` 首次 101/102，失败于私邀恢复场景沿用前序本地 waiting queue ticket；`tests/browser_pvp_live_audit.mjs` 已在该场景前清理 waiting queue 恢复锚点，避免审计串场。
+    - 浏览器审计复跑：`node tests/browser_pvp_live_audit.mjs http://127.0.0.1:4173 output/pvp-live-waiting-contract-cleanup-audit-rerun`，102/102 findings、0 failed、0 console error。
+  - 当前结论
+    - live PVP 成局交接不再残留排队票据：刷新恢复、轮询、UI snapshot 和后续操作都能更明确地区分“正在排队”和“已经进入真人战局”。宽分差等待也不再只有后端合同，普通 `waiting_for_peer` 会直接显示确认进度和候选池规模，减少玩家以为系统仍在排队、重复取消/练习或误判另一位真人状态的风险。该切片只清理 session 状态和 waiting UI 投影，不改变匹配、先后手、卡牌、结算、奖励或宽分差放行规则。
+
 - 2026-06-21: V10-S29 live PVP waiting queue refresh recovery
   - 本轮完成
     - `js/services/pvp-live-session.js` 新增按 `userScope` 分桶的 waiting queue ticket 本地恢复锚点：入队返回 `waiting` 时保存 queue ticket，匹配、取消、票据过期或进入权威战局后清除，避免同浏览器不同账号串恢复。

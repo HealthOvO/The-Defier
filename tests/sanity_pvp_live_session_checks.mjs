@@ -306,6 +306,30 @@ assert.equal(typeof session.resumeCurrentInvite, 'function', 'live session shoul
 assert.equal(typeof session.refreshInviteInbox, 'function', 'live session should expose targeted private invite inbox refresh API');
 assert.equal(typeof session.submitReport, 'function', 'live session should expose audit-safe dispute report API');
 
+const instantMatchedSession = createPvpLiveSession({
+  liveService: {
+    joinQueue: async () => ({
+      success: true,
+      status: 'matched',
+      queueTicket: 'pvplq-instant-matched',
+      matchId: 'pvplm-instant-matched',
+      seatId: 'A',
+      stateView: {
+        matchId: 'pvplm-instant-matched',
+        status: 'setup',
+        stateVersion: 1,
+        currentSeat: 'A',
+        self: { seatId: 'A', hand: [{ instanceId: 'A-strike-1' }] },
+        opponent: { seatId: 'B', handCount: 3, publicProfile: makeRankedOpponentProfile() }
+      }
+    })
+  }
+});
+const instantMatched = await instantMatchedSession.joinQueue({ displayName: '甲' });
+assert.equal(instantMatched.phase, 'setup', 'immediate matched queue join should enter setup phase');
+assert.equal(instantMatched.queueTicket, '', 'immediate matched queue join should clear service queue ticket from matched state');
+assert.equal(instantMatched.waitingReport, null, 'immediate matched queue join should not keep a waiting report');
+
 const recoveredSession = createPvpLiveSession({ liveService });
 const recovered = await recoveredSession.resumeCurrentMatch();
 assert.equal(recovered.phase, 'active', 'resumeCurrentMatch should enter active when server has current match');
@@ -431,6 +455,9 @@ await session.joinQueue({ displayName: '甲' });
 
 const matched = await session.pollQueue();
 assert.equal(matched.phase, 'setup', 'matched queue poll should enter setup phase before battle starts');
+assert.equal(matched.queueTicket, '', 'matched queue poll should clear stale queue ticket from waiting state');
+assert.equal(matched.waitingReport, null, 'matched queue poll should clear stale waiting report from waiting state');
+assert.equal(matched.lastError, null, 'matched queue poll should clear stale queue errors from waiting state');
 assert.equal(matched.matchId, 'pvplm-session', 'matched queue poll should retain match id');
 assert.equal(matched.seatId, 'A', 'matched queue poll should retain seat id');
 assert.ok(!Array.isArray(matched.stateView.opponent.hand), 'live session state must not expose opponent hand');

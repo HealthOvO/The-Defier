@@ -4341,6 +4341,11 @@ async function safeElementScreenshot(page, selector, outputPath) {
     window.PVPScene.liveSession = null;
     window.__livePvpAuditCalls = [];
     window.__livePvpAuditCurrentInviteMode = 'pending';
+    for (const key of Object.keys(window.localStorage)) {
+      if (key.startsWith('theDefierPvpLiveWaitingQueueTicketV1')) {
+        window.localStorage.removeItem(key);
+      }
+    }
     window.PVPService.live.getCurrentMatch = async () => {
       window.__livePvpAuditCalls.push({ method: 'getCurrentMatch', inviteResume: true });
       return { success: false, reason: 'no_current_match', message: '当前没有进行中的实时论道' };

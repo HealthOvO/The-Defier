@@ -866,6 +866,39 @@ assert.doesNotMatch(
   /onclick="PVPScene\.acceptLiveWideMatch\(\)"/,
   'accepted wide-match waiting report should not keep a repeated accept button',
 );
+const ordinaryWideWaitingState = {
+  ...acceptedWideWaitingState,
+  queueTicket: 'pvplq-ui-wide-only',
+  waitingReport: {
+    ...acceptedWideWaitingState.waitingReport,
+    message: '你已确认接受宽分差，仍需对方也确认才会放行。',
+    safeguards: ['real_player_only', 'no_score_change'],
+    protectionReason: '',
+    releaseMode: '',
+    longWait: false
+  }
+};
+const ordinaryWideMarkup = PVPScene.renderLiveWaitingReport(ordinaryWideWaitingState);
+assert.match(
+  ordinaryWideMarkup,
+  /已确认宽分差/,
+  'ordinary wide-match waiting_for_peer should render even without long-wait or quality safeguards',
+);
+assert.match(
+  ordinaryWideMarkup,
+  /data-live-wide-match-consent-status="waiting_for_peer"/,
+  'ordinary wide-match waiting_for_peer should keep the stable consent DOM status',
+);
+assert.match(
+  ordinaryWideMarkup,
+  /宽分差确认\s*1\/2/,
+  'ordinary wide-match waiting_for_peer should show accepted-player progress',
+);
+assert.match(
+  ordinaryWideMarkup,
+  /候选池\s*2/,
+  'ordinary wide-match waiting_for_peer should show candidate-pool size',
+);
 const recentOpponentButtons = new Map([
   ['join-queue', { disabled: true, textContent: '入队', querySelector() { return null; } }],
   ['practice-live', { disabled: true, textContent: '问道练习', querySelector() { return null; } }],

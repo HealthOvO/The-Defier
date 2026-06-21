@@ -827,7 +827,7 @@ export function createPvpLiveSession({
       const stateView = result.stateView || null;
       return publish({
         phase: normalizePhaseFromView(stateView, 'matched'),
-        queueTicket: result.queueTicket || state.queueTicket || '',
+        queueTicket: '',
         inviteCode: '',
         matchId: result.matchId || '',
         seatId: result.seatId || '',
@@ -883,6 +883,7 @@ export function createPvpLiveSession({
       const stateView = result.stateView || null;
       return publish({
         phase: normalizePhaseFromView(stateView, 'matched'),
+        queueTicket: '',
         matchId: result.matchId || '',
         seatId: result.seatId || '',
         stateView,

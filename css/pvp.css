@@ -1321,6 +1321,23 @@
     font-weight: 700;
 }
 
+.pvp-live-waiting-signals {
+    margin-top: 7px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.pvp-live-waiting-signals span {
+    min-width: 0;
+    padding: 4px 6px;
+    border-radius: 6px;
+    background: rgba(147, 205, 255, 0.08);
+    color: rgba(225, 235, 246, 0.78);
+    font-size: 0.68rem;
+    overflow-wrap: anywhere;
+}
+
 .pvp-live-waiting-actions {
     margin-top: 8px;
     display: flex;

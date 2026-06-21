@@ -1922,10 +1922,37 @@ export const PVPScene = {
   renderLiveWaitingReport(state) {
     const report = this.getLiveWaitingReport(state);
     const qualitySafeguard = this.getLiveWaitingQualitySafeguard(state);
-    if (!report || (!report.longWait && !qualitySafeguard)) return '';
+    const wideConsent = report && report.wideMatchConsent;
+    const hasWideConsentSignal = !!(wideConsent && (
+      wideConsent.viewerAccepted
+      || wideConsent.status
+      || wideConsent.acceptedPlayerCount > 0
+      || wideConsent.candidatePoolSize > 1
+    ));
+    const hasWaitingContract = !!(report && (
+      report.longWait
+      || qualitySafeguard
+      || hasWideConsentSignal
+      || report.releaseMode
+      || report.currentEligibleActions.length > 0
+    ));
+    if (!hasWaitingContract) return '';
     const waitSec = Math.ceil(report.waitMs / 1000);
     const thresholdSec = Math.max(1, Math.ceil(report.longWaitThresholdMs / 1000));
-    const wideConsent = report.wideMatchConsent;
+    const heading = report.longWait
+      ? `${thresholdSec} 秒无真人`
+      : qualitySafeguard ? qualitySafeguard.title : hasWideConsentSignal ? '宽分差确认' : '等待真人';
+    const signals = [];
+    if (wideConsent) {
+      signals.push(`宽分差确认 ${wideConsent.acceptedPlayerCount}/${wideConsent.requiredAcceptedPlayers}`);
+      signals.push(`候选池 ${wideConsent.candidatePoolSize}`);
+    }
+    if (report.releaseMode) {
+      signals.push(report.releaseInMs > 0 ? `放行剩余 ${Math.ceil(report.releaseInMs / 1000)}s` : `放行模式 ${report.releaseMode}`);
+    }
+    if (report.currentEligibleActions.length > 0) {
+      signals.push(`可选动作 ${report.currentEligibleActions.join(' / ')}`);
+    }
     const renderWaitingAction = (action) => {
       if (action.id !== 'accept_wide_match') {
         return `<span class="pvp-live-waiting-action" title="${this.escapeHtml(action.detail)}">${this.escapeHtml(action.label)}：${this.escapeHtml(action.detail)}</span>`;
@@ -1939,9 +1966,10 @@ export const PVPScene = {
     };
     return `
       <div class="pvp-live-waiting-head">
-        <span>${this.escapeHtml(report.longWait ? `${thresholdSec} 秒无真人` : qualitySafeguard.title)}</span>
+        <span>${this.escapeHtml(heading)}</span>
         <span>已等待 ${this.escapeHtml(waitSec)}s</span>
       </div>
+      ${signals.length ? `<div class="pvp-live-waiting-signals">${signals.slice(0, 4).map(signal => `<span>${this.escapeHtml(signal)}</span>`).join('')}</div>` : ''}
       <div>${this.escapeHtml(report.message || '当前真人较少，可继续等待、进入问道练习或取消匹配；不会自动切残影。')}</div>
       <div class="pvp-live-waiting-actions">
         ${report.actions.map(action => renderWaitingAction(action)).join('')}
