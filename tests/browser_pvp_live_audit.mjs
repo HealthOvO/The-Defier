@@ -3456,6 +3456,48 @@ async function safeElementScreenshot(page, selector, outputPath) {
       && !/sourceCardId|cardId|instanceId|draw_tag|loadoutSnapshot|reward|rating|elo|hand":\[|deck":\[/i.test(`${cardCycleFormatProbe.event?.detail || ''} ${cardCycleFormatProbe.cappedEvent?.detail || ''} ${cardCycleFormatProbe.receipt || ''}`),
     JSON.stringify(cardCycleFormatProbe),
   );
+  const timeoutAutomationFormatProbe = await page.evaluate(() => {
+    const event = window.PVPScene.formatLiveEvent({
+      eventType: 'automation_action',
+      actingSeat: 'B',
+      payload: {
+        seatId: 'B',
+        actionType: 'defense_card',
+        reason: 'soft_timeout',
+        automationCount: 1,
+        cardInstanceId: 'hidden-timeout-card',
+      },
+      publicData: {
+        seatId: 'B',
+        actionType: 'defense_card',
+        reason: 'soft_timeout',
+        automationCount: 1,
+      },
+    });
+    const endTurnEvent = window.PVPScene.formatLiveEvent({
+      eventType: 'automation_action',
+      actingSeat: 'A',
+      publicData: {
+        seatId: 'A',
+        actionType: 'end_turn',
+        reason: 'soft_timeout',
+        automationCount: 2,
+      },
+    });
+    return {
+      event,
+      endTurnEvent,
+    };
+  });
+  add(
+    'live UI formats timeout automation event as low-impact public handoff',
+    timeoutAutomationFormatProbe.event?.type === 'automation_action'
+      && timeoutAutomationFormatProbe.event?.label === '超时托管'
+      && /B.*系统托管.*防守牌.*第 1 次/.test(timeoutAutomationFormatProbe.event?.detail || '')
+      && /A.*系统托管.*结束回合.*第 2 次/.test(timeoutAutomationFormatProbe.endTurnEvent?.detail || '')
+      && !/automation_action|soft_timeout|cardInstanceId|cardId|instanceId|loadoutSnapshot|reward|rating|elo|hand":\[|deck":\[/i.test(`${timeoutAutomationFormatProbe.event?.label || ''} ${timeoutAutomationFormatProbe.event?.detail || ''} ${timeoutAutomationFormatProbe.endTurnEvent?.label || ''} ${timeoutAutomationFormatProbe.endTurnEvent?.detail || ''}`),
+    JSON.stringify(timeoutAutomationFormatProbe),
+  );
   add(
     'live UI renders handoff receipt label for end-turn action receipt',
     /交权回执/.test(actionProbe.handoffReceipt)

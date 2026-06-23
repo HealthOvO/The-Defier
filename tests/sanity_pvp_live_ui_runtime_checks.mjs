@@ -1617,6 +1617,26 @@ const cardCycleEvent = PVPScene.formatLiveEvent({
 assert.equal(cardCycleEvent.label, '公开抽滤', 'live UI event log should label public card cycle events');
 assert.match(cardCycleEvent.detail, /A.*抽滤 1 张.*当前手牌 4.*牌库 9/, 'live UI event log should render public card cycle counts');
 assert.doesNotMatch(`${cardCycleEvent.label} ${cardCycleEvent.detail}`, /sourceCardId|cardId|instanceId|draw_tag|rating|reward/i, 'live UI card cycle event must not render hidden ids, effect tags, or rewards');
+const timeoutAutomationEvent = PVPScene.formatLiveEvent({
+  eventType: 'automation_action',
+  actingSeat: 'B',
+  payload: {
+    seatId: 'B',
+    actionType: 'defense_card',
+    reason: 'soft_timeout',
+    automationCount: 1,
+    cardInstanceId: 'hidden-timeout-card'
+  },
+  publicData: {
+    seatId: 'B',
+    actionType: 'defense_card',
+    reason: 'soft_timeout',
+    automationCount: 1
+  }
+});
+assert.equal(timeoutAutomationEvent.label, '超时托管', 'live UI event log should label timeout automation as player-facing automation');
+assert.match(timeoutAutomationEvent.detail, /B.*系统托管.*防守牌.*第 1 次/, 'live UI event log should explain low-impact timeout automation');
+assert.doesNotMatch(`${timeoutAutomationEvent.label} ${timeoutAutomationEvent.detail}`, /automation_action|soft_timeout|cardInstanceId|cardId|instanceId|hand|deck|rating|reward/i, 'live UI timeout automation event must not expose protocol codes or hidden ids');
 
 openingActionState = {
   ...openingActionState,

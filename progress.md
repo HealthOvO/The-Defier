@@ -1,5 +1,26 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-23: V10-S44 live PVP timeout automation player-facing event copy
+  - 本轮完成
+    - `js/scenes/pvp-scene.js` 将服务端公共事件 `automation_action` 映射为玩家可读“超时托管”，并在事件详情里说明系统执行的是低影响 `防守牌 / 结束回合 / 保底行动`，附带第几次超时，不再让玩家只看到泛化“公开事件”。
+    - `formatLiveEvent()` 明确优先使用 publicData，不把 `soft_timeout`、`cardInstanceId`、隐藏手牌、牌库、rating、reward 等协议或隐藏字段渲染进可见文本。
+    - `tests/sanity_pvp_live_ui_runtime_checks.mjs` 增加 formatter 红绿合同：超时托管必须显示为“超时托管 / 系统托管防守牌 / 第 1 次”，且禁渲染协议码与隐藏 id。
+    - `tests/browser_pvp_live_audit.mjs` 增加页面环境 finding `live UI formats timeout automation event as low-impact public handoff`，同时覆盖防守牌托管和结束回合托管两种可见说明。
+    - `tests/sanity_release_gate_coverage_checks.cjs` 增加 release marker，确保后续不会丢掉 browser audit 的超时托管可读合同。
+  - 已验证
+    - 红测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs` 在实现前失败于 `live UI event log should label timeout automation as player-facing automation`，实际 label 为 `公开事件`。
+    - 红测：`node tests/sanity_release_gate_coverage_checks.cjs` 在 browser finding 前失败于 `live PVP browser audit should pin UI wiring marker: automation_action`。
+    - 语法：`node --check js/scenes/pvp-scene.js`、`node --check tests/browser_pvp_live_audit.mjs`
+    - 绿测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs`
+    - 绿测：`node tests/sanity_release_gate_coverage_checks.cjs`
+    - 绿测：`node tests/sanity_intro_progress_sync_checks.cjs`
+    - 全量 Node 门禁：`npm run test:node`
+    - Diff 检查：`git diff --check`
+    - 构建：`npm run build:pages`
+    - 浏览器审计：`node tests/browser_pvp_live_audit.mjs http://127.0.0.1:4173 output/pvp-live-timeout-automation-copy-audit-20260623`，106/106 findings、0 failed。
+  - 当前结论
+    - live PVP 的行动超时托管不再只是服务端事件链里的协议事实，而是前台能让双方读懂的公共事件：系统托管是低影响保底动作，不是隐藏出牌、不是正式奖励或段位结算，也不会误导成对手主动操作。本轮只改可见事件文案、UI formatter 和回归门禁，不改变超时阈值、托管策略、战斗数值、结算、奖励或线上配置。
+
 - 2026-06-23: V10-S43 live PVP real-backend invite cancellation browser contract
   - 本轮完成
     - `tests/browser_pvp_live_real_backend_smoke.mjs` 新增真实后端私密直邀取消双账号段：guest 先打开 idle live 面板并通过轮询收到 targeted invite；host 重开 live panel 恢复同一 invite 后点击取消。

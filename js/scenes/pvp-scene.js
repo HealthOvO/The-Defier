@@ -845,6 +845,7 @@ export const PVPScene = {
       ready_timeout: '准备超时',
       connection_timeout: '连接超时',
       turn_timeout: '行动超时',
+      automation_action: '超时托管',
       match_invalidated: '无效局',
       match_finished: '对局结束',
       snapshot_locked: '斗法谱锁定',
@@ -3543,6 +3544,14 @@ export const PVPScene = {
       detail = payload.finishReason === 'connection_timeout'
         ? `${loserSeat} 重连宽限结束`
         : `${loserSeat} 行动窗口超时`;
+    } else if (type === 'automation_action') {
+      const seatId = String(payload.seatId || event.actingSeat || '--');
+      const actionType = String(payload.actionType || '');
+      const automationCount = Math.max(1, Math.floor(Number(payload.automationCount) || 1));
+      const actionLabel = actionType === 'defense_card'
+        ? '防守牌'
+        : actionType === 'end_turn' ? '结束回合' : '保底行动';
+      detail = `${seatId} · 系统托管${actionLabel} · 第 ${automationCount} 次超时`;
     } else if (type === 'emote_sent') {
       const seatId = String(payload.seatId || event.actingSeat || '--');
       const label = String(payload.label || payload.emoteId || '预设表情');
