@@ -111,6 +111,27 @@ const liveService = {
         }
       };
     }
+    const rejectionReasons = {
+      'session-not-current-1': 'not_current_turn',
+      'session-not-enough-energy-1': 'not_enough_energy',
+      'session-card-gone-1': 'card_not_in_hand'
+    };
+    if (intent && rejectionReasons[intent.intentId]) {
+      return {
+        success: true,
+        result: 'rejected',
+        reason: rejectionReasons[intent.intentId],
+        events: [{ eventType: 'intent_rejected', reason: rejectionReasons[intent.intentId] }],
+        stateView: {
+          matchId,
+          status: 'active',
+          stateVersion: 8,
+          currentSeat: 'B',
+          self: { seatId: 'A', hand: [] },
+          opponent: { seatId: 'B', handCount: 2 }
+        }
+      };
+    }
     const isSurrender = intent && intent.intentType === 'surrender';
     const isSetupIntent = intent && (intent.intentType === 'ready' || intent.intentType === 'mulligan');
     const nextVersion = isSurrender ? 9 : isSetupIntent ? 3 : 7;
@@ -732,8 +753,43 @@ const syncRequired = await session.submitIntent({
 });
 assert.equal(syncRequired.phase, 'sync_required', 'sync_required should move session into sync_required phase');
 assert.equal(syncRequired.lastError.reason, 'stale_state', 'sync_required should keep authoritative reject reason');
+assert.match(syncRequired.lastError.message, /权威状态|刷新/, 'sync_required should tell the player to resync authoritative state');
 assert.deepEqual(syncRequired.lastEvents, [{ eventType: 'sync_required' }], 'sync_required should keep sync events');
 assert.equal(syncRequired.stateView.stateVersion, 8, 'sync_required should retain latest authoritative state view');
+
+const rejectionSession = createPvpLiveSession({ liveService });
+await rejectionSession.resumeCurrentMatch();
+
+const notCurrentRejected = await rejectionSession.submitIntent({
+  intentId: 'session-not-current-1',
+  intentType: 'play_card',
+  stateVersion: 8,
+  payload: { cardInstanceId: 'A-stale-turn-1', targetSeat: 'B' }
+});
+assert.equal(notCurrentRejected.phase, 'active', 'not-current rejection should keep the match active');
+assert.equal(notCurrentRejected.lastError.reason, 'not_current_turn', 'not-current rejection should keep stable reason for diagnostics');
+assert.match(notCurrentRejected.lastError.message, /还没轮到你|等待对手/, 'not-current rejection should explain that the player is waiting for opponent action');
+assert.doesNotMatch(notCurrentRejected.lastError.message, /not_current_turn/, 'not-current player copy should not expose raw protocol reason');
+
+const notEnoughEnergyRejected = await rejectionSession.submitIntent({
+  intentId: 'session-not-enough-energy-1',
+  intentType: 'play_card',
+  stateVersion: 8,
+  payload: { cardInstanceId: 'A-expensive-1', targetSeat: 'B' }
+});
+assert.equal(notEnoughEnergyRejected.lastError.reason, 'not_enough_energy', 'energy rejection should keep stable reason for diagnostics');
+assert.match(notEnoughEnergyRejected.lastError.message, /灵力不足|结束回合/, 'energy rejection should suggest a lower-cost action or ending the turn');
+assert.doesNotMatch(notEnoughEnergyRejected.lastError.message, /not_enough_energy/, 'energy rejection player copy should not expose raw protocol reason');
+
+const missingCardRejected = await rejectionSession.submitIntent({
+  intentId: 'session-card-gone-1',
+  intentType: 'play_card',
+  stateVersion: 8,
+  payload: { cardInstanceId: 'A-card-gone-1', targetSeat: 'B' }
+});
+assert.equal(missingCardRejected.lastError.reason, 'card_not_in_hand', 'missing-card rejection should keep stable reason for diagnostics');
+assert.match(missingCardRejected.lastError.message, /不在手牌|刷新/, 'missing-card rejection should tell the player to refresh the authoritative hand');
+assert.doesNotMatch(missingCardRejected.lastError.message, /card_not_in_hand/, 'missing-card player copy should not expose raw protocol reason');
 
 const surrendered = await session.surrender({ intentId: 'session-surrender-1' });
 assert.equal(surrendered.phase, 'finished', 'surrender should move session into finished phase');

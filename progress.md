@@ -1,5 +1,23 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-23: V10-S52 live PVP production lethal smoke and rejected-action recovery copy
+  - 本轮完成
+    - `js/services/pvp-live-session.js` 新增 `formatLiveIntentRejectMessage()`，把服务端权威拒绝 reason 映射成玩家能理解的恢复提示：`stale_state` 引导刷新权威状态，`not_current_turn` 说明等待对手行动，`not_enough_energy` 提示换低费牌或结束回合，`card_not_in_hand` 提示刷新后重选；诊断 reason 仍保留在 `lastError.reason`，但可见 message 不再裸露协议码。
+    - `tests/sanity_pvp_live_session_checks.mjs` 补齐 rejected intent 合同：普通 active 对局里的非当前回合、灵力不足、手牌已变动都必须保持战局 active、保留稳定 reason、显示人话恢复提示，并禁止把 `not_current_turn/not_enough_energy/card_not_in_hand` 直接显示给玩家。
+    - `tests/prod_api_smoke.cjs` 将 production-like ranked queue smoke 从 `surrender` 捷径升级为真实 `play_card/end_turn` 循环：按当前席位读取公开 `actionPreviewReport`，用真实卡牌行动打出 `finishReason='lethal'`，并按实际 winner/loser 动态验证正式胜负、积分、钱包、历史、赛季荣誉和公开 replay。
+    - `tests/sanity_release_gate_coverage_checks.cjs` 同步锁住 session rejected-action 人话映射和 production ranked lethal markers，防止 ranked production smoke 回退到认输终局或通用“行动被拒绝”。
+  - 已验证
+    - 红测：`node tests/sanity_pvp_live_session_checks.mjs` 先失败于 rejected intent 仍停留在通用 `行动被拒绝`。
+    - 红测：`node tests/sanity_release_gate_coverage_checks.cjs` 先失败于缺少 `prod live ranked real card lethal should finish authoritative match` marker。
+    - 绿测：`node tests/sanity_pvp_live_session_checks.mjs`
+    - 绿测：`node tests/sanity_release_gate_coverage_checks.cjs`
+    - 本地 production-mode API smoke：`node tests/prod_api_smoke.cjs http://127.0.0.1:9031`，API smoke passed。
+    - 全量 Node 门禁：`npm run test:node`
+    - 构建：`npm run build:pages`
+    - Diff 检查：`git diff --check`
+  - 当前结论
+    - live PVP 现在不只在真实浏览器层证明主 ranked 终局能由真实卡牌 lethal 完成，也在 production-like API smoke 里摆脱了认输捷径；同时，玩家在弱同步、误点、灵力不足或手牌变动时会看到可恢复的人话说明，而不是只收到“行动被拒绝”。本轮只强化前端 session 提示和 production smoke 证据，不改变卡牌数值、匹配策略、正式结算公式、心跳阈值或线上配置。
+
 - 2026-06-23: V10-S51 live PVP real-browser non-surrender lethal finish contract
   - 本轮完成
     - `tests/browser_pvp_live_real_backend_smoke.mjs` 将真实后端双账号主 ranked 对战从“后手反打后用认输收口”推进为“后手获得 +8 反打窗口后，用真实浏览器点击真实卡牌完成 lethal 终局”：先手开局 lethal 仍被护体挡到 1 血，后手必须经过真实行动窗口，再由 `play_card` 产生 `finishReason='lethal'`。

@@ -281,6 +281,33 @@ function shouldPruneInviteInbox(reason = '') {
     || reason === 'invite_unavailable';
 }
 
+function formatLiveIntentRejectMessage(reason = '', fallbackMessage = '', intentType = '') {
+  const safeReason = String(reason || '').trim();
+  const candidate = String(fallbackMessage || '').trim();
+  const genericFallbacks = new Set(['行动被拒绝', '需要同步权威状态']);
+  if (candidate && candidate !== safeReason && !genericFallbacks.has(candidate) && !/^[a-z0-9_:-]+$/i.test(candidate)) {
+    return candidate;
+  }
+  const actionName = String(intentType || '') === 'emote' ? '表情' : '行动';
+  const messages = {
+    stale_state: '战局状态已更新，请先刷新同步权威状态，再继续行动。',
+    not_current_turn: '还没轮到你行动，等待对手完成当前行动；若画面停住，请刷新权威状态。',
+    not_enough_energy: '灵力不足，换一张低费牌，或结束回合把行动权交给对手。',
+    card_not_in_hand: '这张牌已不在当前手牌，请刷新权威状态后重新选择。',
+    invalid_target: '目标已变化，请刷新权威状态后重新选择目标。',
+    match_not_active: '当前战局不在可行动阶段，请刷新权威状态查看结果。',
+    setup_not_ready: '双方还没完成准备，先调息或确认准备后再行动。',
+    ready_window_closed: '准备窗口已关闭，请刷新权威状态查看本局结果。',
+    ready_already_confirmed: '你已经确认准备，等待对手确认即可。',
+    mulligan_window_closed: '调息窗口已关闭，请确认准备或刷新权威状态。',
+    mulligan_already_used: '本局调息次数已用完，请确认准备继续。',
+    invalid_mulligan_count: '调息选择数量不符合规则，请重新选择手牌。',
+    invalid_emote: '这个表情当前不可发送，请换一个公开表情。',
+    emote_rate_limited: '表情发送过快，稍等片刻再发。'
+  };
+  return messages[safeReason] || `${actionName}暂未被权威状态接受，请刷新后重试。`;
+}
+
 export function createPvpLiveSession({
   liveService = getDefaultLiveService(),
   storage = getDefaultLiveStorage(),
@@ -1374,19 +1401,28 @@ export function createPvpLiveSession({
         stateView: nextView,
         waitingReport: null,
         rematchReport: state.rematchReport || null,
-        lastError: { reason: result.reason || 'sync_required', message: result.message || '需要同步权威状态' },
+        lastError: {
+          reason: result.reason || 'sync_required',
+          message: formatLiveIntentRejectMessage(result.reason || 'stale_state', result.message || '需要同步权威状态', intent.intentType)
+        },
         lastEvents: resolveAuthoritativeEvents(result.events, nextView, resolved.accepted)
       });
     }
     if (result.result === 'rejected') {
       const resolved = resolveAuthoritativeStateView(result.stateView || state.stateView);
       const nextView = resolved.stateView;
+      const nextPhase = resolved.accepted && nextView
+        ? normalizePhaseFromView(nextView, state.phase || 'active')
+        : state.phase;
       return publish({
-        phase: resolved.accepted ? normalizePhaseFromView(nextView, state.phase || 'active') : state.phase,
+        phase: nextPhase,
         stateView: nextView,
         waitingReport: null,
         rematchReport: state.rematchReport || null,
-        lastError: { reason: result.reason || 'rejected', message: result.message || '行动被拒绝' },
+        lastError: {
+          reason: result.reason || 'rejected',
+          message: formatLiveIntentRejectMessage(result.reason || 'rejected', result.message || '行动被拒绝', intent.intentType)
+        },
         lastEvents: resolveAuthoritativeEvents(result.events, nextView, resolved.accepted)
       });
     }
