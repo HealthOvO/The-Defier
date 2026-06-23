@@ -1,5 +1,26 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-23: V10-S58 live PVP player-readable match quality copy
+  - 本轮完成
+    - `js/scenes/pvp-scene.js` 为 `formatLiveMatchQuality()` 新增匹配阶段和评分差桶的玩家文案映射：`mvp_open_pool / strict_rating / accepted_200_399` 等前台改为“新手公开池 / 近分匹配 / 双方确认宽分差”，`unrated_mvp / near_0_99 / expanded_200_399` 等改为“定级样本 / 近分 0-99 / 宽分差 200-399”。
+    - 前台匹配质量文本新增候选池人数，继续显示连接健康和等待秒数；`getLiveSnapshot()` / `payload.matchQuality` 仍保留原始脱敏机器字段，方便自动化审计和回放合同，不暴露 exact rating / score / ELO。
+    - `tests/sanity_pvp_live_ui_runtime_checks.mjs` 新增 strict rating 与 accepted wide-match 两组红测，锁住玩家可见文本不得出现 `strict_rating / near_0_99 / wide_but_accepted / accepted_200_399 / expanded_200_399 / two_sided_explicit_consent`。
+    - `tests/browser_pvp_live_audit.mjs` 将 matched fake browser finding 从“必须看到 raw enum”改成“必须看到新手公开池、定级样本、候选池 2，且可见文本不出现 raw enum”；payload 仍断言保留 `ratingDeltaBucket='unrated_mvp'` 作为机器合同。
+    - `tests/sanity_release_gate_coverage_checks.cjs` 增加 release marker，防止匹配质量文案映射 helper、runtime 红测和 browser 可见文本负向断言被删。
+    - 挑战者巡检后继续收紧同一类文本出口：未知 `connectionHealth` 统一显示“连接状态待确认”，不再回显协议值；`wide_but_accepted` 的可见文案去掉“双确认”重复；`renderLiveWaitingReport()` 的 `releaseMode/currentEligibleActions` 改为“等待更多真人 / 继续等待 / 接受宽分差 / 问道练习 / 取消匹配”等玩家文案，payload 仍保留 `need_third_player / continue_waiting / accept_wide_match / practice / cancel_queue` 供审计。
+  - 已验证
+    - 红测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs` 在实现前失败于 `live UI match quality should map strict rating stage into player copy`，实际可见 `strict_rating · near_0_99`。
+    - 红测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs` 在巡检补点后失败于 `live UI match quality should map unknown connection health into generic player copy`，实际可见 `连接server_probe_lagging`。
+    - 绿测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs`
+    - 绿测：`node tests/sanity_pvp_live_ui_contract_checks.cjs`
+    - 绿测：`node tests/sanity_release_gate_coverage_checks.cjs`
+    - 绿测：`node tests/sanity_intro_progress_sync_checks.cjs`
+    - 构建：`npm run build:pages`
+    - 浏览器审计：`node tests/browser_pvp_live_audit.mjs http://127.0.0.1:4173 output/pvp-live-copy-guard-audit`，108/108 findings、0 failed、0 console error。
+    - 全量 Node 门禁：`npm run test:node`
+  - 当前结论
+    - live PVP matched / waiting / active 的匹配质量与等待护栏不再把协议枚举直接扔给玩家，双方能直接读懂“为什么这是近分、新手池、等待更多真人或双方确认宽分差”；该切片只改展示文案和门禁，不改变匹配算法、rating、先后手、战斗数值、正式结算、奖励、心跳或线上配置。
+
 - 2026-06-23: V10-S57 live PVP public replay share key moments
   - 本轮完成
     - `js/scenes/pvp-scene.js` 为匿名公共战报 viewer 新增 `getLiveReplayShareHighlights()`：只从 `replay_public.events` 和 `publicSummary` 里提取“开局 / 反打窗口 / 转折 / 终局”关键节点，继续固定 public-only 边界，不读取 `replay_self`、隐藏手牌、牌库、随机种子、本人复盘、正式结算或赛季荣誉。

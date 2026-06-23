@@ -720,21 +720,72 @@ export const PVPScene = {
       blocked: '连接已阻断',
       not_measured: '连接未测'
     };
-    return labels[status] || `连接${status}`;
+    return labels[status] || '连接状态待确认';
+  },
+  formatLiveMatchStageLabel(stage = '') {
+    const key = String(stage || '').trim();
+    const labels = {
+      mvp_open_pool: '新手公开池',
+      strict_rating: '近分匹配',
+      expanded_100_199: '长等待扩圈',
+      accepted_200_399: '双方确认宽分差',
+      friend_invite: '好友约战'
+    };
+    return labels[key] || '规则匹配';
+  },
+  formatLiveRatingDeltaBucketLabel(bucket = '') {
+    const key = String(bucket || '').trim();
+    const labels = {
+      unrated_mvp: '定级样本',
+      near_0_99: '近分 0-99',
+      fair_100_199: '扩圈 100-199',
+      expanded_100_199: '扩圈 100-199',
+      expanded_200_399: '宽分差 200-399',
+      friend_invite: '不计排位'
+    };
+    return labels[key] || '评分差已脱敏';
   },
   formatLiveMatchQuality(view) {
     const report = this.getLiveMatchQuality(view);
     if (!report) return '匹配质量：等待真人';
     const labels = {
       good: '良好',
-      expanded: '扩圈',
-      wide_but_accepted: '宽跨度',
+      expanded: '扩圈匹配',
+      wide_but_accepted: '宽分差匹配',
       rejected: '拒绝'
     };
-    const tag = labels[report.tag] || report.tag;
+    const tag = labels[report.tag] || '匹配完成';
+    const stageLabel = this.formatLiveMatchStageLabel(report.expansionStage);
+    const bucketLabel = this.formatLiveRatingDeltaBucketLabel(report.ratingDeltaBucket);
     const maxWaitSec = Math.ceil(Math.max(report.waitMs.A, report.waitMs.B) / 1000);
     const connectionHealth = this.formatLiveMatchConnectionHealth(report);
-    return `匹配质量：${tag} · ${report.expansionStage} · ${report.ratingDeltaBucket} · ${connectionHealth} · 等待 ${maxWaitSec}s`;
+    return `匹配质量：${tag} · ${stageLabel} · ${bucketLabel} · ${connectionHealth} · 候选池 ${report.candidatePoolSize} · 等待 ${maxWaitSec}s`;
+  },
+  formatLiveWaitingReleaseModeLabel(mode = '') {
+    const key = String(mode || '').trim();
+    const labels = {
+      need_third_player: '等待更多真人',
+      long_wait_release: '长等待保护放行',
+      wide_match_consent: '宽分差确认放行'
+    };
+    return labels[key] || '规则保护中';
+  },
+  formatLiveWaitingEligibleActionLabel(actionId = '') {
+    const key = String(actionId || '').trim();
+    const labels = {
+      continue_waiting: '继续等待',
+      accept_wide_match: '接受宽分差',
+      practice: '问道练习',
+      cancel_queue: '取消匹配'
+    };
+    return labels[key] || '其他操作';
+  },
+  formatLiveWaitingEligibleActions(actions = []) {
+    if (!Array.isArray(actions)) return '';
+    const labels = actions
+      .map(actionId => this.formatLiveWaitingEligibleActionLabel(actionId))
+      .filter(Boolean);
+    return labels.length ? labels.join(' / ') : '';
   },
   getLiveTurnTimer(view) {
     const timer = view && view.turnTimer && typeof view.turnTimer === 'object' ? view.turnTimer : null;
@@ -2019,10 +2070,14 @@ export const PVPScene = {
       signals.push(`候选池 ${wideConsent.candidatePoolSize}`);
     }
     if (report.releaseMode) {
-      signals.push(report.releaseInMs > 0 ? `放行剩余 ${Math.ceil(report.releaseInMs / 1000)}s` : `放行模式 ${report.releaseMode}`);
+      const releaseModeLabel = this.formatLiveWaitingReleaseModeLabel(report.releaseMode);
+      signals.push(report.releaseInMs > 0 ? `放行剩余 ${Math.ceil(report.releaseInMs / 1000)}s · ${releaseModeLabel}` : `放行条件 ${releaseModeLabel}`);
     }
     if (report.currentEligibleActions.length > 0) {
-      signals.push(`可选动作 ${report.currentEligibleActions.join(' / ')}`);
+      const eligibleActions = this.formatLiveWaitingEligibleActions(report.currentEligibleActions);
+      if (eligibleActions) {
+        signals.push(`可选操作 ${eligibleActions}`);
+      }
     }
     const renderWaitingAction = (action) => {
       if (action.id !== 'accept_wide_match') {

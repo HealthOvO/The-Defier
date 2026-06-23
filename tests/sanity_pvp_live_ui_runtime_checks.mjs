@@ -774,7 +774,59 @@ const matchQualityWithConnectionGate = PVPScene.formatLiveMatchQuality({
   }
 });
 assert.match(matchQualityWithConnectionGate, /连接健康通过/, 'live UI match quality should expose passed connection health gate');
+assert.match(matchQualityWithConnectionGate, /近分匹配/, 'live UI match quality should map strict rating stage into player copy');
+assert.match(matchQualityWithConnectionGate, /近分 0-99/, 'live UI match quality should map near rating bucket into player copy');
+assert.match(matchQualityWithConnectionGate, /候选池 2/, 'live UI match quality should expose candidate pool as player-readable context');
+assert.doesNotMatch(matchQualityWithConnectionGate, /strict_rating|near_0_99/, 'live UI match quality should not render raw matching enum values');
 assert.doesNotMatch(matchQualityWithConnectionGate, /rtt|missed|heartbeat|reconnect|延迟.*\\d/i, 'live UI match quality should not expose raw connection probe details');
+const unknownConnectionMatchQualityCopy = PVPScene.formatLiveMatchQuality({
+  matchQuality: {
+    reportVersion: 'pvp-live-match-quality-v1',
+    tag: 'good',
+    expansionStage: 'strict_rating',
+    ratingDeltaBucket: 'near_0_99',
+    waitMs: { A: 1200, B: 800 },
+    candidatePoolSize: 2,
+    connectionHealth: 'server_probe_lagging',
+    connectionHealthSummary: {
+      status: 'server_probe_lagging',
+      sampleTag: 'server_preflight'
+    },
+    safeguards: ['server_authoritative', 'connection_health_gate']
+  }
+});
+assert.match(
+  unknownConnectionMatchQualityCopy,
+  /连接状态待确认/,
+  'live UI match quality should map unknown connection health into generic player copy',
+);
+assert.doesNotMatch(
+  unknownConnectionMatchQualityCopy,
+  /server_probe_lagging|server_preflight/,
+  'live UI match quality should not render raw unknown connection health values',
+);
+
+const acceptedWideMatchQualityCopy = PVPScene.formatLiveMatchQuality({
+  matchQuality: {
+    reportVersion: 'pvp-live-match-quality-v1',
+    tag: 'wide_but_accepted',
+    expansionStage: 'accepted_200_399',
+    ratingDeltaBucket: 'expanded_200_399',
+    waitMs: { A: 123000, B: 118000 },
+    candidatePoolSize: 2,
+    connectionHealth: 'pass',
+    wideMatchReason: 'two_sided_explicit_consent',
+    safeguards: ['explicit_wide_match_consent']
+  }
+});
+assert.match(acceptedWideMatchQualityCopy, /双方确认宽分差/, 'live UI match quality should explain accepted wide match as mutual consent');
+assert.match(acceptedWideMatchQualityCopy, /200-399/, 'live UI match quality should keep wide rating span bucketed for player expectation');
+assert.equal(
+  (acceptedWideMatchQualityCopy.match(/双方确认宽分差/g) || []).length,
+  1,
+  'live UI accepted wide-match copy should not repeat the same conclusion twice',
+);
+assert.doesNotMatch(acceptedWideMatchQualityCopy, /wide_but_accepted|accepted_200_399|expanded_200_399|two_sided_explicit_consent/, 'live UI wide match quality should not render raw matching enum values');
 
 let entrySafeguardState = {
   phase: 'idle',
@@ -1043,6 +1095,13 @@ const lowSampleWaitingState = {
     waitMs: 5000,
     longWaitThresholdMs: 120000,
     longWait: false,
+    protectionReason: 'low_sample_protection',
+    releaseMode: 'need_third_player',
+    releaseAt: Date.now() + 115000,
+    releaseInMs: 115000,
+    requiresPoolSize: 3,
+    candidatePoolSize: 2,
+    currentEligibleActions: ['continue_waiting', 'accept_wide_match', 'practice', 'cancel_queue'],
     message: '低样本保护正在优先寻找更稳妥的真人对手；可继续等待、接受宽分差或先进入问道练习，不会自动切残影。',
     safeguards: ['real_player_only', 'low_sample_protection', 'no_score_change'],
     actions: [
@@ -1065,6 +1124,21 @@ assert.match(
   lowSampleWaitingMarkup,
   /data-live-waiting-action="accept-wide-match"/,
   'low-sample waiting report should preserve explicit wide-match consent action',
+);
+assert.match(
+  lowSampleWaitingMarkup,
+  /等待更多真人|放行剩余/,
+  'live UI low-sample waiting report should map release mode into player copy',
+);
+assert.match(
+  lowSampleWaitingMarkup,
+  /继续等待.*接受宽分差.*问道练习.*取消匹配/s,
+  'live UI low-sample waiting report should map eligible actions into player copy',
+);
+assert.doesNotMatch(
+  lowSampleWaitingMarkup,
+  /need_third_player|continue_waiting|accept_wide_match|cancel_queue/,
+  'live UI low-sample waiting report should not render raw waiting protocol enum values',
 );
 const lowSamplePracticeScenario = PVPScene.buildLiveWaitingPracticeScenario(lowSampleWaitingState);
 assert.equal(

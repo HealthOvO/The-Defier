@@ -2954,6 +2954,49 @@ assert.ok(
 });
 
 [
+  'formatLiveMatchStageLabel(',
+  'formatLiveRatingDeltaBucketLabel(',
+  'formatLiveWaitingReleaseModeLabel(',
+  'formatLiveWaitingEligibleActionLabel(',
+  "accepted_200_399: '双方确认宽分差'",
+  "expanded_200_399: '宽分差 200-399'",
+  "need_third_player: '等待更多真人'",
+  "continue_waiting: '继续等待'",
+].forEach((needle) => {
+  assert.ok(
+    pvpSceneSource.includes(needle),
+    `PVPScene should pin player-readable match quality copy marker: ${needle}`,
+  );
+});
+
+[
+  'live UI match quality should map strict rating stage into player copy',
+  'live UI match quality should map unknown connection health into generic player copy',
+  'live UI accepted wide-match copy should not repeat the same conclusion twice',
+  'live UI low-sample waiting report should not render raw waiting protocol enum values',
+  'live UI match quality should not render raw matching enum values',
+  'live UI wide match quality should not render raw matching enum values',
+].forEach((needle) => {
+  assert.ok(
+    pvpLiveUiRuntimeChecks.includes(needle),
+    `live PVP UI runtime should pin player-readable match quality marker: ${needle}`,
+  );
+});
+
+[
+  '新手公开池',
+  '定级样本',
+  '!/mvp_open_pool|unrated_mvp|strict_rating|near_0_99/.test(matchedProbe.matchQuality)',
+  '放行剩余.*等待更多真人',
+  '!/need_third_player|continue_waiting|accept_wide_match|practice|cancel_queue/.test(lowSampleWaitingProbe.report)',
+].forEach((needle) => {
+  assert.ok(
+    browserPvpLiveAudit.includes(needle),
+    `live PVP browser audit should pin player-readable match quality marker: ${needle}`,
+  );
+});
+
+[
   "settlementSource: 'local_authority_gate'",
   "settlementSource: 'local_online_fallback'",
   "settlementSource: 'local_practice'",

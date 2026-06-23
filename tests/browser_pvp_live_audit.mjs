@@ -1909,6 +1909,9 @@ async function safeElementScreenshot(page, selector, outputPath) {
       && /问道练习/.test(lowSampleWaitingProbe.report)
       && /取消匹配/.test(lowSampleWaitingProbe.report)
       && /不会自动切残影/.test(lowSampleWaitingProbe.report)
+      && /放行剩余.*等待更多真人/s.test(lowSampleWaitingProbe.report)
+      && /可选操作.*继续等待.*接受宽分差.*问道练习.*取消匹配/s.test(lowSampleWaitingProbe.report)
+      && !/need_third_player|continue_waiting|accept_wide_match|practice|cancel_queue/.test(lowSampleWaitingProbe.report)
       && lowSampleWaitingProbe.buttons['practice-live'] === false
       && lowSampleWaitingProbe.buttons['cancel-queue'] === false
       && lowSampleWaitingProbe.payload?.waitingReport?.reportVersion === 'pvp-live-waiting-report-v1'
@@ -2521,9 +2524,11 @@ async function safeElementScreenshot(page, selector, outputPath) {
   add(
     'live UI renders public match quality report without hidden rating leak',
     /匹配质量：良好/.test(matchedProbe.matchQuality)
-      && /mvp_open_pool/.test(matchedProbe.matchQuality)
-      && /unrated_mvp/.test(matchedProbe.matchQuality)
+      && /新手公开池/.test(matchedProbe.matchQuality)
+      && /定级样本/.test(matchedProbe.matchQuality)
+      && /候选池 2/.test(matchedProbe.matchQuality)
       && /连接健康通过/.test(matchedProbe.matchQuality)
+      && !/mvp_open_pool|unrated_mvp|strict_rating|near_0_99/.test(matchedProbe.matchQuality)
       && matchedProbe.payload?.matchQuality?.reportVersion === 'pvp-live-match-quality-v1'
       && matchedProbe.payload?.matchQuality?.tag === 'good'
       && matchedProbe.payload?.matchQuality?.ratingDeltaBucket === 'unrated_mvp'
