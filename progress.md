@@ -1,5 +1,25 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-23: V10-S49 live PVP mobile opening fairness readability
+  - 本轮完成
+    - `css/pvp.css` 移除移动端 `.pvp-live-opening-safeguard-chip:nth-child(2) { display: none; }`，不再隐藏“首动预算 · 当前席位预算”这枚关键公平说明 chip。
+    - `tests/browser_pvp_live_audit.mjs` 增加移动端 `openingSafeguardReport` fake state 和 browser finding `live UI mobile keeps opening fairness explanation fully readable`：只统计真实可见 chip 文案，锁住“首动预算 / 当前 B：24 / 先手 A 18 / 后手 B 24 / 后手护盾 / 开局护体 / 反打缓冲”在 390px 窄屏下全部可见且不横向溢出。
+    - 同一 browser audit 调整移动端 live 卡牌点击为开局窗口二次确认链路，避免新增开局护体报告后绕过“开局行动需确认”的公平防秒杀交互。
+    - 移动端布局断言从“所有公平信息必须塞进首屏”改为“关键区域不横向溢出，完整公平/首战说明允许纵向滚动，底部操作按钮滚动后可见”，更贴近真实手机体验。
+    - `tests/sanity_release_gate_coverage_checks.cjs` 增加 release marker 和 CSS 负向断言，防止后续再次把移动端首动预算 chip 隐藏，或把 browser audit 退回只检查父节点 `textContent` 的弱证明。
+    - 顺手修复 `tests/browser_pvp_live_audit.mjs` 里前台恢复实时通道用例的旧 handle 耦合：该用例现在会先断开旧 realtime，再建立本用例的受控连接并等到 `connected` 后模拟 close，避免旧 handler 被 connectionId guard 忽略造成偶发 `connecting` 误判。
+  - 已验证
+    - 红测：`node tests/browser_pvp_live_audit.mjs http://127.0.0.1:4173 output/pvp-live-mobile-opening-fairness-red-20260623`，失败于 `live UI mobile keeps opening fairness explanation fully readable`，报告显示第二枚 chip `首动预算 · 当前 B：24` 为 `display: none` 且 `width/height=0`。
+    - 语法：`node --check tests/browser_pvp_live_audit.mjs`
+    - 绿测：`node tests/sanity_release_gate_coverage_checks.cjs`
+    - 绿测：`node tests/sanity_intro_progress_sync_checks.cjs`
+    - Diff 检查：`git diff --check`
+    - 全量 Node 门禁：`npm run test:node`
+    - 构建：`npm run build:pages`
+    - 浏览器审计：`node tests/browser_pvp_live_audit.mjs http://127.0.0.1:4173 output/pvp-live-mobile-opening-fairness-green-20260623`，107/107 findings、0 failed、0 console error。
+  - 当前结论
+    - live PVP 的“先手不会秒杀、后手有预算/护盾/护体/反打缓冲”的关键解释现在在移动端也完整可见；双方体验不再只在桌面端讲清楚公平机制，手机窄屏玩家也能看到为什么先手优势被压住、后手仍有行动窗口。本轮只修复移动端可读性、审计稳定性和 release marker，不改变战斗数值、匹配数值、正式结算、奖励或线上配置。
+
 - 2026-06-23: V10-S48 live PVP ranked production API smoke contract
   - 本轮完成
     - `tests/prod_api_smoke.cjs` 新增 `assertLivePvpRankedQueueSmoke()`：在本地 production-mode API smoke 中创建三名独立 `smoke_ranked_*` 用户，按正式低样本保护进入公共 ranked queue；A/B 先等待，C 触发三人候选池后与 A 成为同一 ranked setup，不使用 test-only scope、直邀或 legacy match ticket。

@@ -2739,10 +2739,17 @@ async function safeElementScreenshot(page, selector, outputPath) {
     window.__livePvpAuditHeartbeatStateView = stateBeforeReconnect
       ? JSON.parse(JSON.stringify(stateBeforeReconnect))
       : window.__makeLivePvpAuditStateView?.(3, 'A', 'active');
+    session.disconnectRealtime?.();
+    await delay(0);
+    window.__livePvpAuditRealtimeHandlers = null;
     session.connectRealtime?.();
     session.joinRealtimeMatch?.('pvplm-browser-live');
-    await delay(20);
-    window.__livePvpAuditRealtimeHandlers?.onClose?.();
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+      if (session.getState?.()?.realtimeStatus === 'connected') break;
+      await delay(20);
+    }
+    const controlledRealtimeHandlers = window.__livePvpAuditRealtimeHandlers;
+    controlledRealtimeHandlers?.onClose?.();
     await delay(0);
     const beforeResumeStatus = session.getState?.()?.realtimeStatus || '';
     const beforeResumePayload = JSON.parse(window.render_game_to_text()).pvp?.live || null;
@@ -5448,6 +5455,50 @@ async function safeElementScreenshot(page, selector, outputPath) {
         { id: 'queue_again', label: '继续真人排位' },
       ],
     };
+    const makeMobileOpeningSafeguardReport = (stateVersion = 1, currentSeat = 'B', status = 'setup') => ({
+      reportVersion: 'pvp-live-opening-safeguard-v1',
+      sourceVisibility: 'public_state',
+      usesHiddenInformation: false,
+      rankedImpact: 'none',
+      status: status === 'finished' ? 'closed' : 'active',
+      firstSeat: 'A',
+      secondSeat: 'B',
+      viewerSeat: 'B',
+      currentSeat,
+      damageBudget: {
+        reportVersion: 'pvp-live-opening-damage-budget-v1',
+        firstSeat: 18,
+        secondSeat: 24,
+        secondAction: 24,
+        currentSeat,
+        currentActionBudget: currentSeat === 'A' ? 18 : 24,
+        remainingBudget: currentSeat === 'A' ? 18 : 24,
+        budgetWindow: stateVersion <= 4 ? 'opening_round' : 'expired',
+      },
+      secondSeatBuffer: {
+        reportVersion: 'pvp-live-second-seat-buffer-v1',
+        seatId: 'B',
+        block: status === 'active' ? 3 : 0,
+        granted: status === 'active',
+        sourceVisibility: 'public_state',
+        usesHiddenInformation: false,
+      },
+      openingProtection: {
+        reportVersion: 'pvp-live-opening-protection-v1',
+        active: status !== 'finished',
+        minimumHp: 1,
+        protectedSeats: status === 'setup' ? ['A', 'B'] : ['A'],
+        triggeredSeats: [],
+        summary: '未行动方不会被开局伤害直接终结。',
+      },
+      counterplay: {
+        reportVersion: 'pvp-live-counterplay-buffer-v1',
+        block: 8,
+        pendingSeats: status === 'active' ? ['B'] : [],
+        grantedSeats: [],
+        summary: '护体后反打缓冲会在受保护方首个行动窗口发放。',
+      },
+    });
     const makeStateView = (stateVersion = 1, currentSeat = 'B', status = 'setup') => ({
       matchId: 'pvplm-browser-live-mobile',
       ruleVersion: 'pvp-live-v1',
@@ -5462,6 +5513,21 @@ async function safeElementScreenshot(page, selector, outputPath) {
         candidatePoolSize: 2,
         safeguards: ['server_authoritative', 'snapshot_locked', 'setup_ready_required'],
       },
+      openerAssignment: {
+        reportVersion: 'pvp-live-opener-assignment-v1',
+        sourceVisibility: 'server_authoritative_public_seed',
+        usesHiddenInformation: false,
+        rankedImpact: 'none',
+        firstSeat: 'A',
+        secondSeat: 'B',
+        viewerSeat: 'B',
+        opponentSeat: 'A',
+        viewerStarts: false,
+        seedTag: 'mobile-browser-live',
+        queueOrderBinding: false,
+        hostBinding: false,
+      },
+      openingSafeguardReport: makeMobileOpeningSafeguardReport(stateVersion, currentSeat, status),
       firstMatchGuide,
       setup: status === 'setup' ? { readyDeadlineAt: Date.now() + 45000, mulliganLimit: 2 } : null,
       connectionReport: {
@@ -5667,6 +5733,64 @@ async function safeElementScreenshot(page, selector, outputPath) {
       && mobileConnectionProbe.rect?.right <= mobileConnectionProbe.viewportWidth + 2,
     JSON.stringify(mobileConnectionProbe),
   );
+  const mobileOpeningSafeguardProbe = await mobilePage.evaluate(() => {
+    const node = document.querySelector('[data-live-opening-safeguard]');
+    const style = node ? window.getComputedStyle(node) : null;
+    const rect = node?.getBoundingClientRect();
+    const chips = Array.from(node?.querySelectorAll('.pvp-live-opening-safeguard-chip') || []).map((chip) => {
+      const chipStyle = window.getComputedStyle(chip);
+      const chipRect = chip.getBoundingClientRect();
+      return {
+        text: chip.textContent?.replace(/\s+/g, ' ').trim() || '',
+        display: chipStyle.display,
+        visibility: chipStyle.visibility,
+        width: Math.round(chipRect.width),
+        height: Math.round(chipRect.height),
+        left: Math.round(chipRect.left),
+        right: Math.round(chipRect.right),
+      };
+    });
+    return {
+      text: node?.textContent?.replace(/\s+/g, ' ').trim() || '',
+      visibleText: chips
+        .filter(chip => chip.display !== 'none' && chip.visibility !== 'hidden' && chip.width > 0 && chip.height > 0)
+        .map(chip => chip.text)
+        .join(' '),
+      overflow: style?.overflow || '',
+      overflowX: style?.overflowX || '',
+      whiteSpace: style?.whiteSpace || '',
+      scrollWidth: node ? Math.round(node.scrollWidth) : 0,
+      clientWidth: node ? Math.round(node.clientWidth) : 0,
+      chips,
+      rect: rect ? {
+        left: Math.round(rect.left),
+        right: Math.round(rect.right),
+        width: Math.round(rect.width),
+        height: Math.round(rect.height),
+      } : null,
+      viewportWidth: window.innerWidth,
+    };
+  });
+  add(
+    'live UI mobile keeps opening fairness explanation fully readable',
+    /首动预算/.test(mobileOpeningSafeguardProbe.visibleText)
+      && /当前 B/.test(mobileOpeningSafeguardProbe.visibleText)
+      && /24/.test(mobileOpeningSafeguardProbe.visibleText)
+      && /先手 A 18/.test(mobileOpeningSafeguardProbe.visibleText)
+      && /后手 B 24/.test(mobileOpeningSafeguardProbe.visibleText)
+      && /后手护盾/.test(mobileOpeningSafeguardProbe.visibleText)
+      && /开局护体/.test(mobileOpeningSafeguardProbe.visibleText)
+      && /反打缓冲/.test(mobileOpeningSafeguardProbe.visibleText)
+      && mobileOpeningSafeguardProbe.chips.length >= 6
+      && mobileOpeningSafeguardProbe.chips.every(chip => chip.display !== 'none' && chip.visibility !== 'hidden' && chip.width > 0 && chip.height > 0)
+      && mobileOpeningSafeguardProbe.whiteSpace !== 'nowrap'
+      && mobileOpeningSafeguardProbe.overflow !== 'hidden'
+      && mobileOpeningSafeguardProbe.scrollWidth <= mobileOpeningSafeguardProbe.clientWidth + 2
+      && mobileOpeningSafeguardProbe.rect?.left >= -1
+      && mobileOpeningSafeguardProbe.rect?.right <= mobileOpeningSafeguardProbe.viewportWidth + 2
+      && mobileOpeningSafeguardProbe.chips.every(chip => chip.left >= -1 && chip.right <= mobileOpeningSafeguardProbe.viewportWidth + 2),
+    JSON.stringify(mobileOpeningSafeguardProbe),
+  );
   const mobileFirstGuideProbe = await mobilePage.evaluate(() => {
     const node = document.querySelector('[data-live-first-guide]');
     const style = node ? window.getComputedStyle(node) : null;
@@ -5707,6 +5831,7 @@ async function safeElementScreenshot(page, selector, outputPath) {
   const mobileLiveCardClicked = await mobilePage.evaluate(() => {
     const card = document.querySelector('[data-live-card]');
     if (!card) return false;
+    card.click();
     card.click();
     return true;
   });
@@ -5815,8 +5940,9 @@ async function safeElementScreenshot(page, selector, outputPath) {
     /matched|active/.test(mobileProbe.phase)
       && mobileProbe.scrollWidth <= mobileProbe.viewportWidth + 2
       && mobileProbe.statusCard?.top >= -1
-      && mobileProbe.statusCard?.bottom <= mobileProbe.viewportHeight + 2
-      && mobileProbe.statusCard?.height <= mobileProbe.viewportHeight + 2
+      && mobileProbe.statusCard?.left >= -1
+      && mobileProbe.statusCard?.right <= mobileProbe.viewportWidth + 2
+      && mobileProbe.screenScrollHeight > mobileProbe.viewportHeight
       && mobileProbe.root?.left >= 0
       && mobileProbe.root?.right <= mobileProbe.viewportWidth + 2
       && mobileProbe.eventPanel?.left >= -1

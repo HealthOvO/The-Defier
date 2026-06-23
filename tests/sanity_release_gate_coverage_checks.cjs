@@ -65,6 +65,7 @@ const pvpLiveServiceBridgeChecks = read('tests/sanity_pvp_live_service_bridge_ch
 const pvpLiveSessionChecks = read('tests/sanity_pvp_live_session_checks.mjs');
 const pvpLiveSessionSource = read('js/services/pvp-live-session.js');
 const pvpSceneSource = read('js/scenes/pvp-scene.js');
+const pvpCss = read('css/pvp.css');
 const pvpLiveUiContractChecks = read('tests/sanity_pvp_live_ui_contract_checks.cjs');
 const pvpLiveUiRuntimeChecks = read('tests/sanity_pvp_live_ui_runtime_checks.mjs');
 const runNodeChecks = read('tests/run_node_checks.sh');
@@ -652,6 +653,12 @@ const layoutAudit = read('tests/browser_frontend_layout_audit.mjs');
   'inviteInboxProbe.snapshot?.inviteInbox?.length === 1',
   'inviteInboxJoinProbe.snapshot.inviteInbox.length === 0',
   'live UI mobile keeps reconnect grace text readable',
+  'live UI mobile keeps opening fairness explanation fully readable',
+  'mobileOpeningSafeguardProbe',
+  "chip.display !== 'none' && chip.visibility !== 'hidden' && chip.width > 0 && chip.height > 0",
+  'mobileOpeningSafeguardProbe.scrollWidth <= mobileOpeningSafeguardProbe.clientWidth + 2',
+  '先手 A 18',
+  '后手 B 24',
   'live UI mobile renders first-match guide without clipping exception or review actions',
   'inviteCreateProbe.snapshot?.inviteReport?.reportVersion === \'pvp-live-invite-v1\'',
   "call.options?.targetUsername === '乙'",
@@ -827,6 +834,11 @@ const layoutAudit = read('tests/browser_frontend_layout_audit.mjs');
     `live PVP browser audit should pin UI wiring marker: ${needle}`,
   );
 });
+
+assert.ok(
+  !/pvp-live-opening-safeguard-chip:nth-child\(2\)[^{]*\{[^}]*display:\s*none/i.test(pvpCss),
+  'PVP CSS must not hide the mobile opening fairness budget chip',
+);
 
 [
   'buildLivePostReviewPracticePlan(',
