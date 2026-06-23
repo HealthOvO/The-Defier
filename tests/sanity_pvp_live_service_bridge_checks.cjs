@@ -57,6 +57,18 @@ function loadFile(ctx, filePath) {
         calls.push({ method: 'getLivePvpReplay', matchId, options });
         return { success: true, replay: { reportVersion: 'pvp-live-replay-v1', visibilityLayer: options && options.visibility || 'replay_self' } };
       },
+      createLivePvpReplayShare: async (matchId, options) => {
+        calls.push({ method: 'createLivePvpReplayShare', matchId, options });
+        return { success: true, share: { reportVersion: 'pvp-live-replay-share-v1', shareToken: 'pvplrs-service-token-123456789012', visibilityLayer: 'replay_public', rankedImpact: 'none', rewardImpact: 'none' } };
+      },
+      getLivePvpReplayShare: async (shareToken) => {
+        calls.push({ method: 'getLivePvpReplayShare', shareToken });
+        return { success: true, share: { reportVersion: 'pvp-live-replay-share-v1', shareToken }, replay: { reportVersion: 'pvp-live-replay-v1', visibilityLayer: 'replay_public' } };
+      },
+      revokeLivePvpReplayShare: async (matchId) => {
+        calls.push({ method: 'revokeLivePvpReplayShare', matchId });
+        return { success: true, share: { reportVersion: 'pvp-live-replay-share-v1', revoked: true, rankedImpact: 'none', rewardImpact: 'none' } };
+      },
       requestLivePvpRematch: async (matchId, options) => {
         calls.push({ method: 'requestLivePvpRematch', matchId, options });
         return { success: true, status: 'waiting_rematch', friendlySeries: { reportVersion: 'pvp-live-friendly-series-v1', rankedImpact: 'none' } };
@@ -203,6 +215,19 @@ function loadFile(ctx, filePath) {
   const replay = await PVPService.live.getReplay('pvplm-test', { visibility: 'audit_safe' });
   assert(replay.success === true && replay.replay.visibilityLayer === 'audit_safe', 'live replay bridge should forward replay payload');
   assert(calls.at(-1).method === 'getLivePvpReplay', 'live replay bridge should call BackendClient.getLivePvpReplay');
+
+  const replayShare = await PVPService.live.createReplayShare('pvplm-test', { ttlDays: 30 });
+  assert(replayShare.success === true && replayShare.share.visibilityLayer === 'replay_public', 'live replay share bridge should forward share receipt');
+  assert(calls.at(-1).method === 'createLivePvpReplayShare', 'live replay share bridge should call BackendClient.createLivePvpReplayShare');
+  assert(JSON.stringify(calls.at(-1).options) === JSON.stringify({ ttlDays: 30 }), 'live replay share bridge should forward ttl options');
+
+  const publicReplayShare = await PVPService.live.getReplayShare('pvplrs-service-token-123456789012');
+  assert(publicReplayShare.success === true && publicReplayShare.replay.visibilityLayer === 'replay_public', 'public replay share bridge should forward public replay payload');
+  assert(calls.at(-1).method === 'getLivePvpReplayShare', 'public replay share bridge should call BackendClient.getLivePvpReplayShare');
+
+  const revokedReplayShare = await PVPService.live.revokeReplayShare('pvplm-test');
+  assert(revokedReplayShare.success === true && revokedReplayShare.share.revoked === true, 'live replay share revoke bridge should forward revoked receipt');
+  assert(calls.at(-1).method === 'revokeLivePvpReplayShare', 'live replay share revoke bridge should call BackendClient.revokeLivePvpReplayShare');
 
   const rematch = await PVPService.live.requestRematch('pvplm-test', { displayName: '甲' });
   assert(rematch.success === true && rematch.status === 'waiting_rematch', 'live rematch bridge should forward friendly rematch state');

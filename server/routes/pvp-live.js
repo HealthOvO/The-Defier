@@ -47,9 +47,66 @@ function dbRun(sql, params = []) {
     });
 }
 
+const REPLAY_SHARE_DEFAULT_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+const REPLAY_SHARE_MIN_TTL_MS = 60 * 60 * 1000;
+const REPLAY_SHARE_MAX_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+
 function makeDisputeReportId() {
     if (typeof crypto.randomUUID === 'function') return `pvplr-${crypto.randomUUID()}`;
     return `pvplr-${Date.now().toString(36)}-${crypto.randomBytes(8).toString('hex')}`;
+}
+
+function makeReplayShareToken() {
+    return `pvplrs-${crypto.randomBytes(24).toString('base64url')}`;
+}
+
+function normalizeReplayShareToken(value) {
+    const token = String(value || '').trim();
+    return /^pvplrs-[a-zA-Z0-9_-]{24,80}$/.test(token) ? token : '';
+}
+
+function getReplayShareTtlMs(body = {}) {
+    const ttlDays = Math.floor(Number(body && body.ttlDays));
+    if (Number.isFinite(ttlDays) && ttlDays > 0) {
+        return Math.max(REPLAY_SHARE_MIN_TTL_MS, Math.min(REPLAY_SHARE_MAX_TTL_MS, ttlDays * 24 * 60 * 60 * 1000));
+    }
+    return REPLAY_SHARE_DEFAULT_TTL_MS;
+}
+
+function getRequestOrigin(req) {
+    const host = req && typeof req.get === 'function' ? req.get('host') : '';
+    if (!host) return '';
+    const forwardedProto = req.get('x-forwarded-proto');
+    const proto = String(forwardedProto || req.protocol || 'http').split(',')[0].trim() || 'http';
+    return `${proto}://${host}`;
+}
+
+function makeReplaySharePath(shareToken) {
+    return `/api/pvp/live/replay-shares/${encodeURIComponent(shareToken)}`;
+}
+
+function makeReplayShareEnvelope(share, req) {
+    const token = String(share && share.shareToken || '');
+    const sharePath = makeReplaySharePath(token);
+    const origin = getRequestOrigin(req);
+    const revokedAt = Math.max(0, Math.floor(Number(share && share.revokedAt) || 0));
+    return {
+        reportVersion: 'pvp-live-replay-share-v1',
+        shareToken: token,
+        sharePath,
+        shareUrl: origin ? `${origin}${sharePath}` : sharePath,
+        visibilityLayer: 'replay_public',
+        sourceVisibility: 'replay_public',
+        matchRef: String(share && share.matchRef || ''),
+        replayHash: String(share && share.replayHash || ''),
+        createdAt: Math.max(0, Math.floor(Number(share && share.createdAt) || 0)),
+        expiresAt: Math.max(0, Math.floor(Number(share && share.expiresAt) || 0)),
+        revoked: revokedAt > 0 || share && share.status === 'revoked',
+        revokedAt,
+        rankedImpact: 'none',
+        rewardImpact: 'none',
+        boundary: '公开战报分享只暴露 replay_public 脱敏回放，不包含原始战局 ID、隐藏手牌、牌库、随机种子、本人结算或赛季荣誉进度。'
+    };
 }
 
 function sanitizeDisputeReason(reason) {
@@ -433,6 +490,103 @@ router.get('/matches/:matchId/replay', authenticate, asyncHandler(async (req, re
     res.json({
         success: true,
         replay
+    });
+}));
+
+router.post('/matches/:matchId/replay-share', authenticate, asyncHandler(async (req, res) => {
+    const matchAccess = await livePvpStore.getMatchForUser(req.user.id, req.params.matchId);
+    if (!matchAccess) {
+        return res.status(404).json({ success: false, message: '实时论道战局不存在' });
+    }
+    const replayEvents = await livePvpStore.loadMatchEvents(matchAccess.match.matchId);
+    const replay = buildMatchReplay(matchAccess.match, matchAccess.seatId, 'replay_public', {
+        events: replayEvents
+    });
+    if (!replay) {
+        return res.status(409).json({
+            success: false,
+            reason: 'replay_share_not_ready',
+            message: '对局结束后才能生成公开战报分享'
+        });
+    }
+    const now = Date.now();
+    const share = await livePvpStore.saveReplayShare({
+        shareToken: makeReplayShareToken(),
+        matchId: matchAccess.match.matchId,
+        creatorUserId: req.user.id,
+        creatorSeat: matchAccess.seatId,
+        visibilityLayer: 'replay_public',
+        sourceVisibility: 'replay_public',
+        matchRef: replay.matchRef,
+        replayHash: replay.replayHash,
+        status: 'active',
+        createdAt: now,
+        expiresAt: now + getReplayShareTtlMs(req.body || {}),
+        revokedAt: 0,
+        updatedAt: now
+    });
+    if (!share) {
+        return res.status(500).json({ success: false, reason: 'replay_share_create_failed', message: '公开战报分享生成失败' });
+    }
+    res.json({
+        success: true,
+        share: makeReplayShareEnvelope(share, req)
+    });
+}));
+
+router.get('/replay-shares/:shareToken', asyncHandler(async (req, res) => {
+    const shareToken = normalizeReplayShareToken(req.params.shareToken);
+    if (!shareToken) {
+        return res.status(404).json({ success: false, reason: 'replay_share_not_found', message: '公开战报分享不存在' });
+    }
+    const share = await livePvpStore.loadReplayShare(shareToken);
+    if (!share) {
+        return res.status(404).json({ success: false, reason: 'replay_share_not_found', message: '公开战报分享不存在' });
+    }
+    if (share.revokedAt > 0 || share.status === 'revoked') {
+        return res.status(410).json({ success: false, reason: 'replay_share_revoked', message: '公开战报分享已撤销' });
+    }
+    if (Math.max(0, Math.floor(Number(share.expiresAt) || 0)) <= Date.now()) {
+        return res.status(410).json({ success: false, reason: 'replay_share_expired', message: '公开战报分享已过期' });
+    }
+    const match = await livePvpStore.loadMatchForReplayShare(share.matchId);
+    if (!match) {
+        return res.status(404).json({ success: false, reason: 'replay_share_not_found', message: '公开战报分享不存在' });
+    }
+    const replayEvents = await livePvpStore.loadMatchEvents(match.matchId);
+    const replay = buildMatchReplay(match, share.creatorSeat || 'A', 'replay_public', {
+        events: replayEvents
+    });
+    if (!replay) {
+        return res.status(409).json({
+            success: false,
+            reason: 'replay_share_not_ready',
+            message: '公开战报分享暂不可用'
+        });
+    }
+    res.json({
+        success: true,
+        share: makeReplayShareEnvelope({
+            ...share,
+            matchRef: replay.matchRef || share.matchRef,
+            replayHash: replay.replayHash || share.replayHash
+        }, req),
+        replay
+    });
+}));
+
+router.post('/matches/:matchId/replay-share/revoke', authenticate, asyncHandler(async (req, res) => {
+    const matchAccess = await livePvpStore.getMatchForUser(req.user.id, req.params.matchId);
+    if (!matchAccess) {
+        return res.status(404).json({ success: false, message: '实时论道战局不存在' });
+    }
+    const share = await livePvpStore.revokeReplayShareForUser(req.user.id, matchAccess.match.matchId);
+    if (!share) {
+        return res.status(404).json({ success: false, reason: 'replay_share_not_found', message: '公开战报分享不存在' });
+    }
+    res.json({
+        success: true,
+        share: makeReplayShareEnvelope(share, req)
     });
 }));
 

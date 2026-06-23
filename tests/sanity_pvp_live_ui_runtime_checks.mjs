@@ -2162,6 +2162,7 @@ const bridgedReview = PVPScene.getLivePostMatchReview({
     summary: '公开轨迹显示血线被压低。',
     nextActions: [
       { id: 'review_key_turns', auditActionId: 'key_turn_replay', label: '关键回合复盘', detail: '按公开事件复盘。' },
+      { id: 'share_replay', auditActionId: 'public_replay_share', label: '分享脱敏战报', detail: '生成公开战报。' },
       { id: 'adjust_loadout', auditActionId: 'apply_loadout_recommendation', label: '调整斗法谱', detail: '按公开推荐改谱。' },
       { id: 'practice', auditActionId: 'practice_topic', label: '问道练习', detail: '练习不写正式结果。' },
       { id: 'report_issue', auditActionId: 'report_issue', label: '举报异常', detail: '提交异常反馈。' }
@@ -2170,7 +2171,7 @@ const bridgedReview = PVPScene.getLivePostMatchReview({
 });
 assert.deepEqual(
   bridgedReview.nextActions.map(action => `${action.id}:${action.auditActionId}`),
-  ['review_key_turns:key_turn_replay', 'adjust_loadout:apply_loadout_recommendation', 'practice:practice_topic', 'report_issue:report_issue'],
+  ['review_key_turns:key_turn_replay', 'share_replay:public_replay_share', 'adjust_loadout:apply_loadout_recommendation', 'practice:practice_topic', 'report_issue:report_issue'],
   'post-match review normalizer should preserve audit action ids for real UI buttons'
 );
 
@@ -2236,6 +2237,86 @@ assert.equal(replaySnapshot.lastReplay?.reportVersion, 'pvp-live-replay-v1', 'li
 assert.equal(replaySnapshot.lastReplay?.visibilityLayer, 'replay_self', 'fetched key-turn replay should stay viewer-scoped');
 assert.equal(replaySnapshot.lastReplay?.hiddenScan?.forbiddenTokenCount, 0, 'fetched replay summary should preserve the hidden-token scan result');
 assert.match(PVPScene.liveInlineHint, /权威回放|关键回合/, 'key-turn replay fetch should explain the authoritative replay focus');
+
+let shareReviewState = {
+  phase: 'finished',
+  matchId: 'pvpm-ui-runtime-share-replay',
+  seatId: 'A',
+  stateView: {
+    matchId: 'pvpm-ui-runtime-share-replay',
+    status: 'finished',
+    stateVersion: 79,
+    postMatchReview: {
+      reportVersion: 'pvp-live-post-match-review-v1',
+      result: 'win',
+      finishReason: 'lethal',
+      summary: '公开轨迹可分享。',
+      nextActions: [
+        { id: 'share_replay', auditActionId: 'public_replay_share', label: '分享脱敏战报', detail: '生成公开战报链接。' }
+      ]
+    }
+  },
+  lastReplayShare: null,
+  lastReplayShareMatchId: '',
+  lastEvents: []
+};
+const replayShareCalls = [];
+const replayShareCopyCalls = [];
+const previousCopyLiveReplayShareLink = PVPScene.copyLiveReplayShareLink;
+PVPScene.copyLiveReplayShareLink = async (shareLink = '') => {
+  replayShareCopyCalls.push(shareLink);
+  return true;
+};
+PVPScene.renderLivePanel = () => {};
+PVPScene.getLiveSession = () => ({
+  getState: () => shareReviewState,
+  createReplayShare: async (options = {}) => {
+    replayShareCalls.push({ method: 'createReplayShare', options });
+    shareReviewState = {
+      ...shareReviewState,
+      lastReplayShare: {
+        reportVersion: 'pvp-live-replay-share-v1',
+        shareToken: 'pvplrs-ui-runtime-share-123456789012',
+        shareUrl: 'https://080305.xyz/api/pvp/live/replay-shares/pvplrs-ui-runtime-share-123456789012',
+        visibilityLayer: 'replay_public',
+        rankedImpact: 'none',
+        rewardImpact: 'none',
+        expiresAt: Date.now() + 86400000,
+        revoked: false
+      },
+      lastReplayShareMatchId: 'pvpm-ui-runtime-share-replay',
+      lastError: { reason: 'replay_share_created', message: '公开战报链接已生成。' }
+    };
+    return shareReviewState;
+  },
+  revokeReplayShare: async () => {
+    replayShareCalls.push({ method: 'revokeReplayShare' });
+    shareReviewState = {
+      ...shareReviewState,
+      lastReplayShare: {
+        ...shareReviewState.lastReplayShare,
+        revoked: true
+      },
+      lastError: { reason: 'replay_share_revoked', message: '公开战报链接已撤销。' }
+    };
+    return shareReviewState;
+  }
+});
+await PVPScene.handleLivePostReviewAction('share_replay');
+assert.deepEqual(replayShareCalls[0], { method: 'createReplayShare', options: { ttlDays: 30 } }, 'share_replay action should create a 30-day public replay share');
+assert.deepEqual(replayShareCopyCalls, ['https://080305.xyz/api/pvp/live/replay-shares/pvplrs-ui-runtime-share-123456789012'], 'share_replay action should copy the public replay share link');
+assert.match(PVPScene.liveInlineHint, /脱敏战报链接已复制/, 'share_replay action should explain copied public replay boundary');
+const shareReceiptHtml = PVPScene.renderLiveReplayShareReceipt();
+assert.match(shareReceiptHtml, /data-live-replay-share/, 'public replay share receipt should render after creation');
+assert.match(shareReceiptHtml, /data-live-replay-share-revoke/, 'public replay share receipt should expose a revoke control');
+assert.match(shareReceiptHtml, /不含原始战局 ID/, 'public replay share receipt should explain raw match id boundary');
+await PVPScene.revokeLiveReplayShare();
+assert.equal(replayShareCalls.at(-1).method, 'revokeReplayShare', 'replay share revoke control should call session revoke API');
+assert.match(PVPScene.liveInlineHint, /已撤销/, 'replay share revoke should explain revoked state');
+const revokedShareReceiptHtml = PVPScene.renderLiveReplayShareReceipt();
+assert.match(revokedShareReceiptHtml, /data-live-replay-share-revoked="true"/, 'revoked replay share receipt should mark the link as revoked');
+assert.equal(/data-live-replay-share-revoke(?:\s|>)/.test(revokedShareReceiptHtml), false, 'revoked replay share receipt should hide the revoke control');
+PVPScene.copyLiveReplayShareLink = previousCopyLiveReplayShareLink;
 
 let reportReviewState = {
   phase: 'finished',

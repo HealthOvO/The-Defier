@@ -40,6 +40,9 @@ assert.equal(typeof BackendClient.getLivePvpQueueStatus, 'function', 'BackendCli
 assert.equal(typeof BackendClient.getLivePvpMatch, 'function', 'BackendClient should expose getLivePvpMatch');
 assert.equal(typeof BackendClient.getCurrentLivePvpMatch, 'function', 'BackendClient should expose getCurrentLivePvpMatch');
 assert.equal(typeof BackendClient.getLivePvpReplay, 'function', 'BackendClient should expose getLivePvpReplay');
+assert.equal(typeof BackendClient.createLivePvpReplayShare, 'function', 'BackendClient should expose createLivePvpReplayShare');
+assert.equal(typeof BackendClient.getLivePvpReplayShare, 'function', 'BackendClient should expose getLivePvpReplayShare');
+assert.equal(typeof BackendClient.revokeLivePvpReplayShare, 'function', 'BackendClient should expose revokeLivePvpReplayShare');
 assert.equal(typeof BackendClient.requestLivePvpRematch, 'function', 'BackendClient should expose requestLivePvpRematch');
 assert.equal(typeof BackendClient.getLivePvpRematchStatus, 'function', 'BackendClient should expose getLivePvpRematchStatus');
 assert.equal(typeof BackendClient.cancelLivePvpRematch, 'function', 'BackendClient should expose cancelLivePvpRematch');
@@ -212,6 +215,23 @@ const defaultReplay = await BackendClient.getLivePvpReplay('pvplm test/2');
 assert.equal(defaultReplay.success, true, 'default live replay fetch should forward success payload');
 assert.equal(calls.at(-1).path, '/api/pvp/live/matches/pvplm%20test%2F2/replay', 'default live replay fetch should omit default visibility query');
 
+const replayShare = await BackendClient.createLivePvpReplayShare('pvplm test/1', { ttlDays: 30 });
+assert.equal(replayShare.success, true, 'live replay share creation should forward success payload');
+assert.equal(calls.at(-1).path, '/api/pvp/live/matches/pvplm%20test%2F1/replay-share', 'live replay share creation should encode match id');
+assert.equal(calls.at(-1).options.method, 'POST', 'live replay share creation should POST');
+assert.deepEqual(calls.at(-1).options.data, { ttlDays: 30 }, 'live replay share creation should forward ttlDays only');
+
+const publicReplayShare = await BackendClient.getLivePvpReplayShare('pvplrs-public_token-12345678901234567890');
+assert.equal(publicReplayShare.success, true, 'public live replay share fetch should forward success payload');
+assert.equal(calls.at(-1).path, '/api/pvp/live/replay-shares/pvplrs-public_token-12345678901234567890', 'public live replay share fetch should encode share token');
+assert.equal(calls.at(-1).options.method, 'GET', 'public live replay share fetch should GET');
+
+const revokedReplayShare = await BackendClient.revokeLivePvpReplayShare('pvplm test/1');
+assert.equal(revokedReplayShare.success, true, 'live replay share revoke should forward success payload');
+assert.equal(calls.at(-1).path, '/api/pvp/live/matches/pvplm%20test%2F1/replay-share/revoke', 'live replay share revoke should encode match id');
+assert.equal(calls.at(-1).options.method, 'POST', 'live replay share revoke should POST');
+assert.deepEqual(calls.at(-1).options.data, undefined, 'live replay share revoke should not send client settlement data');
+
 const rematch = await BackendClient.requestLivePvpRematch('pvplm test/1', { displayName: '甲', loadout: liveLoadout });
 assert.equal(rematch.success, true, 'live friendly rematch should forward success payload');
 assert.equal(calls.at(-1).path, '/api/pvp/live/matches/pvplm%20test%2F1/rematch', 'live friendly rematch should encode source match id');
@@ -353,6 +373,16 @@ const beforeInvalidReplayVisibility = requestCallCount();
 const invalidReplayVisibility = await BackendClient.getLivePvpReplay('pvplm-test', { visibility: 'server_full' });
 assert.equal(invalidReplayVisibility.success, false, 'server_full replay visibility should fail locally');
 assert.equal(requestCallCount(), beforeInvalidReplayVisibility, 'server_full replay visibility should not call requestServer');
+
+const beforeEmptyReplayShare = requestCallCount();
+const emptyReplayShare = await BackendClient.createLivePvpReplayShare('  ');
+assert.equal(emptyReplayShare.success, false, 'empty live replay share match id should fail locally');
+assert.equal(requestCallCount(), beforeEmptyReplayShare, 'empty live replay share match id should not call requestServer');
+
+const beforeEmptyPublicReplayShare = requestCallCount();
+const emptyPublicReplayShare = await BackendClient.getLivePvpReplayShare('  ');
+assert.equal(emptyPublicReplayShare.success, false, 'empty public live replay share token should fail locally');
+assert.equal(requestCallCount(), beforeEmptyPublicReplayShare, 'empty public live replay share token should not call requestServer');
 
 const beforeEmptyInvite = requestCallCount();
 const emptyInviteJoin = await BackendClient.joinLivePvpInvite('   ', { displayName: '乙' });

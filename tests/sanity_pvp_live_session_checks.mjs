@@ -199,6 +199,37 @@ const liveService = {
       }
     };
   },
+  createReplayShare: async (matchId, options) => {
+    calls.push({ method: 'createReplayShare', matchId, options });
+    return {
+      success: true,
+      share: {
+        reportVersion: 'pvp-live-replay-share-v1',
+        shareToken: 'pvplrs-session-share-123456789012345',
+        shareUrl: 'https://080305.xyz/api/pvp/live/replay-shares/pvplrs-session-share-123456789012345',
+        visibilityLayer: 'replay_public',
+        sourceVisibility: 'replay_public',
+        rankedImpact: 'none',
+        rewardImpact: 'none'
+      }
+    };
+  },
+  revokeReplayShare: async (matchId) => {
+    calls.push({ method: 'revokeReplayShare', matchId });
+    return {
+      success: true,
+      share: {
+        reportVersion: 'pvp-live-replay-share-v1',
+        shareToken: 'pvplrs-session-share-123456789012345',
+        shareUrl: 'https://080305.xyz/api/pvp/live/replay-shares/pvplrs-session-share-123456789012345',
+        visibilityLayer: 'replay_public',
+        sourceVisibility: 'replay_public',
+        rankedImpact: 'none',
+        rewardImpact: 'none',
+        revoked: true
+      }
+    };
+  },
   submitReport: async (matchId, report) => {
     calls.push({ method: 'submitReport', matchId, report });
     return {
@@ -351,6 +382,8 @@ assert.equal(typeof session.pollRematch, 'function', 'live session should expose
 assert.equal(typeof session.cancelRematch, 'function', 'live session should expose friendly rematch cancel API');
 assert.equal(typeof session.heartbeat, 'function', 'live session should expose heartbeat API');
 assert.equal(typeof session.getReplay, 'function', 'live session should expose replay API');
+assert.equal(typeof session.createReplayShare, 'function', 'live session should expose public replay share API');
+assert.equal(typeof session.revokeReplayShare, 'function', 'live session should expose public replay share revoke API');
 assert.equal(typeof session.createInvite, 'function', 'live session should expose private invite creation API');
 assert.equal(typeof session.joinInvite, 'function', 'live session should expose private invite join API');
 assert.equal(typeof session.cancelInvite, 'function', 'live session should expose private invite cancel API');
@@ -570,6 +603,24 @@ assert.equal(replayState.lastError, null, 'successful getReplay should clear rep
 assert.equal(calls.at(-1).method, 'getReplay', 'getReplay should call live service replay bridge');
 assert.deepEqual(calls.at(-1).options, { visibility: 'replay_public' }, 'getReplay should forward replay visibility options');
 
+const replayShareState = await recoveredSession.createReplayShare({ ttlDays: 30 });
+assert.equal(replayShareState.lastReplayShare?.reportVersion, 'pvp-live-replay-share-v1', 'createReplayShare should store returned public share receipt');
+assert.equal(replayShareState.lastReplayShare?.visibilityLayer, 'replay_public', 'createReplayShare should keep the public replay visibility boundary');
+assert.equal(replayShareState.lastReplayShare?.rankedImpact, 'none', 'createReplayShare should not affect ranked state');
+assert.equal(replayShareState.lastReplayShareMatchId, 'pvplm-current', 'createReplayShare should bind share receipt to the current match id');
+assert.equal(replayShareState.lastError?.reason, 'replay_share_created', 'createReplayShare should publish a readable share-created state');
+assert.equal(calls.at(-1).method, 'createReplayShare', 'createReplayShare should call live service share bridge');
+assert.equal(calls.at(-1).matchId, 'pvplm-current', 'createReplayShare should bind share creation to the current match');
+assert.deepEqual(calls.at(-1).options, { ttlDays: 30 }, 'createReplayShare should forward share ttl options');
+
+const replayShareRevokedState = await recoveredSession.revokeReplayShare();
+assert.equal(replayShareRevokedState.lastReplayShare?.revoked, true, 'revokeReplayShare should store the revoked public share receipt');
+assert.equal(replayShareRevokedState.lastReplayShare?.rankedImpact, 'none', 'revokeReplayShare should not affect ranked state');
+assert.equal(replayShareRevokedState.lastReplayShareMatchId, 'pvplm-current', 'revokeReplayShare should bind revoked share receipt to the current match id');
+assert.equal(replayShareRevokedState.lastError?.reason, 'replay_share_revoked', 'revokeReplayShare should publish a readable revoked state');
+assert.equal(calls.at(-1).method, 'revokeReplayShare', 'revokeReplayShare should call live service revoke bridge');
+assert.equal(calls.at(-1).matchId, 'pvplm-current', 'revokeReplayShare should bind share revoke to the current match');
+
 const reportState = await recoveredSession.submitReport({ reason: 'fairness_review', message: '请复核公开事件。' });
 assert.equal(reportState.lastDisputeReport?.reportVersion, 'pvp-live-dispute-report-receipt-v1', 'submitReport should store the dispute receipt');
 assert.equal(reportState.lastDisputeReport?.rankedImpact, 'none', 'dispute receipt should not change ranked state');
@@ -592,6 +643,8 @@ assert.deepEqual(calls.at(-1).request, { reason: 'post_match_avoid', message: '�
 const replayClearedByQueue = await recoveredSession.joinQueue({ displayName: '乙' });
 assert.equal(replayClearedByQueue.lastReplay, null, 'joining a new queue should clear the previous match replay payload');
 assert.equal(replayClearedByQueue.lastReplayMatchId, '', 'joining a new queue should clear the previous replay match binding');
+assert.equal(replayClearedByQueue.lastReplayShare, null, 'joining a new queue should clear the previous replay share receipt');
+assert.equal(replayClearedByQueue.lastReplayShareMatchId, '', 'joining a new queue should clear the previous replay share binding');
 assert.equal(replayClearedByQueue.lastDisputeReport, null, 'joining a new queue should clear the previous dispute report receipt');
 assert.equal(replayClearedByQueue.lastAvoidOpponentReport, null, 'joining a new queue should clear the previous avoid-opponent receipt');
 

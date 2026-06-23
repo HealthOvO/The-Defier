@@ -408,6 +408,31 @@ const initDb = () => {
             });
             db.run(`CREATE INDEX IF NOT EXISTS idx_pvp_live_settlements_loser ON pvp_live_match_settlements(loser_user_id, created_at)`, (err) => {
                 if (err) fail(err);
+            });
+            db.run(`CREATE TABLE IF NOT EXISTS pvp_live_replay_shares (
+                share_token TEXT PRIMARY KEY,
+                match_id TEXT NOT NULL,
+                creator_user_id TEXT NOT NULL,
+                creator_seat TEXT NOT NULL,
+                visibility_layer TEXT NOT NULL DEFAULT 'replay_public',
+                source_visibility TEXT NOT NULL DEFAULT 'replay_public',
+                match_ref TEXT NOT NULL DEFAULT '',
+                replay_hash TEXT NOT NULL DEFAULT '',
+                status TEXT NOT NULL DEFAULT 'active',
+                created_at INTEGER NOT NULL,
+                expires_at INTEGER NOT NULL,
+                revoked_at INTEGER NOT NULL DEFAULT 0,
+                updated_at INTEGER NOT NULL,
+                FOREIGN KEY(match_id) REFERENCES pvp_live_matches(match_id),
+                FOREIGN KEY(creator_user_id) REFERENCES users(id)
+            )`, (err) => {
+                if (err) fail(err);
+            });
+            db.run(`CREATE INDEX IF NOT EXISTS idx_pvp_live_replay_shares_match ON pvp_live_replay_shares(match_id, creator_user_id, created_at)`, (err) => {
+                if (err) fail(err);
+            });
+            db.run(`CREATE INDEX IF NOT EXISTS idx_pvp_live_replay_shares_expires ON pvp_live_replay_shares(status, expires_at)`, (err) => {
+                if (err) fail(err);
                 else done();
             });
         });

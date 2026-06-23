@@ -148,6 +148,27 @@ export const PVPService = {
       }
       return await client.getLivePvpReplay(matchId, options);
     },
+    async createReplayShare(matchId = '', options = {}) {
+      const client = this.getClient();
+      if (!client || typeof client.createLivePvpReplayShare !== 'function') {
+        return { success: false, message: '实时论道战报分享服务未就绪' };
+      }
+      return await client.createLivePvpReplayShare(matchId, options);
+    },
+    async getReplayShare(shareToken = '') {
+      const client = this.getClient();
+      if (!client || typeof client.getLivePvpReplayShare !== 'function') {
+        return { success: false, message: '公开战报分享服务未就绪' };
+      }
+      return await client.getLivePvpReplayShare(shareToken);
+    },
+    async revokeReplayShare(matchId = '') {
+      const client = this.getClient();
+      if (!client || typeof client.revokeLivePvpReplayShare !== 'function') {
+        return { success: false, message: '实时论道战报分享撤销服务未就绪' };
+      }
+      return await client.revokeLivePvpReplayShare(matchId);
+    },
     async requestRematch(matchId = '', options = {}) {
       const client = this.getClient();
       if (!client || typeof client.requestLivePvpRematch !== 'function') {

@@ -4,6 +4,7 @@ const { RULES, getCardDefinition } = require('./rules');
 const POST_GAME_AUDIT_ACTION_BY_UI_ACTION = Object.freeze({
     review_events: 'review_events',
     review_key_turns: 'key_turn_replay',
+    share_replay: 'public_replay_share',
     friendly_rematch: 'friendly_rematch',
     adjust_loadout: 'apply_loadout_recommendation',
     practice: 'practice_topic',
@@ -1002,6 +1003,11 @@ function projectPostMatchReview(state, seatId) {
             id: 'review_key_turns',
             label: '关键回合复盘',
             detail: '按公开事件拆出开战、压力和终局窗口，不读取隐藏信息。'
+        },
+        {
+            id: 'share_replay',
+            label: '分享脱敏战报',
+            detail: '生成 30 天有效的公开战报链接，只包含 replay_public 回放，不暴露隐藏手牌、牌库、本人结算或赛季荣誉。'
         },
         ...(canFriendlyRematch ? [{
             id: 'friendly_rematch',

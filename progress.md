@@ -1,5 +1,30 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-23: V10-S55 live PVP public replay share token
+  - 本轮完成
+    - `server/db/database.js`、`server/pvp-live/live-persistence.js`、`server/pvp-live/live-store.js` 增加 `pvp_live_replay_shares` receipt 生命周期：高熵 `pvplrs-*` token、creator seat、`matchRef`、`replayHash`、过期时间与撤销状态；公开读取只按 token 取回，不把 `matchRef` 或原始 `matchId` 变成公开 lookup 能力。
+    - `server/routes/pvp-live.js` 新增 `POST /api/pvp/live/matches/:matchId/replay-share`、`GET /api/pvp/live/replay-shares/:shareToken`、`POST /api/pvp/live/matches/:matchId/replay-share/revoke`：创建/撤销必须是参赛者，未终局 409；匿名公开读取只返回 `replay_public`，撤销后 410 `replay_share_revoked`，分享 receipt 明确 `rankedImpact='none'`、`rewardImpact='none'`。
+    - 前端接通 `BackendClient.createLivePvpReplayShare/getLivePvpReplayShare/revokeLivePvpReplayShare` -> `PVPService.live.*ReplayShare` -> `PvpLiveSession.createReplayShare` -> `PVPScene.handleLivePostReviewAction('share_replay')`，赛后复盘新增“分享脱敏战报”按钮，生成 30 天公开链接并尝试复制。
+    - `server/pvp-live/engine/state-view.js` 将 `share_replay` 纳入 post-match action bridge，UI receipt 显示分享链接边界：只包含 `replay_public`，不暴露隐藏手牌、牌库、随机种子、本人结算、赛季荣誉或原始战局 ID。
+    - `game-intro.html` 同步公开回放边界文案：分享战报由参赛者主动生成、可撤销，且不暴露请求者席位、本人复盘、正式结算、原始战局 ID 或赛季荣誉。
+    - 挑战者巡检后补强撤销语义：同一参赛者对同一局重复生成多个分享 token 后，一次撤销会批量失效该玩家本局所有 active token；前端 receipt 新增“撤销分享”按钮并接通 `PvpLiveSession.revokeReplayShare()`，撤销后隐藏按钮、标记链接已失效。
+    - `tests/sanity_pvp_live_replay_checks.cjs` 锁住 active 不可分享、终局可生成 token、匿名读取脱敏 replay、raw match id 不能当 token、撤销后不可读；client/service/session/UI/release gate markers 同步补齐。
+  - 已验证
+    - 红测：`node tests/sanity_pvp_live_replay_checks.cjs` 先失败于新 `/replay-share` 路由缺失导致 active share 返回 404 而非 409。
+    - 红测：`node tests/sanity_release_gate_coverage_checks.cjs` 先失败于缺少 `router.post('/matches/:matchId/replay-share'` marker。
+    - 绿测：`node tests/sanity_pvp_live_replay_checks.cjs`
+    - 绿测：`node tests/sanity_pvp_live_client_checks.mjs`
+    - 绿测：`node tests/sanity_pvp_live_service_bridge_checks.cjs`
+    - 绿测：`node tests/sanity_pvp_live_session_checks.mjs`
+    - 绿测：`node tests/sanity_pvp_live_ui_contract_checks.cjs`
+    - 绿测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs`
+    - 绿测：`node tests/sanity_release_gate_coverage_checks.cjs`
+    - 全量 Node 门禁：`npm run test:node`
+    - 构建：`npm run build:pages`
+    - 本地 release gate：`npm run test:release:local`，包含 pvp-live-real 与 pvp-live-mobile-real，输出 `[release-checks] All browser release audits passed.`
+  - 当前结论
+    - live PVP 现在具备真正可传播的脱敏战报分享闭环：参与者主动生成、第三方无需登录即可按 token 查看公开回放、创建和撤销都不影响积分/奖励/匹配。分享能力不改变战斗数值、结算公式、匹配策略、心跳阈值或线上配置；本轮未进行生产部署。
+
 - 2026-06-23: V10-S54 live PVP ranked reconnect grace release gate tightening
   - 本轮完成
     - `tests/sanity_release_gate_coverage_checks.cjs` 继续收紧 V10-S53 production ranked reconnect grace smoke 的 release markers：显式锁住 ranked `/heartbeat` 路径、active current recovery 阶段不展示终局复盘、reconnect-grace current recovery 阶段不展示终局复盘。

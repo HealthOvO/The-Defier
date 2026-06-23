@@ -1162,6 +1162,91 @@ export const BackendClient = {
       };
     }
   },
+  async createLivePvpReplayShare(matchId = '', options = {}) {
+    const user = this.getCurrentUser();
+    if (!user) return {
+      success: false,
+      message: '未登录'
+    };
+    const id = String(matchId || '').trim();
+    if (!id) return {
+      success: false,
+      message: '实时论道战局缺失'
+    };
+    const body = {};
+    const ttlDays = Math.floor(Number(options && options.ttlDays));
+    if (Number.isFinite(ttlDays) && ttlDays > 0) {
+      body.ttlDays = ttlDays;
+    }
+    try {
+      const result = await this.requestServer(`${this.getLivePvpPathPrefix()}/matches/${encodeURIComponent(id)}/replay-share`, {
+        method: 'POST',
+        data: body
+      });
+      return result && typeof result === 'object' ? result : {
+        success: false,
+        message: '实时论道战报分享返回异常'
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error,
+        reason: error && error.reason || undefined,
+        message: error.message || '实时论道战报分享生成失败'
+      };
+    }
+  },
+  async getLivePvpReplayShare(shareToken = '') {
+    const token = String(shareToken || '').trim();
+    if (!token) return {
+      success: false,
+      message: '公开战报分享缺失'
+    };
+    try {
+      const result = await this.requestServer(`${this.getLivePvpPathPrefix()}/replay-shares/${encodeURIComponent(token)}`, {
+        method: 'GET'
+      });
+      return result && typeof result === 'object' ? result : {
+        success: false,
+        message: '公开战报分享返回异常'
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error,
+        reason: error && error.reason || undefined,
+        message: error.message || '公开战报分享读取失败'
+      };
+    }
+  },
+  async revokeLivePvpReplayShare(matchId = '') {
+    const user = this.getCurrentUser();
+    if (!user) return {
+      success: false,
+      message: '未登录'
+    };
+    const id = String(matchId || '').trim();
+    if (!id) return {
+      success: false,
+      message: '实时论道战局缺失'
+    };
+    try {
+      const result = await this.requestServer(`${this.getLivePvpPathPrefix()}/matches/${encodeURIComponent(id)}/replay-share/revoke`, {
+        method: 'POST'
+      });
+      return result && typeof result === 'object' ? result : {
+        success: false,
+        message: '实时论道战报分享撤销返回异常'
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error,
+        reason: error && error.reason || undefined,
+        message: error.message || '实时论道战报分享撤销失败'
+      };
+    }
+  },
   async requestLivePvpRematch(matchId = '', options = {}) {
     const user = this.getCurrentUser();
     if (!user) return {

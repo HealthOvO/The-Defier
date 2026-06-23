@@ -34,6 +34,32 @@ function makeInviteCode() {
     return `TD${crypto.randomBytes(3).toString('hex').toUpperCase()}`;
 }
 
+function normalizeReplayShareRecord(share = {}) {
+    const source = share && typeof share === 'object' ? share : {};
+    const shareToken = String(source.shareToken || '').trim();
+    const matchId = String(source.matchId || '').trim();
+    const creatorUserId = String(source.creatorUserId || '').trim();
+    if (!/^pvplrs-[a-zA-Z0-9_-]{24,80}$/.test(shareToken) || !matchId || !creatorUserId) return null;
+    const createdAt = Math.max(0, Math.floor(Number(source.createdAt) || Date.now()));
+    const expiresAt = Math.max(createdAt + 1000, Math.floor(Number(source.expiresAt) || (createdAt + 30 * 24 * 60 * 60 * 1000)));
+    const revokedAt = Math.max(0, Math.floor(Number(source.revokedAt) || 0));
+    return {
+        shareToken,
+        matchId,
+        creatorUserId,
+        creatorSeat: source.creatorSeat === 'B' ? 'B' : 'A',
+        visibilityLayer: 'replay_public',
+        sourceVisibility: 'replay_public',
+        matchRef: String(source.matchRef || '').trim().slice(0, 64),
+        replayHash: String(source.replayHash || '').trim().slice(0, 64),
+        status: revokedAt > 0 || source.status === 'revoked' ? 'revoked' : 'active',
+        createdAt,
+        expiresAt,
+        revokedAt,
+        updatedAt: Math.max(createdAt, Math.floor(Number(source.updatedAt) || Date.now()))
+    };
+}
+
 function normalizeSourceSeat(value, fallback = 'A') {
     if (value === 'A' || value === 'B') return value;
     if (fallback === 'A' || fallback === 'B') return fallback;
@@ -831,6 +857,7 @@ class LivePvpStore {
         this.recentOpponentPairs = new Map();
         this.avoidedOpponentPairs = new Map();
         this.matchmakingGuards = new Map();
+        this.replayShares = new Map();
     }
 
     setPersistence(persistence = null) {
@@ -2190,6 +2217,80 @@ class LivePvpStore {
     async loadMatchEvents(matchId) {
         if (!this.persistence || typeof this.persistence.loadMatchEvents !== 'function') return [];
         return this.persistence.loadMatchEvents(matchId);
+    }
+
+    async loadMatchForReplayShare(matchId) {
+        const id = String(matchId || '').trim();
+        if (!id) return null;
+        const local = this.matches.get(id);
+        if (local) return local;
+        if (!this.persistence || typeof this.persistence.loadMatchById !== 'function') return null;
+        const persisted = await this.persistence.loadMatchById(id);
+        if (!persisted || persisted.matchId !== id) return null;
+        this.matches.set(persisted.matchId, persisted);
+        return persisted;
+    }
+
+    async saveReplayShare(share) {
+        const normalized = normalizeReplayShareRecord(share);
+        if (!normalized) return null;
+        if (this.persistence && typeof this.persistence.saveReplayShare === 'function') {
+            const saved = await this.persistence.saveReplayShare(normalized);
+            if (saved) {
+                this.replayShares.set(saved.shareToken, saved);
+                return saved;
+            }
+        }
+        this.replayShares.set(normalized.shareToken, normalized);
+        return normalized;
+    }
+
+    async loadReplayShare(shareToken) {
+        const token = String(shareToken || '').trim();
+        if (!/^pvplrs-[a-zA-Z0-9_-]{24,80}$/.test(token)) return null;
+        if (this.persistence && typeof this.persistence.loadReplayShare === 'function') {
+            const persisted = await this.persistence.loadReplayShare(token);
+            if (persisted) {
+                this.replayShares.set(persisted.shareToken, persisted);
+                return persisted;
+            }
+        }
+        return this.replayShares.get(token) || null;
+    }
+
+    async revokeReplayShareForUser(userId, matchId) {
+        const id = String(userId || '').trim();
+        const match = String(matchId || '').trim();
+        if (!id || !match) return null;
+        if (this.persistence && typeof this.persistence.revokeReplayShareForUser === 'function') {
+            const revoked = await this.persistence.revokeReplayShareForUser(id, match);
+            if (revoked) {
+                this.replayShares.set(revoked.shareToken, revoked);
+                return revoked;
+            }
+        }
+        const now = this.now();
+        const shares = Array.from(this.replayShares.values())
+            .filter(item => item && item.matchId === match && item.creatorUserId === id && item.status === 'active' && !item.revokedAt)
+            .sort((a, b) => Math.max(0, Number(b.createdAt) || 0) - Math.max(0, Number(a.createdAt) || 0));
+        if (shares.length === 0) return null;
+        shares.forEach(share => {
+            this.replayShares.set(share.shareToken, {
+                ...share,
+                status: 'revoked',
+                revokedAt: now,
+                updatedAt: now
+            });
+        });
+        const share = shares[0];
+        const revoked = {
+            ...share,
+            status: 'revoked',
+            revokedAt: now,
+            updatedAt: now
+        };
+        this.replayShares.set(revoked.shareToken, revoked);
+        return revoked;
     }
 
     async settleFinishedMatch(match) {

@@ -11,6 +11,8 @@ const DEFAULT_STATE = Object.freeze({
   rematchReport: null,
   lastReplay: null,
   lastReplayMatchId: '',
+  lastReplayShare: null,
+  lastReplayShareMatchId: '',
   lastDisputeReport: null,
   lastAvoidOpponentReport: null,
   lastEvents: [],
@@ -33,6 +35,7 @@ const ALLOWED_SEASON_GOAL_ACTIONS = Object.freeze([
   'adjust_loadout',
   'review_events',
   'review_key_turns',
+  'share_replay',
   'report_issue',
   'avoid_opponent'
 ]);
@@ -348,6 +351,8 @@ export function createPvpLiveSession({
     if (matchIdentityTouched && previousMatchId && previousMatchId !== nextMatchId) {
       nextState.lastReplay = null;
       nextState.lastReplayMatchId = '';
+      nextState.lastReplayShare = null;
+      nextState.lastReplayShareMatchId = '';
       nextState.lastDisputeReport = null;
       nextState.lastAvoidOpponentReport = null;
     }
@@ -1089,6 +1094,8 @@ export function createPvpLiveSession({
       stateView: null,
       lastReplay: null,
       lastReplayMatchId: '',
+      lastReplayShare: null,
+      lastReplayShareMatchId: '',
       lastDisputeReport: null,
       lastAvoidOpponentReport: null,
       lastError: null,
@@ -1494,6 +1501,52 @@ export function createPvpLiveSession({
       lastReplay: cloneData(result.replay),
       lastReplayMatchId: matchId,
       lastError: null
+    });
+  }
+
+  async function createReplayShare(options = {}) {
+    const matchId = getSnapshotMatchId(state);
+    if (!matchId) {
+      return fail('replay_share_match_missing', '实时论道战报分享战局缺失', state.phase);
+    }
+    const result = await callLive('createReplayShare', matchId, options);
+    if (!result || result.success !== true || !result.share) {
+      return fail(result && result.reason || 'replay_share_failed', result && result.message || '实时论道战报分享生成失败', state.phase);
+    }
+    if (getSnapshotMatchId(state) !== matchId) {
+      return getState();
+    }
+    const share = cloneData(result.share);
+    return publish({
+      lastReplayShare: share,
+      lastReplayShareMatchId: matchId,
+      lastError: {
+        reason: 'replay_share_created',
+        message: share.shareUrl ? '公开战报链接已生成，可复制给其他玩家观看脱敏回放。' : '公开战报分享已生成。'
+      }
+    });
+  }
+
+  async function revokeReplayShare() {
+    const matchId = getSnapshotMatchId(state);
+    if (!matchId) {
+      return fail('replay_share_revoke_match_missing', '实时论道战报分享撤销战局缺失', state.phase);
+    }
+    const result = await callLive('revokeReplayShare', matchId);
+    if (!result || result.success !== true || !result.share) {
+      return fail(result && result.reason || 'replay_share_revoke_failed', result && result.message || '实时论道战报分享撤销失败', state.phase);
+    }
+    if (getSnapshotMatchId(state) !== matchId) {
+      return getState();
+    }
+    const share = cloneData(result.share);
+    return publish({
+      lastReplayShare: share,
+      lastReplayShareMatchId: matchId,
+      lastError: {
+        reason: 'replay_share_revoked',
+        message: '公开战报链接已撤销；撤销不改写本局积分、奖励或匹配记录。'
+      }
     });
   }
 
@@ -1993,6 +2046,8 @@ export function createPvpLiveSession({
     recordSeasonGoalAction,
     dismissSeasonGoal,
     getReplay,
+    createReplayShare,
+    revokeReplayShare,
     submitReport,
     avoidOpponent,
     requestRematch,

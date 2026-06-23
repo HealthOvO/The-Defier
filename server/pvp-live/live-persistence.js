@@ -107,6 +107,48 @@ function normalizeMatchmakingGuardProfile(profile = {}) {
     };
 }
 
+function normalizeReplayShareToken(value) {
+    const token = String(value || '').trim();
+    return /^pvplrs-[a-zA-Z0-9_-]{24,80}$/.test(token) ? token : '';
+}
+
+function normalizeReplayVisibilityLayer(value) {
+    return String(value || 'replay_public') === 'replay_public' ? 'replay_public' : 'replay_public';
+}
+
+function normalizeReplayShareStatus(value, revokedAt = 0) {
+    const status = String(value || 'active').trim().toLowerCase();
+    if (revokedAt > 0) return 'revoked';
+    return status === 'revoked' || status === 'expired' ? status : 'active';
+}
+
+function normalizeReplayShareRecord(share = {}) {
+    const source = share && typeof share === 'object' ? share : {};
+    const shareToken = normalizeReplayShareToken(source.shareToken || source.share_token);
+    const matchId = String(source.matchId || source.match_id || '').trim();
+    const creatorUserId = String(source.creatorUserId || source.creator_user_id || '').trim();
+    const creatorSeat = source.creatorSeat === 'B' || source.creator_seat === 'B' ? 'B' : 'A';
+    const createdAt = Math.max(0, Math.floor(Number(source.createdAt || source.created_at) || Date.now()));
+    const expiresAt = Math.max(createdAt + 1000, Math.floor(Number(source.expiresAt || source.expires_at) || (createdAt + 30 * 24 * 60 * 60 * 1000)));
+    const revokedAt = Math.max(0, Math.floor(Number(source.revokedAt || source.revoked_at) || 0));
+    if (!shareToken || !matchId || !creatorUserId) return null;
+    return {
+        shareToken,
+        matchId,
+        creatorUserId,
+        creatorSeat,
+        visibilityLayer: normalizeReplayVisibilityLayer(source.visibilityLayer || source.visibility_layer),
+        sourceVisibility: normalizeReplayVisibilityLayer(source.sourceVisibility || source.source_visibility),
+        matchRef: String(source.matchRef || source.match_ref || '').trim().slice(0, 64),
+        replayHash: String(source.replayHash || source.replay_hash || '').trim().slice(0, 64),
+        status: normalizeReplayShareStatus(source.status, revokedAt),
+        createdAt,
+        expiresAt,
+        revokedAt,
+        updatedAt: Math.max(createdAt, Math.floor(Number(source.updatedAt || source.updated_at) || Date.now()))
+    };
+}
+
 function normalizeRatingScore(value) {
     const numeric = Number(value);
     return Math.max(0, Math.min(9999, Math.floor(Number.isFinite(numeric) ? numeric : 1000)));
@@ -554,6 +596,25 @@ function makeMatchmakingGuardProfileFromRow(row) {
         cooldownSource: row.cooldown_source,
         cancelWindowStartedAt: row.cancel_window_started_at,
         cancelCount: row.cancel_count
+    });
+}
+
+function makeReplayShareFromRow(row) {
+    if (!row || !row.share_token) return null;
+    return normalizeReplayShareRecord({
+        shareToken: row.share_token,
+        matchId: row.match_id,
+        creatorUserId: row.creator_user_id,
+        creatorSeat: row.creator_seat,
+        visibilityLayer: row.visibility_layer,
+        sourceVisibility: row.source_visibility,
+        matchRef: row.match_ref,
+        replayHash: row.replay_hash,
+        status: row.status,
+        createdAt: row.created_at,
+        expiresAt: row.expires_at,
+        revokedAt: row.revoked_at,
+        updatedAt: row.updated_at
     });
 }
 
@@ -1060,6 +1121,100 @@ function makeSqliteLivePvpPersistence() {
                 [match, id, id]
             );
             return makeMatchFromRow(row);
+        },
+        async loadMatchById(matchId) {
+            const match = String(matchId || '').trim();
+            if (!match) return null;
+            const row = await dbGet(
+                `SELECT * FROM pvp_live_matches
+                 WHERE match_id = ?
+                 LIMIT 1`,
+                [match]
+            );
+            return makeMatchFromRow(row);
+        },
+        async saveReplayShare(share) {
+            const normalized = normalizeReplayShareRecord(share);
+            if (!normalized) return null;
+            await dbRun(
+                `INSERT INTO pvp_live_replay_shares
+                    (share_token, match_id, creator_user_id, creator_seat, visibility_layer, source_visibility, match_ref, replay_hash, status, created_at, expires_at, revoked_at, updated_at)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 ON CONFLICT(share_token) DO UPDATE SET
+                    match_id = excluded.match_id,
+                    creator_user_id = excluded.creator_user_id,
+                    creator_seat = excluded.creator_seat,
+                    visibility_layer = excluded.visibility_layer,
+                    source_visibility = excluded.source_visibility,
+                    match_ref = excluded.match_ref,
+                    replay_hash = excluded.replay_hash,
+                    status = excluded.status,
+                    created_at = excluded.created_at,
+                    expires_at = excluded.expires_at,
+                    revoked_at = excluded.revoked_at,
+                    updated_at = excluded.updated_at`,
+                [
+                    normalized.shareToken,
+                    normalized.matchId,
+                    normalized.creatorUserId,
+                    normalized.creatorSeat,
+                    normalized.visibilityLayer,
+                    normalized.sourceVisibility,
+                    normalized.matchRef,
+                    normalized.replayHash,
+                    normalized.status,
+                    normalized.createdAt,
+                    normalized.expiresAt,
+                    normalized.revokedAt,
+                    normalized.updatedAt
+                ]
+            );
+            return normalized;
+        },
+        async loadReplayShare(shareToken) {
+            const token = normalizeReplayShareToken(shareToken);
+            if (!token) return null;
+            const row = await dbGet(
+                `SELECT * FROM pvp_live_replay_shares
+                 WHERE share_token = ?
+                 LIMIT 1`,
+                [token]
+            );
+            return makeReplayShareFromRow(row);
+        },
+        async revokeReplayShareForUser(userId, matchId) {
+            const id = String(userId || '').trim();
+            const match = String(matchId || '').trim();
+            if (!id || !match) return null;
+            const rows = await dbAll(
+                `SELECT * FROM pvp_live_replay_shares
+                 WHERE match_id = ?
+                   AND creator_user_id = ?
+                   AND status = 'active'
+                   AND revoked_at = 0
+                 ORDER BY created_at DESC`,
+                [match, id]
+            );
+            const shares = rows.map(makeReplayShareFromRow).filter(Boolean);
+            if (shares.length === 0) return null;
+            const now = Date.now();
+            await dbRun(
+                `UPDATE pvp_live_replay_shares
+                 SET status = 'revoked',
+                     revoked_at = ?,
+                     updated_at = ?
+                 WHERE match_id = ?
+                   AND creator_user_id = ?
+                   AND status = 'active'
+                   AND revoked_at = 0`,
+                [now, now, match, id]
+            );
+            return {
+                ...shares[0],
+                status: 'revoked',
+                revokedAt: now,
+                updatedAt: now
+            };
         },
         async saveRematchRequest(request) {
             if (!request || !request.sourceMatchId || !request.seriesId || !request.playersByUserId) return;

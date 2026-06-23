@@ -1440,6 +1440,8 @@ assert.ok(
 [
   'active match should not expose post-match replay',
   'active replay rejection should be stable',
+  'active match should not create public replay share',
+  'active replay share rejection should be stable',
   'participant should fetch replay_self',
   'winner self replay should include own authoritative settlement report',
   'winner self replay settlement report should stay seat-scoped',
@@ -1456,6 +1458,18 @@ assert.ok(
   'should not expose hidden card or raw payload fields',
   'replay_public should not expose requester seat',
   'audit_safe replay should derive from replay_public',
+  'participant should create a public replay share after terminal match',
+  'share receipt should not expose raw match id',
+  'public replay share token should be readable without participant auth',
+  'shared replay response should not expose raw match id',
+  'raw match id should not work as a public replay share token',
+  'non-participant should not create public replay share',
+  'non-participant should not revoke public replay share',
+  'participant should create a second public replay share token',
+  'repeated replay share creation should mint a distinct opaque token',
+  'share creator should revoke public replay share',
+  'revoked replay share token should no longer expose replay',
+  'revoke should invalidate every active public replay share token for the match',
   'partial persisted event source should fall back to complete state events',
   'terminal replay should reject incomplete persisted events when state events are also incomplete',
   'public replay should preserve public disconnected seat arrays',
@@ -1481,6 +1495,25 @@ assert.ok(
   assert.ok(
     pvpLiveReplaySource.includes(needle),
     `live PVP replay source should pin partial event stream fallback marker: ${needle}`,
+  );
+});
+
+[
+  "router.post('/matches/:matchId/replay-share'",
+  "router.get('/replay-shares/:shareToken'",
+  "router.post('/matches/:matchId/replay-share/revoke'",
+  'makeReplayShareToken',
+  'makeReplayShareEnvelope',
+  'replay_share_not_ready',
+  'replay_share_not_found',
+  'replay_share_revoked',
+  'rankedImpact: \'none\'',
+  'rewardImpact: \'none\'',
+  "visibilityLayer: 'replay_public'",
+].forEach((needle) => {
+  assert.ok(
+    pvpLiveRoute.includes(needle),
+    `live PVP route should pin public replay share marker: ${needle}`,
   );
 });
 
@@ -2498,6 +2531,12 @@ assert.ok(
   'live friendly rematch status should GET',
   'live friendly rematch cancel should POST',
   'live friendly rematch cancel should not send legacy settlement body',
+  'BackendClient should expose createLivePvpReplayShare',
+  'live replay share creation should encode match id',
+  'public live replay share fetch should encode share token',
+  'live replay share revoke should encode match id',
+  'empty live replay share match id should not call requestServer',
+  'empty public live replay share token should not call requestServer',
   'live heartbeat should POST',
   'live pvp client must not call legacy settlement path',
   'live queue join should forward display name and loadout snapshot candidate',
@@ -2524,6 +2563,9 @@ assert.ok(
   'joinLivePvpQueue',
   'cancelLivePvpQueue',
   'getCurrentLivePvpMatch',
+  'createLivePvpReplayShare',
+  'getLivePvpReplayShare',
+  'revokeLivePvpReplayShare',
   'requestLivePvpRematch',
   'getLivePvpRematchStatus',
   'cancelLivePvpRematch',
@@ -2539,6 +2581,9 @@ assert.ok(
   'live current invite bridge should call BackendClient.getCurrentLivePvpInvite',
   'live invite inbox bridge should call BackendClient.getLivePvpInviteInbox',
   'live heartbeat bridge should call BackendClient.heartbeatLivePvpMatch',
+  'live replay share bridge should call BackendClient.createLivePvpReplayShare',
+  'public replay share bridge should call BackendClient.getLivePvpReplayShare',
+  'live replay share revoke bridge should call BackendClient.revokeLivePvpReplayShare',
   'live rematch bridge should call BackendClient.requestLivePvpRematch',
   'live rematch status bridge should call BackendClient.getLivePvpRematchStatus',
   'live rematch cancel bridge should call BackendClient.cancelLivePvpRematch',
@@ -2714,6 +2759,13 @@ assert.ok(
   'presence WS message should update authoritative connection tempo report',
   'queue cooldown block should retain structured matchmaking guard report',
   'queue cooldown block should retain cooldown source',
+  'live session should expose public replay share API',
+  'live session should expose public replay share revoke API',
+  'createReplayShare should store returned public share receipt',
+  'createReplayShare should bind share creation to the current match',
+  'revokeReplayShare should store the revoked public share receipt',
+  'revokeReplayShare should bind share revoke to the current match',
+  'joining a new queue should clear the previous replay share receipt',
 ].forEach((needle) => {
   assert.ok(
     pvpLiveSessionChecks.includes(needle),
@@ -2770,6 +2822,13 @@ assert.ok(
   'live emote buttons should be disabled by authoritative connection tempo or social realtime intent locks',
   'manual live refresh should be distinct from auto polling when clearing pending intents',
   'manual live refresh should clear local realtime intent locks after authoritative refresh',
+  'share_replay',
+  'createReplayShare({ ttlDays: 30 })',
+  'copyLiveReplayShareLink(',
+  'replay_share_created',
+  'revokeLiveReplayShare(',
+  'data-live-replay-share-revoke',
+  'replay_share_revoked',
 ].forEach((needle) => {
   assert.ok(
     pvpLiveUiContractChecks.includes(needle),
@@ -2828,6 +2887,11 @@ assert.ok(
   'opening safeguard should render the authoritative opener assignment chip',
   'post-match review normalizer should preserve audit action ids for real UI buttons',
   'key-turn review action should fetch the authoritative replay_self layer',
+  'share_replay action should create a 30-day public replay share',
+  'share_replay action should copy the public replay share link',
+  'public replay share receipt should expose a revoke control',
+  'replay share revoke control should call session revoke API',
+  'revoked replay share receipt should hide the revoke control',
 ].forEach((needle) => {
   assert.ok(
     pvpLiveUiRuntimeChecks.includes(needle),

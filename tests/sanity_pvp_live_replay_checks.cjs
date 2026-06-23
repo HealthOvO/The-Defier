@@ -287,6 +287,12 @@ function assertPublicReplayShape(replay, visibilityLayer) {
     });
     assert.equal(activeReplay.status, 409, 'active match should not expose post-match replay');
     assert.equal(activeReplay.payload.reason, 'replay_not_ready', 'active replay rejection should be stable');
+    const activeReplayShare = await request(baseUrl, `/api/pvp/live/matches/${joinB.payload.matchId}/replay-share`, {
+      method: 'POST',
+      token: tokenA
+    });
+    assert.equal(activeReplayShare.status, 409, 'active match should not create public replay share');
+    assert.equal(activeReplayShare.payload.reason, 'replay_share_not_ready', 'active replay share rejection should be stable');
 
     const surrenderB = await submitIntent(baseUrl, tokenB, joinB.payload.matchId, {
       intentId: 'replay-surrender-b',
@@ -358,6 +364,83 @@ function assertPublicReplayShape(replay, visibilityLayer) {
     assert.equal(publicReplay.payload.replay.cosmeticReward, undefined, 'replay_public should not expose seat-specific cosmetic honor reward track');
     assert.equal(publicReplay.payload.replay.seasonHonorCollection, undefined, 'replay_public should not expose seat-specific season honor collection');
     assert.ok(publicReplay.payload.replay.publicSummary?.finishReason === 'surrender', 'replay_public should include public finish summary');
+
+    const replayShare = await request(baseUrl, `/api/pvp/live/matches/${joinB.payload.matchId}/replay-share`, {
+      method: 'POST',
+      token: tokenA,
+      body: { ttlDays: 30 }
+    });
+    assert.equal(replayShare.status, 200, 'participant should create a public replay share after terminal match');
+    assert.equal(replayShare.payload.share?.reportVersion, 'pvp-live-replay-share-v1', 'share receipt should expose stable report version');
+    assert.match(replayShare.payload.share?.shareToken || '', /^pvplrs-[a-z0-9_-]{24,}$/i, 'share receipt should expose opaque share token');
+    assert.equal(replayShare.payload.share?.visibilityLayer, 'replay_public', 'share receipt should lock public replay visibility');
+    assert.equal(replayShare.payload.share?.sourceVisibility, 'replay_public', 'share receipt should derive only from replay_public');
+    assert.equal(replayShare.payload.share?.rankedImpact, 'none', 'share receipt should not affect ranked scoring');
+    assert.equal(replayShare.payload.share?.rewardImpact, 'none', 'share receipt should not affect rewards');
+    assert.equal(replayShare.payload.share?.revoked, false, 'fresh share should not be revoked');
+    assert.ok(replayShare.payload.share?.expiresAt > Date.now(), 'share receipt should expose future expiry');
+    assert.ok(/^[a-f0-9]{16}$/.test(replayShare.payload.share?.matchRef || ''), 'share receipt should expose stable match reference');
+    assert.ok(/^[a-f0-9]{16}$/.test(replayShare.payload.share?.replayHash || ''), 'share receipt should bind to a public replay hash');
+    assert.equal(JSON.stringify(replayShare.payload.share).includes(joinB.payload.matchId), false, 'share receipt should not expose raw match id');
+    assertNoHiddenReplayLeak(replayShare.payload.share, 'replay share receipt');
+
+    const sharedReplay = await request(baseUrl, `/api/pvp/live/replay-shares/${encodeURIComponent(replayShare.payload.share.shareToken)}`);
+    assert.equal(sharedReplay.status, 200, 'public replay share token should be readable without participant auth');
+    assert.equal(sharedReplay.payload.share?.reportVersion, 'pvp-live-replay-share-v1', 'shared replay should include share receipt envelope');
+    assert.equal(sharedReplay.payload.share?.shareToken, replayShare.payload.share.shareToken, 'shared replay should echo the opaque token only');
+    assert.equal(sharedReplay.payload.share?.visibilityLayer, 'replay_public', 'shared replay should stay on replay_public layer');
+    assert.equal(sharedReplay.payload.share?.rankedImpact, 'none', 'shared replay should not affect ranked scoring');
+    assert.equal(sharedReplay.payload.share?.rewardImpact, 'none', 'shared replay should not affect rewards');
+    assertPublicReplayShape(sharedReplay.payload.replay, 'replay_public');
+    assert.equal(sharedReplay.payload.replay.viewerSeat, undefined, 'shared replay should not expose requester seat');
+    assert.equal(sharedReplay.payload.replay.postMatchReview, undefined, 'shared replay should not expose seat-specific review object');
+    assert.equal(sharedReplay.payload.replay.settlementReport, undefined, 'shared replay should not expose seat-specific settlement report');
+    assert.equal(sharedReplay.payload.replay.seasonHonorReport, undefined, 'shared replay should not expose seat-specific season honor progress');
+    assert.equal(sharedReplay.payload.replay.cosmeticReward, undefined, 'shared replay should not expose seat-specific cosmetic reward track');
+    assert.equal(sharedReplay.payload.replay.seasonHonorCollection, undefined, 'shared replay should not expose seat-specific season honor collection');
+    assert.equal(JSON.stringify(sharedReplay.payload).includes(joinB.payload.matchId), false, 'shared replay response should not expose raw match id');
+
+    const rawMatchIdAsToken = await request(baseUrl, `/api/pvp/live/replay-shares/${encodeURIComponent(joinB.payload.matchId)}`);
+    assert.equal(rawMatchIdAsToken.status, 404, 'raw match id should not work as a public replay share token');
+    assert.equal(rawMatchIdAsToken.payload.reason, 'replay_share_not_found', 'raw match id share lookup rejection should be stable');
+
+    const outsiderReplayShare = await request(baseUrl, `/api/pvp/live/matches/${joinB.payload.matchId}/replay-share`, {
+      method: 'POST',
+      token: tokenC,
+      body: { ttlDays: 30 }
+    });
+    assert.equal(outsiderReplayShare.status, 404, 'non-participant should not create public replay share');
+
+    const outsiderReplayShareRevoke = await request(baseUrl, `/api/pvp/live/matches/${joinB.payload.matchId}/replay-share/revoke`, {
+      method: 'POST',
+      token: tokenC
+    });
+    assert.equal(outsiderReplayShareRevoke.status, 404, 'non-participant should not revoke public replay share');
+
+    const replayShareSecond = await request(baseUrl, `/api/pvp/live/matches/${joinB.payload.matchId}/replay-share`, {
+      method: 'POST',
+      token: tokenA,
+      body: { ttlDays: 30 }
+    });
+    assert.equal(replayShareSecond.status, 200, 'participant should create a second public replay share token');
+    assert.notEqual(replayShareSecond.payload.share?.shareToken, replayShare.payload.share.shareToken, 'repeated replay share creation should mint a distinct opaque token');
+    const sharedReplaySecond = await request(baseUrl, `/api/pvp/live/replay-shares/${encodeURIComponent(replayShareSecond.payload.share.shareToken)}`);
+    assert.equal(sharedReplaySecond.status, 200, 'second public replay share token should be readable before revoke');
+
+    const revokedShare = await request(baseUrl, `/api/pvp/live/matches/${joinB.payload.matchId}/replay-share/revoke`, {
+      method: 'POST',
+      token: tokenA
+    });
+    assert.equal(revokedShare.status, 200, 'share creator should revoke public replay share');
+    assert.equal(revokedShare.payload.share?.revoked, true, 'revoked share receipt should expose revoked state');
+    assert.equal(revokedShare.payload.share?.rankedImpact, 'none', 'share revoke should not affect ranked scoring');
+    assert.equal(revokedShare.payload.share?.rewardImpact, 'none', 'share revoke should not affect rewards');
+    const revokedSharedReplay = await request(baseUrl, `/api/pvp/live/replay-shares/${encodeURIComponent(replayShare.payload.share.shareToken)}`);
+    assert.equal(revokedSharedReplay.status, 410, 'revoked replay share token should no longer expose replay');
+    assert.equal(revokedSharedReplay.payload.reason, 'replay_share_revoked', 'revoked share rejection should be stable');
+    const revokedSharedReplaySecond = await request(baseUrl, `/api/pvp/live/replay-shares/${encodeURIComponent(replayShareSecond.payload.share.shareToken)}`);
+    assert.equal(revokedSharedReplaySecond.status, 410, 'revoke should invalidate every active public replay share token for the match');
+    assert.equal(revokedSharedReplaySecond.payload.reason, 'replay_share_revoked', 'second revoked share rejection should be stable');
 
     const auditReplay = await request(baseUrl, `/api/pvp/live/matches/${joinB.payload.matchId}/replay?visibility=audit_safe`, {
       token: tokenB

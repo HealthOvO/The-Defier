@@ -3272,6 +3272,58 @@ export const PVPScene = {
       Utils.showBattleLog(message);
     }
   },
+  async copyLiveReplayShareLink(shareLink = '') {
+    const text = String(shareLink || '').trim();
+    if (!text) return false;
+    if (typeof navigator !== 'undefined' && navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+      try {
+        await navigator.clipboard.writeText(text);
+        return true;
+      } catch (error) {
+        console.warn('[PVP Live] clipboard write failed', error);
+      }
+    }
+    if (typeof document !== 'undefined' && document && typeof document.createElement === 'function') {
+      try {
+        const input = document.createElement('textarea');
+        input.value = text;
+        input.setAttribute('readonly', 'readonly');
+        input.style.position = 'fixed';
+        input.style.opacity = '0';
+        document.body.appendChild(input);
+        input.select();
+        const copied = typeof document.execCommand === 'function' ? document.execCommand('copy') : false;
+        document.body.removeChild(input);
+        return !!copied;
+      } catch (error) {
+        console.warn('[PVP Live] clipboard fallback failed', error);
+      }
+    }
+    return false;
+  },
+  async revokeLiveReplayShare() {
+    const session = this.getLiveSession();
+    const root = document.querySelector('[data-live-pvp-root]');
+    const setHint = (message) => {
+      this.liveInlineHint = message;
+      const hint = root ? root.querySelector('[data-live-last-error]') : null;
+      if (hint) hint.textContent = message;
+      if (typeof Utils !== 'undefined' && Utils && typeof Utils.showBattleLog === 'function') {
+        Utils.showBattleLog(message);
+      }
+    };
+    if (!session || typeof session.revokeReplayShare !== 'function') {
+      setHint('实时论道战报分享撤销服务未就绪。');
+      return;
+    }
+    const nextState = await session.revokeReplayShare();
+    this.renderLivePanel();
+    if (nextState && nextState.lastError && nextState.lastError.reason === 'replay_share_revoked') {
+      setHint(nextState.lastError.message || '公开战报链接已撤销。');
+      return;
+    }
+    setHint(nextState && nextState.lastError && nextState.lastError.message || '公开战报分享撤销失败。');
+  },
   renderLiveDisputeReportReceipt() {
     const state = this.getLiveSession().getState();
     const activeMatchId = String(state && (state.matchId || state.stateView && state.stateView.matchId) || '');
@@ -3326,6 +3378,38 @@ export const PVPScene = {
       </div>
     `;
   },
+  renderLiveReplayShareReceipt() {
+    const state = this.getLiveSession().getState();
+    const activeMatchId = String(state && (state.matchId || state.stateView && state.stateView.matchId) || '');
+    const receipt = state && state.lastReplayShare && typeof state.lastReplayShare === 'object' ? state.lastReplayShare : null;
+    const receiptMatchId = String(state && state.lastReplayShareMatchId || '');
+    if (!receipt || (receiptMatchId && activeMatchId && receiptMatchId !== activeMatchId)) {
+      return '';
+    }
+    const shareUrl = String(receipt.shareUrl || receipt.sharePath || '').trim();
+    if (!shareUrl) return '';
+    const revoked = receipt.revoked === true;
+    const expiresAt = Math.max(0, Math.floor(Number(receipt.expiresAt) || 0));
+    const expiresText = expiresAt ? `${Math.max(0, Math.ceil((expiresAt - Date.now()) / 86400000))} 天内有效` : '限时有效';
+    return `
+      <div
+        class="pvp-live-dispute-receipt pvp-live-replay-share-receipt"
+        data-live-replay-share
+        data-live-replay-share-visibility="${this.escapeHtml(receipt.visibilityLayer || 'replay_public')}"
+        data-live-replay-share-ranked-impact="${this.escapeHtml(receipt.rankedImpact || 'none')}"
+        data-live-replay-share-revoked="${revoked ? 'true' : 'false'}"
+      >
+        <div class="pvp-live-dispute-receipt-head">
+          <span>${revoked ? '脱敏战报链接已撤销' : '脱敏战报链接已生成'}</span>
+          <span>${this.escapeHtml(revoked ? '已失效' : expiresText)}</span>
+        </div>
+        <div class="pvp-live-dispute-receipt-line">${this.escapeHtml(shareUrl)}</div>
+        <div class="pvp-live-dispute-receipt-evidence">只包含 replay_public · 不含原始战局 ID · 不改分不派奖励</div>
+        <div class="pvp-live-dispute-receipt-boundary">${this.escapeHtml(receipt.boundary || '公开战报分享只暴露脱敏回放，不读取隐藏手牌、牌库、随机种子或本人结算。')}</div>
+        ${revoked ? '' : '<button class="challenge-btn secondary" type="button" data-live-replay-share-revoke onclick="PVPScene.revokeLiveReplayShare()">撤销分享</button>'}
+      </div>
+    `;
+  },
   renderLivePostMatchReview(view, phase = 'idle') {
     const review = this.getLivePostMatchReview(view);
     if (!review) return '';
@@ -3369,6 +3453,7 @@ export const PVPScene = {
           >${this.escapeHtml(action.label)}</button>
         `).join('')}
       </div>
+      ${this.renderLiveReplayShareReceipt()}
       ${this.renderLiveDisputeReportReceipt()}
       ${this.renderLiveAvoidOpponentReceipt()}
     `;
@@ -3777,6 +3862,7 @@ export const PVPScene = {
     const liveDrillSourceId = String(this.liveDrillScenario && this.liveDrillScenario.sourceMatchId || '');
     const activeLiveSourceId = String(state.matchId || (view && view.matchId) || '');
     const replayMatchId = String(state.lastReplayMatchId || '');
+    const replayShareMatchId = String(state.lastReplayShareMatchId || '');
     const waitingLiveSourceId = state.queueTicket ? `waiting:${state.queueTicket}` : '';
     const mode = view && view.mode === 'friendly' ? 'friendly' : 'ranked';
     const drillScenario = this.liveDrillScenario && (
@@ -3830,6 +3916,7 @@ export const PVPScene = {
       postMatchReview: this.getLivePostMatchReview(view),
       seasonGoal: this.getLiveSeasonGoalCard(view),
       lastReplay: replayMatchId && replayMatchId === activeLiveSourceId ? this.getLiveReplaySummary(state.lastReplay) : null,
+      lastReplayShare: replayShareMatchId && replayShareMatchId === activeLiveSourceId ? state.lastReplayShare : null,
       lastDisputeReport: state.lastDisputeReport ? this.getLiveDisputeReportReceipt(state.lastDisputeReport) : null,
       lastAvoidOpponentReport: state.lastAvoidOpponentReport ? this.getLiveAvoidOpponentReceipt(state.lastAvoidOpponentReport) : null,
       drillScenario,
@@ -4981,6 +5068,27 @@ export const PVPScene = {
       setHint(replayFetched
         ? '已拉取权威回放并定位关键回合；这里只使用 replay_self 与公开事件序列，不读取隐藏手牌、牌库或事件 payload。'
         : '已定位关键回合；这里只使用公开事件序列，不读取隐藏手牌、牌库或事件 payload。');
+      return;
+    }
+    if (id === 'share_replay') {
+      const session = this.getLiveSession();
+      if (!session || typeof session.createReplayShare !== 'function') {
+        setHint('实时论道战报分享服务未就绪。');
+        return;
+      }
+      const nextState = await session.createReplayShare({ ttlDays: 30 });
+      this.renderLivePanel();
+      const share = nextState && nextState.lastReplayShare ? nextState.lastReplayShare : null;
+      const shareLink = String(share && (share.shareUrl || share.sharePath) || '').trim();
+      const shareCreated = nextState && nextState.lastError && nextState.lastError.reason === 'replay_share_created';
+      if (!shareLink) {
+        setHint(nextState && nextState.lastError && nextState.lastError.message || '公开战报分享生成失败。');
+        return;
+      }
+      const copied = await this.copyLiveReplayShareLink(shareLink);
+      setHint(copied && shareCreated
+        ? '脱敏战报链接已复制；公开链接只包含 replay_public，不暴露隐藏手牌、牌库、本人结算或赛季荣誉。'
+        : `脱敏战报链接已生成：${shareLink}`);
       return;
     }
     if (id === 'report_issue') {
