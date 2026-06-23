@@ -1,5 +1,25 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-23: V10-S46 live PVP waiting rematch reload browser contract
+  - 本轮完成
+    - `tests/browser_pvp_live_real_backend_smoke.mjs` 新增真实后端双账号 waiting rematch 刷新恢复段：败方发起低压力再战后，另开页面并重新打开 live 面板，必须恢复同一 source terminal match、同一 `waiting_rematch` 阶段、Bo3 第 2 局/换边再战状态和 1/2 确认进度。
+    - 新断言锁住双方体验边界：刷新后仍展示“等待本局对手确认 / 换边再战 / 不写正式积分”，保留取消等待入口，并禁用继续真人排位、问道练习、再次发起低压力再战等会打断等待的赛后动作，不退回 finished 复盘或正式排队。
+    - `index.html` / `js/scenes/pvp-scene.js` 将“取消再战”从复盘正文内嵌按钮提升到 live 底部主操作栏，只在 `waiting_rematch` 可见并可点；复盘条只保留系列状态，避免动态复盘内容与对局面板/存档弹窗干扰关键操作。
+    - `tests/browser_pvp_live_audit.mjs` 与真实 smoke 的取消按钮查询改为只认 `[data-live-action="cancel-rematch"]:not([hidden])`，并清理旧内嵌按钮 CSS，防止隐藏按钮或正文残留被误算作玩家可操作入口。
+    - `tests/sanity_release_gate_coverage_checks.cjs` 增加 release marker，锁住 waiting rematch reload finding、`friendlySeries.rankedImpact === 'none'`、可见取消入口、赛后动作禁用和主操作栏显隐逻辑。
+  - 已验证
+    - 红测：先补 release marker 后运行 `node tests/sanity_release_gate_coverage_checks.cjs`，失败于 `live PVP real-backend browser smoke should pin two-account marker: real browser waiting friendly rematch survives full page refresh before opponent accepts`。
+    - 语法：`node --check tests/browser_pvp_live_real_backend_smoke.mjs`
+    - 语法：`node --check tests/browser_pvp_live_audit.mjs`
+    - 绿测：`node tests/sanity_release_gate_coverage_checks.cjs`
+    - 绿测：`node tests/sanity_pvp_live_ui_contract_checks.cjs`
+    - 绿测：`npm run test:node`
+    - 构建：`npm run build:pages`
+    - 浏览器审计：`node tests/browser_pvp_live_audit.mjs http://127.0.0.1:4173 output/pvp-live-waiting-rematch-footer-audit-20260623`，106/106 findings、0 failed、0 console error。
+    - 真实后端 browser smoke：`node tests/browser_pvp_live_real_backend_smoke.mjs http://127.0.0.1:4173 output/pvp-live-waiting-rematch-reload-real-20260623-green9`，69/69 findings、0 failed、0 console error。
+  - 当前结论
+    - live PVP 低压力再战现在具备真实浏览器级等待态恢复证明：发起方刷新或重开 live 面板不会丢 pending rematch、不会误导成正式排位/旧复盘/正式结算，并且取消等待成为稳定的主操作栏入口；本轮只强化赛后再战恢复、可见操作位置和浏览器回归，不改变匹配数值、战斗数值、奖励、正式段位结算或线上配置。
+
 - 2026-06-23: V10-S45 live PVP setup current-match reload browser contract
   - 本轮完成
     - `tests/browser_pvp_live_real_backend_smoke.mjs` 新增真实后端双账号 setup 刷新恢复段：A 先确认准备、B 仍未准备时，新开/重开 B 页面并打开 live 面板，必须恢复同一 `setup` match、同一 `seatId`、同一 countdown deadline，且保留 A 已准备、B 未准备。

@@ -4941,7 +4941,7 @@ async function safeElementScreenshot(page, selector, outputPath) {
       status: series?.getAttribute('data-live-friendly-series-status') || '',
       sourceMatch: series?.getAttribute('data-live-friendly-series-source-match') || '',
       confirmationCount: series?.getAttribute('data-live-friendly-series-confirmations') || '',
-      cancelVisible: !!document.querySelector('[data-live-action="cancel-rematch"]'),
+      cancelVisible: !!document.querySelector('[data-live-action="cancel-rematch"]:not([hidden])'),
       hint: document.querySelector('[data-live-last-error]')?.textContent || '',
       calls: window.__livePvpAuditCalls,
     };
@@ -4956,7 +4956,7 @@ async function safeElementScreenshot(page, selector, outputPath) {
       && /等待本局对手确认/.test(friendlyCancelWaitProbe.hint),
     JSON.stringify(friendlyCancelWaitProbe),
   );
-  await page.click('[data-live-action="cancel-rematch"]', { timeout: 5000, force: true });
+  await page.click('[data-live-action="cancel-rematch"]:not([hidden])', { timeout: 5000, force: true });
   await page.waitForTimeout(120);
   const friendlyCancelProbe = await page.evaluate(() => {
     const series = document.querySelector('[data-live-friendly-series]');
@@ -4967,7 +4967,7 @@ async function safeElementScreenshot(page, selector, outputPath) {
       reviewText: document.querySelector('[data-live-post-match-review]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
       status: series?.getAttribute('data-live-friendly-series-status') || '',
       seriesText: series?.textContent?.replace(/\s+/g, ' ').trim() || '',
-      cancelVisible: !!document.querySelector('[data-live-action="cancel-rematch"]'),
+      cancelVisible: !!document.querySelector('[data-live-action="cancel-rematch"]:not([hidden])'),
       actions,
       calls: window.__livePvpAuditCalls,
     };

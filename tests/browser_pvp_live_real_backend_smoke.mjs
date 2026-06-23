@@ -275,8 +275,15 @@ async function getLiveSessionProbe(page) {
 
 async function dismissBlockingModals(page) {
   await page.evaluate(() => {
+    document.querySelectorAll('.modal').forEach(modal => {
+      modal.classList.remove('active');
+      modal.style.removeProperty('display');
+    });
     ['auth-modal', 'save-slots-modal', 'generic-confirm-modal', 'save-conflict-modal'].forEach(id => {
-      document.getElementById(id)?.classList.remove('active');
+      const modal = document.getElementById(id);
+      if (!modal) return;
+      modal.classList.remove('active');
+      modal.style.removeProperty('display');
     });
   });
 }
@@ -422,6 +429,10 @@ async function clickLiveControl(page, selector, label) {
     let actionability = null;
     do {
       actionability = await page.evaluate(({ targetSelector, targetLabel }) => {
+        document.querySelectorAll('.modal').forEach(modal => {
+          modal.classList.remove('active');
+          modal.style.removeProperty('display');
+        });
         const targets = Array.from(document.querySelectorAll(targetSelector));
         if (targets.length === 0) {
           return { ok: false, label: targetLabel, selector: targetSelector, reason: 'missing' };
@@ -429,44 +440,58 @@ async function clickLiveControl(page, selector, label) {
         let fallback = null;
         for (let index = 0; index < targets.length; index += 1) {
           const target = targets[index];
-          target.scrollIntoView({ block: 'center', inline: 'nearest' });
-          const rect = target.getBoundingClientRect();
-          const style = window.getComputedStyle(target);
-          const x = Math.min(window.innerWidth - 1, Math.max(1, rect.left + rect.width / 2));
-          const y = Math.min(window.innerHeight - 1, Math.max(1, rect.top + rect.height / 2));
-          const hit = document.elementFromPoint(x, y);
-          const ok = !target.disabled
-            && style.visibility !== 'hidden'
-            && style.display !== 'none'
-            && rect.width > 0
-            && rect.height >= (window.innerWidth <= 480 ? 32 : 1)
-            && rect.left >= 0
-            && rect.right <= window.innerWidth + 2
-            && rect.top >= 0
-            && rect.bottom <= window.innerHeight + 2
-            && (hit === target || target.contains(hit));
-          const report = {
-            ok,
-            label: targetLabel,
-            selector: targetSelector,
-            candidateIndex: index,
-            candidateCount: targets.length,
-            disabled: !!target.disabled,
-            rect: {
-              left: Math.round(rect.left),
-              right: Math.round(rect.right),
-              top: Math.round(rect.top),
-              bottom: Math.round(rect.bottom),
-              width: Math.round(rect.width),
-              height: Math.round(rect.height),
-            },
-            viewport: { width: window.innerWidth, height: window.innerHeight },
-            tapPoint: { x: Math.round(x), y: Math.round(y) },
-            hitTag: hit?.tagName || '',
-            hitText: hit?.textContent?.replace(/\s+/g, ' ').trim().slice(0, 60) || '',
-          };
-          if (ok) return report;
-          if (!fallback) fallback = report;
+          const scrollBlocks = ['nearest', 'start', 'center', 'end'];
+          for (const scrollBlock of scrollBlocks) {
+            target.scrollIntoView({ block: scrollBlock, inline: 'nearest' });
+            const rect = target.getBoundingClientRect();
+            const style = window.getComputedStyle(target);
+            const visibleBox = !target.disabled
+              && style.visibility !== 'hidden'
+              && style.display !== 'none'
+              && rect.width > 0
+              && rect.height >= (window.innerWidth <= 480 ? 32 : 1)
+              && rect.left >= 0
+              && rect.right <= window.innerWidth + 2
+              && rect.top >= 0
+              && rect.bottom <= window.innerHeight + 2;
+            const tapCandidates = [
+              { label: 'center', xRatio: 0.5, yRatio: 0.5 },
+              { label: 'left-center', xRatio: 0.18, yRatio: 0.5 },
+              { label: 'right-center', xRatio: 0.82, yRatio: 0.5 },
+              { label: 'upper-center', xRatio: 0.5, yRatio: 0.25 },
+              { label: 'lower-center', xRatio: 0.5, yRatio: 0.75 },
+            ];
+            for (const point of tapCandidates) {
+              const x = Math.min(window.innerWidth - 1, Math.max(1, rect.left + rect.width * point.xRatio));
+              const y = Math.min(window.innerHeight - 1, Math.max(1, rect.top + rect.height * point.yRatio));
+              const hit = document.elementFromPoint(x, y);
+              const ok = visibleBox && (hit === target || target.contains(hit));
+              const report = {
+                ok,
+                label: targetLabel,
+                selector: targetSelector,
+                candidateIndex: index,
+                candidateCount: targets.length,
+                disabled: !!target.disabled,
+                pointLabel: point.label,
+                scrollBlock,
+                rect: {
+                  left: Math.round(rect.left),
+                  right: Math.round(rect.right),
+                  top: Math.round(rect.top),
+                  bottom: Math.round(rect.bottom),
+                  width: Math.round(rect.width),
+                  height: Math.round(rect.height),
+                },
+                viewport: { width: window.innerWidth, height: window.innerHeight },
+                tapPoint: { x: Math.round(x), y: Math.round(y) },
+                hitTag: hit?.tagName || '',
+                hitText: hit?.textContent?.replace(/\s+/g, ' ').trim().slice(0, 60) || '',
+              };
+              if (ok) return report;
+              if (!fallback) fallback = report;
+            }
+          }
         }
         return fallback;
       }, { targetSelector: selector, targetLabel: label });
@@ -2754,11 +2779,75 @@ async function writeReport() {
         && friendlyRematchProbe.snapshot?.rankedImpact === 'none',
       JSON.stringify({ friendlyRematchProbe, loserFriendlyRematchActionable }),
     );
-    const loserCancelRematchActionable = await clickLiveControl(loserClient.page, '[data-live-action="cancel-rematch"]', `${seatSlug(loserSeat)}-cancel-friendly-rematch`);
+    const waitingRematchReloadPage = await loserClient.context.newPage();
+    waitingRematchReloadPage.on('console', msg => {
+      if (msg.type() === 'error') recordConsoleError(msg.text());
+    });
+    waitingRematchReloadPage.on('pageerror', error => recordConsoleError(error.message || String(error)));
+    await waitingRematchReloadPage.goto(appUrl, { waitUntil: 'domcontentloaded' });
+    await reloadAndOpenLivePanel(waitingRematchReloadPage);
+    await waitForLiveSnapshot(waitingRematchReloadPage, () => {
+      const snapshot = window.PVPScene?.getLiveSnapshot?.() || null;
+      return snapshot?.phase === 'waiting_rematch';
+    }, null, 15000);
+    const waitingRematchReloadProbe = await waitingRematchReloadPage.evaluate(() => {
+      const series = document.querySelector('[data-live-friendly-series]');
+      const actions = Object.fromEntries(Array.from(document.querySelectorAll('[data-live-post-review-action]')).map(button => [button.getAttribute('data-live-post-review-action'), button.disabled]));
+      const snapshot = window.PVPScene.getLiveSnapshot() || null;
+      const textPayload = JSON.parse(window.render_game_to_text()).pvp?.live || null;
+      return {
+        phase: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-phase') || '',
+        hint: document.querySelector('[data-live-last-error]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+        friendlyText: series?.textContent?.replace(/\s+/g, ' ').trim() || '',
+        status: series?.getAttribute('data-live-friendly-series-status') || '',
+        sourceMatch: series?.getAttribute('data-live-friendly-series-source-match') || '',
+        confirmationCount: series?.getAttribute('data-live-friendly-series-confirmations') || '',
+        cancelVisible: !!document.querySelector('[data-live-action="cancel-rematch"]:not([hidden])'),
+        actions,
+        snapshot,
+        textPayload,
+      };
+    });
+    await waitingRematchReloadPage.close();
+    const waitingRematchReloadVisiblePayload = JSON.stringify({
+      phase: waitingRematchReloadProbe.phase,
+      hint: waitingRematchReloadProbe.hint,
+      friendlyText: waitingRematchReloadProbe.friendlyText,
+      status: waitingRematchReloadProbe.status,
+      sourceMatch: waitingRematchReloadProbe.sourceMatch,
+      confirmationCount: waitingRematchReloadProbe.confirmationCount,
+      actions: waitingRematchReloadProbe.actions,
+      textPhase: waitingRematchReloadProbe.textPayload?.phase || '',
+      textFriendlySeries: waitingRematchReloadProbe.textPayload?.friendlySeries || null,
+    });
+    add(
+      'real browser waiting friendly rematch survives full page refresh before opponent accepts',
+      waitingRematchReloadProbe.phase === 'waiting_rematch'
+        && waitingRematchReloadProbe.snapshot?.phase === 'waiting_rematch'
+        && waitingRematchReloadProbe.snapshot?.matchId === finishedLoser.matchId
+        && waitingRematchReloadProbe.snapshot?.friendlySeries?.reportVersion === 'pvp-live-friendly-series-v1'
+        && waitingRematchReloadProbe.snapshot?.friendlySeries?.sourceMatchId === finishedLoser.matchId
+        && waitingRematchReloadProbe.snapshot?.friendlySeries?.rankedImpact === 'none'
+        && waitingRematchReloadProbe.status === 'waiting_rematch'
+        && waitingRematchReloadProbe.sourceMatch === finishedLoser.matchId
+        && waitingRematchReloadProbe.confirmationCount === '1'
+        && waitingRematchReloadProbe.cancelVisible === true
+        && waitingRematchReloadProbe.actions?.queue_again === true
+        && waitingRematchReloadProbe.actions?.practice === true
+        && waitingRematchReloadProbe.actions?.friendly_rematch === true
+        && /等待本局对手确认/.test(waitingRematchReloadProbe.hint)
+        && /换边再战/.test(waitingRematchReloadProbe.friendlyText)
+        && /不写正式积分/.test(waitingRematchReloadProbe.friendlyText)
+        && waitingRematchReloadProbe.textPayload?.phase === 'waiting_rematch'
+        && !/findOpponent|reportMatchResult|GhostEnemy|startPVPBattle|didWin|matchTicket|"rating":|"elo":/i.test(waitingRematchReloadVisiblePayload),
+      JSON.stringify({ friendlyRematchProbe, waitingRematchReloadProbe }),
+    );
+    await dismissBlockingModals(loserClient.page);
+    const loserCancelRematchActionable = await clickLiveControl(loserClient.page, '[data-live-action="cancel-rematch"]:not([hidden])', `${seatSlug(loserSeat)}-cancel-friendly-rematch`);
     await loserClient.page.waitForTimeout(300);
     await loserClient.page.evaluate(async () => {
       const snapshot = window.PVPScene?.getLiveSnapshot?.() || null;
-      const cancelButtonVisible = !!document.querySelector('[data-live-action="cancel-rematch"]');
+      const cancelButtonVisible = !!document.querySelector('[data-live-action="cancel-rematch"]:not([hidden])');
       if (snapshot?.phase === 'waiting_rematch' && cancelButtonVisible && typeof window.PVPScene?.cancelLiveRematch === 'function') {
         await window.PVPScene.cancelLiveRematch();
       }
@@ -2770,7 +2859,7 @@ async function writeReport() {
       return snapshot?.phase === 'finished'
         && rootPhase === 'finished'
         && series?.getAttribute('data-live-friendly-series-status') === 'cancelled'
-        && !document.querySelector('[data-live-action="cancel-rematch"]');
+        && !document.querySelector('[data-live-action="cancel-rematch"]:not([hidden])');
     }, null, 15000);
     const cancelledRematchProbe = await loserClient.page.evaluate(() => {
       const series = document.querySelector('[data-live-friendly-series]');
@@ -2781,7 +2870,7 @@ async function writeReport() {
         reviewText: document.querySelector('[data-live-post-match-review]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
         status: series?.getAttribute('data-live-friendly-series-status') || '',
         seriesText: series?.textContent?.replace(/\s+/g, ' ').trim() || '',
-        cancelVisible: !!document.querySelector('[data-live-action="cancel-rematch"]'),
+        cancelVisible: !!document.querySelector('[data-live-action="cancel-rematch"]:not([hidden])'),
         actions,
         snapshot: window.PVPScene?.getLiveSnapshot?.()?.friendlySeries || null,
       };
@@ -2880,7 +2969,7 @@ async function writeReport() {
     await waitForLiveSnapshot(loserClient.page, () => {
       const snapshot = window.PVPScene?.getLiveSnapshot?.();
       return snapshot?.phase === 'setup' && snapshot?.opponent?.ready === true;
-    }, null, 5000);
+    }, null, 15000);
     await loserClient.page.evaluate(async () => {
       await window.PVPScene.readyLiveMatch();
     });

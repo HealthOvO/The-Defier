@@ -685,6 +685,10 @@
 
 .pvp-live-status-card {
     width: calc(100% - 36px);
+    flex: 0 0 auto;
+    overflow: visible;
+    position: relative;
+    z-index: 8;
 }
 
 .pvp-live-meta-grid {
@@ -1366,6 +1370,8 @@
     font-size: 0.76rem;
     line-height: 1.45;
     overflow-wrap: anywhere;
+    position: relative;
+    z-index: 4;
 }
 
 .pvp-live-post-review[hidden] {
@@ -1456,7 +1462,10 @@
     margin-top: 8px;
     display: flex;
     flex-wrap: wrap;
+    align-items: center;
     gap: 6px;
+    position: relative;
+    z-index: 5;
 }
 
 .pvp-live-friendly-series span {
@@ -1469,24 +1478,6 @@
     font-size: 0.68rem;
     line-height: 1.35;
     overflow-wrap: anywhere;
-}
-
-.pvp-live-friendly-series-cancel {
-    min-height: 32px;
-    padding: 5px 9px;
-    border: 1px solid rgba(248, 113, 113, 0.45);
-    border-radius: 6px;
-    background: rgba(127, 29, 29, 0.2);
-    color: #fecaca;
-    font-size: 0.68rem;
-    font-weight: 700;
-    cursor: pointer;
-}
-
-.pvp-live-friendly-series-cancel:hover,
-.pvp-live-friendly-series-cancel:focus-visible {
-    border-color: rgba(248, 113, 113, 0.8);
-    background: rgba(153, 27, 27, 0.35);
 }
 
 .pvp-live-fairness-receipt {

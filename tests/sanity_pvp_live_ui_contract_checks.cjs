@@ -74,6 +74,7 @@ const liveBrowserAudit = read('tests/browser_pvp_live_audit.mjs');
   'data-live-waiting-report',
   'data-live-post-match-review',
   'data-live-action="practice-live"',
+  'data-live-action="cancel-rematch"',
   'data-live-action="create-invite"',
   'data-live-action="join-invite"',
   'data-live-action="cancel-invite"',
@@ -804,7 +805,6 @@ assert.ok(browserGate.includes('node tests/browser_pvp_live_audit.mjs "$BASE_URL
 
 [
   'cancelLiveRematch',
-  'data-live-action="cancel-rematch"',
   'data-live-friendly-series-status',
   'data-live-friendly-series-id',
   'data-live-friendly-series-source-match',

@@ -2651,7 +2651,6 @@ export const PVPScene = {
           : series.winnerSourceSeat
             ? `系列结束 · ${series.winnerSourceSeat === 'A' ? nameA : nameB} 先到 ${series.targetWins} 胜`
             : series.canRequestNextRound ? '系列未决 · 可继续决胜局' : '系列进行中';
-    const canCancel = series.status === 'waiting_rematch';
     return `
       <div
         class="pvp-live-friendly-series"
@@ -2664,14 +2663,6 @@ export const PVPScene = {
         <span>${this.escapeHtml(series.roundLabel)} · ${this.escapeHtml(scoreLabel)}</span>
         <span>${this.escapeHtml(seriesLabel)} · ${this.escapeHtml(impactLabel)}</span>
         <span>系列 ${this.escapeHtml(series.seriesId.slice(0, 12) || '--')} · ${this.escapeHtml(seatPolicyLabel)}</span>
-        ${canCancel ? `
-          <button
-            type="button"
-            class="pvp-live-friendly-series-cancel"
-            data-live-action="cancel-rematch"
-            onclick="PVPScene.cancelLiveRematch()"
-          >取消再战等待</button>
-        ` : ''}
       </div>
     `;
   },
@@ -4167,6 +4158,10 @@ export const PVPScene = {
       const btn = root.querySelector(`[data-live-action="${action}"]`);
       if (btn) btn.disabled = !!disabled;
     };
+    const setHidden = (action, hidden) => {
+      const btn = root.querySelector(`[data-live-action="${action}"]`);
+      if (btn) btn.hidden = !!hidden;
+    };
     const setButtonText = (action, text) => {
       const btn = root.querySelector(`[data-live-action="${action}"]`);
       const label = btn ? btn.querySelector('.text') || btn : null;
@@ -4177,6 +4172,8 @@ export const PVPScene = {
     setDisabled('join-invite', phase === 'queueing' || phase === 'waiting' || phase === 'waiting_invite' || phase === 'waiting_rematch' || phase === 'matched' || phase === 'setup' || phase === 'active');
     setDisabled('cancel-invite', phase !== 'waiting_invite');
     setDisabled('cancel-queue', phase !== 'waiting');
+    setHidden('cancel-rematch', phase !== 'waiting_rematch');
+    setDisabled('cancel-rematch', phase !== 'waiting_rematch' || intentLocked);
     setDisabled('practice-live', !(entrySafeguardBlocked && this.hasLiveEntrySafeguardAction(state, 'practice')) && !(phase === 'waiting' && (this.getLiveWaitingReport(state)?.longWait || this.getLiveWaitingQualitySafeguard(state))));
     setDisabled('refresh-match', !connectionSubmitBlocked && (phase === 'queueing' || phase === 'idle' || phase === 'finished' || phase === 'invalidated'));
     setButtonText('join-queue', queueCooldownBlocked ? queueCooldownCountdown && queueCooldownCountdown.buttonText || '稍后重试' : entrySafeguardBlocked && this.hasLiveEntrySafeguardAction(state, 'retry_connection_check') ? '重试检测' : '入队');
