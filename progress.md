@@ -1,5 +1,20 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-23: V10-S41 live PVP real-backend targeted invite browser contract
+  - 本轮完成
+    - `tests/browser_pvp_live_real_backend_smoke.mjs` 新增真实后端浏览器 targeted invite 双账号段：独立 host/guest 创建私密直邀、受邀方从后端 inbox 看到邀请、再从 inbox CTA 加入同一友谊局 setup。
+    - browser smoke 固定双方体验边界：创建直邀后 host 必须停在 `waiting_invite`，拿到 `inviteReport v1`，包含 `targeted_invite_only`，不生成 `queueTicket` / `matchId`，不会进入公开排队。
+    - 受邀方 inbox 必须展示邀请码、邀请人和“不写正式积分”提示；从 inbox join 后双方必须进入同一 `friendly` setup，`matchQuality.expansionStage='friend_invite'`，包含 `invite_only_match` / `friendly_no_ranked_impact`，受邀方 inbox 清空且没有正式结算复盘。
+    - `tests/sanity_release_gate_coverage_checks.cjs` 增加真实后端 browser smoke marker，锁住 targeted invite 创建、inbox 展示、inbox join、invite report、friend invite matchQuality、inbox cleared 等关键断言，防止后续把真实浏览器覆盖退回 API 或 fake browser 层。
+  - 已验证
+    - 红测：先只补 release marker 后运行 `node tests/sanity_release_gate_coverage_checks.cjs`，失败于 `live PVP real-backend browser smoke should pin two-account marker: real browser creates targeted live invite through backend without entering public queue`，证明门禁能抓住缺失真实浏览器 targeted invite 合同。
+    - 语法：`node --check tests/browser_pvp_live_real_backend_smoke.mjs`
+    - 绿测：`node tests/sanity_release_gate_coverage_checks.cjs`
+    - 构建：`npm run build:pages`
+    - 真实后端 browser smoke：`node tests/browser_pvp_live_real_backend_smoke.mjs http://127.0.0.1:4173 output/pvp-live-real-invite-backend-20260623-green`，61/61 findings、0 failed、0 console error。
+  - 当前结论
+    - live PVP 的私密直邀现在具备真实后端浏览器级证明：玩家可以创建不影响段位的定向邀请，受邀方能在页面 inbox 看到邀请并直接加入同一友谊 setup；这片只补真实浏览器回归和 release marker，不改变匹配数值、战斗数值、奖励、正式段位结算或线上配置。
+
 - 2026-06-23: V10-S40 live PVP ranked opener anti-bias contract
   - 本轮完成
     - `tests/sanity_pvp_live_route_checks.cjs` 新增 ranked opener anti-bias route 合同：在非生产 `DEFIER_PVP_TEST_MODE=1` 下，同一两个玩家、同一 A 先入队/B 后入队，使用两组 deterministic test seed 连续创建 ranked match，必须稳定覆盖 A/B 两种先手。

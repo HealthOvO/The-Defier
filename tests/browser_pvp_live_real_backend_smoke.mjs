@@ -654,6 +654,111 @@ async function writeReport() {
       JSON.stringify({ longWaitPracticeProbe, longWaitPracticeActionable }),
     );
 
+    const inviteHost = await preparePage(browser, `live_real_invite_host_${runId}`, '邀甲');
+    const inviteGuest = await preparePage(browser, `live_real_invite_guest_${runId}`, '邀乙');
+    await inviteHost.page.evaluate(({ targetUsername }) => {
+      window.game.player.name = '邀甲';
+      window.PVPScene.switchTab('live');
+      const targetInput = document.querySelector('[data-live-target-username]');
+      if (targetInput) {
+        targetInput.value = targetUsername;
+        targetInput.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+    }, { targetUsername: inviteGuest.username });
+    const realInviteCreateActionable = await clickLiveControl(inviteHost.page, '[data-live-action="create-invite"]', 'real-invite-create');
+    const realInviteCreated = await waitForLivePhase(inviteHost.page, 'waiting_invite');
+    const realInviteCreateProbe = await inviteHost.page.evaluate(() => ({
+      phase: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-phase') || '',
+      inviteCodeText: document.querySelector('[data-live-invite-code]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+      inviteReportText: document.querySelector('[data-live-invite-report]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+      snapshot: window.PVPScene.getLiveSnapshot(),
+    }));
+    const realInviteCode = String(realInviteCreated.inviteCode || realInviteCreateProbe.snapshot?.inviteCode || '').trim();
+    add(
+      'real browser creates targeted live invite through backend without entering public queue',
+      realInviteCreated.phase === 'waiting_invite'
+        && realInviteCreateProbe.phase === 'waiting_invite'
+        && !!realInviteCode
+        && realInviteCreateProbe.inviteCodeText.includes(realInviteCode)
+        && /好友约战|邀请|约战/.test(realInviteCreateProbe.inviteReportText)
+        && /指定/.test(realInviteCreateProbe.inviteReportText)
+        && /不写正式积分/.test(realInviteCreateProbe.inviteReportText)
+        && realInviteCreateProbe.snapshot?.inviteReport?.reportVersion === 'pvp-live-invite-v1'
+        && realInviteCreateProbe.snapshot?.inviteReport?.rankedImpact === 'none'
+        && (realInviteCreateProbe.snapshot?.inviteReport?.safeguards || []).includes('targeted_invite_only')
+        && realInviteCreateProbe.snapshot?.queueTicket === ''
+        && realInviteCreateProbe.snapshot?.matchId === ''
+        && (!isMobileViewport || realInviteCreateActionable?.ok === true),
+      JSON.stringify({ realInviteCreated, realInviteCreateProbe, realInviteCreateActionable }),
+    );
+
+    await inviteGuest.page.evaluate(async () => {
+      window.game.player.name = '邀乙';
+      window.PVPScene.switchTab('live');
+      const session = window.PVPScene.getLiveSession();
+      if (session && typeof session.refreshInviteInbox === 'function') {
+        await session.refreshInviteInbox();
+      }
+      window.PVPScene.renderLivePanel();
+    });
+    await inviteGuest.page.waitForFunction(
+      () => (window.PVPScene?.getLiveSnapshot?.()?.inviteInbox || []).length === 1,
+      null,
+      { timeout: 8000 },
+    );
+    const realInviteInboxProbe = await inviteGuest.page.evaluate(() => ({
+      phase: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-phase') || '',
+      inboxText: document.querySelector('[data-live-invite-inbox]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+      inboxButtons: Array.from(document.querySelectorAll('[data-live-inbox-join]')).map(button => button.getAttribute('data-live-inbox-join')),
+      snapshot: window.PVPScene.getLiveSnapshot(),
+    }));
+    add(
+      'real browser targeted invite recipient sees backend inbox without manual code',
+      realInviteInboxProbe.phase === 'idle'
+        && realInviteInboxProbe.snapshot?.inviteInbox?.length === 1
+        && realInviteInboxProbe.snapshot.inviteInbox[0]?.inviteCode === realInviteCode
+        && realInviteInboxProbe.inboxText.includes(realInviteCode)
+        && /邀甲/.test(realInviteInboxProbe.inboxText)
+        && /不写正式积分/.test(realInviteInboxProbe.inboxText)
+        && realInviteInboxProbe.inboxButtons.includes(realInviteCode)
+        && (realInviteInboxProbe.snapshot.inviteInbox[0]?.inviteReport?.safeguards || []).includes('targeted_invite_only')
+        && !/findOpponent|reportMatchResult|GhostEnemy|startPVPBattle|didWin|matchTicket|rating|elo/i.test(JSON.stringify(realInviteInboxProbe)),
+      JSON.stringify({ realInviteCode, realInviteInboxProbe }),
+    );
+
+    const escapedInviteCode = cssAttributeValue(realInviteCode);
+    const realInviteInboxJoinActionable = await clickLiveControl(inviteGuest.page, `[data-live-invite-inbox] [data-live-inbox-join="${escapedInviteCode}"]`, 'real-invite-inbox-join');
+    const realInviteJoined = await waitForLivePhase(inviteGuest.page, 'setup');
+    const realInviteHostSetup = await refreshUntilLivePhase(inviteHost.page, 'setup');
+    const realInviteJoinProbe = await inviteGuest.page.evaluate(() => ({
+      phase: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-phase') || '',
+      summary: document.querySelector('[data-live-summary]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+      inviteCodeText: document.querySelector('[data-live-invite-code]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+      inboxText: document.querySelector('[data-live-invite-inbox]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+      snapshot: window.PVPScene.getLiveSnapshot(),
+    }));
+    add(
+      'real browser targeted invite recipient joins backend friendly setup from inbox',
+      realInviteJoined.phase === 'setup'
+        && realInviteHostSetup.phase === 'setup'
+        && realInviteJoined.matchId === realInviteHostSetup.matchId
+        && realInviteJoinProbe.phase === 'setup'
+        && realInviteJoinProbe.snapshot?.mode === 'friendly'
+        && realInviteJoinProbe.snapshot?.status === 'setup'
+        && realInviteJoinProbe.snapshot?.matchQuality?.expansionStage === 'friend_invite'
+        && (realInviteJoinProbe.snapshot?.matchQuality?.safeguards || []).includes('invite_only_match')
+        && (realInviteJoinProbe.snapshot?.matchQuality?.safeguards || []).includes('friendly_no_ranked_impact')
+        && realInviteJoinProbe.snapshot?.inviteInbox?.length === 0
+        && realInviteJoinProbe.snapshot?.postMatchReview == null
+        && /友谊再战|准备阶段/.test(realInviteJoinProbe.summary)
+        && /--/.test(realInviteJoinProbe.inviteCodeText)
+        && !/settlementReport|findOpponent|reportMatchResult|GhostEnemy|startPVPBattle|didWin|matchTicket|"rating":|"elo":|"score":/i.test(JSON.stringify(realInviteJoinProbe))
+        && (!isMobileViewport || realInviteInboxJoinActionable?.ok === true),
+      JSON.stringify({ realInviteCode, realInviteJoined, realInviteHostSetup, realInviteJoinProbe, realInviteInboxJoinActionable }),
+    );
+    await inviteHost.context.close().catch(() => {});
+    await inviteGuest.context.close().catch(() => {});
+
     const changedLoadoutA = makeLoadout('curse', ['pvp_guard', 'pvp_guard', 'pvp_strike', 'pvp_burst']);
 
     await seatA.page.evaluate(() => {
