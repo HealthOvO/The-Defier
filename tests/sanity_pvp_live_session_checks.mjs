@@ -352,6 +352,117 @@ assert.equal(recovered.seatId, 'B', 'resumeCurrentMatch should retain current se
 assert.equal(recovered.stateView.stateVersion, 5, 'resumeCurrentMatch should store authoritative state view');
 assert.equal(calls.at(-1).method, 'getCurrentMatch', 'resumeCurrentMatch should call live current match service');
 
+const currentRecoveryCalls = [];
+const currentRecoverySession = createPvpLiveSession({
+  liveService: {
+    getCurrentMatch: async () => {
+      currentRecoveryCalls.push({ method: 'getCurrentMatch' });
+      return {
+        success: true,
+        matchId: 'pvplm-current-reconnect-grace',
+        seatId: 'A',
+        stateView: {
+          matchId: 'pvplm-current-reconnect-grace',
+          status: 'active',
+          stateVersion: 13,
+          currentSeat: 'A',
+          turnTimer: {
+            startedAt: 1782025000000,
+            deadlineAt: 1782025060000,
+            durationMs: 60000
+          },
+          connectionReport: {
+            reportVersion: 'pvp-live-connection-v1',
+            connectionHealth: 'viewer_grace',
+            viewer: { seatId: 'A', status: 'grace', remainingGraceMs: 11000 },
+            opponent: { seatId: 'B', status: 'online' },
+            heartbeatIntervalMs: 5000,
+            graceMs: 30000
+          },
+          connectionTempoReport: {
+            reportVersion: 'pvp-live-connection-tempo-v1',
+            tempoState: 'viewer_reconnect_grace',
+            actionBoundary: 'recover_connection',
+            canSubmitIntent: false,
+            shouldWaitForAuthority: true
+          },
+          recentEvents: [
+            { eventType: 'connection_timeout', sequence: 20 },
+            { eventType: 'match_finished', sequence: 21 }
+          ],
+          postMatchReview: {
+            reportVersion: 'pvp-live-post-match-review-v1',
+            finishReason: 'connection_timeout',
+            result: 'loss'
+          },
+          self: { seatId: 'A', hand: [] },
+          opponent: { seatId: 'B', handCount: 3 }
+        }
+      };
+    }
+  },
+  now: () => 1782025000000
+});
+const currentRecovery = await currentRecoverySession.resumeCurrentMatch();
+assert.equal(currentRecovery.phase, 'active', 'current-match reconnect recovery should stay active after page refresh');
+assert.equal(currentRecovery.stateView.currentSeat, 'A', 'current-match reconnect recovery should preserve the acting seat');
+assert.equal(currentRecovery.stateView.turnTimer.startedAt, 1782025000000, 'current-match reconnect recovery should preserve active turn timer start');
+assert.equal(currentRecovery.stateView.turnTimer.deadlineAt, 1782025060000, 'current-match reconnect recovery should preserve active turn deadline');
+assert.equal(currentRecovery.stateView.connectionTempoReport.tempoState, 'viewer_reconnect_grace', 'current-match reconnect recovery should keep reconnect grace tempo');
+assert.equal(currentRecovery.stateView.connectionTempoReport.canSubmitIntent, false, 'current-match reconnect recovery should keep stale submits blocked');
+assert.equal(currentRecovery.stateView.postMatchReview, null, 'active current-match recovery should not surface stale terminal review');
+assert.ok(!currentRecovery.stateView.recentEvents.some(event => ['connection_timeout', 'turn_timeout', 'match_finished'].includes(event.eventType)), 'active current-match recovery should scrub stale terminal stateView events');
+assert.ok(!currentRecovery.lastEvents.some(event => ['connection_timeout', 'turn_timeout', 'match_finished'].includes(event.eventType)), 'active current-match recovery should not publish stale terminal events');
+assert.deepEqual(currentRecoveryCalls, [{ method: 'getCurrentMatch' }], 'current-match reconnect recovery should only read the current match service');
+
+const softTimeoutRecoverySession = createPvpLiveSession({
+  liveService: {
+    getCurrentMatch: async () => ({
+      success: true,
+      matchId: 'pvplm-soft-timeout-current',
+      seatId: 'A',
+      stateView: {
+        matchId: 'pvplm-soft-timeout-current',
+        status: 'active',
+        stateVersion: 14,
+        currentSeat: 'B',
+        turnTimer: {
+          startedAt: 1782025100000,
+          deadlineAt: 1782025160000,
+          durationMs: 60000
+        },
+        recentEvents: [
+          {
+            eventType: 'turn_timeout',
+            sequence: 30,
+            publicData: {
+              seatId: 'A',
+              timeoutMs: 60000,
+              elapsedMs: 64000,
+              finishReason: 'soft_timeout_automation'
+            }
+          },
+          {
+            eventType: 'automation_action',
+            sequence: 31,
+            publicData: {
+              seatId: 'A',
+              automationType: 'end_turn'
+            }
+          }
+        ],
+        postMatchReview: null,
+        self: { seatId: 'A', hand: [] },
+        opponent: { seatId: 'B', handCount: 3 }
+      }
+    })
+  },
+  now: () => 1782025100000
+});
+const softTimeoutRecovery = await softTimeoutRecoverySession.resumeCurrentMatch();
+assert.ok(softTimeoutRecovery.stateView.recentEvents.some(event => event.eventType === 'turn_timeout' && event.publicData?.finishReason === 'soft_timeout_automation'), 'active current-match recovery should preserve soft timeout automation evidence');
+assert.ok(softTimeoutRecovery.lastEvents.some(event => event.eventType === 'turn_timeout' && event.publicData?.finishReason === 'soft_timeout_automation'), 'active current-match recovery should publish soft timeout automation evidence');
+
 const replayState = await recoveredSession.getReplay({ visibility: 'replay_public' });
 assert.equal(replayState.lastReplay?.visibilityLayer, 'replay_public', 'getReplay should store returned public replay payload');
 assert.equal(replayState.lastReplayMatchId, 'pvplm-current', 'getReplay should bind stored replay payload to the current match id');

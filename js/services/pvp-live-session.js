@@ -41,7 +41,6 @@ const ALLOWED_SEASON_GOAL_RECOVERY_STATES = Object.freeze([
 ]);
 const ACTIVE_TERMINAL_EVENT_TYPES = Object.freeze([
   'connection_timeout',
-  'turn_timeout',
   'match_finished'
 ]);
 
@@ -56,8 +55,52 @@ function cloneData(value) {
   }
 }
 
+function getEventPublicData(event) {
+  if (!event || typeof event !== 'object') return {};
+  if (event.publicData && typeof event.publicData === 'object') return event.publicData;
+  if (event.payload && typeof event.payload === 'object') return event.payload;
+  return event;
+}
+
+function isActiveTerminalFalloutEvent(event) {
+  const eventType = String(event && event.eventType || '');
+  if (ACTIVE_TERMINAL_EVENT_TYPES.includes(eventType)) return true;
+  if (eventType !== 'turn_timeout') return false;
+  const publicData = getEventPublicData(event);
+  const finishReason = String(publicData.finishReason || '').trim();
+  if (finishReason === 'soft_timeout_automation') return false;
+  return finishReason === 'connection_timeout'
+    || finishReason === 'timeout'
+    || !!String(publicData.winnerSeat || publicData.loserSeat || '').trim();
+}
+
 function hasActiveTerminalEvents(events) {
-  return Array.isArray(events) && events.some(event => ACTIVE_TERMINAL_EVENT_TYPES.includes(String(event && event.eventType || '')));
+  return Array.isArray(events) && events.some(isActiveTerminalFalloutEvent);
+}
+
+function filterActiveTerminalEvents(events) {
+  return Array.isArray(events)
+    ? events.filter(event => !isActiveTerminalFalloutEvent(event))
+    : [];
+}
+
+function sanitizeActiveStateViewTerminalFallout(stateView, fallbackStateView = null) {
+  if (!stateView || typeof stateView !== 'object') return stateView;
+  if (String(stateView.status || '').trim() !== 'active') return stateView;
+  const patch = {};
+  if (stateView.postMatchReview) {
+    patch.postMatchReview = fallbackStateView && Object.prototype.hasOwnProperty.call(fallbackStateView, 'postMatchReview')
+      ? cloneData(fallbackStateView.postMatchReview)
+      : null;
+  }
+  if (hasActiveTerminalEvents(stateView.recentEvents)) {
+    patch.recentEvents = fallbackStateView && Array.isArray(fallbackStateView.recentEvents)
+      ? cloneData(fallbackStateView.recentEvents)
+      : filterActiveTerminalEvents(stateView.recentEvents);
+  }
+  return Object.keys(patch).length > 0
+    ? { ...stateView, ...patch }
+    : stateView;
 }
 
 function normalizeTimerValue(value) {
@@ -90,9 +133,10 @@ function sanitizeSameVersionActiveStateView(currentStateView, incomingStateView)
       ? cloneData(currentStateView.recentEvents)
       : [];
   }
-  return Object.keys(patch).length > 0
+  const mergedStateView = Object.keys(patch).length > 0
     ? { ...incomingStateView, ...patch }
     : incomingStateView;
+  return sanitizeActiveStateViewTerminalFallout(mergedStateView, currentStateView);
 }
 
 function normalizePhaseFromView(stateView, fallback = 'active') {
@@ -323,8 +367,11 @@ export function createPvpLiveSession({
     const nextStateView = !isStale && isSameVersion
       ? sanitizeSameVersionActiveStateView(state.stateView, incomingStateView)
       : incomingStateView;
+    const resolvedStateView = isStale
+      ? state.stateView
+      : sanitizeActiveStateViewTerminalFallout(nextStateView, state.stateView);
     return {
-      stateView: isStale ? state.stateView : nextStateView,
+      stateView: resolvedStateView,
       accepted: !isStale
     };
   };
@@ -346,16 +393,18 @@ export function createPvpLiveSession({
     const incomingVersion = getStateViewVersion(incomingStateView);
     const currentStatus = String(state.stateView && state.stateView.status || '').trim();
     const incomingStatus = String(incomingStateView && incomingStateView.status || '').trim();
-    if (
-      isSameLiveMatch(incomingStateView)
-      && currentVersion !== null
-      && incomingVersion !== null
-      && incomingVersion === currentVersion
-      && currentStatus === 'active'
-      && incomingStatus === 'active'
-      && hasActiveTerminalEvents(candidate)
-    ) {
-      return Array.isArray(state.lastEvents) ? state.lastEvents : [];
+    if (incomingStatus === 'active' && hasActiveTerminalEvents(candidate)) {
+      if (
+        isSameLiveMatch(incomingStateView)
+        && currentVersion !== null
+        && incomingVersion !== null
+        && incomingVersion === currentVersion
+        && currentStatus === 'active'
+        && Array.isArray(state.lastEvents)
+      ) {
+        return state.lastEvents;
+      }
+      return filterActiveTerminalEvents(candidate).slice(-8);
     }
     const currentMax = getMaxEventSequence(state.lastEvents);
     const candidateMax = getMaxEventSequence(candidate);
@@ -1274,7 +1323,8 @@ export function createPvpLiveSession({
       });
     }
     clearStoredWaitingQueueTicket();
-    const stateView = result.stateView || null;
+    const resolved = resolveAuthoritativeStateView(result.stateView || null);
+    const stateView = resolved.stateView;
     const next = publish({
       phase: normalizePhaseFromView(stateView, 'active'),
       queueTicket: '',
@@ -1284,7 +1334,7 @@ export function createPvpLiveSession({
       waitingReport: null,
       rematchReport: null,
       lastError: null,
-      lastEvents: stateView && Array.isArray(stateView.recentEvents) ? stateView.recentEvents.slice(-8) : []
+      lastEvents: resolveAuthoritativeEvents(result.events, stateView, resolved.accepted)
     });
     rememberTerminalReviewMatch(next);
     return next;

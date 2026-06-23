@@ -2079,6 +2079,35 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
         assertConnectionTempoReport(activeGraceObserverRead.payload.stateView.connectionTempoReport, 'opponent_action_grace', 'active current actor reconnect grace state');
         assert.equal(activeGraceObserverRead.payload.stateView.turnTimer.startedAt, reconnectStartedAt, 'current actor reconnect grace should not reset turn timer start');
         assert.equal(activeGraceObserverRead.payload.stateView.turnTimer.deadlineAt, reconnectDeadlineAt, 'current actor reconnect grace should not extend turn timer deadline');
+        const activeGraceObserverCurrentRecovery = await request(baseUrl, '/api/pvp/live/matches/current', {
+            token: observingToken
+        });
+        assert.equal(activeGraceObserverCurrentRecovery.status, 200, 'observer should recover opponent reconnect grace match through current endpoint');
+        assert.equal(activeGraceObserverCurrentRecovery.payload.matchId, joinActiveReconnectB.payload.matchId, 'observer current reconnect recovery should return the active match id');
+        assert.equal(activeGraceObserverCurrentRecovery.payload.stateView.status, 'active', 'observer current reconnect recovery should stay active during opponent grace');
+        assert.equal(activeGraceObserverCurrentRecovery.payload.stateView.currentSeat, reconnectSeat, 'observer current reconnect recovery should preserve active action owner');
+        assertConnectionTempoReport(activeGraceObserverCurrentRecovery.payload.stateView.connectionTempoReport, 'opponent_action_grace', 'observer current-match reconnect recovery state');
+        assert.equal(activeGraceObserverCurrentRecovery.payload.stateView.connectionTempoReport.canSubmitIntent, false, 'observer current reconnect recovery should keep inactive submits blocked');
+        assert.equal(activeGraceObserverCurrentRecovery.payload.stateView.turnTimer.startedAt, reconnectStartedAt, 'observer current reconnect recovery should preserve original turn timer start');
+        assert.equal(activeGraceObserverCurrentRecovery.payload.stateView.turnTimer.deadlineAt, reconnectDeadlineAt, 'observer current reconnect recovery should preserve original turn deadline');
+        assert.equal(activeGraceObserverCurrentRecovery.payload.stateView.postMatchReview, null, 'observer current reconnect recovery should not expose terminal review during active grace');
+        assert.equal(activeGraceObserverCurrentRecovery.payload.stateView.recentEvents.some(event => ['turn_timeout', 'connection_timeout', 'match_finished'].includes(event.eventType)), false, 'observer current reconnect recovery should not expose terminal timeout events');
+        assert.ok(!Array.isArray(activeGraceObserverCurrentRecovery.payload.stateView.opponent.hand), 'observer current reconnect recovery must not leak opponent hand');
+        const activeGraceCurrentRecovery = await request(baseUrl, '/api/pvp/live/matches/current', {
+            token: reconnectToken
+        });
+        assert.equal(activeGraceCurrentRecovery.status, 200, 'current actor should recover active reconnect grace match through current endpoint');
+        assert.equal(activeGraceCurrentRecovery.payload.matchId, joinActiveReconnectB.payload.matchId, 'current reconnect recovery should return the active match id');
+        assert.equal(activeGraceCurrentRecovery.payload.seatId, reconnectSeat, 'current reconnect recovery should preserve actor seat');
+        assert.equal(activeGraceCurrentRecovery.payload.stateView.status, 'active', 'current reconnect recovery should stay active during reconnect grace');
+        assert.equal(activeGraceCurrentRecovery.payload.stateView.currentSeat, reconnectSeat, 'current reconnect recovery should preserve active action owner');
+        assertConnectionTempoReport(activeGraceCurrentRecovery.payload.stateView.connectionTempoReport, 'viewer_reconnect_grace', 'current actor current-match reconnect recovery state');
+        assert.equal(activeGraceCurrentRecovery.payload.stateView.connectionTempoReport.canSubmitIntent, false, 'current reconnect recovery should keep stale submits blocked');
+        assert.equal(activeGraceCurrentRecovery.payload.stateView.turnTimer.startedAt, reconnectStartedAt, 'current reconnect recovery should preserve original turn timer start');
+        assert.equal(activeGraceCurrentRecovery.payload.stateView.turnTimer.deadlineAt, reconnectDeadlineAt, 'current reconnect recovery should preserve original turn deadline');
+        assert.equal(activeGraceCurrentRecovery.payload.stateView.postMatchReview, null, 'current reconnect recovery should not expose terminal review during active grace');
+        assert.equal(activeGraceCurrentRecovery.payload.stateView.recentEvents.some(event => ['turn_timeout', 'connection_timeout', 'match_finished'].includes(event.eventType)), false, 'current reconnect recovery should not expose terminal timeout events');
+        assert.ok(!Array.isArray(activeGraceCurrentRecovery.payload.stateView.opponent.hand), 'current reconnect recovery must not leak opponent hand');
         const activeReconnectHeartbeat = await heartbeat(baseUrl, reconnectToken, joinActiveReconnectB.payload.matchId);
         assert.equal(activeReconnectHeartbeat.status, 200, 'current actor should be able to heartbeat back before reconnect grace expires');
         assert.equal(activeReconnectHeartbeat.payload.stateView.status, 'active', 'current actor heartbeat inside reconnect grace should keep match active');

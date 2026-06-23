@@ -1,5 +1,25 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-23: V10-S36 live PVP current-match reconnect recovery session contract
+  - 本轮完成
+    - `tests/sanity_pvp_live_session_checks.mjs` 新增刷新/重新进入页面后的 current match 恢复合同：服务端返回 `active` 且处于 `viewer_reconnect_grace` 时，session 必须保留 `currentSeat`、`turnTimer.startedAt / deadlineAt` 和 `connectionTempoReport`，并继续阻止 stale submit。
+    - 新增红测覆盖 active current match 夹带旧 `connection_timeout / match_finished` 与 `postMatchReview` 的脏恢复回包；恢复后 `stateView.recentEvents` 与 `lastEvents` 都不能发布这些终局 fallout。
+    - 追加软超时红测：active current-match 恢复遇到合法 `turn_timeout + finishReason='soft_timeout_automation'` 时，必须保留该公共证据，不能被终局 fallout 净化误删。
+    - `js/services/pvp-live-session.js` 增加 `sanitizeActiveStateViewTerminalFallout()` / `filterActiveTerminalEvents()`，并让 `resumeCurrentMatch()` 复用 `resolveAuthoritativeStateView()` / `resolveAuthoritativeEvents()`；终局过滤改为 `isActiveTerminalFalloutEvent()`，只过滤 `connection_timeout`、`match_finished`、以及确认带 `timeout / connection_timeout / winnerSeat / loserSeat` 的终局 `turn_timeout`，保留 `soft_timeout_automation`。
+    - `tests/sanity_pvp_live_route_checks.cjs` 在 active reconnect grace 段补 `/api/pvp/live/matches/current` 读取合同：当前行动方刷新恢复时仍拿到同一 active match、同一 seat、同一行动窗口、`viewer_reconnect_grace`，不能展示终局复盘或终局事件，也不能泄漏对手手牌；观察方刷新恢复时也必须保持 `opponent_action_grace`、原倒计时和不可提交状态。
+    - `tests/sanity_release_gate_coverage_checks.cjs` 增加 session source、route current-match recovery、软超时保留、原倒计时和隐藏信息边界 marker，防止后续把刷新恢复退回直接发布 raw stateView 或漏掉 current endpoint。
+  - 已验证
+    - 红测：`node tests/sanity_pvp_live_session_checks.mjs` 在实现前失败于 `active current-match recovery should not surface stale terminal review`，实际保留了 `postMatchReview.finishReason='connection_timeout'`。
+    - 红测：`node tests/sanity_pvp_live_session_checks.mjs` 在收窄过滤前失败于 `active current-match recovery should preserve soft timeout automation evidence`，实际误删了合法 `soft_timeout_automation` 事件。
+    - 语法：`node --check js/services/pvp-live-session.js`、`node --check tests/sanity_pvp_live_session_checks.mjs`、`node --check tests/sanity_pvp_live_route_checks.cjs`
+    - 定向合同：`node tests/sanity_pvp_live_session_checks.mjs`、`node tests/sanity_pvp_live_route_checks.cjs`
+    - 绿测：`node tests/sanity_release_gate_coverage_checks.cjs`、`node tests/sanity_intro_progress_sync_checks.cjs`、`git diff --check`
+    - 复核：`node tests/sanity_pvp_live_cross_process_ws_fanout_checks.cjs` 单跑通过；首次全量 Node 曾在该 cross-process WS presence 等待上 timing timeout，重跑全量已通过。
+    - 全量 Node 门禁：`npm run test:node`，All node checks passed。
+    - 构建：`npm run build:pages`
+  - 当前结论
+    - live PVP 的弱网恢复覆盖从“同页 heartbeat / WS / 前台恢复”继续推进到“整页刷新或重新进入 live 后恢复 current match”：只要服务端仍声明对局是 active，前端 session 不会因为脏 current-match 回包把玩家带进旧终局或旧连接超时复盘；服务端 current endpoint 也被门禁锁定为同一 active 行动窗口，并区分合法软超时托管与真正终局 timeout。该切片只改 session 状态净化和回归门禁，不改变匹配、战斗数值、心跳协议、结算或奖励。
+
 - 2026-06-21: V10-S35 live PVP foreground resume active continuity browser contract
   - 本轮完成
     - `tests/browser_pvp_live_audit.mjs` 将前台恢复探针移动到 setup -> active 之后：真实页面先完成调息/准备进入战斗，再模拟切后台、实时通道断开、回前台、focus/pageshow。
