@@ -709,6 +709,7 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
             body: { displayName: '己', loadout: loadoutA }
         });
         assert.equal(joinCancelledInvite.status, 404, 'cancelled private invite should not be joinable');
+        assert.equal(joinCancelledInvite.payload.reason, 'invite_not_found', 'cancelled private invite join should expose stable missing invite reason');
         const queueAfterInviteCancel = await request(baseUrl, '/api/pvp/live/queue/join', {
             method: 'POST',
             token: tokenE,

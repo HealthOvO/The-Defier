@@ -832,6 +832,40 @@ assert.equal(inviteJoined.inviteInbox.length, 0, 'joining a private invite shoul
 assert.equal(calls.at(-1).method, 'joinInvite', 'joinInvite should call live service joinInvite');
 assert.equal(calls.at(-1).inviteCode, 'LIVE1234', 'joinInvite should forward invite code');
 
+const staleInviteSession = createPvpLiveSession({
+  liveService: {
+    getInviteInbox: async () => ({
+      success: true,
+      status: 'invite_inbox',
+      invites: [
+        {
+          inviteCode: 'STALE42',
+          inviteReport: {
+            reportVersion: 'pvp-live-invite-v1',
+            inviteCode: 'STALE42',
+            host: { displayName: '甲' },
+            target: { displayName: '乙' },
+            rankedImpact: 'none'
+          }
+        }
+      ]
+    }),
+    joinInvite: async () => ({
+      success: false,
+      reason: 'invite_not_found',
+      message: '好友约战已取消或失效'
+    })
+  }
+});
+await staleInviteSession.refreshInviteInbox();
+assert.equal(staleInviteSession.getState().inviteInbox.length, 1, 'stale private invite setup should begin with one inbox invite');
+const staleInviteJoined = await staleInviteSession.joinInvite('STALE42', { displayName: '乙', loadout: { identitySlot: 'shield' } });
+assert.equal(staleInviteJoined.phase, 'idle', 'clicking a cancelled private invite should keep recipient idle');
+assert.equal(staleInviteJoined.inviteInbox.length, 0, 'clicking a cancelled private invite should remove the stale inbox item');
+assert.equal(staleInviteJoined.inviteCode, '', 'clicking a cancelled private invite should not create a local invite code');
+assert.equal(staleInviteJoined.matchId, '', 'clicking a cancelled private invite should not create a match id');
+assert.equal(staleInviteJoined.lastError?.reason, 'invite_not_found', 'clicking a cancelled private invite should expose stable stale invite reason');
+
 const noCurrentSession = createPvpLiveSession({
   liveService: {
     getCurrentMatch: async () => ({ success: false, reason: 'no_current_match', message: '当前没有进行中的实时论道' })

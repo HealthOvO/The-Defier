@@ -273,6 +273,12 @@ function normalizeInviteInbox(result) {
   })).filter(invite => invite.inviteCode);
 }
 
+function shouldPruneInviteInbox(reason = '') {
+  return reason === 'invite_not_found'
+    || reason === 'invite_expired'
+    || reason === 'invite_unavailable';
+}
+
 export function createPvpLiveSession({
   liveService = getDefaultLiveService(),
   storage = getDefaultLiveStorage(),
@@ -1711,7 +1717,17 @@ export function createPvpLiveSession({
     }
     const result = await callLive('joinInvite', code, options);
     if (!result || result.success === false) {
-      return fail(result && result.reason || 'invite_join_failed', result && result.message || '实时论道邀请加入失败', state.phase);
+      const reason = result && result.reason || 'invite_join_failed';
+      const message = result && result.message || '实时论道邀请加入失败';
+      if (shouldPruneInviteInbox(reason)) {
+        const inviteInbox = (Array.isArray(state.inviteInbox) ? state.inviteInbox : [])
+          .filter(invite => String(invite && (invite.inviteCode || invite.inviteReport && invite.inviteReport.inviteCode) || '').trim() !== code);
+        return publish({
+          inviteInbox,
+          lastError: { reason, message }
+        });
+      }
+      return fail(reason, message, state.phase);
     }
     if (result.status === 'matched') {
       clearStoredTerminalMatchId();

@@ -677,6 +677,116 @@ async function writeReport() {
       JSON.stringify({ longWaitPracticeProbe, longWaitPracticeActionable }),
     );
 
+    const inviteCancelHost = await preparePage(browser, `live_real_invite_cancel_host_${runId}`, '消甲');
+    const inviteCancelGuest = await preparePage(browser, `live_real_invite_cancel_guest_${runId}`, '消乙');
+    await reloadAndOpenLivePanel(inviteCancelGuest.page);
+    const realInviteCancelGuestIdleProbe = await inviteCancelGuest.page.evaluate(() => ({
+      phase: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-phase') || '',
+      inboxText: document.querySelector('[data-live-invite-inbox]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+      snapshot: window.PVPScene.getLiveSnapshot(),
+    }));
+    await inviteCancelHost.page.evaluate(({ targetUsername }) => {
+      window.game.player.name = '消甲';
+      window.PVPScene.switchTab('live');
+      const targetInput = document.querySelector('[data-live-target-username]');
+      if (targetInput) {
+        targetInput.value = targetUsername;
+        targetInput.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+    }, { targetUsername: inviteCancelGuest.username });
+    const realInviteCancelCreateActionable = await clickLiveControl(inviteCancelHost.page, '[data-live-action="create-invite"]', 'real-invite-cancel-create');
+    const realInviteCancelCreated = await waitForLivePhase(inviteCancelHost.page, 'waiting_invite');
+    const realInviteCancelCode = String(realInviteCancelCreated.inviteCode || '').trim();
+    await inviteCancelGuest.page.waitForFunction(
+      (expectedInviteCode) => {
+        const snapshot = window.PVPScene?.getLiveSnapshot?.() || {};
+        return snapshot.phase === 'idle'
+          && (snapshot.inviteInbox || []).some(invite => invite && invite.inviteCode === expectedInviteCode);
+      },
+      realInviteCancelCode,
+      { timeout: 8000 },
+    );
+    const realInviteCancelGuestBeforeProbe = await inviteCancelGuest.page.evaluate((beforeProbe) => ({
+      phase: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-phase') || '',
+      inboxText: document.querySelector('[data-live-invite-inbox]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+      inboxButtons: Array.from(document.querySelectorAll('[data-live-inbox-join]')).map(button => button.getAttribute('data-live-inbox-join')),
+      openedBeforeInvite: beforeProbe?.phase === 'idle'
+        && beforeProbe?.snapshot?.phase === 'idle'
+        && beforeProbe?.snapshot?.queueTicket === ''
+        && beforeProbe?.snapshot?.matchId === ''
+        && (beforeProbe?.snapshot?.inviteInbox || []).length === 0,
+      beforeProbe,
+      snapshot: window.PVPScene.getLiveSnapshot(),
+    }), realInviteCancelGuestIdleProbe);
+    await reloadAndOpenLivePanel(inviteCancelHost.page);
+    const realInviteCancelResume = await waitForLivePhase(inviteCancelHost.page, 'waiting_invite');
+    const realInviteCancelActionable = await clickLiveControl(inviteCancelHost.page, '[data-live-action="cancel-invite"]', 'real-invite-cancel');
+    const realInviteCancelledHost = await waitForLivePhase(inviteCancelHost.page, 'idle');
+    const realInviteCancelProbe = await inviteCancelHost.page.evaluate(() => ({
+      phase: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-phase') || '',
+      inviteCodeText: document.querySelector('[data-live-invite-code]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+      inviteReportText: document.querySelector('[data-live-invite-report]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+      lastErrorText: document.querySelector('[data-live-last-error]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+      snapshot: window.PVPScene.getLiveSnapshot(),
+    }));
+    add(
+      'real browser host cancels recovered targeted invite without entering public queue',
+      !!realInviteCancelCode
+        && realInviteCancelResume.phase === 'waiting_invite'
+        && realInviteCancelResume.inviteCode === realInviteCancelCode
+        && realInviteCancelledHost.phase === 'idle'
+        && realInviteCancelProbe.phase === 'idle'
+        && realInviteCancelProbe.snapshot?.phase === 'idle'
+        && realInviteCancelProbe.snapshot?.inviteCode === ''
+        && realInviteCancelProbe.snapshot?.queueTicket === ''
+        && realInviteCancelProbe.snapshot?.matchId === ''
+        && realInviteCancelProbe.snapshot?.inviteReport == null
+        && realInviteCancelProbe.snapshot?.lastError?.reason === 'invite_cancelled'
+        && /--/.test(realInviteCancelProbe.inviteCodeText)
+        && /已取消|约战/.test(realInviteCancelProbe.lastErrorText)
+        && !/findOpponent|reportMatchResult|GhostEnemy|startPVPBattle|didWin|matchTicket|"rating":|"elo":|"score":/i.test(JSON.stringify(realInviteCancelProbe))
+        && (!isMobileViewport || realInviteCancelCreateActionable?.ok === true)
+        && (!isMobileViewport || realInviteCancelActionable?.ok === true),
+      JSON.stringify({ realInviteCancelCode, realInviteCancelCreated, realInviteCancelGuestBeforeProbe, realInviteCancelResume, realInviteCancelledHost, realInviteCancelProbe, realInviteCancelCreateActionable, realInviteCancelActionable }),
+    );
+    await inviteCancelGuest.page.waitForFunction(
+      (expectedInviteCode) => {
+        const snapshot = window.PVPScene?.getLiveSnapshot?.() || {};
+        const inbox = snapshot.inviteInbox || [];
+        const inboxText = document.querySelector('[data-live-invite-inbox]')?.textContent || '';
+        return snapshot.phase === 'idle'
+          && !inbox.some(invite => invite && invite.inviteCode === expectedInviteCode)
+          && /暂无/.test(inboxText);
+      },
+      realInviteCancelCode,
+      { timeout: 8000 },
+    );
+    const realInviteCancelledInboxProbe = await inviteCancelGuest.page.evaluate(({ beforeProbe, expectedInviteCode }) => ({
+      phase: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-phase') || '',
+      inboxText: document.querySelector('[data-live-invite-inbox]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+      inboxButtons: Array.from(document.querySelectorAll('[data-live-inbox-join]')).map(button => button.getAttribute('data-live-inbox-join')),
+      openedBeforeCancel: beforeProbe?.openedBeforeInvite === true
+        && (beforeProbe?.snapshot?.inviteInbox || []).some(invite => invite && invite.inviteCode === expectedInviteCode),
+      beforeProbe,
+      snapshot: window.PVPScene.getLiveSnapshot(),
+    }), { beforeProbe: realInviteCancelGuestBeforeProbe, expectedInviteCode: realInviteCancelCode });
+    add(
+      'real browser recipient clears cancelled backend invite through idle polling',
+      realInviteCancelledInboxProbe.openedBeforeCancel === true
+        && realInviteCancelledInboxProbe.phase === 'idle'
+        && realInviteCancelledInboxProbe.snapshot?.phase === 'idle'
+        && realInviteCancelledInboxProbe.snapshot?.queueTicket === ''
+        && realInviteCancelledInboxProbe.snapshot?.matchId === ''
+        && realInviteCancelledInboxProbe.snapshot?.inviteInbox?.length === 0
+        && /暂无/.test(realInviteCancelledInboxProbe.inboxText)
+        && !realInviteCancelledInboxProbe.inboxButtons.includes(realInviteCancelCode)
+        && !new RegExp(realInviteCancelCode).test(realInviteCancelledInboxProbe.inboxText)
+        && !/findOpponent|reportMatchResult|GhostEnemy|startPVPBattle|didWin|matchTicket|"rating":|"elo":|"score":/i.test(JSON.stringify(realInviteCancelledInboxProbe)),
+      JSON.stringify({ realInviteCancelCode, realInviteCancelledInboxProbe }),
+    );
+    await inviteCancelHost.context.close().catch(() => {});
+    await inviteCancelGuest.context.close().catch(() => {});
+
     const inviteHost = await preparePage(browser, `live_real_invite_host_${runId}`, '邀甲');
     const inviteGuest = await preparePage(browser, `live_real_invite_guest_${runId}`, '邀乙');
     await reloadAndOpenLivePanel(inviteGuest.page);

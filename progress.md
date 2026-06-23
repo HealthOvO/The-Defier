@@ -1,5 +1,27 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-23: V10-S43 live PVP real-backend invite cancellation browser contract
+  - 本轮完成
+    - `tests/browser_pvp_live_real_backend_smoke.mjs` 新增真实后端私密直邀取消双账号段：guest 先打开 idle live 面板并通过轮询收到 targeted invite；host 重开 live panel 恢复同一 invite 后点击取消。
+    - host 取消后必须回到 `idle`，清空 `inviteCode` / `queueTicket` / `matchId` / `inviteReport`，展示 `invite_cancelled` 稳定原因，不进入公开匹配，也不触发旧残影、matchTicket、rating/ELO 或正式结算链路。
+    - guest 侧必须靠 idle poll 自动清掉已取消邀请，inbox 回到“暂无”，不保留可点 join CTA，不需要手动复制邀请码或刷新内部 session。
+    - 同步补齐 stale click 边界：若 guest 在 idle poll 清空前点击了已取消邀请，服务端 join 404 必须返回稳定 `invite_not_found`，前端立即修剪该 inbox 项并保持 `idle`，不生成 match、queue、invite 或正式结算副作用。
+    - `tests/sanity_release_gate_coverage_checks.cjs` 增加真实后端 browser smoke marker，锁住 host cancel 与 guest cancelled-inbox polling 两端体验，防止只在 API/session/fake browser 层证明取消。
+  - 已验证
+    - 红测：先只补 release marker 后运行 `node tests/sanity_release_gate_coverage_checks.cjs`，失败于 `live PVP real-backend browser smoke should pin two-account marker: real browser host cancels recovered targeted invite without entering public queue`。
+    - 红测：补 stale click 断言后，`node tests/sanity_pvp_live_route_checks.cjs` 失败于取消后 join payload 缺少 `invite_not_found`；`node tests/sanity_pvp_live_session_checks.mjs` 失败于点击已取消邀请后 inbox 仍保留 1 条旧项。
+    - 语法：`node --check tests/browser_pvp_live_real_backend_smoke.mjs`
+    - 语法：`node --check js/services/pvp-live-session.js`、`node --check server/routes/pvp-live.js`
+    - 绿测：`node tests/sanity_pvp_live_route_checks.cjs`
+    - 绿测：`node tests/sanity_pvp_live_session_checks.mjs`
+    - 绿测：`node tests/sanity_release_gate_coverage_checks.cjs`
+    - 绿测：`node tests/sanity_intro_progress_sync_checks.cjs`
+    - 全量 Node 门禁：`npm run test:node`
+    - 构建：`npm run build:pages`
+    - 真实后端 browser smoke：`node tests/browser_pvp_live_real_backend_smoke.mjs http://127.0.0.1:4173 output/pvp-live-invite-cancel-real-20260623-stale-green`，67/67 findings、0 failed、0 console error。
+  - 当前结论
+    - live PVP 私密直邀现在具备真实浏览器级取消闭环：host 能在恢复后的等待约战中取消，guest 已看到的邀请会自动消失；即使 guest 抢在下一次 idle poll 前点击旧邀请，也会得到稳定失效原因并清空对应卡片，不留下失效按钮或误导性正式 PVP 入口；这片只增强真实后端浏览器回归、route/session 合同和 release marker，不改战斗数值、匹配数值、奖励、正式段位结算或线上配置。
+
 - 2026-06-23: V10-S42 live PVP real-backend invite continuity browser contract
   - 本轮完成
     - `tests/browser_pvp_live_real_backend_smoke.mjs` 在真实后端 targeted invite 段继续补连续性合同：host 创建私密直邀后整页重开 live panel，必须通过 current invite 恢复回同一 `waiting_invite` 和同一邀请码。

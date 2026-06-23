@@ -357,7 +357,7 @@ router.post('/invites/:inviteCode/join', authenticate, asyncHandler(async (req, 
         loadout: req.body && req.body.loadout
     });
     if (!result) {
-        return res.status(404).json({ success: false, message: '实时论道邀请不存在或已失效' });
+        return res.status(404).json({ success: false, reason: 'invite_not_found', message: '实时论道邀请不存在或已失效' });
     }
     if (result.status === 'expired') {
         return res.status(404).json({ success: false, reason: result.reason, message: result.message || '好友约战邀请码已过期' });
