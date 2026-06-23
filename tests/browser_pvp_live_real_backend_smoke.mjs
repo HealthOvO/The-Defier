@@ -1304,6 +1304,94 @@ async function writeReport() {
       );
       throw error;
     }
+    const setupReloadBefore = await seatB.page.evaluate(() => {
+      const payload = window.PVPScene.getLiveSnapshot() || null;
+      const textPayload = JSON.parse(window.render_game_to_text()).pvp?.live || null;
+      return {
+        phase: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-phase') || '',
+        timerText: document.querySelector('[data-live-turn-timer]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+        readyButtonDisabled: document.querySelector('[data-live-action="ready"]')?.disabled === true,
+        mulliganButtonDisabled: document.querySelector('[data-live-action="confirm-mulligan"]')?.disabled === true,
+        matchId: payload?.matchId || '',
+        seatId: payload?.seatId || '',
+        currentSeat: payload?.currentSeat || '',
+        stateVersion: payload?.stateVersion || 0,
+        turnTimer: payload?.turnTimer || null,
+        setup: payload?.stateView?.setup || null,
+        selfReady: payload?.self?.ready === true,
+        opponentReady: payload?.opponent?.ready === true,
+        payload,
+        textPayload,
+      };
+    });
+    const setupReloadPage = await seatB.context.newPage();
+    setupReloadPage.on('console', msg => {
+      if (msg.type() === 'error') recordConsoleError(msg.text());
+    });
+    setupReloadPage.on('pageerror', error => recordConsoleError(error.message || String(error)));
+    await setupReloadPage.goto(appUrl, { waitUntil: 'domcontentloaded' });
+    await reloadAndOpenLivePanel(setupReloadPage);
+    const setupReloadRestored = await waitForLivePhase(setupReloadPage, 'setup', 15000);
+    const setupReloadProbe = await setupReloadPage.evaluate(() => {
+      const payload = window.PVPScene.getLiveSnapshot() || null;
+      const textPayload = JSON.parse(window.render_game_to_text()).pvp?.live || null;
+      return {
+        phase: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-phase') || '',
+        summaryText: document.querySelector('[data-live-summary]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+        timerText: document.querySelector('[data-live-turn-timer]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+        connectionText: document.querySelector('[data-live-connection-status]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+        selfStatsText: document.querySelector('[data-live-self-stats]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+        opponentStatsText: document.querySelector('[data-live-opponent-stats]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+        lastErrorText: document.querySelector('[data-live-last-error]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+        readyButtonDisabled: document.querySelector('[data-live-action="ready"]')?.disabled === true,
+        mulliganButtonDisabled: document.querySelector('[data-live-action="confirm-mulligan"]')?.disabled === true,
+        liveTabActive: document.getElementById('tab-live')?.classList.contains('active') === true,
+        opponentHandArray: Array.isArray(payload?.opponent?.hand),
+        payload,
+        textPayload,
+      };
+    });
+    const setupReloadVisibleText = [
+      setupReloadProbe.summaryText,
+      setupReloadProbe.timerText,
+      setupReloadProbe.connectionText,
+      setupReloadProbe.selfStatsText,
+      setupReloadProbe.opponentStatsText,
+      setupReloadProbe.lastErrorText,
+    ].join(' ');
+    await setupReloadPage.close();
+    add(
+      'real browser setup match survives full page refresh before both seats ready',
+      setupReloadRestored.phase === 'setup'
+        && setupReloadBefore.phase === 'setup'
+        && setupReloadBefore.opponentReady === true
+        && setupReloadBefore.selfReady === false
+        && setupReloadProbe.phase === 'setup'
+        && setupReloadProbe.liveTabActive === true
+        && setupReloadProbe.payload?.phase === 'setup'
+        && setupReloadProbe.payload?.matchId === setupReloadBefore.matchId
+        && setupReloadProbe.payload?.seatId === setupReloadBefore.seatId
+        && setupReloadProbe.payload?.currentSeat === setupReloadBefore.currentSeat
+        && setupReloadProbe.payload?.turnTimer?.deadlineAt === setupReloadBefore.turnTimer?.deadlineAt
+        && setupReloadProbe.payload?.stateView?.setup?.readyDeadlineAt === setupReloadBefore.setup?.readyDeadlineAt
+        && setupReloadProbe.textPayload?.matchId === setupReloadBefore.matchId
+        && setupReloadProbe.textPayload?.turnTimer?.deadlineAt === setupReloadBefore.turnTimer?.deadlineAt
+        && setupReloadProbe.payload?.opponent?.ready === true
+        && setupReloadProbe.payload?.self?.ready === false
+        && setupReloadProbe.readyButtonDisabled === false
+        && setupReloadProbe.mulliganButtonDisabled === false
+        && /准备倒计时/.test(setupReloadProbe.timerText)
+        && /准备阶段/.test(setupReloadProbe.summaryText)
+        && /已准备/.test(setupReloadProbe.opponentStatsText)
+        && /未准备/.test(setupReloadProbe.selfStatsText)
+        && /准备阶段/.test(setupReloadProbe.lastErrorText)
+        && /连接：/.test(setupReloadProbe.connectionText)
+        && setupReloadProbe.payload?.postMatchReview == null
+        && setupReloadProbe.textPayload?.postMatchReview == null
+        && setupReloadProbe.opponentHandArray === false
+        && !/didWin|matchTicket|GhostEnemy|reportMatchResult|rating|elo|settlementReport/i.test(setupReloadVisibleText),
+      JSON.stringify({ setupReloadBefore, setupReloadRestored, setupReloadProbe }),
+    );
     const seatBReadyTouchActionable = await clickLiveControl(seatB.page, '[data-live-action="ready"]', 'seat-b-ready-live');
     const activeA = await waitForLivePhase(seatA.page, 'active');
     const activeB = await waitForLivePhase(seatB.page, 'active');
@@ -2069,10 +2157,26 @@ async function writeReport() {
       cardInstanceId: protectedCounterplayBeforeProbe.cardInstanceId,
       confirming: protectedCounterplayConfirming,
     });
-    const afterProtectedCounterplayFirst = await waitForLiveSnapshot(firstSeatClient.page, expectedVersion => {
+    const waitForProtectedCounterplayFirstPredicate = expectedVersion => {
       const snapshot = window.PVPScene?.getLiveSnapshot?.();
       return Number(snapshot?.stateVersion || 0) > expectedVersion;
-    }, afterEndTurnSecond.stateVersion);
+    };
+    let afterProtectedCounterplayFirst = null;
+    try {
+      afterProtectedCounterplayFirst = await waitForLiveSnapshot(
+        firstSeatClient.page,
+        waitForProtectedCounterplayFirstPredicate,
+        afterEndTurnSecond.stateVersion,
+        6000,
+      );
+    } catch (error) {
+      afterProtectedCounterplayFirst = await refreshUntilLiveSnapshot(
+        firstSeatClient.page,
+        waitForProtectedCounterplayFirstPredicate,
+        afterEndTurnSecond.stateVersion,
+        10000,
+      );
+    }
     add(
       'real browser protected defender can spend the +8 counterplay window on a real action',
       protectedCounterplayActionProbe.before?.currentSeat === activeSecondSeat
@@ -2770,21 +2874,24 @@ async function writeReport() {
     await winnerClient.page.evaluate(async () => {
       await window.PVPScene.readyLiveMatch();
     });
+    await loserClient.page.evaluate(async () => {
+      await window.PVPScene.refreshLiveMatch();
+    });
     await waitForLiveSnapshot(loserClient.page, () => {
       const snapshot = window.PVPScene?.getLiveSnapshot?.();
       return snapshot?.phase === 'setup' && snapshot?.opponent?.ready === true;
-    });
+    }, null, 5000);
     await loserClient.page.evaluate(async () => {
       await window.PVPScene.readyLiveMatch();
     });
-    await waitForLivePhase(winnerClient.page, 'active');
-    await waitForLivePhase(loserClient.page, 'active');
+    await refreshUntilLivePhase(winnerClient.page, 'active', 10000);
+    await refreshUntilLivePhase(loserClient.page, 'active', 10000);
     await loserClient.page.evaluate(async () => {
       await window.PVPScene.surrenderLiveMatch();
       await window.PVPScene.surrenderLiveMatch();
     });
     await waitForLivePhase(loserClient.page, 'finished');
-    await waitForLivePhase(winnerClient.page, 'finished');
+    await refreshUntilLivePhase(winnerClient.page, 'finished', 10000);
 
     await loserClient.page.evaluate(async () => {
       await window.PVPScene.handleLivePostReviewAction('queue_again');

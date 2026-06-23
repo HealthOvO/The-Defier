@@ -624,6 +624,59 @@ PVPScene.updateLiveButtons('setup', false, { seatId: 'A', ready: false, mulligan
 assert.equal(blockedActiveButtons.get('confirm-mulligan').disabled, true, 'viewer refresh required should disable stale mulligan submit');
 assert.equal(blockedActiveButtons.get('ready').disabled, true, 'viewer refresh required should disable stale ready submit');
 assert.equal(blockedActiveButtons.get('refresh-match').disabled, false, 'viewer refresh required setup should keep refresh enabled');
+
+const setupRecoveryButtons = new Map([
+  ['join-queue', { disabled: false, textContent: '入队', querySelector() { return null; } }],
+  ['create-invite', { disabled: false, textContent: '创建邀请', querySelector() { return null; } }],
+  ['join-invite', { disabled: false, textContent: '加入邀请', querySelector() { return null; } }],
+  ['cancel-invite', { disabled: false, textContent: '取消邀请', querySelector() { return null; } }],
+  ['cancel-queue', { disabled: false, textContent: '取消排队', querySelector() { return null; } }],
+  ['practice-live', { disabled: false, textContent: '问道练习', querySelector() { return null; } }],
+  ['refresh-match', { disabled: true, textContent: '刷新', querySelector() { return null; } }],
+  ['end-turn', { disabled: false, textContent: '结束回合', querySelector() { return null; } }],
+  ['surrender', { disabled: false, textContent: '认输', querySelector() { return null; } }],
+  ['confirm-mulligan', { disabled: true, textContent: '确认调息', querySelector() { return null; } }],
+  ['ready', { disabled: true, textContent: '准备就绪', querySelector() { return null; } }],
+]);
+const setupRecoveryRoot = {
+  querySelector(selector) {
+    const actionMatch = String(selector || '').match(/^\[data-live-action="([^"]+)"\]$/);
+    return actionMatch ? setupRecoveryButtons.get(actionMatch[1]) || null : null;
+  },
+  querySelectorAll() { return []; }
+};
+const setupRecoveryState = {
+  phase: 'setup',
+  matchId: 'pvpm-ui-runtime-setup-recovery',
+  seatId: 'B',
+  realtimeStatus: 'connected',
+  stateView: {
+    matchId: 'pvpm-ui-runtime-setup-recovery',
+    status: 'setup',
+    stateVersion: 2,
+    currentSeat: 'B',
+    self: { seatId: 'B', ready: false, mulliganUsed: false },
+    opponent: { seatId: 'A', ready: true, handCount: 3 }
+  },
+  lastEvents: []
+};
+documentStub.querySelector = (selector) => selector === '[data-live-pvp-root]' ? setupRecoveryRoot : null;
+PVPScene.getLiveSession = () => ({ getState: () => setupRecoveryState });
+PVPScene.liveIntentInFlight = null;
+PVPScene.updateLiveButtons('setup', false, { seatId: 'B', ready: false, mulliganUsed: false });
+assert.equal(setupRecoveryButtons.get('join-queue').disabled, true, 'setup recovery should keep public queue entry disabled while matched');
+assert.equal(setupRecoveryButtons.get('create-invite').disabled, true, 'setup recovery should keep invite creation disabled while matched');
+assert.equal(setupRecoveryButtons.get('join-invite').disabled, true, 'setup recovery should keep invite join disabled while matched');
+assert.equal(setupRecoveryButtons.get('end-turn').disabled, true, 'setup recovery should keep active turn submit disabled before battle starts');
+assert.equal(setupRecoveryButtons.get('surrender').disabled, true, 'setup recovery should keep surrender disabled before battle starts');
+assert.equal(setupRecoveryButtons.get('refresh-match').disabled, false, 'setup recovery should still allow manual authoritative refresh');
+assert.equal(setupRecoveryButtons.get('confirm-mulligan').disabled, false, 'setup recovery should keep mulligan available before the viewer has used it');
+assert.equal(setupRecoveryButtons.get('ready').disabled, false, 'setup recovery should keep ready available before the viewer has confirmed');
+PVPScene.updateLiveButtons('setup', false, { seatId: 'B', ready: true, mulliganUsed: true });
+assert.equal(setupRecoveryButtons.get('confirm-mulligan').disabled, true, 'setup recovery should disable mulligan after the viewer has used it');
+assert.equal(setupRecoveryButtons.get('ready').disabled, true, 'setup recovery should disable ready after the viewer has confirmed');
+documentStub.querySelector = (selector) => selector === '[data-live-pvp-root]' ? blockedActiveRoot : null;
+PVPScene.getLiveSession = () => ({ getState: () => viewerReconnectBlockedState });
 const blockedIntentCalls = [];
 const previousStartLiveRealtimeForConnectionTempo = PVPScene.startLiveRealtime;
 const previousRenderLivePanelForConnectionTempo = PVPScene.renderLivePanel;

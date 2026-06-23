@@ -352,6 +352,67 @@ assert.equal(recovered.seatId, 'B', 'resumeCurrentMatch should retain current se
 assert.equal(recovered.stateView.stateVersion, 5, 'resumeCurrentMatch should store authoritative state view');
 assert.equal(calls.at(-1).method, 'getCurrentMatch', 'resumeCurrentMatch should call live current match service');
 
+const setupRecoveryCalls = [];
+const setupRecoverySession = createPvpLiveSession({
+  liveService: {
+    getCurrentMatch: async () => {
+      setupRecoveryCalls.push({ method: 'getCurrentMatch' });
+      return {
+        success: true,
+        matchId: 'pvplm-current-setup-recovery',
+        seatId: 'B',
+        stateView: {
+          matchId: 'pvplm-current-setup-recovery',
+          status: 'setup',
+          stateVersion: 2,
+          currentSeat: 'B',
+          setup: {
+            readyDeadlineAt: 1782025060000,
+            mulliganLimit: 2
+          },
+          turnTimer: {
+            phase: 'setup',
+            startedAt: 1782025000000,
+            deadlineAt: 1782025060000,
+            durationMs: 60000
+          },
+          connectionReport: {
+            reportVersion: 'pvp-live-connection-v1',
+            connectionHealth: 'healthy',
+            viewer: { seatId: 'B', status: 'online' },
+            opponent: { seatId: 'A', status: 'online' },
+            heartbeatIntervalMs: 5000,
+            graceMs: 30000
+          },
+          self: { seatId: 'B', ready: false, mulliganUsed: false, hand: [{ instanceId: 'B-strike-1' }] },
+          opponent: { seatId: 'A', ready: true, handCount: 3, publicProfile: makeRankedOpponentProfile() },
+          postMatchReview: null
+        }
+      };
+    },
+    getCurrentInvite: async () => {
+      setupRecoveryCalls.push({ method: 'getCurrentInvite' });
+      return { success: false };
+    },
+    getInviteInbox: async () => {
+      setupRecoveryCalls.push({ method: 'getInviteInbox' });
+      return { success: true, invites: [] };
+    }
+  },
+  now: () => 1782025000000
+});
+const setupRecovery = await setupRecoverySession.resumeCurrentMatch();
+assert.equal(setupRecovery.phase, 'setup', 'setup current-match recovery should stay in setup after page refresh');
+assert.equal(setupRecovery.matchId, 'pvplm-current-setup-recovery', 'setup current-match recovery should retain match id');
+assert.equal(setupRecovery.seatId, 'B', 'setup current-match recovery should retain viewer seat');
+assert.equal(setupRecovery.stateView.setup.readyDeadlineAt, 1782025060000, 'setup current-match recovery should preserve setup ready deadline');
+assert.equal(setupRecovery.stateView.turnTimer.deadlineAt, 1782025060000, 'setup current-match recovery should preserve setup countdown deadline');
+assert.equal(setupRecovery.stateView.connectionReport.connectionHealth, 'healthy', 'setup current-match recovery should preserve connection report');
+assert.equal(setupRecovery.stateView.self.ready, false, 'setup current-match recovery should preserve viewer ready state');
+assert.equal(setupRecovery.stateView.opponent.ready, true, 'setup current-match recovery should preserve opponent ready state');
+assert.equal(setupRecovery.stateView.postMatchReview, null, 'setup current-match recovery should not surface terminal review');
+assert.deepEqual(setupRecoveryCalls, [{ method: 'getCurrentMatch' }], 'setup current-match recovery should not fall through to invite or inbox recovery');
+
 const currentRecoveryCalls = [];
 const currentRecoverySession = createPvpLiveSession({
   liveService: {

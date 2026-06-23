@@ -1,5 +1,24 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-23: V10-S45 live PVP setup current-match reload browser contract
+  - 本轮完成
+    - `tests/browser_pvp_live_real_backend_smoke.mjs` 新增真实后端双账号 setup 刷新恢复段：A 先确认准备、B 仍未准备时，新开/重开 B 页面并打开 live 面板，必须恢复同一 `setup` match、同一 `seatId`、同一 countdown deadline，且保留 A 已准备、B 未准备。
+    - 新 browser 断言同时固定玩家体验：重开后 live tab 仍激活，准备倒计时、连接状态、双方准备文案可见，B 的 `ready` / `confirm-mulligan` 仍可操作，不误入 `finished`、不出现 `postMatchReview`、旧 `matchTicket`、rating/ELO 或结算文本，也不泄漏对手隐藏手牌数组。
+    - `tests/sanity_pvp_live_session_checks.mjs` 增加 `resumeCurrentMatch()` setup current-match 合同：服务端返回 `status: 'setup'` 时必须保持 setup，不走 invite/inbox fallback，并保留 `setup.readyDeadlineAt`、`turnTimer.deadlineAt`、`connectionReport`、`self.ready/opponent.ready` 和空终局复盘。
+    - `tests/sanity_pvp_live_ui_runtime_checks.mjs` 增加 setup recovery 按钮合同：恢复后的 setup 禁止公开排队/直邀/回合行动/认输，但在玩家未准备且未调息时保持 `ready` 与 `confirm-mulligan` 可用；玩家已准备/已调息后再禁用对应按钮。
+    - `tests/sanity_release_gate_coverage_checks.cjs` 增加真实后端 browser smoke marker，锁住 setup reload 前后 `setupReloadBefore/setupReloadProbe`、同一 match/seat/deadline、ready 状态与无 post-match review。
+    - 顺手稳定真实后端长 smoke 的非目标等待点：counterplay 对端同步和 friendly rematch ready/active/finished 收口沿用已有 `refreshUntilLiveSnapshot` / `refreshUntilLivePhase` 权威刷新兜底，避免 10 秒 setup 准备窗口被测试探针和被动推送等待吃完。
+  - 已验证
+    - 红测：先补 release marker 后运行 `node tests/sanity_release_gate_coverage_checks.cjs`，失败于 `live PVP real-backend browser smoke should pin two-account marker: real browser setup match survives full page refresh before both seats ready`。
+    - 语法：`node --check tests/browser_pvp_live_real_backend_smoke.mjs`
+    - 绿测：`node tests/sanity_pvp_live_session_checks.mjs`
+    - 绿测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs`
+    - 绿测：`node tests/sanity_release_gate_coverage_checks.cjs`
+    - 构建：`npm run build:pages`
+    - 真实后端 browser smoke：`node tests/browser_pvp_live_real_backend_smoke.mjs http://127.0.0.1:4173 output/pvp-live-setup-reload-real-20260623-green4`，68/68 findings、0 failed、0 console error。
+  - 当前结论
+    - live PVP setup 阶段现在具备真实浏览器级刷新/重开证明：一方已准备、一方未准备时，玩家刷新或重新打开 live 面板不会丢当前局、不会被误导成等待/结束/结算，也不会因为先手已准备就让另一方失去准备与调息操作；本轮只强化 setup 恢复合同、浏览器回归和测试稳定性，不改变匹配数值、战斗数值、奖励、正式段位结算或线上配置。
+
 - 2026-06-23: V10-S44 live PVP timeout automation player-facing event copy
   - 本轮完成
     - `js/scenes/pvp-scene.js` 将服务端公共事件 `automation_action` 映射为玩家可读“超时托管”，并在事件详情里说明系统执行的是低影响 `防守牌 / 结束回合 / 保底行动`，附带第几次超时，不再让玩家只看到泛化“公开事件”。
