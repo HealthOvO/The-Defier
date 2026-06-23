@@ -1,5 +1,20 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-23: V10-S53 live PVP production ranked reconnect grace smoke
+  - 本轮完成
+    - `tests/prod_api_smoke.cjs` 在 ranked public queue 真实对局进入 active 后，新增 production-like 恢复链路：双方先通过 `/api/pvp/live/matches/current` 和 `/heartbeat` 验证刷新/心跳能恢复同一个 ranked active match，不暴露终局复盘，并保留 turn timer 与连接报告。
+    - 同一 production smoke 进一步真实等待 `heartbeatStaleMs` 后进入 reconnect grace：选当前行动席位作为观察者，另一名参赛者静默；观察者中途 heartbeat 保持在线，随后用 `/matches/current` 看到 silent opponent 进入 `grace`，确认状态仍 active、`postMatchReview` 仍为 null、原 turn deadline 不变、没有 `connection_timeout/turn_timeout/match_finished` 终局事件。
+    - 静默方随后用真实 `/heartbeat` 恢复在线；smoke 再从观察者视角确认 opponent 回到 online，且后续仍继续走真实 `play_card/end_turn` lethal 终局与 ranked 正式结算，不使用认输捷径。
+    - `tests/sanity_release_gate_coverage_checks.cjs` 增加 production ranked current recovery、silent opponent grace、deadline preserved、no terminal events、heartbeat recovery markers，防止 production smoke 回退成只测 happy-path current read。
+  - 已验证
+    - 红测：`node tests/sanity_release_gate_coverage_checks.cjs` 先失败于缺少 `prod live ranked active current match should recover same ranked match` marker。
+    - 红测：`node tests/sanity_release_gate_coverage_checks.cjs` 再失败于缺少 `prod live ranked silent opponent should enter reconnect grace through current match recovery` marker。
+    - 绿测：`node --check tests/prod_api_smoke.cjs`
+    - 绿测：`node tests/sanity_release_gate_coverage_checks.cjs`
+    - 本地 production-mode API smoke：`node tests/prod_api_smoke.cjs http://127.0.0.1:9033`，API smoke passed。
+  - 当前结论
+    - live PVP 的 production-like ranked smoke 现在不仅证明真实卡牌 lethal 和正式结算，还证明一方短暂静默不会被立即判负：对手能通过 current-match recovery 看到 reconnect grace，行动窗口和 deadline 不被刷新或误结算，静默方 heartbeat 后能回到同一局继续打。本轮只强化 production smoke 证据，不改变卡牌数值、心跳阈值、连接超时结算公式、匹配策略、奖励或线上配置。
+
 - 2026-06-23: V10-S52 live PVP production lethal smoke and rejected-action recovery copy
   - 本轮完成
     - `js/services/pvp-live-session.js` 新增 `formatLiveIntentRejectMessage()`，把服务端权威拒绝 reason 映射成玩家能理解的恢复提示：`stale_state` 引导刷新权威状态，`not_current_turn` 说明等待对手行动，`not_enough_energy` 提示换低费牌或结束回合，`card_not_in_hand` 提示刷新后重选；诊断 reason 仍保留在 `lastError.reason`，但可见 message 不再裸露协议码。
