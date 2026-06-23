@@ -1,5 +1,20 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-23: V10-S37 live PVP active current-match reload browser contract
+  - 本轮完成
+    - `tests/browser_pvp_live_real_backend_smoke.mjs` 新增真实双账号 active 对局整页恢复 finding：双方进入 `active` 后，使用同一账号 context 的独立 fresh page 完整加载页面、打开 live tab、调用 `loadLivePanel()`，必须通过 current-match recovery 回到同一 `matchId`、同一 `seatId`、同一 `currentSeat` 和同一 `turnTimer.startedAt / deadlineAt`。
+    - 新增 `reloadAndOpenLivePanel()` 测试 helper：reload 后重新注入 `TEST_MATCH_SCOPE`、恢复 live tab active 状态并调用 `loadLivePanel()`，保证该 finding 测的是整页恢复链路，而不污染主页面后续出牌、交权、终局与再战流程。
+    - finding 同时断言 DOM / `PVPScene.getLiveSnapshot()` / `render_game_to_text().pvp.live` 三层一致：仍是 active、仍显示行动倒计时与连接状态、没有 `postMatchReview`，且不泄漏对手手牌数组。
+    - `tests/sanity_release_gate_coverage_checks.cjs` 增加真实后端 browser smoke marker，固定 finding 名、`activeReloadBefore` / `activeReloadProbe`、matchId/currentSeat/turnTimer/no postMatchReview 关键断言，防止后续把 active reload 恢复覆盖删掉。
+  - 已验证
+    - 红测：先只补 release gate marker 后运行 `node tests/sanity_release_gate_coverage_checks.cjs`，失败于 `real browser active match survives full page refresh through current match recovery`，证明门禁会抓住缺失 browser finding。
+    - 语法：`node --check tests/browser_pvp_live_real_backend_smoke.mjs`
+    - 绿测：`node tests/sanity_release_gate_coverage_checks.cjs`
+    - 真实后端 browser smoke：`node tests/browser_pvp_live_real_backend_smoke.mjs http://127.0.0.1:4173 output/pvp-live-active-current-reload-real-20260623-green2`，58/58 findings、0 failed、0 console error。
+    - 构建：`npm run build:pages`
+  - 当前结论
+    - live PVP 的弱网/刷新恢复链现在从 session、route 继续推进到真实浏览器层：active 真人局里整页加载或重新打开 live tab 后，页面会恢复同一权威 current match，不会丢到等待态、终局复盘、旧局或错误行动窗口。该切片只增加真实浏览器回归覆盖和 release marker，不改变战斗数值、匹配规则、心跳协议、结算或奖励。
+
 - 2026-06-23: V10-S36 live PVP current-match reconnect recovery session contract
   - 本轮完成
     - `tests/sanity_pvp_live_session_checks.mjs` 新增刷新/重新进入页面后的 current match 恢复合同：服务端返回 `active` 且处于 `viewer_reconnect_grace` 时，session 必须保留 `currentSeat`、`turnTimer.startedAt / deadlineAt` 和 `connectionTempoReport`，并继续阻止 stale submit。

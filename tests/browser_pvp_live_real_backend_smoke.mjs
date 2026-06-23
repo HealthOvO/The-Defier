@@ -281,6 +281,38 @@ async function dismissBlockingModals(page) {
   });
 }
 
+async function reloadAndOpenLivePanel(page) {
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(
+    () => !!window.game && !!window.PVPScene && typeof window.render_game_to_text === 'function',
+    null,
+    { timeout: 15000 },
+  );
+  await page.evaluate(async (testMatchScope) => {
+    window.__DEFIER_PVP_REAL_TEST_SCOPE = testMatchScope;
+    if (!window.PVPScene.__realSmokeOriginalJoinLiveQueue) {
+      window.PVPScene.__realSmokeOriginalJoinLiveQueue = window.PVPScene.joinLiveQueue.bind(window.PVPScene);
+      window.PVPScene.joinLiveQueue = async function scopedRealSmokeJoinLiveQueue(options = {}) {
+        return await window.PVPScene.__realSmokeOriginalJoinLiveQueue({
+          ...options,
+          testMatchScope: window.__DEFIER_PVP_REAL_TEST_SCOPE
+        });
+      };
+    }
+    window.game.showScreen('pvp-screen');
+    window.PVPScene.activeTab = 'live';
+    document.querySelectorAll('.rune-tab').forEach(btn => btn.classList.remove('active'));
+    document.querySelector('.rune-tab[onclick*="live"]')?.classList.add('active');
+    document.querySelectorAll('.pvp-tab-pane').forEach(el => {
+      el.classList.remove('active');
+      el.style.display = '';
+    });
+    document.getElementById('tab-live')?.classList.add('active');
+    await window.PVPScene.loadLivePanel();
+  }, TEST_MATCH_SCOPE);
+  await dismissBlockingModals(page);
+}
+
 async function waitForLivePhase(page, phase, timeoutMs = 10000) {
   await page.waitForFunction(
     expected => window.PVPScene?.getLiveSnapshot?.()?.phase === expected,
@@ -969,6 +1001,57 @@ async function writeReport() {
         && activeB.openerAssignment?.firstSeat === activeFirstSeat
         && activeB.openerAssignment?.secondSeat === activeSecondSeat,
       JSON.stringify({ activeFirstSeat, activeSecondSeat, activeA, activeB, seatAReadyTouchActionable, seatBReadyTouchActionable }),
+    );
+    const activeReloadBefore = {
+      matchId: activeFirstSnapshot.matchId,
+      seatId: activeFirstSnapshot.seatId,
+      currentSeat: activeFirstSnapshot.currentSeat,
+      turnTimer: activeFirstSnapshot.turnTimer || null,
+    };
+    const activeReloadPage = await firstSeatClient.context.newPage();
+    activeReloadPage.on('console', msg => {
+      if (msg.type() === 'error') recordConsoleError(msg.text());
+    });
+    activeReloadPage.on('pageerror', error => recordConsoleError(error.message || String(error)));
+    await activeReloadPage.goto(appUrl, { waitUntil: 'domcontentloaded' });
+    await reloadAndOpenLivePanel(activeReloadPage);
+    const activeReloadRestored = await waitForLivePhase(activeReloadPage, 'active', 15000);
+    const activeReloadProbe = await activeReloadPage.evaluate(() => {
+      const payload = window.PVPScene.getLiveSnapshot() || null;
+      const textPayload = JSON.parse(window.render_game_to_text()).pvp?.live || null;
+      return {
+        phase: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-phase') || '',
+        timerText: document.querySelector('[data-live-turn-timer]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+        connectionText: document.querySelector('[data-live-connection-status]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+        reviewText: document.querySelector('[data-live-post-match-review]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+        liveTabActive: document.getElementById('tab-live')?.classList.contains('active') === true,
+        opponentHandArray: Array.isArray(payload?.opponent?.hand),
+        payload,
+        textPayload,
+      };
+    });
+    await activeReloadPage.close();
+    const reloadProbe = activeReloadProbe;
+    add(
+      'real browser active match survives full page refresh through current match recovery',
+      activeReloadRestored.phase === 'active'
+        && reloadProbe.phase === 'active'
+        && reloadProbe.liveTabActive === true
+        && reloadProbe.payload?.phase === 'active'
+        && reloadProbe.payload?.matchId === activeReloadBefore.matchId
+        && reloadProbe.payload?.seatId === activeReloadBefore.seatId
+        && reloadProbe.payload?.currentSeat === activeReloadBefore.currentSeat
+        && reloadProbe.payload?.turnTimer?.startedAt === activeReloadBefore.turnTimer?.startedAt
+        && reloadProbe.payload?.turnTimer?.deadlineAt === activeReloadBefore.turnTimer?.deadlineAt
+        && reloadProbe.textPayload?.matchId === activeReloadBefore.matchId
+        && reloadProbe.textPayload?.turnTimer?.startedAt === activeReloadBefore.turnTimer?.startedAt
+        && /行动倒计时/.test(reloadProbe.timerText)
+        && /连接：/.test(reloadProbe.connectionText)
+        && ['online', 'grace'].includes(reloadProbe.payload?.connectionReport?.viewer?.status)
+        && reloadProbe.payload?.postMatchReview == null
+        && reloadProbe.textPayload?.postMatchReview == null
+        && reloadProbe.opponentHandArray === false,
+      JSON.stringify({ activeReloadBefore, activeReloadRestored, activeReloadProbe }),
     );
     const openerAssignmentProbe = await firstSeatClient.page.evaluate(() => {
       const textPayload = JSON.parse(window.render_game_to_text()).pvp?.live || null;
