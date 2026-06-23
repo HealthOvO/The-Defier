@@ -1,5 +1,23 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-23: V10-S57 live PVP public replay share key moments
+  - 本轮完成
+    - `js/scenes/pvp-scene.js` 为匿名公共战报 viewer 新增 `getLiveReplayShareHighlights()`：只从 `replay_public.events` 和 `publicSummary` 里提取“开局 / 反打窗口 / 转折 / 终局”关键节点，继续固定 public-only 边界，不读取 `replay_self`、隐藏手牌、牌库、随机种子、本人复盘、正式结算或赛季荣誉。
+    - 公共战报页在事件列表前新增 `data-live-replay-share-highlight-list`，让第三方打开分享链接时能先读到“开局发生了什么、反先手秒杀保护如何触发、终局如何结束”，再展开完整公开事件流。
+    - `css/pvp.css` 补充关键节点摘要的响应式布局，保证 390px 移动视口下摘要、事件流和隐私边界可换行，不横向溢出。
+    - `tests/browser_automation_boot_audit.mjs` 将 `?pvpReplayShare=` 匿名启动场景推进到移动视口：mock 公开分享 API 后，断言不开登录/存档、不创建 live session、渲染关键节点摘要、隐藏 raw 协议枚举与敏感报告，并检查 viewer/highlight/document 均不横向溢出。
+    - `tests/sanity_pvp_live_ui_runtime_checks.mjs`、`tests/sanity_pvp_live_ui_contract_checks.cjs` 和 `tests/sanity_release_gate_coverage_checks.cjs` 同步锁住关键节点 helper、DOM marker、CSS marker、移动端 boot marker 与敏感字段不渲染。
+  - 已验证
+    - 红测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs` 在实现前失败于 `public replay viewer should render a key-moment highlight list`。
+    - 红测：`node tests/sanity_pvp_live_ui_contract_checks.cjs` 在实现前失败于缺少 `getLiveReplayShareHighlights(` marker。
+    - 绿测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs`
+    - 绿测：`node tests/sanity_pvp_live_ui_contract_checks.cjs`
+    - 绿测：`node tests/sanity_release_gate_coverage_checks.cjs`
+    - 构建：`npm run build:pages`
+    - 浏览器启动门禁：`node tests/browser_automation_boot_audit.mjs http://127.0.0.1:4173 output/pvp-live-public-share-highlights-boot-audit`
+  - 当前结论
+    - live PVP 的公开战报分享从“能打开脱敏事件页”继续推进到“匿名观看者能快速读懂这局为什么有反打窗口、如何终局”的分享体验；这提升战报传播和赛后娱乐性，但不改变战斗数值、匹配、正式结算、奖励、心跳或线上配置。本轮未进行生产部署。
+
 - 2026-06-23: V10-S56 live PVP public replay share viewer
   - 本轮完成
     - `server/routes/pvp-live.js` 将公开战报分享 receipt 拆成 `apiPath` 与玩家可复制的 `sharePath/shareUrl`：机器匿名读取仍走 `/api/pvp/live/replay-shares/:shareToken`，玩家分享链接改为 `/?pvpReplayShare=:shareToken`，避免第三方打开后只看到 JSON。

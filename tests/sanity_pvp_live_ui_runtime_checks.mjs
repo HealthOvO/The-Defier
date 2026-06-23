@@ -2379,10 +2379,12 @@ PVPService.live.getReplayShare = async (shareToken = '') => {
         loserSeat: 'B',
         finishReason: 'lethal'
       },
-      eventCount: 2,
+      eventCount: 4,
       events: [
         { sequence: 1, eventType: 'battle_started', actingSeat: 'A', publicData: { firstSeat: 'A' } },
-        { sequence: 2, eventType: 'damage_applied', actingSeat: 'A', publicData: { targetSeat: 'B', hpDamage: 7, targetHp: 13 } }
+        { sequence: 2, eventType: 'opening_protection_triggered', actingSeat: 'A', publicData: { protectedSeat: 'B', minimumHp: 1, preventedDamage: 9 } },
+        { sequence: 3, eventType: 'damage_applied', actingSeat: 'A', publicData: { targetSeat: 'B', hpDamage: 7, targetHp: 13 } },
+        { sequence: 4, eventType: 'match_finished', actingSeat: 'A', publicData: { reason: 'lethal', winnerSeat: 'A', loserSeat: 'B' } }
       ],
       hiddenScan: { forbiddenTokenCount: 0, forbiddenKeyCount: 0, forbiddenStringCount: 0 },
       postMatchReview: { summary: 'SHOULD_NOT_RENDER_POST_MATCH_REVIEW' },
@@ -2399,6 +2401,11 @@ assert.match(replayShareViewerHost.innerHTML, /data-live-replay-share-viewer/, '
 assert.match(replayShareViewerHost.innerHTML, /replay_public/, 'public replay viewer should label replay_public visibility');
 assert.match(replayShareViewerHost.innerHTML, /a1b2c3d4e5f67890/, 'public replay viewer should show the stable match reference');
 assert.match(replayShareViewerHost.innerHTML, /伤害终结/, 'public replay viewer should show the public finish reason');
+assert.match(replayShareViewerHost.innerHTML, /data-live-replay-share-highlight-list/, 'public replay viewer should render a key-moment highlight list');
+assert.match(replayShareViewerHost.innerHTML, /关键节点/, 'public replay viewer should introduce key-moment highlights');
+assert.match(replayShareViewerHost.innerHTML, /开局/, 'public replay viewer should highlight the public opening moment');
+assert.match(replayShareViewerHost.innerHTML, /反打窗口/, 'public replay viewer should highlight the anti-snowball counterplay moment');
+assert.match(replayShareViewerHost.innerHTML, /终局/, 'public replay viewer should highlight the public finish moment');
 assert.equal(/pvpm-ui-runtime-raw-should-not-render|SHOULD_NOT_RENDER|postMatchReview|settlementReport|seasonHonorReport/.test(replayShareViewerHost.innerHTML), false, 'public replay viewer should not render raw match ids or seat-specific payload fields');
 PVPService.live.getReplayShare = previousPvpServiceGetReplayShare;
 documentStub.querySelector = previousDocumentQuerySelectorForReplayShare;

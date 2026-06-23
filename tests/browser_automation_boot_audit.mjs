@@ -28,7 +28,7 @@ async function safeScreenshot(page, outPath) {
 }
 
 async function runScenario(browser, scenario) {
-  const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+  const page = await browser.newPage({ viewport: scenario.viewport || { width: 1440, height: 900 } });
   page.on('console', (msg) => {
     if (msg.type() === 'error') recordConsoleError(msg.text(), scenario.id);
   });
@@ -86,6 +86,24 @@ async function runScenario(browser, scenario) {
     })(),
     publicReplayViewerText: document.querySelector('[data-live-replay-share-viewer]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
     publicReplayViewerStatus: document.querySelector('[data-live-replay-share-viewer]')?.getAttribute('data-live-replay-share-viewer-status') || '',
+    publicReplayViewerMetrics: (() => {
+      const viewer = document.querySelector('[data-live-replay-share-viewer]');
+      const highlightList = document.querySelector('[data-live-replay-share-highlight-list]');
+      const viewerRect = viewer?.getBoundingClientRect();
+      const highlightRect = highlightList?.getBoundingClientRect();
+      const overflows = (rect, element) => !!(rect && element && (
+        rect.left < -1
+        || rect.right > window.innerWidth + 1
+        || element.scrollWidth > Math.ceil(rect.width) + 1
+      ));
+      return {
+        viewportWidth: window.innerWidth,
+        documentOverflowsX: document.documentElement.scrollWidth > window.innerWidth + 1,
+        viewerOverflowsX: overflows(viewerRect, viewer),
+        highlightVisible: !!(highlightRect && highlightRect.width > 0 && highlightRect.height > 0),
+        highlightOverflowsX: overflows(highlightRect, highlightList)
+      };
+    })(),
     pvpLiveJoinVisible: (() => {
       const button = document.querySelector('[data-live-action="join-queue"]');
       if (!button) return false;
@@ -158,7 +176,8 @@ const scenarios = [
   {
     id: 'public-replay-share-viewer',
     query: '?autotest=guest-map&pvpReplayShare=pvplrs-browser_public_viewer_token_1234567890',
-    name: 'public replay share query lands on anonymous viewer before auth or automation boot',
+    viewport: { width: 390, height: 844 },
+    name: 'public replay share mobile viewer keeps key moments readable before auth or automation boot',
     mockReplayShare: {
       success: true,
       share: {
@@ -184,10 +203,12 @@ const scenarios = [
           loserSeat: 'B',
           finishReason: 'lethal'
         },
-        eventCount: 2,
+        eventCount: 4,
         events: [
           { sequence: 1, eventType: 'battle_started', actingSeat: 'A', publicData: { firstSeat: 'A' } },
-          { sequence: 2, eventType: 'damage_applied', actingSeat: 'A', publicData: { targetSeat: 'B', hpDamage: 8, targetHp: 0 } }
+          { sequence: 2, eventType: 'opening_protection_triggered', actingSeat: 'A', publicData: { protectedSeat: 'B', minimumHp: 1, preventedDamage: 8 } },
+          { sequence: 3, eventType: 'damage_applied', actingSeat: 'B', publicData: { targetSeat: 'A', hpDamage: 8, targetHp: 12 } },
+          { sequence: 4, eventType: 'match_finished', actingSeat: 'A', publicData: { reason: 'lethal', winnerSeat: 'A', loserSeat: 'B' } }
         ],
         hiddenScan: { forbiddenTokenCount: 0, forbiddenKeyCount: 0, forbiddenStringCount: 0 },
         postMatchReview: { summary: 'SHOULD_NOT_RENDER_POST_MATCH_REVIEW' },
@@ -207,6 +228,16 @@ const scenarios = [
       && /b0c0ffee1234abcd/.test(probe.publicReplayViewerText)
       && /replay_public/.test(probe.publicReplayViewerText)
       && /伤害终结/.test(probe.publicReplayViewerText)
+      && /关键节点/.test(probe.publicReplayViewerText)
+      && /开局/.test(probe.publicReplayViewerText)
+      && /反打窗口/.test(probe.publicReplayViewerText)
+      && /终局/.test(probe.publicReplayViewerText)
+      && !/battle_started|opening_protection_triggered|match_finished/.test(probe.publicReplayViewerText)
+      && probe.publicReplayViewerMetrics?.viewportWidth === 390
+      && probe.publicReplayViewerMetrics?.highlightVisible
+      && !probe.publicReplayViewerMetrics?.viewerOverflowsX
+      && !probe.publicReplayViewerMetrics?.highlightOverflowsX
+      && !probe.publicReplayViewerMetrics?.documentOverflowsX
       && !/pvpm-browser-raw-should-not-render|SHOULD_NOT_RENDER|postMatchReview|settlementReport|seasonHonorReport/.test(probe.publicReplayViewerText)
       && payload?.mode === 'pvp-screen'
       && payload?.pvp?.activeTab === 'live'

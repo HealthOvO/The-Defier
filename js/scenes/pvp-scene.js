@@ -3449,8 +3449,71 @@ export const PVPScene = {
         forbiddenTokenCount: Math.max(0, Math.floor(Number(hiddenScan.forbiddenTokenCount) || 0)),
         forbiddenKeyCount: Math.max(0, Math.floor(Number(hiddenScan.forbiddenKeyCount) || 0)),
         forbiddenStringCount: Math.max(0, Math.floor(Number(hiddenScan.forbiddenStringCount) || 0))
-      }
+      },
+      highlights: this.getLiveReplayShareHighlights(replay, publicSummary)
     };
+  },
+  getLiveReplayShareHighlights(replay = {}, publicSummary = {}) {
+    const events = Array.isArray(replay && replay.events) ? replay.events : [];
+    const highlights = [];
+    const usedKinds = new Set();
+    const pushHighlight = (kind, title, event, fallbackDetail = '') => {
+      if (usedKinds.has(kind) || highlights.length >= 4) return;
+      const sequence = Number.isFinite(Number(event && event.sequence))
+        ? Math.max(0, Math.floor(Number(event.sequence)))
+        : 0;
+      const formatted = event ? this.formatLiveEvent(event) : null;
+      const detail = String(formatted && formatted.detail || fallbackDetail || '').trim();
+      highlights.push({
+        kind,
+        title,
+        sequence,
+        label: formatted && formatted.label ? String(formatted.label) : title,
+        detail
+      });
+      usedKinds.add(kind);
+    };
+
+    for (const event of events) {
+      const type = String(event && event.eventType || '');
+      if (type === 'battle_started') {
+        pushHighlight('opening', '开局', event);
+      } else if ([
+        'opening_protection_triggered',
+        'opening_second_seat_buffer_granted',
+        'opening_counterplay_granted',
+        'budget_clamped'
+      ].includes(type)) {
+        pushHighlight('counterplay', '反打窗口', event);
+      } else if ([
+        'status_applied',
+        'status_consumed',
+        'status_mitigated',
+        'hp_recovered',
+        'card_cycled',
+        'block_gained'
+      ].includes(type)) {
+        pushHighlight('turning', '转折', event);
+      } else if ([
+        'match_finished',
+        'match_invalidated',
+        'player_surrendered',
+        'ready_timeout',
+        'connection_timeout',
+        'turn_timeout'
+      ].includes(type)) {
+        pushHighlight('finish', '终局', event);
+      }
+    }
+
+    if (!usedKinds.has('finish') && publicSummary && publicSummary.finishReason) {
+      const winnerSeat = String(publicSummary.winnerSeat || '--');
+      const loserSeat = String(publicSummary.loserSeat || '--');
+      const finishLabel = this.formatLiveFinishReasonLabel(publicSummary.finishReason || '');
+      pushHighlight('finish', '终局', null, `${finishLabel} · 胜方 ${winnerSeat} / 败方 ${loserSeat}`);
+    }
+
+    return highlights;
   },
   renderLiveReplayShareViewerMarkup(viewer = {}) {
     const status = String(viewer.status || 'idle');
@@ -3487,6 +3550,17 @@ export const PVPScene = {
     const matchRef = String(share.matchRef || '--');
     const eventCount = Math.max(0, Math.floor(Number(replay.eventCount) || (Array.isArray(replay.events) ? replay.events.length : 0)));
     const hiddenScan = replay.hiddenScan && typeof replay.hiddenScan === 'object' ? replay.hiddenScan : {};
+    const highlights = this.getLiveReplayShareHighlights(replay, publicSummary);
+    const highlightRows = highlights.length > 0 ? highlights.map((item) => {
+      const sequence = item.sequence ? `#${item.sequence} · ` : '';
+      return `
+        <div class="pvp-live-replay-share-highlight" data-live-replay-share-highlight="${this.escapeHtml(item.kind)}">
+          <span class="pvp-live-replay-share-highlight-title">${this.escapeHtml(item.title)}</span>
+          <span class="pvp-live-replay-share-highlight-main">${this.escapeHtml(sequence)}${this.escapeHtml(item.label)}</span>
+          <span class="pvp-live-replay-share-highlight-detail">${this.escapeHtml(item.detail || '公开事件已记录')}</span>
+        </div>
+      `;
+    }).join('') : '<div class="pvp-live-empty">暂无关键节点</div>';
     const events = Array.isArray(replay.events) ? replay.events.slice(0, 16) : [];
     const eventRows = events.length > 0 ? events.map(event => {
       const formatted = this.formatLiveEvent(event);
@@ -3520,6 +3594,10 @@ export const PVPScene = {
           <span>公开事件 ${this.escapeHtml(eventCount)}</span>
         </div>
         <div class="pvp-live-dispute-receipt-evidence">隐私扫描 ${this.escapeHtml(forbiddenTotal)} 项命中 · 不含原始战局 ID · 不含本人结算或赛季荣誉</div>
+        <div class="pvp-live-replay-share-highlights" data-live-replay-share-highlight-list>
+          <div class="pvp-live-replay-share-highlight-head">关键节点</div>
+          ${highlightRows}
+        </div>
         <div class="pvp-live-event-log" data-live-replay-share-event-log>${eventRows}</div>
         <div class="pvp-live-dispute-receipt-boundary">${this.escapeHtml(share.boundary || '公开战报分享只暴露 replay_public 脱敏回放，不读取隐藏手牌、牌库、随机种子或本人结算。')}</div>
       </section>

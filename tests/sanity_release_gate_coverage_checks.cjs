@@ -167,7 +167,10 @@ const browserAutomationBootAudit = read('tests/browser_automation_boot_audit.mjs
   "id: 'public-replay-share-viewer'",
   '?autotest=guest-map&pvpReplayShare=',
   'mockReplayShare',
-  'public replay share query lands on anonymous viewer before auth or automation boot',
+  'public replay share mobile viewer keeps key moments readable before auth or automation boot',
+  'viewport: { width: 390, height: 844 }',
+  'probe.publicReplayViewerMetrics?.highlightVisible',
+  '!probe.publicReplayViewerMetrics?.documentOverflowsX',
   'probe.authModalActive',
   'probe.saveSlotsModalActive',
   'probe.publicReplayViewerVisible',
@@ -2853,13 +2856,35 @@ assert.ok(
   'data-live-replay-share-revoke',
   'replay_share_revoked',
   'openLiveReplayShareViewer(',
+  'getLiveReplayShareHighlights(',
   'renderLiveReplayShareViewer(',
   'data-live-replay-share-viewer',
   'data-live-replay-share-viewer-public-only',
+  'data-live-replay-share-highlight-list',
 ].forEach((needle) => {
   assert.ok(
     pvpLiveUiContractChecks.includes(needle),
     `live PVP UI contract should pin authoritative heartbeat scheduling marker: ${needle}`,
+  );
+});
+
+[
+  'getLiveReplayShareHighlights(',
+  'data-live-replay-share-highlight-list',
+].forEach((needle) => {
+  assert.ok(
+    pvpSceneSource.includes(needle),
+    `PVPScene should pin public replay share highlight marker: ${needle}`,
+  );
+});
+
+[
+  '.pvp-live-replay-share-highlights',
+  '.pvp-live-replay-share-highlight',
+].forEach((needle) => {
+  assert.ok(
+    pvpCss.includes(needle),
+    `PVP CSS should pin public replay share highlight marker: ${needle}`,
   );
 });
 
