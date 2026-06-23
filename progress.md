@@ -1,5 +1,20 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-23: V10-S51 live PVP real-browser non-surrender lethal finish contract
+  - 本轮完成
+    - `tests/browser_pvp_live_real_backend_smoke.mjs` 将真实后端双账号主 ranked 对战从“后手反打后用认输收口”推进为“后手获得 +8 反打窗口后，用真实浏览器点击真实卡牌完成 lethal 终局”：先手开局 lethal 仍被护体挡到 1 血，后手必须经过真实行动窗口，再由 `play_card` 产生 `finishReason='lethal'`。
+    - 新增 `real browser protected defender ends the match with a real lethal card after counterplay` finding：用 scoped test route 只校准公开血量/灵力，终局必须来自 UI 真实点牌；断言 winner/loser 双方 post-match review 都是 lethal、公开 evidence 包含 `damage_applied` 与 `match_finished`，且终局链不含 `player_surrendered/认输`。
+    - 同步把主 ranked post-match/replay/fairness 断言从 surrender 改为 real lethal：`replay_public` 和 `audit_safe` 公开摘要必须是 `lethal`，败方 fairness receipt 也必须引用 lethal 终局，不泄漏隐藏手牌、牌库、谱 hash、奖励或 rating 明细。
+    - 为真实浏览器后续 friendly rematch 段补 `readyLiveSetupSeat()` 测试 helper，并把 friendly surrender 收口改成真实按钮二次点击，避免新 lethal 主线拉长后，10 秒准备窗口里因 stale state 或同 tick 双调用造成 ready_timeout 抖动。
+    - `tests/sanity_release_gate_coverage_checks.cjs` 增加 real-backend browser smoke marker，锁住“后手真实反打后真实 lethal 终局”和“real lethal post-match review”，防止回退到认输捷径。
+  - 已验证
+    - 红测：`node tests/sanity_release_gate_coverage_checks.cjs` 失败于缺少 `real browser protected defender ends the match with a real lethal card after counterplay` marker。
+    - 绿测：`node tests/sanity_release_gate_coverage_checks.cjs`
+    - 桌面真实后端 browser smoke：`node tests/browser_pvp_live_real_backend_smoke.mjs`，71/71 findings、0 failed、0 console error。
+    - 移动端真实后端 browser smoke：`env BROWSER_PVP_LIVE_REAL_VIEWPORT=mobile BROWSER_PVP_LIVE_REAL_REQUIRE_MOBILE=1 node tests/browser_pvp_live_real_backend_smoke.mjs http://127.0.0.1:4173 output/browser-pvp-live-mobile-real-smoke`，72/72 findings、0 failed、0 console error。
+  - 当前结论
+    - live PVP 现在有真实浏览器级证据证明：先手保护不是只停留在模拟/route 层，后手在被开局打到 1 血后仍能获得可操作反打窗口，并用真实卡牌行动完成正式 lethal 终局；主 ranked 烟测不再用认输作为核心终局捷径。本轮只强化真实浏览器门禁和测试稳定性，不改变战斗数值、正式结算、奖励公式、匹配策略、心跳阈值或线上配置。
+
 - 2026-06-23: V10-S50 live PVP post-match avoid-opponent safety contract
   - 本轮完成
     - `server/pvp-live/live-store.js` 增加赛后 `avoidOpponentForUser()`：终局后玩家可记录“优先避开此对手”，默认 24 小时生效；匹配选择先检查 `player_avoid_opponent`，若双方任一方存在有效偏好则不立即重配，等待报告展示“已优先避开/屏蔽对手”，但仍只等待真人、不切残影、不改分。
