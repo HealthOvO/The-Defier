@@ -2562,7 +2562,7 @@ class LivePvpStore {
                 'viewer_refresh_required',
                 viewerSeatId,
                 'danger',
-                `连接：我方断线 · 刷新同步权威结果；若仍在可恢复窗口会自动重连，否则按 connection_timeout 结算 · 对方${opponentLabel}`,
+                `连接：我方断线 · 刷新同步权威结果；若仍在可恢复窗口会自动重连，否则按连接超时结算 · 对方${opponentLabel}`,
                 '先刷新权威局面，避免本地旧状态覆盖真实回合。',
                 { id: 'refresh_match', label: '刷新权威状态' },
                 {
@@ -2593,7 +2593,7 @@ class LivePvpStore {
                     'opponent_action_grace',
                     opponentSeatId,
                     'warning',
-                    `连接：我方${viewerLabel} · 对方重连宽限 ${opponentGraceSec}s · 对方当前行动，宽限结束才会按 connection_timeout 权威结算`,
+                    `连接：我方${viewerLabel} · 对方重连宽限 ${opponentGraceSec}s · 对方当前行动，宽限结束才会按连接超时权威结算`,
                     '胜负仍等服务端终局事件，不由前端提前判定。',
                     null,
                     {
@@ -2626,7 +2626,7 @@ class LivePvpStore {
                     opponentSeatId,
                     'info',
                     `连接：我方${viewerLabel} · 对方断线 · 对局继续，当前行动仍可提交；轮到对手仍未恢复才会由服务端处理`,
-                    '对局继续：非当前行动方断线不会立刻触发 connection_timeout；当前行动仍可提交，轮到对手仍未恢复才会处理。',
+                    '对局继续：非当前行动方断线不会立刻触发连接超时；当前行动仍可提交，轮到对手仍未恢复才会处理。',
                     null,
                     {
                         actionBoundary: 'continue_current_action',
@@ -2639,7 +2639,7 @@ class LivePvpStore {
                     'opponent_action_timeout_pending',
                     opponentSeatId,
                     'warning',
-                    `连接：我方${viewerLabel} · 对方断线 · 对方当前行动，等待 connection_timeout 权威超时结算`,
+                    `连接：我方${viewerLabel} · 对方断线 · 对方当前行动，等待连接超时权威结算`,
                     '只有当前行动方断线超过宽限，服务端才会发布终局；胜负以 match_finished 为准。',
                     null,
                     {

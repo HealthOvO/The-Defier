@@ -1,5 +1,26 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-23: V10-S47 live PVP connection tempo terminal browser contract
+  - 本轮完成
+    - `tests/browser_pvp_live_real_backend_smoke.mjs` 在真实后端双账号 active 断线段补充玩家可见文案断言：非当前行动方断线时，当前行动方仍可提交行动，但 `connection status / connection tempo` 不得显示 `connection_timeout` 或 `turn_timeout` 这类内部协议码。
+    - 同一真实后端 smoke 追加独立双账号 current-action disconnect 终局闭环：双方进入 active 后停掉当前行动席心跳并注入超过 stale + grace 的连接超时，观察席刷新必须先拿到 `opponent_action_timeout_pending` 权威节奏，再进入 `finished` 复盘；双方 `postMatchReview.finishReason` 均为 `connection_timeout`，观察席为胜、断线行动席为败。
+    - 新增刷新恢复断言：观察席在连接超时终局后新开页面重新打开 live 面板，必须恢复同一 finished terminal match 和同一连接超时复盘，不丢到 active / waiting / invalidated。
+    - `server/pvp-live/live-store.js` 将服务端权威 `connectionTempoReport.statusLine/detailLine` 的 raw `connection_timeout` 文案替换为玩家可读的“连接超时 / 权威结算 / 对局结束事件”表达；内部 `finishReason`、事件类型和审计 payload 不变，仍保留机器可校验枚举。
+    - `tests/sanity_release_gate_coverage_checks.cjs` 增加真实后端 smoke marker，锁住 active non-turn disconnect 文案不得回退到 raw protocol code，并锁住 current-action disconnect 的 pending tempo、双方胜负复盘和终局刷新恢复。
+  - 已验证
+    - 红测：`node tests/browser_pvp_live_real_backend_smoke.mjs http://127.0.0.1:4173 output/pvp-live-connection-tempo-copy-red-20260623`，失败于 `real browser active non-turn opponent disconnect keeps current actor actionable`，实际可见 `connectionTempo` 包含 `connection_timeout`。
+    - 红测：`node tests/sanity_release_gate_coverage_checks.cjs`，失败于 `real browser live PVP smoke should pin visible authoritative settlement marker: real browser current action disconnect resolves to authoritative connection-timeout review`。
+    - 语法：`node --check server/pvp-live/live-store.js`
+    - 语法：`node --check tests/browser_pvp_live_real_backend_smoke.mjs`
+    - 绿测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs`
+    - 绿测：`node tests/sanity_pvp_live_route_checks.cjs`
+    - 绿测：`node tests/sanity_release_gate_coverage_checks.cjs`
+    - 绿测：`node tests/sanity_intro_progress_sync_checks.cjs`
+    - 绿测：`npm run test:node`
+    - 真实后端 browser smoke：`node tests/browser_pvp_live_real_backend_smoke.mjs http://127.0.0.1:4173 output/pvp-live-current-action-disconnect-terminal-green-20260623`，70/70 findings、0 failed、0 console error。
+  - 当前结论
+    - live PVP 弱网/断线提示现在更像玩家能理解的战斗状态：非当前行动方断线不会误导成马上判负，也不会把内部协议码直接暴露到屏幕；当前行动方真正断线超过宽限时，真实浏览器能看到服务端权威终局、双方胜负复盘和刷新恢复。本轮只打磨服务端权威连接节奏文案和真实浏览器回归，不改变心跳阈值、超时裁决、战斗数值、正式结算、奖励或线上配置。
+
 - 2026-06-23: V10-S46 live PVP waiting rematch reload browser contract
   - 本轮完成
     - `tests/browser_pvp_live_real_backend_smoke.mjs` 新增真实后端双账号 waiting rematch 刷新恢复段：败方发起低压力再战后，另开页面并重新打开 live 面板，必须恢复同一 source terminal match、同一 `waiting_rematch` 阶段、Bo3 第 2 局/换边再战状态和 1/2 确认进度。

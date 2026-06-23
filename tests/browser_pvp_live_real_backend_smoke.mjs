@@ -1636,6 +1636,7 @@ async function writeReport() {
           && activeNonTurnDisconnectProbe.textConnectionTempo?.tempoState === 'opponent_non_turn_disconnected'
           && /对方断线/.test(activeNonTurnDisconnectProbe.connectionText)
           && /对局继续|当前行动仍可提交|轮到对手/.test(`${activeNonTurnDisconnectProbe.connectionText} ${activeNonTurnDisconnectProbe.connectionTempo}`)
+          && !/connection_timeout|turn_timeout/.test(`${activeNonTurnDisconnectProbe.connectionText} ${activeNonTurnDisconnectProbe.connectionTempo}`)
           && !/等待权威超时结算/.test(`${activeNonTurnDisconnectProbe.connectionText} ${activeNonTurnDisconnectProbe.connectionTempo}`)
           && activeNonTurnDisconnectProbe.connectionTempoState === 'opponent_non_turn_disconnected'
           && activeNonTurnDisconnectProbe.connectionTempoActor === activeSecondSeat
@@ -3077,6 +3078,165 @@ async function writeReport() {
         && !invalidatedNoSeasonHonorProbe.matchRead?.stateView?.postMatchReview,
       JSON.stringify({ timeoutJoinC, timeoutJoinD, timeoutSetupC, invalidatedC, invalidatedNoSeasonHonorProbe, seatCJoinActionable, seatDJoinActionable }),
     );
+
+    const seatE = await preparePage(browser, `live_real_timeout_e_${runId}`, '戊');
+    const seatF = await preparePage(browser, `live_real_timeout_f_${runId}`, '己');
+    await seedRankedHistory(seatE.username, 1000, 6);
+    await seedRankedHistory(seatF.username, 1000, 6);
+    await seatE.page.evaluate(() => {
+      window.game.player.name = '戊';
+      window.PVPScene.switchTab('live');
+    });
+    await seatF.page.evaluate(() => {
+      window.game.player.name = '己';
+      window.PVPScene.switchTab('live');
+    });
+    await seatE.page.waitForFunction(() => window.PVPScene?.getLiveSnapshot?.()?.phase === 'idle', null, { timeout: 8000 });
+    await seatF.page.waitForFunction(() => window.PVPScene?.getLiveSnapshot?.()?.phase === 'idle', null, { timeout: 8000 });
+    const seatEJoinActionable = await clickLiveControl(seatE.page, '[data-live-action="join-queue"]', 'seat-e-join-queue');
+    const disconnectJoinE = await waitForLivePhase(seatE.page, 'waiting');
+    const seatFJoinActionable = await clickLiveControl(seatF.page, '[data-live-action="join-queue"]', 'seat-f-join-queue');
+    const disconnectSetupF = await waitForLivePhase(seatF.page, 'setup');
+    const disconnectSetupE = await refreshUntilLivePhase(seatE.page, 'setup');
+    const disconnectReadyEActionable = await clickLiveControl(seatE.page, '[data-live-action="ready"]', 'seat-e-ready-live');
+    await refreshUntilLiveSnapshot(seatF.page, () => {
+      const snapshot = window.PVPScene?.getLiveSnapshot?.();
+      return snapshot?.phase === 'setup' && snapshot?.opponent?.ready === true;
+    }, null, 8000);
+    const disconnectReadyFActionable = await clickLiveControl(seatF.page, '[data-live-action="ready"]', 'seat-f-ready-live');
+    const disconnectActiveE = await waitForLivePhase(seatE.page, 'active', 10000);
+    const disconnectActiveF = await waitForLivePhase(seatF.page, 'active', 10000);
+    const disconnectActorSeat = disconnectActiveE.currentSeat;
+    const disconnectObserverSeat = otherSeatId(disconnectActorSeat);
+    const disconnectActorClient = disconnectActorSeat === disconnectActiveE.seatId ? seatE : seatF;
+    const disconnectObserverClient = disconnectObserverSeat === disconnectActiveE.seatId ? seatE : seatF;
+    await disconnectActorClient.page.evaluate(() => {
+      window.PVPScene.__realSmokeStartLiveHeartbeat = window.PVPScene.startLiveHeartbeat;
+      window.PVPScene.__realSmokeSendLiveHeartbeat = window.PVPScene.sendLiveHeartbeat;
+      window.PVPScene.startLiveHeartbeat = () => {};
+      window.PVPScene.sendLiveHeartbeat = async () => {};
+      window.PVPScene.stopLiveHeartbeat();
+      window.PVPScene.stopLiveRealtime();
+    });
+    const currentActionDisconnectPendingProbe = await disconnectObserverClient.page.evaluate(async actorSeat => {
+      const BackendClient = window.__THE_DEFIER_SERVICES__?.BackendClient;
+      const before = window.PVPScene.getLiveSnapshot();
+      const heartbeatElapsedMs = Math.max(0, Number(before?.connectionReport?.heartbeatStaleMs || 1000))
+        + Math.max(0, Number(before?.connectionReport?.graceMs || 60000))
+        + 1000;
+      const response = await BackendClient.requestServer(`/api/pvp/live/test/matches/${before.matchId}/seats/${actorSeat}`, {
+        method: 'POST',
+        data: { heartbeatElapsedMs, testMatchScope: window.__DEFIER_PVP_REAL_TEST_SCOPE }
+      });
+      const tempoEl = document.querySelector('[data-live-connection-tempo]');
+      return {
+        before,
+        response,
+        snapshot: window.PVPScene.getLiveSnapshot(),
+        connectionText: document.querySelector('[data-live-connection-status]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+        connectionTempo: tempoEl?.textContent?.replace(/\s+/g, ' ').trim() || '',
+        connectionTempoState: tempoEl?.getAttribute('data-live-connection-tempo-state') || '',
+        eventLogText: document.querySelector('[data-live-event-log]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+        responseStatusLine: response?.stateView?.connectionTempoReport?.statusLine || '',
+        responseDetailLine: response?.stateView?.connectionTempoReport?.detailLine || '',
+        heartbeatElapsedMs,
+      };
+    }, disconnectActorSeat);
+    const currentActionFinishedObserver = await refreshUntilLivePhase(disconnectObserverClient.page, 'finished', 10000);
+    const currentActionFinishedActor = await refreshUntilLivePhase(disconnectActorClient.page, 'finished', 10000);
+    const currentActionDisconnectReviewProbe = await disconnectObserverClient.page.evaluate(() => {
+      const snapshot = window.PVPScene.getLiveSnapshot();
+      const textPayload = JSON.parse(window.render_game_to_text()).pvp?.live || null;
+      return {
+        phase: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-phase') || '',
+        summary: document.querySelector('[data-live-summary]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+        reviewText: document.querySelector('[data-live-post-match-review]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+        eventText: document.querySelector('[data-live-event-log]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+        connectionText: document.querySelector('[data-live-connection-status]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+        snapshot,
+        textPayload,
+      };
+    });
+    const currentActionDisconnectReloadPage = await disconnectObserverClient.context.newPage();
+    currentActionDisconnectReloadPage.on('console', msg => {
+      if (msg.type() === 'error') recordConsoleError(msg.text());
+    });
+    currentActionDisconnectReloadPage.on('pageerror', error => recordConsoleError(error.message || String(error)));
+    await currentActionDisconnectReloadPage.goto(appUrl, { waitUntil: 'domcontentloaded' });
+    await reloadAndOpenLivePanel(currentActionDisconnectReloadPage);
+    const currentActionDisconnectReloaded = await waitForLivePhase(currentActionDisconnectReloadPage, 'finished', 15000);
+    const currentActionDisconnectReloadProbe = await currentActionDisconnectReloadPage.evaluate(() => ({
+      phase: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-phase') || '',
+      reviewText: document.querySelector('[data-live-post-match-review]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+      snapshot: window.PVPScene.getLiveSnapshot(),
+      textPayload: JSON.parse(window.render_game_to_text()).pvp?.live || null,
+    }));
+    await currentActionDisconnectReloadPage.close();
+    const currentActionDisconnectVisibleText = [
+      currentActionDisconnectPendingProbe.connectionText,
+      currentActionDisconnectPendingProbe.connectionTempo,
+      currentActionDisconnectPendingProbe.eventLogText,
+      currentActionDisconnectPendingProbe.responseStatusLine,
+      currentActionDisconnectPendingProbe.responseDetailLine,
+      currentActionDisconnectReviewProbe.summary,
+      currentActionDisconnectReviewProbe.reviewText,
+      currentActionDisconnectReviewProbe.eventText,
+      currentActionDisconnectReviewProbe.connectionText,
+      currentActionDisconnectReloadProbe.reviewText,
+    ].join(' ');
+    add(
+      'real browser current action disconnect resolves to authoritative connection-timeout review',
+      disconnectJoinE.phase === 'waiting'
+        && disconnectSetupF.phase === 'setup'
+        && disconnectSetupE.phase === 'setup'
+        && (!isMobileViewport || (seatEJoinActionable?.ok === true && seatFJoinActionable?.ok === true && disconnectReadyEActionable?.ok === true && disconnectReadyFActionable?.ok === true))
+        && currentActionDisconnectPendingProbe.response?.success === true
+        && currentActionDisconnectPendingProbe.response?.stateView?.status === 'active'
+        && currentActionDisconnectPendingProbe.snapshot?.phase === 'active'
+        && currentActionDisconnectPendingProbe.response?.stateView?.connectionTempoReport?.tempoState === 'opponent_action_timeout_pending'
+        && currentActionDisconnectPendingProbe.response?.stateView?.connectionTempoReport?.affectedSeat === disconnectActorSeat
+        && /等待连接超时权威结算|连接超时/.test(`${currentActionDisconnectPendingProbe.responseStatusLine} ${currentActionDisconnectPendingProbe.responseDetailLine}`)
+        && currentActionFinishedObserver.phase === 'finished'
+        && currentActionFinishedActor.phase === 'finished'
+        && currentActionFinishedObserver.matchId === currentActionFinishedActor.matchId
+        && currentActionFinishedObserver.matchId === currentActionDisconnectPendingProbe.before?.matchId
+        && currentActionFinishedObserver.postMatchReview?.finishReason === 'connection_timeout'
+        && currentActionFinishedActor.postMatchReview?.finishReason === 'connection_timeout'
+        && currentActionFinishedObserver.postMatchReview?.result === 'win'
+        && currentActionFinishedActor.postMatchReview?.result === 'loss'
+        && currentActionDisconnectReviewProbe.phase === 'finished'
+        && currentActionDisconnectReviewProbe.snapshot?.postMatchReview?.finishReason === 'connection_timeout'
+        && currentActionDisconnectReviewProbe.textPayload?.postMatchReview?.finishReason === 'connection_timeout'
+        && /连接超时|重连宽限结束|行动超时/.test(currentActionDisconnectReviewProbe.reviewText)
+        && /行动超时|对局结束/.test(currentActionDisconnectReviewProbe.eventText)
+        && currentActionDisconnectReloaded.phase === 'finished'
+        && currentActionDisconnectReloaded.matchId === currentActionFinishedObserver.matchId
+        && currentActionDisconnectReloadProbe.phase === 'finished'
+        && currentActionDisconnectReloadProbe.snapshot?.postMatchReview?.finishReason === 'connection_timeout'
+        && currentActionDisconnectReloadProbe.textPayload?.postMatchReview?.finishReason === 'connection_timeout'
+        && !/connection_timeout|turn_timeout|ready_timeout|ranked_authoritative|swap_sides|forfeit_disconnect/.test(currentActionDisconnectVisibleText),
+      JSON.stringify({
+        disconnectJoinE,
+        disconnectSetupF,
+        disconnectSetupE,
+        disconnectActiveE,
+        disconnectActiveF,
+        disconnectActorSeat,
+        disconnectObserverSeat,
+        currentActionDisconnectPendingProbe,
+        currentActionFinishedObserver,
+        currentActionFinishedActor,
+        currentActionDisconnectReviewProbe,
+        currentActionDisconnectReloaded,
+        currentActionDisconnectReloadProbe,
+        seatEJoinActionable,
+        seatFJoinActionable,
+        disconnectReadyEActionable,
+        disconnectReadyFActionable,
+      }),
+    );
+    await seatE.context.close().catch(() => {});
+    await seatF.context.close().catch(() => {});
 
     await safeAuditScreenshot(seatA.page, path.join(outDir, 'seat-a-live-real.png'), 'pvp_live_real_seat_a', {
       fullPage: false,
