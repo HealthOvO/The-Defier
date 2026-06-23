@@ -4076,6 +4076,35 @@ async function safeElementScreenshot(page, selector, outputPath) {
       && !/findOpponent|reportMatchResult|GhostEnemy|startPVPBattle|didWin|matchTicket/.test(JSON.stringify(keyTurnActionProbe.calls)),
     JSON.stringify(keyTurnActionProbe),
   );
+  await page.click('[data-live-key-turn-focus="pressure_window"]', { timeout: 5000, force: true });
+  await page.waitForTimeout(100);
+  const keyTurnStepperProbe = await page.evaluate(() => ({
+    phase: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-phase') || '',
+    hint: document.querySelector('[data-live-last-error]')?.textContent || '',
+    eventsPanelFocused: document.querySelector('[data-live-event-panel]')?.getAttribute('data-live-review-focus') || '',
+    keyTurnPanelFocused: document.querySelector('[data-live-key-turn-replay]')?.getAttribute('data-live-review-focus') || '',
+    pressureFocused: document.querySelector('[data-live-key-turn="pressure_window"]')?.getAttribute('data-live-review-focus') || '',
+    eventLogText: document.querySelector('[data-live-event-log]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+    eventRows: Array.from(document.querySelectorAll('[data-live-event-row]')).map(row => ({
+      type: row.getAttribute('data-live-event-type') || '',
+      text: row.textContent?.replace(/\s+/g, ' ').trim() || '',
+    })),
+    keyTurnPayload: window.PVPScene.getLiveSnapshot()?.postMatchReview?.keyTurnReplay || null,
+  }));
+  add(
+    'live UI key-turn stepper focuses one public evidence window without hidden payloads',
+    keyTurnStepperProbe.phase === 'finished'
+      && /关键回合|公开事件/.test(keyTurnStepperProbe.hint)
+      && keyTurnStepperProbe.eventsPanelFocused === 'key_turn:pressure_window'
+      && keyTurnStepperProbe.keyTurnPanelFocused === 'key_turn:pressure_window'
+      && keyTurnStepperProbe.pressureFocused === 'key_turn:pressure_window'
+      && keyTurnStepperProbe.eventRows.length === 1
+      && keyTurnStepperProbe.eventRows[0]?.type === 'card_played'
+      && /术式打出/.test(keyTurnStepperProbe.eventRows[0]?.text || '')
+      && !/开战|对局结束|认输/.test(keyTurnStepperProbe.eventRows.map(row => row.text).join(' '))
+      && !/payload|hand|deck|cardId|instanceId|loadoutSnapshot|reward|rating|elo/i.test(JSON.stringify(keyTurnStepperProbe.keyTurnPayload || {})),
+    JSON.stringify(keyTurnStepperProbe),
+  );
 
   const disputeReportCallStart = await page.evaluate(() => window.__livePvpAuditCalls.length);
   await page.click('[data-live-post-review-action="report_issue"]', { timeout: 5000, force: true });

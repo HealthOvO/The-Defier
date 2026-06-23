@@ -3013,17 +3013,70 @@ export const PVPScene = {
         ${replay.summary ? `<div class="pvp-live-key-turns-summary">${this.escapeHtml(replay.summary)}</div>` : ''}
         <div class="pvp-live-key-turn-grid">
           ${replay.turns.map(turn => `
-            <div class="pvp-live-key-turn severity-${this.escapeHtml(turn.severity)}" data-live-key-turn="${this.escapeHtml(turn.id)}">
+            <button
+              type="button"
+              class="pvp-live-key-turn severity-${this.escapeHtml(turn.severity)}"
+              data-live-key-turn="${this.escapeHtml(turn.id)}"
+              data-live-key-turn-focus="${this.escapeHtml(turn.id)}"
+              onclick="PVPScene.focusLiveKeyTurn('${this.escapeHtml(turn.id)}')"
+              title="定位 ${this.escapeHtml(turn.label)} 的公开事件"
+            >
               <div class="pvp-live-key-turn-meta">
                 <span>${this.escapeHtml(turn.label)}</span>
                 <span>${turn.sequence !== null ? `#${this.escapeHtml(turn.sequence)}` : '--'} · ${this.escapeHtml(this.formatLiveEventTypeLabel(turn.eventType))}</span>
               </div>
               <div class="pvp-live-key-turn-lesson">${this.escapeHtml(turn.lesson)}</div>
-            </div>
+            </button>
           `).join('')}
         </div>
       </div>
     `;
+  },
+  getLiveReviewFocusedEvents(view, reviewFocus = '') {
+    const focus = String(reviewFocus || '');
+    const review = this.getLivePostMatchReview(view);
+    if (!review) return [];
+    if (focus === 'events') return Array.isArray(review.evidence) ? review.evidence : [];
+    const keyTurns = review.keyTurnReplay && Array.isArray(review.keyTurnReplay.turns)
+      ? review.keyTurnReplay.turns
+      : [];
+    if (focus === 'key_turns') return keyTurns;
+    if (focus.startsWith('key_turn:')) {
+      const turnId = focus.slice('key_turn:'.length);
+      const selectedTurns = keyTurns.filter(turn => String(turn && turn.id || '') === turnId);
+      if (selectedTurns.length === 0) return [];
+      const evidence = Array.isArray(review.evidence) ? review.evidence : [];
+      const matchedEvidence = selectedTurns
+        .map(turn => evidence.find(event => {
+          const sameSequence = turn.sequence !== null && Number.isFinite(Number(event && event.sequence))
+            && Math.floor(Number(event.sequence)) === turn.sequence;
+          const sameType = String(event && event.eventType || '') === String(turn && turn.eventType || '');
+          return sameSequence && sameType;
+        }) || turn)
+        .filter(Boolean);
+      return matchedEvidence;
+    }
+    if (focus.startsWith('experience_check:')) {
+      const checkId = focus.slice('experience_check:'.length);
+      const checks = review.experienceReport && Array.isArray(review.experienceReport.fairnessChecks)
+        ? review.experienceReport.fairnessChecks
+        : [];
+      const check = checks.find(item => String(item && item.id || '') === checkId);
+      return check && Array.isArray(check.linkedEvidence) ? check.linkedEvidence : [];
+    }
+    return [];
+  },
+  renderLiveEventRows(events = []) {
+    const list = Array.isArray(events) ? events : [];
+    return list.map(event => {
+      const formatted = this.formatLiveEvent(event);
+      return `
+        <div class="pvp-live-event-row" data-live-event-row data-live-event-type="${this.escapeHtml(formatted.type)}">
+          <span class="pvp-live-event-main">${this.escapeHtml(formatted.label)}</span>
+          <span class="pvp-live-event-detail">${this.escapeHtml(formatted.detail)}</span>
+        </div>
+      `;
+    }).join('');
   },
   isLivePublicNoImpactReport(report = null) {
     const source = report && typeof report === 'object' ? report : null;
@@ -4507,9 +4560,15 @@ export const PVPScene = {
     if (this.liveReviewFocus) {
       const eventPanel = root.querySelector('[data-live-event-panel]');
       if (eventPanel) eventPanel.setAttribute('data-live-review-focus', this.liveReviewFocus);
-      if (this.liveReviewFocus === 'key_turns') {
+      if (this.liveReviewFocus === 'key_turns' || this.liveReviewFocus.startsWith('key_turn:')) {
         const keyTurnPanel = root.querySelector('[data-live-key-turn-replay]');
-        if (keyTurnPanel) keyTurnPanel.setAttribute('data-live-review-focus', 'key_turns');
+        if (keyTurnPanel) keyTurnPanel.setAttribute('data-live-review-focus', this.liveReviewFocus);
+        if (this.liveReviewFocus.startsWith('key_turn:')) {
+          const turnId = this.liveReviewFocus.slice('key_turn:'.length);
+          const focusedTurn = Array.from(root.querySelectorAll('[data-live-key-turn]'))
+            .find(item => item.getAttribute('data-live-key-turn') === turnId);
+          if (focusedTurn) focusedTurn.setAttribute('data-live-review-focus', this.liveReviewFocus);
+        }
       } else if (this.liveReviewFocus.startsWith('experience_check:')) {
         const checkId = this.liveReviewFocus.slice('experience_check:'.length);
         const focusedCheck = Array.from(root.querySelectorAll('[data-live-experience-check]')).find(item => item.getAttribute('data-live-experience-check') === checkId);
@@ -4569,28 +4628,17 @@ export const PVPScene = {
     if (eventLog) {
       const eventPanel = root.querySelector('[data-live-event-panel]');
       const reviewFocus = eventPanel ? eventPanel.getAttribute('data-live-review-focus') : '';
-      const review = this.getLivePostMatchReview(view);
-      const reviewEvents = reviewFocus === 'events' ? review?.evidence || [] : [];
-      const keyTurnEvents = reviewFocus === 'key_turns' ? review?.keyTurnReplay?.turns || [] : [];
-      const experienceCheckId = reviewFocus && reviewFocus.startsWith('experience_check:') ? reviewFocus.slice('experience_check:'.length) : '';
-      const experienceEvents = experienceCheckId
-        ? (review?.experienceReport?.fairnessChecks || []).find(check => check.id === experienceCheckId)?.linkedEvidence || []
-        : [];
-      const focusedEvents = experienceEvents.length > 0 ? experienceEvents : keyTurnEvents.length > 0 ? keyTurnEvents : reviewEvents;
+      let focusedEvents = this.getLiveReviewFocusedEvents(view, reviewFocus);
+      if (focusedEvents.length === 0 && reviewFocus && reviewFocus.startsWith('key_turn:')) {
+        const snapshot = this.getLiveSnapshot();
+        focusedEvents = this.getLiveReviewFocusedEvents({ postMatchReview: snapshot && snapshot.postMatchReview }, reviewFocus);
+      }
       const events = focusedEvents.length > 0
         ? focusedEvents
         : Array.isArray(state.lastEvents) && state.lastEvents.length > 0 ? state.lastEvents : view && Array.isArray(view.recentEvents) ? view.recentEvents.slice(-5) : [];
       const filteredEvents = this.filterLiveEventsForMute(events);
       const visibleEvents = focusedEvents.length > 0 ? filteredEvents.slice(0, 12) : filteredEvents.slice(-8);
-      eventLog.innerHTML = visibleEvents.length > 0 ? visibleEvents.map(event => {
-        const formatted = this.formatLiveEvent(event);
-        return `
-        <div class="pvp-live-event-row" data-live-event-type="${this.escapeHtml(formatted.type)}">
-          <span class="pvp-live-event-main">${this.escapeHtml(formatted.label)}</span>
-          <span class="pvp-live-event-detail">${this.escapeHtml(formatted.detail)}</span>
-        </div>
-      `;
-      }).join('') : '暂无事件';
+      eventLog.innerHTML = visibleEvents.length > 0 ? this.renderLiveEventRows(visibleEvents) : '暂无事件';
     }
 
     const queueCooldownCountdown = this.getLiveQueueCooldownCountdown(state);
@@ -5289,6 +5337,50 @@ export const PVPScene = {
       }
     }
     const hint = root ? root.querySelector('[data-live-last-error]') : null;
+    const message = this.liveInlineHint;
+    if (hint) hint.textContent = message;
+    if (typeof Utils !== 'undefined' && Utils && typeof Utils.showBattleLog === 'function') {
+      Utils.showBattleLog(message);
+    }
+  },
+  focusLiveKeyTurn(turnId) {
+    const id = String(turnId || '').trim();
+    if (!id) return;
+    const focus = `key_turn:${id}`;
+    this.liveReviewFocus = focus;
+    this.liveInlineHint = '已定位这个关键回合的公开事件；练习只使用公开序列，不读取隐藏手牌、牌库或事件 payload。';
+    const root = document.querySelector('[data-live-pvp-root]');
+    const eventPanel = root ? root.querySelector('[data-live-event-panel]') : null;
+    if (eventPanel) {
+      eventPanel.setAttribute('data-live-review-focus', focus);
+    }
+    this.renderLivePanel();
+    const nextRoot = document.querySelector('[data-live-pvp-root]') || root;
+    const nextEventPanel = nextRoot ? nextRoot.querySelector('[data-live-event-panel]') : eventPanel;
+    const keyTurnPanel = nextRoot ? nextRoot.querySelector('[data-live-key-turn-replay]') : null;
+    const focusedTurn = nextRoot
+      ? Array.from(nextRoot.querySelectorAll('[data-live-key-turn]')).find(item => item.getAttribute('data-live-key-turn') === id)
+      : null;
+    if (nextEventPanel) nextEventPanel.setAttribute('data-live-review-focus', focus);
+    if (keyTurnPanel) keyTurnPanel.setAttribute('data-live-review-focus', focus);
+    if (focusedTurn) focusedTurn.setAttribute('data-live-review-focus', focus);
+    const eventLog = nextRoot ? nextRoot.querySelector('[data-live-event-log]') : null;
+    if (eventLog) {
+      const state = this.getLiveSession().getState();
+      const view = state && state.stateView ? state.stateView : null;
+      let focusedEvents = this.getLiveReviewFocusedEvents(view, focus);
+      if (focusedEvents.length === 0) {
+        const snapshot = this.getLiveSnapshot();
+        focusedEvents = this.getLiveReviewFocusedEvents({ postMatchReview: snapshot && snapshot.postMatchReview }, focus);
+      }
+      focusedEvents = this.filterLiveEventsForMute(focusedEvents);
+      eventLog.innerHTML = focusedEvents.length > 0 ? this.renderLiveEventRows(focusedEvents.slice(0, 12)) : '暂无事件';
+    }
+    const scrollTarget = nextEventPanel || focusedTurn || keyTurnPanel;
+    if (scrollTarget && typeof scrollTarget.scrollIntoView === 'function') {
+      scrollTarget.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }
+    const hint = nextRoot ? nextRoot.querySelector('[data-live-last-error]') : null;
     const message = this.liveInlineHint;
     if (hint) hint.textContent = message;
     if (typeof Utils !== 'undefined' && Utils && typeof Utils.showBattleLog === 'function') {

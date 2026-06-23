@@ -683,6 +683,7 @@ assert.ok(!/\.pvp-live-first-guide\s*\{[\s\S]*?max-height:\s*60px[\s\S]*?overflo
   '.pvp-live-post-review',
   '.pvp-live-key-turns',
   '.pvp-live-key-turn',
+  '.pvp-live-key-turn[data-live-review-focus',
   '.pvp-live-key-turn-lesson',
   '.pvp-live-experience-report',
   '.pvp-live-experience-check',

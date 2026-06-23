@@ -644,6 +644,7 @@ const browserAutomationBootAudit = read('tests/browser_automation_boot_audit.mjs
   'reviewParity',
   'live UI post-match review actions are clickable safe handoff entries',
   'live UI post-match key-turn action fetches authoritative replay and focuses it without hidden payloads',
+  'live UI key-turn stepper focuses one public evidence window without hidden payloads',
   'live UI post-match report_issue submits audit-safe dispute receipt without changing ranked state',
   'live UI post-match avoid_opponent records no-score no-reward opponent avoidance',
   'live UI requires a second click before surrender submits terminal intent',
@@ -2939,6 +2940,8 @@ assert.ok(
   'opening safeguard should render the authoritative opener assignment chip',
   'post-match review normalizer should preserve audit action ids for real UI buttons',
   'key-turn review action should fetch the authoritative replay_self layer',
+  'key-turn replay should render each key turn as a clickable focus step',
+  'key-turn focus should reuse matching public evidence details when available',
   'share_replay action should create a 30-day public replay share',
   'share_replay action should copy the front-end public replay viewer link',
   'public replay viewer should fetch by opaque share token only',
@@ -2950,6 +2953,18 @@ assert.ok(
   assert.ok(
     pvpLiveUiRuntimeChecks.includes(needle),
     `live PVP UI runtime should pin authoritative heartbeat scheduling marker: ${needle}`,
+  );
+});
+
+[
+  'getLiveReviewFocusedEvents(',
+  'focusLiveKeyTurn(',
+  'data-live-key-turn-focus',
+  'key_turn:',
+].forEach((needle) => {
+  assert.ok(
+    pvpSceneSource.includes(needle),
+    `PVPScene should pin key-turn stepper marker: ${needle}`,
   );
 });
 

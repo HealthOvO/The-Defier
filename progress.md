@@ -1,5 +1,25 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-24: V10-S59 live PVP key-turn stepper replay focus
+  - 本轮完成
+    - `js/scenes/pvp-scene.js` 将赛后 `keyTurnReplay.turns` 从静态卡片升级为可点击的关键回合步骤：每个步骤带 `data-live-key-turn-focus` 并调用 `focusLiveKeyTurn()`，点击后事件面板只聚焦该公开窗口。
+    - 新增 `getLiveReviewFocusedEvents()` 统一处理 `events / key_turns / key_turn:<id> / experience_check:<id>` 四类复盘聚焦；关键回合逐段定位会优先按 `sequence + eventType` 复用 `review.evidence` 里的公开事件明细，找不到时才回退到 key-turn 摘要。
+    - `css/pvp.css` 为 key-turn stepper 补按钮重置、hover/focus-visible 和 `key_turn:<id>` 聚焦态，避免按钮默认样式破坏复盘卡片，也让玩家明确知道当前正在看哪一拍。
+    - `tests/sanity_pvp_live_ui_runtime_checks.mjs` 先红后绿锁住两件事：关键回合必须是可点击步骤；点击某一段时必须复用对应公开 evidence 明细，且不暴露隐藏手牌、牌库、卡牌实例、奖励、rating 或 ELO。
+    - `tests/browser_pvp_live_audit.mjs` 新增真实 DOM 点击审计：先通过“关键回合复盘”拉取 `replay_self`，再点击 `pressure_window`，事件栏只显示对应 `card_played` 公开窗口，不混入开战/终局/认输文本。
+    - `tests/sanity_pvp_live_ui_contract_checks.cjs` 与 `tests/sanity_release_gate_coverage_checks.cjs` 同步锁住 DOM/CSS/helper/handler/browser finding marker，`game-intro.html` 同步“关键回合逐段定位”玩家说明。
+  - 已验证
+    - 红测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs` 在实现前失败于 `key-turn replay should render each key turn as a clickable focus step`，当时关键回合仍是静态 `div`。
+    - 红测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs` 在 evidence 复用前失败于 `key-turn focus should reuse matching public evidence details when available`，当时只返回 key-turn 摘要、缺少公开 `publicData.targetHp`。
+    - 绿测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs`
+    - 绿测：`node tests/sanity_pvp_live_ui_contract_checks.cjs`
+    - 绿测：`node tests/sanity_release_gate_coverage_checks.cjs`
+    - 构建：`npm run build:pages`
+    - 浏览器审计：`node tests/browser_pvp_live_audit.mjs http://127.0.0.1:4173 output/pvp-live-key-turn-stepper-audit`，109/109 findings、0 failed、0 console error。
+    - 全量 Node 门禁：`npm run test:node`
+  - 当前结论
+    - live PVP 的赛后复盘从“看到关键回合列表”推进到“能逐段定位公开证据”：败方可以直接点压力窗口、开局窗口或终局窗口，事件栏只展示该拍的公开事件，便于复刻练习和下一局调整；该切片只改复盘交互和门禁，不改变匹配、先后手、伤害、卡牌数值、正式结算、奖励、心跳或线上配置。
+
 - 2026-06-23: V10-S58 live PVP player-readable match quality copy
   - 本轮完成
     - `js/scenes/pvp-scene.js` 为 `formatLiveMatchQuality()` 新增匹配阶段和评分差桶的玩家文案映射：`mvp_open_pool / strict_rating / accepted_200_399` 等前台改为“新手公开池 / 近分匹配 / 双方确认宽分差”，`unrated_mvp / near_0_99 / expanded_200_399` 等改为“定级样本 / 近分 0-99 / 宽分差 200-399”。

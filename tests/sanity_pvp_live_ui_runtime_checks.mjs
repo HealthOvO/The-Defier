@@ -486,6 +486,66 @@ assert.match(protocolLabelReviewMarkup, /服务端权威结算/, 'settlement rep
 assert.match(protocolLabelReviewMarkup, /换边再战/, 'friendly series should map swap-side policy to player copy');
 assert.doesNotMatch(protocolLabelReviewMarkup, rawProtocolPattern, 'post-match visible review should not expose internal protocol codes');
 
+const keyTurnStepperView = {
+  status: 'finished',
+  postMatchReview: {
+    reportVersion: 'pvp-live-post-match-review-v1',
+    title: '关键回合复盘',
+    result: 'loss',
+    finishReason: 'lethal',
+    summary: '公开轨迹显示终局。',
+    evidence: [
+      { eventType: 'battle_started', sequence: 1, actingSeat: 'A', publicData: { firstSeat: 'A' } },
+      { eventType: 'damage_applied', sequence: 4, actingSeat: 'A', publicData: { targetSeat: 'B', hpDamage: 8, targetHp: 1 } },
+      { eventType: 'match_finished', sequence: 9, actingSeat: 'B', publicData: { winnerSeat: 'B', loserSeat: 'A' } }
+    ],
+    keyTurnReplay: {
+      reportVersion: 'pvp-live-key-turn-replay-v1',
+      sourceVisibility: 'public_events',
+      usesHiddenInformation: false,
+      rankedImpact: 'none',
+      turns: [
+        { id: 'opening', label: '开局读题', sequence: 1, eventType: 'battle_started', lesson: '确认先后手。' },
+        { id: 'counterplay', label: '反打窗口', sequence: 4, eventType: 'damage_applied', lesson: '保留防守后再反打。' },
+        { id: 'finish', label: '终局选择', sequence: 9, eventType: 'match_finished', lesson: '确认终局前一拍。' }
+      ]
+    },
+    nextActions: []
+  }
+};
+const keyTurnStepperMarkup = PVPScene.renderLiveKeyTurnReplay(keyTurnStepperView.postMatchReview);
+assert.match(
+  keyTurnStepperMarkup,
+  /data-live-key-turn-focus="counterplay"/,
+  'key-turn replay should render each key turn as a clickable focus step',
+);
+assert.match(
+  keyTurnStepperMarkup,
+  /onclick="PVPScene\.focusLiveKeyTurn\('counterplay'\)"/,
+  'key-turn replay focus step should call the focused key-turn handler',
+);
+const focusedCounterplayEvents = PVPScene.getLiveReviewFocusedEvents(keyTurnStepperView, 'key_turn:counterplay');
+assert.deepEqual(
+  focusedCounterplayEvents.map(event => event.eventType),
+  ['damage_applied'],
+  'key-turn focus should narrow the event log to the selected public turn',
+);
+assert.equal(
+  focusedCounterplayEvents[0]?.sequence,
+  4,
+  'key-turn focus should preserve selected public evidence sequence',
+);
+assert.equal(
+  focusedCounterplayEvents[0]?.publicData?.targetHp,
+  1,
+  'key-turn focus should reuse matching public evidence details when available',
+);
+assert.doesNotMatch(
+  JSON.stringify(focusedCounterplayEvents),
+  /hand|deck|cardId|instanceId|loadoutSnapshot|reward|rating|elo/i,
+  'key-turn focus should not expose hidden payloads or ranked reward fields',
+);
+
 const authoritativeConnectionTempoView = {
   matchId: 'pvpm-ui-runtime-authoritative-tempo',
   status: 'active',
