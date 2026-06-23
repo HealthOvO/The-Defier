@@ -2168,17 +2168,138 @@ async function safeElementScreenshot(page, selector, outputPath) {
     payload: JSON.parse(window.render_game_to_text()).pvp?.live || null,
   }));
   add(
-    'live UI local disconnected state names authoritative sync path before timeout',
+    'live UI actual setup local disconnected state keeps no-score authoritative refresh boundary',
     /我方断线/.test(localDisconnectedProbe.connectionStatus)
       && /刷新同步权威结果|同步权威结果/.test(localDisconnectedProbe.connectionStatus)
-      && /仍在可恢复窗口会自动重连/.test(localDisconnectedProbe.connectionStatus)
-      && /权威|连接超时|超时结算/.test(localDisconnectedProbe.connectionStatus)
-      && !visibleProtocolPattern.test(`${localDisconnectedProbe.connectionStatus} ${localDisconnectedProbe.connectionTempo}`)
+      && /准备阶段/.test(localDisconnectedProbe.connectionStatus)
+      && /无效局|不计正式积分/.test(localDisconnectedProbe.connectionStatus)
+      && !/按连接超时结算|正式败局|判负/.test(localDisconnectedProbe.connectionStatus)
+      && !visibleProtocolPattern.test(localDisconnectedProbe.connectionStatus)
       && /刷新权威状态/.test(localDisconnectedProbe.tempoAction)
       && localDisconnectedProbe.tempoDuplicateGlobalRefreshCount === 0
       && localDisconnectedProbe.globalRefreshActionCount === 1
       && localDisconnectedProbe.payload?.connectionReport?.viewer?.status === 'disconnected',
     JSON.stringify(localDisconnectedProbe),
+  );
+  const setupLocalDisconnectedProbe = await page.evaluate(() => {
+    const view = {
+      status: 'setup',
+      currentSeat: 'A',
+      connectionReport: {
+        reportVersion: 'pvp-live-connection-v1',
+        connectionHealth: 'viewer_disconnected',
+        viewerSeat: 'A',
+        opponentSeat: 'B',
+        heartbeatIntervalMs: 5000,
+        heartbeatStaleMs: 15000,
+        graceMs: 30000,
+        viewer: { seatId: 'A', status: 'disconnected', isViewer: true, remainingGraceMs: 0 },
+        opponent: { seatId: 'B', status: 'online', isViewer: false, remainingGraceMs: 0 },
+      },
+    };
+    const scene = window.PVPScene;
+    const tempo = scene.getLiveConnectionTempo(view, { phase: 'setup' });
+    const el = document.querySelector('[data-live-connection-tempo]');
+    if (el) {
+      el.hidden = false;
+      el.setAttribute('data-live-connection-tempo-state', tempo?.tempoState || '');
+      el.setAttribute('data-live-connection-tempo-actor', tempo?.affectedSeat || '');
+      el.setAttribute('data-live-connection-tempo-severity', tempo?.severity || '');
+      el.innerHTML = scene.renderLiveConnectionTempo(view, { phase: 'setup' });
+    }
+    return {
+      phase: view.status,
+      connectionStatus: scene.formatLiveConnectionStatus(view),
+      connectionTempo: el?.textContent?.replace(/\s+/g, ' ').trim() || '',
+      connectionTempoState: el?.getAttribute('data-live-connection-tempo-state') || '',
+      connectionTempoActor: el?.getAttribute('data-live-connection-tempo-actor') || '',
+      tempoAction: el?.querySelector('[data-live-tempo-action="refresh-match"]')?.textContent?.trim() || '',
+      payload: {
+        connectionTempoReport: tempo,
+        connectionReport: view.connectionReport,
+      },
+    };
+  });
+  add(
+    'live UI setup local disconnect explains no-score invalidation instead of active timeout loss',
+    setupLocalDisconnectedProbe.phase === 'setup'
+      && /我方断线/.test(setupLocalDisconnectedProbe.connectionStatus)
+      && /刷新同步权威结果|同步权威结果/.test(setupLocalDisconnectedProbe.connectionStatus)
+      && /准备阶段/.test(setupLocalDisconnectedProbe.connectionStatus)
+      && /无效局|不计正式积分/.test(setupLocalDisconnectedProbe.connectionStatus)
+      && /准备阶段|无效局|不计正式积分/.test(setupLocalDisconnectedProbe.connectionTempo)
+      && !/按连接超时结算|正式败局|判负/.test(`${setupLocalDisconnectedProbe.connectionStatus} ${setupLocalDisconnectedProbe.connectionTempo}`)
+      && !visibleProtocolPattern.test(`${setupLocalDisconnectedProbe.connectionStatus} ${setupLocalDisconnectedProbe.connectionTempo}`)
+      && /刷新权威状态/.test(setupLocalDisconnectedProbe.tempoAction)
+      && setupLocalDisconnectedProbe.connectionTempoState === 'viewer_refresh_required'
+      && setupLocalDisconnectedProbe.connectionTempoActor === 'A'
+      && setupLocalDisconnectedProbe.payload?.connectionTempoReport?.usesHiddenInformation === false
+      && setupLocalDisconnectedProbe.payload?.connectionTempoReport?.rankedImpact === 'none',
+    JSON.stringify(setupLocalDisconnectedProbe),
+  );
+  const setupOpponentConnectionProbe = await page.evaluate(() => {
+    const scene = window.PVPScene;
+    const makeView = (tempoState, statusLine, detailLine) => ({
+      status: 'setup',
+      currentSeat: 'B',
+      connectionTempoReport: {
+        reportVersion: 'pvp-live-connection-tempo-v1',
+        sourceVisibility: 'server_authoritative_connection_state',
+        usesHiddenInformation: false,
+        rankedImpact: 'none',
+        tempoState,
+        severity: 'warning',
+        phase: 'setup',
+        currentSeat: 'B',
+        viewerSeat: 'B',
+        opponentSeat: 'A',
+        affectedSeat: 'A',
+        statusLine,
+        detailLine,
+        actionBoundary: 'continue_setup_action',
+        canSubmitIntent: true,
+        shouldWaitForAuthority: false,
+      },
+    });
+    return [
+      makeView('opponent_setup_grace', '连接：对方重连宽限 18s', '对手准备阶段重连中。'),
+      makeView('opponent_setup_disconnected', '连接：对方断线', '对手准备阶段断线。'),
+    ].map((view) => {
+      const tempo = scene.getLiveConnectionTempo(view, { phase: 'setup' });
+      const el = document.querySelector('[data-live-connection-tempo]');
+      if (el) {
+        el.hidden = false;
+        el.setAttribute('data-live-connection-tempo-state', tempo?.tempoState || '');
+        el.setAttribute('data-live-connection-tempo-actor', tempo?.affectedSeat || '');
+        el.setAttribute('data-live-connection-tempo-severity', tempo?.severity || '');
+        el.setAttribute('data-live-connection-tempo-boundary', tempo?.actionBoundary || '');
+        el.setAttribute('data-live-connection-tempo-can-submit', String(tempo?.canSubmitIntent === true));
+        el.innerHTML = scene.renderLiveConnectionTempo(view, { phase: 'setup' });
+      }
+      return {
+        tempoState: tempo?.tempoState || '',
+        status: scene.formatLiveConnectionStatus(view),
+        tempoText: el?.textContent?.replace(/\s+/g, ' ').trim() || '',
+        boundary: el?.getAttribute('data-live-connection-tempo-boundary') || '',
+        canSubmit: el?.getAttribute('data-live-connection-tempo-can-submit') || '',
+        payload: tempo,
+      };
+    });
+  });
+  add(
+    'live UI setup opponent disconnect keeps setup actions readable and score-safe',
+    setupOpponentConnectionProbe.length === 2
+      && setupOpponentConnectionProbe.every(item => /opponent_setup_(grace|disconnected)/.test(item.tempoState))
+      && setupOpponentConnectionProbe.every(item => /继续|调息|确认准备|准备/.test(`${item.status} ${item.tempoText}`))
+      && setupOpponentConnectionProbe.every(item => /无效局|不计正式积分/.test(`${item.status} ${item.tempoText}`))
+      && setupOpponentConnectionProbe.every(item => !/判负|正式败局|等待连接超时结算/.test(`${item.status} ${item.tempoText}`))
+      && setupOpponentConnectionProbe.every(item => !visibleProtocolPattern.test(`${item.status} ${item.tempoText}`))
+      && setupOpponentConnectionProbe.every(item => item.boundary === 'continue_setup_action')
+      && setupOpponentConnectionProbe.every(item => item.canSubmit === 'true')
+      && setupOpponentConnectionProbe.every(item => item.payload?.canSubmitIntent === true)
+      && setupOpponentConnectionProbe.every(item => item.payload?.usesHiddenInformation === false)
+      && setupOpponentConnectionProbe.every(item => item.payload?.rankedImpact === 'none'),
+    JSON.stringify(setupOpponentConnectionProbe),
   );
   const activeNonTurnDisconnectProbe = await page.evaluate(() => {
     const view = {
@@ -2775,6 +2896,18 @@ async function safeElementScreenshot(page, selector, outputPath) {
       await delay(20);
     }
     const controlledRealtimeHandlers = window.__livePvpAuditRealtimeHandlers;
+    if (session.getState?.()?.realtimeStatus !== 'connected') {
+      controlledRealtimeHandlers?.onOpen?.();
+      controlledRealtimeHandlers?.onMessage?.({
+        type: 'connected',
+        connectionId: 'audit-live-ws-1',
+        connectionReport: {
+          connectionId: 'audit-live-ws-1',
+          heartbeatIntervalMs: 5000,
+        },
+      });
+      await delay(0);
+    }
     controlledRealtimeHandlers?.onClose?.();
     await delay(0);
     const beforeResumeStatus = session.getState?.()?.realtimeStatus || '';
@@ -4931,7 +5064,7 @@ async function safeElementScreenshot(page, selector, outputPath) {
     await window.PVPScene.loadLivePanel();
   });
   await page.waitForTimeout(100);
-  await page.click('[data-live-post-review-action="friendly_rematch"]', { timeout: 5000, force: true });
+  await page.click('[data-live-post-match-review]:visible [data-live-post-review-action="friendly_rematch"]', { timeout: 5000, force: true });
   await page.waitForTimeout(120);
   const friendlyRematchProbe = await page.evaluate(() => ({
     phase: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-phase') || '',
@@ -5051,7 +5184,7 @@ async function safeElementScreenshot(page, selector, outputPath) {
     await window.PVPScene.loadLivePanel();
   });
   await page.waitForTimeout(100);
-  await page.click('[data-live-post-review-action="friendly_rematch"]', { timeout: 5000, force: true });
+  await page.click('[data-live-post-match-review]:visible [data-live-post-review-action="friendly_rematch"]', { timeout: 5000, force: true });
   await page.waitForTimeout(120);
   const friendlyCancelWaitProbe = await page.evaluate(() => {
     const series = document.querySelector('[data-live-friendly-series]');
@@ -5151,7 +5284,7 @@ async function safeElementScreenshot(page, selector, outputPath) {
     actionIds: Array.from(document.querySelectorAll('[data-live-post-review-action]')).map(button => button.getAttribute('data-live-post-review-action')),
     snapshot: window.PVPScene.getLiveSnapshot()?.friendlySeries || null,
   }));
-  await page.click('[data-live-post-review-action="friendly_rematch"]', { timeout: 5000, force: true });
+  await page.click('[data-live-post-match-review]:visible [data-live-post-review-action="friendly_rematch"]', { timeout: 5000, force: true });
   await page.waitForTimeout(2800);
   const friendlyDeciderRecoveryProbe = await page.evaluate(() => ({
     phase: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-phase') || '',

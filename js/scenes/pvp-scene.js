@@ -939,23 +939,39 @@ export const PVPScene = {
           label: String(authoritative.action.label || '')
         }
         : null;
+      const tempoState = String(authoritative.tempoState || 'stable');
+      const actionBoundary = String(authoritative.actionBoundary || '');
+      const canSubmitIntent = authoritative.canSubmitIntent === true;
+      const phase = String(authoritative.phase || view.status || sourceState && sourceState.phase || 'unknown');
+      const continueSetupAction = phase === 'setup'
+        && actionBoundary === 'continue_setup_action'
+        && canSubmitIntent
+        && (tempoState === 'opponent_setup_grace' || tempoState === 'opponent_setup_disconnected');
+      const statusLine = continueSetupAction
+        ? tempoState === 'opponent_setup_grace'
+          ? String(authoritative.statusLine || '连接：对方重连宽限中') + ' · 仍可继续调息或确认准备'
+          : String(authoritative.statusLine || '连接：对方断线') + ' · 仍可继续调息或确认准备'
+        : String(authoritative.statusLine || '连接：等待权威状态');
+      const detailLine = continueSetupAction
+        ? '对手仍在准备阶段连接恢复中；你可以继续调息或确认准备，若未开战成功，本局会走无效局且不计正式积分。'
+        : String(authoritative.detailLine || authoritative.statusLine || '连接节奏：等待权威状态');
       return {
         reportVersion: 'pvp-live-connection-tempo-v1',
         sourceVisibility: String(authoritative.sourceVisibility || 'server_authoritative_connection_state'),
         usesHiddenInformation: authoritative.usesHiddenInformation === true,
         rankedImpact: String(authoritative.rankedImpact || 'none'),
-        tempoState: String(authoritative.tempoState || 'stable'),
+        tempoState,
         severity: safeSeverity,
-        phase: String(authoritative.phase || view.status || sourceState && sourceState.phase || 'unknown'),
+        phase,
         currentSeat: String(authoritative.currentSeat || view.currentSeat || ''),
         viewerSeat: String(authoritative.viewerSeat || ''),
         opponentSeat: String(authoritative.opponentSeat || ''),
         affectedSeat: String(authoritative.affectedSeat || ''),
-        statusLine: String(authoritative.statusLine || '连接：等待权威状态'),
-        detailLine: String(authoritative.detailLine || authoritative.statusLine || '连接节奏：等待权威状态'),
+        statusLine,
+        detailLine,
         action,
-        actionBoundary: String(authoritative.actionBoundary || ''),
-        canSubmitIntent: authoritative.canSubmitIntent === true,
+        actionBoundary,
+        canSubmitIntent,
         shouldWaitForAuthority: authoritative.shouldWaitForAuthority === true,
         remainingGraceMs: Math.max(0, Math.floor(Number(authoritative.remainingGraceMs) || 0)),
         safeguards: Array.isArray(authoritative.safeguards)
@@ -1005,6 +1021,16 @@ export const PVPScene = {
       );
     }
     if (report.viewer.status === 'disconnected') {
+      if (phase === 'setup' || phase === 'matched') {
+        return makeTempo(
+          'viewer_refresh_required',
+          viewerSeat,
+          'danger',
+          `连接：我方断线 · 刷新同步权威结果；准备阶段若未开战成功，本局会成为无效局且不计正式积分 · 对方${opponentLabel}`,
+          '先刷新权威局面；准备阶段断线只等待服务端无效局判定，不等同于已开战后的正式胜负结算。',
+          { id: 'refresh_match', label: '刷新权威状态' }
+        );
+      }
       return makeTempo(
         'viewer_refresh_required',
         viewerSeat,

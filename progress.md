@@ -1,5 +1,28 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-24: V10-S61 live PVP setup disconnect no-score action copy
+  - 本轮完成
+    - `js/scenes/pvp-scene.js` 收紧 `getLiveConnectionTempo()` 的 viewer disconnected 分支：当对局仍处于 `setup/matched` 时，前台不再显示“否则按连接超时结算”，改为“准备阶段若未开战成功，本局会成为无效局且不计正式积分”。
+    - 该分支继续复用 `viewer_refresh_required` 和 `data-live-tempo-action="refresh-match"`，因此准备阶段本机断线仍会阻断调息/准备等 stale 输入，并保留“刷新权威状态”恢复路径。
+    - 同步收紧服务端权威 `opponent_setup_grace / opponent_setup_disconnected` 的前台 normalize：当服务端明确 `actionBoundary=continue_setup_action` 且 `canSubmitIntent=true`，前台会写明“仍可继续调息或确认准备”，并解释未开战成功只会走无效局/不计正式积分。
+    - `tests/sanity_pvp_live_ui_runtime_checks.mjs` 先红后绿锁住 setup 本机断线状态栏与连接节奏正文：必须出现“准备阶段 / 无效局 / 不计正式积分 / 刷新权威”，不得出现“按连接超时结算 / 正式败局 / 判负”。
+    - `tests/sanity_pvp_live_ui_runtime_checks.mjs` 追加权威对手 setup grace/disconnected 红绿断言：`canSubmitIntent=true` 时，`confirm-mulligan` 与 `ready` 仍可用，文案必须说明可继续准备和不计正式积分边界。
+    - `tests/browser_pvp_live_audit.mjs` 新增真实 DOM formatter 审计：构造 setup viewer disconnected 与 server-authoritative opponent setup grace/disconnected 连接报告，检查状态栏、tempo 正文、CTA、`tempoState`、`actionBoundary`、`canSubmitIntent`、`usesHiddenInformation=false`、`rankedImpact=none` 全部符合开战前无效局边界。
+    - 同时稳定 `tests/browser_pvp_live_audit.mjs` 里两个既有抖动点：前台恢复用例先显式进入 connected 再模拟 close，Bo3/再战点击收窄到可见的赛后复盘卡片，避免旧隐藏按钮或异步 realtime 状态污染 fresh 审计。
+    - `tests/sanity_release_gate_coverage_checks.cjs` 与 `game-intro.html` 同步锁住 browser finding 和玩家说明，避免后续把开战前断线误写成 active 阶段判负。
+  - 已验证
+    - 红测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs` 在实现前失败于 `setup local disconnected copy should keep pre-battle invalidation separate from active timeout loss`，当时实际可见“否则按连接超时结算”。
+    - 红测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs` 在权威对手 setup grace normalize 前失败于 `setup opponent grace should explain the no-score invalidation boundary`，当时实际只显示“对手准备阶段重连中”。
+    - 绿测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs`
+    - 绿测：`node tests/sanity_pvp_live_ui_contract_checks.cjs`
+    - 绿测：`node tests/sanity_release_gate_coverage_checks.cjs`
+    - 绿测：`node tests/sanity_intro_progress_sync_checks.cjs`
+    - 构建：`npm run build:pages`
+    - 浏览器审计：`node tests/browser_pvp_live_audit.mjs http://127.0.0.1:4173 output/pvp-live-setup-disconnect-copy-audit`，113/113 findings、0 failed、0 console error。
+    - 全量 Node 门禁：`npm run test:node`
+  - 当前结论
+    - live PVP 的连接文案进一步按阶段拆清：开战前本机断线不再被表达成正式败局或 active 超时结算；对手准备阶段掉线时，已连接玩家也能明确知道仍可继续调息或确认准备，且未开战成功只会走无效局/不计正式积分。该切片只改展示文案和门禁，不改变心跳阈值、无效局裁决、active 连接超时、匹配、战斗数值、正式结算、奖励或线上配置。
+
 - 2026-06-24: V10-S60 live PVP pre-click authoritative card preview
   - 本轮完成
     - `js/scenes/pvp-scene.js` 新增 `renderLiveCardActionPreview()`，复用服务端 `actionPreviewReport.playableCards`，在 active 且当前 viewer 行动、报告不含隐藏信息、`rankedImpact=none` 时，直接把每张可出手牌的权威公开预览渲染到卡面。

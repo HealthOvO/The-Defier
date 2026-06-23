@@ -399,6 +399,43 @@ const localDisconnectedTempoMarkup = PVPScene.renderLiveConnectionTempo({
 assert.match(localDisconnectedTempoMarkup, /data-live-tempo-action="refresh-match"/, 'connection tempo CTA should expose a dedicated tempo action hook');
 assert.doesNotMatch(localDisconnectedTempoMarkup, /data-live-action="refresh-match"/, 'connection tempo CTA must not duplicate the global refresh action hook');
 
+const setupLocalDisconnectedConnectionCopy = PVPScene.formatLiveConnectionStatus({
+  status: 'setup',
+  currentSeat: 'A',
+  connectionReport: {
+    reportVersion: 'pvp-live-connection-v1',
+    viewerSeat: 'A',
+    opponentSeat: 'B',
+    heartbeatIntervalMs: 1000,
+    heartbeatStaleMs: 1000,
+    graceMs: 30000,
+    viewer: { seatId: 'A', status: 'disconnected', isViewer: true, remainingGraceMs: 0 },
+    opponent: { seatId: 'B', status: 'online', isViewer: false, remainingGraceMs: 0 }
+  }
+});
+assert.match(setupLocalDisconnectedConnectionCopy, /我方断线/, 'setup local disconnected copy should name the viewer as disconnected');
+assert.match(setupLocalDisconnectedConnectionCopy, /准备阶段|无效局|不计正式积分/, 'setup local disconnected copy should keep pre-battle invalidation separate from active timeout loss');
+assert.match(setupLocalDisconnectedConnectionCopy, /刷新|权威/, 'setup local disconnected copy should guide the player to refresh authoritative state');
+assert.doesNotMatch(setupLocalDisconnectedConnectionCopy, /按连接超时结算|正式败局|判负/, 'setup local disconnected copy must not imply an active timeout loss before battle starts');
+
+const setupLocalDisconnectedTempoMarkup = PVPScene.renderLiveConnectionTempo({
+  status: 'setup',
+  currentSeat: 'A',
+  connectionReport: {
+    reportVersion: 'pvp-live-connection-v1',
+    viewerSeat: 'A',
+    opponentSeat: 'B',
+    heartbeatIntervalMs: 1000,
+    heartbeatStaleMs: 1000,
+    graceMs: 30000,
+    viewer: { seatId: 'A', status: 'disconnected', isViewer: true, remainingGraceMs: 0 },
+    opponent: { seatId: 'B', status: 'online', isViewer: false, remainingGraceMs: 0 }
+  }
+});
+assert.match(setupLocalDisconnectedTempoMarkup, /data-live-tempo-action="refresh-match"/, 'setup local disconnected tempo should keep the authoritative refresh CTA');
+assert.match(setupLocalDisconnectedTempoMarkup, /准备阶段|无效局|不计正式积分/, 'setup local disconnected tempo should explain pre-battle invalidation instead of active timeout settlement');
+assert.doesNotMatch(setupLocalDisconnectedTempoMarkup, /按连接超时结算|正式败局|判负/, 'setup local disconnected tempo must not imply active timeout loss');
+
 const opponentDisconnectedNonTurnCopy = PVPScene.formatLiveConnectionStatus({
   status: 'active',
   currentSeat: 'A',
@@ -737,6 +774,83 @@ assert.equal(setupRecoveryButtons.get('ready').disabled, false, 'setup recovery 
 PVPScene.updateLiveButtons('setup', false, { seatId: 'B', ready: true, mulliganUsed: true });
 assert.equal(setupRecoveryButtons.get('confirm-mulligan').disabled, true, 'setup recovery should disable mulligan after the viewer has used it');
 assert.equal(setupRecoveryButtons.get('ready').disabled, true, 'setup recovery should disable ready after the viewer has confirmed');
+
+const setupOpponentGraceView = {
+  status: 'setup',
+  currentSeat: 'B',
+  connectionTempoReport: {
+    reportVersion: 'pvp-live-connection-tempo-v1',
+    sourceVisibility: 'server_authoritative_connection_state',
+    usesHiddenInformation: false,
+    rankedImpact: 'none',
+    tempoState: 'opponent_setup_grace',
+    severity: 'warning',
+    phase: 'setup',
+    currentSeat: 'B',
+    viewerSeat: 'B',
+    opponentSeat: 'A',
+    affectedSeat: 'A',
+    statusLine: '连接：对方重连宽限 18s',
+    detailLine: '对手准备阶段重连中。',
+    actionBoundary: 'continue_setup_action',
+    canSubmitIntent: true,
+    shouldWaitForAuthority: false
+  }
+};
+const setupOpponentGraceStatus = PVPScene.formatLiveConnectionStatus(setupOpponentGraceView);
+const setupOpponentGraceTempo = PVPScene.renderLiveConnectionTempo(setupOpponentGraceView, { phase: 'setup' });
+assert.match(setupOpponentGraceStatus, /对方重连宽限/, 'setup opponent grace should remain visible as reconnect grace');
+assert.match(`${setupOpponentGraceStatus} ${setupOpponentGraceTempo}`, /继续|调息|确认准备|准备/, 'setup opponent grace should tell the connected player they can continue setup actions');
+assert.match(`${setupOpponentGraceStatus} ${setupOpponentGraceTempo}`, /无效局|不计正式积分/, 'setup opponent grace should explain the no-score invalidation boundary');
+assert.doesNotMatch(`${setupOpponentGraceStatus} ${setupOpponentGraceTempo}`, /判负|正式败局|等待连接超时结算/, 'setup opponent grace must not imply active timeout loss');
+setupRecoveryButtons.get('confirm-mulligan').disabled = true;
+setupRecoveryButtons.get('ready').disabled = true;
+PVPScene.getLiveSession = () => ({
+  getState: () => ({
+    ...setupRecoveryState,
+    stateView: {
+      ...setupRecoveryState.stateView,
+      connectionTempoReport: setupOpponentGraceView.connectionTempoReport
+    }
+  })
+});
+PVPScene.updateLiveButtons('setup', false, { seatId: 'B', ready: false, mulliganUsed: false });
+assert.equal(setupRecoveryButtons.get('confirm-mulligan').disabled, false, 'setup opponent grace should keep mulligan available when server allows setup actions');
+assert.equal(setupRecoveryButtons.get('ready').disabled, false, 'setup opponent grace should keep ready available when server allows setup actions');
+
+const setupOpponentDisconnectedView = {
+  ...setupOpponentGraceView,
+  connectionTempoReport: {
+    ...setupOpponentGraceView.connectionTempoReport,
+    tempoState: 'opponent_setup_disconnected',
+    severity: 'warning',
+    statusLine: '连接：对方断线',
+    detailLine: '对手准备阶段断线。',
+    actionBoundary: 'continue_setup_action',
+    canSubmitIntent: true,
+    shouldWaitForAuthority: false
+  }
+};
+const setupOpponentDisconnectedStatus = PVPScene.formatLiveConnectionStatus(setupOpponentDisconnectedView);
+const setupOpponentDisconnectedTempo = PVPScene.renderLiveConnectionTempo(setupOpponentDisconnectedView, { phase: 'setup' });
+assert.match(setupOpponentDisconnectedStatus, /对方断线/, 'setup opponent disconnected should name the disconnected opponent');
+assert.match(`${setupOpponentDisconnectedStatus} ${setupOpponentDisconnectedTempo}`, /继续|调息|确认准备|准备/, 'setup opponent disconnected should tell the connected player they can continue setup actions');
+assert.match(`${setupOpponentDisconnectedStatus} ${setupOpponentDisconnectedTempo}`, /无效局|不计正式积分/, 'setup opponent disconnected should explain the no-score invalidation boundary');
+assert.doesNotMatch(`${setupOpponentDisconnectedStatus} ${setupOpponentDisconnectedTempo}`, /判负|正式败局|等待连接超时结算/, 'setup opponent disconnected must not imply active timeout loss');
+setupRecoveryButtons.get('confirm-mulligan').disabled = true;
+setupRecoveryButtons.get('ready').disabled = true;
+PVPScene.getLiveSession = () => ({
+  getState: () => ({
+    ...setupRecoveryState,
+    stateView: {
+      ...setupRecoveryState.stateView,
+      connectionTempoReport: setupOpponentDisconnectedView.connectionTempoReport
+    }
+  })
+});
+PVPScene.updateLiveButtons('setup', false, { seatId: 'B', ready: false, mulliganUsed: false });
+assert.equal(setupRecoveryButtons.get('confirm-mulligan').disabled, false, 'setup opponent disconnected should keep mulligan available when server allows setup actions');
+assert.equal(setupRecoveryButtons.get('ready').disabled, false, 'setup opponent disconnected should keep ready available when server allows setup actions');
 documentStub.querySelector = (selector) => selector === '[data-live-pvp-root]' ? blockedActiveRoot : null;
 PVPScene.getLiveSession = () => ({ getState: () => viewerReconnectBlockedState });
 const blockedIntentCalls = [];
