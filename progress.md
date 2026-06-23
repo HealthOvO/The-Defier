@@ -1,5 +1,22 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-23: V10-S48 live PVP ranked production API smoke contract
+  - 本轮完成
+    - `tests/prod_api_smoke.cjs` 新增 `assertLivePvpRankedQueueSmoke()`：在本地 production-mode API smoke 中创建三名独立 `smoke_ranked_*` 用户，按正式低样本保护进入公共 ranked queue；A/B 先等待，C 触发三人候选池后与 A 成为同一 ranked setup，不使用 test-only scope、直邀或 legacy match ticket。
+    - 新 smoke 固定正式真人 PVP 关键链路：A 通过 queue status 恢复同一 match，B 作为未使用候选票据被取消，A/C 双方 ready 后进入 active，C 投降后由服务端权威进入 finished；败方复盘必须带 `pvp-live-settlement-report-v1`、`server_authoritative_settlement`、`ranked_authoritative` 和只给外观回访的 `pvp-live-season-honor-v1`。
+    - smoke 同时验证正式收益写入：赢家 wins +1、败者 losses +1，赢家积分上升、败者积分下降，双方钱包获得对应真人 PVP 奖励并各自 `totalMatches +1`，双方 `economy.matchHistory` 均追加 `source='live_pvp'` / 同一 `matchId` 的胜负历史。
+    - replay 侧补齐生产 API 证据：正式 ranked 终局后 `/api/pvp/live/matches/:matchId/replay` 必须返回 finished public replay，并包含 `match_finished` 公开事件。
+    - `tests/sanity_release_gate_coverage_checks.cjs` 增加 production API smoke marker，锁住 queue/join、queue/status、intents、replay、正式 settlement、赛季荣誉、rank/wallet/history 这些上线前必须保留的 ranked 证据。
+  - 已验证
+    - 红测：`node tests/sanity_release_gate_coverage_checks.cjs`，失败于 `production API smoke should cover live PVP ranked marker: assertLivePvpRankedQueueSmoke`。
+    - 红测：首次本地 production smoke `node tests/prod_api_smoke.cjs http://127.0.0.1:9026`，失败于双新号未满足低样本三人池保护，第二名仍为 `waiting` 且 `requiresPoolSize=3`，证明 smoke 不能绕过正式匹配质量策略。
+    - 红测：第二次本地 production smoke `node tests/prod_api_smoke.cjs http://127.0.0.1:9027`，双方接受宽分差后仍因候选池不足 3 人保持 waiting，继续确认低样本保护真实生效。
+    - 语法：`node --check tests/prod_api_smoke.cjs`
+    - 绿测：`node tests/sanity_release_gate_coverage_checks.cjs`
+    - 本地 production-mode API smoke：`PORT=9029 DEFIER_DB_PATH=/tmp/the-defier-prod-ranked-smoke-9029-20260623-4.sqlite JWT_SECRET=integration-jwt-secret-32-characters DEFIER_HMAC_SECRET=integration-hmac-secret-32-characters DEFIER_INTEGRITY_REQUIRED=1 NODE_ENV=production node server/app.js` 后运行 `node tests/prod_api_smoke.cjs http://127.0.0.1:9029`，API smoke passed。
+  - 当前结论
+    - live PVP 的生产 API smoke 现在不只证明“好友直邀友谊局不写正式收益”，也证明“正式公共 ranked queue 能在低样本保护下真实成局，并由服务端权威写入胜负、积分、钱包、历史、赛季荣誉和公开回放”。本轮只强化 production-like API 门禁和测试证据，不改变战斗数值、低样本保护、正式奖励公式、线上配置或正式部署状态。
+
 - 2026-06-23: V10-S47 live PVP connection tempo terminal browser contract
   - 本轮完成
     - `tests/browser_pvp_live_real_backend_smoke.mjs` 在真实后端双账号 active 断线段补充玩家可见文案断言：非当前行动方断线时，当前行动方仍可提交行动，但 `connection status / connection tempo` 不得显示 `connection_timeout` 或 `turn_timeout` 这类内部协议码。

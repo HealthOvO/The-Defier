@@ -124,6 +124,31 @@ const waitingReportSource = pvpLiveStore.slice(
   );
 });
 
+[
+  'assertLivePvpRankedQueueSmoke',
+  '/api/pvp/live/queue/join',
+  '/api/pvp/live/queue/status/${encodeURIComponent(queueTicket)}',
+  '/api/pvp/live/matches/${encodeURIComponent(matchId)}/intents',
+  '/api/pvp/live/matches/${encodeURIComponent(matchId)}/replay',
+  'prod live ranked should match through public queue',
+  'prod live ranked both ready should enter active',
+  'prod live ranked surrender should finish authoritative match',
+  'prod live ranked loser should expose settlement report',
+  'prod live ranked settlement should be formal authoritative',
+  'prod live ranked season honor should remain cosmetic only',
+  'prod live ranked winner score should increase',
+  'prod live ranked loser score should decrease',
+  'prod live ranked winner wallet should gain live reward',
+  'prod live ranked loser wallet should gain participation reward',
+  'prod live ranked should append winner live match history',
+  'prod live ranked replay should expose finished public replay',
+].forEach((needle) => {
+  assert.ok(
+    prodApiSmoke.includes(needle),
+    `production API smoke should cover live PVP ranked marker: ${needle}`,
+  );
+});
+
 const layoutAudit = read('tests/browser_frontend_layout_audit.mjs');
 [
   "id: 'endless-paranoia-modal'",
