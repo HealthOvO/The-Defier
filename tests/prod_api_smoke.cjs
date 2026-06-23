@@ -140,6 +140,126 @@ function makePvpBattleData(marker, overrides = {}) {
   };
 }
 
+async function submitLiveIntent(matchId, token, intent) {
+  return request(`/api/pvp/live/matches/${encodeURIComponent(matchId)}/intents`, {
+    method: 'POST',
+    token,
+    body: intent
+  });
+}
+
+function assertRankAndWalletUnchanged(label, before, after) {
+  assert.strictEqual(after.payload.rank.score, before.payload.rank.score, `${label} prod live invite smoke should not change rank scores`);
+  assert.strictEqual(after.payload.rank.wins, before.payload.rank.wins, `${label} prod live invite smoke should not change rank wins`);
+  assert.strictEqual(after.payload.rank.losses, before.payload.rank.losses, `${label} prod live invite smoke should not change rank losses`);
+  assert.strictEqual(after.payload.wallet.coins, before.payload.wallet.coins, `${label} prod live invite smoke should not change wallet coins`);
+  assert.strictEqual(after.payload.wallet.totalMatches, before.payload.wallet.totalMatches, `${label} prod live invite smoke should not change wallet match count`);
+}
+
+async function assertLivePvpInviteSmoke({ host, guest, hostName, guestName }) {
+  const hostRankBefore = await request('/api/pvp/rank', { token: host.sessionToken });
+  requireOk('prod live invite host rank before', hostRankBefore);
+  const guestRankBefore = await request('/api/pvp/rank', { token: guest.sessionToken });
+  requireOk('prod live invite guest rank before', guestRankBefore);
+
+  const invite = await request('/api/pvp/live/invites', {
+    method: 'POST',
+    token: host.sessionToken,
+    body: {
+      displayName: hostName,
+      targetUsername: guestName
+    }
+  });
+  requireOk('prod live invite create', invite);
+  assert.strictEqual(invite.payload.status, 'waiting_invite', `prod live invite should create no-ranked invite: ${JSON.stringify(invite.payload)}`);
+  assert.strictEqual(invite.payload.inviteReport?.rankedImpact, 'none', `prod live invite should create no-ranked invite: ${JSON.stringify(invite.payload)}`);
+  assert(invite.payload.inviteCode, `prod live invite should return invite code: ${JSON.stringify(invite.payload)}`);
+  const inviteCode = invite.payload.inviteCode;
+
+  const currentInvite = await request('/api/pvp/live/invites/current', { token: host.sessionToken });
+  requireOk('prod live invite current host', currentInvite);
+  assert.strictEqual(currentInvite.payload.inviteCode, inviteCode, `prod live invite current host should recover invite: ${JSON.stringify(currentInvite.payload)}`);
+
+  const inbox = await request('/api/pvp/live/invites/inbox', { token: guest.sessionToken });
+  requireOk('prod live invite inbox', inbox);
+  assert(
+    Array.isArray(inbox.payload.invites) && inbox.payload.invites.some(item => item.inviteCode === inviteCode),
+    `prod live invite target inbox should list invite: ${JSON.stringify(inbox.payload)}`
+  );
+
+  const joined = await request(`/api/pvp/live/invites/${encodeURIComponent(inviteCode)}/join`, {
+    method: 'POST',
+    token: guest.sessionToken,
+    body: { displayName: guestName }
+  });
+  requireOk('prod live invite join', joined);
+  assert.strictEqual(joined.payload.status, 'matched', `prod live invite join should create friendly setup: ${JSON.stringify(joined.payload)}`);
+  assert.strictEqual(joined.payload.stateView?.mode, 'friendly', `prod live invite join should create friendly setup: ${JSON.stringify(joined.payload)}`);
+  assert.strictEqual(joined.payload.stateView?.status, 'setup', `prod live invite join should create friendly setup: ${JSON.stringify(joined.payload)}`);
+  assert.strictEqual(joined.payload.inviteReport?.rankedImpact, 'none', `prod live invite join should keep no-ranked invite report: ${JSON.stringify(joined.payload)}`);
+  assert(
+    joined.payload.stateView?.matchQuality?.safeguards?.includes('friendly_no_ranked_impact'),
+    `prod live invite join should create no-ranked friendly setup: ${JSON.stringify(joined.payload)}`
+  );
+  const matchId = joined.payload.matchId;
+
+  const hostCurrent = await request('/api/pvp/live/matches/current', { token: host.sessionToken });
+  requireOk('prod live invite host current match', hostCurrent);
+  assert.strictEqual(hostCurrent.payload.matchId, matchId, `prod live invite host current match should recover same match: ${JSON.stringify(hostCurrent.payload)}`);
+  assert.strictEqual(hostCurrent.payload.stateView?.mode, 'friendly', `prod live invite host current match should stay friendly: ${JSON.stringify(hostCurrent.payload)}`);
+
+  const readyHost = await submitLiveIntent(matchId, host.sessionToken, {
+    intentId: `prod-live-invite-ready-host-${RUN_ID}`,
+    intentType: 'ready',
+    stateVersion: hostCurrent.payload.stateView.stateVersion,
+    payload: {}
+  });
+  requireOk('prod live invite host ready', readyHost);
+  assert.strictEqual(readyHost.payload.result, 'accepted', `prod live invite host ready should be accepted: ${JSON.stringify(readyHost.payload)}`);
+
+  const readyGuest = await submitLiveIntent(matchId, guest.sessionToken, {
+    intentId: `prod-live-invite-ready-guest-${RUN_ID}`,
+    intentType: 'ready',
+    stateVersion: readyHost.payload.stateView.stateVersion,
+    payload: {}
+  });
+  requireOk('prod live invite guest ready', readyGuest);
+  assert.strictEqual(readyGuest.payload.result, 'accepted', `prod live invite guest ready should be accepted: ${JSON.stringify(readyGuest.payload)}`);
+  assert.strictEqual(readyGuest.payload.stateView?.status, 'active', `prod live invite both ready should enter active: ${JSON.stringify(readyGuest.payload)}`);
+  assert.strictEqual(readyGuest.payload.stateView?.mode, 'friendly', `prod live invite both ready should stay friendly: ${JSON.stringify(readyGuest.payload)}`);
+
+  const surrender = await submitLiveIntent(matchId, guest.sessionToken, {
+    intentId: `prod-live-invite-surrender-guest-${RUN_ID}`,
+    intentType: 'surrender',
+    stateVersion: readyGuest.payload.stateView.stateVersion,
+    payload: {}
+  });
+  requireOk('prod live invite surrender', surrender);
+  assert.strictEqual(surrender.payload.result, 'accepted', `prod live invite surrender should be accepted: ${JSON.stringify(surrender.payload)}`);
+  assert.strictEqual(surrender.payload.stateView?.status, 'finished', `prod live invite surrender should finish friendly match: ${JSON.stringify(surrender.payload)}`);
+  assert.strictEqual(surrender.payload.stateView?.mode, 'friendly', `prod live invite surrender should finish friendly match: ${JSON.stringify(surrender.payload)}`);
+  assert(
+    !surrender.payload.stateView?.postMatchReview?.settlementReport,
+    `prod live invite smoke should not expose settlement report: ${JSON.stringify(surrender.payload.stateView?.postMatchReview)}`
+  );
+
+  const replay = await request(`/api/pvp/live/matches/${encodeURIComponent(matchId)}/replay`, { token: host.sessionToken });
+  requireOk('prod live invite replay', replay);
+  assert.strictEqual(replay.payload.replay?.publicSummary?.status, 'finished', `prod live invite replay should expose finished public replay: ${JSON.stringify(replay.payload)}`);
+  assert.strictEqual(replay.payload.replay?.visibilityLayer, 'replay_self', `prod live invite replay should expose finished public replay: ${JSON.stringify(replay.payload)}`);
+  assert(
+    Array.isArray(replay.payload.replay?.events) && replay.payload.replay.events.some(event => event.eventType === 'match_finished'),
+    `prod live invite replay should include match_finished public event: ${JSON.stringify(replay.payload)}`
+  );
+
+  const hostRankAfter = await request('/api/pvp/rank', { token: host.sessionToken });
+  requireOk('prod live invite host rank after', hostRankAfter);
+  const guestRankAfter = await request('/api/pvp/rank', { token: guest.sessionToken });
+  requireOk('prod live invite guest rank after', guestRankAfter);
+  assertRankAndWalletUnchanged('host', hostRankBefore, hostRankAfter);
+  assertRankAndWalletUnchanged('guest', guestRankBefore, guestRankAfter);
+}
+
 async function main() {
   console.log(`[prod-smoke] Base URL: ${BASE_URL}`);
 
@@ -250,6 +370,13 @@ async function main() {
 
   const opponentPvpRank = await request('/api/pvp/rank', { token: opponent.sessionToken });
   requireOk('opponent PVP rank read', opponentPvpRank);
+
+  await assertLivePvpInviteSmoke({
+    host: user,
+    guest: opponent,
+    hostName: username,
+    guestName: opponentName
+  });
 
   const pvpLeaderboard = await request('/api/pvp/leaderboard?limit=20', { token: user.sessionToken });
   requireOk('PVP leaderboard read', pvpLeaderboard);

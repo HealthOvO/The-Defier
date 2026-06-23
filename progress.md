@@ -1,5 +1,19 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-23: V10-S39 live PVP production invite smoke contract
+  - 本轮完成
+    - `tests/prod_api_smoke.cjs` 新增生产 API 级 live PVP 私密直邀 smoke：双账号创建 targeted invite、目标 inbox 展示、host current invite 恢复、受邀方 join 成友谊局 setup、host current match 恢复同一 match、双方 ready 进入 active、受邀方 surrender 进入 finished、host 可读取公开 replay。
+    - smoke 固定双方体验边界：直邀友谊局必须是 `mode='friendly'`、`matchQuality.safeguards` 包含 `friendly_no_ranked_impact`，投降终局不能暴露正式 `settlementReport`，回放必须只给公开 finished replay 和 `match_finished` 事件。
+    - smoke 在直邀前后分别读取双方 `/api/pvp/rank`，断言 rank score / wins / losses、wallet coins、totalMatches 均不变化，防止友谊直邀误写正式段位、战绩或钱包。
+    - `tests/sanity_release_gate_coverage_checks.cjs` 增加生产 API smoke marker，锁定 `/api/pvp/live/invites`、`/api/pvp/live/invites/inbox`、`/api/pvp/live/invites/current`、join、current match、intent、replay 这些真实生产路由和关键断言文案，避免发布门禁只覆盖 legacy PVP。
+  - 已验证
+    - 红测：先只补 release marker 后运行 `node tests/sanity_release_gate_coverage_checks.cjs`，失败于 `production API smoke should cover live PVP invite marker: assertLivePvpInviteSmoke`，证明门禁能抓住缺失 live PVP 生产 smoke。
+    - 语法：`node --check tests/prod_api_smoke.cjs`
+    - 绿测：`node tests/sanity_release_gate_coverage_checks.cjs`
+    - 本地生产态 API smoke：`PORT=9025 DEFIER_DB_PATH=/tmp/the-defier-prod-smoke-live-${USER:-codex}-9025.sqlite JWT_SECRET=integration-jwt-secret-32-characters DEFIER_HMAC_SECRET=integration-hmac-secret-32-characters DEFIER_INTEGRITY_REQUIRED=1 NODE_ENV=production node server/app.js` 后运行 `node tests/prod_api_smoke.cjs http://127.0.0.1:9025`，API smoke passed。
+  - 当前结论
+    - live PVP 的正式 API smoke 现在不再只测 legacy 防御上传、快速匹配、结果上报和商店链路；生产态门禁会实际走一次无段位影响的真人私密直邀生命周期，能在发布前抓住直邀路由、current 恢复、ready/active、终局、回放、段位/钱包隔离这些关键体验退化。
+
 - 2026-06-23: V10-S38 live PVP fake browser current-match reopen contract
   - 本轮完成
     - `tests/browser_pvp_live_audit.mjs` 新增 fake browser reopen current-match finding：在页面已经进入 `active` 真人局后，深拷贝当前 session 的权威 `stateView`，模拟重新打开 live tab / 重建 `liveSession`，再通过 `loadLivePanel()` 命中 `resumeCurrentMatch()` 恢复同一 current match。

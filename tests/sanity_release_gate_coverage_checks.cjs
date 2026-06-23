@@ -6,6 +6,7 @@ const root = path.resolve(__dirname, '..');
 const read = (relativePath) => fs.readFileSync(path.join(root, relativePath), 'utf8');
 
 const prodReadScript = read('scripts/check-production-read-only.sh');
+const prodApiSmoke = read('tests/prod_api_smoke.cjs');
 const pagesWorkflow = read('.github/workflows/pages.yml');
 const browserReleaseScript = read('tests/run_browser_release_checks.sh');
 const browserReleaseSummary = read('tests/summarize_browser_release_reports.cjs');
@@ -95,6 +96,31 @@ const waitingReportSource = pvpLiveStore.slice(
   assert.ok(
     prodReadScript.includes(needle),
     `production read-only check should cover backend marker: ${needle}`,
+  );
+});
+
+[
+  'assertLivePvpInviteSmoke',
+  '/api/pvp/live/invites',
+  '/api/pvp/live/invites/inbox',
+  '/api/pvp/live/invites/current',
+  '/api/pvp/live/invites/${encodeURIComponent(inviteCode)}/join',
+  '/api/pvp/live/matches/current',
+  '/api/pvp/live/matches/${encodeURIComponent(matchId)}/intents',
+  '/api/pvp/live/matches/${encodeURIComponent(matchId)}/replay',
+  'prod live invite should create no-ranked invite',
+  'prod live invite target inbox should list invite',
+  'prod live invite join should create friendly setup',
+  'prod live invite both ready should enter active',
+  'prod live invite surrender should finish friendly match',
+  'prod live invite replay should expose finished public replay',
+  'prod live invite smoke should not change rank scores',
+  'prod live invite smoke should not change wallet coins',
+  'prod live invite smoke should not expose settlement report',
+].forEach((needle) => {
+  assert.ok(
+    prodApiSmoke.includes(needle),
+    `production API smoke should cover live PVP invite marker: ${needle}`,
   );
 });
 
