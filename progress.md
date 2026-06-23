@@ -1,5 +1,29 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-23: V10-S56 live PVP public replay share viewer
+  - 本轮完成
+    - `server/routes/pvp-live.js` 将公开战报分享 receipt 拆成 `apiPath` 与玩家可复制的 `sharePath/shareUrl`：机器匿名读取仍走 `/api/pvp/live/replay-shares/:shareToken`，玩家分享链接改为 `/?pvpReplayShare=:shareToken`，避免第三方打开后只看到 JSON。
+    - `js/game.js` 新增 `pvpReplayShare` 启动入口：公开战报链接打开后会优先进入 PVP 页面，不弹存档选择，不触发 `autotest` 流程，也不要求登录。
+    - `index.html`、`css/pvp.css` 和 `js/scenes/pvp-scene.js` 增加只读公共战报 viewer：只调用 `PVPService.live.getReplayShare(token)` 匿名读取 `replay_public`，渲染 `matchRef`、公开终局摘要、公开事件列表和隐私边界；不走 `getLiveSession()`、不拉 `replay_self`、不渲染本人 `postMatchReview`、`settlementReport` 或 `seasonHonorReport`。
+    - 挑战者巡检后补强 `render_game_to_text()`：公共 viewer 激活时导出 `pvp.replayShareViewer`，并保持 `pvp.live=null`，不会为了文本快照创建 live session。
+    - `tests/sanity_pvp_live_replay_checks.cjs`、`tests/sanity_pvp_live_ui_runtime_checks.mjs`、`tests/sanity_pvp_live_ui_contract_checks.cjs` 与 release marker 同步锁住前端 viewer 链接、匿名 token 读取、公开字段渲染和敏感字段不泄漏。
+    - `tests/browser_automation_boot_audit.mjs` 新增真实 `?pvpReplayShare=` 启动场景：mock 匿名 share API，断言不会弹登录/存档、不会被 `autotest` 接管，并直接落到公共战报 viewer。
+  - 已验证
+    - 红测：`node tests/sanity_pvp_live_replay_checks.cjs` 先失败于分享 receipt 缺少独立 `apiPath`。
+    - 红测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs` 先失败于 `PVPScene.openLiveReplayShareViewer is not a function`。
+    - 绿测：`node tests/sanity_pvp_live_replay_checks.cjs`
+    - 绿测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs`
+    - 绿测：`node tests/sanity_pvp_live_ui_contract_checks.cjs`
+    - 绿测：`node tests/sanity_pvp_live_session_checks.mjs`
+    - 绿测：`node tests/sanity_pvp_live_client_checks.mjs`
+    - 绿测：`node tests/sanity_release_gate_coverage_checks.cjs`
+    - 构建：`npm run build:pages`
+    - 浏览器启动门禁：`node tests/browser_automation_boot_audit.mjs http://127.0.0.1:4173 output/public-replay-share-viewer-boot-audit`
+    - 移动端真实后端 PVP smoke：`env BROWSER_PVP_LIVE_REAL_VIEWPORT=mobile BROWSER_PVP_LIVE_REAL_REQUIRE_MOBILE=1 node tests/browser_pvp_live_real_backend_smoke.mjs http://127.0.0.1:4173 output/pvp-live-mobile-real-final`，72/72 findings、0 failed、0 console error。
+    - 全量 Node 门禁：`npm run test:node`
+  - 当前结论
+    - live PVP 的战报分享现在从“可匿名 API 读取”补成“玩家真正能打开看的公共战报页”：分享者复制的是前端 viewer URL，观看者无需登录即可看到脱敏公开事件和终局摘要；该切片只改分享入口、展示层和门禁，不改变战斗数值、正式结算、奖励、匹配或线上配置。
+
 - 2026-06-23: V10-S55 live PVP public replay share token
   - 本轮完成
     - `server/db/database.js`、`server/pvp-live/live-persistence.js`、`server/pvp-live/live-store.js` 增加 `pvp_live_replay_shares` receipt 生命周期：高熵 `pvplrs-*` token、creator seat、`matchRef`、`replayHash`、过期时间与撤销状态；公开读取只按 token 取回，不把 `matchRef` 或原始 `matchId` 变成公开 lookup 能力。

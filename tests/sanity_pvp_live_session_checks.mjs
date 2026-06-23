@@ -206,7 +206,9 @@ const liveService = {
       share: {
         reportVersion: 'pvp-live-replay-share-v1',
         shareToken: 'pvplrs-session-share-123456789012345',
-        shareUrl: 'https://080305.xyz/api/pvp/live/replay-shares/pvplrs-session-share-123456789012345',
+        apiPath: '/api/pvp/live/replay-shares/pvplrs-session-share-123456789012345',
+        sharePath: '/?pvpReplayShare=pvplrs-session-share-123456789012345',
+        shareUrl: 'https://080305.xyz/?pvpReplayShare=pvplrs-session-share-123456789012345',
         visibilityLayer: 'replay_public',
         sourceVisibility: 'replay_public',
         rankedImpact: 'none',
@@ -221,7 +223,9 @@ const liveService = {
       share: {
         reportVersion: 'pvp-live-replay-share-v1',
         shareToken: 'pvplrs-session-share-123456789012345',
-        shareUrl: 'https://080305.xyz/api/pvp/live/replay-shares/pvplrs-session-share-123456789012345',
+        apiPath: '/api/pvp/live/replay-shares/pvplrs-session-share-123456789012345',
+        sharePath: '/?pvpReplayShare=pvplrs-session-share-123456789012345',
+        shareUrl: 'https://080305.xyz/?pvpReplayShare=pvplrs-session-share-123456789012345',
         visibilityLayer: 'replay_public',
         sourceVisibility: 'replay_public',
         rankedImpact: 'none',

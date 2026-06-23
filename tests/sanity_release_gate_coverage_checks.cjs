@@ -162,6 +162,26 @@ const waitingReportSource = pvpLiveStore.slice(
 });
 
 const layoutAudit = read('tests/browser_frontend_layout_audit.mjs');
+const browserAutomationBootAudit = read('tests/browser_automation_boot_audit.mjs');
+[
+  "id: 'public-replay-share-viewer'",
+  '?autotest=guest-map&pvpReplayShare=',
+  'mockReplayShare',
+  'public replay share query lands on anonymous viewer before auth or automation boot',
+  'probe.authModalActive',
+  'probe.saveSlotsModalActive',
+  'probe.publicReplayViewerVisible',
+  'payload?.pvp?.live === null',
+  'payload?.pvp?.replayShareViewer?.status === \'ready\'',
+  'pvpm-browser-raw-should-not-render',
+  'SHOULD_NOT_RENDER_POST_MATCH_REVIEW',
+].forEach((needle) => {
+  assert.ok(
+    browserAutomationBootAudit.includes(needle),
+    `automation boot browser audit should cover public replay share viewer marker: ${needle}`,
+  );
+});
+
 [
   "id: 'endless-paranoia-modal'",
   'activateEndlessParanoiaModal',
@@ -1504,6 +1524,9 @@ assert.ok(
   "router.post('/matches/:matchId/replay-share/revoke'",
   'makeReplayShareToken',
   'makeReplayShareEnvelope',
+  'makeReplayShareApiPath',
+  'apiPath',
+  '?pvpReplayShare=',
   'replay_share_not_ready',
   'replay_share_not_found',
   'replay_share_revoked',
@@ -2829,6 +2852,10 @@ assert.ok(
   'revokeLiveReplayShare(',
   'data-live-replay-share-revoke',
   'replay_share_revoked',
+  'openLiveReplayShareViewer(',
+  'renderLiveReplayShareViewer(',
+  'data-live-replay-share-viewer',
+  'data-live-replay-share-viewer-public-only',
 ].forEach((needle) => {
   assert.ok(
     pvpLiveUiContractChecks.includes(needle),
@@ -2888,7 +2915,9 @@ assert.ok(
   'post-match review normalizer should preserve audit action ids for real UI buttons',
   'key-turn review action should fetch the authoritative replay_self layer',
   'share_replay action should create a 30-day public replay share',
-  'share_replay action should copy the public replay share link',
+  'share_replay action should copy the front-end public replay viewer link',
+  'public replay viewer should fetch by opaque share token only',
+  'public replay viewer should not render raw match ids or seat-specific payload fields',
   'public replay share receipt should expose a revoke control',
   'replay share revoke control should call session revoke API',
   'revoked replay share receipt should hide the revoke control',

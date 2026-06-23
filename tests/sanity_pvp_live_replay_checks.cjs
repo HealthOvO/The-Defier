@@ -381,6 +381,10 @@ function assertPublicReplayShape(replay, visibilityLayer) {
     assert.ok(replayShare.payload.share?.expiresAt > Date.now(), 'share receipt should expose future expiry');
     assert.ok(/^[a-f0-9]{16}$/.test(replayShare.payload.share?.matchRef || ''), 'share receipt should expose stable match reference');
     assert.ok(/^[a-f0-9]{16}$/.test(replayShare.payload.share?.replayHash || ''), 'share receipt should bind to a public replay hash');
+    assert.equal(replayShare.payload.share?.apiPath, `/api/pvp/live/replay-shares/${encodeURIComponent(replayShare.payload.share.shareToken)}`, 'share receipt should keep the anonymous replay API path separate from the viewer URL');
+    assert.equal(replayShare.payload.share?.sharePath, `/?pvpReplayShare=${encodeURIComponent(replayShare.payload.share.shareToken)}`, 'share receipt should expose a front-end public replay viewer path');
+    assert.match(replayShare.payload.share?.shareUrl || '', /\/\?pvpReplayShare=pvplrs-/i, 'share receipt should copy a player-facing public replay viewer URL');
+    assert.equal((replayShare.payload.share?.shareUrl || '').includes('/api/pvp/live/replay-shares/'), false, 'share receipt should not copy the raw JSON API endpoint as the public URL');
     assert.equal(JSON.stringify(replayShare.payload.share).includes(joinB.payload.matchId), false, 'share receipt should not expose raw match id');
     assertNoHiddenReplayLeak(replayShare.payload.share, 'replay share receipt');
 
@@ -391,6 +395,8 @@ function assertPublicReplayShape(replay, visibilityLayer) {
     assert.equal(sharedReplay.payload.share?.visibilityLayer, 'replay_public', 'shared replay should stay on replay_public layer');
     assert.equal(sharedReplay.payload.share?.rankedImpact, 'none', 'shared replay should not affect ranked scoring');
     assert.equal(sharedReplay.payload.share?.rewardImpact, 'none', 'shared replay should not affect rewards');
+    assert.equal(sharedReplay.payload.share?.apiPath, `/api/pvp/live/replay-shares/${encodeURIComponent(replayShare.payload.share.shareToken)}`, 'shared replay should keep apiPath machine-readable');
+    assert.equal(sharedReplay.payload.share?.sharePath, `/?pvpReplayShare=${encodeURIComponent(replayShare.payload.share.shareToken)}`, 'shared replay should keep sharePath on the front-end viewer');
     assertPublicReplayShape(sharedReplay.payload.replay, 'replay_public');
     assert.equal(sharedReplay.payload.replay.viewerSeat, undefined, 'shared replay should not expose requester seat');
     assert.equal(sharedReplay.payload.replay.postMatchReview, undefined, 'shared replay should not expose seat-specific review object');
@@ -435,6 +441,8 @@ function assertPublicReplayShape(replay, visibilityLayer) {
     assert.equal(revokedShare.payload.share?.revoked, true, 'revoked share receipt should expose revoked state');
     assert.equal(revokedShare.payload.share?.rankedImpact, 'none', 'share revoke should not affect ranked scoring');
     assert.equal(revokedShare.payload.share?.rewardImpact, 'none', 'share revoke should not affect rewards');
+    assert.equal(revokedShare.payload.share?.apiPath, `/api/pvp/live/replay-shares/${encodeURIComponent(replayShareSecond.payload.share.shareToken)}`, 'revoked share receipt should still expose the separate anonymous API path');
+    assert.equal(revokedShare.payload.share?.sharePath, `/?pvpReplayShare=${encodeURIComponent(replayShareSecond.payload.share.shareToken)}`, 'revoked share receipt should still expose the front-end viewer path');
     const revokedSharedReplay = await request(baseUrl, `/api/pvp/live/replay-shares/${encodeURIComponent(replayShare.payload.share.shareToken)}`);
     assert.equal(revokedSharedReplay.status, 410, 'revoked replay share token should no longer expose replay');
     assert.equal(revokedSharedReplay.payload.reason, 'replay_share_revoked', 'revoked share rejection should be stable');

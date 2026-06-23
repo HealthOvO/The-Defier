@@ -81,18 +81,24 @@ function getRequestOrigin(req) {
     return `${proto}://${host}`;
 }
 
-function makeReplaySharePath(shareToken) {
+function makeReplayShareApiPath(shareToken) {
     return `/api/pvp/live/replay-shares/${encodeURIComponent(shareToken)}`;
+}
+
+function makeReplaySharePath(shareToken) {
+    return `/?pvpReplayShare=${encodeURIComponent(shareToken)}`;
 }
 
 function makeReplayShareEnvelope(share, req) {
     const token = String(share && share.shareToken || '');
+    const apiPath = makeReplayShareApiPath(token);
     const sharePath = makeReplaySharePath(token);
     const origin = getRequestOrigin(req);
     const revokedAt = Math.max(0, Math.floor(Number(share && share.revokedAt) || 0));
     return {
         reportVersion: 'pvp-live-replay-share-v1',
         shareToken: token,
+        apiPath,
         sharePath,
         shareUrl: origin ? `${origin}${sharePath}` : sharePath,
         visibilityLayer: 'replay_public',

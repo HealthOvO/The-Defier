@@ -691,6 +691,47 @@
     z-index: 8;
 }
 
+.pvp-live-replay-share-viewer {
+    margin-top: 12px;
+}
+
+.pvp-live-replay-share-viewer[hidden] {
+    display: none;
+}
+
+.pvp-live-replay-share-card {
+    padding: 12px;
+    border-radius: 8px;
+    border: 1px solid rgba(105, 211, 172, 0.22);
+    background: rgba(18, 55, 49, 0.26);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+    overflow-wrap: anywhere;
+}
+
+.pvp-live-replay-share-card.error {
+    border-color: rgba(237, 126, 126, 0.24);
+    background: rgba(75, 28, 28, 0.24);
+}
+
+.pvp-live-replay-share-summary {
+    margin-top: 9px;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 8px;
+}
+
+.pvp-live-replay-share-summary span {
+    min-width: 0;
+    padding: 7px 8px;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(255, 255, 255, 0.04);
+    color: rgba(238, 246, 242, 0.88);
+    font-size: 0.72rem;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+}
+
 .pvp-live-meta-grid {
     margin-top: 14px;
     display: grid;

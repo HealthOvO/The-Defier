@@ -72,6 +72,7 @@ const liveBrowserAudit = read('tests/browser_pvp_live_audit.mjs');
   'data-live-first-guide',
   'data-live-first-match-guide',
   'data-live-waiting-report',
+  'data-live-replay-share-viewer-root',
   'data-live-post-match-review',
   'data-live-action="practice-live"',
   'data-live-action="cancel-rematch"',
@@ -251,6 +252,13 @@ const liveBrowserAudit = read('tests/browser_pvp_live_audit.mjs');
   'revokeLiveReplayShare(',
   'data-live-replay-share-revoke',
   'replay_share_revoked',
+  'normalizeLiveReplayShareToken(',
+  'openLiveReplayShareViewer(',
+  'renderLiveReplayShareViewer(',
+  'renderLiveReplayShareViewerMarkup(',
+  'PVPService.live.getReplayShare(token)',
+  'data-live-replay-share-viewer',
+  'data-live-replay-share-viewer-public-only',
   'data-live-key-turn-replay',
   'data-live-experience-report',
   'pvp-live-loadout-exploration-v1',
@@ -652,6 +660,9 @@ assert.ok(!/\.pvp-live-first-guide\s*\{[\s\S]*?max-height:\s*60px[\s\S]*?overflo
   '.pvp-live-emote-row',
   '.pvp-live-emote-button',
   '.pvp-live-social-status',
+  '.pvp-live-replay-share-viewer',
+  '.pvp-live-replay-share-card',
+  '.pvp-live-replay-share-summary',
   '.pvp-live-first-guide',
   '.pvp-live-guide-step',
   '.pvp-live-guide-loadout',
@@ -724,7 +735,15 @@ assert.ok(scene.includes('formatLivePolicyLabel(report.formalResultPolicy)'), 'r
 assert.ok(scene.includes('formatLivePolicyLabel(series.seatPolicy)'), 'renderLiveFriendlySeries should map seat policy before rendering player-visible text');
 
 assert.ok(game.includes('getLiveSnapshot'), 'render_game_to_text should expose live PVP snapshot');
+assert.ok(scene.includes('getLiveReplayShareViewerSnapshot()'), 'PVPScene should expose public replay share viewer snapshot without creating live session');
+assert.ok(game.includes('getLiveReplayShareViewerSnapshot()'), 'render_game_to_text should prefer public replay share viewer snapshot');
+assert.ok(game.includes('!pvpReplayShareViewer &&'), 'render_game_to_text should not create live session while public replay share viewer is active');
+assert.ok(game.includes('replayShareViewer: pvpReplayShareViewer'), 'render_game_to_text should expose public replay share viewer state');
+assert.ok(game.includes('parsePublicReplayShareConfig()'), 'game boot should parse public replay share query');
+assert.ok(game.includes("params.get('pvpReplayShare')"), 'game boot should recognize pvpReplayShare links');
+assert.ok(game.includes('runPublicReplayShareBootFlow()'), 'game boot should open the public replay share viewer');
 assert.ok(nodeGate.includes('node tests/sanity_pvp_live_ui_contract_checks.cjs'), 'node gate should run live UI contract check');
+assert.ok(browserGate.includes('node tests/browser_automation_boot_audit.mjs "$BASE_URL" "$OUTPUT_ROOT/automation-boot"'), 'browser release gate should run automation boot audit');
 assert.ok(browserGate.includes('node tests/browser_pvp_live_audit.mjs "$BASE_URL" "$OUTPUT_ROOT/pvp-live"'), 'browser release gate should run live PVP audit');
 
 [

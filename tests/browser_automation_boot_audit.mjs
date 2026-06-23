@@ -35,6 +35,21 @@ async function runScenario(browser, scenario) {
   page.on('pageerror', (err) => {
     recordConsoleError(String(err), scenario.id);
   });
+  if (scenario.mockReplayShare) {
+    await page.addInitScript(() => {
+      localStorage.setItem('theDefierServerConfig', JSON.stringify({
+        baseUrl: window.location.origin,
+        pvpPathPrefix: '/api/pvp'
+      }));
+    });
+    await page.route('**/api/pvp/live/replay-shares/**', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(scenario.mockReplayShare)
+      });
+    });
+  }
 
   await page.goto(`${baseUrl}${scenario.query}`, { waitUntil: 'domcontentloaded' });
   await page.waitForTimeout(1200);
@@ -61,6 +76,16 @@ async function runScenario(browser, scenario) {
     pvpRankingTabActive: !!document.querySelector('[data-pvp-tab="ranking"]')?.classList.contains('active'),
     pvpLivePaneActive: !!document.getElementById('tab-live')?.classList.contains('active'),
     pvpRankingPaneActive: !!document.getElementById('tab-ranking')?.classList.contains('active'),
+    authModalActive: !!document.getElementById('auth-modal')?.classList.contains('active'),
+    saveSlotsModalActive: !!document.getElementById('save-slots-modal')?.classList.contains('active'),
+    publicReplayViewerVisible: (() => {
+      const viewer = document.querySelector('[data-live-replay-share-viewer]');
+      if (!viewer) return false;
+      const rect = viewer.getBoundingClientRect();
+      return rect.width > 0 && rect.height > 0;
+    })(),
+    publicReplayViewerText: document.querySelector('[data-live-replay-share-viewer]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+    publicReplayViewerStatus: document.querySelector('[data-live-replay-share-viewer]')?.getAttribute('data-live-replay-share-viewer-status') || '',
     pvpLiveJoinVisible: (() => {
       const button = document.querySelector('[data-live-action="join-queue"]');
       if (!button) return false;
@@ -128,6 +153,68 @@ const scenarios = [
       && !probe.pvpRankingTabActive
       && !probe.pvpRankingPaneActive
       && probe.pvpLiveJoinVisible
+    )
+  },
+  {
+    id: 'public-replay-share-viewer',
+    query: '?autotest=guest-map&pvpReplayShare=pvplrs-browser_public_viewer_token_1234567890',
+    name: 'public replay share query lands on anonymous viewer before auth or automation boot',
+    mockReplayShare: {
+      success: true,
+      share: {
+        reportVersion: 'pvp-live-replay-share-v1',
+        shareToken: 'pvplrs-browser_public_viewer_token_1234567890',
+        apiPath: '/api/pvp/live/replay-shares/pvplrs-browser_public_viewer_token_1234567890',
+        sharePath: '/?pvpReplayShare=pvplrs-browser_public_viewer_token_1234567890',
+        shareUrl: 'https://080305.xyz/?pvpReplayShare=pvplrs-browser_public_viewer_token_1234567890',
+        visibilityLayer: 'replay_public',
+        sourceVisibility: 'replay_public',
+        matchRef: 'b0c0ffee1234abcd',
+        rankedImpact: 'none',
+        rewardImpact: 'none',
+        boundary: '公开战报分享只暴露 replay_public 脱敏回放。'
+      },
+      replay: {
+        reportVersion: 'pvp-live-replay-v1',
+        visibilityLayer: 'replay_public',
+        matchId: 'pvpm-browser-raw-should-not-render',
+        publicSummary: {
+          status: 'finished',
+          winnerSeat: 'A',
+          loserSeat: 'B',
+          finishReason: 'lethal'
+        },
+        eventCount: 2,
+        events: [
+          { sequence: 1, eventType: 'battle_started', actingSeat: 'A', publicData: { firstSeat: 'A' } },
+          { sequence: 2, eventType: 'damage_applied', actingSeat: 'A', publicData: { targetSeat: 'B', hpDamage: 8, targetHp: 0 } }
+        ],
+        hiddenScan: { forbiddenTokenCount: 0, forbiddenKeyCount: 0, forbiddenStringCount: 0 },
+        postMatchReview: { summary: 'SHOULD_NOT_RENDER_POST_MATCH_REVIEW' },
+        settlementReport: { summaryLine: 'SHOULD_NOT_RENDER_SETTLEMENT' },
+        seasonHonorReport: { summaryLine: 'SHOULD_NOT_RENDER_SEASON_HONOR' }
+      }
+    },
+    assert: ({ payload, probe }) => (
+      probe.screen === 'pvp-screen'
+      && !probe.guestMode
+      && !probe.authModalActive
+      && !probe.saveSlotsModalActive
+      && probe.pvpLiveTabActive
+      && probe.pvpLivePaneActive
+      && probe.publicReplayViewerVisible
+      && probe.publicReplayViewerStatus === 'ready'
+      && /b0c0ffee1234abcd/.test(probe.publicReplayViewerText)
+      && /replay_public/.test(probe.publicReplayViewerText)
+      && /伤害终结/.test(probe.publicReplayViewerText)
+      && !/pvpm-browser-raw-should-not-render|SHOULD_NOT_RENDER|postMatchReview|settlementReport|seasonHonorReport/.test(probe.publicReplayViewerText)
+      && payload?.mode === 'pvp-screen'
+      && payload?.pvp?.activeTab === 'live'
+      && payload?.pvp?.live === null
+      && payload?.pvp?.replayShareViewer?.status === 'ready'
+      && payload?.pvp?.replayShareViewer?.matchRef === 'b0c0ffee1234abcd'
+      && payload?.pvp?.replayShareViewer?.visibilityLayer === 'replay_public'
+      && payload?.pvp?.replayShareViewer?.publicSummary?.finishReason === 'lethal'
     )
   }
 ];

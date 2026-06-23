@@ -68,6 +68,7 @@ globalThis.localStorage = {
 globalThis.window.localStorage = globalThis.localStorage;
 
 const { PVPScene } = await import('../js/scenes/pvp-scene.js');
+const { PVPService } = await import('../js/services/pvp-service.js');
 
 PVPScene.getLiveSession = () => ({
   getState: () => ({
@@ -2277,7 +2278,9 @@ PVPScene.getLiveSession = () => ({
       lastReplayShare: {
         reportVersion: 'pvp-live-replay-share-v1',
         shareToken: 'pvplrs-ui-runtime-share-123456789012',
-        shareUrl: 'https://080305.xyz/api/pvp/live/replay-shares/pvplrs-ui-runtime-share-123456789012',
+        apiPath: '/api/pvp/live/replay-shares/pvplrs-ui-runtime-share-123456789012',
+        sharePath: '/?pvpReplayShare=pvplrs-ui-runtime-share-123456789012',
+        shareUrl: 'https://080305.xyz/?pvpReplayShare=pvplrs-ui-runtime-share-123456789012',
         visibilityLayer: 'replay_public',
         rankedImpact: 'none',
         rewardImpact: 'none',
@@ -2304,7 +2307,7 @@ PVPScene.getLiveSession = () => ({
 });
 await PVPScene.handleLivePostReviewAction('share_replay');
 assert.deepEqual(replayShareCalls[0], { method: 'createReplayShare', options: { ttlDays: 30 } }, 'share_replay action should create a 30-day public replay share');
-assert.deepEqual(replayShareCopyCalls, ['https://080305.xyz/api/pvp/live/replay-shares/pvplrs-ui-runtime-share-123456789012'], 'share_replay action should copy the public replay share link');
+assert.deepEqual(replayShareCopyCalls, ['https://080305.xyz/?pvpReplayShare=pvplrs-ui-runtime-share-123456789012'], 'share_replay action should copy the front-end public replay viewer link');
 assert.match(PVPScene.liveInlineHint, /脱敏战报链接已复制/, 'share_replay action should explain copied public replay boundary');
 const shareReceiptHtml = PVPScene.renderLiveReplayShareReceipt();
 assert.match(shareReceiptHtml, /data-live-replay-share/, 'public replay share receipt should render after creation');
@@ -2317,6 +2320,88 @@ const revokedShareReceiptHtml = PVPScene.renderLiveReplayShareReceipt();
 assert.match(revokedShareReceiptHtml, /data-live-replay-share-revoked="true"/, 'revoked replay share receipt should mark the link as revoked');
 assert.equal(/data-live-replay-share-revoke(?:\s|>)/.test(revokedShareReceiptHtml), false, 'revoked replay share receipt should hide the revoke control');
 PVPScene.copyLiveReplayShareLink = previousCopyLiveReplayShareLink;
+
+const previousPvpServiceGetReplayShare = PVPService.live.getReplayShare;
+const previousDocumentQuerySelectorForReplayShare = documentStub.querySelector;
+const replayShareViewerCalls = [];
+const replayShareViewerHost = {
+  hidden: true,
+  innerHTML: '',
+  dataset: {},
+  attributes: {},
+  setAttribute(name, value) {
+    this.attributes[name] = String(value);
+  },
+  getAttribute(name) {
+    return this.attributes[name] || '';
+  }
+};
+const replayShareViewerRoot = {
+  dataset: {},
+  attributes: {},
+  setAttribute(name, value) {
+    this.attributes[name] = String(value);
+  },
+  querySelector(selector) {
+    if (selector === '[data-live-replay-share-viewer-root]') return replayShareViewerHost;
+    return null;
+  }
+};
+documentStub.querySelector = (selector) => {
+  if (selector === '[data-live-pvp-root]') return replayShareViewerRoot;
+  if (selector === '[data-live-replay-share-viewer-root]') return replayShareViewerHost;
+  return null;
+};
+PVPService.live.getReplayShare = async (shareToken = '') => {
+  replayShareViewerCalls.push(shareToken);
+  return {
+    success: true,
+    share: {
+      reportVersion: 'pvp-live-replay-share-v1',
+      shareToken,
+      apiPath: `/api/pvp/live/replay-shares/${shareToken}`,
+      sharePath: `/?pvpReplayShare=${shareToken}`,
+      shareUrl: `https://080305.xyz/?pvpReplayShare=${shareToken}`,
+      visibilityLayer: 'replay_public',
+      sourceVisibility: 'replay_public',
+      matchRef: 'a1b2c3d4e5f67890',
+      rankedImpact: 'none',
+      rewardImpact: 'none',
+      boundary: '公开战报分享只暴露 replay_public 脱敏回放。'
+    },
+    replay: {
+      reportVersion: 'pvp-live-replay-v1',
+      visibilityLayer: 'replay_public',
+      matchId: 'pvpm-ui-runtime-raw-should-not-render',
+      publicSummary: {
+        status: 'finished',
+        winnerSeat: 'A',
+        loserSeat: 'B',
+        finishReason: 'lethal'
+      },
+      eventCount: 2,
+      events: [
+        { sequence: 1, eventType: 'battle_started', actingSeat: 'A', publicData: { firstSeat: 'A' } },
+        { sequence: 2, eventType: 'damage_applied', actingSeat: 'A', publicData: { targetSeat: 'B', hpDamage: 7, targetHp: 13 } }
+      ],
+      hiddenScan: { forbiddenTokenCount: 0, forbiddenKeyCount: 0, forbiddenStringCount: 0 },
+      postMatchReview: { summary: 'SHOULD_NOT_RENDER_POST_MATCH_REVIEW' },
+      settlementReport: { summaryLine: 'SHOULD_NOT_RENDER_SETTLEMENT' },
+      seasonHonorReport: { summaryLine: 'SHOULD_NOT_RENDER_SEASON_HONOR' }
+    }
+  };
+};
+const replayShareViewerState = await PVPScene.openLiveReplayShareViewer(' pvplrs-ui_public_viewer_token_1234567890 ');
+assert.equal(replayShareViewerState.status, 'ready', 'public replay viewer should enter ready state after anonymous fetch');
+assert.deepEqual(replayShareViewerCalls, ['pvplrs-ui_public_viewer_token_1234567890'], 'public replay viewer should fetch by opaque share token only');
+assert.equal(replayShareViewerHost.hidden, false, 'public replay viewer host should become visible');
+assert.match(replayShareViewerHost.innerHTML, /data-live-replay-share-viewer/, 'public replay viewer should render a stable host marker');
+assert.match(replayShareViewerHost.innerHTML, /replay_public/, 'public replay viewer should label replay_public visibility');
+assert.match(replayShareViewerHost.innerHTML, /a1b2c3d4e5f67890/, 'public replay viewer should show the stable match reference');
+assert.match(replayShareViewerHost.innerHTML, /伤害终结/, 'public replay viewer should show the public finish reason');
+assert.equal(/pvpm-ui-runtime-raw-should-not-render|SHOULD_NOT_RENDER|postMatchReview|settlementReport|seasonHonorReport/.test(replayShareViewerHost.innerHTML), false, 'public replay viewer should not render raw match ids or seat-specific payload fields');
+PVPService.live.getReplayShare = previousPvpServiceGetReplayShare;
+documentStub.querySelector = previousDocumentQuerySelectorForReplayShare;
 
 let reportReviewState = {
   phase: 'finished',

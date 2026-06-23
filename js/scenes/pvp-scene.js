@@ -43,6 +43,7 @@ export const PVPScene = {
   liveSocialMuted: false,
   liveSocialPreferencesLoaded: false,
   liveInlineHint: '',
+  liveReplayShareViewer: null,
   liveReviewFocus: '',
   liveLoadoutReviewFocused: false,
   liveLoadoutReviewFocusReason: 'loadout',
@@ -3323,6 +3324,206 @@ export const PVPScene = {
       return;
     }
     setHint(nextState && nextState.lastError && nextState.lastError.message || '公开战报分享撤销失败。');
+  },
+  normalizeLiveReplayShareToken(value = '') {
+    const token = String(value || '').trim();
+    return /^pvplrs-[a-zA-Z0-9_-]{24,80}$/.test(token) ? token : '';
+  },
+  activateLiveReplayShareViewerSurface() {
+    if (typeof document === 'undefined') return;
+    this.activeTab = 'live';
+    document.querySelectorAll('.rune-tab').forEach(btn => btn.classList.remove('active'));
+    const liveTabButton = document.querySelector('.rune-tab[data-pvp-tab="live"]');
+    if (liveTabButton) liveTabButton.classList.add('active');
+    document.querySelectorAll('.pvp-tab-pane').forEach(el => {
+      el.classList.remove('active');
+      el.style.display = '';
+    });
+    const livePane = document.getElementById('tab-live');
+    if (livePane) livePane.classList.add('active');
+  },
+  async openLiveReplayShareViewer(shareToken = '') {
+    const token = this.normalizeLiveReplayShareToken(shareToken);
+    const gameRef = this.getGameRef();
+    if (gameRef && typeof gameRef.showScreen === 'function') {
+      gameRef.showScreen('pvp-screen');
+    }
+    this.activateLiveReplayShareViewerSurface();
+    if (!token) {
+      this.liveReplayShareViewer = {
+        status: 'error',
+        shareToken: '',
+        message: '公开战报链接无效或已损坏。'
+      };
+      this.renderLiveReplayShareViewer();
+      return this.liveReplayShareViewer;
+    }
+    this.liveReplayShareViewer = {
+      status: 'loading',
+      shareToken: token,
+      message: '正在读取公开战报...'
+    };
+    this.renderLiveReplayShareViewer();
+    try {
+      if (!PVPService || !PVPService.live || typeof PVPService.live.getReplayShare !== 'function') {
+        throw new Error('公开战报分享服务未就绪');
+      }
+      const result = await PVPService.live.getReplayShare(token);
+      if (!result || result.success === false) {
+        const reason = String(result && (result.reason || result.message) || 'replay_share_unavailable');
+        this.liveReplayShareViewer = {
+          status: 'error',
+          shareToken: token,
+          reason,
+          message: result && result.message ? String(result.message) : '公开战报已失效或暂不可读。'
+        };
+        this.renderLiveReplayShareViewer();
+        return this.liveReplayShareViewer;
+      }
+      this.liveReplayShareViewer = {
+        status: 'ready',
+        shareToken: token,
+        share: result.share && typeof result.share === 'object' ? result.share : null,
+        replay: result.replay && typeof result.replay === 'object' ? result.replay : null,
+        message: '公开战报已载入。'
+      };
+      this.renderLiveReplayShareViewer();
+      return this.liveReplayShareViewer;
+    } catch (error) {
+      this.liveReplayShareViewer = {
+        status: 'error',
+        shareToken: token,
+        reason: error && error.reason || 'replay_share_fetch_failed',
+        message: error && error.message ? error.message : '公开战报读取失败。'
+      };
+      this.renderLiveReplayShareViewer();
+      return this.liveReplayShareViewer;
+    }
+  },
+  renderLiveReplayShareViewer() {
+    if (typeof document === 'undefined') return '';
+    const root = document.querySelector('[data-live-pvp-root]');
+    const host = root && typeof root.querySelector === 'function'
+      ? root.querySelector('[data-live-replay-share-viewer-root]')
+      : document.querySelector('[data-live-replay-share-viewer-root]');
+    if (!host) return '';
+    const viewer = this.liveReplayShareViewer;
+    if (!viewer) {
+      host.hidden = true;
+      host.innerHTML = '';
+      return '';
+    }
+    host.hidden = false;
+    const status = String(viewer.status || 'idle');
+    host.setAttribute('data-live-replay-share-viewer-status', status);
+    const markup = this.renderLiveReplayShareViewerMarkup(viewer);
+    host.innerHTML = markup;
+    return markup;
+  },
+  getLiveReplayShareViewerSnapshot() {
+    const viewer = this.liveReplayShareViewer && typeof this.liveReplayShareViewer === 'object'
+      ? this.liveReplayShareViewer
+      : null;
+    if (!viewer) return null;
+    const share = viewer.share && typeof viewer.share === 'object' ? viewer.share : {};
+    const replay = viewer.replay && typeof viewer.replay === 'object' ? viewer.replay : {};
+    const publicSummary = replay.publicSummary && typeof replay.publicSummary === 'object' ? replay.publicSummary : {};
+    const hiddenScan = replay.hiddenScan && typeof replay.hiddenScan === 'object' ? replay.hiddenScan : {};
+    return {
+      reportVersion: 'pvp-live-replay-share-viewer-v1',
+      status: String(viewer.status || 'idle'),
+      publicOnly: true,
+      sourceVisibility: String(share.sourceVisibility || share.visibilityLayer || replay.visibilityLayer || 'replay_public'),
+      visibilityLayer: String(replay.visibilityLayer || share.visibilityLayer || 'replay_public'),
+      matchRef: String(share.matchRef || ''),
+      message: String(viewer.message || ''),
+      reason: String(viewer.reason || ''),
+      publicSummary: {
+        status: String(publicSummary.status || ''),
+        winnerSeat: String(publicSummary.winnerSeat || ''),
+        loserSeat: String(publicSummary.loserSeat || ''),
+        finishReason: String(publicSummary.finishReason || '')
+      },
+      eventCount: Math.max(0, Math.floor(Number(replay.eventCount) || (Array.isArray(replay.events) ? replay.events.length : 0))),
+      hiddenScan: {
+        forbiddenTokenCount: Math.max(0, Math.floor(Number(hiddenScan.forbiddenTokenCount) || 0)),
+        forbiddenKeyCount: Math.max(0, Math.floor(Number(hiddenScan.forbiddenKeyCount) || 0)),
+        forbiddenStringCount: Math.max(0, Math.floor(Number(hiddenScan.forbiddenStringCount) || 0))
+      }
+    };
+  },
+  renderLiveReplayShareViewerMarkup(viewer = {}) {
+    const status = String(viewer.status || 'idle');
+    if (status === 'loading') {
+      return `
+        <section class="pvp-live-replay-share-card" data-live-replay-share-viewer data-live-replay-share-viewer-status="loading">
+          <div class="pvp-live-dispute-receipt-head">
+            <span>公开战报</span>
+            <span>replay_public</span>
+          </div>
+          <div class="pvp-live-dispute-receipt-line">正在读取公开战报...</div>
+        </section>
+      `;
+    }
+    if (status === 'error') {
+      return `
+        <section class="pvp-live-replay-share-card error" data-live-replay-share-viewer data-live-replay-share-viewer-status="error">
+          <div class="pvp-live-dispute-receipt-head">
+            <span>公开战报不可用</span>
+            <span>${this.escapeHtml(viewer.reason || 'unavailable')}</span>
+          </div>
+          <div class="pvp-live-dispute-receipt-line">${this.escapeHtml(viewer.message || '公开战报已失效或暂不可读。')}</div>
+          <div class="pvp-live-dispute-receipt-boundary">公开 viewer 只读取 replay_public，不读取本人回放、隐藏手牌、牌库或结算奖励。</div>
+        </section>
+      `;
+    }
+    const share = viewer.share && typeof viewer.share === 'object' ? viewer.share : {};
+    const replay = viewer.replay && typeof viewer.replay === 'object' ? viewer.replay : {};
+    const publicSummary = replay.publicSummary && typeof replay.publicSummary === 'object' ? replay.publicSummary : {};
+    const visibility = String(replay.visibilityLayer || share.visibilityLayer || 'replay_public');
+    const finishLabel = this.formatLiveFinishReasonLabel(publicSummary.finishReason || '');
+    const winnerSeat = String(publicSummary.winnerSeat || '--');
+    const loserSeat = String(publicSummary.loserSeat || '--');
+    const matchRef = String(share.matchRef || '--');
+    const eventCount = Math.max(0, Math.floor(Number(replay.eventCount) || (Array.isArray(replay.events) ? replay.events.length : 0)));
+    const hiddenScan = replay.hiddenScan && typeof replay.hiddenScan === 'object' ? replay.hiddenScan : {};
+    const events = Array.isArray(replay.events) ? replay.events.slice(0, 16) : [];
+    const eventRows = events.length > 0 ? events.map(event => {
+      const formatted = this.formatLiveEvent(event);
+      const sequence = Number.isFinite(Number(event && event.sequence)) ? `#${Math.floor(Number(event.sequence))} · ` : '';
+      return `
+        <div class="pvp-live-event-row" data-live-replay-share-event="${this.escapeHtml(formatted.type)}">
+          <span class="pvp-live-event-main">${this.escapeHtml(sequence)}${this.escapeHtml(formatted.label)}</span>
+          <span class="pvp-live-event-detail">${this.escapeHtml(formatted.detail)}</span>
+        </div>
+      `;
+    }).join('') : '<div class="pvp-live-empty">暂无公开事件</div>';
+    const forbiddenTotal = Math.max(0, Math.floor(Number(hiddenScan.forbiddenTokenCount) || 0))
+      + Math.max(0, Math.floor(Number(hiddenScan.forbiddenKeyCount) || 0))
+      + Math.max(0, Math.floor(Number(hiddenScan.forbiddenStringCount) || 0));
+    return `
+      <section
+        class="pvp-live-replay-share-card"
+        data-live-replay-share-viewer
+        data-live-replay-share-viewer-status="ready"
+        data-live-replay-share-viewer-visibility="${this.escapeHtml(visibility)}"
+        data-live-replay-share-viewer-public-only="true"
+      >
+        <div class="pvp-live-dispute-receipt-head">
+          <span>公开战报</span>
+          <span>${this.escapeHtml(visibility)}</span>
+        </div>
+        <div class="pvp-live-replay-share-summary" data-live-replay-share-summary>
+          <span>战报 ${this.escapeHtml(matchRef)}</span>
+          <span>${this.escapeHtml(finishLabel)}</span>
+          <span>胜方 ${this.escapeHtml(winnerSeat)} / 败方 ${this.escapeHtml(loserSeat)}</span>
+          <span>公开事件 ${this.escapeHtml(eventCount)}</span>
+        </div>
+        <div class="pvp-live-dispute-receipt-evidence">隐私扫描 ${this.escapeHtml(forbiddenTotal)} 项命中 · 不含原始战局 ID · 不含本人结算或赛季荣誉</div>
+        <div class="pvp-live-event-log" data-live-replay-share-event-log>${eventRows}</div>
+        <div class="pvp-live-dispute-receipt-boundary">${this.escapeHtml(share.boundary || '公开战报分享只暴露 replay_public 脱敏回放，不读取隐藏手牌、牌库、随机种子或本人结算。')}</div>
+      </section>
+    `;
   },
   renderLiveDisputeReportReceipt() {
     const state = this.getLiveSession().getState();
