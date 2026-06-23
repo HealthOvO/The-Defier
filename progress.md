@@ -1,5 +1,16 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-23: V10-S54 live PVP ranked reconnect grace release gate tightening
+  - 本轮完成
+    - `tests/sanity_release_gate_coverage_checks.cjs` 继续收紧 V10-S53 production ranked reconnect grace smoke 的 release markers：显式锁住 ranked `/heartbeat` 路径、active current recovery 阶段不展示终局复盘、reconnect-grace current recovery 阶段不展示终局复盘。
+    - `tests/prod_api_smoke.cjs` 将已有 `postMatchReview === null` 断言文案拆成更精确的 marker：`prod live ranked current recovery should keep terminal review hidden before grace` 与 `prod live ranked reconnect grace current recovery should keep terminal review hidden`，防止未来把真实 grace recovery 退化成只测 happy-path current read。
+  - 已验证
+    - 红测：`node tests/sanity_release_gate_coverage_checks.cjs` 先失败于缺少 `prod live ranked current recovery should keep terminal review hidden before grace` marker。
+    - 绿测：`node --check tests/prod_api_smoke.cjs`
+    - 绿测：`node tests/sanity_release_gate_coverage_checks.cjs`
+  - 当前结论
+    - 本轮只加强 production smoke 的 release gate 约束和断言可读性，不改变 PVP 运行时、卡牌数值、心跳阈值、连接结算、匹配或奖励。
+
 - 2026-06-23: V10-S53 live PVP production ranked reconnect grace smoke
   - 本轮完成
     - `tests/prod_api_smoke.cjs` 在 ranked public queue 真实对局进入 active 后，新增 production-like 恢复链路：双方先通过 `/api/pvp/live/matches/current` 和 `/heartbeat` 验证刷新/心跳能恢复同一个 ranked active match，不暴露终局复盘，并保留 turn timer 与连接报告。

@@ -303,7 +303,7 @@ async function assertRankedActiveRecoverySmoke({ matchId, participantsBySeat }) 
     assert.strictEqual(current.payload.seatId, seatId, `prod live ranked active current match should preserve viewer seat: ${JSON.stringify(current.payload)}`);
     assert.strictEqual(current.payload.stateView?.mode, 'ranked', `prod live ranked active current match should stay ranked: ${JSON.stringify(current.payload)}`);
     assert.strictEqual(current.payload.stateView?.status, 'active', `prod live ranked active current match should stay active: ${JSON.stringify(current.payload)}`);
-    assert.strictEqual(current.payload.stateView?.postMatchReview, null, `prod live ranked active current match should keep terminal review hidden: ${JSON.stringify(current.payload.stateView?.postMatchReview)}`);
+    assert.strictEqual(current.payload.stateView?.postMatchReview, null, `prod live ranked current recovery should keep terminal review hidden before grace: ${JSON.stringify(current.payload.stateView?.postMatchReview)}`);
     assert.strictEqual(current.payload.stateView?.turnTimer?.reportVersion, 'pvp-live-turn-timer-v1', `prod live ranked active current match should preserve turn timer: ${JSON.stringify(current.payload.stateView?.turnTimer)}`);
     assert.strictEqual(current.payload.stateView?.connectionReport?.reportVersion, 'pvp-live-connection-v1', `prod live ranked active current match should expose connection report: ${JSON.stringify(current.payload.stateView?.connectionReport)}`);
     assert.strictEqual(current.payload.stateView?.connectionReport?.viewer?.seatId, seatId, `prod live ranked active current match should scope connection viewer seat: ${JSON.stringify(current.payload.stateView?.connectionReport)}`);
@@ -348,7 +348,7 @@ async function assertRankedActiveRecoverySmoke({ matchId, participantsBySeat }) 
   requireOk(`prod live ranked reconnect grace current recovery ${observerSeatId}`, graceCurrent);
   assert.strictEqual(graceCurrent.payload.matchId, matchId, `prod live ranked reconnect grace current recovery should keep same match: ${JSON.stringify(graceCurrent.payload)}`);
   assert.strictEqual(graceCurrent.payload.stateView?.status, 'active', `prod live ranked silent opponent should enter reconnect grace through current match recovery: ${JSON.stringify(graceCurrent.payload.stateView)}`);
-  assert.strictEqual(graceCurrent.payload.stateView?.postMatchReview, null, `prod live ranked reconnect grace should keep terminal review hidden: ${JSON.stringify(graceCurrent.payload.stateView?.postMatchReview)}`);
+  assert.strictEqual(graceCurrent.payload.stateView?.postMatchReview, null, `prod live ranked reconnect grace current recovery should keep terminal review hidden: ${JSON.stringify(graceCurrent.payload.stateView?.postMatchReview)}`);
   assert.strictEqual(graceCurrent.payload.stateView?.turnTimer?.deadlineAt, baselineDeadlineAt, `prod live ranked reconnect grace should preserve active turn deadline: ${JSON.stringify({ before: observerBaseline.payload.stateView?.turnTimer, after: graceCurrent.payload.stateView?.turnTimer })}`);
   assert.strictEqual(graceCurrent.payload.stateView?.connectionReport?.viewer?.status, 'online', `prod live ranked reconnect grace observer should remain online: ${JSON.stringify(graceCurrent.payload.stateView?.connectionReport)}`);
   assert.strictEqual(graceCurrent.payload.stateView?.connectionReport?.opponent?.seatId, silentSeatId, `prod live ranked reconnect grace should identify silent opponent seat: ${JSON.stringify(graceCurrent.payload.stateView?.connectionReport)}`);
