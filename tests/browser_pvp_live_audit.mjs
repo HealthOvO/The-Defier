@@ -2835,6 +2835,89 @@ async function safeElementScreenshot(page, selector, outputPath) {
       && !(foregroundResumeProbe.payload?.lastEvents || []).some(event => ['connection_timeout', 'turn_timeout', 'match_finished'].includes(event.eventType)),
     JSON.stringify(foregroundResumeProbe),
   );
+  const reopenCurrentMatchProbe = await page.evaluate(async () => {
+    const delay = (ms = 0) => new Promise(resolve => setTimeout(resolve, ms));
+    const scene = window.PVPScene;
+    const liveService = window.PVPService?.live || {};
+    const session = scene?.getLiveSession?.();
+    const beforeState = session?.getState?.() || {};
+    const beforePayload = JSON.parse(window.render_game_to_text()).pvp?.live || null;
+    const activeStateView = beforeState?.stateView
+      ? JSON.parse(JSON.stringify(beforeState.stateView))
+      : window.__makeLivePvpAuditStateView?.(3, 'A', 'active');
+    if (activeStateView) {
+      activeStateView.status = 'active';
+      activeStateView.matchId = activeStateView.matchId || beforePayload?.matchId || 'pvplm-browser-live';
+      activeStateView.currentSeat = activeStateView.currentSeat || beforePayload?.currentSeat || 'A';
+      if (!activeStateView.turnTimer) {
+        activeStateView.turnTimer = {
+          reportVersion: 'pvp-live-turn-timer-v1',
+          phase: 'active',
+          currentSeat: activeStateView.currentSeat,
+          viewerSeat: beforePayload?.seatId || 'A',
+          isViewerTurn: activeStateView.currentSeat === (beforePayload?.seatId || 'A'),
+          startedAt: Date.now(),
+          deadlineAt: Date.now() + 90000,
+          timeoutMs: 90000,
+          remainingMs: 90000,
+        };
+      }
+      activeStateView.postMatchReview = null;
+      activeStateView.recentEvents = Array.isArray(activeStateView.recentEvents)
+        ? activeStateView.recentEvents.filter(event => !['connection_timeout', 'turn_timeout', 'match_finished'].includes(String(event?.eventType || '')))
+        : [];
+    }
+    const originalGetCurrentMatch = liveService.getCurrentMatch;
+    const callsBefore = window.__livePvpAuditCalls.length;
+    try {
+      liveService.getCurrentMatch = async () => {
+        window.__livePvpAuditCalls.push({ method: 'getCurrentMatch', reopenLiveTab: true });
+        return {
+          success: true,
+          matchId: activeStateView?.matchId || beforePayload?.matchId || 'pvplm-browser-live',
+          seatId: beforeState?.seatId || beforePayload?.seatId || 'A',
+          stateView: activeStateView,
+          events: Array.isArray(activeStateView?.recentEvents) ? activeStateView.recentEvents.slice(-8) : [],
+        };
+      };
+      if (scene) {
+        scene.liveSession = null;
+        scene.activeTab = 'live';
+        await scene.loadLivePanel();
+      }
+      await delay(20);
+      return {
+        beforePayload,
+        payload: JSON.parse(window.render_game_to_text()).pvp?.live || null,
+        phaseAttr: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-phase') || '',
+        timerText: document.querySelector('[data-live-turn-timer]')?.textContent || '',
+        reviewHidden: document.querySelector('[data-live-post-match-review]')?.hidden ?? false,
+        calls: window.__livePvpAuditCalls.slice(callsBefore),
+      };
+    } finally {
+      if (originalGetCurrentMatch) {
+        liveService.getCurrentMatch = originalGetCurrentMatch;
+      } else {
+        delete liveService.getCurrentMatch;
+      }
+    }
+  });
+  add(
+    'live UI reopening live tab recovers the same active current match',
+    reopenCurrentMatchProbe.beforePayload?.phase === 'active'
+      && reopenCurrentMatchProbe.payload?.phase === 'active'
+      && reopenCurrentMatchProbe.phaseAttr === 'active'
+      && reopenCurrentMatchProbe.payload?.matchId === reopenCurrentMatchProbe.beforePayload?.matchId
+      && reopenCurrentMatchProbe.payload?.currentSeat === reopenCurrentMatchProbe.beforePayload?.currentSeat
+      && reopenCurrentMatchProbe.payload?.turnTimer?.startedAt === reopenCurrentMatchProbe.beforePayload?.turnTimer?.startedAt
+      && reopenCurrentMatchProbe.payload?.turnTimer?.deadlineAt === reopenCurrentMatchProbe.beforePayload?.turnTimer?.deadlineAt
+      && reopenCurrentMatchProbe.payload?.postMatchReview == null
+      && reopenCurrentMatchProbe.reviewHidden === true
+      && /行动倒计时/.test(reopenCurrentMatchProbe.timerText)
+      && !(reopenCurrentMatchProbe.payload?.lastEvents || []).some(event => ['connection_timeout', 'turn_timeout', 'match_finished'].includes(event.eventType))
+      && reopenCurrentMatchProbe.calls.some(call => call.method === 'getCurrentMatch' && call.reopenLiveTab === true),
+    JSON.stringify(reopenCurrentMatchProbe),
+  );
   const lowTimerProbe = await page.evaluate(async () => {
     const session = window.PVPScene?.getLiveSession?.();
     const originalGetState = session?.getState?.bind(session);

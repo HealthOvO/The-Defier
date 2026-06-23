@@ -1,5 +1,20 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-23: V10-S38 live PVP fake browser current-match reopen contract
+  - 本轮完成
+    - `tests/browser_pvp_live_audit.mjs` 新增 fake browser reopen current-match finding：在页面已经进入 `active` 真人局后，深拷贝当前 session 的权威 `stateView`，模拟重新打开 live tab / 重建 `liveSession`，再通过 `loadLivePanel()` 命中 `resumeCurrentMatch()` 恢复同一 current match。
+    - 新 finding `live UI reopening live tab recovers the same active current match` 固定双方体验关键断言：恢复后仍是 `active`，`matchId`、`currentSeat`、`turnTimer.startedAt / deadlineAt` 与恢复前一致，`postMatchReview` 为空，`lastEvents` 不出现 `connection_timeout / turn_timeout / match_finished`，并且必须确实调用 `getCurrentMatch`。
+    - `tests/sanity_release_gate_coverage_checks.cjs` 增加对应 release marker，扫描 `reopenCurrentMatchProbe`、同局/同席位/同倒计时、无终局复盘、无终局事件污染、`getCurrentMatch` reopen 调用，防止 fake browser 审计漏掉“重开 live 面板仍恢复同一 active 局”的合同。
+  - 已验证
+    - 红测：先只补 release gate marker 后运行 `node tests/sanity_release_gate_coverage_checks.cjs`，失败于 `live UI reopening live tab recovers the same active current match`，证明门禁会抓住缺失 browser finding。
+    - 语法：`node --check tests/browser_pvp_live_audit.mjs`
+    - 绿测：`node tests/sanity_release_gate_coverage_checks.cjs`
+    - 浏览器审计：`node tests/browser_pvp_live_audit.mjs http://127.0.0.1:4173 output/pvp-live-reopen-current-match-fake-20260623`，105/105 findings、0 failed、0 console error。
+    - 全量 Node 门禁：`npm run test:node`，All node checks passed。
+    - 构建：`npm run build:pages`
+  - 当前结论
+    - live PVP 的“重新打开页面/面板后继续当前真人局”现在同时有真实后端 smoke 与 fake browser 审计锁定：前端不会把进行中的 active 对局恢复成等待态、终局复盘、旧 timeout 或重置行动窗口。该切片只增加浏览器回归覆盖和 release marker，不改变匹配、战斗数值、心跳协议、结算、奖励或正式线上配置。
+
 - 2026-06-23: V10-S37 live PVP active current-match reload browser contract
   - 本轮完成
     - `tests/browser_pvp_live_real_backend_smoke.mjs` 新增真实双账号 active 对局整页恢复 finding：双方进入 `active` 后，使用同一账号 context 的独立 fresh page 完整加载页面、打开 live tab、调用 `loadLivePanel()`，必须通过 current-match recovery 回到同一 `matchId`、同一 `seatId`、同一 `currentSeat` 和同一 `turnTimer.startedAt / deadlineAt`。
