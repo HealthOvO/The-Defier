@@ -1,5 +1,26 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-24: V10-S62 live PVP status response end-turn confirmation
+  - 本轮完成
+    - `js/scenes/pvp-scene.js` 将既有二次确认机制从 `opening_window` 扩展到 `status_response_window` 的结束回合：当玩家处在破绽响应窗口、公开预览显示可用防守牌清除破绽时，第一次结束回合只弹确认，不会直接提交 `end_turn`。
+    - 确认文案复用服务端公开投影里的 `intentSignalReport.responseLine`、`actionPreviewReport.playableCards.publicStatusMitigation` 与 `endTurn.summaryLine`，直接说明“破绽响应窗口 / 可用防守牌清除破绽 / 若直接结束回合后续可能被兑现”。
+    - `tests/sanity_pvp_live_ui_runtime_checks.mjs` 先红后绿锁住 status response 窗口：关闭开局护体后，仅凭 `pressureState='status_response_window'` 也必须拦住第一次结束回合；`stateVersion` 前进后旧确认失效；同版本第二次确认才提交一个权威 `end_turn`。
+    - `tests/browser_pvp_live_audit.mjs` 新增真实 DOM probe：临时构造 `status_response_window`、点击结束回合，检查页面 hint、按钮确认态、`publicStatusMitigation` payload、无隐藏手牌/牌库/rating 泄漏，以及第三次同版本确认才提交。
+    - 同步把公平回执 `evidenceSummary` 从静态标签升级为可点击证据按钮：点击“公开决策窗口 / 后手有效行动”等回执项会复用 `experience_check:<id>` 聚焦公开事件面板，赛后能更快定位“为什么这局不算无解释先手秒杀 / 哪个窗口需要复查”。
+    - `css/pvp.css` 为公平回执证据按钮补按钮重置、hover/focus 和聚焦态，保持移动端换行与现有复盘卡一致。
+    - `tests/sanity_pvp_live_ui_contract_checks.cjs`、`tests/sanity_release_gate_coverage_checks.cjs` 和 `game-intro.html` 同步锁住 status response 确认、`publicStatusMitigation`、`data-live-fairness-check` 与玩家说明。
+  - 已验证
+    - 红测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs` 在关闭开局护体后失败于 `first status-response end-turn click should only arm confirmation and must not submit end_turn`，当时第一次点击直接提交了 1 个 `end_turn`。
+    - 绿测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs`
+    - 绿测：`node tests/sanity_pvp_live_ui_contract_checks.cjs`
+    - 绿测：`node tests/sanity_release_gate_coverage_checks.cjs`
+    - 绿测：`node tests/sanity_intro_progress_sync_checks.cjs`
+    - 构建：`npm run build:pages`
+    - 浏览器审计：`node tests/browser_pvp_live_audit.mjs http://127.0.0.1:4173 output/pvp-live-status-response-confirm-audit`，115/115 findings、0 failed、0 console error。
+    - 全量 Node 门禁：`npm run test:node`
+  - 当前结论
+    - live PVP 的战中响应窗口从“只展示可解释信息”推进到“防误操作保护”：玩家处在破绽/公开状态响应窗口时，不会因为一次误点结束回合而错过唯一的清除破绽机会；该切片只改前台确认、复盘证据跳转和门禁，不改变卡牌数值、状态规则、先后手、正式结算、奖励、匹配或线上配置。
+
 - 2026-06-24: V10-S61 live PVP setup disconnect no-score action copy
   - 本轮完成
     - `js/scenes/pvp-scene.js` 收紧 `getLiveConnectionTempo()` 的 viewer disconnected 分支：当对局仍处于 `setup/matched` 时，前台不再显示“否则按连接超时结算”，改为“准备阶段若未开战成功，本局会成为无效局且不计正式积分”。

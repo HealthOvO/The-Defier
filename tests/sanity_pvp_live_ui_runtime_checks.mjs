@@ -2079,6 +2079,123 @@ await PVPScene.endLiveTurn();
 assert.equal(openingActionIntents.length, 1, 'fresh second opening-window end-turn click should submit exactly one end_turn intent');
 assert.equal(openingActionIntents[0].intentType, 'end_turn', 'confirmed opening-window end-turn should keep the authoritative end_turn intent');
 
+openingActionState = {
+  ...openingActionState,
+  phase: 'active',
+  seatId: 'A',
+  stateView: {
+    ...openingActionState.stateView,
+    stateVersion: 51,
+    currentSeat: 'A',
+    openingSafeguardReport: {
+      ...openingActionState.stateView.openingSafeguardReport,
+      status: 'closed',
+      damageBudget: {
+        ...openingActionState.stateView.openingSafeguardReport.damageBudget,
+        currentActionBudget: null
+      },
+      openingProtection: {
+        ...openingActionState.stateView.openingSafeguardReport.openingProtection,
+        active: false,
+        protectedSeats: []
+      },
+      secondSeatBuffer: {
+        ...openingActionState.stateView.openingSafeguardReport.secondSeatBuffer,
+        active: false
+      },
+      counterplay: {
+        ...openingActionState.stateView.openingSafeguardReport.counterplay,
+        pendingSeats: [],
+        grantedSeats: []
+      }
+    },
+    opponent: { seatId: 'B' },
+    self: {
+      ...openingActionState.stateView.self,
+      seatId: 'A',
+      publicStatuses: [{
+        statusId: 'vulnerable_mark',
+        label: '破绽',
+        sourceSeat: 'B',
+        earliestConsumeTurnIndex: 52,
+        summary: '破绽已公开；防守方至少拥有一个行动窗口后才可被兑现。'
+      }],
+      hand: [{ instanceId: 'A-guard-response', cardId: 'pvp_guard', name: '护体诀' }]
+    },
+    duelMomentumReport: {
+      reportVersion: 'pvp-live-duel-momentum-v1',
+      pressureState: 'status_response_window',
+      pressureLabel: '破绽响应窗口',
+      agencyLabel: '你的防守响应窗口',
+      summaryLine: '局势：你正处于破绽响应窗口，防守牌可阻止后续兑现。',
+      counterplayLine: '反制窗口：先清除破绽或补盾，否则下一轮可能被兑现。',
+      sourceVisibility: 'public_state',
+      usesHiddenInformation: false,
+      rankedImpact: 'none'
+    },
+    intentSignalReport: {
+      reportVersion: 'pvp-live-intent-signal-v1',
+      sourceVisibility: 'public_state_and_public_content',
+      usesHiddenInformation: false,
+      rankedImpact: 'none',
+      signalState: 'status_response_window',
+      signalLabel: '破绽响应',
+      intentLine: '读牌：对手已给你挂上破绽，下一轮可能兑现。',
+      responseLine: '反制窗口：可用防守牌清除破绽；若直接结束回合，后续可能被兑现。',
+      safeguards: ['public_card_catalog_only', 'private_card_projection_blocked', 'status_response_window']
+    },
+    actionPreviewReport: {
+      ...openingActionState.stateView.actionPreviewReport,
+      playableCards: [{
+        cardInstanceId: 'A-guard-response',
+        cardName: '护体诀',
+        targetSeat: 'A',
+        rawDamage: 0,
+        damageBudget: 0,
+        budgetedDamage: 0,
+        blockedDamage: 0,
+        hpDamage: 0,
+        blockGain: 7,
+        selfBlockAfter: 7,
+        publicStatusMitigation: {
+          statusId: 'vulnerable_mark',
+          label: '破绽',
+          seatId: 'A',
+          sourceSeat: 'B',
+          responseWindow: 'status_response_window',
+          mitigation: 'cleared'
+        },
+        summaryLine: '护体诀：自身护盾 +7；清除破绽，阻止后续兑现。'
+      }],
+      endTurn: {
+        nextSeat: 'B',
+        summaryLine: '结束回合后行动权交给 B；破绽仍可能被后续兑现。'
+      }
+    }
+  }
+};
+openingActionIntents.length = 0;
+PVPScene.liveOpeningActionConfirm = null;
+PVPScene.liveInlineHint = '';
+await PVPScene.endLiveTurn();
+assert.equal(openingActionIntents.length, 0, 'first status-response end-turn click should only arm confirmation and must not submit end_turn');
+assert.match(PVPScene.liveInlineHint, /再次点击确认结束回合/, 'status-response end-turn confirmation should require a second click');
+assert.match(PVPScene.liveInlineHint, /破绽|响应窗口|反制窗口/, 'status-response confirmation should name the public response window');
+assert.match(PVPScene.liveInlineHint, /清除破绽|防守牌|后续兑现/, 'status-response confirmation should explain why ending now is risky');
+assert.doesNotMatch(PVPScene.liveInlineHint, /cardInstanceId|hand|deck|rating|elo|reward/i, 'status-response confirmation must not expose hidden card or reward/rating data');
+openingActionState = {
+  ...openingActionState,
+  stateView: {
+    ...openingActionState.stateView,
+    stateVersion: 52
+  }
+};
+await PVPScene.endLiveTurn();
+assert.equal(openingActionIntents.length, 0, 'status-response confirmation should not survive an authoritative stateVersion advance');
+await PVPScene.endLiveTurn();
+assert.equal(openingActionIntents.length, 1, 'fresh second status-response end-turn click should submit exactly one end_turn intent');
+assert.equal(openingActionIntents[0].intentType, 'end_turn', 'confirmed status-response end-turn should keep the authoritative end_turn intent');
+
 let intentState = {
   phase: 'active',
   matchId: 'pvpm-ui-runtime-intent-lock',
@@ -2285,6 +2402,32 @@ await PVPScene.surrenderLiveMatch();
 assert.equal(surrenderIntents.length, 1, 'second live surrender click inside confirmation window should submit exactly one surrender intent');
 assert.equal(surrenderIntents[0].intentType, 'surrender', 'confirmed live surrender should still use the authoritative surrender intent type');
 assert.equal(PVPScene.liveSurrenderConfirmUntil, 0, 'confirmed live surrender should clear the confirmation window');
+
+const fairnessReceiptMarkup = PVPScene.renderLiveFairnessReceipt({
+  reportVersion: 'pvp-live-fairness-receipt-v1',
+  sourceVisibility: 'public_events',
+  usesHiddenInformation: false,
+  rankedImpact: 'none',
+  receiptState: 'watch',
+  agencyLabel: '败方窗口偏短',
+  setupVerdict: '开战回执：双方准备公开确认后才进入战斗。',
+  fairnessVerdict: '公平回执：公开行动窗口偏短，本局需要先复盘关键回合，再判断是否继续排位。',
+  budgetVerdict: '首动预算证据不足，下一局优先观察第一手伤害是否被公开预算约束。',
+  counterplayVerdict: '反打回执：护体或反打窗口样本不足，建议先查看公开关键回合。',
+  windowVerdict: '行动窗口：公开窗口偏短，先确认是否认输、超时或连接中断导致。',
+  effectiveActionVerdict: '有效行动：未看到后手有效行动窗口，本局不能只按“没被秒”判定体验公平。',
+  terminalVerdict: '终局边界：终局来自公开伤害或公开长局规则，复盘看终局前一手。',
+  nextStepLine: '下一步：先查看权威事件和关键回合复盘，不把短窗口样本直接当成公平结论。',
+  evidenceSummary: [
+    { id: 'decision_windows', label: '公开决策窗口', passed: false, evidenceSequences: [1, 2] },
+    { id: 'second_seat_effective_action', label: '后手有效行动', passed: false, evidenceSequences: [2] }
+  ],
+  boundary: '公平回执只汇总公开复盘证据，不读取隐藏手牌、牌库或原始事件明细，也不改正式积分或结算。'
+});
+assert.match(fairnessReceiptMarkup, /data-live-fairness-check="decision_windows"/, 'fairness receipt evidence should be directly focusable from the receipt');
+assert.match(fairnessReceiptMarkup, /onclick="PVPScene\.handleLiveExperienceCheckFocus\(&quot;decision_windows&quot;\)"/, 'fairness receipt evidence should reuse public experience-check focusing');
+assert.match(fairnessReceiptMarkup, /公开决策窗口 · 观察/, 'fairness receipt focus button should keep the readable evidence label');
+assert.doesNotMatch(fairnessReceiptMarkup, /payload|\bhand\b|deck|cardId|instanceId|loadoutSnapshot|reward|rating|elo/i, 'fairness receipt focus controls must not expose hidden or reward/rating data');
 
 let recommendationState = {
   phase: 'finished',

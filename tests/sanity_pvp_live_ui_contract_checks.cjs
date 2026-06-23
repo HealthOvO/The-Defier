@@ -240,6 +240,7 @@ const liveBrowserAudit = read('tests/browser_pvp_live_audit.mjs');
   'safeguardSummary',
   'fairnessReceipt',
   'data-live-fairness-receipt',
+  'data-live-fairness-check',
   'getLiveFairnessReceipt(',
   'renderLiveFairnessReceipt(',
   'review_key_turns',
@@ -497,6 +498,8 @@ const openingConfirmMessageBody = methodBody(scene, 'formatLiveOpeningActionConf
   'getLiveActionPreviewReport',
   'getLiveCardActionPreview',
   'formatLiveActionPreviewLine',
+  'status_response_window',
+  'publicStatusMitigation',
   '权威预览',
 ].forEach((needle) => {
   assert.ok(openingConfirmMessageBody.includes(needle), `opening confirmation formatter should consume authoritative action preview: ${needle}`);
@@ -798,6 +801,10 @@ assert.ok(browserGate.includes('node tests/browser_pvp_live_audit.mjs "$BASE_URL
   'live UI post-match key-turn action fetches authoritative replay and focuses it without hidden payloads',
   'live UI renders post-match experience report from public events',
   'live UI experience check focuses linked public evidence without hidden payloads',
+  'live UI fairness receipt evidence focuses linked public experience proof',
+  'live UI requires a second click before status-response end turn submits',
+  'status_response_window',
+  'publicStatusMitigation',
   'live UI renders loadout exploration report without hidden payloads',
   'live UI renders post-match season goal card and can dismiss it locally',
   'live UI dismisses season goal locally without hiding post-match review',

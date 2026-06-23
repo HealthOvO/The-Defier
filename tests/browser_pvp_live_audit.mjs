@@ -3711,6 +3711,172 @@ async function safeElementScreenshot(page, selector, outputPath) {
     JSON.stringify(actionProbe),
   );
 
+  const statusResponseEndTurnProbe = await page.evaluate(async () => {
+    const scene = window.PVPScene;
+    const originalGetLiveSession = scene.getLiveSession;
+    const originalStartLiveRealtime = scene.startLiveRealtime;
+    const originalRenderLivePanel = scene.renderLivePanel.bind(scene);
+    const calls = [];
+    let statusState = {
+      phase: 'active',
+      matchId: 'pvplm-browser-status-response',
+      seatId: 'A',
+      realtimeStatus: 'closed',
+      stateView: {
+        ...window.__makeLivePvpAuditStateView(20, 'A', 'active'),
+        matchId: 'pvplm-browser-status-response',
+      },
+    };
+    statusState.stateView.openingSafeguardReport = {
+      ...statusState.stateView.openingSafeguardReport,
+      status: 'closed',
+      damageBudget: {
+        ...statusState.stateView.openingSafeguardReport.damageBudget,
+        currentActionBudget: null,
+      },
+      openingProtection: {
+        ...statusState.stateView.openingSafeguardReport.openingProtection,
+        active: false,
+        protectedSeats: [],
+      },
+      secondSeatBuffer: {
+        ...statusState.stateView.openingSafeguardReport.secondSeatBuffer,
+        active: false,
+      },
+      counterplay: {
+        ...statusState.stateView.openingSafeguardReport.counterplay,
+        pendingSeats: [],
+        grantedSeats: [],
+      },
+    };
+    statusState.stateView.duelMomentumReport = {
+      reportVersion: 'pvp-live-duel-momentum-v1',
+      sourceVisibility: 'public_state',
+      usesHiddenInformation: false,
+      rankedImpact: 'none',
+      viewerSeat: 'A',
+      opponentSeat: 'B',
+      currentSeat: 'A',
+      isViewerTurn: true,
+      pressureState: 'status_response_window',
+      pressureLabel: '破绽响应窗口',
+      agencyLabel: '你的防守响应窗口',
+      summaryLine: '局势：你正处于破绽响应窗口，防守牌可阻止后续兑现。',
+      counterplayLine: '反制窗口：先清除破绽或补盾，否则下一轮可能被兑现。',
+      safeguards: ['status_response_window', 'public_status_mitigation'],
+    };
+    statusState.stateView.intentSignalReport = {
+      reportVersion: 'pvp-live-intent-signal-v1',
+      sourceVisibility: 'public_state_and_public_content',
+      usesHiddenInformation: false,
+      rankedImpact: 'none',
+      signalState: 'status_response_window',
+      signalLabel: '破绽响应',
+      intentLine: '读牌：对手已给你挂上破绽，下一轮可能兑现。',
+      responseLine: '反制窗口：可用防守牌清除破绽；若直接结束回合，后续可能被兑现。',
+      safeguards: ['public_card_catalog_only', 'private_card_projection_blocked', 'status_response_window'],
+    };
+    statusState.stateView.actionPreviewReport = {
+      ...statusState.stateView.actionPreviewReport,
+      playableCards: [{
+        cardInstanceId: 'A-guard-response',
+        cardName: '护体诀',
+        targetSeat: 'A',
+        rawDamage: 0,
+        damageBudget: 0,
+        budgetedDamage: 0,
+        blockedDamage: 0,
+        hpDamage: 0,
+        blockGain: 7,
+        selfBlockAfter: 7,
+        publicStatusMitigation: {
+          statusId: 'vulnerable_mark',
+          label: '破绽',
+          seatId: 'A',
+          sourceSeat: 'B',
+          responseWindow: 'status_response_window',
+          mitigation: 'cleared',
+        },
+        summaryLine: '护体诀：自身护盾 +7；清除破绽，阻止后续兑现。',
+      }],
+      endTurn: {
+        nextSeat: 'B',
+        summaryLine: '结束回合后行动权交给 B；破绽仍可能被后续兑现。',
+      },
+    };
+    statusState.stateView.self = {
+      ...statusState.stateView.self,
+      hand: [{ instanceId: 'A-guard-response', cardId: 'pvp_guard', name: '护体诀', cost: 1, damage: 0, block: 7 }],
+      publicStatuses: [{
+        statusId: 'vulnerable_mark',
+        label: '破绽',
+        sourceSeat: 'B',
+        summary: '破绽已公开；防守方至少拥有一个行动窗口后才可被兑现。',
+      }],
+    };
+    try {
+      scene.getLiveSession = () => ({
+        getState: () => statusState,
+        submitIntent: async (intent) => {
+          calls.push(intent);
+          return statusState;
+        },
+      });
+      scene.startLiveRealtime = () => {};
+      scene.liveOpeningActionConfirm = null;
+      scene.liveInlineHint = '';
+      scene.renderLivePanel();
+      await scene.endLiveTurn();
+      const firstClick = {
+        hint: document.querySelector('[data-live-last-error]')?.textContent || '',
+        endTurnText: document.querySelector('[data-live-action="end-turn"]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+        calls: calls.slice(),
+        payload: JSON.parse(window.render_game_to_text()).pvp?.live || null,
+      };
+      statusState = {
+        ...statusState,
+        stateView: {
+          ...statusState.stateView,
+          stateVersion: 21,
+        },
+      };
+      await scene.endLiveTurn();
+      const afterVersionAdvance = {
+        hint: document.querySelector('[data-live-last-error]')?.textContent || '',
+        calls: calls.slice(),
+      };
+      await scene.endLiveTurn();
+      const afterConfirm = {
+        calls: calls.slice(),
+      };
+      return {
+        firstClick,
+        afterVersionAdvance,
+        afterConfirm,
+      };
+    } finally {
+      scene.getLiveSession = originalGetLiveSession;
+      scene.startLiveRealtime = originalStartLiveRealtime;
+      scene.liveOpeningActionConfirm = null;
+      scene.liveInlineHint = '';
+      originalRenderLivePanel();
+    }
+  });
+  add(
+    'live UI requires a second click before status-response end turn submits',
+    /再次点击确认结束回合/.test(statusResponseEndTurnProbe.firstClick?.hint || '')
+      && /破绽|响应窗口|反制窗口/.test(statusResponseEndTurnProbe.firstClick?.hint || '')
+      && /清除破绽|防守牌|后续兑现/.test(statusResponseEndTurnProbe.firstClick?.hint || '')
+      && /确认结束/.test(statusResponseEndTurnProbe.firstClick?.endTurnText || '')
+      && statusResponseEndTurnProbe.firstClick?.payload?.duelMomentumReport?.pressureState === 'status_response_window'
+      && (statusResponseEndTurnProbe.firstClick?.payload?.actionPreviewReport?.playableCards || []).some(card => card.publicStatusMitigation?.label === '破绽')
+      && !(statusResponseEndTurnProbe.firstClick?.calls || []).some(intent => intent.intentType === 'end_turn')
+      && !(statusResponseEndTurnProbe.afterVersionAdvance?.calls || []).some(intent => intent.intentType === 'end_turn')
+      && (statusResponseEndTurnProbe.afterConfirm?.calls || []).filter(intent => intent.intentType === 'end_turn').length === 1
+      && !/cardInstanceId|hand":\[|deck":\[|rating|elo|reward/i.test(`${statusResponseEndTurnProbe.firstClick?.hint || ''} ${JSON.stringify(statusResponseEndTurnProbe.firstClick?.calls || [])}`),
+    JSON.stringify(statusResponseEndTurnProbe),
+  );
+
   await page.click('[data-live-emote="respect"]', { timeout: 5000, force: true });
   await page.waitForTimeout(200);
   const ownEmoteProbe = await page.evaluate(() => ({
@@ -3896,6 +4062,7 @@ async function safeElementScreenshot(page, selector, outputPath) {
     fairnessSource: document.querySelector('[data-live-fairness-receipt]')?.getAttribute('data-live-fairness-source') || '',
     fairnessHidden: document.querySelector('[data-live-fairness-receipt]')?.getAttribute('data-live-fairness-hidden') || '',
     fairnessState: document.querySelector('[data-live-fairness-receipt]')?.getAttribute('data-live-fairness-state') || '',
+    fairnessCheckIds: Array.from(document.querySelectorAll('[data-live-fairness-check]')).map(button => button.getAttribute('data-live-fairness-check')),
     seasonGoalText: document.querySelector('[data-live-season-goal]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
     seasonGoalMode: document.querySelector('[data-live-season-goal]')?.getAttribute('data-live-season-goal-mode') || '',
     seasonGoalDismissState: document.querySelector('[data-live-season-goal]')?.getAttribute('data-live-season-goal-dismiss-state') || '',
@@ -3974,6 +4141,7 @@ async function safeElementScreenshot(page, selector, outputPath) {
       && surrenderProbe.reviewPayload?.fairnessReceipt?.rankedImpact === 'none'
       && surrenderProbe.reviewPayload?.fairnessReceipt?.receiptState === 'accepted'
       && /有效行动/.test(surrenderProbe.reviewPayload?.fairnessReceipt?.effectiveActionVerdict || '')
+      && surrenderProbe.fairnessCheckIds.includes('second_seat_effective_action')
       && (surrenderProbe.reviewPayload?.fairnessReceipt?.evidenceSummary || []).length >= 3
       && (surrenderProbe.reviewPayload?.fairnessReceipt?.evidenceSummary || []).some(item => item.id === 'second_seat_effective_action')
       && reviewParity?.fairnessReceipt === true
@@ -4015,6 +4183,40 @@ async function safeElementScreenshot(page, selector, outputPath) {
       && reviewParity?.experienceChecks === true
       && !/payload|hand|deck|cardId|instanceId|loadoutSnapshot|reward|rating|elo/i.test(JSON.stringify(surrenderProbe.reviewPayload?.experienceReport || {})),
     JSON.stringify({ ...surrenderProbe, reviewParity }),
+  );
+  const fairnessCheckClicked = await page.evaluate(() => {
+    const button = document.querySelector('[data-live-fairness-check="second_seat_effective_action"]');
+    if (!button) return false;
+    button.scrollIntoView({ block: 'center', inline: 'nearest' });
+    button.click();
+    return true;
+  });
+  if (!fairnessCheckClicked) throw new Error('expected second-seat fairness receipt focus button');
+  await page.waitForTimeout(100);
+  const fairnessFocusProbe = await page.evaluate(() => ({
+    phase: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-phase') || '',
+    hint: document.querySelector('[data-live-last-error]')?.textContent || '',
+    eventsPanelFocused: document.querySelector('[data-live-event-panel]')?.getAttribute('data-live-review-focus') || '',
+    fairnessFocused: document.querySelector('[data-live-fairness-check="second_seat_effective_action"]')?.getAttribute('data-live-review-focus') || '',
+    focusedEvents: document.querySelector('[data-live-event-log]')?.textContent || '',
+    eventTypes: Array.from(document.querySelectorAll('[data-live-event-type]')).map(item => item.getAttribute('data-live-event-type')),
+    receiptPayload: window.PVPScene.getLiveSnapshot()?.postMatchReview?.fairnessReceipt || null,
+    experiencePayload: window.PVPScene.getLiveSnapshot()?.postMatchReview?.experienceReport || null,
+    calls: window.__livePvpAuditCalls,
+  }));
+  add(
+    'live UI fairness receipt evidence focuses linked public experience proof',
+    fairnessFocusProbe.phase === 'finished'
+      && /体验诊断证据/.test(fairnessFocusProbe.hint)
+      && fairnessFocusProbe.eventsPanelFocused === 'experience_check:second_seat_effective_action'
+      && fairnessFocusProbe.fairnessFocused === 'experience_check:second_seat_effective_action'
+      && fairnessFocusProbe.eventTypes.includes('block_gained')
+      && /护盾结算/.test(fairnessFocusProbe.focusedEvents)
+      && (fairnessFocusProbe.receiptPayload?.evidenceSummary || []).some(item => item.id === 'second_seat_effective_action')
+      && (fairnessFocusProbe.experiencePayload?.fairnessChecks || []).some(item => item.id === 'second_seat_effective_action' && (item.linkedEvidence || []).some(event => event.eventType === 'block_gained'))
+      && !/payload|hand|deck|cardId|instanceId|loadoutSnapshot|reward|rating|elo/i.test(`${fairnessFocusProbe.focusedEvents} ${JSON.stringify(fairnessFocusProbe.receiptPayload || {})}`)
+      && !/findOpponent|reportMatchResult|GhostEnemy|startPVPBattle|didWin|matchTicket/.test(JSON.stringify(fairnessFocusProbe.calls)),
+    JSON.stringify(fairnessFocusProbe),
   );
   add(
     'live UI renders post-match season goal card and can dismiss it locally',

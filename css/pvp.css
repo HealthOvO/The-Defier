@@ -1603,15 +1603,17 @@
 }
 
 .pvp-live-fairness-verdicts span,
-.pvp-live-fairness-evidence span {
+.pvp-live-fairness-evidence button {
     min-width: 0;
     padding: 6px 7px;
     border-radius: 8px;
     border: 1px solid rgba(153, 214, 170, 0.12);
     background: rgba(255, 255, 255, 0.035);
     color: rgba(226, 241, 231, 0.78);
+    font-family: inherit;
     font-size: 0.66rem;
     line-height: 1.35;
+    text-align: left;
     overflow-wrap: anywhere;
 }
 
@@ -1622,11 +1624,23 @@
     gap: 6px;
 }
 
-.pvp-live-fairness-evidence span.passed {
+.pvp-live-fairness-evidence button {
+    cursor: pointer;
+}
+
+.pvp-live-fairness-evidence button:hover,
+.pvp-live-fairness-evidence button:focus-visible,
+.pvp-live-fairness-evidence button[data-live-review-focus^="experience_check:"] {
+    border-color: rgba(153, 214, 170, 0.38);
+    background: rgba(153, 214, 170, 0.08);
+    outline: none;
+}
+
+.pvp-live-fairness-evidence button.passed {
     border-color: rgba(153, 214, 170, 0.2);
 }
 
-.pvp-live-fairness-evidence span.watch {
+.pvp-live-fairness-evidence button.watch {
     border-color: rgba(242, 192, 121, 0.2);
 }
 

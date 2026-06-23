@@ -3029,12 +3029,22 @@ export const PVPScene = {
           ${verdicts.slice(0, 7).map(line => `<span>${this.escapeHtml(line)}</span>`).join('')}
         </div>
         <div class="pvp-live-fairness-evidence">
-          ${receipt.evidenceSummary.map(item => `
-            <span class="${item.passed ? 'passed' : 'watch'}">
-              ${this.escapeHtml(item.label)} · ${this.escapeHtml(item.passed ? '通过' : '观察')}
-              ${item.evidenceSequences.length ? ` · #${this.escapeHtml(item.evidenceSequences.join('/#'))}` : ''}
-            </span>
-          `).join('')}
+          ${receipt.evidenceSummary.map(item => {
+            const checkId = String(item.id || '');
+            const handlerArg = this.escapeHtml(JSON.stringify(checkId));
+            return `
+              <button
+                type="button"
+                class="${item.passed ? 'passed' : 'watch'}"
+                data-live-fairness-check="${this.escapeHtml(checkId)}"
+                onclick="PVPScene.handleLiveExperienceCheckFocus(${handlerArg})"
+                title="定位 ${this.escapeHtml(item.label)} 的公开证据"
+              >
+                ${this.escapeHtml(item.label)} · ${this.escapeHtml(item.passed ? '通过' : '观察')}
+                ${item.evidenceSequences.length ? ` · #${this.escapeHtml(item.evidenceSequences.join('/#'))}` : ''}
+              </button>
+            `;
+          }).join('')}
         </div>
         <div class="pvp-live-fairness-boundary">${this.escapeHtml(receipt.boundary)}</div>
       </div>
@@ -4617,6 +4627,8 @@ export const PVPScene = {
         const checkId = this.liveReviewFocus.slice('experience_check:'.length);
         const focusedCheck = Array.from(root.querySelectorAll('[data-live-experience-check]')).find(item => item.getAttribute('data-live-experience-check') === checkId);
         if (focusedCheck) focusedCheck.setAttribute('data-live-review-focus', this.liveReviewFocus);
+        const focusedFairnessCheck = Array.from(root.querySelectorAll('[data-live-fairness-check]')).find(item => item.getAttribute('data-live-fairness-check') === checkId);
+        if (focusedFairnessCheck) focusedFairnessCheck.setAttribute('data-live-review-focus', this.liveReviewFocus);
       }
     }
     if (this.liveLoadoutReviewFocused) {
@@ -4990,7 +5002,9 @@ export const PVPScene = {
     const opening = this.getLiveOpeningSafeguardReport(view);
     const pressureState = String(momentum && momentum.pressureState || '');
     const openingActive = !!(opening && opening.openingProtection && opening.openingProtection.active);
-    if (pressureState !== 'opening_window' && !openingActive) return null;
+    const statusResponseWindow = pressureState === 'status_response_window';
+    if (pressureState !== 'opening_window' && !openingActive && !statusResponseWindow) return null;
+    if (statusResponseWindow && action !== 'end_turn') return null;
     const actionPayload = payload && typeof payload === 'object' ? { ...payload } : {};
     const cardInstanceId = String(actionPayload.cardInstanceId || '');
     if (action === 'play_card') {
@@ -5027,7 +5041,29 @@ export const PVPScene = {
       : session && typeof session.getState === 'function' ? session.getState() : null;
     const view = source && source.stateView && typeof source.stateView === 'object' ? source.stateView : null;
     const opening = this.getLiveOpeningSafeguardReport(view);
-    if (!context || !opening) return '再次点击确认行动；当前仍处于开局保护窗口。';
+    if (!context) return '再次点击确认行动；当前仍处于关键响应窗口。';
+    if (context.pressureState === 'status_response_window' && String(actionType || '') === 'end_turn') {
+      const intentSignal = this.getLiveIntentSignalReport(view);
+      const responseLine = intentSignal && intentSignal.responseLine
+        ? String(intentSignal.responseLine)
+        : '反制窗口：当前有公开状态响应窗口。';
+      const actionPreview = this.getLiveActionPreviewReport(view);
+      const mitigationPreview = actionPreview && Array.isArray(actionPreview.playableCards)
+        ? actionPreview.playableCards.find(card => card && card.publicStatusMitigation)
+        : null;
+      const mitigation = mitigationPreview && mitigationPreview.publicStatusMitigation
+        ? mitigationPreview.publicStatusMitigation
+        : null;
+      const statusLabel = mitigation && mitigation.label ? mitigation.label : '公开状态';
+      const mitigationLine = mitigation
+        ? `可用防守牌处理 ${statusLabel}；${mitigation.mitigation === 'cleared' ? `清除${statusLabel}` : '降低后续兑现风险'}。`
+        : '可先使用防守牌或补盾处理公开状态。';
+      const endTurnPreview = actionPreview && actionPreview.endTurn && actionPreview.endTurn.summaryLine
+        ? `权威预览：${actionPreview.endTurn.summaryLine}`
+        : '若直接结束回合，后续可能被兑现。';
+      return `再次点击确认结束回合；当前是${statusLabel}响应窗口。${responseLine}${mitigationLine}${endTurnPreview}`;
+    }
+    if (!opening) return '再次点击确认行动；当前仍处于关键响应窗口。';
     const currentBudget = opening.damageBudget.currentActionBudget;
     const budgetText = currentBudget === null
       ? '首动预算等待权威状态'
@@ -5372,8 +5408,13 @@ export const PVPScene = {
       eventPanel.setAttribute('data-live-review-focus', `experience_check:${id}`);
     }
     this.renderLivePanel();
-    const focusedCheck = root
-      ? Array.from(root.querySelectorAll('[data-live-experience-check]')).find(item => item.getAttribute('data-live-experience-check') === id)
+    const nextRoot = document.querySelector('[data-live-pvp-root]') || root;
+    const nextEventPanel = nextRoot ? nextRoot.querySelector('[data-live-event-panel]') : eventPanel;
+    if (nextEventPanel) {
+      nextEventPanel.setAttribute('data-live-review-focus', `experience_check:${id}`);
+    }
+    const focusedCheck = nextRoot
+      ? Array.from(nextRoot.querySelectorAll('[data-live-experience-check]')).find(item => item.getAttribute('data-live-experience-check') === id)
       : null;
     if (focusedCheck) {
       focusedCheck.setAttribute('data-live-review-focus', `experience_check:${id}`);
@@ -5381,7 +5422,13 @@ export const PVPScene = {
         focusedCheck.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
       }
     }
-    const hint = root ? root.querySelector('[data-live-last-error]') : null;
+    const focusedFairnessCheck = nextRoot
+      ? Array.from(nextRoot.querySelectorAll('[data-live-fairness-check]')).find(item => item.getAttribute('data-live-fairness-check') === id)
+      : null;
+    if (focusedFairnessCheck) {
+      focusedFairnessCheck.setAttribute('data-live-review-focus', `experience_check:${id}`);
+    }
+    const hint = nextRoot ? nextRoot.querySelector('[data-live-last-error]') : null;
     const message = this.liveInlineHint;
     if (hint) hint.textContent = message;
     if (typeof Utils !== 'undefined' && Utils && typeof Utils.showBattleLog === 'function') {
