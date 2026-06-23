@@ -69,6 +69,7 @@ globalThis.window.localStorage = globalThis.localStorage;
 
 const { PVPScene } = await import('../js/scenes/pvp-scene.js');
 const { PVPService } = await import('../js/services/pvp-service.js');
+const originalRenderLivePanel = PVPScene.renderLivePanel;
 
 PVPScene.getLiveSession = () => ({
   getState: () => ({
@@ -1579,6 +1580,109 @@ PVPScene.liveIntentInFlight = null;
 PVPScene.liveOpeningActionConfirm = null;
 PVPScene.liveInlineHint = '';
 PVPScene.startLiveRealtime = () => {};
+PVPScene.getLiveSession = () => ({
+  getState: () => openingActionState,
+  submitIntent: async (intent) => {
+    openingActionIntents.push(intent);
+    openingActionState = {
+      ...openingActionState,
+      stateView: {
+        ...openingActionState.stateView,
+        stateVersion: openingActionState.stateView.stateVersion + 1,
+        currentSeat: intent.intentType === 'end_turn' ? 'B' : openingActionState.stateView.currentSeat,
+        duelMomentumReport: {
+          ...openingActionState.stateView.duelMomentumReport,
+          pressureState: 'reversal_window'
+        }
+      }
+    };
+    return openingActionState;
+  }
+});
+const previousDocumentQuerySelectorForOpeningAction = documentStub.querySelector;
+const openingHandEl = {
+  innerHTML: '',
+  textContent: '',
+  hidden: false,
+  setAttribute() {},
+  getAttribute() { return ''; },
+  removeAttribute() {},
+  querySelector() { return null; },
+  querySelectorAll() { return []; }
+};
+const openingEventPanelEl = {
+  getAttribute() { return ''; },
+  setAttribute() {},
+  removeAttribute() {},
+  querySelector() { return null; },
+  querySelectorAll() { return []; }
+};
+const openingEventLogEl = {
+  innerHTML: '',
+  textContent: '',
+  setAttribute() {},
+  getAttribute() { return ''; },
+  removeAttribute() {},
+  querySelector() { return null; },
+  querySelectorAll() { return []; }
+};
+const openingRenderRoot = {
+  dataset: {},
+  setAttribute() {},
+  removeAttribute() {},
+  querySelector(selector) {
+    if (selector === '[data-live-hand]') return openingHandEl;
+    if (selector === '[data-live-event-panel]') return openingEventPanelEl;
+    if (selector === '[data-live-event-log]') return openingEventLogEl;
+    return null;
+  },
+  querySelectorAll() { return []; }
+};
+documentStub.querySelector = (selector) => selector === '[data-live-pvp-root]' ? openingRenderRoot : null;
+PVPScene.startLiveHeartbeat = () => {};
+PVPScene.renderLivePanel = originalRenderLivePanel;
+PVPScene.renderLivePanel();
+assert.match(openingHandEl.innerHTML, /data-live-card-preview/, 'active viewer-turn cards should render authoritative preview before the first click');
+assert.match(openingHandEl.innerHTML, /预算后\s*8/, 'pre-click card preview should show budgeted damage');
+assert.match(openingHandEl.innerHTML, /破盾\s*3/, 'pre-click card preview should show public block absorption');
+assert.match(openingHandEl.innerHTML, /生命伤害\s*5/, 'pre-click card preview should show HP damage');
+assert.match(openingHandEl.innerHTML, /B\s*预计\s*45\s*血/, 'pre-click card preview should show target HP after the action');
+assert.doesNotMatch(openingHandEl.innerHTML, /cardInstanceId|loadoutSnapshot|rating|elo|opponentHand|opponentDeck/i, 'pre-click card preview must not expose hidden payload markers');
+const notViewerTurnState = {
+  ...openingActionState,
+  stateView: {
+    ...openingActionState.stateView,
+    currentSeat: 'B',
+    actionPreviewReport: {
+      ...openingActionState.stateView.actionPreviewReport,
+      currentSeat: 'B',
+      isViewerTurn: false
+    }
+  }
+};
+PVPScene.getLiveSession = () => ({ getState: () => notViewerTurnState });
+openingHandEl.innerHTML = '';
+PVPScene.renderLivePanel();
+assert.doesNotMatch(openingHandEl.innerHTML, /data-live-card-preview/, 'cards should not render stale action previews outside the viewer action turn');
+const inactiveStalePreviewState = {
+  ...openingActionState,
+  phase: 'finished',
+  stateView: {
+    ...openingActionState.stateView,
+    status: 'finished',
+    currentSeat: 'A',
+    actionPreviewReport: {
+      ...openingActionState.stateView.actionPreviewReport,
+      currentSeat: 'A',
+      isViewerTurn: true
+    }
+  }
+};
+PVPScene.getLiveSession = () => ({ getState: () => inactiveStalePreviewState });
+openingHandEl.innerHTML = '';
+PVPScene.renderLivePanel();
+assert.doesNotMatch(openingHandEl.innerHTML, /data-live-card-preview/, 'cards should not render stale action previews after the active phase ends');
+documentStub.querySelector = previousDocumentQuerySelectorForOpeningAction;
 PVPScene.renderLivePanel = () => {};
 PVPScene.getLiveSession = () => ({
   getState: () => openingActionState,

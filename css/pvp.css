@@ -2298,7 +2298,7 @@
 }
 
 .pvp-live-card {
-    min-height: 72px;
+    min-height: 96px;
     padding: 11px 12px;
     border-radius: 12px;
     border: 1px solid rgba(207, 170, 112, 0.26);
@@ -2338,6 +2338,17 @@
     margin-top: 7px;
     color: rgba(213, 224, 238, 0.72);
     font-size: 0.72rem;
+}
+
+.pvp-live-card-preview {
+    display: block;
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid rgba(255, 244, 224, 0.1);
+    color: rgba(176, 228, 255, 0.9);
+    font-size: 0.68rem;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
 }
 
 .pvp-live-event-log {

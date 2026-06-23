@@ -1,5 +1,24 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-24: V10-S60 live PVP pre-click authoritative card preview
+  - 本轮完成
+    - `js/scenes/pvp-scene.js` 新增 `renderLiveCardActionPreview()`，复用服务端 `actionPreviewReport.playableCards`，在 active 且当前 viewer 行动、报告不含隐藏信息、`rankedImpact=none` 时，直接把每张可出手牌的权威公开预览渲染到卡面。
+    - 卡面预览展示“预算后 / 破盾 / 生命伤害 / 预计血量 / 护体保底”等公开结果，让玩家第一次点击前就知道这张牌不会造成无解释秒杀；二次确认 hint 继续保留完整确认语义。
+    - `css/pvp.css` 为 `.pvp-live-card-preview` 补独立层级、浅蓝公开信息样式和移动端可换行，避免 390px 窄屏横向溢出。
+    - `tests/sanity_pvp_live_ui_runtime_checks.mjs` 先红后绿锁住：active viewer-turn 卡面必须在第一次点击前展示 `data-live-card-preview`，非当前行动方和非 active 阶段都不得保留 stale 预览，不暴露隐藏手牌、牌库、奖励、rating 或 ELO。
+    - `tests/browser_pvp_live_audit.mjs` 新增真实 DOM 审计：在开局保护窗口点击卡牌前，卡面已可读权威公开预览，来源为 `viewer_public_state`，`usesHiddenInformation=false`，`rankedImpact=none`，且不会提前提交 `play_card`；390px 移动端 active 卡面同步检查预览可见、可换行且不横向溢出。
+    - `tests/sanity_pvp_live_ui_contract_checks.cjs`、`tests/sanity_release_gate_coverage_checks.cjs` 和 `game-intro.html` 同步锁住 helper、DOM marker、browser finding 与玩家说明。
+  - 已验证
+    - 红测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs` 在实现前失败于 `active viewer-turn cards should render authoritative preview before the first click`，当时手牌卡面只有“耗 / 伤 / 护”。
+    - 红测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs` 在 phase gate 修复前失败于 `cards should not render stale action previews after the active phase ends`，当时 finished 阶段禁用卡面仍显示旧 `data-live-card-preview`。
+    - 绿测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs`
+    - 绿测：`node tests/sanity_pvp_live_ui_contract_checks.cjs`
+    - 绿测：`node tests/sanity_release_gate_coverage_checks.cjs`
+    - 构建：`npm run build:pages`
+    - 浏览器审计：`node tests/browser_pvp_live_audit.mjs http://127.0.0.1:4173 output/pvp-live-card-preview-audit`，111/111 findings、0 failed、0 console error。
+  - 当前结论
+    - live PVP 的 active 决策面从“先点卡再看底栏确认”推进到“点击前先读公开权威结果”：先手玩家能预判预算后伤害和护体边界，后手玩家获得更可解释的反打窗口，双方更少出现“莫名被秒 / 莫名打不死”的体验落差；该切片只改展示层、样式和门禁，不改变匹配、先后手、伤害、卡牌数值、正式结算、奖励、心跳或线上配置。
+
 - 2026-06-24: V10-S59 live PVP key-turn stepper replay focus
   - 本轮完成
     - `js/scenes/pvp-scene.js` 将赛后 `keyTurnReplay.turns` 从静态卡片升级为可点击的关键回合步骤：每个步骤带 `data-live-key-turn-focus` 并调用 `focusLiveKeyTurn()`，点击后事件面板只聚焦该公开窗口。

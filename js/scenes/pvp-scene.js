@@ -1383,6 +1383,24 @@ export const PVPScene = {
       : '';
     return `${preview.cardName || '术式'}：预算后 ${preview.budgetedDamage}，破盾 ${preview.blockedDamage}，生命伤害 ${preview.hpDamage}，${targetSeat} 预计 ${preview.targetHpAfter} 血${protectionText}${blockText}${healText}。`;
   },
+  renderLiveCardActionPreview(view, cardInstanceId = '', phase = '') {
+    if (String(phase || '') !== 'active') return '';
+    const report = this.getLiveActionPreviewReport(view);
+    if (!report || report.usesHiddenInformation || report.rankedImpact !== 'none' || !report.isViewerTurn) return '';
+    if (report.viewerSeat && report.currentSeat && report.viewerSeat !== report.currentSeat) return '';
+    const preview = this.getLiveCardActionPreview({ actionPreviewReport: report }, cardInstanceId);
+    const previewLine = this.formatLiveActionPreviewLine(preview);
+    if (!previewLine) return '';
+    return `
+              <span
+                class="pvp-live-card-preview"
+                data-live-card-preview
+                data-live-card-preview-source="${this.escapeHtml(report.sourceVisibility)}"
+                data-live-card-preview-hidden="${report.usesHiddenInformation ? 'true' : 'false'}"
+                data-live-card-preview-impact="${this.escapeHtml(report.rankedImpact)}"
+              >${this.escapeHtml(previewLine)}</span>
+            `;
+  },
   getLiveActionReceiptReport(view) {
     const report = view && view.actionReceiptReport && typeof view.actionReceiptReport === 'object'
       ? view.actionReceiptReport
@@ -4618,6 +4636,7 @@ export const PVPScene = {
           <button class="pvp-live-card ${this.liveMulliganSelection.has(card.instanceId) ? 'selected' : ''} ${cardConfirming ? 'confirming' : ''}" ${canSelectMulligan ? `data-live-mulligan-card="${this.escapeHtml(card.instanceId || '')}" onclick="PVPScene.toggleLiveMulliganCard('${this.escapeHtml(card.instanceId || '')}')"` : `data-live-card="${this.escapeHtml(card.instanceId || '')}" onclick="PVPScene.submitLiveCard('${this.escapeHtml(card.instanceId || '')}')"`} ${canAct || canSelectMulligan ? '' : 'disabled'}>
             <span class="pvp-live-card-name">${this.escapeHtml(card.name || card.cardId || '术式')}</span>
             <span class="pvp-live-card-meta">耗 ${this.escapeHtml(card.cost || 0)} · 伤 ${this.escapeHtml(card.damage || 0)} · 护 ${this.escapeHtml(card.block || 0)}${cardConfirming ? ' · 确认' : ''}</span>
+            ${!canSelectMulligan ? this.renderLiveCardActionPreview(view, card.instanceId || '', phase) : ''}
           </button>
         `;
         }).join('');

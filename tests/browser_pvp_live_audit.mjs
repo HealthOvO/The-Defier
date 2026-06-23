@@ -3025,6 +3025,31 @@ async function safeElementScreenshot(page, selector, outputPath) {
     window.PVPScene?.renderLivePanel?.();
     window.__livePvpAuditOpeningCardCallStart = window.__livePvpAuditCalls.length;
   });
+  const openingCardPreClickPreviewProbe = await page.evaluate(() => ({
+    phase: window.PVPScene?.getLiveSnapshot?.()?.phase || '',
+    currentSeat: window.PVPScene?.getLiveSnapshot?.()?.currentSeat || '',
+    cardText: document.querySelector('[data-live-card]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+    previewText: document.querySelector('[data-live-card-preview]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+    previewSource: document.querySelector('[data-live-card-preview]')?.getAttribute('data-live-card-preview-source') || '',
+    previewHidden: document.querySelector('[data-live-card-preview]')?.getAttribute('data-live-card-preview-hidden') || '',
+    previewImpact: document.querySelector('[data-live-card-preview]')?.getAttribute('data-live-card-preview-impact') || '',
+    calls: window.__livePvpAuditCalls.slice(window.__livePvpAuditOpeningCardCallStart || 0),
+  }));
+  add(
+    'live UI renders authoritative card preview before opening-window card click',
+    openingCardPreClickPreviewProbe.phase === 'active'
+      && openingCardPreClickPreviewProbe.currentSeat === 'A'
+      && /预算后\s*8/.test(openingCardPreClickPreviewProbe.previewText)
+      && /破盾\s*3/.test(openingCardPreClickPreviewProbe.previewText)
+      && /生命伤害\s*5/.test(openingCardPreClickPreviewProbe.previewText)
+      && /B\s*预计\s*45\s*血/.test(openingCardPreClickPreviewProbe.previewText)
+      && openingCardPreClickPreviewProbe.previewSource === 'viewer_public_state'
+      && openingCardPreClickPreviewProbe.previewHidden === 'false'
+      && openingCardPreClickPreviewProbe.previewImpact === 'none'
+      && !/play_card/.test(JSON.stringify(openingCardPreClickPreviewProbe.calls))
+      && !/deck|loadoutSnapshot|reward|rating|elo|opponentHand|opponentDeck/i.test(openingCardPreClickPreviewProbe.cardText),
+    JSON.stringify(openingCardPreClickPreviewProbe),
+  );
   const liveCardClicked = await page.evaluate(() => {
     const card = document.querySelector('[data-live-card]');
     if (!card) return false;
@@ -5615,6 +5640,42 @@ async function safeElementScreenshot(page, selector, outputPath) {
         hostBinding: false,
       },
       openingSafeguardReport: makeMobileOpeningSafeguardReport(stateVersion, currentSeat, status),
+      actionPreviewReport: {
+        reportVersion: 'pvp-live-action-preview-v1',
+        sourceVisibility: 'viewer_public_state',
+        usesHiddenInformation: false,
+        rankedImpact: 'none',
+        viewerSeat: 'B',
+        currentSeat,
+        isViewerTurn: status === 'active' && currentSeat === 'B',
+        playableCards: status === 'active' && currentSeat === 'B' ? [{
+          cardInstanceId: 'B-strike-1',
+          cardName: '试探斩',
+          targetSeat: 'A',
+          cost: 1,
+          energyAfter: 2,
+          rawDamage: 8,
+          damageBudget: 24,
+          budgetedDamage: 8,
+          preventedByBudget: 0,
+          blockedDamage: 0,
+          hpDamage: 8,
+          targetHpBefore: 50,
+          targetHpAfter: 42,
+          wouldHaveHp: 42,
+          openingProtection: {
+            willTrigger: false,
+            minimumHp: 1,
+            preventedDamage: 0,
+          },
+          blockGain: 0,
+          selfBlockAfter: 0,
+          summaryLine: '试探斩：预算后 8，破盾 0，生命伤害 8，A 预计 42 血。',
+        }] : [],
+        endTurn: status === 'active' && currentSeat === 'B'
+          ? { nextSeat: 'A', summaryLine: '结束回合后行动权交给 A。' }
+          : null,
+      },
       firstMatchGuide,
       setup: status === 'setup' ? { readyDeadlineAt: Date.now() + 45000, mulliganLimit: 2 } : null,
       connectionReport: {
@@ -5915,6 +5976,57 @@ async function safeElementScreenshot(page, selector, outputPath) {
   await mobilePage.waitForTimeout(100);
   await mobilePage.click('[data-live-action="ready"]', { timeout: 5000, force: true });
   await mobilePage.waitForTimeout(100);
+  const mobileCardPreviewProbe = await mobilePage.evaluate(() => {
+    const card = document.querySelector('[data-live-card]');
+    const preview = document.querySelector('[data-live-card-preview]');
+    const cardRect = card?.getBoundingClientRect();
+    const previewRect = preview?.getBoundingClientRect();
+    const style = preview ? window.getComputedStyle(preview) : null;
+    return {
+      phase: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-phase') || '',
+      cardText: card?.textContent?.replace(/\s+/g, ' ').trim() || '',
+      previewText: preview?.textContent?.replace(/\s+/g, ' ').trim() || '',
+      previewSource: preview?.getAttribute('data-live-card-preview-source') || '',
+      previewHidden: preview?.getAttribute('data-live-card-preview-hidden') || '',
+      previewImpact: preview?.getAttribute('data-live-card-preview-impact') || '',
+      overflowWrap: style?.overflowWrap || '',
+      whiteSpace: style?.whiteSpace || '',
+      cardScrollWidth: card ? Math.round(card.scrollWidth) : 0,
+      cardClientWidth: card ? Math.round(card.clientWidth) : 0,
+      cardRect: cardRect ? {
+        left: Math.round(cardRect.left),
+        right: Math.round(cardRect.right),
+        width: Math.round(cardRect.width),
+        height: Math.round(cardRect.height),
+      } : null,
+      previewRect: previewRect ? {
+        left: Math.round(previewRect.left),
+        right: Math.round(previewRect.right),
+        width: Math.round(previewRect.width),
+        height: Math.round(previewRect.height),
+      } : null,
+      viewportWidth: window.innerWidth,
+    };
+  });
+  add(
+    'live UI mobile renders pre-click authoritative card preview without overflow',
+    mobileCardPreviewProbe.phase === 'active'
+      && /预算后/.test(mobileCardPreviewProbe.previewText)
+      && /破盾/.test(mobileCardPreviewProbe.previewText)
+      && /预计\s*\d+\s*血/.test(mobileCardPreviewProbe.previewText)
+      && mobileCardPreviewProbe.previewSource === 'viewer_public_state'
+      && mobileCardPreviewProbe.previewHidden === 'false'
+      && mobileCardPreviewProbe.previewImpact === 'none'
+      && !/deck|loadoutSnapshot|reward|rating|elo|opponentHand|opponentDeck/i.test(mobileCardPreviewProbe.cardText)
+      && mobileCardPreviewProbe.whiteSpace !== 'nowrap'
+      && (mobileCardPreviewProbe.overflowWrap === 'anywhere' || mobileCardPreviewProbe.overflowWrap === 'break-word')
+      && mobileCardPreviewProbe.cardScrollWidth <= mobileCardPreviewProbe.cardClientWidth + 2
+      && mobileCardPreviewProbe.cardRect?.left >= -1
+      && mobileCardPreviewProbe.cardRect?.right <= mobileCardPreviewProbe.viewportWidth + 2
+      && mobileCardPreviewProbe.previewRect?.left >= -1
+      && mobileCardPreviewProbe.previewRect?.right <= mobileCardPreviewProbe.viewportWidth + 2,
+    JSON.stringify(mobileCardPreviewProbe),
+  );
   const mobileLiveCardClicked = await mobilePage.evaluate(() => {
     const card = document.querySelector('[data-live-card]');
     if (!card) return false;

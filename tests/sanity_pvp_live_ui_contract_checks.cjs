@@ -178,6 +178,8 @@ const liveBrowserAudit = read('tests/browser_pvp_live_audit.mjs');
   'getLiveActionPreviewReport(',
   'getLiveCardActionPreview(',
   'formatLiveActionPreviewLine(',
+  'renderLiveCardActionPreview(',
+  'data-live-card-preview',
   'getLiveActionReceiptReport(',
   'renderLiveActionReceiptReport(',
   'cardDraw',
