@@ -313,6 +313,7 @@ async function safeElementScreenshot(page, selector, outputPath) {
         { id: 'practice', auditActionId: 'practice_topic', label: '问道练习' },
         { id: 'queue_again', auditActionId: 'queue_again', label: '继续真人排位' },
         { id: 'report_issue', auditActionId: 'report_issue', label: '举报异常' },
+        { id: 'avoid_opponent', auditActionId: 'avoid_opponent', label: '避开此对手' },
       ],
     }) : null;
     const makeTurnTimer = (status, currentSeat, viewerSeat = 'A') => {
@@ -1270,6 +1271,26 @@ async function safeElementScreenshot(page, selector, outputPath) {
               riskTags: ['player_reported', 'fairness_review_requested'],
             },
             boundary: '提交异常反馈不会即时改变正式积分、奖励或匹配评分。',
+          },
+        };
+      },
+      avoidOpponent: async (matchId, request = {}) => {
+        push({ method: 'avoidOpponent', matchId, request });
+        return {
+          success: true,
+          report: {
+            reportVersion: 'pvp-live-avoid-opponent-receipt-v1',
+            status: 'active',
+            reason: request.reason || 'post_match_avoid',
+            sourceVisibility: 'account_preference',
+            usesHiddenInformation: false,
+            rankedImpact: 'none',
+            formalResultPolicy: 'no_result_change',
+            safeguard: 'player_avoid_opponent',
+            sourceMatchId: matchId,
+            expiresAt: Date.now() + 86400000,
+            nextStepLine: '已记录：后续匹配会优先避开此对手；这不会改写本局结算。',
+            boundary: '避开对手只影响后续匹配优先级，不保证永久不匹配，不影响积分、奖励或隐藏信息。',
           },
         };
       },
@@ -3754,8 +3775,9 @@ async function safeElementScreenshot(page, selector, outputPath) {
       && /查看权威事件/.test(surrenderProbe.reviewText)
       && /继续真人排位/.test(surrenderProbe.reviewText)
       && /举报异常/.test(surrenderProbe.reviewText)
-      && ['review_events', 'review_key_turns', 'friendly_rematch', 'adjust_loadout', 'practice', 'queue_again', 'report_issue'].every(id => surrenderProbe.reviewActionIds.includes(id))
-      && ['review_key_turns:key_turn_replay', 'adjust_loadout:apply_loadout_recommendation', 'practice:practice_topic', 'queue_again:queue_again', 'report_issue:report_issue'].every(id => surrenderProbe.reviewActionAuditIds.includes(id))
+      && /避开此对手/.test(surrenderProbe.reviewText)
+      && ['review_events', 'review_key_turns', 'friendly_rematch', 'adjust_loadout', 'practice', 'queue_again', 'report_issue', 'avoid_opponent'].every(id => surrenderProbe.reviewActionIds.includes(id))
+      && ['review_key_turns:key_turn_replay', 'adjust_loadout:apply_loadout_recommendation', 'practice:practice_topic', 'queue_again:queue_again', 'report_issue:report_issue', 'avoid_opponent:avoid_opponent'].every(id => surrenderProbe.reviewActionAuditIds.includes(id))
       && surrenderProbe.reviewPayload?.reportVersion === 'pvp-live-post-match-review-v1'
       && surrenderProbe.reviewPayload?.result === 'loss'
       && surrenderProbe.textPayload?.reportVersion === 'pvp-live-post-match-review-v1'
@@ -4079,6 +4101,37 @@ async function safeElementScreenshot(page, selector, outputPath) {
       && !/payload|hand|deck|cardId|instanceId|loadoutSnapshot|randomSeed/i.test(JSON.stringify(disputeReportProbe.reportPayload || {}))
       && !/findOpponent|reportMatchResult|GhostEnemy|startPVPBattle|didWin|matchTicket/.test(JSON.stringify(disputeReportProbe.calls)),
     JSON.stringify(disputeReportProbe),
+  );
+
+  const avoidOpponentCallStart = await page.evaluate(() => window.__livePvpAuditCalls.length);
+  await page.click('[data-live-post-review-action="avoid_opponent"]', { timeout: 5000, force: true });
+  await page.waitForTimeout(100);
+  const avoidOpponentProbe = await page.evaluate(callStart => ({
+    phase: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-phase') || '',
+    hint: document.querySelector('[data-live-last-error]')?.textContent || '',
+    receiptText: document.querySelector('[data-live-avoid-opponent]')?.textContent || '',
+    receiptStatus: document.querySelector('[data-live-avoid-opponent]')?.getAttribute('data-live-avoid-opponent-status') || '',
+    receiptHidden: document.querySelector('[data-live-avoid-opponent]')?.getAttribute('data-live-avoid-opponent-hidden') || '',
+    receiptRankedImpact: document.querySelector('[data-live-avoid-opponent]')?.getAttribute('data-live-avoid-opponent-ranked-impact') || '',
+    receiptSafeguard: document.querySelector('[data-live-avoid-opponent]')?.getAttribute('data-live-avoid-opponent-safeguard') || '',
+    reportPayload: window.PVPScene.getLiveSnapshot()?.lastAvoidOpponentReport || null,
+    calls: window.__livePvpAuditCalls.slice(callStart),
+  }), avoidOpponentCallStart);
+  add(
+    'live UI post-match avoid_opponent records no-score no-reward opponent avoidance',
+    avoidOpponentProbe.phase === 'finished'
+      && /已优先避开此对手/.test(avoidOpponentProbe.receiptText)
+      && /不会改写本局结算/.test(avoidOpponentProbe.hint)
+      && avoidOpponentProbe.receiptStatus === 'active'
+      && avoidOpponentProbe.receiptHidden === 'false'
+      && avoidOpponentProbe.receiptRankedImpact === 'none'
+      && avoidOpponentProbe.receiptSafeguard === 'player_avoid_opponent'
+      && avoidOpponentProbe.reportPayload?.reportVersion === 'pvp-live-avoid-opponent-receipt-v1'
+      && avoidOpponentProbe.reportPayload?.usesHiddenInformation === false
+      && avoidOpponentProbe.calls.some(call => call.method === 'avoidOpponent' && call.request?.reason === 'post_match_avoid')
+      && !/payload|hand|deck|cardId|instanceId|loadoutSnapshot|randomSeed/i.test(JSON.stringify(avoidOpponentProbe.reportPayload || {}))
+      && !/findOpponent|reportMatchResult|GhostEnemy|startPVPBattle|didWin|matchTicket/.test(JSON.stringify(avoidOpponentProbe.calls)),
+    JSON.stringify(avoidOpponentProbe),
   );
 
   await page.click('[data-live-post-review-action="review_events"]', { timeout: 5000, force: true });

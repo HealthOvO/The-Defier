@@ -124,6 +124,14 @@ function loadFile(ctx, filePath) {
         calls.push({ method: 'submitLivePvpIntent', matchId, intent });
         return { success: true, result: 'accepted', stateView: { stateVersion: 2 } };
       },
+      submitLivePvpReport: async (matchId, report) => {
+        calls.push({ method: 'submitLivePvpReport', matchId, report });
+        return { success: true, report: { reportVersion: 'pvp-live-dispute-report-receipt-v1', rankedImpact: 'none' } };
+      },
+      submitLivePvpAvoidOpponent: async (matchId, request) => {
+        calls.push({ method: 'submitLivePvpAvoidOpponent', matchId, request });
+        return { success: true, report: { reportVersion: 'pvp-live-avoid-opponent-receipt-v1', rankedImpact: 'none' } };
+      },
       connectLivePvpWebSocket: (handlers) => {
         calls.push({ method: 'connectLivePvpWebSocket', handlers });
         return { send: () => true, close: () => true };
@@ -166,6 +174,8 @@ function loadFile(ctx, filePath) {
   assert(typeof PVPService.live.measureConnectionHealth === 'function', 'PVPService.live should expose measureConnectionHealth');
   assert(typeof PVPService.live.heartbeat === 'function', 'PVPService.live should expose heartbeat');
   assert(typeof PVPService.live.submitIntent === 'function', 'PVPService.live should expose submitIntent');
+  assert(typeof PVPService.live.submitReport === 'function', 'PVPService.live should expose submitReport');
+  assert(typeof PVPService.live.avoidOpponent === 'function', 'PVPService.live should expose avoidOpponent');
   assert(typeof PVPService.live.connectRealtime === 'function', 'PVPService.live should expose connectRealtime');
   assert(!('reportResult' in PVPService.live), 'PVPService.live must not expose client-reported result API');
 
@@ -242,6 +252,14 @@ function loadFile(ctx, filePath) {
   });
   assert(intent.success === true && intent.result === 'accepted', 'live intent bridge should forward intent result');
   assert(calls.at(-1).method === 'submitLivePvpIntent', 'live intent bridge should call BackendClient.submitLivePvpIntent');
+
+  const report = await PVPService.live.submitReport('pvplm-test', { reason: 'fairness_review' });
+  assert(report.success === true && report.report.reportVersion === 'pvp-live-dispute-report-receipt-v1', 'live report bridge should forward dispute receipt');
+  assert(calls.at(-1).method === 'submitLivePvpReport', 'live report bridge should call BackendClient.submitLivePvpReport');
+
+  const avoidOpponent = await PVPService.live.avoidOpponent('pvplm-test', { reason: 'post_match_avoid' });
+  assert(avoidOpponent.success === true && avoidOpponent.report.reportVersion === 'pvp-live-avoid-opponent-receipt-v1', 'live avoid-opponent bridge should forward social safety receipt');
+  assert(calls.at(-1).method === 'submitLivePvpAvoidOpponent', 'live avoid-opponent bridge should call BackendClient.submitLivePvpAvoidOpponent');
 
   const realtime = PVPService.live.connectRealtime({ onMessage: () => {} });
   assert(realtime && typeof realtime.send === 'function', 'live realtime bridge should return websocket handle');

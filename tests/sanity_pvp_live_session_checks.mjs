@@ -204,6 +204,24 @@ const liveService = {
       }
     };
   },
+  avoidOpponent: async (matchId, request) => {
+    calls.push({ method: 'avoidOpponent', matchId, request });
+    return {
+      success: true,
+      report: {
+        reportVersion: 'pvp-live-avoid-opponent-receipt-v1',
+        status: 'active',
+        reason: request.reason || 'post_match_avoid',
+        sourceVisibility: 'account_preference',
+        usesHiddenInformation: false,
+        rankedImpact: 'none',
+        formalResultPolicy: 'no_result_change',
+        safeguard: 'player_avoid_opponent',
+        nextStepLine: '已记录：后续匹配会优先避开此对手；这不会改写本局结算。',
+        boundary: '避开对手只影响后续匹配优先级，不保证永久不匹配，不影响积分、奖励或隐藏信息。'
+      }
+    };
+  },
   createInvite: async (options) => {
     calls.push({ method: 'createInvite', options });
     return {
@@ -540,10 +558,21 @@ assert.equal(calls.at(-1).method, 'submitReport', 'submitReport should call live
 assert.equal(calls.at(-1).matchId, 'pvplm-current', 'submitReport should bind the report to the current match');
 assert.deepEqual(calls.at(-1).report, { reason: 'fairness_review', message: '请复核公开事件。' }, 'submitReport should forward the player report payload');
 
+const avoidOpponentState = await recoveredSession.avoidOpponent({ reason: 'post_match_avoid', message: '之后优先避开这个对手' });
+assert.equal(avoidOpponentState.lastAvoidOpponentReport?.reportVersion, 'pvp-live-avoid-opponent-receipt-v1', 'avoidOpponent should store the social safety receipt');
+assert.equal(avoidOpponentState.lastAvoidOpponentReport?.rankedImpact, 'none', 'avoid-opponent receipt should not change ranked state');
+assert.equal(avoidOpponentState.lastAvoidOpponentReport?.usesHiddenInformation, false, 'avoid-opponent receipt should preserve hidden-information boundary');
+assert.equal(avoidOpponentState.lastAvoidOpponentReport?.safeguard, 'player_avoid_opponent', 'avoid-opponent receipt should expose the future matchmaking safeguard');
+assert.equal(avoidOpponentState.lastError?.reason, 'avoid_opponent_saved', 'avoidOpponent should publish a readable saved state');
+assert.equal(calls.at(-1).method, 'avoidOpponent', 'avoidOpponent should call live service bridge');
+assert.equal(calls.at(-1).matchId, 'pvplm-current', 'avoidOpponent should bind the request to the current match');
+assert.deepEqual(calls.at(-1).request, { reason: 'post_match_avoid', message: '之后优先避开这个对手' }, 'avoidOpponent should forward the player safety request');
+
 const replayClearedByQueue = await recoveredSession.joinQueue({ displayName: '乙' });
 assert.equal(replayClearedByQueue.lastReplay, null, 'joining a new queue should clear the previous match replay payload');
 assert.equal(replayClearedByQueue.lastReplayMatchId, '', 'joining a new queue should clear the previous replay match binding');
 assert.equal(replayClearedByQueue.lastDisputeReport, null, 'joining a new queue should clear the previous dispute report receipt');
+assert.equal(replayClearedByQueue.lastAvoidOpponentReport, null, 'joining a new queue should clear the previous avoid-opponent receipt');
 
 const recoveredInviteSession = createPvpLiveSession({ liveService });
 const recoveredInvite = await recoveredInviteSession.resumeCurrentInvite();

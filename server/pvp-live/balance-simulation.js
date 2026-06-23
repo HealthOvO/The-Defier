@@ -77,13 +77,13 @@ const NON_GAME_FINISH_REASONS = Object.freeze([
 ]);
 
 const POST_GAME_NEXT_ACTIONS_BY_REASON = Object.freeze({
-    lethal: ['queue_again', 'practice_topic', 'apply_loadout_recommendation', 'key_turn_replay', 'friendly_rematch', 'report_issue'],
-    resource_draw: ['queue_again', 'practice_topic', 'apply_loadout_recommendation', 'key_turn_replay', 'report_issue'],
-    round14_draw: ['queue_again', 'practice_topic', 'apply_loadout_recommendation', 'key_turn_replay', 'report_issue'],
-    round14_score: ['queue_again', 'practice_topic', 'apply_loadout_recommendation', 'key_turn_replay', 'report_issue'],
-    connection_timeout: ['queue_again', 'key_turn_replay', 'report_issue'],
-    invalidated: ['queue_again', 'report_issue'],
-    surrender: ['queue_again', 'practice_topic', 'apply_loadout_recommendation', 'report_issue']
+    lethal: ['queue_again', 'practice_topic', 'apply_loadout_recommendation', 'key_turn_replay', 'friendly_rematch', 'report_issue', 'avoid_opponent'],
+    resource_draw: ['queue_again', 'practice_topic', 'apply_loadout_recommendation', 'key_turn_replay', 'report_issue', 'avoid_opponent'],
+    round14_draw: ['queue_again', 'practice_topic', 'apply_loadout_recommendation', 'key_turn_replay', 'report_issue', 'avoid_opponent'],
+    round14_score: ['queue_again', 'practice_topic', 'apply_loadout_recommendation', 'key_turn_replay', 'report_issue', 'avoid_opponent'],
+    connection_timeout: ['queue_again', 'key_turn_replay', 'report_issue', 'avoid_opponent'],
+    invalidated: ['queue_again', 'report_issue', 'avoid_opponent'],
+    surrender: ['queue_again', 'practice_topic', 'apply_loadout_recommendation', 'report_issue', 'avoid_opponent']
 });
 
 const POST_GAME_UI_ACTION_IDS_BY_AUDIT_ACTION = Object.freeze({
@@ -93,7 +93,8 @@ const POST_GAME_UI_ACTION_IDS_BY_AUDIT_ACTION = Object.freeze({
     apply_loadout_recommendation: Object.freeze(['adjust_loadout']),
     practice_topic: Object.freeze(['practice']),
     queue_again: Object.freeze(['queue_again']),
-    report_issue: Object.freeze(['report_issue'])
+    report_issue: Object.freeze(['report_issue']),
+    avoid_opponent: Object.freeze(['avoid_opponent'])
 });
 
 function validatePolicyVocabularyCoverage() {

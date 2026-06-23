@@ -12,6 +12,7 @@ const DEFAULT_STATE = Object.freeze({
   lastReplay: null,
   lastReplayMatchId: '',
   lastDisputeReport: null,
+  lastAvoidOpponentReport: null,
   lastEvents: [],
   lastError: null,
   realtimeStatus: 'idle',
@@ -32,7 +33,8 @@ const ALLOWED_SEASON_GOAL_ACTIONS = Object.freeze([
   'adjust_loadout',
   'review_events',
   'review_key_turns',
-  'report_issue'
+  'report_issue',
+  'avoid_opponent'
 ]);
 const ALLOWED_SEASON_GOAL_RECOVERY_STATES = Object.freeze([
   'stable',
@@ -320,6 +322,7 @@ export function createPvpLiveSession({
       nextState.lastReplay = null;
       nextState.lastReplayMatchId = '';
       nextState.lastDisputeReport = null;
+      nextState.lastAvoidOpponentReport = null;
     }
     state = nextState;
     if (typeof onChange === 'function') {
@@ -1060,6 +1063,7 @@ export function createPvpLiveSession({
       lastReplay: null,
       lastReplayMatchId: '',
       lastDisputeReport: null,
+      lastAvoidOpponentReport: null,
       lastError: null,
       lastEvents: []
     });
@@ -1475,6 +1479,28 @@ export function createPvpLiveSession({
       lastError: {
         reason: 'report_issue_submitted',
         message: receipt.nextStepLine || '异常反馈已提交；复核不会立即改写本局结算。'
+      }
+    });
+  }
+
+  async function avoidOpponent(request = {}) {
+    const matchId = getSnapshotMatchId(state);
+    if (!matchId) {
+      return fail('avoid_opponent_match_missing', '实时论道避开对手战局缺失', state.phase);
+    }
+    const result = await callLive('avoidOpponent', matchId, request);
+    if (!result || result.success !== true || !result.report) {
+      return fail(result && result.reason || 'avoid_opponent_failed', result && result.message || '实时论道避开对手提交失败', state.phase);
+    }
+    if (getSnapshotMatchId(state) !== matchId) {
+      return getState();
+    }
+    const receipt = cloneData(result.report);
+    return publish({
+      lastAvoidOpponentReport: receipt,
+      lastError: {
+        reason: 'avoid_opponent_saved',
+        message: receipt.nextStepLine || '已记录赛后避开偏好；后续匹配会优先避开此对手。'
       }
     });
   }
@@ -1932,6 +1958,7 @@ export function createPvpLiveSession({
     dismissSeasonGoal,
     getReplay,
     submitReport,
+    avoidOpponent,
     requestRematch,
     pollRematch,
     cancelRematch,

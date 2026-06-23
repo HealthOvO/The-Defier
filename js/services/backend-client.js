@@ -1354,6 +1354,39 @@ export const BackendClient = {
       };
     }
   },
+  async submitLivePvpAvoidOpponent(matchId = '', request = {}) {
+    const user = this.getCurrentUser();
+    if (!user) return {
+      success: false,
+      message: '未登录'
+    };
+    const id = String(matchId || '').trim();
+    if (!id) return {
+      success: false,
+      message: '实时论道战局缺失'
+    };
+    const payload = {
+      reason: String(request.reason || 'post_match_avoid').trim().slice(0, 48),
+      message: String(request.message || '').trim().slice(0, 240)
+    };
+    try {
+      const result = await this.requestServer(`${this.getLivePvpPathPrefix()}/matches/${encodeURIComponent(id)}/avoid-opponent`, {
+        method: 'POST',
+        data: payload
+      });
+      return result && typeof result === 'object' ? result : {
+        success: false,
+        message: '实时论道避开对手返回异常'
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error,
+        reason: error && error.reason || undefined,
+        message: error.message || '实时论道避开对手提交失败'
+      };
+    }
+  },
   async getPvpEconomy() {
     const user = this.getCurrentUser();
     if (!user) return {

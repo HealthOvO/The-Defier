@@ -33,7 +33,9 @@ assert.ok(fullPostGameRows.length >= 1, 'S2-C full gate entertainment audit shou
 assert.strictEqual(fullPostGameActionBridge.reportVersion, 'pvp-live-post-game-action-bridge-v1', 'S2-C full gate entertainment audit should include the post-game audit-to-UI action bridge');
 assert.ok(fullPostGameActionBridge.uiActionIdsByAuditAction.key_turn_replay.includes('review_key_turns'), 'S2-C full gate action bridge should map key_turn_replay to the real review_key_turns UI button');
 assert.ok(fullPostGameActionBridge.coveredAuditActions.includes('report_issue'), 'S2-C full gate action bridge should include the real dispute report handoff');
+assert.ok(fullPostGameActionBridge.coveredAuditActions.includes('avoid_opponent'), 'S2-C full gate action bridge should include the real avoid-opponent handoff');
 assert.ok(fullPostGameRows.flatMap(row => row.actions).includes('report_issue'), 'S2-C full gate post-game action coverage should include report_issue');
+assert.ok(fullPostGameRows.flatMap(row => row.actions).includes('avoid_opponent'), 'S2-C full gate post-game action coverage should include avoid_opponent');
 assert.ok(
   Object.values(fullGate.archetypeWinRates).every(rate => rate >= 0.45 && rate <= 0.55),
   `S2-C archetype win rates should all stay within 45%-55%: ${JSON.stringify(fullGate.archetypeWinRates)}`

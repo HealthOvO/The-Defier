@@ -159,9 +159,18 @@ assert.ok(
   'post-game action coverage should include the implemented dispute report handoff'
 );
 assert.ok(
+  postGameActionRows.flatMap(row => row.actions).includes('avoid_opponent'),
+  'post-game action coverage should include the implemented avoid-opponent handoff'
+);
+assert.ok(
   bridgedAuditActions.has('report_issue')
     && postGameActionBridge.uiActionIdsByAuditAction.report_issue.includes('report_issue'),
   'post-game action bridge should map report_issue to the real dispute report UI button'
+);
+assert.ok(
+  bridgedAuditActions.has('avoid_opponent')
+    && postGameActionBridge.uiActionIdsByAuditAction.avoid_opponent.includes('avoid_opponent'),
+  'post-game action bridge should map avoid_opponent to the real avoid-opponent UI button'
 );
 assert.ok(
   deckEditFollowThroughRate.trackable === true

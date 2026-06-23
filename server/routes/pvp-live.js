@@ -17,6 +17,7 @@ const livePvpStore = createLivePvpStore({
     reconnectGraceMs: Number(process.env.PVP_LIVE_RECONNECT_GRACE_MS),
     inviteTtlMs: Number(process.env.PVP_LIVE_INVITE_TTL_MS),
     rematchTtlMs: Number(process.env.PVP_LIVE_REMATCH_TTL_MS),
+    avoidOpponentCooldownMs: Number(process.env.PVP_LIVE_AVOID_OPPONENT_COOLDOWN_MS),
     ratingProvider: makeDefaultRatingProvider()
 });
 let userDirectory = makeDefaultUserDirectory();
@@ -474,6 +475,64 @@ router.post('/matches/:matchId/reports', authenticate, asyncHandler(async (req, 
             now
         ]
     );
+    res.json({
+        success: true,
+        report
+    });
+}));
+
+router.post('/matches/:matchId/avoid-opponent', authenticate, asyncHandler(async (req, res) => {
+    const matchAccess = await livePvpStore.getMatchForUser(req.user.id, req.params.matchId);
+    if (!matchAccess) {
+        return res.status(404).json({ success: false, message: '实时论道战局不存在' });
+    }
+    const report = await livePvpStore.avoidOpponentForUser(req.user.id, req.params.matchId, {
+        reason: req.body && req.body.reason,
+        message: req.body && req.body.message
+    });
+    if (!report) {
+        return res.status(404).json({ success: false, message: '实时论道战局不存在' });
+    }
+    if (report.success === false) {
+        return res.status(409).json({
+            success: false,
+            reason: report.reason || 'avoid_opponent_not_ready',
+            message: report.message || '赛后避开对手暂不可用'
+        });
+    }
+    const opponentSeatId = matchAccess.seatId === 'A' ? 'B' : 'A';
+    const avoidedUserId = livePvpStore.getSourceSeatUserId(matchAccess.match, opponentSeatId);
+    const pairKey = [String(req.user.id || ''), String(avoidedUserId || '')]
+        .filter(Boolean)
+        .sort()
+        .join('::');
+    if (avoidedUserId && pairKey.includes('::')) {
+        const now = Date.now();
+        await dbRun(
+            `INSERT INTO pvp_live_avoid_opponents
+                (avoider_user_id, avoided_user_id, pair_key, source_match_id, reason, message, avoided_at, avoid_until, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+             ON CONFLICT(avoider_user_id, avoided_user_id) DO UPDATE SET
+                pair_key = excluded.pair_key,
+                source_match_id = excluded.source_match_id,
+                reason = excluded.reason,
+                message = excluded.message,
+                avoided_at = excluded.avoided_at,
+                avoid_until = excluded.avoid_until,
+                updated_at = excluded.updated_at`,
+            [
+                req.user.id,
+                avoidedUserId,
+                pairKey,
+                report.sourceMatchId || matchAccess.match.matchId,
+                report.reason || 'post_match_avoid',
+                report.message || '',
+                report.avoidedAt || now,
+                report.expiresAt || now,
+                now
+            ]
+        );
+    }
     res.json({
         success: true,
         report

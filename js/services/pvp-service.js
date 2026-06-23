@@ -190,6 +190,13 @@ export const PVPService = {
       }
       return await client.submitLivePvpReport(matchId, report);
     },
+    async avoidOpponent(matchId = '', request = {}) {
+      const client = this.getClient();
+      if (!client || typeof client.submitLivePvpAvoidOpponent !== 'function') {
+        return { success: false, message: '实时论道服务未就绪' };
+      }
+      return await client.submitLivePvpAvoidOpponent(matchId, request);
+    },
     connectRealtime(handlers = {}) {
       const client = this.getClient();
       if (!client || typeof client.connectLivePvpWebSocket !== 'function') {

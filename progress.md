@@ -1,5 +1,34 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-23: V10-S50 live PVP post-match avoid-opponent safety contract
+  - 本轮完成
+    - `server/pvp-live/live-store.js` 增加赛后 `avoidOpponentForUser()`：终局后玩家可记录“优先避开此对手”，默认 24 小时生效；匹配选择先检查 `player_avoid_opponent`，若双方任一方存在有效偏好则不立即重配，等待报告展示“已优先避开/屏蔽对手”，但仍只等待真人、不切残影、不改分。
+    - `server/db/database.js` 与 `server/pvp-live/live-persistence.js` 增加 `pvp_live_avoid_opponents` 持久化表与 save/load 方法，保证跨进程/重启后仍能优先避开；`server/routes/pvp-live.js` 增加 `/api/pvp/live/matches/:matchId/avoid-opponent`，非参赛者 404、未终局 409、成功返回 `pvp-live-avoid-opponent-receipt-v1`。
+    - 前端链路按既有 live PVP layering 接齐：`BackendClient.submitLivePvpAvoidOpponent` -> `PVPService.live.avoidOpponent` -> `PvpLiveSession.avoidOpponent` -> `PVPScene.handleLivePostReviewAction('avoid_opponent')`，赛后复盘新增“避开此对手”按钮和 `data-live-avoid-opponent` receipt，不读取隐藏手牌/牌库/谱 hash，也不影响本局结算、奖励或积分。
+    - `server/pvp-live/engine/state-view.js` 与 `server/pvp-live/balance-simulation.js` 同步 post-game action bridge，把 `avoid_opponent` 纳入可审计赛后动作；`output/pvp-live-balance/simulation_report_v1.json` 用现有 artifact generator 重生成，锁住新动作在平衡审计产物中的契约。
+    - 测试补齐客户端路径、服务桥、会话状态、UI runtime、浏览器点击、route/SQLite、跨进程队列抑制、平衡审计和 release marker，防止后续只保留按钮但丢掉真实匹配抑制或持久化。
+  - 已验证
+    - 红测：`node tests/sanity_pvp_live_client_checks.mjs` 失败于 `BackendClient should expose submitLivePvpAvoidOpponent`。
+    - 红测：`node tests/sanity_pvp_live_service_bridge_checks.cjs` 失败于 `PVPService.live should expose avoidOpponent`。
+    - 红测：`node tests/sanity_pvp_live_session_checks.mjs` 失败于 `recoveredSession.avoidOpponent is not a function`。
+    - 红测：`node tests/sanity_pvp_live_cross_process_queue_checks.cjs` 失败于 `avoidedStoreB.avoidOpponentForUser is not a function`。
+    - 绿测：`node tests/sanity_pvp_live_client_checks.mjs`
+    - 绿测：`node tests/sanity_pvp_live_service_bridge_checks.cjs`
+    - 绿测：`node tests/sanity_pvp_live_session_checks.mjs`
+    - 绿测：`node tests/sanity_pvp_live_cross_process_queue_checks.cjs`
+    - 绿测：`node tests/sanity_pvp_live_route_checks.cjs`
+    - 绿测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs`
+    - 绿测：`node tests/sanity_pvp_live_balance_simulation_checks.cjs`
+    - 绿测：`node tests/sanity_pvp_live_balance_artifact_checks.cjs`
+    - 绿测：`node tests/sanity_pvp_live_full_gate_balance_checks.cjs`
+    - 绿测：`node tests/sanity_release_gate_coverage_checks.cjs`
+    - 浏览器审计：`node tests/browser_pvp_live_audit.mjs`，108/108 findings、0 failed、0 console error。
+    - 全量 Node 门禁：`npm run test:node`
+    - 构建：`npm run build:pages`
+    - Diff 检查：`git diff --check`
+  - 当前结论
+    - live PVP 现在补上了赛后社交安全闭环：玩家能在不改写失败/胜利、不影响积分奖励、不获取隐藏信息的前提下，优先避开刚结束对局的对手；匹配层会真实抑制这对组合，等待层会解释原因，并且第三名真实玩家仍能释放等待池。本轮只新增赛后避开与未来匹配优先级，不改变战斗数值、正式结算、奖励公式、先后手规则、近期对手冷却或线上配置。
+
 - 2026-06-23: V10-S49 live PVP mobile opening fairness readability
   - 本轮完成
     - `css/pvp.css` 移除移动端 `.pvp-live-opening-safeguard-chip:nth-child(2) { display: none; }`，不再隐藏“首动预算 · 当前席位预算”这枚关键公平说明 chip。

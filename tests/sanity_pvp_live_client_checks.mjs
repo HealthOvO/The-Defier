@@ -51,6 +51,7 @@ assert.equal(typeof BackendClient.getLivePvpInviteInbox, 'function', 'BackendCli
 assert.equal(typeof BackendClient.measureLivePvpConnectionHealth, 'function', 'BackendClient should expose live PVP connection health preflight');
 assert.equal(typeof BackendClient.heartbeatLivePvpMatch, 'function', 'BackendClient should expose heartbeatLivePvpMatch');
 assert.equal(typeof BackendClient.submitLivePvpIntent, 'function', 'BackendClient should expose submitLivePvpIntent');
+assert.equal(typeof BackendClient.submitLivePvpAvoidOpponent, 'function', 'BackendClient should expose submitLivePvpAvoidOpponent');
 assert.equal(typeof BackendClient.getLivePvpWebSocketUrl, 'function', 'BackendClient should expose getLivePvpWebSocketUrl');
 assert.equal(typeof BackendClient.connectLivePvpWebSocket, 'function', 'BackendClient should expose connectLivePvpWebSocket');
 
@@ -321,6 +322,18 @@ assert.equal(staleIntent.success, false, 'live intent stale failure should retur
 assert.equal(staleIntent.reason, 'sync_required', 'live intent stale failure should preserve server reason');
 BackendClient.requestServer = originalRequestServer;
 
+const avoidOpponent = await BackendClient.submitLivePvpAvoidOpponent('pvplm test/1', {
+  reason: 'post_match_avoid',
+  message: '之后优先避开这个对手'
+});
+assert.equal(avoidOpponent.success, true, 'live avoid-opponent request should forward success payload');
+assert.equal(calls.at(-1).path, '/api/pvp/live/matches/pvplm%20test%2F1/avoid-opponent', 'live avoid-opponent request should encode match id');
+assert.equal(calls.at(-1).options.method, 'POST', 'live avoid-opponent request should POST');
+assert.deepEqual(calls.at(-1).options.data, {
+  reason: 'post_match_avoid',
+  message: '之后优先避开这个对手'
+}, 'live avoid-opponent request should send only a bounded social safety payload');
+
 const beforeEmptyMatch = requestCallCount();
 const emptyMatch = await BackendClient.getLivePvpMatch('');
 assert.equal(emptyMatch.success, false, 'empty live match id should fail locally');
@@ -365,6 +378,11 @@ const emptyIntentMatch = await BackendClient.submitLivePvpIntent('', {
 });
 assert.equal(emptyIntentMatch.success, false, 'empty live intent match id should fail locally');
 assert.equal(requestCallCount(), beforeEmptyIntentMatch, 'empty live intent match id should not call requestServer');
+
+const beforeEmptyAvoidOpponentMatch = requestCallCount();
+const emptyAvoidOpponentMatch = await BackendClient.submitLivePvpAvoidOpponent('', { reason: 'post_match_avoid' });
+assert.equal(emptyAvoidOpponentMatch.success, false, 'empty live avoid-opponent match id should fail locally');
+assert.equal(requestCallCount(), beforeEmptyAvoidOpponentMatch, 'empty live avoid-opponent match id should not call requestServer');
 
 BackendClient.getCurrentUser = () => null;
 const loggedOut = await BackendClient.joinLivePvpQueue({ displayName: '甲' });

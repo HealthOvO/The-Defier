@@ -12,6 +12,7 @@ const DEFAULT_RECONNECT_GRACE_MS = 30 * 1000;
 const DEFAULT_INVITE_TTL_MS = 15 * 60 * 1000;
 const DEFAULT_REMATCH_TTL_MS = 10 * 60 * 1000;
 const DEFAULT_RECENT_OPPONENT_COOLDOWN_MS = 10 * 60 * 1000;
+const DEFAULT_AVOID_OPPONENT_COOLDOWN_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_QUEUE_CANCEL_WINDOW_MS = 2 * 60 * 1000;
 const DEFAULT_QUEUE_CANCEL_COOLDOWN_MS = 60 * 1000;
 const DEFAULT_QUEUE_CANCEL_COOLDOWN_THRESHOLD = 3;
@@ -211,6 +212,40 @@ function normalizeRecentOpponentPair(pair = {}) {
         userIdB,
         lastMatchId: String(source.lastMatchId || source.last_match_id || ''),
         lastMatchedAt: Math.max(0, Math.floor(Number(source.lastMatchedAt || source.last_matched_at) || 0))
+    };
+}
+
+function makeAvoidedOpponentPreferenceKey(avoiderUserId, avoidedUserId) {
+    const avoider = String(avoiderUserId || '').trim();
+    const avoided = String(avoidedUserId || '').trim();
+    return avoider && avoided && avoider !== avoided ? `${avoider}::${avoided}` : '';
+}
+
+function normalizeAvoidOpponentReason(value) {
+    const normalized = String(value || 'post_match_avoid')
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9_-]/g, '_')
+        .slice(0, 48);
+    return normalized || 'post_match_avoid';
+}
+
+function normalizeAvoidedOpponentPair(pair = {}) {
+    const source = pair && typeof pair === 'object' ? pair : {};
+    const avoiderUserId = String(source.avoiderUserId || source.avoider_user_id || '').trim();
+    const avoidedUserId = String(source.avoidedUserId || source.avoided_user_id || '').trim();
+    const preferenceKey = makeAvoidedOpponentPreferenceKey(avoiderUserId, avoidedUserId);
+    if (!preferenceKey) return null;
+    return {
+        preferenceKey,
+        pairKey: makeRecentOpponentPairKey(avoiderUserId, avoidedUserId),
+        avoiderUserId,
+        avoidedUserId,
+        sourceMatchId: String(source.sourceMatchId || source.source_match_id || ''),
+        reason: normalizeAvoidOpponentReason(source.reason),
+        message: String(source.message || '').trim().slice(0, 240),
+        avoidedAt: Math.max(0, Math.floor(Number(source.avoidedAt || source.avoided_at) || 0)),
+        expiresAt: Math.max(0, Math.floor(Number(source.expiresAt || source.expires_at || source.avoidUntil || source.avoid_until) || 0))
     };
 }
 
@@ -556,15 +591,18 @@ function makeWaitingReport({ waitMs = 0, thresholdMs = DEFAULT_LONG_WAIT_THRESHO
         'no_score_change',
         ...(Array.isArray(safeguards) ? safeguards.map(item => String(item || '')).filter(Boolean) : [])
     ].reduce((items, item) => appendUniqueString(items, item, 12), []);
+    const hasAvoidOpponentSuppression = mergedSafeguards.includes('player_avoid_opponent');
     const hasRecentOpponentSuppression = mergedSafeguards.includes('recent_opponent_suppression');
     const hasLowSampleProtection = mergedSafeguards.includes('low_sample_protection');
     const releaseAt = hasLowSampleProtection ? safeCreatedAt + safeThresholdMs : 0;
     const releaseInMs = hasLowSampleProtection ? Math.max(0, releaseAt - safeNow) : 0;
     const protectionReason = hasLowSampleProtection
         ? 'low_sample_protection'
+        : hasAvoidOpponentSuppression ? 'player_avoid_opponent'
         : hasRecentOpponentSuppression ? 'recent_opponent_suppression' : '';
     const releaseMode = hasLowSampleProtection
         ? longWait ? 'long_wait_release' : 'need_third_player'
+        : hasAvoidOpponentSuppression ? 'quality_safeguard_wait'
         : hasRecentOpponentSuppression ? 'quality_safeguard_wait' : longWait ? 'long_wait_no_real_player' : 'standard_wait';
     const requiresPoolSize = hasLowSampleProtection ? 3 : 2;
     const actions = [
@@ -607,7 +645,9 @@ function makeWaitingReport({ waitMs = 0, thresholdMs = DEFAULT_LONG_WAIT_THRESHO
                 candidatePoolSize: safeCandidatePoolSize
             })
             : null,
-        message: hasRecentOpponentSuppression
+        message: hasAvoidOpponentSuppression
+            ? '已优先避开你赛后屏蔽的对手，正在为你换一位真人；若真人池过小，系统会继续解释等待原因。'
+            : hasRecentOpponentSuppression
             ? '刚刚交手的近期对手会被暂时跳过，正在为你换一位真人；不会自动切残影。'
             : hasLowSampleProtection
                 ? '低样本保护正在优先寻找更稳妥的真人对手；可继续等待、接受宽分差或先进入问道练习，不会自动切残影。'
@@ -744,6 +784,7 @@ class LivePvpStore {
         inviteTtlMs = DEFAULT_INVITE_TTL_MS,
         rematchTtlMs = DEFAULT_REMATCH_TTL_MS,
         recentOpponentCooldownMs = DEFAULT_RECENT_OPPONENT_COOLDOWN_MS,
+        avoidOpponentCooldownMs = DEFAULT_AVOID_OPPONENT_COOLDOWN_MS,
         queueCancelWindowMs = DEFAULT_QUEUE_CANCEL_WINDOW_MS,
         queueCancelCooldownMs = DEFAULT_QUEUE_CANCEL_COOLDOWN_MS,
         queueCancelCooldownThreshold = DEFAULT_QUEUE_CANCEL_COOLDOWN_THRESHOLD,
@@ -764,6 +805,9 @@ class LivePvpStore {
         this.recentOpponentCooldownMs = Number.isFinite(Number(recentOpponentCooldownMs))
             ? Math.max(0, Math.floor(Number(recentOpponentCooldownMs)))
             : DEFAULT_RECENT_OPPONENT_COOLDOWN_MS;
+        this.avoidOpponentCooldownMs = Number.isFinite(Number(avoidOpponentCooldownMs))
+            ? Math.max(0, Math.floor(Number(avoidOpponentCooldownMs)))
+            : DEFAULT_AVOID_OPPONENT_COOLDOWN_MS;
         this.queueCancelWindowMs = Math.max(1000, Math.floor(Number(queueCancelWindowMs) || DEFAULT_QUEUE_CANCEL_WINDOW_MS));
         this.queueCancelCooldownMs = Math.max(0, Math.floor(Number(queueCancelCooldownMs) || DEFAULT_QUEUE_CANCEL_COOLDOWN_MS));
         this.queueCancelCooldownThreshold = Math.max(1, Math.floor(Number(queueCancelCooldownThreshold) || DEFAULT_QUEUE_CANCEL_COOLDOWN_THRESHOLD));
@@ -785,6 +829,7 @@ class LivePvpStore {
         this.inviteRooms = new Map();
         this.inviteCodeByHostUserId = new Map();
         this.recentOpponentPairs = new Map();
+        this.avoidedOpponentPairs = new Map();
         this.matchmakingGuards = new Map();
     }
 
@@ -915,6 +960,22 @@ class LivePvpStore {
         if (!this.persistence || typeof this.persistence.loadRecentOpponentPair !== 'function') return null;
         const pair = await this.persistence.loadRecentOpponentPair(userIdA, userIdB);
         return normalizeRecentOpponentPair(pair);
+    }
+
+    async saveAvoidedOpponentPair(pair) {
+        const normalized = normalizeAvoidedOpponentPair(pair);
+        if (!normalized || !normalized.expiresAt) return null;
+        this.avoidedOpponentPairs.set(normalized.preferenceKey, normalized);
+        if (this.persistence && typeof this.persistence.saveAvoidedOpponentPair === 'function') {
+            await this.persistence.saveAvoidedOpponentPair(normalized);
+        }
+        return normalized;
+    }
+
+    async loadAvoidedOpponentPair(userIdA, userIdB) {
+        if (!this.persistence || typeof this.persistence.loadAvoidedOpponentPair !== 'function') return null;
+        const pair = await this.persistence.loadAvoidedOpponentPair(userIdA, userIdB);
+        return normalizeAvoidedOpponentPair(pair);
     }
 
     async saveMatchmakingGuard(profile) {
@@ -1063,6 +1124,79 @@ class LivePvpStore {
         if (!this.isRecentOpponentPairFresh(persistedPair)) return false;
         this.recentOpponentPairs.set(pairKey, persistedPair);
         return true;
+    }
+
+    isAvoidedOpponentPairFresh(pair) {
+        const normalized = normalizeAvoidedOpponentPair(pair);
+        if (!normalized || !normalized.expiresAt || this.avoidOpponentCooldownMs <= 0) return false;
+        return normalized.expiresAt > this.now();
+    }
+
+    async isAvoidedOpponentPair(userIdA, userIdB) {
+        if (this.avoidOpponentCooldownMs <= 0) return false;
+        const firstKey = makeAvoidedOpponentPreferenceKey(userIdA, userIdB);
+        const secondKey = makeAvoidedOpponentPreferenceKey(userIdB, userIdA);
+        for (const key of [firstKey, secondKey].filter(Boolean)) {
+            const localPair = this.avoidedOpponentPairs.get(key);
+            if (this.isAvoidedOpponentPairFresh(localPair)) return true;
+            if (localPair) this.avoidedOpponentPairs.delete(key);
+        }
+        const persistedPair = await this.loadAvoidedOpponentPair(userIdA, userIdB);
+        if (!persistedPair) return false;
+        if (!this.isAvoidedOpponentPairFresh(persistedPair)) return false;
+        this.avoidedOpponentPairs.set(persistedPair.preferenceKey, persistedPair);
+        return true;
+    }
+
+    async avoidOpponentForUser(userId, matchId, request = {}) {
+        const matchAccess = await this.getMatchForUser(userId, matchId);
+        if (!matchAccess) return null;
+        const { match, seatId, stateView } = matchAccess;
+        const status = String(stateView && stateView.status || match && match.state && match.state.status || '');
+        if (!this.isTerminalStatus(status)) {
+            return {
+                success: false,
+                reason: 'avoid_opponent_not_ready',
+                message: '对局结束后才能设置赛后避开对手'
+            };
+        }
+        const opponentUserId = this.getSourceSeatUserId(match, otherSourceSeat(seatId));
+        const avoiderUserId = String(userId || '').trim();
+        if (!avoiderUserId || !opponentUserId || opponentUserId === avoiderUserId) return null;
+        const avoidedAt = this.now();
+        const pair = await this.saveAvoidedOpponentPair({
+            avoiderUserId,
+            avoidedUserId: opponentUserId,
+            sourceMatchId: match.matchId,
+            reason: request && request.reason,
+            message: request && request.message,
+            avoidedAt,
+            expiresAt: avoidedAt + this.avoidOpponentCooldownMs
+        });
+        if (!pair) {
+            return {
+                success: false,
+                reason: 'avoid_opponent_disabled',
+                message: '赛后避开对手功能暂不可用'
+            };
+        }
+        return {
+            reportVersion: 'pvp-live-avoid-opponent-receipt-v1',
+            status: 'active',
+            reason: pair.reason,
+            message: pair.message,
+            sourceVisibility: 'account_preference',
+            usesHiddenInformation: false,
+            rankedImpact: 'none',
+            formalResultPolicy: 'no_result_change',
+            safeguard: 'player_avoid_opponent',
+            sourceMatchId: String(match.matchId || ''),
+            avoidedAt: pair.avoidedAt,
+            expiresAt: pair.expiresAt,
+            avoidWindowMs: this.avoidOpponentCooldownMs,
+            nextStepLine: '已记录：后续匹配会优先避开此对手；这不会改写本局结算，真人池过小时系统会解释等待原因。',
+            boundary: '避开对手只影响后续匹配优先级，不保证永久不匹配，不影响积分、奖励或隐藏信息。'
+        };
     }
 
     async deleteQueueEntry(queueTicket) {
@@ -1580,6 +1714,12 @@ class LivePvpStore {
             const opponentTicket = this.waitingQueue[index];
             if (!opponentTicket || !opponentTicket.player || opponentTicket.player.userId === requesterEntry.player.userId) continue;
             if (getQueueEntryTestMatchScope(opponentTicket) !== requesterTestMatchScope) continue;
+            if (await this.isAvoidedOpponentPair(opponentTicket.player.userId, requesterEntry.player.userId)) {
+                this.markQueueSuppression(opponentTicket, 'player_avoid_opponent');
+                this.markQueueSuppression(requesterEntry, 'player_avoid_opponent');
+                await this.saveQueueEntry(opponentTicket);
+                continue;
+            }
             if (await this.isRecentOpponentPair(opponentTicket.player.userId, requesterEntry.player.userId)) {
                 this.markQueueSuppression(opponentTicket, 'recent_opponent_suppression');
                 this.markQueueSuppression(requesterEntry, 'recent_opponent_suppression');

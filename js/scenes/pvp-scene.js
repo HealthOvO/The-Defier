@@ -2348,7 +2348,7 @@ export const PVPScene = {
           ]).filter(([key]) => key))
           : {}
       } : null,
-      nextActions: nextActions.slice(0, 7).map(action => ({
+      nextActions: nextActions.slice(0, 8).map(action => ({
         id: String(action && action.id || ''),
         auditActionId: String(action && action.auditActionId || ''),
         label: String(action && action.label || ''),
@@ -2408,6 +2408,24 @@ export const PVPScene = {
           : []
       },
       boundary: String(report.boundary || '提交异常反馈不会即时改变正式积分、奖励或匹配评分。')
+    };
+  },
+  getLiveAvoidOpponentReceipt(source) {
+    const report = source && typeof source === 'object' ? source : null;
+    if (!report) return null;
+    return {
+      reportVersion: String(report.reportVersion || 'pvp-live-avoid-opponent-receipt-v1'),
+      status: String(report.status || 'active'),
+      reason: String(report.reason || 'post_match_avoid'),
+      sourceVisibility: String(report.sourceVisibility || 'account_preference'),
+      usesHiddenInformation: report.usesHiddenInformation === true,
+      rankedImpact: String(report.rankedImpact || 'none'),
+      formalResultPolicy: String(report.formalResultPolicy || 'no_result_change'),
+      safeguard: String(report.safeguard || 'player_avoid_opponent'),
+      sourceMatchId: String(report.sourceMatchId || ''),
+      expiresAt: Math.max(0, Math.floor(Number(report.expiresAt) || 0)),
+      nextStepLine: String(report.nextStepLine || '已记录赛后避开偏好；后续匹配会优先避开此对手。'),
+      boundary: String(report.boundary || '避开对手只影响后续匹配优先级，不保证永久不匹配，不影响积分、奖励或隐藏信息。')
     };
   },
   getLiveLoadoutRecommendation(source) {
@@ -3282,6 +3300,32 @@ export const PVPScene = {
       </div>
     `;
   },
+  renderLiveAvoidOpponentReceipt() {
+    const state = this.getLiveSession().getState();
+    const activeMatchId = String(state && (state.matchId || state.stateView && state.stateView.matchId) || '');
+    const receipt = this.getLiveAvoidOpponentReceipt(state && state.lastAvoidOpponentReport);
+    if (!receipt || (receipt.sourceMatchId && activeMatchId && receipt.sourceMatchId !== activeMatchId)) {
+      return '';
+    }
+    return `
+      <div
+        class="pvp-live-dispute-receipt pvp-live-avoid-receipt"
+        data-live-avoid-opponent
+        data-live-avoid-opponent-status="${this.escapeHtml(receipt.status)}"
+        data-live-avoid-opponent-hidden="${receipt.usesHiddenInformation ? 'true' : 'false'}"
+        data-live-avoid-opponent-ranked-impact="${this.escapeHtml(receipt.rankedImpact)}"
+        data-live-avoid-opponent-safeguard="${this.escapeHtml(receipt.safeguard)}"
+      >
+        <div class="pvp-live-dispute-receipt-head">
+          <span>已优先避开此对手</span>
+          <span>${this.escapeHtml(receipt.safeguard || 'player_avoid_opponent')}</span>
+        </div>
+        <div class="pvp-live-dispute-receipt-line">${this.escapeHtml(receipt.nextStepLine)}</div>
+        <div class="pvp-live-dispute-receipt-evidence">不改写本局结算 · 不读取隐藏信息 · 后续匹配优先避开</div>
+        <div class="pvp-live-dispute-receipt-boundary">${this.escapeHtml(receipt.boundary)}</div>
+      </div>
+    `;
+  },
   renderLivePostMatchReview(view, phase = 'idle') {
     const review = this.getLivePostMatchReview(view);
     if (!review) return '';
@@ -3326,6 +3370,7 @@ export const PVPScene = {
         `).join('')}
       </div>
       ${this.renderLiveDisputeReportReceipt()}
+      ${this.renderLiveAvoidOpponentReceipt()}
     `;
   },
   buildLivePostReviewDrillScenario(state = null) {
@@ -3786,6 +3831,7 @@ export const PVPScene = {
       seasonGoal: this.getLiveSeasonGoalCard(view),
       lastReplay: replayMatchId && replayMatchId === activeLiveSourceId ? this.getLiveReplaySummary(state.lastReplay) : null,
       lastDisputeReport: state.lastDisputeReport ? this.getLiveDisputeReportReceipt(state.lastDisputeReport) : null,
+      lastAvoidOpponentReport: state.lastAvoidOpponentReport ? this.getLiveAvoidOpponentReceipt(state.lastAvoidOpponentReport) : null,
       drillScenario,
       waitingReport: this.getLiveWaitingReport(state),
       inviteReport: state.inviteReport || null,
@@ -4961,6 +5007,29 @@ export const PVPScene = {
       setHint(receipt
         ? receipt.nextStepLine
         : next.lastError && next.lastError.message || '异常反馈提交失败，请稍后重试。');
+      return;
+    }
+    if (id === 'avoid_opponent') {
+      const session = this.getLiveSession();
+      if (!session || typeof session.avoidOpponent !== 'function') {
+        setHint('实时论道避开对手服务未就绪。');
+        return;
+      }
+      const state = session.getState();
+      const review = this.getLivePostMatchReview(state && state.stateView ? state.stateView : null);
+      await session.avoidOpponent({
+        reason: 'post_match_avoid',
+        message: review
+          ? `玩家从赛后复盘选择优先避开此对手：${review.finishReason || 'finished'} / ${review.result || 'result'}`
+          : '玩家从赛后复盘选择优先避开此对手'
+      });
+      this.liveReviewFocus = this.liveReviewFocus || 'events';
+      this.renderLivePanel();
+      const next = session.getState();
+      const receipt = this.getLiveAvoidOpponentReceipt(next.lastAvoidOpponentReport);
+      setHint(receipt
+        ? receipt.nextStepLine
+        : next.lastError && next.lastError.message || '避开对手提交失败，请稍后重试。');
       return;
     }
     if (id === 'adjust_loadout') {

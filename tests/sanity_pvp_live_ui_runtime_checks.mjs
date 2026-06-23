@@ -2251,14 +2251,17 @@ let reportReviewState = {
       finishReason: 'lethal',
       summary: '公开轨迹显示终局。',
       nextActions: [
-        { id: 'report_issue', auditActionId: 'report_issue', label: '举报异常', detail: '提交异常反馈；不即时改分。' }
+        { id: 'report_issue', auditActionId: 'report_issue', label: '举报异常', detail: '提交异常反馈；不即时改分。' },
+        { id: 'avoid_opponent', auditActionId: 'avoid_opponent', label: '避开此对手', detail: '后续匹配优先避开；不改写本局结算。' }
       ]
     }
   },
   lastDisputeReport: null,
+  lastAvoidOpponentReport: null,
   lastEvents: []
 };
 const disputeCalls = [];
+const avoidOpponentCalls = [];
 PVPScene.liveReviewFocus = '';
 PVPScene.liveInlineHint = '';
 PVPScene.renderLivePanel = () => {};
@@ -2296,6 +2299,30 @@ PVPScene.getLiveSession = () => ({
       }
     };
     return reportReviewState;
+  },
+  avoidOpponent: async (request = {}) => {
+    avoidOpponentCalls.push(request);
+    reportReviewState = {
+      ...reportReviewState,
+      lastAvoidOpponentReport: {
+        reportVersion: 'pvp-live-avoid-opponent-receipt-v1',
+        status: 'active',
+        reason: request.reason || 'post_match_avoid',
+        sourceVisibility: 'account_preference',
+        usesHiddenInformation: false,
+        rankedImpact: 'none',
+        formalResultPolicy: 'no_result_change',
+        safeguard: 'player_avoid_opponent',
+        sourceMatchId: 'pvpm-ui-runtime-report-issue',
+        nextStepLine: '已记录：后续匹配会优先避开此对手；这不会改写本局结算。',
+        boundary: '避开对手只影响后续匹配优先级，不保证永久不匹配，不影响积分、奖励或隐藏信息。'
+      },
+      lastError: {
+        reason: 'avoid_opponent_saved',
+        message: '已记录：后续匹配会优先避开此对手；这不会改写本局结算。'
+      }
+    };
+    return reportReviewState;
   }
 });
 await PVPScene.handleLivePostReviewAction('report_issue');
@@ -2308,5 +2335,16 @@ assert.equal(disputeSnapshot.lastDisputeReport?.evidencePackage?.eventCount, 3, 
 assert.match(PVPScene.liveInlineHint, /不会立即改写本局结算/, 'report_issue action should explain non-immediate settlement impact');
 assert.match(PVPScene.renderLiveDisputeReportReceipt(), /data-live-dispute-report/, 'dispute receipt should render a stable DOM marker');
 assert.doesNotMatch(PVPScene.renderLiveDisputeReportReceipt(), /hand|deck|cardId|instanceId|loadoutSnapshot/i, 'dispute receipt UI should not render hidden card or loadout tokens');
+
+await PVPScene.handleLivePostReviewAction('avoid_opponent');
+const avoidOpponentSnapshot = PVPScene.getLiveSnapshot();
+assert.deepEqual(avoidOpponentCalls.map(call => call.reason), ['post_match_avoid'], 'avoid_opponent action should submit a post-match avoid preference');
+assert.equal(avoidOpponentSnapshot.lastAvoidOpponentReport?.reportVersion, 'pvp-live-avoid-opponent-receipt-v1', 'live snapshot should expose the avoid-opponent receipt');
+assert.equal(avoidOpponentSnapshot.lastAvoidOpponentReport?.rankedImpact, 'none', 'avoid-opponent receipt should not affect ranked state');
+assert.equal(avoidOpponentSnapshot.lastAvoidOpponentReport?.usesHiddenInformation, false, 'avoid-opponent receipt should stay audit-safe');
+assert.equal(avoidOpponentSnapshot.lastAvoidOpponentReport?.safeguard, 'player_avoid_opponent', 'avoid-opponent receipt should expose the future matching safeguard');
+assert.match(PVPScene.liveInlineHint, /优先避开此对手/, 'avoid_opponent action should explain future matching impact');
+assert.match(PVPScene.renderLiveAvoidOpponentReceipt(), /data-live-avoid-opponent/, 'avoid-opponent receipt should render a stable DOM marker');
+assert.doesNotMatch(PVPScene.renderLiveAvoidOpponentReceipt(), /hand|deck|cardId|instanceId|loadoutSnapshot/i, 'avoid-opponent receipt UI should not render hidden card or loadout tokens');
 
 console.log('PVP live UI runtime checks passed.');

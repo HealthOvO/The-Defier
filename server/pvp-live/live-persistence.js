@@ -60,6 +60,40 @@ function normalizeRecentOpponentPair(pair = {}) {
     };
 }
 
+function makeAvoidedOpponentPreferenceKey(avoiderUserId, avoidedUserId) {
+    const avoider = String(avoiderUserId || '').trim();
+    const avoided = String(avoidedUserId || '').trim();
+    return avoider && avoided && avoider !== avoided ? `${avoider}::${avoided}` : '';
+}
+
+function normalizeAvoidOpponentReason(value) {
+    const normalized = String(value || 'post_match_avoid')
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9_-]/g, '_')
+        .slice(0, 48);
+    return normalized || 'post_match_avoid';
+}
+
+function normalizeAvoidedOpponentPair(pair = {}) {
+    const source = pair && typeof pair === 'object' ? pair : {};
+    const avoiderUserId = String(source.avoiderUserId || source.avoider_user_id || '').trim();
+    const avoidedUserId = String(source.avoidedUserId || source.avoided_user_id || '').trim();
+    const preferenceKey = makeAvoidedOpponentPreferenceKey(avoiderUserId, avoidedUserId);
+    if (!preferenceKey) return null;
+    return {
+        preferenceKey,
+        pairKey: makeRecentOpponentPairKey(avoiderUserId, avoidedUserId),
+        avoiderUserId,
+        avoidedUserId,
+        sourceMatchId: String(source.sourceMatchId || source.source_match_id || ''),
+        reason: normalizeAvoidOpponentReason(source.reason),
+        message: String(source.message || '').trim().slice(0, 240),
+        avoidedAt: Math.max(0, Math.floor(Number(source.avoidedAt || source.avoided_at) || 0)),
+        expiresAt: Math.max(0, Math.floor(Number(source.expiresAt || source.expires_at || source.avoidUntil || source.avoid_until) || 0))
+    };
+}
+
 function normalizeMatchmakingGuardProfile(profile = {}) {
     const source = profile && typeof profile === 'object' ? profile : {};
     const userId = String(source.userId || source.user_id || '').trim();
@@ -499,6 +533,19 @@ function makeRecentOpponentPairFromRow(row) {
     return normalized;
 }
 
+function makeAvoidedOpponentPairFromRow(row) {
+    if (!row || !row.avoider_user_id || !row.avoided_user_id) return null;
+    return normalizeAvoidedOpponentPair({
+        avoiderUserId: row.avoider_user_id,
+        avoidedUserId: row.avoided_user_id,
+        sourceMatchId: row.source_match_id,
+        reason: row.reason,
+        message: row.message,
+        avoidedAt: row.avoided_at,
+        expiresAt: row.avoid_until
+    });
+}
+
 function makeMatchmakingGuardProfileFromRow(row) {
     if (!row || !row.user_id) return null;
     return normalizeMatchmakingGuardProfile({
@@ -718,6 +765,48 @@ function makeSqliteLivePvpPersistence() {
                 [pairKey]
             );
             return makeRecentOpponentPairFromRow(row);
+        },
+        async saveAvoidedOpponentPair(pair) {
+            const normalized = normalizeAvoidedOpponentPair(pair);
+            if (!normalized || !normalized.expiresAt) return;
+            const now = Date.now();
+            await dbRun(
+                `INSERT INTO pvp_live_avoid_opponents
+                    (avoider_user_id, avoided_user_id, pair_key, source_match_id, reason, message, avoided_at, avoid_until, updated_at)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 ON CONFLICT(avoider_user_id, avoided_user_id) DO UPDATE SET
+                    pair_key = excluded.pair_key,
+                    source_match_id = excluded.source_match_id,
+                    reason = excluded.reason,
+                    message = excluded.message,
+                    avoided_at = excluded.avoided_at,
+                    avoid_until = excluded.avoid_until,
+                    updated_at = excluded.updated_at`,
+                [
+                    normalized.avoiderUserId,
+                    normalized.avoidedUserId,
+                    normalized.pairKey,
+                    normalized.sourceMatchId,
+                    normalized.reason,
+                    normalized.message,
+                    normalized.avoidedAt,
+                    normalized.expiresAt,
+                    now
+                ]
+            );
+        },
+        async loadAvoidedOpponentPair(userIdA, userIdB) {
+            const pairKey = makeRecentOpponentPairKey(userIdA, userIdB);
+            if (!pairKey) return null;
+            const row = await dbGet(
+                `SELECT *
+                 FROM pvp_live_avoid_opponents
+                 WHERE pair_key = ?
+                 ORDER BY avoid_until DESC
+                 LIMIT 1`,
+                [pairKey]
+            );
+            return makeAvoidedOpponentPairFromRow(row);
         },
         async saveMatchmakingGuard(profile) {
             const normalized = normalizeMatchmakingGuardProfile(profile);

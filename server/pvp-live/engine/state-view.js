@@ -8,7 +8,8 @@ const POST_GAME_AUDIT_ACTION_BY_UI_ACTION = Object.freeze({
     adjust_loadout: 'apply_loadout_recommendation',
     practice: 'practice_topic',
     queue_again: 'queue_again',
-    report_issue: 'report_issue'
+    report_issue: 'report_issue',
+    avoid_opponent: 'avoid_opponent'
 });
 
 function withAuditAction(action) {
@@ -1028,6 +1029,11 @@ function projectPostMatchReview(state, seatId) {
             id: 'report_issue',
             label: '举报异常',
             detail: '提交异常反馈；系统只附带公开证据包，不立即改写积分、奖励或匹配评分。'
+        },
+        {
+            id: 'avoid_opponent',
+            label: '避开此对手',
+            detail: '后续匹配优先避开该对手；不改写本局结算，也不读取隐藏信息。'
         }
     ].map(withAuditAction);
     const postGameActionBridge = buildPostGameActionBridge(nextActions);

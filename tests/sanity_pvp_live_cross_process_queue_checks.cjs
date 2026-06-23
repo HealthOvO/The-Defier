@@ -77,6 +77,7 @@ function makeSharedPersistence({ keepQueueRowsOnDelete = false } = {}) {
   const queueEntries = new Map();
   const queueHandoffs = new Map();
   const recentOpponents = new Map();
+  const avoidedOpponents = new Map();
   const matches = new Map();
   const activeStatuses = new Set(['setup', 'active']);
   const claimHooks = new Map();
@@ -179,6 +180,27 @@ function makeSharedPersistence({ keepQueueRowsOnDelete = false } = {}) {
     },
     async loadRecentOpponentPair(userIdA, userIdB) {
       return clone(recentOpponents.get(makeRecentOpponentPairKey(userIdA, userIdB)) || null);
+    },
+    async saveAvoidedOpponentPair(pair) {
+      const avoiderUserId = String(pair && pair.avoiderUserId || '');
+      const avoidedUserId = String(pair && pair.avoidedUserId || '');
+      const key = `${avoiderUserId}::${avoidedUserId}`;
+      if (!avoiderUserId || !avoidedUserId || avoiderUserId === avoidedUserId) return;
+      avoidedOpponents.set(key, clone({
+        pairKey: makeRecentOpponentPairKey(avoiderUserId, avoidedUserId),
+        avoiderUserId,
+        avoidedUserId,
+        sourceMatchId: String(pair.sourceMatchId || ''),
+        reason: String(pair.reason || 'post_match_avoid'),
+        message: String(pair.message || ''),
+        avoidedAt: Number(pair.avoidedAt) || 0,
+        expiresAt: Number(pair.expiresAt) || 0,
+      }));
+    },
+    async loadAvoidedOpponentPair(userIdA, userIdB) {
+      const left = String(userIdA || '');
+      const right = String(userIdB || '');
+      return clone(avoidedOpponents.get(`${left}::${right}`) || avoidedOpponents.get(`${right}::${left}`) || null);
     },
     async loadActiveMatchForUser(userId) {
       const id = String(userId || '');
@@ -523,6 +545,90 @@ function makeSharedPersistence({ keepQueueRowsOnDelete = false } = {}) {
   assert.ok(
     persistedRecentB2.waitingReport?.safeguards?.includes('recent_opponent_suppression'),
     'persisted recent opponent suppression should still expose the waiting safeguard',
+  );
+
+  const avoidedOpponentPersistence = makeSharedPersistence();
+  const avoidedStoreA = createLivePvpStore({
+    now: () => now,
+    persistence: avoidedOpponentPersistence,
+    avoidOpponentCooldownMs: 24 * 60 * 60 * 1000,
+  });
+  const avoidedStoreB = createLivePvpStore({
+    now: () => now,
+    persistence: avoidedOpponentPersistence,
+    avoidOpponentCooldownMs: 24 * 60 * 60 * 1000,
+  });
+  const avoidedStoreC = createLivePvpStore({
+    now: () => now,
+    persistence: avoidedOpponentPersistence,
+    avoidOpponentCooldownMs: 24 * 60 * 60 * 1000,
+  });
+  const avoidedStoreD = createLivePvpStore({
+    now: () => now,
+    persistence: avoidedOpponentPersistence,
+    avoidOpponentCooldownMs: 24 * 60 * 60 * 1000,
+  });
+  const avoidedStoreE = createLivePvpStore({
+    now: () => now,
+    persistence: avoidedOpponentPersistence,
+    avoidOpponentCooldownMs: 24 * 60 * 60 * 1000,
+  });
+  now += 1000;
+  const avoidedJoinA1 = await avoidedStoreA.joinQueue({
+    userId: 'avoid-opponent-a',
+    displayName: '避开甲',
+    loadout: makeLoadout('sword', ['pvp_burst', 'pvp_strike', 'pvp_guard', 'pvp_strike']),
+  });
+  assert.equal(avoidedJoinA1.status, 'waiting', 'avoid-opponent seed should wait before first match');
+  now += 1000;
+  const avoidedJoinB1 = await avoidedStoreB.joinQueue({
+    userId: 'avoid-opponent-b',
+    displayName: '避开乙',
+    loadout: makeLoadout('shield', ['pvp_guard', 'pvp_strike', 'pvp_burst', 'pvp_guard']),
+  });
+  assert.equal(avoidedJoinB1.status, 'matched', 'avoid-opponent pair should match before the preference exists');
+  await finishStoreMatch(avoidedStoreB, avoidedJoinB1.matchId, { winnerSeat: 'A', finishReason: 'surrender' });
+  const avoidReceipt = await avoidedStoreB.avoidOpponentForUser('avoid-opponent-a', avoidedJoinB1.matchId, {
+    reason: 'post_match_avoid',
+    message: '之后优先避开这个对手',
+  });
+  assert.equal(avoidReceipt?.reportVersion, 'pvp-live-avoid-opponent-receipt-v1', 'avoid-opponent should return a stable receipt');
+  assert.equal(avoidReceipt?.rankedImpact, 'none', 'avoid-opponent should not change ranked state');
+  assert.equal(avoidReceipt?.safeguard, 'player_avoid_opponent', 'avoid-opponent receipt should expose the matchmaking safeguard');
+  now += 1000;
+  const avoidedJoinA2 = await avoidedStoreC.joinQueue({
+    userId: 'avoid-opponent-a',
+    displayName: '避开甲',
+    loadout: makeLoadout('sword', ['pvp_burst', 'pvp_strike', 'pvp_guard', 'pvp_strike']),
+  });
+  assert.equal(avoidedJoinA2.status, 'waiting', 'avoiding player should wait for a different opponent in a fresh process');
+  now += 1000;
+  const avoidedJoinB2 = await avoidedStoreD.joinQueue({
+    userId: 'avoid-opponent-b',
+    displayName: '避开乙',
+    loadout: makeLoadout('shield', ['pvp_guard', 'pvp_strike', 'pvp_burst', 'pvp_guard']),
+  });
+  assert.equal(avoidedJoinB2.status, 'waiting', 'avoided opponent should not be immediately rematched while the preference is active');
+  assert.ok(
+    avoidedJoinB2.waitingReport?.safeguards?.includes('player_avoid_opponent'),
+    'avoid-opponent waiting report should expose the player_avoid_opponent safeguard',
+  );
+  assert.match(
+    avoidedJoinB2.waitingReport?.message || '',
+    /避开|屏蔽/,
+    'avoid-opponent waiting report should explain why the player is still waiting',
+  );
+  now += 1000;
+  const avoidedJoinC = await avoidedStoreE.joinQueue({
+    userId: 'avoid-opponent-c',
+    displayName: '避开丙',
+    loadout: makeLoadout('mirror', ['pvp_guard', 'pvp_strike', 'pvp_burst', 'pvp_guard']),
+  });
+  assert.equal(avoidedJoinC.status, 'matched', 'a third player should still release the avoided-opponent waiting pool');
+  assert.notEqual(
+    avoidedJoinC.stateView?.opponent?.publicProfile?.alias,
+    'avoid-opponent-b',
+    'avoid-opponent resolution should keep opponent identity concealed',
   );
 
   const lowSampleOpenPoolRatings = makeRatingProvider({

@@ -2411,9 +2411,16 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
         const reportAction = round14ScoreAView.payload.stateView.postMatchReview?.nextActions
             ?.find(action => action.id === 'report_issue');
         assert.equal(reportAction?.auditActionId, 'report_issue', 'finished review should expose a real dispute report action');
+        const avoidAction = round14ScoreAView.payload.stateView.postMatchReview?.nextActions
+            ?.find(action => action.id === 'avoid_opponent');
+        assert.equal(avoidAction?.auditActionId, 'avoid_opponent', 'finished review should expose a real avoid-opponent action');
         assert.ok(
             round14ScoreAView.payload.stateView.postMatchReview?.postGameActionBridge?.uiActionIdsByAuditAction?.report_issue?.includes('report_issue'),
             'post-game action bridge should map report_issue to the report UI action'
+        );
+        assert.ok(
+            round14ScoreAView.payload.stateView.postMatchReview?.postGameActionBridge?.uiActionIdsByAuditAction?.avoid_opponent?.includes('avoid_opponent'),
+            'post-game action bridge should map avoid_opponent to the avoid-opponent UI action'
         );
         const disputeReport = await request(baseUrl, `/api/pvp/live/matches/${joinRound14ScoreB.payload.matchId}/reports`, {
             method: 'POST',
@@ -2440,12 +2447,40 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
         assert.equal(persistedDisputeReport?.status, 'reported', 'persisted dispute report should stay in reported status');
         assert.equal(persistedDisputeReport?.reason, 'fairness_review', 'persisted dispute report should store the player reason');
         assert.ok(JSON.parse(persistedDisputeReport?.evidence_json || '{}').riskTags.includes('fairness_review_requested'), 'persisted dispute evidence should keep risk tags');
+        const avoidOpponent = await request(baseUrl, `/api/pvp/live/matches/${joinRound14ScoreB.payload.matchId}/avoid-opponent`, {
+            method: 'POST',
+            token: tokenA,
+            body: {
+                reason: 'post_match_avoid',
+                message: '之后优先避开这个对手。'
+            }
+        });
+        assert.equal(avoidOpponent.status, 200, 'finished live match should accept an avoid-opponent preference');
+        assert.equal(avoidOpponent.payload.report?.reportVersion, 'pvp-live-avoid-opponent-receipt-v1', 'avoid-opponent should return a stable receipt contract');
+        assert.equal(avoidOpponent.payload.report?.status, 'active', 'avoid-opponent should activate a future matchmaking preference');
+        assert.equal(avoidOpponent.payload.report?.rankedImpact, 'none', 'avoid-opponent should not change ranked state');
+        assert.equal(avoidOpponent.payload.report?.usesHiddenInformation, false, 'avoid-opponent receipt should not use hidden information');
+        assert.equal(avoidOpponent.payload.report?.safeguard, 'player_avoid_opponent', 'avoid-opponent receipt should expose the future matchmaking safeguard');
+        assert.doesNotMatch(JSON.stringify(avoidOpponent.payload), /hand|deck|cardId|instanceId|loadoutSnapshot|randomSeed/i, 'avoid-opponent receipt must not leak hidden cards, decks, loadouts, or seeds');
+        const persistedAvoidOpponent = await dbGet(
+            'SELECT avoider_user_id, avoided_user_id, source_match_id, reason FROM pvp_live_avoid_opponents WHERE source_match_id = ? AND avoider_user_id = ? LIMIT 1',
+            [joinRound14ScoreB.payload.matchId, 'live-user-a']
+        );
+        assert.equal(persistedAvoidOpponent?.avoider_user_id, 'live-user-a', 'avoid-opponent preference should persist avoider user');
+        assert.equal(persistedAvoidOpponent?.avoided_user_id, 'live-user-b', 'avoid-opponent preference should persist the opponent user');
+        assert.equal(persistedAvoidOpponent?.reason, 'post_match_avoid', 'avoid-opponent preference should persist the bounded reason');
         const outsiderDispute = await request(baseUrl, `/api/pvp/live/matches/${joinRound14ScoreB.payload.matchId}/reports`, {
             method: 'POST',
             token: tokenC,
             body: { reason: 'fairness_review' }
         });
         assert.equal(outsiderDispute.status, 404, 'non-participant should not be able to report or inspect another live match');
+        const outsiderAvoidOpponent = await request(baseUrl, `/api/pvp/live/matches/${joinRound14ScoreB.payload.matchId}/avoid-opponent`, {
+            method: 'POST',
+            token: tokenC,
+            body: { reason: 'post_match_avoid' }
+        });
+        assert.equal(outsiderAvoidOpponent.status, 404, 'non-participant should not be able to avoid an opponent through another live match');
 
         pvpLiveRoutes.__livePvpStore.reset();
         const joinSetupTimeoutA = await request(baseUrl, '/api/pvp/live/queue/join', {
