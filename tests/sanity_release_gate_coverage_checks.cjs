@@ -998,7 +998,10 @@ assert.ok(
 );
 
 [
-  'const serverSeed = crypto.randomBytes(16).toString(\'hex\');',
+  'crypto.randomBytes(16).toString(\'hex\')',
+  'normalizeLivePvpTestOpenerSeed',
+  'pvp-live-test-opener-v1',
+  'safeTestOpenerSeed || crypto.randomBytes(16).toString(\'hex\')',
   'pvp-live-opener-v1',
   'server_seeded_fair_opener',
   'friendly_series_rotating_opener',
@@ -1008,6 +1011,29 @@ assert.ok(
   assert.ok(
     openerAssignmentSource.includes(needle),
     `live PVP opener assignment should pin public-seed source marker: ${needle}`,
+  );
+});
+[
+  'testOpenerSeed: isLivePvpTestModeEnabled() ? req.body && req.body.testOpenerSeed : \'\'',
+].forEach((needle) => {
+  assert.ok(
+    pvpLiveRoute.includes(needle),
+    `live PVP route should keep test opener seed test-mode gated: ${needle}`,
+  );
+});
+[
+  'expectedTestOpenerAssignment',
+  'route-opener-seed-a',
+  'route-opener-seed-b',
+  'ranked opener anti-bias deterministic seed should set expected first seat',
+  'ranked opener anti-bias deterministic seeds should cover both first seats with the same queue order',
+  'ranked opener anti-bias must not expose raw test seed',
+  'ranked opener anti-bias must not bind first seat to queue order',
+  'ranked opener anti-bias must not bind first seat to host identity',
+].forEach((needle) => {
+  assert.ok(
+    pvpLiveRouteChecks.includes(needle),
+    `live PVP route checks should pin ranked opener anti-bias marker: ${needle}`,
   );
 });
 [

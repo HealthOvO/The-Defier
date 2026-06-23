@@ -1,5 +1,21 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-23: V10-S40 live PVP ranked opener anti-bias contract
+  - 本轮完成
+    - `tests/sanity_pvp_live_route_checks.cjs` 新增 ranked opener anti-bias route 合同：在非生产 `DEFIER_PVP_TEST_MODE=1` 下，同一两个玩家、同一 A 先入队/B 后入队，使用两组 deterministic test seed 连续创建 ranked match，必须稳定覆盖 A/B 两种先手。
+    - 红测固定双方体验边界：`openerAssignment.policy` 仍是 `server_seeded_fair_opener`，`sourceVisibility` 仍是 `server_authoritative_public_seed`，`queueOrderBinding=false`、`hostBinding=false`，且不暴露 raw test seed、userId、loadout、hand、deck、rating 或 ELO。
+    - `server/routes/pvp-live.js` 只在非生产测试模式透传 `testOpenerSeed`；`server/pvp-live/live-store.js` 要求 `testMatchScope` 存在才会接受 `testOpenerSeed`，并且只在 ranked opener 中使用测试专用 `pvp-live-test-opener-v1` entropy key。正式 ranked 匹配仍走 `crypto.randomBytes(16)` 生成服务端随机种子。
+    - `tests/sanity_release_gate_coverage_checks.cjs` 增加 release marker，锁住 test-only seed 入口、route A/B 覆盖断言、raw seed 不泄露、以及生产随机仍存在，防止后续把先手公平测试退回“单局不绑定排队顺序”的弱证明。
+  - 已验证
+    - 红测：实现前运行 `node tests/sanity_pvp_live_route_checks.cjs`，失败于 `ranked opener anti-bias deterministic seed should set expected first seat`，证明现有 route 没有 test-only deterministic seed 合同。
+    - 语法：`node --check server/pvp-live/live-store.js`、`node --check server/routes/pvp-live.js`、`node --check tests/sanity_pvp_live_route_checks.cjs`
+    - 绿测：`node tests/sanity_pvp_live_route_checks.cjs`、`node tests/sanity_release_gate_coverage_checks.cjs`
+    - 文档同步：`node tests/sanity_intro_progress_sync_checks.cjs`
+    - 全量 Node 门禁：`npm run test:node`，All node checks passed。
+    - 构建：`npm run build:pages`
+  - 当前结论
+    - live PVP 的 ranked 起手公平现在有可复现 route 合同：测试态能稳定证明同一对玩家、同一入队顺序不会被长期绑定到单一先手；生产态仍由服务端随机种子决定，不改变卡牌数值、首动预算、友谊 Bo3 轮换、奖励、结算、心跳或线上配置。
+
 - 2026-06-23: V10-S39 live PVP production invite smoke contract
   - 本轮完成
     - `tests/prod_api_smoke.cjs` 新增生产 API 级 live PVP 私密直邀 smoke：双账号创建 targeted invite、目标 inbox 展示、host current invite 恢复、受邀方 join 成友谊局 setup、host current match 恢复同一 match、双方 ready 进入 active、受邀方 surrender 进入 finished、host 可读取公开 replay。

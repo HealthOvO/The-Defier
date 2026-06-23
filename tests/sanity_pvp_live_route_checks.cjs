@@ -1,4 +1,5 @@
 const assert = require('assert');
+const crypto = require('crypto');
 const express = require('../server/node_modules/express');
 const pvpLiveRoutes = require('../server/routes/pvp-live');
 const { generateToken } = require('../server/middleware/auth');
@@ -92,6 +93,17 @@ function currentSeatUserId(stateView, seatId) {
     if (stateView.self && stateView.self.seatId === seatId) return stateView.self.userId || '';
     if (stateView.opponent && stateView.opponent.seatId === seatId) return stateView.opponent.userId || '';
     return '';
+}
+
+function expectedTestOpenerAssignment(seed) {
+    const digest = crypto.createHash('sha256')
+        .update(['pvp-live-test-opener-v1', String(seed || '')].join('|'))
+        .digest('hex');
+    const firstSeat = parseInt(digest.slice(0, 2), 16) % 2 === 0 ? 'A' : 'B';
+    return {
+        firstSeat,
+        seedTag: digest.slice(0, 12)
+    };
 }
 
 function makeLoadout(identitySlot, pattern) {
@@ -1710,6 +1722,61 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
         assert.equal(blockedAfterSeries.status, 404, 'completed Bo3 should reject another friendly rematch');
 
         pvpLiveRoutes.__livePvpStore.reset();
+        const previousOpenerTestMode = process.env.DEFIER_PVP_TEST_MODE;
+        process.env.DEFIER_PVP_TEST_MODE = '1';
+        try {
+            const openerCases = [
+                { seed: 'route-opener-seed-a', scope: 'route_opener_bias_a' },
+                { seed: 'route-opener-seed-b', scope: 'route_opener_bias_b' }
+            ];
+            const observedFirstSeats = [];
+            for (const openerCase of openerCases) {
+                pvpLiveRoutes.__livePvpStore.reset();
+                const firstJoin = await request(baseUrl, '/api/pvp/live/queue/join', {
+                    method: 'POST',
+                    token: tokenA,
+                    body: {
+                        displayName: '甲',
+                        loadout: loadoutA,
+                        testMatchScope: openerCase.scope,
+                        testOpenerSeed: openerCase.seed
+                    }
+                });
+                assert.equal(firstJoin.payload.status, 'waiting', 'ranked opener anti-bias first player should wait with same queue order');
+                const secondJoin = await request(baseUrl, '/api/pvp/live/queue/join', {
+                    method: 'POST',
+                    token: tokenB,
+                    body: {
+                        displayName: '乙',
+                        loadout: loadoutB,
+                        testMatchScope: openerCase.scope,
+                        testOpenerSeed: openerCase.seed
+                    }
+                });
+                assert.equal(secondJoin.payload.status, 'matched', 'ranked opener anti-bias second player should match with same queue order');
+                const expectedOpener = expectedTestOpenerAssignment(openerCase.seed);
+                const opener = secondJoin.payload.stateView.openerAssignment || {};
+                assert.equal(opener.policy, 'server_seeded_fair_opener', 'ranked opener anti-bias should keep ranked opener policy');
+                assert.equal(opener.sourceVisibility, 'server_authoritative_public_seed', 'ranked opener anti-bias should keep public-seed visibility');
+                assert.equal(opener.firstSeat, expectedOpener.firstSeat, 'ranked opener anti-bias deterministic seed should set expected first seat');
+                assert.equal(opener.seedTag, expectedOpener.seedTag, 'ranked opener anti-bias deterministic seed should expose only expected seed tag');
+                assert.equal(opener.queueOrderBinding, false, 'ranked opener anti-bias must not bind first seat to queue order');
+                assert.equal(opener.hostBinding, false, 'ranked opener anti-bias must not bind first seat to host identity');
+                assert.ok(!JSON.stringify(opener).includes(openerCase.seed), 'ranked opener anti-bias must not expose raw test seed');
+                assert.ok(!/userId|loadout|hand|deck|rating|elo/i.test(JSON.stringify(opener)), 'ranked opener anti-bias should not leak hidden player data');
+                observedFirstSeats.push(opener.firstSeat);
+            }
+            assert.deepEqual(
+                Array.from(new Set(observedFirstSeats)).sort(),
+                ['A', 'B'],
+                'ranked opener anti-bias deterministic seeds should cover both first seats with the same queue order'
+            );
+        } finally {
+            if (previousOpenerTestMode === undefined) delete process.env.DEFIER_PVP_TEST_MODE;
+            else process.env.DEFIER_PVP_TEST_MODE = previousOpenerTestMode;
+            pvpLiveRoutes.__livePvpStore.reset();
+        }
+
         const routeTestMatchScope = 'route_protected_counterplay';
         const previousQueueTestMode = process.env.DEFIER_PVP_TEST_MODE;
         process.env.DEFIER_PVP_TEST_MODE = '1';

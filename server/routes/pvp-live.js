@@ -283,6 +283,7 @@ router.post('/queue/join', authenticate, asyncHandler(async (req, res) => {
         loadout: req.body && req.body.loadout,
         wideMatchConsent: req.body && req.body.wideMatchConsent,
         testMatchScope: isLivePvpTestModeEnabled() ? req.body && req.body.testMatchScope : '',
+        testOpenerSeed: isLivePvpTestModeEnabled() ? req.body && req.body.testOpenerSeed : '',
         connectionHealthProbe: req.body && req.body.connectionHealthProbe
     });
     if (result && result.status === 'blocked') {

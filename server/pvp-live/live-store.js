@@ -57,7 +57,7 @@ function getFriendlySeriesOpenerSeat({ playerA, playerB, friendlySeries = null }
     return '';
 }
 
-function makeAuthoritativeOpenerAssignment({ matchId, playerA, playerB, mode = 'ranked', friendlySeries = null } = {}) {
+function makeAuthoritativeOpenerAssignment({ matchId, playerA, playerB, mode = 'ranked', friendlySeries = null, testOpenerSeed = '' } = {}) {
     const seriesTag = friendlySeries && typeof friendlySeries === 'object'
         ? `${friendlySeries.seriesId || ''}:${friendlySeries.roundIndex || ''}:${friendlySeries.sourceMatchId || ''}`
         : '';
@@ -87,14 +87,17 @@ function makeAuthoritativeOpenerAssignment({ matchId, playerA, playerB, mode = '
             boundaryLine: '友谊 Bo3 按源对局席位轮换先手；换边再战时，首动窗口也会随源玩家轮换。'
         };
     }
-    const serverSeed = crypto.randomBytes(16).toString('hex');
-    const seedInput = [
-        'pvp-live-opener-v1',
-        String(matchId || ''),
-        String(mode || 'ranked'),
-        seriesTag,
-        serverSeed
-    ].join('|');
+    const safeTestOpenerSeed = normalizeLivePvpTestOpenerSeed(testOpenerSeed);
+    const serverSeed = safeTestOpenerSeed || crypto.randomBytes(16).toString('hex');
+    const seedInput = safeTestOpenerSeed
+        ? ['pvp-live-test-opener-v1', safeTestOpenerSeed].join('|')
+        : [
+            'pvp-live-opener-v1',
+            String(matchId || ''),
+            String(mode || 'ranked'),
+            seriesTag,
+            serverSeed
+        ].join('|');
     const digest = crypto.createHash('sha256').update(seedInput).digest('hex');
     const firstSeat = parseInt(digest.slice(0, 2), 16) % 2 === 0 ? 'A' : 'B';
     return {
@@ -174,6 +177,15 @@ function normalizeLivePvpTestMatchScope(value) {
         .toLowerCase()
         .replace(/[^a-z0-9_-]/g, '_')
         .slice(0, 64);
+    return normalized && normalized !== 'none' ? normalized : '';
+}
+
+function normalizeLivePvpTestOpenerSeed(value) {
+    const normalized = String(value || '')
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9_-]/g, '_')
+        .slice(0, 96);
     return normalized && normalized !== 'none' ? normalized : '';
 }
 
@@ -807,6 +819,9 @@ class LivePvpStore {
             if (!existing.testMatchScope && queueEntry.testMatchScope) {
                 existing.testMatchScope = queueEntry.testMatchScope;
             }
+            if (!existing.testOpenerSeed && queueEntry.testOpenerSeed) {
+                existing.testOpenerSeed = queueEntry.testOpenerSeed;
+            }
             if (queueEntry.matchmakingSuppressionReasons && queueEntry.matchmakingSuppressionReasons.length > 0) {
                 existing.matchmakingSuppressionReasons = this.mergeQueueSuppressionReasons(
                     existing.matchmakingSuppressionReasons,
@@ -828,6 +843,9 @@ class LivePvpStore {
             }
             if (!duplicateUserTicket.testMatchScope && queueEntry.testMatchScope) {
                 duplicateUserTicket.testMatchScope = queueEntry.testMatchScope;
+            }
+            if (!duplicateUserTicket.testOpenerSeed && queueEntry.testOpenerSeed) {
+                duplicateUserTicket.testOpenerSeed = queueEntry.testOpenerSeed;
             }
             if (queueEntry.matchmakingSuppressionReasons && queueEntry.matchmakingSuppressionReasons.length > 0) {
                 duplicateUserTicket.matchmakingSuppressionReasons = this.mergeQueueSuppressionReasons(
@@ -1724,7 +1742,10 @@ class LivePvpStore {
                             return this.makeWaitingQueueResult(existingTicket);
                         }
                         const match = await this.createMatch(opponentTicket.player, existingTicket.player, selectedOpponent.qualityInput, {
-                            testMatchScope: selectedOpponent.testMatchScope
+                            testMatchScope: selectedOpponent.testMatchScope,
+                            testOpenerSeed: selectedOpponent.testMatchScope
+                                ? existingTicket.testOpenerSeed || opponentTicket.testOpenerSeed || ''
+                                : ''
                         });
                         await this.saveMatchedQueueHandoff(opponentTicket, match);
                         await this.saveMatchedQueueHandoff(existingTicket, match);
@@ -1747,6 +1768,7 @@ class LivePvpStore {
             ratingSnapshot: await this.resolveRatingSnapshot(player.userId),
             wideMatchConsent: normalizeWideMatchConsent(playerInput && playerInput.wideMatchConsent),
             testMatchScope: normalizeLivePvpTestMatchScope(playerInput && playerInput.testMatchScope),
+            testOpenerSeed: normalizeLivePvpTestOpenerSeed(playerInput && playerInput.testOpenerSeed),
             matchmakingSuppressionReasons: [],
             createdAt: this.now()
         };
@@ -1757,7 +1779,10 @@ class LivePvpStore {
             const opponentClaim = await this.claimQueueEntry(opponentTicket);
             if (opponentClaim.claimed) {
                 const match = await this.createMatch(opponentTicket.player, player, selectedOpponent.qualityInput, {
-                    testMatchScope: selectedOpponent.testMatchScope
+                    testMatchScope: selectedOpponent.testMatchScope,
+                    testOpenerSeed: selectedOpponent.testMatchScope
+                        ? requesterEntry.testOpenerSeed || opponentTicket.testOpenerSeed || ''
+                        : ''
                 });
                 await this.saveMatchedQueueHandoff(opponentTicket, match);
                 await this.deleteQueueEntryForUser(player.userId);
@@ -1774,6 +1799,7 @@ class LivePvpStore {
             ratingSnapshot: requesterEntry.ratingSnapshot,
             wideMatchConsent: requesterEntry.wideMatchConsent,
             testMatchScope: requesterEntry.testMatchScope,
+            testOpenerSeed: requesterEntry.testMatchScope ? requesterEntry.testOpenerSeed : '',
             matchmakingSuppressionReasons: requesterEntry.matchmakingSuppressionReasons || [],
             createdAt: this.now()
         };
@@ -2684,12 +2710,16 @@ class LivePvpStore {
         const matchId = makeId('pvplm');
         const mode = options && options.mode === 'friendly' ? 'friendly' : 'ranked';
         const testMatchScope = normalizeLivePvpTestMatchScope(options && options.testMatchScope);
+        const testOpenerSeed = testMatchScope
+            ? normalizeLivePvpTestOpenerSeed(options && options.testOpenerSeed)
+            : '';
         const openerAssignment = makeAuthoritativeOpenerAssignment({
             matchId,
             playerA,
             playerB,
             mode,
-            friendlySeries: mode === 'friendly' ? options.friendlySeries : null
+            friendlySeries: mode === 'friendly' ? options.friendlySeries : null,
+            testOpenerSeed: mode === 'ranked' ? testOpenerSeed : ''
         });
         const state = createInitialLiveState({
             matchId,
