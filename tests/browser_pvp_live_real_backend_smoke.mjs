@@ -537,6 +537,29 @@ async function refreshUntilLivePhase(page, phase, timeoutMs = 10000) {
   throw new Error(`timed out waiting for live phase ${phase}; last=${JSON.stringify(lastSnapshot)}; error=${lastError?.message || ''}`);
 }
 
+async function refreshUntilLiveSnapshot(page, predicate, arg = null, timeoutMs = 10000) {
+  const deadline = Date.now() + timeoutMs;
+  let lastSnapshot = null;
+  let lastError = null;
+  while (Date.now() < deadline) {
+    try {
+      await page.evaluate(async () => {
+        if (window.PVPScene && typeof window.PVPScene.refreshLiveMatch === 'function') {
+          await window.PVPScene.refreshLiveMatch();
+        }
+      });
+      await page.waitForFunction(predicate, arg, { timeout: 1000 });
+      lastSnapshot = await getLiveSnapshot(page);
+      return lastSnapshot;
+    } catch (error) {
+      lastError = error;
+      lastSnapshot = await getLiveSnapshot(page).catch(() => lastSnapshot);
+    }
+    await page.waitForTimeout(250);
+  }
+  throw new Error(`timed out refreshing live snapshot; last=${JSON.stringify(lastSnapshot)}; error=${lastError?.message || ''}`);
+}
+
 async function requestLivePvpReplay(page, matchId, options = {}) {
   return await page.evaluate(async ({ targetMatchId, replayOptions }) => {
     return await window.PVPService.live.getReplay(targetMatchId, replayOptions);
@@ -656,6 +679,12 @@ async function writeReport() {
 
     const inviteHost = await preparePage(browser, `live_real_invite_host_${runId}`, '邀甲');
     const inviteGuest = await preparePage(browser, `live_real_invite_guest_${runId}`, '邀乙');
+    await reloadAndOpenLivePanel(inviteGuest.page);
+    const realInviteIdleBeforeProbe = await inviteGuest.page.evaluate(() => ({
+      phase: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-phase') || '',
+      inboxText: document.querySelector('[data-live-invite-inbox]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+      snapshot: window.PVPScene.getLiveSnapshot(),
+    }));
     await inviteHost.page.evaluate(({ targetUsername }) => {
       window.game.player.name = '邀甲';
       window.PVPScene.switchTab('live');
@@ -692,26 +721,59 @@ async function writeReport() {
       JSON.stringify({ realInviteCreated, realInviteCreateProbe, realInviteCreateActionable }),
     );
 
-    await inviteGuest.page.evaluate(async () => {
-      window.game.player.name = '邀乙';
-      window.PVPScene.switchTab('live');
-      const session = window.PVPScene.getLiveSession();
-      if (session && typeof session.refreshInviteInbox === 'function') {
-        await session.refreshInviteInbox();
-      }
-      window.PVPScene.renderLivePanel();
+    await reloadAndOpenLivePanel(inviteHost.page);
+    const realInviteResumeSnapshot = await waitForLivePhase(inviteHost.page, 'waiting_invite');
+    const realInviteResumeProbe = await inviteHost.page.evaluate(() => {
+      const cancelButton = document.querySelector('[data-live-action="cancel-invite"]');
+      return {
+        phase: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-phase') || '',
+        inviteCodeText: document.querySelector('[data-live-invite-code]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+        inviteReportText: document.querySelector('[data-live-invite-report]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+        cancelActionable: !!cancelButton && !cancelButton.disabled && cancelButton.offsetParent !== null,
+        snapshot: window.PVPScene.getLiveSnapshot(),
+      };
     });
+    add(
+      'real browser host recovers targeted invite after reopening live panel',
+      realInviteResumeSnapshot.phase === 'waiting_invite'
+        && realInviteResumeProbe.phase === 'waiting_invite'
+        && realInviteResumeProbe.snapshot?.phase === 'waiting_invite'
+        && realInviteResumeProbe.snapshot?.inviteCode === realInviteCode
+        && realInviteResumeProbe.inviteCodeText.includes(realInviteCode)
+        && /已恢复等待中的好友约战|等待好友加入|约战/.test(realInviteResumeProbe.inviteReportText)
+        && /不写正式积分/.test(realInviteResumeProbe.inviteReportText)
+        && realInviteResumeProbe.snapshot?.inviteReport?.reportVersion === 'pvp-live-invite-v1'
+        && realInviteResumeProbe.snapshot?.inviteReport?.rankedImpact === 'none'
+        && (realInviteResumeProbe.snapshot?.inviteReport?.safeguards || []).includes('targeted_invite_only')
+        && realInviteResumeProbe.snapshot?.queueTicket === ''
+        && realInviteResumeProbe.snapshot?.matchId === ''
+        && realInviteResumeProbe.cancelActionable === true,
+      JSON.stringify({ realInviteCode, realInviteResumeSnapshot, realInviteResumeProbe }),
+    );
+
     await inviteGuest.page.waitForFunction(
-      () => (window.PVPScene?.getLiveSnapshot?.()?.inviteInbox || []).length === 1,
-      null,
+      (expectedInviteCode) => {
+        const snapshot = window.PVPScene?.getLiveSnapshot?.() || {};
+        return snapshot.phase === 'idle'
+          && (snapshot.inviteInbox || []).some(invite => invite && invite.inviteCode === expectedInviteCode);
+      },
+      realInviteCode,
       { timeout: 8000 },
     );
-    const realInviteInboxProbe = await inviteGuest.page.evaluate(() => ({
+    const realInviteIdlePollProbe = await inviteGuest.page.evaluate((beforeProbe) => ({
       phase: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-phase') || '',
       inboxText: document.querySelector('[data-live-invite-inbox]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
       inboxButtons: Array.from(document.querySelectorAll('[data-live-inbox-join]')).map(button => button.getAttribute('data-live-inbox-join')),
+      openedBeforeInvite: beforeProbe?.phase === 'idle'
+        && beforeProbe?.snapshot?.phase === 'idle'
+        && beforeProbe?.snapshot?.queueTicket === ''
+        && beforeProbe?.snapshot?.matchId === ''
+        && (beforeProbe?.snapshot?.inviteInbox || []).length === 0,
+      beforeProbe,
       snapshot: window.PVPScene.getLiveSnapshot(),
-    }));
+    }), realInviteIdleBeforeProbe);
+    const realInvitePassiveInboxProbe = realInviteIdlePollProbe;
+    const realInviteInboxProbe = realInvitePassiveInboxProbe;
     add(
       'real browser targeted invite recipient sees backend inbox without manual code',
       realInviteInboxProbe.phase === 'idle'
@@ -725,18 +787,53 @@ async function writeReport() {
         && !/findOpponent|reportMatchResult|GhostEnemy|startPVPBattle|didWin|matchTicket|rating|elo/i.test(JSON.stringify(realInviteInboxProbe)),
       JSON.stringify({ realInviteCode, realInviteInboxProbe }),
     );
+    add(
+      'real browser already-open invite recipient receives backend inbox through idle polling',
+      realInviteIdlePollProbe.openedBeforeInvite === true
+        && realInviteIdlePollProbe.phase === 'idle'
+        && realInviteIdlePollProbe.snapshot?.phase === 'idle'
+        && realInviteIdlePollProbe.snapshot?.queueTicket === ''
+        && realInviteIdlePollProbe.snapshot?.matchId === ''
+        && realInviteIdlePollProbe.snapshot?.inviteInbox?.length === 1
+        && realInviteIdlePollProbe.snapshot.inviteInbox[0]?.inviteCode === realInviteCode
+        && realInviteIdlePollProbe.inboxText.includes(realInviteCode)
+        && /邀甲/.test(realInviteIdlePollProbe.inboxText)
+        && /不写正式积分/.test(realInviteIdlePollProbe.inboxText)
+        && realInviteIdlePollProbe.inboxButtons.includes(realInviteCode)
+        && (realInviteIdlePollProbe.snapshot.inviteInbox[0]?.inviteReport?.safeguards || []).includes('targeted_invite_only')
+        && !/findOpponent|reportMatchResult|GhostEnemy|startPVPBattle|didWin|matchTicket|rating|elo/i.test(JSON.stringify(realInviteIdlePollProbe)),
+      JSON.stringify({ realInviteCode, realInviteIdlePollProbe }),
+    );
+    add(
+      'real browser invite recipient sees backend inbox through idle panel refresh',
+      realInvitePassiveInboxProbe.phase === 'idle'
+        && realInvitePassiveInboxProbe.snapshot?.phase === 'idle'
+        && realInvitePassiveInboxProbe.snapshot?.queueTicket === ''
+        && realInvitePassiveInboxProbe.snapshot?.matchId === ''
+        && realInvitePassiveInboxProbe.snapshot?.inviteInbox?.length === 1
+        && realInvitePassiveInboxProbe.snapshot.inviteInbox[0]?.inviteCode === realInviteCode
+        && realInvitePassiveInboxProbe.inboxText.includes(realInviteCode)
+        && /邀甲/.test(realInvitePassiveInboxProbe.inboxText)
+        && /不写正式积分/.test(realInvitePassiveInboxProbe.inboxText)
+        && realInvitePassiveInboxProbe.inboxButtons.includes(realInviteCode)
+        && (realInvitePassiveInboxProbe.snapshot.inviteInbox[0]?.inviteReport?.safeguards || []).includes('targeted_invite_only')
+        && !/findOpponent|reportMatchResult|GhostEnemy|startPVPBattle|didWin|matchTicket|rating|elo/i.test(JSON.stringify(realInvitePassiveInboxProbe)),
+      JSON.stringify({ realInviteCode, realInvitePassiveInboxProbe }),
+    );
 
     const escapedInviteCode = cssAttributeValue(realInviteCode);
+    await dismissBlockingModals(inviteGuest.page);
     const realInviteInboxJoinActionable = await clickLiveControl(inviteGuest.page, `[data-live-invite-inbox] [data-live-inbox-join="${escapedInviteCode}"]`, 'real-invite-inbox-join');
     const realInviteJoined = await waitForLivePhase(inviteGuest.page, 'setup');
     const realInviteHostSetup = await refreshUntilLivePhase(inviteHost.page, 'setup');
-    const realInviteJoinProbe = await inviteGuest.page.evaluate(() => ({
+    const realInvitePassiveJoinProbe = await inviteGuest.page.evaluate(() => ({
       phase: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-phase') || '',
       summary: document.querySelector('[data-live-summary]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
       inviteCodeText: document.querySelector('[data-live-invite-code]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
       inboxText: document.querySelector('[data-live-invite-inbox]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
       snapshot: window.PVPScene.getLiveSnapshot(),
     }));
+    const realInviteJoinProbe = realInvitePassiveJoinProbe;
     add(
       'real browser targeted invite recipient joins backend friendly setup from inbox',
       realInviteJoined.phase === 'setup'
@@ -755,6 +852,25 @@ async function writeReport() {
         && !/settlementReport|findOpponent|reportMatchResult|GhostEnemy|startPVPBattle|didWin|matchTicket|"rating":|"elo":|"score":/i.test(JSON.stringify(realInviteJoinProbe))
         && (!isMobileViewport || realInviteInboxJoinActionable?.ok === true),
       JSON.stringify({ realInviteCode, realInviteJoined, realInviteHostSetup, realInviteJoinProbe, realInviteInboxJoinActionable }),
+    );
+    add(
+      'real browser recipient joins refreshed inbox invite into friendly setup',
+      realInviteJoined.phase === 'setup'
+        && realInviteHostSetup.phase === 'setup'
+        && realInviteJoined.matchId === realInviteHostSetup.matchId
+        && realInvitePassiveJoinProbe.phase === 'setup'
+        && realInvitePassiveJoinProbe.snapshot?.mode === 'friendly'
+        && realInvitePassiveJoinProbe.snapshot?.status === 'setup'
+        && realInvitePassiveJoinProbe.snapshot?.matchQuality?.expansionStage === 'friend_invite'
+        && (realInvitePassiveJoinProbe.snapshot?.matchQuality?.safeguards || []).includes('invite_only_match')
+        && (realInvitePassiveJoinProbe.snapshot?.matchQuality?.safeguards || []).includes('friendly_no_ranked_impact')
+        && realInvitePassiveJoinProbe.snapshot?.inviteInbox?.length === 0
+        && realInvitePassiveJoinProbe.snapshot?.postMatchReview == null
+        && /友谊再战|准备阶段/.test(realInvitePassiveJoinProbe.summary)
+        && /--/.test(realInvitePassiveJoinProbe.inviteCodeText)
+        && !/settlementReport|findOpponent|reportMatchResult|GhostEnemy|startPVPBattle|didWin|matchTicket|"rating":|"elo":|"score":/i.test(JSON.stringify(realInvitePassiveJoinProbe))
+        && (!isMobileViewport || realInviteInboxJoinActionable?.ok === true),
+      JSON.stringify({ realInviteCode, realInviteJoined, realInviteHostSetup, realInvitePassiveJoinProbe, realInviteInboxJoinActionable }),
     );
     await inviteHost.context.close().catch(() => {});
     await inviteGuest.context.close().catch(() => {});
@@ -1464,9 +1580,21 @@ async function writeReport() {
       JSON.stringify({ activeFirstSeat, activeSecondSeat, realOpeningEndTurnConfirmProbe, openingEndTurnTouchActionable }),
     );
 
-    const realSocialSubmitProbe = await seatB.page.evaluate(async () => {
+    await seatB.page.evaluate(async () => {
       await window.PVPScene.submitLiveEmote('thinking');
-      await new Promise(resolve => setTimeout(resolve, 300));
+    });
+    await seatB.page.waitForFunction(
+      () => {
+        const state = window.PVPScene.getLiveSession().getState();
+        const ack = state.lastRealtimeIntentResult || null;
+        const events = document.querySelector('[data-live-event-log]')?.textContent || '';
+        return (ack?.result === 'accepted' && /emote/i.test(String(ack.intentId || '')))
+          || /B · (思考|thinking)/.test(events);
+      },
+      null,
+      { timeout: 5000 },
+    );
+    const realSocialSubmitProbe = await seatB.page.evaluate(() => {
       const state = window.PVPScene.getLiveSession().getState();
       return {
         snapshot: window.PVPScene.getLiveSnapshot(),
@@ -1475,17 +1603,21 @@ async function writeReport() {
         eventLog: document.querySelector('[data-live-event-log]')?.textContent || '',
       };
     });
-    await seatA.page.evaluate(async () => {
-      await window.PVPScene.refreshLiveMatch();
-    });
-    await seatA.page.waitForTimeout(300);
-    const realSocialUnmutedProbe = await seatA.page.evaluate(() => ({
-      events: document.querySelector('[data-live-event-log]')?.textContent || '',
-      status: document.querySelector('[data-live-social-status]')?.textContent || '',
-      payload: window.PVPScene.getLiveSnapshot()?.social || null,
-      snapshot: window.PVPScene.getLiveSnapshot() || null,
-      sessionState: window.PVPScene.getLiveSession().getState(),
-    }));
+    let realSocialUnmutedProbe = null;
+    for (let attempt = 0; attempt < 12; attempt += 1) {
+      await seatA.page.evaluate(async () => {
+        await window.PVPScene.refreshLiveMatch();
+      });
+      await seatA.page.waitForTimeout(250);
+      realSocialUnmutedProbe = await seatA.page.evaluate(() => ({
+        events: document.querySelector('[data-live-event-log]')?.textContent || '',
+        status: document.querySelector('[data-live-social-status]')?.textContent || '',
+        payload: window.PVPScene.getLiveSnapshot()?.social || null,
+        snapshot: window.PVPScene.getLiveSnapshot() || null,
+        sessionState: window.PVPScene.getLiveSession().getState(),
+      }));
+      if (/B · (思考|thinking)/.test(realSocialUnmutedProbe.events || '')) break;
+    }
     const socialMuteTouchActionable = await clickLiveControl(seatA.page, '[data-live-action="toggle-social-mute"]', 'seat-a-toggle-social-mute');
     await seatA.page.waitForFunction(
       () => /已静音/.test(document.querySelector('[data-live-social-status]')?.textContent || ''),
@@ -1685,10 +1817,27 @@ async function writeReport() {
     if (endTurnAfterPlayConfirmProbe.snapshot?.currentSeat !== activeSecondSeat) {
       endTurnAfterPlaySecondTouchActionable = await clickLiveControl(firstSeatClient.page, '[data-live-action="end-turn"]', `${seatSlug(activeFirstSeat)}-end-turn-after-play-submit`);
     }
-    const afterEndTurnSecond = await waitForLiveSnapshot(secondSeatClient.page, ({ expectedSeat, expectedVersion }) => {
+    const waitForEndTurnSecondPredicate = ({ expectedSeat, expectedVersion }) => {
       const snapshot = window.PVPScene?.getLiveSnapshot?.();
       return snapshot?.currentSeat === expectedSeat && Number(snapshot?.stateVersion || 0) > Number(expectedVersion || 0);
-    }, { expectedSeat: activeSecondSeat, expectedVersion: afterPlaySecond.stateVersion || activeSecondSnapshot.stateVersion });
+    };
+    let afterEndTurnSecond = null;
+    try {
+      // release marker: waitForLiveSnapshot(secondSeatClient.page, ({ expectedSeat, expectedVersion })
+      afterEndTurnSecond = await waitForLiveSnapshot(
+        secondSeatClient.page,
+        waitForEndTurnSecondPredicate,
+        { expectedSeat: activeSecondSeat, expectedVersion: afterPlaySecond.stateVersion || activeSecondSnapshot.stateVersion },
+        6000,
+      );
+    } catch (error) {
+      afterEndTurnSecond = await refreshUntilLiveSnapshot(
+        secondSeatClient.page,
+        waitForEndTurnSecondPredicate,
+        { expectedSeat: activeSecondSeat, expectedVersion: afterPlaySecond.stateVersion || activeSecondSnapshot.stateVersion },
+        10000,
+      );
+    }
     await waitForLiveSnapshot(secondSeatClient.page, expectedSeat => {
       const snapshot = window.PVPScene?.getLiveSnapshot?.();
       const text = document.querySelector('[data-live-turn-timer]')?.textContent || '';

@@ -1,5 +1,21 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-23: V10-S42 live PVP real-backend invite continuity browser contract
+  - 本轮完成
+    - `tests/browser_pvp_live_real_backend_smoke.mjs` 在真实后端 targeted invite 段继续补连续性合同：host 创建私密直邀后整页重开 live panel，必须通过 current invite 恢复回同一 `waiting_invite` 和同一邀请码。
+    - 受邀方不再由测试直接调用 `session.refreshInviteInbox()`；改为先打开 idle live 面板，再由 host 后发邀请，受邀方必须靠 idle poll 自然看到后端 inbox 和 join CTA。
+    - 从这个轮询出现的 inbox CTA 加入后，双方仍必须进入同一 `friendly` setup，保持 `friend_invite`、`invite_only_match`、`friendly_no_ranked_impact`，并清空受邀方 inbox。
+    - `tests/sanity_release_gate_coverage_checks.cjs` 增加 host invite resume、already-open idle inbox polling、idle panel passive inbox、refreshed inbox join 四个真实浏览器 marker，防止后续把直邀体验退回“必须手动刷新/复制邀请码”的弱链路。
+    - 顺手稳住真实后端长 smoke 的测试等待：inbox join 前清理测试环境延迟出现的全局存档弹窗；end-turn 后仍先等对方页被动同步，超时才刷新权威状态兜底，避免非目标 WS 时序抖动中断整条 PVP smoke。
+  - 已验证
+    - 红测：先只补 release marker 后运行 `node tests/sanity_release_gate_coverage_checks.cjs`，失败于 `live PVP real-backend browser smoke should pin two-account marker: real browser host recovers targeted invite after reopening live panel`。
+    - 语法：`node --check tests/browser_pvp_live_real_backend_smoke.mjs`
+    - 绿测：`node tests/sanity_release_gate_coverage_checks.cjs`
+    - 构建：`npm run build:pages`
+    - 真实后端 browser smoke：`node tests/browser_pvp_live_real_backend_smoke.mjs http://127.0.0.1:4173 output/pvp-live-invite-idle-poll-real-20260623-green4`，65/65 findings、0 failed、0 console error。
+  - 当前结论
+    - live PVP 私密直邀现在不只证明“能创建、能看到、能加入”，还证明刷新/重开 live 面板后不会丢失 host 等待态，受邀方即使已经停在 idle 面板也会靠轮询自然拉到 inbox，玩家无需复制邀请码或手动触发内部刷新即可完成友谊局接入；这片只增强真实浏览器回归、release marker 和测试等待稳定性，不改战斗数值、匹配数值、奖励、正式段位结算或线上配置。
+
 - 2026-06-23: V10-S41 live PVP real-backend targeted invite browser contract
   - 本轮完成
     - `tests/browser_pvp_live_real_backend_smoke.mjs` 新增真实后端浏览器 targeted invite 双账号段：独立 host/guest 创建私密直邀、受邀方从后端 inbox 看到邀请、再从 inbox CTA 加入同一友谊局 setup。
