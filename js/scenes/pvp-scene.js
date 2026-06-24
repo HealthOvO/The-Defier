@@ -1298,11 +1298,11 @@ export const PVPScene = {
       : report.counterplay.grantedSeats.length ? `已发放 ${report.counterplay.grantedSeats.join('/')}` : '待触发';
     return `
       <span class="pvp-live-opening-safeguard-chip" data-live-opener-assignment>${this.escapeHtml(openerBoundary)}</span>
-      <span class="pvp-live-opening-safeguard-chip">首动预算 · ${this.escapeHtml(currentBudgetText)}</span>
-      <span class="pvp-live-opening-safeguard-chip">先手 ${this.escapeHtml(report.firstSeat || 'A')} ${report.damageBudget.firstSeat} / 后手 ${this.escapeHtml(report.secondSeat || 'B')} ${report.damageBudget.secondSeat}</span>
+      <span class="pvp-live-opening-safeguard-chip" data-live-opening-budget>首动预算 · ${this.escapeHtml(currentBudgetText)}</span>
+      <span class="pvp-live-opening-safeguard-chip" data-live-opening-budget-line>先手 ${this.escapeHtml(report.firstSeat || 'A')} ${report.damageBudget.firstSeat} / 后手 ${this.escapeHtml(report.secondSeat || 'B')} ${report.damageBudget.secondSeat}</span>
       <span class="pvp-live-opening-safeguard-chip" data-live-opening-second-seat-buffer>后手护盾 · ${this.escapeHtml(secondSeatBufferText)}</span>
-      <span class="pvp-live-opening-safeguard-chip">开局护体 · ${this.escapeHtml(protectionText)}</span>
-      <span class="pvp-live-opening-safeguard-chip">反打缓冲 · 护盾 ${report.counterplay.block} · ${this.escapeHtml(counterplaySeats)}</span>
+      <span class="pvp-live-opening-safeguard-chip" data-live-opening-protection aria-label="开局护体防先手秒杀">${this.escapeHtml(`防先手秒杀 · 开局护体 · ${protectionText}`)}</span>
+      <span class="pvp-live-opening-safeguard-chip" data-live-opening-counterplay aria-label="后手行动窗口反打缓冲">${this.escapeHtml(`后手行动窗口 · 反打缓冲 · 护盾 ${report.counterplay.block} · ${counterplaySeats}`)}</span>
     `;
   },
   getLiveActionPreviewReport(view) {

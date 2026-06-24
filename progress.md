@@ -1,5 +1,23 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-24: V10-S67 live PVP opening safeguard readable fairness copy
+  - 本轮完成
+    - `js/scenes/pvp-scene.js` 将实时论道开局公平保护从通用 chip 文案进一步拆成玩家能直接理解的公平反馈：首动预算、先后手预算线、后手护盾、防先手秒杀开局护体、后手行动窗口反打缓冲分别有独立 `data-live-opening-*` marker。
+    - 新增 `data-live-opening-protection` 和 `data-live-opening-counterplay`，可见文案直接写明“防先手秒杀”和“后手行动窗口”，并补 `aria-label`，让玩家在移动端开局读牌时能明确知道为什么不是先手秒杀、后手还有行动窗口。
+    - `tests/sanity_pvp_live_ui_runtime_checks.mjs` 先红后绿锁住：开局保护必须渲染专用 marker，并展示“防先手秒杀 / 后手行动窗口”，防止以后退回只显示技术向“开局护体 / 反打缓冲”。
+    - `tests/browser_pvp_live_audit.mjs` 同步真实移动端 DOM 断言：390px live 面板必须显示新公平口径，所有 chip 可见、不横向溢出，并检查 protection/counterplay 的 marker 与 aria label。
+    - `tests/sanity_pvp_live_ui_contract_checks.cjs`、`tests/sanity_release_gate_coverage_checks.cjs` 和 `game-intro.html` 同步锁住新 marker、browser finding 与玩家说明。
+    - Goodall 只读巡检指出下一条高价值切片是“赛后下一步建议分流卡”：把现有 `recommendedAction / nextStepLine / loadoutRecommendation` 接成显式 CTA，而不是继续堆证据块；本轮未展开，避免和开局公平反馈切片混在一起。
+  - 已验证
+    - 红测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs` 在实现前失败于 `opening safeguard should expose a dedicated opening-protection marker`，当时开局保护只有 `data-live-opener-assignment` 和 `data-live-opening-second-seat-buffer`。
+    - 绿测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs`
+    - 绿测：`node tests/sanity_pvp_live_ui_contract_checks.cjs`
+    - 绿测：`node tests/sanity_release_gate_coverage_checks.cjs`
+    - 绿测：`node tests/sanity_intro_progress_sync_checks.cjs`
+    - 浏览器审计：`node tests/browser_pvp_live_audit.mjs http://127.0.0.1:4173 output/pvp-live-opening-safeguard-readable-audit`，118/118 findings、0 failed、0 console error。
+  - 当前结论
+    - live PVP 的开局公平反馈从“规则存在且可被复盘证明”推进到“玩家开局时就能读懂规则如何保护双方体验”：先手方知道首动预算和护体边界，后手方能看到后手护盾与行动窗口。该切片只改前台可读反馈、语义 marker、说明和门禁，不改变服务端先后手、伤害预算、护体、反打缓冲、匹配、积分、奖励或结算。
+
 - 2026-06-24: V10-S66 live PVP practice selection mobile audit
   - 本轮完成
     - `tests/browser_challenge_mobile_flow_audit.mjs` 新增 390×844 移动端 live PVP 练习选择页 finding，直接从 `pvp-live-drill-scenario-v1` 进入 `practiceOnly + replayOnly` 锁定选择页，覆盖 `data-pvp-live-practice-selection-plan`、3 条关键回合、3 条体验复查和公开事件安全 marker。

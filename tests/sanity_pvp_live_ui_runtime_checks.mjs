@@ -1689,6 +1689,10 @@ assert.match(mirroredOpenerText, /data-live-opener-assignment/, 'opening safegua
 assert.match(mirroredOpenerText, /对方先手/, 'opening safeguard should translate first seat into viewer/opponent wording');
 assert.match(mirroredOpenerText, /服务端种子/, 'opening safeguard should explain that opener assignment is server seeded');
 assert.match(mirroredOpenerText, /不绑定排队|不绑定房主/, 'opening safeguard should show opener assignment is not queue or host bound');
+assert.match(mirroredOpenerText, /data-live-opening-protection/, 'opening safeguard should expose a dedicated opening-protection marker');
+assert.match(mirroredOpenerText, /data-live-opening-counterplay/, 'opening safeguard should expose a dedicated counterplay-window marker');
+assert.match(mirroredOpenerText, /防先手秒杀/, 'opening safeguard should tell players the protection prevents first-seat burst kills');
+assert.match(mirroredOpenerText, /后手行动窗口/, 'opening safeguard should tell players the counterplay buffer preserves second-seat agency');
 const openingActionIntents = [];
 PVPScene.liveIntentInFlight = null;
 PVPScene.liveOpeningActionConfirm = null;

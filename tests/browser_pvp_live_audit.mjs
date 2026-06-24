@@ -6335,6 +6335,13 @@ async function safeElementScreenshot(page, selector, outputPath) {
       const chipRect = chip.getBoundingClientRect();
       return {
         text: chip.textContent?.replace(/\s+/g, ' ').trim() || '',
+        opener: chip.hasAttribute('data-live-opener-assignment'),
+        budget: chip.hasAttribute('data-live-opening-budget'),
+        budgetLine: chip.hasAttribute('data-live-opening-budget-line'),
+        secondSeatBuffer: chip.hasAttribute('data-live-opening-second-seat-buffer'),
+        openingProtection: chip.hasAttribute('data-live-opening-protection'),
+        counterplay: chip.hasAttribute('data-live-opening-counterplay'),
+        ariaLabel: chip.getAttribute('aria-label') || '',
         display: chipStyle.display,
         visibility: chipStyle.visibility,
         width: Math.round(chipRect.width),
@@ -6374,7 +6381,15 @@ async function safeElementScreenshot(page, selector, outputPath) {
       && /后手护盾/.test(mobileOpeningSafeguardProbe.visibleText)
       && /开局护体/.test(mobileOpeningSafeguardProbe.visibleText)
       && /反打缓冲/.test(mobileOpeningSafeguardProbe.visibleText)
+      && /防先手秒杀/.test(mobileOpeningSafeguardProbe.visibleText)
+      && /后手行动窗口/.test(mobileOpeningSafeguardProbe.visibleText)
       && mobileOpeningSafeguardProbe.chips.length >= 6
+      && mobileOpeningSafeguardProbe.chips.some(chip => chip.opener)
+      && mobileOpeningSafeguardProbe.chips.some(chip => chip.budget)
+      && mobileOpeningSafeguardProbe.chips.some(chip => chip.budgetLine)
+      && mobileOpeningSafeguardProbe.chips.some(chip => chip.secondSeatBuffer)
+      && mobileOpeningSafeguardProbe.chips.some(chip => chip.openingProtection && /防先手秒杀/.test(chip.text) && /防先手秒杀/.test(chip.ariaLabel))
+      && mobileOpeningSafeguardProbe.chips.some(chip => chip.counterplay && /后手行动窗口/.test(chip.text) && /后手行动窗口/.test(chip.ariaLabel))
       && mobileOpeningSafeguardProbe.chips.every(chip => chip.display !== 'none' && chip.visibility !== 'hidden' && chip.width > 0 && chip.height > 0)
       && mobileOpeningSafeguardProbe.whiteSpace !== 'nowrap'
       && mobileOpeningSafeguardProbe.overflow !== 'hidden'
