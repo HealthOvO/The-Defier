@@ -2311,6 +2311,53 @@ const mitigatedReceipt = PVPScene.getLiveActionReceiptReport({
 });
 assert.equal(mitigatedReceipt.statusEffects.mitigated[0].statusId, 'vulnerable_mark', 'live UI should preserve mitigated public status effects in action receipts');
 assert.match(PVPScene.renderLiveActionReceiptReport({ actionReceiptReport: mitigatedReceipt }), /稳住破绽|阻止后续兑现/, 'live UI action receipt should explain public status mitigation');
+const consumedReceipt = PVPScene.getLiveActionReceiptReport({
+  actionReceiptReport: {
+    reportVersion: 'pvp-live-action-receipt-v1',
+    sourceVisibility: 'authoritative_public_projection',
+    usesHiddenInformation: false,
+    rankedImpact: 'none',
+    viewerSeat: 'A',
+    actingSeat: 'A',
+    actionType: 'play_card',
+    latestSequence: 45,
+    cardName: '破绽回路',
+    statusEffects: {
+      consumed: [{
+        statusId: 'vulnerable_mark',
+        label: '破绽',
+        seatId: 'B',
+        sourceSeat: 'A',
+        damageBonus: 6,
+        consumedTurnIndex: 4,
+        cardInstanceId: 'hidden-status-source',
+        sourceCardId: 'hidden-card-source',
+        payload: { hand: ['hidden-card'], deck: ['hidden-deck'] },
+        loadoutSnapshot: { hidden: true },
+        token: 'hidden-status-token'
+      }]
+    },
+    summaryLine: 'A 打出破绽回路：对 B 造成 13 点伤害；消耗破绽，额外伤害 +6。',
+    safeguards: ['public_events', 'public_status_consumed']
+  }
+});
+const consumedReceiptMarkup = PVPScene.renderLiveActionReceiptReport({ actionReceiptReport: consumedReceipt });
+assert.equal(consumedReceipt.statusEffects.consumed[0].statusId, 'vulnerable_mark', 'live UI should preserve consumed public status effects in action receipts');
+assert.equal(consumedReceipt.statusEffects.consumed[0].damageBonus, 6, 'live UI should preserve consumed public status bonus in action receipts');
+assert.equal(Object.prototype.hasOwnProperty.call(consumedReceipt.statusEffects.consumed[0], 'cardInstanceId'), false, 'live UI consumed status receipt must drop hidden card instance ids');
+assert.equal(Object.prototype.hasOwnProperty.call(consumedReceipt.statusEffects.consumed[0], 'sourceCardId'), false, 'live UI consumed status receipt must drop hidden source card ids');
+assert.equal(Object.prototype.hasOwnProperty.call(consumedReceipt.statusEffects.consumed[0], 'payload'), false, 'live UI consumed status receipt must drop raw payloads');
+assert.equal(Object.prototype.hasOwnProperty.call(consumedReceipt.statusEffects.consumed[0], 'loadoutSnapshot'), false, 'live UI consumed status receipt must drop loadout snapshots');
+assert.equal(Object.prototype.hasOwnProperty.call(consumedReceipt.statusEffects.consumed[0], 'token'), false, 'live UI consumed status receipt must drop hidden tokens');
+assert.match(consumedReceiptMarkup, /data-live-action-status-payoff="vulnerable_mark"/, 'live UI should render a stable public status payoff marker');
+assert.match(consumedReceiptMarkup, /data-live-action-status-payoff-state="public_status_consumed"/, 'live UI should render public status payoff state');
+assert.match(consumedReceiptMarkup, /data-live-action-status-payoff-source="authoritative_public_projection"/, 'live UI should render status payoff public source');
+assert.match(consumedReceiptMarkup, /data-live-action-status-payoff-hidden="false"/, 'live UI should mark status payoff as hidden-info safe');
+assert.match(consumedReceiptMarkup, /data-live-action-status-payoff-impact="none"/, 'live UI should mark status payoff as no ranked impact');
+assert.match(consumedReceiptMarkup, /data-live-action-status-payoff-bonus="6"/, 'live UI should expose the public status payoff bonus amount');
+assert.match(consumedReceiptMarkup, /data-live-action-status-payoff-safeguard="public_status_consumed"/, 'live UI should render status payoff safeguard marker');
+assert.match(consumedReceiptMarkup, /公开兑现|破绽|\+6|额外伤害/, 'live UI action receipt should explain consumed public status payoff');
+assert.doesNotMatch(consumedReceiptMarkup, /payload|cardInstanceId|sourceCardId|\bhand\b|hand":\[|deck|loadoutSnapshot|rating|reward|token/i, 'live UI status payoff rendering must not expose hidden ids, cards, payloads, rewards, or tokens');
 const mitigatedEvent = PVPScene.formatLiveEvent({
   eventType: 'status_mitigated',
   actingSeat: 'B',

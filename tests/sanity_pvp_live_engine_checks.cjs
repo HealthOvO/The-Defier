@@ -783,6 +783,8 @@ assert(delayedPayoff.events.some(e => e.eventType === 'status_consumed' && e.pay
 assert(!delayedPayoff.state.seats.B.publicStatuses.some(status => status.statusId === 'vulnerable_mark'), 'consumed mark should be removed from target public statuses');
 const delayedReceipt = projectStateView(delayedPayoff.state, 'A').actionReceiptReport;
 assert(delayedReceipt.statusEffects && delayedReceipt.statusEffects.consumed.some(status => status.statusId === 'vulnerable_mark'), 'payoff receipt should explain consumed public status');
+assert(delayedReceipt.statusEffects.consumed.some(status => status.statusId === 'vulnerable_mark' && status.label === '破绽' && status.damageBonus > 0), 'payoff receipt should expose the consumed public status label and bonus');
+assert(delayedReceipt.safeguards.includes('public_status_consumed'), 'payoff receipt should carry a public status consumed safeguard marker');
 assert(/破绽|额外/.test(delayedReceipt.summaryLine), 'payoff receipt should include a readable public status payoff line');
 assert(!/hand|deck|cardId|instanceId|loadoutSnapshot|rating|elo|reward/i.test(JSON.stringify(delayedReceipt)), 'payoff receipt must not leak hidden hand, deck, rating, or reward data');
 

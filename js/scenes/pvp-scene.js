@@ -1701,6 +1701,26 @@ export const PVPScene = {
       && report.openingProtection.preventedDamage > 0
       ? `<span class="pvp-live-action-receipt-chip" data-live-action-opening-protection="public_opening_protection">${this.escapeHtml(`开局护体保底 ${report.openingProtection.minimumHp || 1} 血 · 挡下 ${report.openingProtection.preventedDamage}`)}</span>`
       : '';
+    const consumedStatuses = report.statusEffects && Array.isArray(report.statusEffects.consumed)
+      ? report.statusEffects.consumed.filter(status => status && status.statusId)
+      : [];
+    const statusPayoffChip = consumedStatuses.map((status) => {
+      const bonus = Math.max(0, Math.floor(Number(status.damageBonus) || 0));
+      const label = status.label || '公开状态';
+      const payoffText = bonus > 0
+        ? `公开兑现 · ${label} +${bonus} 额外伤害`
+        : `公开兑现 · ${label}`;
+      return `<span
+          class="pvp-live-action-receipt-chip"
+          data-live-action-status-payoff="${this.escapeHtml(status.statusId || '')}"
+          data-live-action-status-payoff-state="public_status_consumed"
+          data-live-action-status-payoff-source="${this.escapeHtml(report.sourceVisibility || '')}"
+          data-live-action-status-payoff-hidden="${report.usesHiddenInformation ? 'true' : 'false'}"
+          data-live-action-status-payoff-impact="${this.escapeHtml(report.rankedImpact || 'none')}"
+          data-live-action-status-payoff-bonus="${this.escapeHtml(String(bonus))}"
+          data-live-action-status-payoff-safeguard="public_status_consumed"
+        >${this.escapeHtml(payoffText)}</span>`;
+    }).join('');
     const mitigationChip = report.statusEffects && Array.isArray(report.statusEffects.mitigated) && report.statusEffects.mitigated.length > 0
       ? '<span class="pvp-live-action-receipt-chip" data-live-public-status-mitigation="public_status_mitigated">公开状态缓解</span>'
       : '';
@@ -1745,6 +1765,7 @@ export const PVPScene = {
       <span class="pvp-live-action-receipt-line">${this.escapeHtml(summary)}</span>
       ${budgetClampChip}
       ${openingProtectionChip}
+      ${statusPayoffChip}
       ${mitigationChip}
       ${guardStanceChip}
       ${weakFocusChip}

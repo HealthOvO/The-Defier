@@ -3561,6 +3561,62 @@ async function safeElementScreenshot(page, selector, outputPath) {
       && !/payload|hand|deck|cardId|instanceId|loadoutSnapshot|reward|rating|elo|sourceCardId/i.test(`${mitigationFormatProbe.event?.detail || ''} ${mitigationFormatProbe.receipt || ''}`),
     JSON.stringify(mitigationFormatProbe),
   );
+  const payoffFormatProbe = await page.evaluate(() => {
+    const receipt = window.PVPScene.renderLiveActionReceiptReport({
+      actionReceiptReport: {
+        reportVersion: 'pvp-live-action-receipt-v1',
+        sourceVisibility: 'authoritative_public_projection',
+        usesHiddenInformation: false,
+        rankedImpact: 'none',
+        viewerSeat: 'A',
+        actingSeat: 'A',
+        actionType: 'play_card',
+        latestSequence: 45,
+        cardName: '破绽回路',
+        statusEffects: {
+          consumed: [{
+            statusId: 'vulnerable_mark',
+            label: '破绽',
+            seatId: 'B',
+            sourceSeat: 'A',
+            damageBonus: 6,
+            consumedTurnIndex: 4,
+            cardInstanceId: 'hidden-status-source',
+            sourceCardId: 'hidden-card-source',
+          }],
+        },
+        summaryLine: 'A 打出破绽回路：对 B 造成 13 点伤害；消耗破绽，额外伤害 +6。',
+        safeguards: ['public_events', 'public_status_consumed'],
+      },
+    });
+    const container = document.createElement('div');
+    container.innerHTML = receipt;
+    const payoff = container.querySelector('[data-live-action-status-payoff]');
+    return {
+      receipt,
+      payoffText: payoff?.textContent || '',
+      payoffStatus: payoff?.getAttribute('data-live-action-status-payoff') || '',
+      payoffState: payoff?.getAttribute('data-live-action-status-payoff-state') || '',
+      payoffSource: payoff?.getAttribute('data-live-action-status-payoff-source') || '',
+      payoffHidden: payoff?.getAttribute('data-live-action-status-payoff-hidden') || '',
+      payoffImpact: payoff?.getAttribute('data-live-action-status-payoff-impact') || '',
+      payoffBonus: payoff?.getAttribute('data-live-action-status-payoff-bonus') || '',
+      payoffSafeguard: payoff?.getAttribute('data-live-action-status-payoff-safeguard') || '',
+    };
+  });
+  add(
+    'live UI renders public status payoff receipt without hidden payloads',
+    payoffFormatProbe.payoffStatus === 'vulnerable_mark'
+      && payoffFormatProbe.payoffState === 'public_status_consumed'
+      && payoffFormatProbe.payoffSource === 'authoritative_public_projection'
+      && payoffFormatProbe.payoffHidden === 'false'
+      && payoffFormatProbe.payoffImpact === 'none'
+      && payoffFormatProbe.payoffBonus === '6'
+      && payoffFormatProbe.payoffSafeguard === 'public_status_consumed'
+      && /公开兑现|破绽|\+6|额外伤害/.test(payoffFormatProbe.payoffText || '')
+      && !/payload|cardInstanceId|sourceCardId|cardId|instanceId|\bhand\b|hand":\[|deck|loadoutSnapshot|reward|rating|elo|token/i.test(`${payoffFormatProbe.payoffText || ''} ${payoffFormatProbe.receipt || ''}`),
+    JSON.stringify(payoffFormatProbe),
+  );
   const guardStanceFormatProbe = await page.evaluate(() => {
     const appliedEvent = window.PVPScene.formatLiveEvent({
       eventType: 'status_applied',

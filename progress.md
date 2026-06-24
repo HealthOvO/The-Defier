@@ -1,5 +1,25 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-24: V10-S74 live PVP public status payoff receipt
+  - 本轮完成
+    - `server/pvp-live/engine/state-view.js` 现有权威 `actionReceiptReport.statusEffects.consumed` 已包含 `statusId / label / seatId / sourceSeat / damageBonus / consumedTurnIndex`，并在 `summaryLine` 中写明“消耗破绽，额外伤害 +X”；本轮确认该服务端公开投影足够，不新增隐藏来源字段。
+    - `js/scenes/pvp-scene.js` 在现有 `[data-live-action-receipt]` 内新增“公开兑现” chip：当 `statusEffects.consumed` 出现公开状态时，渲染 `data-live-action-status-payoff*` source/hidden/impact/bonus/safeguard marker，让双方能直接看到额外伤害来自已公开的破绽兑现。
+    - 新 chip 固定使用 `public_status_consumed` safeguard，只读取归一化后的公开状态 id、标签、席位和额外伤害，不展示 `cardInstanceId`、`sourceCardId`、手牌、牌库、谱快照、rating、reward 或 token。
+    - `tests/sanity_pvp_live_ui_runtime_checks.mjs` 新增 consumed receipt sibling case，锁住归一化字段、DOM marker、公开额外伤害文案和隐藏字段防泄漏。
+    - `tests/sanity_pvp_live_engine_checks.cjs` 补强 delayed payoff 断言，确认 consumed receipt 携带公开标签、额外伤害和 `public_status_consumed` safeguard。
+    - `tests/sanity_pvp_live_ui_contract_checks.cjs`、`tests/sanity_release_gate_coverage_checks.cjs` 与 `tests/browser_pvp_live_audit.mjs` 同步锁住静态 marker、release gate finding 和真实浏览器渲染 probe。
+    - `game-intro.html` 同步玩家说明：交权风险提示之后，如果公开状态真的被对手兑现，行动回执会继续显示“公开兑现”，说明额外伤害来自已公开状态而非隐藏爆发。
+  - 已验证
+    - 红测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs` 在实现前失败于 `live UI should render a stable public status payoff marker`。
+    - 红测：`node tests/sanity_pvp_live_ui_contract_checks.cjs` 在实现前失败于 `PVPScene live practice handoff should include marker: public_status_consumed`。
+    - 绿测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs`
+    - 绿测：`node tests/sanity_pvp_live_ui_contract_checks.cjs`
+    - 绿测：`node tests/sanity_pvp_live_engine_checks.cjs`
+    - 绿测：`node tests/sanity_release_gate_coverage_checks.cjs`
+    - 浏览器审计：`node tests/browser_pvp_live_audit.mjs http://127.0.0.1:5173 output/pvp-live-public-status-payoff-audit-20260624`，129/129 findings、0 failed、0 console error。
+  - 当前结论
+    - live PVP 的公开状态链路从“交权时提醒你可能把破绽交给对手”推进到“破绽真正被兑现时也给双方一条稳定公开回执”：防守方能理解自己错过窗口后的后果，进攻方也能确认额外伤害来自公开状态兑现，而不是隐藏手牌或先手秒杀。该切片只改前端公开回执、玩家说明和门禁，不改变卡牌数值、破绽规则、伤害、护体、先后手、匹配、正式积分、奖励或结算。
+
 - 2026-06-24: V10-S73 live PVP handoff risk receipt
   - 本轮完成
     - `server/pvp-live/engine/state-view.js` 在权威 `end_turn` 行动回执里新增 `handoffRisk`：当玩家确认结束公开状态响应窗口、且自身破绽仍在并已进入对手可兑现窗口时，服务端公开投影 `status_response_handoff`。
