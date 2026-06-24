@@ -1555,6 +1555,15 @@ export const PVPScene = {
       ? '权威公开投影'
       : report.sourceVisibility === 'public_events' ? '公开事件' : report.sourceVisibility;
     const hidden = report.usesHiddenInformation ? '含隐藏信息' : '不含隐藏信息';
+    const budgetClampChip = !report.usesHiddenInformation && report.damage && report.damage.preventedByBudget > 0
+      ? `<span class="pvp-live-action-receipt-chip" data-live-action-budget-clamp="public_first_action_budget">${this.escapeHtml(`首动预算挡下 ${report.damage.preventedByBudget}`)}</span>`
+      : '';
+    const openingProtectionChip = !report.usesHiddenInformation
+      && report.openingProtection
+      && report.openingProtection.triggered
+      && report.openingProtection.preventedDamage > 0
+      ? `<span class="pvp-live-action-receipt-chip" data-live-action-opening-protection="public_opening_protection">${this.escapeHtml(`开局护体保底 ${report.openingProtection.minimumHp || 1} 血 · 挡下 ${report.openingProtection.preventedDamage}`)}</span>`
+      : '';
     const mitigationChip = report.statusEffects && Array.isArray(report.statusEffects.mitigated) && report.statusEffects.mitigated.length > 0
       ? '<span class="pvp-live-action-receipt-chip" data-live-public-status-mitigation="public_status_mitigated">公开状态缓解</span>'
       : '';
@@ -1581,6 +1590,8 @@ export const PVPScene = {
     return `
       <span class="pvp-live-action-receipt-chip">${this.escapeHtml(receiptLabel)}</span>
       <span class="pvp-live-action-receipt-line">${this.escapeHtml(summary)}</span>
+      ${budgetClampChip}
+      ${openingProtectionChip}
       ${mitigationChip}
       ${guardStanceChip}
       ${weakFocusChip}

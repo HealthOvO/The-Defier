@@ -644,23 +644,24 @@ async function safeElementScreenshot(page, selector, outputPath) {
         actionType: 'play_card',
         latestSequence: 6,
         cardName: '试探斩',
-        summaryLine: 'A 打出试探斩：预算后 8，破盾 3，生命伤害 5，B 剩余 45 血。',
+        summaryLine: 'A 打出试探斩：预算后 8，破盾 3，生命伤害 5，B 剩余 1 血；开局护体触发，保底 1 血，挡下 6 点致命伤害。',
         damage: {
           targetSeat: 'B',
-          rawDamage: 8,
+          rawDamage: 20,
           budgetedDamage: 8,
-          preventedByBudget: 0,
+          preventedByBudget: 12,
           blockedDamage: 3,
           hpDamage: 5,
-          targetHpAfter: 45,
+          targetHpAfter: 1,
         },
         openingProtection: {
-          triggered: false,
-          protectedSeat: '',
+          triggered: true,
+          protectedSeat: 'B',
           minimumHp: 1,
-          preventedDamage: 0,
+          preventedDamage: 6,
+          wouldHaveHp: -5,
         },
-        safeguards: ['public_events', 'public_block'],
+        safeguards: ['public_events', 'first_action_budget', 'opening_protection', 'public_block'],
       } : null,
       duelMomentumReport: makeDuelMomentumReport(stateVersion, currentSeat, status),
       intentSignalReport: makeIntentSignalReport(stateVersion, currentSeat, status),
@@ -3236,6 +3237,10 @@ async function safeElementScreenshot(page, selector, outputPath) {
     actionReceiptType: document.querySelector('[data-live-action-receipt]')?.getAttribute('data-live-action-receipt-type') || '',
     actionReceiptActing: document.querySelector('[data-live-action-receipt]')?.getAttribute('data-live-action-receipt-acting') || '',
     actionReceiptNextSeat: document.querySelector('[data-live-action-receipt]')?.getAttribute('data-live-action-receipt-next-seat') || '',
+    actionBudgetClamp: document.querySelector('[data-live-action-budget-clamp]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+    actionBudgetClampAttr: document.querySelector('[data-live-action-budget-clamp]')?.getAttribute('data-live-action-budget-clamp') || '',
+    actionOpeningProtection: document.querySelector('[data-live-action-opening-protection]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+    actionOpeningProtectionAttr: document.querySelector('[data-live-action-opening-protection]')?.getAttribute('data-live-action-opening-protection') || '',
     handoffReceipt: window.PVPScene.renderLiveActionReceiptReport({
       actionReceiptReport: {
         reportVersion: 'pvp-live-action-receipt-v1',
@@ -3301,7 +3306,12 @@ async function safeElementScreenshot(page, selector, outputPath) {
       && /预算后\s*8/.test(actionProbe.actionReceipt)
       && /破盾\s*3/.test(actionProbe.actionReceipt)
       && /生命伤害\s*5/.test(actionProbe.actionReceipt)
-      && /B\s*剩余\s*45\s*血/.test(actionProbe.actionReceipt)
+      && /B\s*剩余\s*1\s*血/.test(actionProbe.actionReceipt)
+      && actionProbe.actionBudgetClampAttr === 'public_first_action_budget'
+      && /首动预算挡下\s*12/.test(actionProbe.actionBudgetClamp)
+      && actionProbe.actionOpeningProtectionAttr === 'public_opening_protection'
+      && /开局护体保底\s*1\s*血/.test(actionProbe.actionOpeningProtection)
+      && /挡下\s*6/.test(actionProbe.actionOpeningProtection)
       && actionProbe.actionReceiptSource === 'authoritative_public_projection'
       && actionProbe.actionReceiptHidden === 'false'
       && actionProbe.actionReceiptSeq === '6'
@@ -3839,6 +3849,19 @@ async function safeElementScreenshot(page, selector, outputPath) {
         previewHidden: mitigationPreview?.getAttribute('data-live-card-preview-hidden') || '',
         previewImpact: mitigationPreview?.getAttribute('data-live-card-preview-impact') || '',
       };
+      const responseCardButton = document.querySelector('[data-live-card="A-guard-response"]');
+      responseCardButton?.click();
+      await new Promise(resolve => setTimeout(resolve, 0));
+      const responseCardClick = {
+        clicked: !!responseCardButton,
+        hint: document.querySelector('[data-live-last-error]')?.textContent || '',
+        confirmArmed: !!scene.liveOpeningActionConfirm,
+        calls: calls.slice(),
+      };
+      calls.length = 0;
+      scene.liveOpeningActionConfirm = null;
+      scene.liveInlineHint = '';
+      scene.renderLivePanel();
       await scene.endLiveTurn();
       const firstClick = {
         hint: document.querySelector('[data-live-last-error]')?.textContent || '',
@@ -3864,6 +3887,7 @@ async function safeElementScreenshot(page, selector, outputPath) {
       };
       return {
         beforeClick,
+        responseCardClick,
         firstClick,
         afterVersionAdvance,
         afterConfirm,
@@ -3889,6 +3913,17 @@ async function safeElementScreenshot(page, selector, outputPath) {
       && statusResponseEndTurnProbe.beforeClick?.previewImpact === 'none'
       && !/cardInstanceId|loadoutSnapshot|reward|rating|elo|opponentHand|opponentDeck/i.test(`${statusResponseEndTurnProbe.beforeClick?.cardText || ''} ${statusResponseEndTurnProbe.beforeClick?.previewText || ''}`),
     JSON.stringify(statusResponseEndTurnProbe.beforeClick || null),
+  );
+  add(
+    'live UI status-response mitigation card submits immediately without second-click confirmation',
+    statusResponseEndTurnProbe.responseCardClick?.clicked === true
+      && (statusResponseEndTurnProbe.responseCardClick?.calls || []).filter(intent => intent.intentType === 'play_card').length === 1
+      && !(statusResponseEndTurnProbe.responseCardClick?.calls || []).some(intent => intent.intentType === 'end_turn')
+      && statusResponseEndTurnProbe.responseCardClick?.calls?.[0]?.payload?.cardInstanceId === 'A-guard-response'
+      && statusResponseEndTurnProbe.responseCardClick?.confirmArmed === false
+      && !/再次点击确认结束回合|再次点击确认出牌/.test(statusResponseEndTurnProbe.responseCardClick?.hint || '')
+      && !/hand":\[|deck":\[|rating|elo|reward/i.test(JSON.stringify(statusResponseEndTurnProbe.responseCardClick?.calls || [])),
+    JSON.stringify(statusResponseEndTurnProbe.responseCardClick || null),
   );
   add(
     'live UI requires a second click before status-response end turn submits',

@@ -1,5 +1,23 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-24: V10-S69 live PVP action receipt anti-burst evidence chips
+  - 本轮完成
+    - `js/scenes/pvp-scene.js` 将实时论道行动回执里的公开伤害拆解进一步显性化：当服务端 `actionReceiptReport.damage.preventedByBudget > 0` 时，回执会渲染 `data-live-action-budget-clamp="public_first_action_budget"`，直接显示“首动预算挡下 X”。
+    - 当 `actionReceiptReport.openingProtection.triggered=true` 且公开护体挡伤大于 0 时，回执会渲染 `data-live-action-opening-protection="public_opening_protection"`，显示“开局护体保底 1 血 · 挡下 X”。
+    - 两个 chip 只使用 `authoritative_public_projection` 已归一化的公开字段，且要求 `usesHiddenInformation=false`；不读取手牌、牌库、卡实例、推荐谱快照、奖励、rating 或 ELO。
+    - `tests/browser_pvp_live_audit.mjs` 的开局保护样本升级成“先手高伤被首动预算与护体共同压住”的真实 DOM 审计：行动回执现在必须同时暴露预算挡伤 marker、护体保底 marker、公开来源和无隐藏信息边界。
+    - challenger 巡检后补强 `status_response_window` 正向救场门禁：runtime 和 browser 审计都会真实提交/点击 `A-guard-response`，确认响应牌会直接发出 `play_card`，不会误走二次确认、不会提交 `end_turn`。
+    - `game-intro.html` 同步玩家说明：行动回执会拆出“首动预算挡下”和“开局护体保底”证据，让双方都知道为什么不是先手秒杀。
+  - 已验证
+    - 红测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs` 在实现前失败于 `live UI action receipt should expose the public first-action budget clamp marker`，当时行动回执只有 summary 文本和通用来源 chip。
+    - 红测：`node tests/sanity_pvp_live_ui_contract_checks.cjs` 在实现前失败于缺少 `data-live-action-budget-clamp` 生产 marker。
+    - 绿测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs`
+    - 绿测：`node tests/sanity_pvp_live_ui_contract_checks.cjs`
+    - 绿测：`node tests/sanity_release_gate_coverage_checks.cjs`
+    - 浏览器审计：`node tests/browser_pvp_live_audit.mjs http://127.0.0.1:4173 output/pvp-live-action-receipt-evidence-audit`，122/122 findings、0 failed、0 console error。
+  - 当前结论
+    - live PVP 的开局公平解释从“预览和事件能证明不会先手秒杀”继续推进到“行动结算回执也能逐项展示预算挡伤与护体保底”：先手方知道伤害被权威预算压住，后手方能看到自己为何保住行动窗口。该切片只改前台公开回执、测试、版本说明和进度记录，不改变服务端伤害、护体、先后手、匹配、积分、奖励或结算。
+
 - 2026-06-24: V10-S68 live PVP post-match next-step guide
   - 本轮完成
     - `js/scenes/pvp-scene.js` 新增 `getLivePostReviewNextStepGuide()` / `renderLivePostReviewNextStepGuide()`，把既有 `experienceReport.recommendedAction`、`keyTurnReplay.recommendedAction`、`fairnessReceipt.nextStepLine`、`loadoutRecommendation` 和 `review.nextActions` 聚合成赛后“下一步建议”卡。

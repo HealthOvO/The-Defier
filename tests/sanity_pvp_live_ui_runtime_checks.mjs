@@ -169,6 +169,8 @@ assert.match(renderedActionReceipt, /行动回执/, 'live UI should render actio
 assert.match(renderedActionReceipt, /预算后 18/, 'live UI action receipt should render budgeted damage');
 assert.match(renderedActionReceipt, /破盾 3/, 'live UI action receipt should render block absorption');
 assert.match(renderedActionReceipt, /生命伤害 15/, 'live UI action receipt should render HP damage');
+assert.match(renderedActionReceipt, /data-live-action-budget-clamp="public_first_action_budget"/, 'live UI action receipt should expose the public first-action budget clamp marker');
+assert.match(renderedActionReceipt, /首动预算挡下 1/, 'live UI action receipt should explain how much damage the first-action budget prevented');
 assert.match(renderedActionReceipt, /权威公开投影/, 'live UI action receipt should render accurate projection source');
 assert.doesNotMatch(renderedActionReceipt, /cardInstanceId|sourceCardId|deck|rating|reward/i, 'live UI action receipt rendering must not expose hidden ids or rewards');
 
@@ -1957,6 +1959,43 @@ const guardStanceMitigatedEvent = PVPScene.formatLiveEvent({
   }
 });
 assert.match(guardStanceMitigatedEvent.detail, /守势减伤 2|挡下 2/, 'live UI event log should explain public guard stance damage reduction');
+const lethalOpeningProtectionReceipt = PVPScene.getLiveActionReceiptReport({
+  actionReceiptReport: {
+    reportVersion: 'pvp-live-action-receipt-v1',
+    sourceVisibility: 'authoritative_public_projection',
+    usesHiddenInformation: false,
+    rankedImpact: 'none',
+    viewerSeat: 'B',
+    actingSeat: 'A',
+    actionType: 'play_card',
+    latestSequence: 6,
+    cardName: '试探斩',
+    damage: {
+      targetSeat: 'B',
+      rawDamage: 20,
+      budgetedDamage: 8,
+      preventedByBudget: 12,
+      blockedDamage: 3,
+      hpDamage: 5,
+      targetHpAfter: 1
+    },
+    openingProtection: {
+      triggered: true,
+      protectedSeat: 'B',
+      minimumHp: 1,
+      preventedDamage: 6,
+      wouldHaveHp: -5
+    },
+    summaryLine: 'A 打出试探斩：预算后 8，破盾 3，生命伤害 5，B 剩余 1 血；开局护体触发，保底 1 血，挡下 6 点致命伤害。',
+    safeguards: ['public_events', 'first_action_budget', 'opening_protection']
+  }
+});
+const renderedLethalOpeningProtectionReceipt = PVPScene.renderLiveActionReceiptReport({ actionReceiptReport: lethalOpeningProtectionReceipt });
+assert.match(renderedLethalOpeningProtectionReceipt, /data-live-action-budget-clamp="public_first_action_budget"/, 'lethal opening receipt should expose the first-action budget marker');
+assert.match(renderedLethalOpeningProtectionReceipt, /首动预算挡下 12/, 'lethal opening receipt should show budget-prevented damage separately from protection');
+assert.match(renderedLethalOpeningProtectionReceipt, /data-live-action-opening-protection="public_opening_protection"/, 'lethal opening receipt should expose the opening-protection marker');
+assert.match(renderedLethalOpeningProtectionReceipt, /开局护体保底 1 血|挡下 6/, 'lethal opening receipt should show why the defender was not killed');
+assert.doesNotMatch(renderedLethalOpeningProtectionReceipt, /cardInstanceId|sourceCardId|hand|deck|loadoutSnapshot|reward|rating|elo/i, 'opening-protection receipt chips must not expose hidden ids or reward/rating data');
 const weakFocusReceipt = PVPScene.getLiveActionReceiptReport({
   actionReceiptReport: {
     reportVersion: 'pvp-live-action-receipt-v1',
@@ -2229,6 +2268,23 @@ assert.equal(openingActionIntents.length, 0, 'status-response confirmation shoul
 await PVPScene.endLiveTurn();
 assert.equal(openingActionIntents.length, 1, 'fresh second status-response end-turn click should submit exactly one end_turn intent');
 assert.equal(openingActionIntents[0].intentType, 'end_turn', 'confirmed status-response end-turn should keep the authoritative end_turn intent');
+
+openingActionState = {
+  ...openingActionState,
+  stateView: {
+    ...openingActionState.stateView,
+    stateVersion: 53
+  }
+};
+openingActionIntents.length = 0;
+PVPScene.liveOpeningActionConfirm = null;
+PVPScene.liveInlineHint = '';
+await PVPScene.submitLiveCard('A-guard-response');
+assert.equal(openingActionIntents.length, 1, 'status-response mitigation card should submit play_card immediately without a second click');
+assert.equal(openingActionIntents[0].intentType, 'play_card', 'status-response mitigation card should preserve the authoritative play_card intent');
+assert.equal(openingActionIntents[0].payload.cardInstanceId, 'A-guard-response', 'status-response mitigation card should submit the selected public response card');
+assert.equal(PVPScene.liveOpeningActionConfirm, null, 'status-response mitigation card should not arm opening confirmation');
+assert.doesNotMatch(PVPScene.liveInlineHint, /再次点击确认结束回合|再次点击确认出牌/, 'status-response mitigation card should not ask for a second click before saving the defender');
 
 let intentState = {
   phase: 'active',
