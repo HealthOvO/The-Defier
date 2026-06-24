@@ -1,5 +1,29 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-24: V10-S65 live PVP practice selection plan and return context
+  - 本轮完成
+    - `js/core/challenge_hub.js` 新增 `renderPvpLivePracticeSelectionPlanMarkup()`，把 `pvp-live-practice-plan-v1` 从 bundle 的 `meta.practicePlan` 继续渲染到锁定角色选择页；玩家点击“问道练习”后，在真正开练前仍能看到同一份公开练习计划。
+    - 选择页新增 `data-pvp-live-practice-selection-plan`、`data-pvp-live-practice-plan-turn`、`data-pvp-live-practice-plan-focus`，展示 objective/coach、关键回合、体验复查和公平护栏，并继续锁住 `sourceVisibility=public_events`、`usesHiddenInformation=false`、`rankedImpact=none`。
+    - `css/style.css` 为选择页练习计划补信息带样式，使用 banner 内分隔区而不是新嵌套卡片，保持角色锁定选择页可扫读且移动端自动换行。
+    - `openPvpLivePracticeReturn()` 消费 `pvp-live-practice-return-v1` 里的 `recommendedLoadoutId / recommendedLoadoutLabel`：练完从挑战侧栏回到 live tab 时会把推荐斗法谱设为下一局候选，并显示“不会自动入队，需手动继续真人排位”的提示。
+    - `tests/browser_pvp_live_audit.mjs` 先红后绿锁住：赛后 practice handoff 打开的选择页必须展示与 `drillScenario.practicePlan.tempoScript / fairnessFocus` 同 id、同文案的可见训练计划，且不得泄漏隐藏手牌、牌库、卡实例、奖励或 rating。
+    - `tests/browser_challenge_audit.mjs` 先红后绿锁住：点击“继续真人排位”不只跳回 live tab，还必须带回推荐谱候选、显示推荐谱名、保持 `queueTicket/matchId` 为空，并且不触发 `loadLivePanel()` 的 live 服务恢复读取。
+    - `tests/sanity_release_gate_coverage_checks.cjs` 与 `game-intro.html` 同步锁住选择页计划 marker、回排推荐谱上下文和玩家说明。
+  - 已验证
+    - 红测：`node tests/browser_pvp_live_audit.mjs http://127.0.0.1:4173 output/pvp-live-selection-practice-plan-red` 在实现前失败于 `selectionPlanText/source/hidden/impact` 为空，说明选择页没有可见练习计划。
+    - 红测：`node tests/browser_challenge_audit.mjs http://127.0.0.1:4173 output/challenge-practice-return-context-red` 在实现前失败于 `selectedPreset="balanced"` 且 `inlineHint=""`，说明回流按钮只跳页，没有带回推荐谱上下文。
+    - challenger 红测：`node tests/browser_challenge_audit.mjs http://127.0.0.1:4173 output/challenge-practice-return-no-live-read-red` 在修复前失败于 `liveCalls=[loadLivePanel, loadLivePanel]`，说明回流 CTA 会触发 live 面板恢复读取。
+    - 绿测：`node tests/browser_challenge_audit.mjs http://127.0.0.1:4173 output/challenge-practice-return-no-live-read-final`，22/22 findings、0 failed、0 console error。
+    - 绿测：`node tests/browser_pvp_live_audit.mjs http://127.0.0.1:4173 output/pvp-live-selection-practice-plan-final`，117/117 findings、0 failed、0 console error。
+    - 绿测：`node tests/sanity_observatory_archive_checks.cjs`
+    - 绿测：`node tests/sanity_pvp_live_ui_contract_checks.cjs`
+    - 绿测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs`
+    - 绿测：`node tests/sanity_release_gate_coverage_checks.cjs`
+    - 绿测：`node tests/sanity_intro_progress_sync_checks.cjs`
+    - 构建：`npm run build:pages`
+  - 当前结论
+    - live PVP 的“复盘 -> 问道练习 -> 练完回排”从可进入练习推进到可读、可承接、可回排：练习目标不会只停留在 payload 或赛后卡片，进入 ChallengeHub 选择页仍保持同一份公开训练计划；练完回 live 时会自动带回推荐谱候选，但仍必须玩家手动入队，且不会触发 live 面板恢复读取或排队。该切片只改前台计划展示、候选谱回填、文案和门禁，不改变后端匹配、战斗数值、先后手、公平回执、正式积分、奖励或结算。
+
 - 2026-06-24: V10-S64 live PVP post-review practice plan card
   - 本轮完成
     - `js/scenes/pvp-scene.js` 新增 `renderLivePostReviewPracticePlan()`，把既有 `buildLivePostReviewPracticePlan()` 的公开训练计划直接渲染到赛后复盘里，不再只藏在点击“问道练习”后的 `drillScenario.practicePlan` payload。

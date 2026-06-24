@@ -1050,6 +1050,51 @@ const challengeHubMethods = Object.create(null);
             </div>
         `;
   };
+  const renderPvpLivePracticeSelectionPlanMarkup = (plan = null) => {
+    const src = plan && typeof plan === 'object' ? plan : null;
+    if (!src || src.reportVersion !== 'pvp-live-practice-plan-v1') return '';
+    if (src.sourceVisibility !== 'public_events' || src.usesHiddenInformation !== false || src.rankedImpact !== 'none') return '';
+    const tempoScript = Array.isArray(src.tempoScript) ? src.tempoScript.slice(0, 3).filter(item => item && item.id && item.label && item.lesson) : [];
+    const fairnessFocus = Array.isArray(src.fairnessFocus) ? src.fairnessFocus.slice(0, 3).filter(item => item && item.id && item.label && item.detail) : [];
+    if (tempoScript.length === 0 && fairnessFocus.length === 0) return '';
+    return `
+            <div class="challenge-selection-practice-plan"
+                data-pvp-live-practice-selection-plan="true"
+                data-pvp-live-practice-plan-source="${escapeHtml(src.sourceVisibility)}"
+                data-pvp-live-practice-plan-hidden="${escapeHtml(String(src.usesHiddenInformation))}"
+                data-pvp-live-practice-plan-impact="${escapeHtml(src.rankedImpact)}">
+                <div class="challenge-selection-practice-head">
+                    <span>真人练习计划</span>
+                    <strong>${escapeHtml(src.objectiveLine || '按公开关键回合复刻节奏，不写正式积分。')}</strong>
+                </div>
+                ${src.coachLine ? `<p>${escapeHtml(src.coachLine)}</p>` : ''}
+                <div class="challenge-selection-practice-grid">
+                    ${tempoScript.length ? `<section>
+                        <h4>关键回合</h4>
+                        ${tempoScript.map(item => `
+                            <div class="challenge-selection-practice-row" data-pvp-live-practice-plan-turn="${escapeHtml(item.id)}">
+                                <strong>${escapeHtml(item.label)}</strong>
+                                <span>${escapeHtml(`#${item.sequence !== null && typeof item.sequence !== 'undefined' ? item.sequence : '-'} · ${item.eventType || '公开事件'}${item.actingSeat ? ` · ${item.actingSeat}` : ''}`)}</span>
+                                <p>${escapeHtml(item.lesson)}</p>
+                                ${item.drillPrompt ? `<em>${escapeHtml(item.drillPrompt)}</em>` : ''}
+                            </div>
+                        `).join('')}
+                    </section>` : ''}
+                    ${fairnessFocus.length ? `<section>
+                        <h4>体验复查</h4>
+                        ${fairnessFocus.map(item => `
+                            <div class="challenge-selection-practice-row" data-pvp-live-practice-plan-focus="${escapeHtml(item.id)}">
+                                <strong>${escapeHtml(item.label)}</strong>
+                                <span>${escapeHtml(item.status || 'watch')}</span>
+                                <p>${escapeHtml(item.detail)}</p>
+                            </div>
+                        `).join('')}
+                    </section>` : ''}
+                </div>
+                <div class="challenge-selection-practice-guard">公平护栏：${escapeHtml(src.guardrailLine || '训练计划只读公开事件，不读取隐藏信息，不写正式积分。')}</div>
+            </div>
+        `;
+  };
   challengeHubMethods.ensureChallengeHubBootState = function () {
     if (!this.challengeHubState || typeof this.challengeHubState !== 'object') {
       this.challengeHubState = this.loadChallengeHubState();
@@ -3636,13 +3681,26 @@ const challengeHubMethods = Object.create(null);
     }
     const scene = typeof PVPScene !== 'undefined' && PVPScene ? PVPScene : typeof window !== 'undefined' && window.PVPScene ? window.PVPScene : null;
     if (scene && typeof scene.switchTab === 'function') {
-      scene.switchTab('live');
+      scene.switchTab('live', { skipLoad: true });
     }
-    if (scene && typeof scene.onShow === 'function') {
-      scene.onShow();
+    if (scene) {
+      const loadoutId = String(receipt.recommendedLoadoutId || '').trim();
+      if (loadoutId && typeof scene.setLiveLoadoutPreset === 'function') {
+        scene.setLiveLoadoutPreset(loadoutId);
+      } else if (loadoutId) {
+        scene.liveSelectedLoadoutPreset = loadoutId;
+      }
+      const label = String(receipt.recommendedLoadoutLabel || '推荐斗法谱').trim();
+      scene.liveInlineHint = `已带着${label}回到真人排位候选；不会自动入队，请手动点击继续真人排位。`;
+      if (typeof scene.renderLiveLoadoutPresets === 'function') {
+        scene.renderLiveLoadoutPresets('idle');
+      }
+      if (typeof scene.renderLivePanel === 'function') {
+        scene.renderLivePanel();
+      }
     }
     if (typeof Utils !== 'undefined' && Utils && typeof Utils.showBattleLog === 'function') {
-      Utils.showBattleLog(`${receipt.summaryLine} 本次训练不写正式积分。`);
+      Utils.showBattleLog(`${receipt.summaryLine} 本次训练不写正式积分；回排不会自动入队。`);
     }
     return true;
   };
@@ -3915,6 +3973,9 @@ const challengeHubMethods = Object.create(null);
     if (!container) return;
     const dangerProfile = this.buildChallengeDangerProfile(pending.rule, pending.mode);
     const archiveInsight = pending.archiveInsight && hasChallengeArchiveInsight(pending.archiveInsight) ? normalizeChallengeArchiveInsight(pending.archiveInsight) : null;
+    const practicePlanMarkup = pending.practiceOnly
+      ? renderPvpLivePracticeSelectionPlanMarkup(pending.bundleSnapshot?.meta?.practicePlan)
+      : '';
     let banner = document.getElementById('challenge-selection-banner');
     if (!banner) {
       banner = document.createElement('div');
@@ -3937,6 +3998,7 @@ const challengeHubMethods = Object.create(null);
             ${renderChallengeInsightMarkup(archiveInsight, {
       compact: true
     })}
+            ${practicePlanMarkup}
         `;
     document.querySelectorAll('.character-card').forEach(card => {
       const locked = card.dataset.id !== pending.rule.characterId;

@@ -735,6 +735,11 @@ const browserAutomationBootAudit = read('tests/browser_automation_boot_audit.mjs
   "postReviewPracticeProbe.drillScenario?.practicePlan?.rankedImpact === 'none'",
   'visiblePracticePlanProbe.keyTurnIds.every',
   'visiblePracticePlanProbe.checkIds.every',
+  'selectionPlanText',
+  'selectionPlanTurnIds',
+  'selectionPlanFocusIds',
+  "postReviewPracticeProbe.selectionPlanSource === 'public_events'",
+  "postReviewPracticeProbe.selectionPlanImpact === 'none'",
   'live UI post-match practice plan rejects unsafe source reports',
   'unsafePracticePlanProbe.unsafeScenario === null',
   'unsafePracticePlanProbe.missingMetadataScenario === null',
@@ -942,8 +947,15 @@ assert.ok(
   'pvp-live-practice-return-v1',
   '节奏脚本',
   '体验复查',
+  'renderPvpLivePracticeSelectionPlanMarkup',
+  'data-pvp-live-practice-selection-plan',
+  'data-pvp-live-practice-plan-turn',
+  'data-pvp-live-practice-plan-focus',
   'data-pvp-live-practice-return',
   'open-pvp-live-practice-return',
+  'liveSelectedLoadoutPreset',
+  "scene.switchTab('live', { skipLoad: true })",
+  '不会自动入队',
   'practicePlan: clone(practicePlan)',
 ].forEach((needle) => {
   assert.ok(
@@ -1217,11 +1229,16 @@ assert.ok(
 
 [
   'challenge hub browser renders PVP live practice-return card with no-score boundary',
-  'challenge hub practice-return CTA opens the live PVP tab without auto-queueing',
+  'challenge hub practice-return CTA opens live PVP with recommended loadout context but no auto-queue',
   'data-pvp-live-practice-return',
   'data-pvp-live-practice-return-action="true"',
   'pvp-live-practice-return-v1',
   '正式积分不变',
+  "pvpPracticeReturnClickProbe.selectedPreset === 'shield'",
+  'selectedLoadoutText',
+  'liveCalls.length === 0',
+  'queueTicket ===',
+  '守势斗法谱',
   "window.PVPScene?.activeTab || ''",
 ].forEach((needle) => {
   assert.ok(

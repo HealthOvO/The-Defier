@@ -4938,6 +4938,12 @@ async function safeElementScreenshot(page, selector, outputPath) {
       focus: payload?.challenge?.trainingFocus || null,
       bannerText: document.getElementById('challenge-selection-banner')?.textContent?.replace(/\s+/g, ' ').trim() || '',
       insightText: document.querySelector('#challenge-selection-banner .challenge-record-insight')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+      selectionPlanText: document.querySelector('[data-pvp-live-practice-selection-plan]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+      selectionPlanSource: document.querySelector('[data-pvp-live-practice-selection-plan]')?.getAttribute('data-pvp-live-practice-plan-source') || '',
+      selectionPlanHidden: document.querySelector('[data-pvp-live-practice-selection-plan]')?.getAttribute('data-pvp-live-practice-plan-hidden') || '',
+      selectionPlanImpact: document.querySelector('[data-pvp-live-practice-selection-plan]')?.getAttribute('data-pvp-live-practice-plan-impact') || '',
+      selectionPlanTurnIds: Array.from(document.querySelectorAll('[data-pvp-live-practice-plan-turn]')).map(item => item.getAttribute('data-pvp-live-practice-plan-turn')),
+      selectionPlanFocusIds: Array.from(document.querySelectorAll('[data-pvp-live-practice-plan-focus]')).map(item => item.getAttribute('data-pvp-live-practice-plan-focus')),
       confirmText: document.querySelector('#confirm-character-btn .btn-text')?.textContent?.trim() || '',
       drillScenario: payload?.pvp?.live?.drillScenario || window.PVPScene.getLiveSnapshot()?.drillScenario || null,
       calls: window.__livePvpAuditCalls,
@@ -4955,6 +4961,21 @@ async function safeElementScreenshot(page, selector, outputPath) {
       && /真人 PVP|首败|复盘/.test(postReviewPracticeProbe.focus?.trainingAdvice || '')
       && /真人 PVP|问道练习|不计/.test(postReviewPracticeProbe.bannerText || '')
       && /公开事件|不写正式积分|隐藏/.test(postReviewPracticeProbe.insightText || '')
+      && /真人练习计划|关键回合|体验复查|公平护栏/.test(postReviewPracticeProbe.selectionPlanText || '')
+      && postReviewPracticeProbe.selectionPlanSource === 'public_events'
+      && postReviewPracticeProbe.selectionPlanHidden === 'false'
+      && postReviewPracticeProbe.selectionPlanImpact === 'none'
+      && (postReviewPracticeProbe.drillScenario?.practicePlan?.tempoScript || []).every(item => (
+        postReviewPracticeProbe.selectionPlanTurnIds.includes(item.id)
+        && postReviewPracticeProbe.selectionPlanText.includes(item.label)
+        && postReviewPracticeProbe.selectionPlanText.includes(item.lesson)
+      ))
+      && (postReviewPracticeProbe.drillScenario?.practicePlan?.fairnessFocus || []).every(item => (
+        postReviewPracticeProbe.selectionPlanFocusIds.includes(item.id)
+        && postReviewPracticeProbe.selectionPlanText.includes(item.label)
+        && postReviewPracticeProbe.selectionPlanText.includes(item.detail)
+      ))
+      && !/payload|\bhand\b|deck|cardId|instanceId|cardInstanceId|loadoutSnapshot|rawPayload|reward|rating|elo|token/i.test(postReviewPracticeProbe.selectionPlanText || '')
       && /回放命盘/.test(postReviewPracticeProbe.confirmText || '')
       && postReviewPracticeProbe.drillScenario?.reportVersion === 'pvp-live-drill-scenario-v1'
       && postReviewPracticeProbe.drillScenario?.sourceMatchId === 'pvplm-browser-live'

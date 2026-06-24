@@ -430,7 +430,8 @@ export const PVPScene = {
         `;
     this.renderChallengeIntent();
   },
-  switchTab(tabName) {
+  switchTab(tabName, options = {}) {
+    const shouldSkipLoad = !!(options && typeof options === 'object' && options.skipLoad);
     if (this.activeTab === 'live' && tabName !== 'live') {
       this.stopLivePolling();
       this.stopLiveHeartbeat();
@@ -453,10 +454,10 @@ export const PVPScene = {
     }
 
     // Load Data
-    if (tabName === 'ranking') this.loadRankings();
-    if (tabName === 'live') this.loadLivePanel();
-    if (tabName === 'defense') this.loadDefenseInfo();
-    if (tabName === 'shop') this.loadShop();
+    if (!shouldSkipLoad && tabName === 'ranking') this.loadRankings();
+    if (!shouldSkipLoad && tabName === 'live') this.loadLivePanel();
+    if (!shouldSkipLoad && tabName === 'defense') this.loadDefenseInfo();
+    if (!shouldSkipLoad && tabName === 'shop') this.loadShop();
   },
   getLiveSession() {
     this.ensureLiveLifecycleBindings();

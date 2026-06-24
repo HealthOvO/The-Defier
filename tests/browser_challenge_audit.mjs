@@ -183,21 +183,53 @@ async function waitForChallengeHubReady(page, expectedTab = 'daily') {
       && pvpPracticeReturnCardProbe.payload?.usesHiddenInformation === false,
     JSON.stringify(pvpPracticeReturnCardProbe || null)
   );
+  await page.evaluate(() => {
+    window.__challengePracticeReturnLiveCalls = [];
+    const scene = window.PVPScene;
+    if (!scene || scene.__challengePracticeReturnLoadLivePatched) return;
+    const originalLoadLivePanel = typeof scene.loadLivePanel === 'function'
+      ? scene.loadLivePanel.bind(scene)
+      : null;
+    scene.loadLivePanel = async (...args) => {
+      window.__challengePracticeReturnLiveCalls.push({ method: 'loadLivePanel' });
+      if (originalLoadLivePanel) return originalLoadLivePanel(...args);
+      return undefined;
+    };
+    scene.__challengePracticeReturnLoadLivePatched = true;
+  });
   await page.click('[data-pvp-live-practice-return-action="true"]', { timeout: 5000, force: true });
   await page.waitForTimeout(500);
-  const pvpPracticeReturnClickProbe = await page.evaluate(() => ({
-    currentScreen: window.game?.currentScreen || '',
-    activeTab: window.PVPScene?.activeTab || '',
-    liveTabActive: !!document.querySelector('[data-pvp-tab="live"]')?.classList.contains('active'),
-    pvpVisible: !!document.getElementById('pvp-screen')?.classList.contains('active'),
-    inlineHint: window.PVPScene?.liveInlineHint || ''
-  }));
+  const pvpPracticeReturnClickProbe = await page.evaluate(() => {
+    const payload = typeof window.render_game_to_text === 'function'
+      ? JSON.parse(window.render_game_to_text())
+      : null;
+    return {
+      currentScreen: window.game?.currentScreen || '',
+      activeTab: window.PVPScene?.activeTab || '',
+      selectedPreset: window.PVPScene?.liveSelectedLoadoutPreset || '',
+      liveTabActive: !!document.querySelector('[data-pvp-tab="live"]')?.classList.contains('active'),
+      pvpVisible: !!document.getElementById('pvp-screen')?.classList.contains('active'),
+      selectedLoadoutText: document.querySelector('[data-live-selected-loadout]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+      inlineHint: window.PVPScene?.liveInlineHint || '',
+      queueTicket: payload?.pvp?.live?.queueTicket || '',
+      matchId: payload?.pvp?.live?.matchId || '',
+      liveCalls: window.__challengePracticeReturnLiveCalls || []
+    };
+  });
   add(
-    'challenge hub practice-return CTA opens the live PVP tab without auto-queueing',
+    'challenge hub practice-return CTA opens live PVP with recommended loadout context but no auto-queue',
     pvpPracticeReturnClickProbe.currentScreen === 'pvp-screen'
       && pvpPracticeReturnClickProbe.activeTab === 'live'
+      && pvpPracticeReturnClickProbe.selectedPreset === 'shield'
       && pvpPracticeReturnClickProbe.liveTabActive === true
-      && pvpPracticeReturnClickProbe.pvpVisible === true,
+      && pvpPracticeReturnClickProbe.pvpVisible === true
+      && /守势斗法谱/.test(pvpPracticeReturnClickProbe.selectedLoadoutText || '')
+      && /守势斗法谱/.test(pvpPracticeReturnClickProbe.inlineHint || '')
+      && /手动|不会自动|不自动/.test(pvpPracticeReturnClickProbe.inlineHint || '')
+      && /继续真人排位|入队/.test(pvpPracticeReturnClickProbe.inlineHint || '')
+      && pvpPracticeReturnClickProbe.queueTicket === ''
+      && pvpPracticeReturnClickProbe.matchId === ''
+      && pvpPracticeReturnClickProbe.liveCalls.length === 0,
     JSON.stringify(pvpPracticeReturnClickProbe || null)
   );
 
