@@ -4013,6 +4013,7 @@ async function safeElementScreenshot(page, selector, outputPath) {
       scene.renderLivePanel();
       const mitigationPreview = document.querySelector('[data-live-card-status-mitigation]');
       const counterplayGuide = document.querySelector('[data-live-counterplay-guide]');
+      const actionWindowReceipt = document.querySelector('[data-live-action-window-receipt]');
       const beforeClick = {
         phase: scene.getLiveSnapshot?.()?.phase || '',
         currentSeat: scene.getLiveSnapshot?.()?.currentSeat || '',
@@ -4033,6 +4034,15 @@ async function safeElementScreenshot(page, selector, outputPath) {
         counterplayGuideAdvisoryOnly: counterplayGuide?.getAttribute('data-live-counterplay-guide-advisory-only') || '',
         counterplayGuideReportVersion: scene.getLiveSnapshot?.()?.counterplayGuide?.reportVersion || '',
         counterplayGuideVisible: !!counterplayGuide && counterplayGuide.getAttribute('hidden') === null,
+        actionWindowReceiptText: actionWindowReceipt?.textContent?.replace(/\s+/g, ' ').trim() || '',
+        actionWindowReceiptSource: actionWindowReceipt?.getAttribute('data-live-action-window-receipt-source') || '',
+        actionWindowReceiptHidden: actionWindowReceipt?.getAttribute('data-live-action-window-receipt-hidden') || '',
+        actionWindowReceiptImpact: actionWindowReceipt?.getAttribute('data-live-action-window-receipt-impact') || '',
+        actionWindowReceiptState: actionWindowReceipt?.getAttribute('data-live-action-window-receipt-state') || '',
+        actionWindowReceiptResponseCount: actionWindowReceipt?.getAttribute('data-live-action-window-receipt-response-cards') || '',
+        actionWindowReceiptAdvisoryOnly: actionWindowReceipt?.getAttribute('data-live-action-window-receipt-advisory-only') || '',
+        actionWindowReceiptReportVersion: scene.getLiveSnapshot?.()?.actionWindowReceipt?.reportVersion || '',
+        actionWindowReceiptVisible: !!actionWindowReceipt && actionWindowReceipt.getAttribute('hidden') === null,
       };
       const responseCardButton = document.querySelector('[data-live-card="A-guard-response"]');
       responseCardButton?.click();
@@ -4115,6 +4125,25 @@ async function safeElementScreenshot(page, selector, outputPath) {
       && /不要直接结束回合|先出响应牌/.test(statusResponseEndTurnProbe.beforeClick?.counterplayGuideText || '')
       && /公开状态和公开卡面|不写正式积分|不代打/.test(statusResponseEndTurnProbe.beforeClick?.counterplayGuideText || '')
       && !/cardInstanceId|cardId|instanceId|hand|deck|loadoutSnapshot|reward|rating|elo|token|opponentHand|opponentDeck/i.test(statusResponseEndTurnProbe.beforeClick?.counterplayGuideText || ''),
+    JSON.stringify(statusResponseEndTurnProbe.beforeClick || null),
+  );
+  add(
+    'live UI renders action-window receipt during status-response window',
+    statusResponseEndTurnProbe.beforeClick?.actionWindowReceiptVisible === true
+      && statusResponseEndTurnProbe.beforeClick?.actionWindowReceiptReportVersion === 'pvp-live-action-window-receipt-v1'
+      && statusResponseEndTurnProbe.beforeClick?.actionWindowReceiptSource === 'public_state_and_public_content'
+      && statusResponseEndTurnProbe.beforeClick?.actionWindowReceiptHidden === 'false'
+      && statusResponseEndTurnProbe.beforeClick?.actionWindowReceiptImpact === 'none'
+      && statusResponseEndTurnProbe.beforeClick?.actionWindowReceiptState === 'status_response_window'
+      && statusResponseEndTurnProbe.beforeClick?.actionWindowReceiptResponseCount === '1'
+      && statusResponseEndTurnProbe.beforeClick?.actionWindowReceiptAdvisoryOnly === 'true'
+      && /行动窗口回执/.test(statusResponseEndTurnProbe.beforeClick?.actionWindowReceiptText || '')
+      && /有效行动窗口|响应窗口/.test(statusResponseEndTurnProbe.beforeClick?.actionWindowReceiptText || '')
+      && /1\s*张/.test(statusResponseEndTurnProbe.beforeClick?.actionWindowReceiptText || '')
+      && /清除破绽|补盾/.test(statusResponseEndTurnProbe.beforeClick?.actionWindowReceiptText || '')
+      && /结束回合|放弃|交出/.test(statusResponseEndTurnProbe.beforeClick?.actionWindowReceiptText || '')
+      && /不含隐藏信息|不改变正式积分|不代打|只提示/.test(statusResponseEndTurnProbe.beforeClick?.actionWindowReceiptText || '')
+      && !/cardInstanceId|cardId|instanceId|hand|deck|loadoutSnapshot|reward|rating|elo|token|opponentHand|opponentDeck/i.test(statusResponseEndTurnProbe.beforeClick?.actionWindowReceiptText || ''),
     JSON.stringify(statusResponseEndTurnProbe.beforeClick || null),
   );
   add(

@@ -217,6 +217,16 @@ const liveBrowserAudit = read('tests/browser_pvp_live_audit.mjs');
   'data-live-counterplay-guide-impact',
   'data-live-counterplay-guide-response-cards',
   'data-live-counterplay-guide-advisory-only',
+  'getLiveActionWindowReceipt(',
+  'renderLiveActionWindowReceipt(',
+  'pvp-live-action-window-receipt-v1',
+  'data-live-action-window-receipt',
+  'data-live-action-window-receipt-state',
+  'data-live-action-window-receipt-source',
+  'data-live-action-window-receipt-hidden',
+  'data-live-action-window-receipt-impact',
+  'data-live-action-window-receipt-response-cards',
+  'data-live-action-window-receipt-advisory-only',
   'getLiveTimeoutAutomationForecast(',
   'renderLiveTimeoutAutomationForecast(',
   'pvp-live-timeout-automation-forecast-v1',
@@ -581,6 +591,36 @@ const renderLiveCounterplayGuideBody = methodBody(scene, 'renderLiveCounterplayG
   assert.ok(renderLiveCounterplayGuideBody.includes(needle), `counterplay guide renderer should expose stable readable markers: ${needle}`);
 });
 
+const liveActionWindowReceiptBody = methodBody(scene, 'getLiveActionWindowReceipt');
+[
+  'getLiveCounterplayGuide',
+  'status_response_window',
+  'opening_window',
+  'reversal_window',
+  'public_state_and_public_content',
+  'usesHiddenInformation',
+  "rankedImpact !== 'none'",
+  'advisoryOnly',
+  'responseCardCount',
+  '有效行动窗口',
+  '结束回合',
+  '不改变正式积分',
+].forEach((needle) => {
+  assert.ok(liveActionWindowReceiptBody.includes(needle), `action-window receipt should derive safe public agency guidance: ${needle}`);
+});
+
+const renderLiveActionWindowReceiptBody = methodBody(scene, 'renderLiveActionWindowReceipt');
+[
+  'data-live-action-window-receipt-line',
+  'data-live-action-window-receipt-chip',
+  '行动窗口回执',
+  '只提示',
+  '不代打',
+  '不改变正式积分',
+].forEach((needle) => {
+  assert.ok(renderLiveActionWindowReceiptBody.includes(needle), `action-window receipt renderer should expose stable readable markers: ${needle}`);
+});
+
 const liveTimeoutAutomationForecastBody = methodBody(scene, 'getLiveTimeoutAutomationForecast');
 [
   'getLiveTurnTimer',
@@ -921,9 +961,11 @@ assert.ok(browserGate.includes('node tests/browser_pvp_live_audit.mjs "$BASE_URL
   'live UI requires a second click before status-response end turn submits',
   'live UI status-response mitigation card submits immediately without second-click confirmation',
   'live UI renders public counterplay guide during status-response window',
+  'live UI renders action-window receipt during status-response window',
   'status_response_window',
   'publicStatusMitigation',
   'data-live-counterplay-guide',
+  'data-live-action-window-receipt',
   'live UI renders loadout exploration report without hidden payloads',
   'live UI renders post-match season goal card and can dismiss it locally',
   'live UI dismisses season goal locally without hiding post-match review',

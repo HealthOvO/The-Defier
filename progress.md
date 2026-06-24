@@ -1,5 +1,27 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-24: V10-S72 live PVP action-window receipt
+  - 本轮完成
+    - `js/scenes/pvp-scene.js` 新增 `getLiveActionWindowReceipt()` / `renderLiveActionWindowReceipt()`，在 active 且轮到自己行动的 `opening_window` / `status_response_window` / `reversal_window` 公开窗口中生成“行动窗口回执”。
+    - 新回执复用 `getLiveCounterplayGuide()` 的公开安全聚合，固定 `pvp-live-action-window-receipt-v1`、`sourceVisibility=public_state_and_public_content`、`usesHiddenInformation=false`、`rankedImpact=none`、`advisoryOnly=true`；展示当前有效行动窗口、可用响应牌数量、清除破绽/补盾等公开选择和结束回合交权风险。
+    - `index.html` 新增 `[data-live-action-window-receipt]` 挂点，并固定 state/source/hidden/impact/response-cards/advisory marker；`css/pvp.css` 补桌面和 390px 移动端样式，避免回执长文案横向撑宽。
+    - `server/pvp-live/engine/state-view.js` 修正真实服务端 `intentSignalReport.signalState` 命名：公开状态响应窗口统一输出 `status_response_window`，开局护体/开局压力统一输出 `opening_window`，避免前端反制建议和行动窗口回执只在手造测试 payload 中可见。
+    - `tests/browser_pvp_live_audit.mjs` 新增真实 DOM finding：status response 窗口必须显示行动窗口回执，且 source/hidden/impact/advisory/response-cards marker 正确，文案说明有效行动窗口、响应牌、交权风险和不代打/不改正式结算边界，不泄露 `cardInstanceId`、手牌、牌库、奖励、rating、token。
+    - `game-intro.html` 同步玩家说明：开局窗口和破绽响应窗口会展示公开反制建议卡与行动窗口回执，帮助双方读懂当前是否仍有有效响应窗口。
+  - 已验证
+    - 红测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs` 在实现前失败于 `live UI should expose an action-window receipt helper`。
+    - 红测：`node tests/sanity_pvp_live_engine_checks.cjs` 在修复前失败于 `defender response turn intent signal should use the supported status-response window state`。
+    - 绿测：`node tests/sanity_pvp_live_engine_checks.cjs`
+    - 绿测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs`
+    - 绿测：`node tests/sanity_pvp_live_ui_contract_checks.cjs`
+    - 绿测：`node tests/sanity_release_gate_coverage_checks.cjs`
+    - 绿测：`node tests/sanity_intro_progress_sync_checks.cjs`
+    - 浏览器审计：`node tests/browser_pvp_live_audit.mjs http://127.0.0.1:4174 output/pvp-live-action-window-receipt-audit-20260624`，127/127 findings、0 failed、0 console error。
+    - 完整 Node 门禁：`npm run test:node`
+    - 构建：`npm run build:pages`
+  - 当前结论
+    - live PVP 的战中响应体验从“能看到反制建议”继续推进到“明确收到有效行动窗口回执”：行动方能确认自己仍有公开响应窗口，知道响应牌数量和可处理方向，也能在结束回合前看到交权风险；对手则仍只看到公开状态和公开卡面边界。该切片只改服务端公开 report 命名、前端公开回执、DOM marker、样式、说明和测试，不改变卡牌数值、伤害、护体、先后手、匹配、正式积分、奖励或结算。
+
 - 2026-06-24: V10-S71 live PVP timeout automation forecast
   - 本轮完成
     - `server/pvp-live/engine/state-view.js` 新增 `pvp-live-timeout-automation-state-v1`，由服务端公开投影当前行动席与 A/B 席位的 soft-timeout 托管次数，解决旧超时事件滚出 `recentEvents` 后前台误判首次超时的问题。

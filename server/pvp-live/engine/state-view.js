@@ -2132,25 +2132,25 @@ function projectIntentSignalReport(state, seatId, openingSafeguardReport = null)
     if (actorMitigableStatuses.length > 0) safeguards.push('public_status_response_window');
     let signalState = 'tempo_probe';
     if (actorMitigableStatuses.length > 0) {
-        signalState = 'status_response';
+        signalState = 'status_response_window';
     } else if (openingProtectionWouldTrigger) {
-        signalState = 'protected_lethal_read';
+        signalState = 'opening_window';
     } else if (targetHpAfter <= 0) {
         signalState = 'lethal_pressure';
     } else if (targetProtected || status === 'active' && protectedSeats.length > 0) {
-        signalState = 'opening_pressure';
+        signalState = 'opening_window';
     } else if (publicDamageCeiling >= 12 || targetHpAfter <= 15) {
         signalState = 'burst_pressure';
     } else if (ceilings.maxBlock >= 8 && publicDamageCeiling <= 8) {
         signalState = 'guard_pressure';
     }
-    const signalLabel = signalState === 'protected_lethal_read'
+    const signalLabel = signalState === 'opening_window' && openingProtectionWouldTrigger
         ? '护体读秒'
-        : signalState === 'status_response'
+        : signalState === 'status_response_window'
             ? '破绽响应'
             : signalState === 'lethal_pressure'
             ? '斩杀压力'
-            : signalState === 'opening_pressure'
+            : signalState === 'opening_window'
                 ? '公开压迫'
                 : signalState === 'burst_pressure'
                     ? '爆发压力'

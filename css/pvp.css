@@ -1156,6 +1156,53 @@
     overflow-wrap: anywhere;
 }
 
+.pvp-live-action-window-receipt {
+    margin-top: 8px;
+    display: grid;
+    gap: 6px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    border: 1px solid rgba(142, 220, 171, 0.24);
+    background: rgba(28, 87, 54, 0.14);
+    color: rgba(229, 248, 236, 0.95);
+    font-size: 0.74rem;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+}
+
+.pvp-live-action-window-receipt[hidden] {
+    display: none;
+}
+
+.pvp-live-action-window-receipt-line {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    min-width: 0;
+}
+
+.pvp-live-action-window-receipt-line > span:last-child {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.pvp-live-action-window-receipt-line.compact {
+    color: rgba(229, 248, 236, 0.76);
+    font-size: 0.68rem;
+}
+
+.pvp-live-action-window-receipt-chip {
+    flex: 0 0 auto;
+    max-width: 42%;
+    padding: 3px 6px;
+    border-radius: 8px;
+    border: 1px solid rgba(142, 220, 171, 0.22);
+    background: rgba(255, 255, 255, 0.05);
+    color: rgba(237, 255, 242, 0.96);
+    font-weight: 800;
+    overflow-wrap: anywhere;
+}
+
 .pvp-live-social-panel {
     margin-top: 8px;
     padding: 8px;
@@ -4936,6 +4983,27 @@ input:checked+.seal-slider .seal-face.on {
     }
 
     .pvp-live-counterplay-guide-chip {
+        max-width: 38%;
+        padding: 2px 4px;
+    }
+
+    .pvp-live-action-window-receipt {
+        margin-top: 3px;
+        padding: 4px 5px;
+        gap: 3px;
+        font-size: 0.6rem;
+        line-height: 1.14;
+    }
+
+    .pvp-live-action-window-receipt-line {
+        gap: 4px;
+    }
+
+    .pvp-live-action-window-receipt-line.compact {
+        font-size: 0.56rem;
+    }
+
+    .pvp-live-action-window-receipt-chip {
         max-width: 38%;
         padding: 2px 4px;
     }

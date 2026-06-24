@@ -2015,6 +2015,56 @@ assert.match(statusCounterplayGuideMarkup, /清除破绽/, 'counterplay guide sh
 assert.match(statusCounterplayGuideMarkup, /不要直接结束回合|先出响应牌/, 'counterplay guide should warn before giving up the response window');
 assert.match(statusCounterplayGuideMarkup, /公开状态和公开卡面|不写正式积分|不代打/, 'counterplay guide should render source, advisory-only, and ranked-impact boundaries');
 assert.doesNotMatch(statusCounterplayGuideMarkup, /cardInstanceId|cardId|instanceId|hand|deck|loadoutSnapshot|reward|rating|elo|token/i, 'counterplay guide rendering must not expose hidden ids or rewards');
+assert.equal(typeof PVPScene.getLiveActionWindowReceipt, 'function', 'live UI should expose an action-window receipt helper');
+assert.equal(typeof PVPScene.renderLiveActionWindowReceipt, 'function', 'live UI should expose an action-window receipt renderer');
+const statusActionWindowReceipt = PVPScene.getLiveActionWindowReceipt(statusCounterplayGuideView, 'active');
+assert.equal(statusActionWindowReceipt.reportVersion, 'pvp-live-action-window-receipt-v1', 'action-window receipt should expose a stable report version');
+assert.equal(statusActionWindowReceipt.sourceVisibility, 'public_state_and_public_content', 'action-window receipt should aggregate only public state and public card content');
+assert.equal(statusActionWindowReceipt.usesHiddenInformation, false, 'action-window receipt should be hidden-info safe');
+assert.equal(statusActionWindowReceipt.rankedImpact, 'none', 'action-window receipt must not affect ranked state');
+assert.equal(statusActionWindowReceipt.advisoryOnly, true, 'action-window receipt should explicitly stay advisory-only');
+assert.equal(statusActionWindowReceipt.pressureState, 'status_response_window', 'action-window receipt should preserve the public response-window state');
+assert.equal(statusActionWindowReceipt.responseCardCount, 1, 'action-window receipt should count public response cards');
+assert.match(statusActionWindowReceipt.primaryLine, /有效行动窗口|响应窗口/, 'action-window receipt should name the active response window');
+assert.match(statusActionWindowReceipt.riskLine, /结束回合|放弃|交出/, 'action-window receipt should warn about giving up the response window');
+assert.match(statusActionWindowReceipt.boundaryLine, /只提示|不代打|不改变正式积分/, 'action-window receipt should state advisory and ranked boundaries');
+const statusActionWindowReceiptMarkup = PVPScene.renderLiveActionWindowReceipt(statusCounterplayGuideView, 'active');
+assert.match(statusActionWindowReceiptMarkup, /data-live-action-window-receipt-line/, 'action-window receipt should render readable receipt lines');
+assert.match(statusActionWindowReceiptMarkup, /行动窗口回执/, 'action-window receipt should label itself as a receipt');
+assert.match(statusActionWindowReceiptMarkup, /有效行动窗口|响应窗口/, 'action-window receipt should surface the active response window');
+assert.match(statusActionWindowReceiptMarkup, /1\s*张/, 'action-window receipt should show the public response-card count');
+assert.match(statusActionWindowReceiptMarkup, /清除破绽|补盾 \+7/, 'action-window receipt should surface public response choices');
+assert.match(statusActionWindowReceiptMarkup, /结束回合|放弃|交出/, 'action-window receipt should warn before giving up the response window');
+assert.match(statusActionWindowReceiptMarkup, /不含隐藏信息|不改变正式积分|不代打|只提示/, 'action-window receipt should render source, advisory-only, and ranked-impact boundaries');
+assert.doesNotMatch(statusActionWindowReceiptMarkup, /cardInstanceId|cardId|instanceId|hand|deck|loadoutSnapshot|reward|rating|elo|token/i, 'action-window receipt rendering must not expose hidden ids or rewards');
+assert.equal(
+  PVPScene.getLiveActionWindowReceipt({
+    ...statusCounterplayGuideView,
+    actionPreviewReport: {
+      ...statusCounterplayGuideView.actionPreviewReport,
+      usesHiddenInformation: true
+    }
+  }, 'active'),
+  null,
+  'action-window receipt must reject unsafe action preview sources',
+);
+assert.equal(
+  PVPScene.getLiveActionWindowReceipt(statusCounterplayGuideView, 'finished'),
+  null,
+  'action-window receipt must not render outside active live phase',
+);
+assert.equal(
+  PVPScene.getLiveActionWindowReceipt({
+    ...statusCounterplayGuideView,
+    duelMomentumReport: {
+      ...statusCounterplayGuideView.duelMomentumReport,
+      currentSeat: 'B',
+      isViewerTurn: false
+    }
+  }, 'active'),
+  null,
+  'action-window receipt must reject mixed stale reports that disagree on whose turn it is',
+);
 assert.equal(
   PVPScene.getLiveCounterplayGuide({
     ...statusCounterplayGuideView,

@@ -708,6 +708,9 @@ const markEndTurn = reduceIntent(punctureMark.state, {
 });
 const defenderResponseTurn = projectStateView(markEndTurn.state, 'B');
 assert(defenderResponseTurn.self.publicStatuses.some(status => status.statusId === 'vulnerable_mark'), 'defender response turn should keep the public mark visible');
+assert(defenderResponseTurn.duelMomentumReport.pressureState === 'status_response_window', 'defender response turn should publish the same status-response pressure state used by the live UI');
+assert(defenderResponseTurn.intentSignalReport.signalState === 'status_response_window', 'defender response turn intent signal should use the supported status-response window state');
+assert(defenderResponseTurn.intentSignalReport.safeguards.includes('public_status_response_window'), 'defender response turn intent signal should expose the public response-window safeguard');
 assert(/破绽|反制/.test(defenderResponseTurn.duelMomentumReport.counterplayLine) || defenderResponseTurn.self.publicStatuses.length > 0, 'defender response turn should be readable as a response window');
 const guardMitigation = reduceIntent(markEndTurn.state, {
   intentId: 'intent-public-status-b-guard-1',

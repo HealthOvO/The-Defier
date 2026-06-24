@@ -1956,6 +1956,93 @@ export const PVPScene = {
       </div>
     `;
   },
+  getLiveActionWindowReceipt(view, phase = '') {
+    const source = view && view.reportVersion === 'pvp-live-action-window-receipt-v1'
+      ? view
+      : this.getLiveCounterplayGuide(view, phase);
+    if (!source) return null;
+    if (source.usesHiddenInformation || source.rankedImpact !== 'none') return null;
+    if (String(source.sourceVisibility || '') !== 'public_state_and_public_content') return null;
+    const supportedPressureStates = ['opening_window', 'status_response_window', 'reversal_window'];
+    const pressureState = String(source.pressureState || '');
+    if (!supportedPressureStates.includes(pressureState)) return null;
+    const forbiddenLineToken = /\b(?:cardInstanceId|cardId|instanceId|hand|deck|opponentHand|opponentDeck|loadoutSnapshot|reward|rating|elo|token)\b/i;
+    const safeLine = value => {
+      const line = String(value || '').trim();
+      if (!line || forbiddenLineToken.test(line)) return '';
+      return line;
+    };
+    const responseCardCount = Math.max(0, Math.floor(Number(source.responseCardCount) || 0));
+    const responseLabels = Array.isArray(source.responseLabels)
+      ? source.responseLabels.map(safeLine).filter(Boolean).slice(0, 4)
+      : [];
+    const stateLabels = {
+      opening_window: '开局行动窗口',
+      status_response_window: '公开状态响应窗口',
+      reversal_window: '反打行动窗口'
+    };
+    const primaryLine = pressureState === 'status_response_window'
+      ? `有效行动窗口：${stateLabels[pressureState]}仍在，${responseCardCount > 0 ? `还有 ${responseCardCount} 张响应牌可先处理公开风险` : '先确认公开风险再交权'}。`
+      : pressureState === 'opening_window'
+        ? '有效行动窗口：开局行动窗口仍在，先读首动预算、开局护体和后手行动窗口再确认。'
+        : '有效行动窗口：反打行动窗口仍在，先处理防守或反击选择再交权。';
+    const choiceLine = responseCardCount > 0
+      ? `可响应 ${responseCardCount} 张${responseLabels.length ? ` · ${responseLabels.join(' · ')}` : ''}`
+      : safeLine(source.responseLine) || '可响应：等待权威公开状态继续同步。';
+    const riskLine = pressureState === 'status_response_window'
+      ? '结束回合会放弃当前响应窗口并交出行动权；先处理响应牌再确认交权。'
+      : pressureState === 'opening_window'
+        ? '结束回合会交出开局行动窗口；确认前先读首动预算和护体。'
+        : '结束回合会交出反打窗口；确认前先处理防守收益。';
+    const counterplayLine = safeLine(source.counterplayLine);
+    return {
+      reportVersion: 'pvp-live-action-window-receipt-v1',
+      sourceVisibility: 'public_state_and_public_content',
+      usesHiddenInformation: false,
+      rankedImpact: 'none',
+      advisoryOnly: true,
+      viewerSeat: String(source.viewerSeat || ''),
+      currentSeat: String(source.currentSeat || ''),
+      pressureState,
+      stateLabel: stateLabels[pressureState],
+      responseCardCount,
+      responseLabels,
+      primaryLine,
+      choiceLine,
+      riskLine,
+      counterplayLine,
+      boundaryLine: '只提示不代打；不改变正式积分、奖励或结算。'
+    };
+  },
+  renderLiveActionWindowReceipt(view, phase = '') {
+    const report = view && view.reportVersion === 'pvp-live-action-window-receipt-v1'
+      ? view
+      : this.getLiveActionWindowReceipt(view, phase);
+    if (!report) return '行动窗口回执：等待有效行动窗口';
+    const sourceLine = `${report.sourceVisibility} · ${report.usesHiddenInformation ? '含隐藏信息' : '不含隐藏信息'} · ${report.rankedImpact === 'none' ? '不改变正式积分' : report.rankedImpact}`;
+    const counterplayLine = report.counterplayLine
+      ? `<div class="pvp-live-action-window-receipt-line compact" data-live-action-window-receipt-line><span>${this.escapeHtml(report.counterplayLine)}</span></div>`
+      : '';
+    return `
+      <div class="pvp-live-action-window-receipt-line" data-live-action-window-receipt-line>
+        <span class="pvp-live-action-window-receipt-chip" data-live-action-window-receipt-chip>行动窗口回执</span>
+        <span>${this.escapeHtml(report.primaryLine)}</span>
+      </div>
+      <div class="pvp-live-action-window-receipt-line" data-live-action-window-receipt-line>
+        <span class="pvp-live-action-window-receipt-chip" data-live-action-window-receipt-chip>可响应</span>
+        <span>${this.escapeHtml(report.choiceLine)}</span>
+      </div>
+      <div class="pvp-live-action-window-receipt-line" data-live-action-window-receipt-line>
+        <span class="pvp-live-action-window-receipt-chip" data-live-action-window-receipt-chip>交权风险</span>
+        <span>${this.escapeHtml(report.riskLine)}</span>
+      </div>
+      ${counterplayLine}
+      <div class="pvp-live-action-window-receipt-line compact" data-live-action-window-receipt-line>
+        <span>${this.escapeHtml(report.boundaryLine || '只提示不代打；不改变正式积分、奖励或结算。')}</span>
+        <span>${this.escapeHtml(sourceLine)}</span>
+      </div>
+    `;
+  },
   getLivePublicStatuses(seat) {
     const statuses = Array.isArray(seat && seat.publicStatuses) ? seat.publicStatuses : [];
     return statuses.slice(0, 6).map(status => ({
@@ -4818,6 +4905,7 @@ export const PVPScene = {
       duelMomentumReport: this.getLiveDuelMomentumReport(view),
       intentSignalReport: this.getLiveIntentSignalReport(view),
       counterplayGuide: this.getLiveCounterplayGuide(view, state.phase || ''),
+      actionWindowReceipt: this.getLiveActionWindowReceipt(view, state.phase || ''),
       friendlySeries: this.getLiveFriendlySeries(view && view.friendlySeries ? view.friendlySeries : state.rematchReport),
       firstMatchGuide: this.getLiveFirstMatchGuide(view),
       loadoutExplorationReport: this.getLiveLoadoutExplorationReport(view),
@@ -5064,6 +5152,18 @@ export const PVPScene = {
       counterplayGuideEl.setAttribute('data-live-counterplay-guide-response-cards', guideReport ? String(guideReport.responseCardCount) : '0');
       counterplayGuideEl.setAttribute('data-live-counterplay-guide-advisory-only', guideReport ? String(guideReport.advisoryOnly === true) : 'true');
       counterplayGuideEl.innerHTML = this.renderLiveCounterplayGuide(guideReport || view, phase);
+    }
+    const actionWindowReceiptEl = root.querySelector('[data-live-action-window-receipt]');
+    if (actionWindowReceiptEl) {
+      const windowReceipt = this.getLiveActionWindowReceipt(view, phase);
+      actionWindowReceiptEl.hidden = !windowReceipt;
+      actionWindowReceiptEl.setAttribute('data-live-action-window-receipt-state', windowReceipt ? windowReceipt.pressureState : 'idle');
+      actionWindowReceiptEl.setAttribute('data-live-action-window-receipt-source', windowReceipt ? windowReceipt.sourceVisibility : '');
+      actionWindowReceiptEl.setAttribute('data-live-action-window-receipt-hidden', windowReceipt ? String(windowReceipt.usesHiddenInformation === true) : '');
+      actionWindowReceiptEl.setAttribute('data-live-action-window-receipt-impact', windowReceipt ? windowReceipt.rankedImpact : '');
+      actionWindowReceiptEl.setAttribute('data-live-action-window-receipt-response-cards', windowReceipt ? String(windowReceipt.responseCardCount) : '0');
+      actionWindowReceiptEl.setAttribute('data-live-action-window-receipt-advisory-only', windowReceipt ? String(windowReceipt.advisoryOnly === true) : 'true');
+      actionWindowReceiptEl.innerHTML = this.renderLiveActionWindowReceipt(windowReceipt || view, phase);
     }
     setText('[data-live-social-status]', this.liveSocialMuted
       ? '社交：已静音对手表情 · 本地偏好 · 不写正式积分'
