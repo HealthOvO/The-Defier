@@ -9,9 +9,35 @@ fs.mkdirSync(outDir, { recursive: true });
 const findings = [];
 const consoleErrors = [];
 const visibleProtocolPattern = /connection_timeout|turn_timeout|ready_timeout|ranked_authoritative|swap_sides|forfeit_disconnect/;
+const hiddenAuditDetailKeyPattern = /^(cardInstanceId|cardInstanceIds|cardId|cardIds|instanceId|instanceIds|hand|deck|loadoutSnapshot|loadoutHash|rewardId|rating|elo|token|accessToken|jwt)$/i;
+
+function sanitizeAuditDetailValue(value) {
+  if (Array.isArray(value)) {
+    return value.map(item => sanitizeAuditDetailValue(item));
+  }
+  if (!value || typeof value !== 'object') return value;
+  return Object.fromEntries(Object.entries(value).map(([key, item]) => {
+    if (hiddenAuditDetailKeyPattern.test(key)) return [key, '[redacted]'];
+    return [key, sanitizeAuditDetailValue(item)];
+  }));
+}
+
+function sanitizeAuditDetail(detail = '') {
+  if (typeof detail !== 'string' || !detail) return '';
+  try {
+    return JSON.stringify(sanitizeAuditDetailValue(JSON.parse(detail)));
+  } catch (_) {
+    return detail
+      .replace(/"cardInstanceId"\s*:\s*"[^"]*"/gi, '"cardInstanceId":"[redacted]"')
+      .replace(/"cardId"\s*:\s*"[^"]*"/gi, '"cardId":"[redacted]"')
+      .replace(/"instanceId"\s*:\s*"[^"]*"/gi, '"instanceId":"[redacted]"')
+      .replace(/"loadoutHash"\s*:\s*"[^"]*"/gi, '"loadoutHash":"[redacted]"')
+      .replace(/"token"\s*:\s*"[^"]*"/gi, '"token":"[redacted]"');
+  }
+}
 
 function add(name, pass, detail = '') {
-  findings.push({ name, pass, detail });
+  findings.push({ name, pass, detail: sanitizeAuditDetail(detail) });
 }
 
 async function safeElementScreenshot(page, selector, outputPath) {
@@ -566,6 +592,26 @@ async function safeElementScreenshot(page, selector, outputPath) {
           : ['public_card_catalog_only', 'private_card_projection_blocked', 'setup_ready_required', 'opening_protection'],
       };
     };
+    const getTimeoutAutomationCount = (seatId) => {
+      const counts = window.__livePvpAuditTimeoutAutomationCounts && typeof window.__livePvpAuditTimeoutAutomationCounts === 'object'
+        ? window.__livePvpAuditTimeoutAutomationCounts
+        : {};
+      return Math.max(0, Math.floor(Number(counts[seatId]) || 0));
+    };
+    const makeTimeoutAutomationReport = (currentSeat = 'A') => ({
+      reportVersion: 'pvp-live-timeout-automation-state-v1',
+      sourceVisibility: 'server_authoritative_public_timeout_state',
+      usesHiddenInformation: false,
+      rankedImpact: 'none',
+      currentSeat,
+      viewerSeat: 'A',
+      currentSeatAutomationCount: getTimeoutAutomationCount(currentSeat),
+      viewerSeatAutomationCount: getTimeoutAutomationCount('A'),
+      countsBySeat: {
+        A: getTimeoutAutomationCount('A'),
+        B: getTimeoutAutomationCount('B'),
+      },
+    });
     const makeStateView = (stateVersion = 1, currentSeat = 'A', status = 'setup') => ({
       matchId: 'pvplm-browser-live',
       ruleVersion: 'pvp-live-v1',
@@ -670,6 +716,7 @@ async function safeElementScreenshot(page, selector, outputPath) {
       postMatchReview: makePostMatchReview(status),
       setup: status === 'setup' ? { readyDeadlineAt: Date.now() + 45000, mulliganLimit: 2 } : null,
       turnTimer: makeTurnTimer(status, currentSeat),
+      timeoutAutomationReport: makeTimeoutAutomationReport(currentSeat),
       connectionReport: makeConnectionReport(),
       stateVersion,
       roundIndex: 1,
@@ -3104,12 +3151,50 @@ async function safeElementScreenshot(page, selector, outputPath) {
     }
     window.PVPScene?.renderLivePanel?.();
     const timer = document.querySelector('[data-live-turn-timer]');
+    const forecast = document.querySelector('[data-live-timeout-forecast]');
     const endTurn = document.querySelector('[data-live-action="end-turn"]');
+    const forecastStyle = forecast ? window.getComputedStyle(forecast) : null;
+    const forecastRect = forecast?.getBoundingClientRect();
+    const livePayload = JSON.parse(window.render_game_to_text()).pvp?.live || {};
+    const safeLivePayload = {
+      turnTimer: livePayload.turnTimer ? {
+        reportVersion: livePayload.turnTimer.reportVersion,
+        phase: livePayload.turnTimer.phase,
+        currentSeat: livePayload.turnTimer.currentSeat,
+        remainingMs: livePayload.turnTimer.remainingMs,
+      } : null,
+      timeoutAutomationForecast: livePayload.timeoutAutomationForecast ? {
+        reportVersion: livePayload.timeoutAutomationForecast.reportVersion,
+        sourceVisibility: livePayload.timeoutAutomationForecast.sourceVisibility,
+        usesHiddenInformation: livePayload.timeoutAutomationForecast.usesHiddenInformation,
+        rankedImpact: livePayload.timeoutAutomationForecast.rankedImpact,
+        advisoryOnly: livePayload.timeoutAutomationForecast.advisoryOnly,
+        forecastState: livePayload.timeoutAutomationForecast.forecastState,
+        automationCount: livePayload.timeoutAutomationForecast.automationCount,
+      } : null,
+    };
     const probe = {
       text: timer?.textContent || '',
       urgency: timer?.getAttribute('data-live-turn-timer-urgency') || '',
+      forecastText: forecast?.textContent?.replace(/\s+/g, ' ').trim() || '',
+      forecastHidden: forecast ? forecast.hasAttribute('hidden') : true,
+      forecastState: forecast?.getAttribute('data-live-timeout-forecast-state') || '',
+      forecastSource: forecast?.getAttribute('data-live-timeout-forecast-source') || '',
+      forecastHiddenAttr: forecast?.getAttribute('data-live-timeout-forecast-hidden') || '',
+      forecastImpact: forecast?.getAttribute('data-live-timeout-forecast-impact') || '',
+      forecastAutomationCount: forecast?.getAttribute('data-live-timeout-forecast-automation-count') || '',
+      forecastAdvisoryOnly: forecast?.getAttribute('data-live-timeout-forecast-advisory-only') || '',
+      forecastOverflowWrap: forecastStyle?.overflowWrap || '',
+      forecastScrollWidth: forecast ? Math.round(forecast.scrollWidth) : 0,
+      forecastClientWidth: forecast ? Math.round(forecast.clientWidth) : 0,
+      forecastRect: forecastRect ? {
+        left: Math.round(forecastRect.left),
+        right: Math.round(forecastRect.right),
+        width: Math.round(forecastRect.width),
+      } : null,
+      viewportWidth: window.innerWidth,
       endTurnDisabled: !!endTurn?.disabled,
-      payload: JSON.parse(window.render_game_to_text()).pvp?.live?.turnTimer || null,
+      safeLivePayload,
     };
     if (session && originalGetState) {
       session.getState = originalGetState;
@@ -3122,9 +3207,99 @@ async function safeElementScreenshot(page, selector, outputPath) {
     /最后 10 秒，请确认行动/.test(lowTimerProbe.text)
       && lowTimerProbe.urgency === 'low'
       && lowTimerProbe.endTurnDisabled === false
-      && lowTimerProbe.payload?.phase === 'active'
-      && lowTimerProbe.payload?.remainingMs <= 10000,
+      && lowTimerProbe.safeLivePayload?.turnTimer?.phase === 'active'
+      && lowTimerProbe.safeLivePayload?.turnTimer?.remainingMs <= 10000,
     JSON.stringify(lowTimerProbe),
+  );
+  add(
+    'live UI previews first soft-timeout automation without hiding action controls',
+    lowTimerProbe.forecastHidden === false
+      && lowTimerProbe.forecastState === 'first_soft_timeout'
+      && lowTimerProbe.forecastSource === 'server_authoritative_public_timeout_state'
+      && lowTimerProbe.forecastHiddenAttr === 'false'
+      && lowTimerProbe.forecastImpact === 'none'
+      && lowTimerProbe.forecastAutomationCount === '0'
+      && lowTimerProbe.forecastAdvisoryOnly === 'true'
+      && /超时预告|首次超时|低影响托管/.test(lowTimerProbe.forecastText)
+      && /防守牌|结束回合/.test(lowTimerProbe.forecastText)
+      && /只提示不代打|不改变正式积分|奖励|结算/.test(lowTimerProbe.forecastText)
+      && !/automation_action|soft_timeout|cardInstanceId|cardId|instanceId|hand|deck|loadoutSnapshot|rewardId|rating|elo|token/i.test(lowTimerProbe.forecastText)
+      && (lowTimerProbe.forecastOverflowWrap === 'anywhere' || lowTimerProbe.forecastOverflowWrap === 'break-word')
+      && lowTimerProbe.forecastScrollWidth <= lowTimerProbe.forecastClientWidth + 2
+      && lowTimerProbe.forecastRect?.left >= -1
+      && lowTimerProbe.forecastRect?.right <= lowTimerProbe.viewportWidth + 2
+      && lowTimerProbe.endTurnDisabled === false
+      && lowTimerProbe.safeLivePayload?.timeoutAutomationForecast?.reportVersion === 'pvp-live-timeout-automation-forecast-v1',
+    JSON.stringify(lowTimerProbe),
+  );
+
+  const repeatTimeoutProbe = await page.evaluate(() => {
+    const session = window.PVPScene?.getLiveSession?.();
+    const originalGetState = session?.getState?.bind(session);
+    const baseState = originalGetState?.() || {};
+    const currentVersion = Number(baseState?.stateView?.stateVersion || 4);
+    window.__livePvpAuditTurnTimerMode = 'low';
+    window.__livePvpAuditTimeoutAutomationCounts = { A: 1, B: 0 };
+    const repeatStateView = window.__makeLivePvpAuditStateView?.(currentVersion + 2, 'A', 'active') || null;
+    window.__livePvpAuditTurnTimerMode = '';
+    window.__livePvpAuditTimeoutAutomationCounts = null;
+    if (repeatStateView) {
+      repeatStateView.recentEvents = repeatStateView.recentEvents.filter(event => event.eventType !== 'automation_action');
+    }
+    if (session && originalGetState && repeatStateView) {
+      session.getState = () => ({
+        ...baseState,
+        phase: 'active',
+        matchId: baseState.matchId || repeatStateView.matchId || 'pvplm-browser-live',
+        seatId: baseState.seatId || 'A',
+        stateView: repeatStateView,
+      });
+    }
+    window.PVPScene?.renderLivePanel?.();
+    const forecast = document.querySelector('[data-live-timeout-forecast]');
+    const livePayload = JSON.parse(window.render_game_to_text()).pvp?.live || {};
+    const safeLivePayload = {
+      timeoutAutomationForecast: livePayload.timeoutAutomationForecast ? {
+        reportVersion: livePayload.timeoutAutomationForecast.reportVersion,
+        sourceVisibility: livePayload.timeoutAutomationForecast.sourceVisibility,
+        usesHiddenInformation: livePayload.timeoutAutomationForecast.usesHiddenInformation,
+        rankedImpact: livePayload.timeoutAutomationForecast.rankedImpact,
+        forecastState: livePayload.timeoutAutomationForecast.forecastState,
+        automationCount: livePayload.timeoutAutomationForecast.automationCount,
+      } : null,
+    };
+    const probe = {
+      forecastText: forecast?.textContent?.replace(/\s+/g, ' ').trim() || '',
+      forecastHidden: forecast ? forecast.hasAttribute('hidden') : true,
+      forecastState: forecast?.getAttribute('data-live-timeout-forecast-state') || '',
+      forecastSource: forecast?.getAttribute('data-live-timeout-forecast-source') || '',
+      forecastHiddenAttr: forecast?.getAttribute('data-live-timeout-forecast-hidden') || '',
+      forecastImpact: forecast?.getAttribute('data-live-timeout-forecast-impact') || '',
+      forecastAutomationCount: forecast?.getAttribute('data-live-timeout-forecast-automation-count') || '',
+      recentAutomationEvents: repeatStateView?.recentEvents?.filter(event => event.eventType === 'automation_action').length || 0,
+      safeLivePayload,
+    };
+    if (session && originalGetState) {
+      session.getState = originalGetState;
+    }
+    window.PVPScene?.renderLivePanel?.();
+    return probe;
+  });
+  add(
+    'live UI previews repeat timeout risk from server public count without relying on recent events',
+    repeatTimeoutProbe.forecastHidden === false
+      && repeatTimeoutProbe.forecastState === 'repeat_timeout_risk'
+      && repeatTimeoutProbe.forecastSource === 'server_authoritative_public_timeout_state'
+      && repeatTimeoutProbe.forecastHiddenAttr === 'false'
+      && repeatTimeoutProbe.forecastImpact === 'none'
+      && repeatTimeoutProbe.forecastAutomationCount === '1'
+      && repeatTimeoutProbe.recentAutomationEvents === 0
+      && /已有 1 次超时托管|再次超时|权威结算/.test(repeatTimeoutProbe.forecastText)
+      && /只提示不代打|不改变正式积分|奖励|结算/.test(repeatTimeoutProbe.forecastText)
+      && !/cardInstanceId|cardId|instanceId|hand|deck|loadoutSnapshot|rewardId|rating|elo|token/i.test(repeatTimeoutProbe.forecastText)
+      && repeatTimeoutProbe.safeLivePayload?.timeoutAutomationForecast?.forecastState === 'repeat_timeout_risk'
+      && repeatTimeoutProbe.safeLivePayload?.timeoutAutomationForecast?.automationCount === 1,
+    JSON.stringify(repeatTimeoutProbe),
   );
 
   const openingEndTurnConfirmProbe = await page.evaluate(async () => {

@@ -829,6 +829,122 @@ export const PVPScene = {
     }
     return baseText;
   },
+  getLiveTimeoutAutomationForecast(view, phase = '') {
+    const livePhase = String(phase || '');
+    const viewStatus = String(view && view.status || '');
+    if (livePhase && livePhase !== 'active') return null;
+    if (!livePhase && viewStatus && viewStatus !== 'active') return null;
+    const timer = this.getLiveTurnTimer(view);
+    if (!timer || timer.phase !== 'active' || timer.remainingMs <= 0) return null;
+    if (this.getLiveTurnTimerUrgency(view) !== 'low') return null;
+    const currentSeat = String(timer.currentSeat || view && view.currentSeat || '').trim();
+    if (!currentSeat) return null;
+    const actionPreview = this.getLiveActionPreviewReport(view);
+    if (actionPreview && (actionPreview.usesHiddenInformation || actionPreview.rankedImpact !== 'none')) return null;
+    if (actionPreview && actionPreview.currentSeat && actionPreview.currentSeat !== currentSeat) return null;
+    const timeoutAutomationReport = view && view.timeoutAutomationReport && typeof view.timeoutAutomationReport === 'object'
+      ? view.timeoutAutomationReport
+      : null;
+    if (timeoutAutomationReport && (
+      timeoutAutomationReport.usesHiddenInformation === true
+      || String(timeoutAutomationReport.rankedImpact || 'none') !== 'none'
+    )) return null;
+    const getReportAutomationCount = (seatId) => {
+      if (!timeoutAutomationReport || !seatId) return null;
+      const countsBySeat = timeoutAutomationReport.countsBySeat && typeof timeoutAutomationReport.countsBySeat === 'object'
+        ? timeoutAutomationReport.countsBySeat
+        : {};
+      if (Object.prototype.hasOwnProperty.call(countsBySeat, seatId)) {
+        return Math.max(0, Math.floor(Number(countsBySeat[seatId]) || 0));
+      }
+      if (String(timeoutAutomationReport.currentSeat || '') === seatId) {
+        return Math.max(0, Math.floor(Number(timeoutAutomationReport.currentSeatAutomationCount) || 0));
+      }
+      if (String(timeoutAutomationReport.viewerSeat || '') === seatId) {
+        return Math.max(0, Math.floor(Number(timeoutAutomationReport.viewerSeatAutomationCount) || 0));
+      }
+      return null;
+    };
+    const reportAutomationCount = getReportAutomationCount(currentSeat);
+    const sourceVisibility = reportAutomationCount !== null
+      ? String(timeoutAutomationReport.sourceVisibility || 'server_authoritative_public_timeout_state')
+      : 'public_timer_and_public_events';
+    const advisoryOnly = true;
+    const firstSoftTimeoutState = 'first_soft_timeout';
+    const repeatTimeoutRiskState = 'repeat_timeout_risk';
+    const eventSources = reportAutomationCount !== null ? [] : [
+      Array.isArray(view && view.recentEvents) ? view.recentEvents : [],
+      Array.isArray(view && view.events) ? view.events : [],
+      Array.isArray(view && view.lastEvents) ? view.lastEvents : []
+    ].flat();
+    const automationCount = reportAutomationCount !== null ? reportAutomationCount : eventSources.reduce((max, event) => {
+      const eventType = String(event && event.eventType || '');
+      if (eventType !== 'automation_action') return max;
+      const payload = event && event.publicData && typeof event.publicData === 'object'
+        ? event.publicData
+        : event && event.payload && typeof event.payload === 'object' ? event.payload : {};
+      if (String(payload.reason || '') !== 'soft_timeout') return max;
+      if (String(payload.seatId || event.actingSeat || '') !== currentSeat) return max;
+      return Math.max(max, Math.max(0, Math.floor(Number(payload.automationCount) || 0)));
+    }, 0);
+    const viewerSeat = String(timer.viewerSeat || actionPreview && actionPreview.viewerSeat || '').trim();
+    const isViewerTurn = timer.isViewerTurn === true || !!(actionPreview && actionPreview.isViewerTurn);
+    const canUseViewerPreview = !!actionPreview
+      && actionPreview.isViewerTurn === true
+      && (!viewerSeat || viewerSeat === currentSeat)
+      && (!actionPreview.viewerSeat || actionPreview.viewerSeat === currentSeat);
+    const defenseCardAvailable = canUseViewerPreview && actionPreview.playableCards.some(card => (
+      Math.max(0, Math.floor(Number(card.blockGain) || 0)) > 0
+      && Math.max(0, Math.floor(Number(card.hpDamage) || 0)) <= 0
+    ));
+    const remainingSec = Math.max(0, Math.ceil(timer.remainingMs / 1000));
+    const forecastState = automationCount > 0 ? repeatTimeoutRiskState : firstSoftTimeoutState;
+    const actorLine = isViewerTurn ? '你' : `${currentSeat} 席`;
+    const primaryLine = forecastState === 'first_soft_timeout'
+      ? `超时预告：${actorLine}还有 ${remainingSec}s；首次超时会交给服务端低影响托管，${defenseCardAvailable ? '优先使用公开可见防守牌' : '优先执行防守牌或结束回合'}，不会由前端提前判胜。`
+      : `超时预告：${currentSeat} 已有 ${automationCount} 次超时托管；再次超时将等待服务端按行动超时权威结算，前端不会提前改写胜负。`;
+    const secondaryLine = forecastState === 'first_soft_timeout'
+      ? '仍可在倒计时内自行行动；托管只兜底低影响防守或交权，不替玩家寻找最优解。'
+      : '重复超时属于正式行动窗口风险；继续对局或终局只看服务端权威事件。';
+    return {
+      reportVersion: 'pvp-live-timeout-automation-forecast-v1',
+      sourceVisibility,
+      usesHiddenInformation: false,
+      rankedImpact: 'none',
+      advisoryOnly,
+      forecastState,
+      currentSeat,
+      viewerSeat,
+      isViewerTurn,
+      remainingSec,
+      automationCount,
+      defenseCardAvailable,
+      primaryLine,
+      secondaryLine,
+      boundaryLine: '只提示不代打；超时托管规则不改变正式积分、奖励或结算口径。'
+    };
+  },
+  renderLiveTimeoutAutomationForecast(view, phase = '') {
+    const report = view && view.reportVersion === 'pvp-live-timeout-automation-forecast-v1'
+      ? view
+      : this.getLiveTimeoutAutomationForecast(view, phase);
+    if (!report) return '超时预告：等待行动窗口';
+    const boundaryLine = report.boundaryLine || '只提示不代打；超时托管规则不改变正式积分、奖励或结算口径。';
+    const sourceLine = `${report.sourceVisibility} · ${report.usesHiddenInformation ? '含隐藏信息' : '不含隐藏信息'} · ${report.rankedImpact === 'none' ? '不写正式积分' : report.rankedImpact}`;
+    return `
+      <div class="pvp-live-timeout-forecast-line" data-live-timeout-forecast-line>
+        <span class="pvp-live-timeout-forecast-chip" data-live-timeout-forecast-chip>超时预告</span>
+        <span>${this.escapeHtml(report.primaryLine)}</span>
+      </div>
+      <div class="pvp-live-timeout-forecast-line compact" data-live-timeout-forecast-line>
+        <span>${this.escapeHtml(report.secondaryLine)}</span>
+      </div>
+      <div class="pvp-live-timeout-forecast-line compact" data-live-timeout-forecast-line>
+        <span>${this.escapeHtml(boundaryLine)}</span>
+        <span>${this.escapeHtml(sourceLine)}</span>
+      </div>
+    `;
+  },
   getLiveConnectionReport(view) {
     const report = view && view.connectionReport && typeof view.connectionReport === 'object' ? view.connectionReport : null;
     if (!report) return null;
@@ -4689,6 +4805,7 @@ export const PVPScene = {
       },
       matchQuality: this.getLiveMatchQuality(view),
       turnTimer: this.getLiveTurnTimer(view),
+      timeoutAutomationForecast: this.getLiveTimeoutAutomationForecast(view, state.phase || ''),
       connectionReport: this.getLiveConnectionReport(view),
       connectionTempoReport: this.getLiveConnectionTempo(view, state),
       realtimeStatus: String(state.realtimeStatus || 'idle'),
@@ -4878,6 +4995,18 @@ export const PVPScene = {
     if (turnTimerEl) {
       turnTimerEl.textContent = this.formatLiveTurnTimer(view);
       turnTimerEl.setAttribute('data-live-turn-timer-urgency', this.getLiveTurnTimerUrgency(view));
+    }
+    const timeoutForecastEl = root.querySelector('[data-live-timeout-forecast]');
+    if (timeoutForecastEl) {
+      const forecast = this.getLiveTimeoutAutomationForecast(view, phase);
+      timeoutForecastEl.hidden = !forecast;
+      timeoutForecastEl.setAttribute('data-live-timeout-forecast-state', forecast ? forecast.forecastState : 'idle');
+      timeoutForecastEl.setAttribute('data-live-timeout-forecast-source', forecast ? forecast.sourceVisibility : '');
+      timeoutForecastEl.setAttribute('data-live-timeout-forecast-hidden', forecast ? String(forecast.usesHiddenInformation === true) : '');
+      timeoutForecastEl.setAttribute('data-live-timeout-forecast-impact', forecast ? forecast.rankedImpact : '');
+      timeoutForecastEl.setAttribute('data-live-timeout-forecast-automation-count', forecast ? String(forecast.automationCount) : '0');
+      timeoutForecastEl.setAttribute('data-live-timeout-forecast-advisory-only', forecast ? String(forecast.advisoryOnly === true) : 'true');
+      timeoutForecastEl.innerHTML = this.renderLiveTimeoutAutomationForecast(forecast || view, phase);
     }
     setText('[data-live-connection-status]', this.formatLiveConnectionStatus(view));
     const connectionTempoEl = root.querySelector('[data-live-connection-tempo]');

@@ -1,5 +1,32 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-24: V10-S71 live PVP timeout automation forecast
+  - 本轮完成
+    - `server/pvp-live/engine/state-view.js` 新增 `pvp-live-timeout-automation-state-v1`，由服务端公开投影当前行动席与 A/B 席位的 soft-timeout 托管次数，解决旧超时事件滚出 `recentEvents` 后前台误判首次超时的问题。
+    - `js/scenes/pvp-scene.js` 新增 `getLiveTimeoutAutomationForecast()` / `renderLiveTimeoutAutomationForecast()`，在 active 当前行动方进入最后 10 秒低剩余时间时，基于服务端公开超时状态、公开倒计时和安全出牌预览生成“超时托管预告”。
+    - 首次行动超时会展示 `first_soft_timeout`：说明服务端只做低影响托管，优先打公开防守牌或结束回合；若同席位已有服务端公开托管计数，会切到 `repeat_timeout_risk`，提示重复超时可能进入权威超时风险。
+    - 新预告固定 `pvp-live-timeout-automation-forecast-v1`、`sourceVisibility=server_authoritative_public_timeout_state`、`usesHiddenInformation=false`、`rankedImpact=none`、`advisoryOnly=true`；不会展示手牌实例、卡牌 id、牌库、奖励、rating、token，也不会自动出牌或改变正式积分、奖励、结算。
+    - `index.html` 增加 `[data-live-timeout-forecast]` 挂点与 source/hidden/impact/count/advisory marker；`css/pvp.css` 补桌面与 390px 移动端样式，保证预告长文案可换行且不挤压行动按钮。
+    - `tests/browser_pvp_live_audit.mjs` 新增真实 DOM finding：最后 10 秒必须看到首次低影响托管预告、重复超时风险必须来自服务端公开计数而不是最近事件猜测、公开边界 marker、无隐藏信息泄漏、行动按钮仍可点；审计报告 detail 写入前会统一脱敏 viewer-only card / deck / loadout 字段。
+    - `game-intro.html` 同步玩家说明：最后 10 秒会显示超时托管预告，首次超时低影响托管，重复超时才提示权威风险，且提示不代打、不改写正式结算。
+  - 已验证
+    - 红测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs` 在实现前失败于 `live UI should expose a timeout automation forecast helper`。
+    - 红测：`node tests/sanity_pvp_live_ui_contract_checks.cjs` 在实现前失败于缺少 `getLiveTimeoutAutomationForecast(` 合约 marker。
+    - 红测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs` 在修复前失败于 `timeout forecast should use server-authoritative public timeout state`。
+    - 红测：`node tests/sanity_pvp_live_engine_checks.cjs` 在修复前失败于 `state view should expose public timeout automation state`。
+    - 红测：`node tests/sanity_release_gate_coverage_checks.cjs` 在修复前失败于缺少 `server_authoritative_public_timeout_state` / `safeLivePayload` 浏览器审计 marker。
+    - 绿测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs`
+    - 绿测：`node tests/sanity_pvp_live_engine_checks.cjs`
+    - 绿测：`node tests/sanity_pvp_live_ui_contract_checks.cjs`
+    - 绿测：`node tests/sanity_release_gate_coverage_checks.cjs`
+    - 浏览器审计：`node tests/browser_pvp_live_audit.mjs http://127.0.0.1:4174 output/pvp-live-timeout-forecast-audit-fix-20260624`，126/126 findings、0 failed、0 console error；复扫确认 `A-strike-1`、`B-strike-1`、`hash-self-sword-123456`、`pvp_guard`、`pvp_strike`、`hidden-guard-instance` 均未出现在报告中。
+    - 绿测：`node tests/sanity_intro_progress_sync_checks.cjs`
+    - 完整 Node 门禁：`npm run test:node`
+    - 构建：`npm run build:pages`
+    - 空白检查：`git diff --check`
+  - 当前结论
+    - live PVP 的超时体验从“等倒计时结束后才知道服务端做了什么”推进到“最后 10 秒先看懂托管边界”：行动方知道首次超时不会被前台偷偷代打，对手也能理解为什么短暂超时只是低影响兜底而不是突然判负；重复超时风险仍由服务端权威处理。该切片只改前台公开预告、DOM marker、样式、说明和门禁，不改变服务端伤害、护体、先后手、匹配、正式积分、奖励或结算。
+
 - 2026-06-24: V10-S70 live PVP response-window counterplay guide
   - 本轮完成
     - `js/scenes/pvp-scene.js` 新增 `getLiveCounterplayGuide()` / `renderLiveCounterplayGuide()`，把 `duelMomentumReport`、`intentSignalReport` 和 `actionPreviewReport.playableCards` 聚合成战中“反制建议”卡。

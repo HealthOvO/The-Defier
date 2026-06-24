@@ -362,6 +362,18 @@ assert(activeViewA.duelMomentumReport.currentSeat === 'A' && activeViewA.duelMom
 assert(/护体/.test(activeViewA.duelMomentumReport.summaryLine), 'active duel momentum should mention active opening protection');
 assert(/反打窗口/.test(activeViewA.duelMomentumReport.counterplayLine), 'active duel momentum should keep counterplay window readable');
 assert(activeViewA.duelMomentumReport.safeguards.includes('second_seat_buffer'), 'active duel momentum should surface second-seat buffer safeguard');
+const activeTimeoutViewA = projectStateView({
+  ...activeState,
+  timeoutAutomationBySeat: { A: 1, B: 0 }
+}, 'A');
+assert(activeTimeoutViewA.timeoutAutomationReport?.reportVersion === 'pvp-live-timeout-automation-state-v1', 'state view should expose public timeout automation state');
+assert(activeTimeoutViewA.timeoutAutomationReport.sourceVisibility === 'server_authoritative_public_timeout_state', 'timeout automation state should be server-authoritative public data');
+assert(activeTimeoutViewA.timeoutAutomationReport.usesHiddenInformation === false, 'timeout automation state must not use hidden information');
+assert(activeTimeoutViewA.timeoutAutomationReport.rankedImpact === 'none', 'timeout automation state should not write ranked result');
+assert(activeTimeoutViewA.timeoutAutomationReport.currentSeat === 'A', 'timeout automation state should expose the public current seat');
+assert(activeTimeoutViewA.timeoutAutomationReport.currentSeatAutomationCount === 1, 'timeout automation state should preserve the current seat prior soft-timeout count');
+assert(activeTimeoutViewA.timeoutAutomationReport.countsBySeat.A === 1 && activeTimeoutViewA.timeoutAutomationReport.countsBySeat.B === 0, 'timeout automation state should expose public counts by seat for stale-event-safe UI');
+assert(!/hand|deck|cardId|instanceId|loadoutSnapshot|reward|rating|elo|token/i.test(JSON.stringify(activeTimeoutViewA.timeoutAutomationReport)), 'timeout automation state must not leak hidden cards, rewards, rating, or tokens');
 assert(activeViewA.intentSignalReport && activeViewA.intentSignalReport.reportVersion === 'pvp-live-intent-signal-v1', 'active state view should expose public intent signal report');
 assert(activeViewA.intentSignalReport.sourceVisibility === 'public_state_and_public_content', 'intent signal should use public board state and public card content only');
 assert(activeViewA.intentSignalReport.usesHiddenInformation === false, 'intent signal must not use hidden hand or deck information');

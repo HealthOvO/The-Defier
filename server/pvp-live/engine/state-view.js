@@ -111,6 +111,31 @@ function projectRankedOpponentSeat(seat, state) {
     };
 }
 
+function normalizeTimeoutAutomationCounts(rawCounts = {}) {
+    const counts = rawCounts && typeof rawCounts === 'object' ? rawCounts : {};
+    return {
+        A: Math.max(0, Math.floor(Number(counts.A) || 0)),
+        B: Math.max(0, Math.floor(Number(counts.B) || 0))
+    };
+}
+
+function projectTimeoutAutomationReport(state, viewerSeat) {
+    const countsBySeat = normalizeTimeoutAutomationCounts(state && state.timeoutAutomationBySeat);
+    const currentSeat = state && state.currentSeat === 'B' ? 'B' : state && state.currentSeat === 'A' ? 'A' : '';
+    const safeViewerSeat = viewerSeat === 'B' ? 'B' : viewerSeat === 'A' ? 'A' : '';
+    return {
+        reportVersion: 'pvp-live-timeout-automation-state-v1',
+        sourceVisibility: 'server_authoritative_public_timeout_state',
+        usesHiddenInformation: false,
+        rankedImpact: 'none',
+        currentSeat,
+        viewerSeat: safeViewerSeat,
+        currentSeatAutomationCount: currentSeat ? countsBySeat[currentSeat] : 0,
+        viewerSeatAutomationCount: safeViewerSeat ? countsBySeat[safeViewerSeat] : 0,
+        countsBySeat
+    };
+}
+
 function projectSelfSeat(seat) {
     return {
         ...projectPublicSeat(seat),
@@ -2190,6 +2215,7 @@ function projectStateView(state, seatId) {
         roundIndex: state.roundIndex,
         turnIndex: state.turnIndex,
         currentSeat: state.currentSeat,
+        timeoutAutomationReport: projectTimeoutAutomationReport(state, seatId),
         setup: state.setup ? {
             readyDeadlineAt: Math.max(0, Math.floor(Number(state.setup.readyDeadlineAt) || 0)),
             firstSeat: state.setup.firstSeat || 'A',

@@ -217,6 +217,16 @@ const liveBrowserAudit = read('tests/browser_pvp_live_audit.mjs');
   'data-live-counterplay-guide-impact',
   'data-live-counterplay-guide-response-cards',
   'data-live-counterplay-guide-advisory-only',
+  'getLiveTimeoutAutomationForecast(',
+  'renderLiveTimeoutAutomationForecast(',
+  'pvp-live-timeout-automation-forecast-v1',
+  'data-live-timeout-forecast',
+  'data-live-timeout-forecast-state',
+  'data-live-timeout-forecast-source',
+  'data-live-timeout-forecast-hidden',
+  'data-live-timeout-forecast-impact',
+  'data-live-timeout-forecast-automation-count',
+  'data-live-timeout-forecast-advisory-only',
   'getLivePublicStatuses(',
   'renderLivePublicStatuses(',
   'formatLiveEvent(',
@@ -569,6 +579,36 @@ const renderLiveCounterplayGuideBody = methodBody(scene, 'renderLiveCounterplayG
   '不写正式积分',
 ].forEach((needle) => {
   assert.ok(renderLiveCounterplayGuideBody.includes(needle), `counterplay guide renderer should expose stable readable markers: ${needle}`);
+});
+
+const liveTimeoutAutomationForecastBody = methodBody(scene, 'getLiveTimeoutAutomationForecast');
+[
+  'getLiveTurnTimer',
+  'getLiveTurnTimerUrgency',
+  'getLiveActionPreviewReport',
+  'timeoutAutomationReport',
+  'server_authoritative_public_timeout_state',
+  'automation_action',
+  'soft_timeout',
+  'first_soft_timeout',
+  'repeat_timeout_risk',
+  'public_timer_and_public_events',
+  'advisoryOnly',
+  'usesHiddenInformation',
+  "rankedImpact !== 'none'",
+].forEach((needle) => {
+  assert.ok(liveTimeoutAutomationForecastBody.includes(needle), `timeout automation forecast should derive from public timer/events safely: ${needle}`);
+});
+
+const renderLiveTimeoutAutomationForecastBody = methodBody(scene, 'renderLiveTimeoutAutomationForecast');
+[
+  'data-live-timeout-forecast-line',
+  'data-live-timeout-forecast-chip',
+  '超时预告',
+  '只提示不代打',
+  '不改变正式积分',
+].forEach((needle) => {
+  assert.ok(renderLiveTimeoutAutomationForecastBody.includes(needle), `timeout automation forecast renderer should expose stable readable markers: ${needle}`);
 });
 
 const endLiveTurnBody = methodBody(scene, 'endLiveTurn');

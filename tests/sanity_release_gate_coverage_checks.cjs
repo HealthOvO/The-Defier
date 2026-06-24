@@ -802,6 +802,20 @@ const browserAutomationBootAudit = read('tests/browser_automation_boot_audit.mjs
   'data-live-counterplay-guide-advisory-only',
   'live UI renders public counterplay guide during status-response window',
   'live UI mobile renders public counterplay guide without overflow',
+  'pvp-live-timeout-automation-forecast-v1',
+  'data-live-timeout-forecast',
+  'data-live-timeout-forecast-state',
+  'data-live-timeout-forecast-source',
+  'data-live-timeout-forecast-hidden',
+  'data-live-timeout-forecast-impact',
+  'data-live-timeout-forecast-automation-count',
+  'data-live-timeout-forecast-advisory-only',
+  'server_authoritative_public_timeout_state',
+  'safeLivePayload',
+  'sanitizeAuditDetail',
+  'hiddenAuditDetailKeyPattern',
+  'live UI previews first soft-timeout automation without hiding action controls',
+  'live UI previews repeat timeout risk from server public count without relying on recent events',
   'status_mitigated',
   'public_status_mitigated',
   'card_cycled',
@@ -922,6 +936,11 @@ const browserAutomationBootAudit = read('tests/browser_automation_boot_audit.mjs
     `live PVP browser audit should pin UI wiring marker: ${needle}`,
   );
 });
+
+assert.ok(
+  browserPvpLiveAudit.includes('findings.push({ name, pass, detail: sanitizeAuditDetail(detail) })'),
+  'live PVP browser audit must sanitize finding details before writing report output',
+);
 
 assert.ok(
   !/pvp-live-opening-safeguard-chip:nth-child\(2\)[^{]*\{[^}]*display:\s*none/i.test(pvpCss),

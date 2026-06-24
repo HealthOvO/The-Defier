@@ -918,6 +918,136 @@ assert.equal(
   'low',
   'live UI should expose a low-time urgency state for DOM styling and audits',
 );
+assert.equal(typeof PVPScene.getLiveTimeoutAutomationForecast, 'function', 'live UI should expose a timeout automation forecast helper');
+assert.equal(typeof PVPScene.renderLiveTimeoutAutomationForecast, 'function', 'live UI should expose a timeout automation forecast renderer');
+const firstTimeoutForecastView = {
+  status: 'active',
+  currentSeat: 'A',
+  timeoutAutomationReport: {
+    reportVersion: 'pvp-live-timeout-automation-state-v1',
+    sourceVisibility: 'server_authoritative_public_timeout_state',
+    usesHiddenInformation: false,
+    rankedImpact: 'none',
+    currentSeat: 'A',
+    currentSeatAutomationCount: 0,
+    countsBySeat: { A: 0, B: 0 }
+  },
+  turnTimer: {
+    reportVersion: 'pvp-live-turn-timer-v1',
+    phase: 'active',
+    currentSeat: 'A',
+    viewerSeat: 'A',
+    isViewerTurn: true,
+    viewerCanAct: true,
+    startedAt: Date.now() - 81000,
+    deadlineAt: Date.now() + 9000,
+    timeoutMs: 90000,
+    remainingMs: 9000
+  },
+  actionPreviewReport: {
+    reportVersion: 'pvp-live-action-preview-v1',
+    sourceVisibility: 'viewer_public_state',
+    usesHiddenInformation: false,
+    rankedImpact: 'none',
+    viewerSeat: 'A',
+    currentSeat: 'A',
+    isViewerTurn: true,
+    playableCards: [{
+      cardInstanceId: 'hidden-guard-instance',
+      cardName: '护体诀',
+      blockGain: 7,
+      hpDamage: 0,
+      budgetedDamage: 0,
+      summaryLine: '护体诀：自身护盾 +7。'
+    }],
+    endTurn: {
+      nextSeat: 'B',
+      summaryLine: '结束回合后行动权交给 B。'
+    }
+  },
+  recentEvents: []
+};
+const firstTimeoutForecast = PVPScene.getLiveTimeoutAutomationForecast(firstTimeoutForecastView, 'active');
+assert.equal(firstTimeoutForecast.reportVersion, 'pvp-live-timeout-automation-forecast-v1', 'timeout forecast should expose a stable report version');
+assert.equal(firstTimeoutForecast.sourceVisibility, 'server_authoritative_public_timeout_state', 'timeout forecast should use server-authoritative public timeout state');
+assert.equal(firstTimeoutForecast.usesHiddenInformation, false, 'timeout forecast must be hidden-info safe');
+assert.equal(firstTimeoutForecast.rankedImpact, 'none', 'timeout forecast must not affect ranked state');
+assert.equal(firstTimeoutForecast.advisoryOnly, true, 'timeout forecast should explicitly stay advisory-only');
+assert.equal(firstTimeoutForecast.forecastState, 'first_soft_timeout', 'first low-time window should explain the first soft timeout automation path');
+assert.equal(firstTimeoutForecast.automationCount, 0, 'first timeout forecast should not invent previous automation counts');
+assert.equal(firstTimeoutForecast.defenseCardAvailable, true, 'first timeout forecast should detect a public low-impact defense-card fallback without exposing ids');
+assert.match(firstTimeoutForecast.primaryLine, /首次超时|低影响托管|防守牌/, 'first timeout forecast should explain low-impact automation in player language');
+const firstTimeoutForecastMarkup = PVPScene.renderLiveTimeoutAutomationForecast(firstTimeoutForecastView, 'active');
+assert.match(firstTimeoutForecastMarkup, /data-live-timeout-forecast-line/, 'timeout forecast should render stable readable lines');
+assert.match(firstTimeoutForecastMarkup, /首次超时|低影响托管|防守牌/, 'timeout forecast should render first soft-timeout guidance');
+assert.match(firstTimeoutForecastMarkup, /只提示不代打|不改变正式积分|奖励|结算/, 'timeout forecast should render advisory and settlement boundaries');
+assert.doesNotMatch(firstTimeoutForecastMarkup, /hidden-guard-instance|cardInstanceId|cardId|instanceId|hand|deck|loadoutSnapshot|rewardId|rating|elo|token/i, 'timeout forecast rendering must not expose hidden ids, rewards, or rating payloads');
+const repeatTimeoutForecast = PVPScene.getLiveTimeoutAutomationForecast({
+  ...firstTimeoutForecastView,
+  timeoutAutomationReport: {
+    ...firstTimeoutForecastView.timeoutAutomationReport,
+    currentSeatAutomationCount: 1,
+    countsBySeat: { A: 1, B: 0 }
+  },
+  recentEvents: [{
+    eventType: 'automation_action',
+    actingSeat: 'A',
+    publicData: {
+      seatId: 'A',
+      actionType: 'defense_card',
+      reason: 'soft_timeout',
+      automationCount: 1
+    }
+  }]
+}, 'active');
+assert.equal(repeatTimeoutForecast.forecastState, 'repeat_timeout_risk', 'repeat low-time window should explain the authoritative timeout risk');
+assert.equal(repeatTimeoutForecast.automationCount, 1, 'repeat timeout forecast should preserve the public prior automation count');
+assert.match(repeatTimeoutForecast.primaryLine, /已有 1 次超时托管|再次超时|权威结算/, 'repeat timeout forecast should warn about repeated timeout consequences');
+const staleEventRepeatForecast = PVPScene.getLiveTimeoutAutomationForecast({
+  ...firstTimeoutForecastView,
+  timeoutAutomationReport: {
+    ...firstTimeoutForecastView.timeoutAutomationReport,
+    currentSeatAutomationCount: 1,
+    countsBySeat: { A: 1, B: 0 }
+  },
+  recentEvents: []
+}, 'active');
+assert.equal(staleEventRepeatForecast.forecastState, 'repeat_timeout_risk', 'repeat timeout forecast should use server-authoritative public count even after old events roll out of recentEvents');
+assert.equal(staleEventRepeatForecast.automationCount, 1, 'repeat timeout forecast should not reset to first timeout when recentEvents no longer contains the first soft timeout');
+assert.equal(
+  PVPScene.getLiveTimeoutAutomationForecast({
+    ...firstTimeoutForecastView,
+    timeoutAutomationReport: {
+      ...firstTimeoutForecastView.timeoutAutomationReport,
+      usesHiddenInformation: true
+    }
+  }, 'active'),
+  null,
+  'timeout forecast should reject unsafe timeout automation reports',
+);
+assert.equal(
+  PVPScene.getLiveTimeoutAutomationForecast({
+    ...firstTimeoutForecastView,
+    turnTimer: {
+      ...firstTimeoutForecastView.turnTimer,
+      deadlineAt: Date.now() + 30000,
+      remainingMs: 30000
+    }
+  }, 'active'),
+  null,
+  'timeout forecast should stay hidden outside the final 10 seconds',
+);
+assert.equal(
+  PVPScene.getLiveTimeoutAutomationForecast({
+    ...firstTimeoutForecastView,
+    actionPreviewReport: {
+      ...firstTimeoutForecastView.actionPreviewReport,
+      usesHiddenInformation: true
+    }
+  }, 'active'),
+  null,
+  'timeout forecast should reject unsafe action preview sources',
+);
 const lowOpponentActionTimerCopy = PVPScene.formatLiveTurnTimer({
   turnTimer: {
     reportVersion: 'pvp-live-turn-timer-v1',

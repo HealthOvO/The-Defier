@@ -862,6 +862,53 @@
     color: rgba(255, 214, 214, 0.96);
 }
 
+.pvp-live-timeout-forecast {
+    margin-top: 8px;
+    display: grid;
+    gap: 6px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 191, 92, 0.28);
+    background: rgba(255, 191, 92, 0.09);
+    color: rgba(255, 240, 210, 0.96);
+    font-size: 0.74rem;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+}
+
+.pvp-live-timeout-forecast[hidden] {
+    display: none;
+}
+
+.pvp-live-timeout-forecast-line {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    min-width: 0;
+}
+
+.pvp-live-timeout-forecast-line > span:last-child {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.pvp-live-timeout-forecast-line.compact {
+    color: rgba(255, 240, 210, 0.78);
+    font-size: 0.68rem;
+}
+
+.pvp-live-timeout-forecast-chip {
+    flex: 0 0 auto;
+    max-width: 42%;
+    padding: 3px 6px;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 191, 92, 0.22);
+    background: rgba(255, 255, 255, 0.05);
+    color: rgba(255, 246, 225, 0.98);
+    font-weight: 800;
+    overflow-wrap: anywhere;
+}
+
 .pvp-live-connection-status,
 .pvp-live-realtime-status {
     margin-top: 8px;
@@ -4752,6 +4799,30 @@ input:checked+.seal-slider .seal-face.on {
         text-overflow: clip;
         white-space: normal;
         overflow-wrap: anywhere;
+    }
+
+    .pvp-live-timeout-forecast {
+        margin-top: 4px;
+        padding: 5px 6px;
+        gap: 4px;
+        font-size: 0.62rem;
+        line-height: 1.16;
+        overflow: visible;
+        white-space: normal;
+        overflow-wrap: anywhere;
+    }
+
+    .pvp-live-timeout-forecast-line {
+        gap: 4px;
+    }
+
+    .pvp-live-timeout-forecast-line.compact {
+        font-size: 0.56rem;
+    }
+
+    .pvp-live-timeout-forecast-chip {
+        max-width: 38%;
+        padding: 2px 4px;
     }
 
     .pvp-live-connection-status,
