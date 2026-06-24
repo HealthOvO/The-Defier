@@ -1,5 +1,28 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-24: V10-S70 live PVP response-window counterplay guide
+  - 本轮完成
+    - `js/scenes/pvp-scene.js` 新增 `getLiveCounterplayGuide()` / `renderLiveCounterplayGuide()`，把 `duelMomentumReport`、`intentSignalReport` 和 `actionPreviewReport.playableCards` 聚合成战中“反制建议”卡。
+    - 新卡只在 active 且轮到自己行动的 `opening_window` / `status_response_window` / `reversal_window` 等公开窗口显示；非 active、非自己回合、任一来源 `usesHiddenInformation=true` 或 `rankedImpact!='none'` 时不渲染。
+    - DOM 新增 `[data-live-counterplay-guide]`，并固定 `data-live-counterplay-guide-source="public_state_and_public_content"`、`data-live-counterplay-guide-hidden="false"`、`data-live-counterplay-guide-impact="none"`、`data-live-counterplay-guide-advisory-only="true"` 和可用响应牌数量 marker。
+    - status response 窗口会提示“可用响应牌 1 张 · 清除破绽 · 补盾 +7”，并说明直接结束回合会交出反打窗口；它只提示公开反制线，不展示 `cardInstanceId` / `cardId` / `hand` / `deck` / `rating` / `reward` / token，也不自动出牌或改变正式积分、奖励、结算。
+    - `css/pvp.css` 为反制建议卡补桌面和 390px 移动端样式，沿用现有 live HUD 的紧凑信息带，避免长文案横向撑宽。
+    - `game-intro.html` 同步玩家说明：开局窗口和破绽响应窗口会出现公开反制建议卡，提示响应牌数量和清除破绽/补盾方向，但只提示不代打、不改变正式结算口径。
+  - 已验证
+    - 红测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs` 在实现前失败于 `live UI should expose a response-window counterplay guide helper`。
+    - 红测：`node tests/sanity_pvp_live_ui_contract_checks.cjs` 在实现前失败于缺少 `getLiveCounterplayGuide(` 合约 marker。
+    - 红测：`node tests/sanity_release_gate_coverage_checks.cjs` 在实现前失败于缺少 `pvp-live-counterplay-guide-v1` browser audit marker。
+    - 绿测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs`
+    - 绿测：`node tests/sanity_pvp_live_ui_contract_checks.cjs`
+    - 绿测：`node tests/sanity_release_gate_coverage_checks.cjs`
+    - 绿测：`node tests/sanity_intro_progress_sync_checks.cjs`
+    - 构建：`npm run build:pages`
+    - 浏览器审计：`node tests/browser_pvp_live_audit.mjs http://127.0.0.1:4174 output/pvp-live-counterplay-guide-final-audit-20260624`，124/124 findings、0 failed、0 console error。
+    - 完整 Node 门禁：`npm run test:node`
+    - 空白检查：`git diff --check`
+  - 当前结论
+    - live PVP 的响应窗口从“卡面有响应牌标识、结束回合需二次确认”继续推进到“玩家在窗口中直接读到公开反制线”：双方能更清楚地理解为什么不该急着交权、还能用哪些公开类型的响应救场。该切片只改前端公开引导、DOM marker、样式、说明和测试，不改变服务端伤害、护体、先后手、匹配、正式积分、奖励或结算。
+
 - 2026-06-24: V10-S69 live PVP action receipt anti-burst evidence chips
   - 本轮完成
     - `js/scenes/pvp-scene.js` 将实时论道行动回执里的公开伤害拆解进一步显性化：当服务端 `actionReceiptReport.damage.preventedByBudget > 0` 时，回执会渲染 `data-live-action-budget-clamp="public_first_action_budget"`，直接显示“首动预算挡下 X”。
@@ -16,7 +39,7 @@ Original prompt: 进入全自动审查与修复模式，按顺序审查并修复
     - 绿测：`node tests/sanity_release_gate_coverage_checks.cjs`
     - 浏览器审计：`node tests/browser_pvp_live_audit.mjs http://127.0.0.1:4173 output/pvp-live-action-receipt-evidence-audit`，122/122 findings、0 failed、0 console error。
   - 当前结论
-    - live PVP 的开局公平解释从“预览和事件能证明不会先手秒杀”继续推进到“行动结算回执也能逐项展示预算挡伤与护体保底”：先手方知道伤害被权威预算压住，后手方能看到自己为何保住行动窗口。该切片只改前台公开回执、测试、版本说明和进度记录，不改变服务端伤害、护体、先后手、匹配、积分、奖励或结算。
+    - live PVP 的开局公平解释从“预览和事件能说明首动伤害如何被限制”继续推进到“行动结算回执也能逐项展示预算挡伤与护体保底”：先手方知道伤害被权威预算压住，后手方能看到自己为何保住行动窗口。该切片只改前台公开回执、测试、版本说明和进度记录，不改变服务端伤害、护体、先后手、匹配、积分、奖励或结算。
 
 - 2026-06-24: V10-S68 live PVP post-match next-step guide
   - 本轮完成
@@ -1479,12 +1502,12 @@ Original prompt: 进入全自动审查与修复模式，按顺序审查并修复
     - 浏览器审计：`node tests/browser_pvp_live_audit.mjs http://127.0.0.1:4173 output/pvp-live-action-preview-audit-2`，73/73 findings、0 console error。
     - 真实后端 smoke：`node tests/browser_pvp_live_real_backend_smoke.mjs http://127.0.0.1:4173 output/pvp-live-action-preview-real-2`，46/46 findings、0 console error。
   - 当前结论
-    - live PVP 开局窗口现在不仅告诉玩家“为什么不会先手秒杀”，还会在正式提交前把本张牌的公开结算预期讲清楚。先手能理解伤害为什么被预算 / 护盾 / 护体压住，后手也能确认自己仍有血线、护盾和反打窗口；这比单纯防误触更接近真正 PVP 的双边体验。
+    - live PVP 开局窗口现在不仅告诉玩家“首动伤害如何被限制”，还会在正式提交前把本张牌的公开结算预期讲清楚。先手能理解伤害为什么被预算 / 护盾 / 护体压住，后手也能确认自己仍有血线、护盾和反打窗口；这比单纯防误触更接近真正 PVP 的双边体验。
 
 - 2026-06-20: V10-S9O live PVP opening action preview
   - 本轮完成
     - `js/scenes/pvp-scene.js` 新增 `formatLiveOpeningActionConfirmMessage()`，把 live PVP `opening_window` 的第一次出牌 / 结束回合点击从泛化二次确认，升级为可读的公开规则预期提示。
-    - 出牌确认现在会展示当前术式、目标席位、首动预算、开局护体保底血量、后手公开护盾和反打缓冲；结束回合确认会额外说明行动权将交给哪个公开席位，避免玩家误以为“点一下就交权”或不了解本拍为什么不会先手秒杀。
+    - 出牌确认现在会展示当前术式、目标席位、首动预算、开局护体保底血量、后手公开护盾和反打缓冲；结束回合确认会额外说明行动权将交给哪个公开席位，避免玩家误以为“点一下就交权”或不了解本拍首动伤害如何被限制。
     - 该切片只消费服务端公开 `openingSafeguardReport` 与当前 `stateView`，不在前端重算伤害、护体、预算、反打或胜负；第二次确认后仍提交原有 `play_card` / `end_turn` 权威 intent，不改 WS / HTTP fallback、服务端结算、积分、奖励、赛季验证或匹配规则。
     - `tests/sanity_pvp_live_ui_runtime_checks.mjs` 固定确认提示必须包含 `首动预算 18`、`保底 1 血`、`后手护盾 B +3`、`反打缓冲 +8`，结束回合还必须包含 `交给 B`。
     - `tests/browser_pvp_live_audit.mjs` 与 `tests/browser_pvp_live_real_backend_smoke.mjs` 在 fake UI 和真实双账号链路中同时固定上述公开预期 marker；`tests/sanity_pvp_live_ui_contract_checks.cjs` 与 `tests/sanity_release_gate_coverage_checks.cjs` 固定 helper 和 release gate marker，防止确认文案退回空泛提示。
@@ -2986,7 +3009,7 @@ Original prompt: 进入全自动审查与修复模式，按顺序审查并修复
     - `index.html`、`css/pvp.css`、`js/scenes/pvp-scene.js` 在 live 状态区增加 `data-live-first-guide` / `data-live-first-match-guide`，展示首战简报、当前 next action、关键步骤和三套推荐谱弱点；`render_game_to_text()` 输出同一份 public payload。
     - `tests/sanity_pvp_live_engine_checks.cjs`、`tests/sanity_pvp_live_route_checks.cjs`、`tests/sanity_pvp_live_ui_contract_checks.cjs`、`tests/browser_pvp_live_audit.mjs`、`tests/browser_pvp_live_real_backend_smoke.mjs` 和 `tests/sanity_release_gate_coverage_checks.cjs` 已固定服务端报告、路由投影、UI 锚点、fake audit、真实双账号 smoke 和无 reward / rating / ELO 暗示。
   - 当前结论
-    - live PVP 现在有双方可见的“首战简报 MVP”：玩家能在第一局前知道是真人排位、入队锁谱、如何调息、为什么不会先手秒杀、准备超时为什么不计正式积分，以及三套 MVP 谱的弱点。120 秒无真人长等待 UI 和赛后/首败复盘 MVP 已由后续切片补上；它仍不是完整首战引导合同：正式问道练习战斗承接、正式 ELO / 赛季奖励、8 套正式斗法谱和线上部署仍未宣称完成。
+    - live PVP 现在有双方可见的“首战简报 MVP”：玩家能在第一局前知道是真人排位、入队锁谱、如何调息、首动伤害如何被限制、准备超时为什么不计正式积分，以及三套 MVP 谱的弱点。120 秒无真人长等待 UI 和赛后/首败复盘 MVP 已由后续切片补上；它仍不是完整首战引导合同：正式问道练习战斗承接、正式 ELO / 赛季奖励、8 套正式斗法谱和线上部署仍未宣称完成。
 
 - 2026-06-18: V10 真 PVP live 开局防先手秒杀体验保护切片
   - 本轮完成

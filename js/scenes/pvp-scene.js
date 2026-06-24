@@ -1721,6 +1721,125 @@ export const PVPScene = {
       </div>
     `;
   },
+  getLiveCounterplayGuide(view, phase = '') {
+    const livePhase = String(phase || '');
+    const viewStatus = String(view && view.status || '');
+    if (livePhase && livePhase !== 'active') return null;
+    if (!livePhase && viewStatus && viewStatus !== 'active') return null;
+    const actionPreview = this.getLiveActionPreviewReport(view);
+    const duelMomentum = this.getLiveDuelMomentumReport(view);
+    const intentSignal = this.getLiveIntentSignalReport(view);
+    const safeReports = [actionPreview, duelMomentum, intentSignal].filter(Boolean);
+    if (!safeReports.length) return null;
+    if (safeReports.some(report => report.usesHiddenInformation || report.rankedImpact !== 'none')) return null;
+    const forbiddenLineToken = /\b(?:cardInstanceId|cardId|instanceId|hand|deck|opponentHand|opponentDeck|loadoutSnapshot|reward|rating|elo|token)\b/i;
+    const safeLine = value => {
+      const line = String(value || '').trim();
+      if (!line || forbiddenLineToken.test(line)) return '';
+      return line;
+    };
+    const turnReports = safeReports.filter(report => report.viewerSeat || report.currentSeat || report.isViewerTurn);
+    if (!turnReports.length || turnReports.some(report => report.isViewerTurn !== true)) return null;
+    const viewerSeats = new Set(turnReports.map(report => report.viewerSeat).filter(Boolean));
+    const currentSeats = new Set(turnReports.map(report => report.currentSeat).filter(Boolean));
+    if (viewerSeats.size > 1 || currentSeats.size > 1) return null;
+    const viewerSeat = viewerSeats.size ? Array.from(viewerSeats)[0] : '';
+    const currentSeat = currentSeats.size ? Array.from(currentSeats)[0] : String(view && view.currentSeat || '');
+    if (viewerSeat && currentSeat && viewerSeat !== currentSeat) return null;
+    const supportedPressureStates = ['opening_window', 'status_response_window', 'reversal_window'];
+    const pressureStates = [
+      duelMomentum && duelMomentum.pressureState,
+      intentSignal && intentSignal.signalState
+    ].map(item => String(item || '')).filter(item => item && item !== 'idle' && item !== 'unknown');
+    if (!pressureStates.length || pressureStates.some(item => !supportedPressureStates.includes(item))) return null;
+    const uniquePressureStates = Array.from(new Set(pressureStates));
+    if (uniquePressureStates.length !== 1) return null;
+    const pressureState = uniquePressureStates[0];
+    const playableCards = actionPreview && Array.isArray(actionPreview.playableCards) ? actionPreview.playableCards : [];
+    const responseLabels = [];
+    const addLabel = (label) => {
+      const value = safeLine(label);
+      if (value && !responseLabels.includes(value)) responseLabels.push(value);
+    };
+    playableCards.forEach(card => {
+      if (card.publicStatusMitigation) {
+        addLabel(card.publicStatusMitigation.mitigation === 'cleared'
+          ? `清除${card.publicStatusMitigation.label || '公开状态'}`
+          : `处理${card.publicStatusMitigation.label || '公开状态'}`);
+      }
+      if (card.blockGain > 0) addLabel(`补盾 +${card.blockGain}`);
+      if (card.openingProtection && card.openingProtection.willTrigger) {
+        addLabel(`护体保底 ${card.openingProtection.minimumHp || 1} 血`);
+      }
+    });
+    const responseCardCount = playableCards.filter(card => (
+      !!card.publicStatusMitigation
+      || card.blockGain > 0
+      || (card.openingProtection && card.openingProtection.willTrigger)
+    )).length;
+    if (intentSignal && intentSignal.responseWindow && intentSignal.responseWindow.counterplayBlock > 0) {
+      addLabel(`反打缓冲 +${intentSignal.responseWindow.counterplayBlock}`);
+    }
+    const endTurnLine = actionPreview && actionPreview.endTurn && actionPreview.endTurn.summaryLine
+      ? safeLine(actionPreview.endTurn.summaryLine)
+      : '';
+    const primaryLine = pressureState === 'status_response_window'
+      ? '反制建议：先出响应牌清除破绽，再决定是否结束回合；不要直接结束回合交出反打窗口。'
+      : pressureState === 'opening_window'
+        ? '反制建议：当前仍有公开反制线，先读首动预算、开局护体和后手窗口，再确认行动。'
+        : '反制建议：当前仍有公开反制线，先处理防守窗口，再决定是否交权。';
+    const counterplayLine = [
+      intentSignal && intentSignal.responseLine,
+      duelMomentum && duelMomentum.counterplayLine
+    ].map(safeLine).find(Boolean) || '';
+    const responseLine = responseCardCount > 0
+      ? `可用响应牌 ${responseCardCount} 张${responseLabels.length ? ` · ${responseLabels.slice(0, 4).join(' · ')}` : ''}`
+      : responseLabels.length ? `公开反制线 · ${responseLabels.slice(0, 4).join(' · ')}` : '公开反制线：等待权威状态继续同步。';
+    return {
+      reportVersion: 'pvp-live-counterplay-guide-v1',
+      sourceVisibility: 'public_state_and_public_content',
+      usesHiddenInformation: false,
+      rankedImpact: 'none',
+      advisoryOnly: true,
+      viewerSeat,
+      currentSeat,
+      pressureState,
+      responseCardCount,
+      responseLabels: responseLabels.slice(0, 4),
+      primaryLine,
+      counterplayLine,
+      responseLine,
+      endTurnLine,
+      boundaryLine: '只读取公开状态和公开卡面；只给提示、不代打、不写正式积分。'
+    };
+  },
+  renderLiveCounterplayGuide(view, phase = '') {
+    const report = view && view.reportVersion === 'pvp-live-counterplay-guide-v1'
+      ? view
+      : this.getLiveCounterplayGuide(view, phase);
+    if (!report) return '反制建议：等待公开行动窗口';
+    const boundaryLine = report.boundaryLine || '只读取公开状态和公开卡面；只给提示、不代打、不写正式积分。';
+    const endTurnLine = report.endTurnLine
+      ? `<div class="pvp-live-counterplay-guide-line compact" data-live-counterplay-guide-line><span>${this.escapeHtml(report.endTurnLine)}</span></div>`
+      : '';
+    const sourceLine = `${report.sourceVisibility} · ${report.usesHiddenInformation ? '含隐藏信息' : '不含隐藏信息'} · ${report.rankedImpact === 'none' ? '不写正式积分' : report.rankedImpact}`;
+    return `
+      <div class="pvp-live-counterplay-guide-line" data-live-counterplay-guide-line>
+        <span class="pvp-live-counterplay-guide-chip" data-live-counterplay-guide-chip>反制建议</span>
+        <span>${this.escapeHtml(report.primaryLine)}</span>
+      </div>
+      <div class="pvp-live-counterplay-guide-line" data-live-counterplay-guide-line>
+        <span class="pvp-live-counterplay-guide-chip" data-live-counterplay-guide-chip>响应牌</span>
+        <span>${this.escapeHtml(report.responseLine)}</span>
+      </div>
+      ${report.counterplayLine ? `<div class="pvp-live-counterplay-guide-line compact" data-live-counterplay-guide-line><span>${this.escapeHtml(report.counterplayLine)}</span></div>` : ''}
+      ${endTurnLine}
+      <div class="pvp-live-counterplay-guide-line compact" data-live-counterplay-guide-line>
+        <span>${this.escapeHtml(boundaryLine)}</span>
+        <span>${this.escapeHtml(sourceLine)}</span>
+      </div>
+    `;
+  },
   getLivePublicStatuses(seat) {
     const statuses = Array.isArray(seat && seat.publicStatuses) ? seat.publicStatuses : [];
     return statuses.slice(0, 6).map(status => ({
@@ -4581,6 +4700,7 @@ export const PVPScene = {
       actionReceiptReport: this.getLiveActionReceiptReport(view),
       duelMomentumReport: this.getLiveDuelMomentumReport(view),
       intentSignalReport: this.getLiveIntentSignalReport(view),
+      counterplayGuide: this.getLiveCounterplayGuide(view, state.phase || ''),
       friendlySeries: this.getLiveFriendlySeries(view && view.friendlySeries ? view.friendlySeries : state.rematchReport),
       firstMatchGuide: this.getLiveFirstMatchGuide(view),
       loadoutExplorationReport: this.getLiveLoadoutExplorationReport(view),
@@ -4803,6 +4923,18 @@ export const PVPScene = {
       intentSignalEl.setAttribute('data-live-intent-signal-hidden', report ? String(report.usesHiddenInformation === true) : '');
       intentSignalEl.setAttribute('data-live-intent-signal-current-seat', report ? report.currentSeat : '');
       intentSignalEl.innerHTML = this.renderLiveIntentSignalReport(view);
+    }
+    const counterplayGuideEl = root.querySelector('[data-live-counterplay-guide]');
+    if (counterplayGuideEl) {
+      const guideReport = this.getLiveCounterplayGuide(view, phase);
+      counterplayGuideEl.hidden = !guideReport;
+      counterplayGuideEl.setAttribute('data-live-counterplay-guide-state', guideReport ? guideReport.pressureState : 'idle');
+      counterplayGuideEl.setAttribute('data-live-counterplay-guide-source', guideReport ? guideReport.sourceVisibility : '');
+      counterplayGuideEl.setAttribute('data-live-counterplay-guide-hidden', guideReport ? String(guideReport.usesHiddenInformation === true) : '');
+      counterplayGuideEl.setAttribute('data-live-counterplay-guide-impact', guideReport ? guideReport.rankedImpact : '');
+      counterplayGuideEl.setAttribute('data-live-counterplay-guide-response-cards', guideReport ? String(guideReport.responseCardCount) : '0');
+      counterplayGuideEl.setAttribute('data-live-counterplay-guide-advisory-only', guideReport ? String(guideReport.advisoryOnly === true) : 'true');
+      counterplayGuideEl.innerHTML = this.renderLiveCounterplayGuide(guideReport || view, phase);
     }
     setText('[data-live-social-status]', this.liveSocialMuted
       ? '社交：已静音对手表情 · 本地偏好 · 不写正式积分'

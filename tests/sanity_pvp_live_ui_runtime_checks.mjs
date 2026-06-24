@@ -1798,6 +1798,182 @@ assert.match(statusMitigationPreviewMarkup, /data-live-card-status-mitigation="v
 assert.match(statusMitigationPreviewMarkup, /data-live-card-response-chip/, 'status-response mitigation card should render a dedicated response chip');
 assert.match(statusMitigationPreviewMarkup, /响应牌[\s\S]*清除破绽/, 'status-response mitigation card should make the clearable public status visible before click');
 assert.doesNotMatch(statusMitigationPreviewMarkup, /cardInstanceId|loadoutSnapshot|rating|elo|opponentHand|opponentDeck|reward/i, 'status-response mitigation marker must not expose hidden payload or reward/rating data');
+assert.equal(typeof PVPScene.getLiveCounterplayGuide, 'function', 'live UI should expose a response-window counterplay guide helper');
+assert.equal(typeof PVPScene.renderLiveCounterplayGuide, 'function', 'live UI should expose a response-window counterplay guide renderer');
+const statusCounterplayGuideView = {
+  ...openingActionState.stateView,
+  duelMomentumReport: {
+    reportVersion: 'pvp-live-duel-momentum-v1',
+    sourceVisibility: 'public_state',
+    usesHiddenInformation: false,
+    rankedImpact: 'none',
+    viewerSeat: 'A',
+    opponentSeat: 'B',
+    currentSeat: 'A',
+    isViewerTurn: true,
+    pressureState: 'status_response_window',
+    pressureLabel: '破绽响应窗口',
+    agencyLabel: '你的防守响应窗口',
+    summaryLine: '局势：你正处于破绽响应窗口，防守牌可阻止后续兑现。',
+    counterplayLine: '反制窗口：先清除破绽或补盾，否则下一轮可能被兑现。',
+    safeguards: ['status_response_window', 'public_status_mitigation']
+  },
+  intentSignalReport: {
+    reportVersion: 'pvp-live-intent-signal-v1',
+    sourceVisibility: 'public_state_and_public_content',
+    usesHiddenInformation: false,
+    rankedImpact: 'none',
+    viewerSeat: 'A',
+    opponentSeat: 'B',
+    currentSeat: 'A',
+    isViewerTurn: true,
+    signalState: 'status_response_window',
+    signalLabel: '破绽响应',
+    intentLine: '读牌：对手已给你挂上破绽，下一轮可能兑现。',
+    responseLine: '反制窗口：可用防守牌清除破绽；若直接结束回合，后续可能被兑现。',
+    safeguards: ['public_card_catalog_only', 'private_card_projection_blocked', 'status_response_window']
+  },
+  actionPreviewReport: {
+    ...openingActionState.stateView.actionPreviewReport,
+    viewerSeat: 'A',
+    currentSeat: 'A',
+    isViewerTurn: true,
+    sourceVisibility: 'viewer_public_state',
+    usesHiddenInformation: false,
+    rankedImpact: 'none',
+    playableCards: [{
+      cardInstanceId: 'A-guard-response',
+      cardName: '护体诀',
+      targetSeat: 'A',
+      rawDamage: 0,
+      damageBudget: 0,
+      budgetedDamage: 0,
+      blockedDamage: 0,
+      hpDamage: 0,
+      blockGain: 7,
+      selfBlockAfter: 7,
+      publicStatusMitigation: {
+        statusId: 'vulnerable_mark',
+        label: '破绽',
+        seatId: 'A',
+        sourceSeat: 'B',
+        responseWindow: 'status_response_window',
+        mitigation: 'cleared'
+      },
+      summaryLine: '护体诀：自身护盾 +7；清除破绽，阻止后续兑现。'
+    }],
+    endTurn: {
+      nextSeat: 'B',
+      summaryLine: '结束回合后行动权交给 B；破绽仍可能被后续兑现。'
+    }
+  }
+};
+const statusCounterplayGuide = PVPScene.getLiveCounterplayGuide(statusCounterplayGuideView, 'active');
+assert.equal(statusCounterplayGuide.reportVersion, 'pvp-live-counterplay-guide-v1', 'counterplay guide should expose a stable report version');
+assert.equal(statusCounterplayGuide.sourceVisibility, 'public_state_and_public_content', 'counterplay guide should aggregate only public state and public card content');
+assert.equal(statusCounterplayGuide.usesHiddenInformation, false, 'counterplay guide should be hidden-info safe');
+assert.equal(statusCounterplayGuide.rankedImpact, 'none', 'counterplay guide must not affect ranked state');
+assert.equal(statusCounterplayGuide.advisoryOnly, true, 'counterplay guide should explicitly stay advisory-only');
+assert.equal(statusCounterplayGuide.pressureState, 'status_response_window', 'counterplay guide should preserve the public response-window state');
+assert.equal(statusCounterplayGuide.responseCardCount, 1, 'counterplay guide should count public response cards');
+assert.deepEqual(statusCounterplayGuide.responseLabels, ['清除破绽', '补盾 +7'], 'counterplay guide should summarize public response choices without exposing ids');
+const statusCounterplayGuideMarkup = PVPScene.renderLiveCounterplayGuide(statusCounterplayGuideView, 'active');
+assert.match(statusCounterplayGuideMarkup, /data-live-counterplay-guide-line/, 'counterplay guide should render readable guide lines');
+assert.match(statusCounterplayGuideMarkup, /反制建议/, 'counterplay guide should label itself as advice');
+assert.match(statusCounterplayGuideMarkup, /1\s*张/, 'counterplay guide should show the public response-card count');
+assert.match(statusCounterplayGuideMarkup, /清除破绽/, 'counterplay guide should surface the public status mitigation route');
+assert.match(statusCounterplayGuideMarkup, /不要直接结束回合|先出响应牌/, 'counterplay guide should warn before giving up the response window');
+assert.match(statusCounterplayGuideMarkup, /公开状态和公开卡面|不写正式积分|不代打/, 'counterplay guide should render source, advisory-only, and ranked-impact boundaries');
+assert.doesNotMatch(statusCounterplayGuideMarkup, /cardInstanceId|cardId|instanceId|hand|deck|loadoutSnapshot|reward|rating|elo|token/i, 'counterplay guide rendering must not expose hidden ids or rewards');
+assert.equal(
+  PVPScene.getLiveCounterplayGuide({
+    ...statusCounterplayGuideView,
+    actionPreviewReport: {
+      ...statusCounterplayGuideView.actionPreviewReport,
+      usesHiddenInformation: true
+    }
+  }, 'active'),
+  null,
+  'counterplay guide must reject unsafe action preview sources',
+);
+assert.equal(
+  PVPScene.getLiveCounterplayGuide(statusCounterplayGuideView, 'finished'),
+  null,
+  'counterplay guide must not render outside active live phase',
+);
+assert.equal(
+  PVPScene.getLiveCounterplayGuide({
+    ...statusCounterplayGuideView,
+    actionPreviewReport: {
+      ...statusCounterplayGuideView.actionPreviewReport,
+      currentSeat: 'B',
+      isViewerTurn: false
+    },
+    duelMomentumReport: {
+      ...statusCounterplayGuideView.duelMomentumReport,
+      currentSeat: 'B',
+      isViewerTurn: false
+    },
+    intentSignalReport: {
+      ...statusCounterplayGuideView.intentSignalReport,
+      currentSeat: 'B',
+      isViewerTurn: false
+    }
+  }, 'active'),
+  null,
+  'counterplay guide must not expose current-player advice when it is not the viewer turn',
+);
+assert.equal(
+  PVPScene.getLiveCounterplayGuide({
+    ...statusCounterplayGuideView,
+    duelMomentumReport: {
+      ...statusCounterplayGuideView.duelMomentumReport,
+      pressureState: 'neutral',
+      counterplayLine: '行动窗口：常规行动。'
+    },
+    intentSignalReport: {
+      ...statusCounterplayGuideView.intentSignalReport,
+      signalState: 'closed'
+    }
+  }, 'active'),
+  null,
+  'counterplay guide must not render unsupported pressure states even when response cards exist',
+);
+assert.equal(
+  PVPScene.getLiveCounterplayGuide({
+    ...statusCounterplayGuideView,
+    duelMomentumReport: {
+      ...statusCounterplayGuideView.duelMomentumReport,
+      currentSeat: 'B',
+      isViewerTurn: false
+    }
+  }, 'active'),
+  null,
+  'counterplay guide must reject mixed stale reports that disagree on whose turn it is',
+);
+const forbiddenCounterplayGuideMarkup = PVPScene.renderLiveCounterplayGuide({
+  ...statusCounterplayGuideView,
+  duelMomentumReport: {
+    ...statusCounterplayGuideView.duelMomentumReport,
+    counterplayLine: '隐藏 hand deck cardInstanceId reward rating 不应回显'
+  },
+  intentSignalReport: {
+    ...statusCounterplayGuideView.intentSignalReport,
+    responseLine: '隐藏 token opponentDeck 不应回显'
+  },
+  actionPreviewReport: {
+    ...statusCounterplayGuideView.actionPreviewReport,
+    endTurn: {
+      nextSeat: 'B',
+      summaryLine: '隐藏 cardId instanceId elo 不应回显'
+    }
+  }
+}, 'active');
+assert.doesNotMatch(
+  forbiddenCounterplayGuideMarkup,
+  /cardInstanceId|cardId|instanceId|hand|deck|opponentDeck|reward|rating|elo|token/i,
+  'counterplay guide must drop unsafe upstream public-summary lines instead of echoing forbidden tokens',
+);
 const notViewerTurnState = {
   ...openingActionState,
   stateView: {

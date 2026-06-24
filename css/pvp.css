@@ -1062,6 +1062,53 @@
     overflow-wrap: anywhere;
 }
 
+.pvp-live-counterplay-guide {
+    margin-top: 8px;
+    display: grid;
+    gap: 6px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 191, 92, 0.26);
+    background: rgba(255, 191, 92, 0.08);
+    color: rgba(255, 240, 210, 0.95);
+    font-size: 0.74rem;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+}
+
+.pvp-live-counterplay-guide[hidden] {
+    display: none;
+}
+
+.pvp-live-counterplay-guide-line {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    min-width: 0;
+}
+
+.pvp-live-counterplay-guide-line > span:last-child {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.pvp-live-counterplay-guide-line.compact {
+    color: rgba(255, 240, 210, 0.78);
+    font-size: 0.68rem;
+}
+
+.pvp-live-counterplay-guide-chip {
+    flex: 0 0 auto;
+    max-width: 42%;
+    padding: 3px 6px;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 191, 92, 0.22);
+    background: rgba(255, 255, 255, 0.05);
+    color: rgba(255, 246, 225, 0.96);
+    font-weight: 800;
+    overflow-wrap: anywhere;
+}
+
 .pvp-live-social-panel {
     margin-top: 8px;
     padding: 8px;
@@ -4797,6 +4844,27 @@ input:checked+.seal-slider .seal-face.on {
     }
 
     .pvp-live-intent-signal-chip {
+        max-width: 38%;
+        padding: 2px 4px;
+    }
+
+    .pvp-live-counterplay-guide {
+        margin-top: 3px;
+        padding: 4px 5px;
+        gap: 3px;
+        font-size: 0.6rem;
+        line-height: 1.14;
+    }
+
+    .pvp-live-counterplay-guide-line {
+        gap: 4px;
+    }
+
+    .pvp-live-counterplay-guide-line.compact {
+        font-size: 0.56rem;
+    }
+
+    .pvp-live-counterplay-guide-chip {
         max-width: 38%;
         padding: 2px 4px;
     }

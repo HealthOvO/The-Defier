@@ -208,6 +208,15 @@ const liveBrowserAudit = read('tests/browser_pvp_live_audit.mjs');
   'renderLiveDuelMomentumReport(',
   'getLiveIntentSignalReport(',
   'renderLiveIntentSignalReport(',
+  'getLiveCounterplayGuide(',
+  'renderLiveCounterplayGuide(',
+  'pvp-live-counterplay-guide-v1',
+  'data-live-counterplay-guide',
+  'data-live-counterplay-guide-source',
+  'data-live-counterplay-guide-hidden',
+  'data-live-counterplay-guide-impact',
+  'data-live-counterplay-guide-response-cards',
+  'data-live-counterplay-guide-advisory-only',
   'getLivePublicStatuses(',
   'renderLivePublicStatuses(',
   'formatLiveEvent(',
@@ -533,6 +542,35 @@ const liveCardActionPreviewBody = methodBody(scene, 'renderLiveCardActionPreview
   assert.ok(liveCardActionPreviewBody.includes(needle), `live card action preview should render status mitigation marker: ${needle}`);
 });
 
+const liveCounterplayGuideBody = methodBody(scene, 'getLiveCounterplayGuide');
+[
+  'getLiveActionPreviewReport',
+  'getLiveDuelMomentumReport',
+  'getLiveIntentSignalReport',
+  'status_response_window',
+  'opening_window',
+  'publicStatusMitigation',
+  'blockGain',
+  'openingProtection',
+  'usesHiddenInformation',
+  "rankedImpact !== 'none'",
+  'public_state_and_public_content',
+  'advisoryOnly',
+].forEach((needle) => {
+  assert.ok(liveCounterplayGuideBody.includes(needle), `counterplay guide should aggregate safe public response-window reports: ${needle}`);
+});
+
+const renderLiveCounterplayGuideBody = methodBody(scene, 'renderLiveCounterplayGuide');
+[
+  'data-live-counterplay-guide-line',
+  'data-live-counterplay-guide-chip',
+  '反制建议',
+  '不代打',
+  '不写正式积分',
+].forEach((needle) => {
+  assert.ok(renderLiveCounterplayGuideBody.includes(needle), `counterplay guide renderer should expose stable readable markers: ${needle}`);
+});
+
 const endLiveTurnBody = methodBody(scene, 'endLiveTurn');
 [
   'isLiveOpeningActionConfirmRequired',
@@ -842,8 +880,10 @@ assert.ok(browserGate.includes('node tests/browser_pvp_live_audit.mjs "$BASE_URL
   'live UI fairness receipt evidence focuses linked public experience proof',
   'live UI requires a second click before status-response end turn submits',
   'live UI status-response mitigation card submits immediately without second-click confirmation',
+  'live UI renders public counterplay guide during status-response window',
   'status_response_window',
   'publicStatusMitigation',
+  'data-live-counterplay-guide',
   'live UI renders loadout exploration report without hidden payloads',
   'live UI renders post-match season goal card and can dismiss it locally',
   'live UI dismisses season goal locally without hiding post-match review',

@@ -3837,6 +3837,7 @@ async function safeElementScreenshot(page, selector, outputPath) {
       scene.liveInlineHint = '';
       scene.renderLivePanel();
       const mitigationPreview = document.querySelector('[data-live-card-status-mitigation]');
+      const counterplayGuide = document.querySelector('[data-live-counterplay-guide]');
       const beforeClick = {
         phase: scene.getLiveSnapshot?.()?.phase || '',
         currentSeat: scene.getLiveSnapshot?.()?.currentSeat || '',
@@ -3848,6 +3849,15 @@ async function safeElementScreenshot(page, selector, outputPath) {
         previewSource: mitigationPreview?.getAttribute('data-live-card-preview-source') || '',
         previewHidden: mitigationPreview?.getAttribute('data-live-card-preview-hidden') || '',
         previewImpact: mitigationPreview?.getAttribute('data-live-card-preview-impact') || '',
+        counterplayGuideText: counterplayGuide?.textContent?.replace(/\s+/g, ' ').trim() || '',
+        counterplayGuideSource: counterplayGuide?.getAttribute('data-live-counterplay-guide-source') || '',
+        counterplayGuideHidden: counterplayGuide?.getAttribute('data-live-counterplay-guide-hidden') || '',
+        counterplayGuideImpact: counterplayGuide?.getAttribute('data-live-counterplay-guide-impact') || '',
+        counterplayGuideState: counterplayGuide?.getAttribute('data-live-counterplay-guide-state') || '',
+        counterplayGuideResponseCount: counterplayGuide?.getAttribute('data-live-counterplay-guide-response-cards') || '',
+        counterplayGuideAdvisoryOnly: counterplayGuide?.getAttribute('data-live-counterplay-guide-advisory-only') || '',
+        counterplayGuideReportVersion: scene.getLiveSnapshot?.()?.counterplayGuide?.reportVersion || '',
+        counterplayGuideVisible: !!counterplayGuide && counterplayGuide.getAttribute('hidden') === null,
       };
       const responseCardButton = document.querySelector('[data-live-card="A-guard-response"]');
       responseCardButton?.click();
@@ -3912,6 +3922,24 @@ async function safeElementScreenshot(page, selector, outputPath) {
       && statusResponseEndTurnProbe.beforeClick?.previewHidden === 'false'
       && statusResponseEndTurnProbe.beforeClick?.previewImpact === 'none'
       && !/cardInstanceId|loadoutSnapshot|reward|rating|elo|opponentHand|opponentDeck/i.test(`${statusResponseEndTurnProbe.beforeClick?.cardText || ''} ${statusResponseEndTurnProbe.beforeClick?.previewText || ''}`),
+    JSON.stringify(statusResponseEndTurnProbe.beforeClick || null),
+  );
+  add(
+    'live UI renders public counterplay guide during status-response window',
+    statusResponseEndTurnProbe.beforeClick?.counterplayGuideVisible === true
+      && statusResponseEndTurnProbe.beforeClick?.counterplayGuideReportVersion === 'pvp-live-counterplay-guide-v1'
+      && statusResponseEndTurnProbe.beforeClick?.counterplayGuideSource === 'public_state_and_public_content'
+      && statusResponseEndTurnProbe.beforeClick?.counterplayGuideHidden === 'false'
+      && statusResponseEndTurnProbe.beforeClick?.counterplayGuideImpact === 'none'
+      && statusResponseEndTurnProbe.beforeClick?.counterplayGuideState === 'status_response_window'
+      && statusResponseEndTurnProbe.beforeClick?.counterplayGuideResponseCount === '1'
+      && statusResponseEndTurnProbe.beforeClick?.counterplayGuideAdvisoryOnly === 'true'
+      && /反制建议/.test(statusResponseEndTurnProbe.beforeClick?.counterplayGuideText || '')
+      && /响应牌|1\s*张/.test(statusResponseEndTurnProbe.beforeClick?.counterplayGuideText || '')
+      && /清除破绽/.test(statusResponseEndTurnProbe.beforeClick?.counterplayGuideText || '')
+      && /不要直接结束回合|先出响应牌/.test(statusResponseEndTurnProbe.beforeClick?.counterplayGuideText || '')
+      && /公开状态和公开卡面|不写正式积分|不代打/.test(statusResponseEndTurnProbe.beforeClick?.counterplayGuideText || '')
+      && !/cardInstanceId|cardId|instanceId|hand|deck|loadoutSnapshot|reward|rating|elo|token|opponentHand|opponentDeck/i.test(statusResponseEndTurnProbe.beforeClick?.counterplayGuideText || ''),
     JSON.stringify(statusResponseEndTurnProbe.beforeClick || null),
   );
   add(
@@ -6196,14 +6224,45 @@ async function safeElementScreenshot(page, selector, outputPath) {
             minimumHp: 1,
             preventedDamage: 0,
           },
-          blockGain: 0,
-          selfBlockAfter: 0,
-          summaryLine: '试探斩：预算后 8，破盾 0，生命伤害 8，A 预计 42 血。',
+          blockGain: 4,
+          selfBlockAfter: 4,
+          summaryLine: '试探斩：预算后 8，破盾 0，生命伤害 8，A 预计 42 血；自身获得 4 护盾。',
         }] : [],
         endTurn: status === 'active' && currentSeat === 'B'
           ? { nextSeat: 'A', summaryLine: '结束回合后行动权交给 A。' }
           : null,
       },
+      duelMomentumReport: status === 'active' ? {
+        reportVersion: 'pvp-live-duel-momentum-v1',
+        sourceVisibility: 'public_state',
+        usesHiddenInformation: false,
+        rankedImpact: 'none',
+        viewerSeat: 'B',
+        opponentSeat: 'A',
+        currentSeat,
+        isViewerTurn: currentSeat === 'B',
+        pressureState: 'opening_window',
+        pressureLabel: '开局窗口',
+        agencyLabel: '你的开局行动',
+        summaryLine: '局势：开局窗口仍受首动预算与护体保护。',
+        counterplayLine: '反制窗口：先读预算、护体和后手窗口，再决定是否交权。',
+        safeguards: ['opening_window', 'first_action_budget', 'opening_protection'],
+      } : null,
+      intentSignalReport: status === 'active' ? {
+        reportVersion: 'pvp-live-intent-signal-v1',
+        sourceVisibility: 'public_state_and_public_content',
+        usesHiddenInformation: false,
+        rankedImpact: 'none',
+        viewerSeat: 'B',
+        opponentSeat: 'A',
+        currentSeat,
+        isViewerTurn: currentSeat === 'B',
+        signalState: 'opening_window',
+        signalLabel: '开局读牌',
+        intentLine: '读牌：当前只展示公开预算、护体和卡面预览。',
+        responseLine: '反制窗口：可先补盾或读开局护体，再确认行动。',
+        safeguards: ['public_card_catalog_only', 'private_card_projection_blocked', 'opening_window'],
+      } : null,
       firstMatchGuide,
       setup: status === 'setup' ? { readyDeadlineAt: Date.now() + 45000, mulliganLimit: 2 } : null,
       connectionReport: {
@@ -6519,6 +6578,71 @@ async function safeElementScreenshot(page, selector, outputPath) {
   await mobilePage.waitForTimeout(100);
   await mobilePage.click('[data-live-action="ready"]', { timeout: 5000, force: true });
   await mobilePage.waitForTimeout(100);
+  const mobileCounterplayGuideProbe = await mobilePage.evaluate(() => {
+    const node = document.querySelector('[data-live-counterplay-guide]');
+    const style = node ? window.getComputedStyle(node) : null;
+    const rect = node?.getBoundingClientRect();
+    const chips = Array.from(node?.querySelectorAll('[data-live-counterplay-guide-chip]') || []).map((chip) => {
+      const chipStyle = window.getComputedStyle(chip);
+      const chipRect = chip.getBoundingClientRect();
+      return {
+        text: chip.textContent?.replace(/\s+/g, ' ').trim() || '',
+        display: chipStyle.display,
+        visibility: chipStyle.visibility,
+        width: Math.round(chipRect.width),
+        height: Math.round(chipRect.height),
+        left: Math.round(chipRect.left),
+        right: Math.round(chipRect.right),
+      };
+    });
+    return {
+      text: node?.textContent?.replace(/\s+/g, ' ').trim() || '',
+      hidden: node ? node.hasAttribute('hidden') : true,
+      state: node?.getAttribute('data-live-counterplay-guide-state') || '',
+      source: node?.getAttribute('data-live-counterplay-guide-source') || '',
+      hiddenAttr: node?.getAttribute('data-live-counterplay-guide-hidden') || '',
+      impact: node?.getAttribute('data-live-counterplay-guide-impact') || '',
+      responseCards: node?.getAttribute('data-live-counterplay-guide-response-cards') || '',
+      advisoryOnly: node?.getAttribute('data-live-counterplay-guide-advisory-only') || '',
+      whiteSpace: style?.whiteSpace || '',
+      overflow: style?.overflow || '',
+      overflowWrap: style?.overflowWrap || '',
+      scrollWidth: node ? Math.round(node.scrollWidth) : 0,
+      clientWidth: node ? Math.round(node.clientWidth) : 0,
+      chips,
+      rect: rect ? {
+        left: Math.round(rect.left),
+        right: Math.round(rect.right),
+        width: Math.round(rect.width),
+        height: Math.round(rect.height),
+      } : null,
+      viewportWidth: window.innerWidth,
+    };
+  });
+  add(
+    'live UI mobile renders public counterplay guide without overflow',
+    mobileCounterplayGuideProbe.hidden === false
+      && mobileCounterplayGuideProbe.state === 'opening_window'
+      && mobileCounterplayGuideProbe.source === 'public_state_and_public_content'
+      && mobileCounterplayGuideProbe.hiddenAttr === 'false'
+      && mobileCounterplayGuideProbe.impact === 'none'
+      && mobileCounterplayGuideProbe.responseCards === '1'
+      && mobileCounterplayGuideProbe.advisoryOnly === 'true'
+      && /反制建议/.test(mobileCounterplayGuideProbe.text)
+      && /响应牌|1\s*张/.test(mobileCounterplayGuideProbe.text)
+      && /补盾/.test(mobileCounterplayGuideProbe.text)
+      && /公开状态和公开卡面|不写正式积分|不代打/.test(mobileCounterplayGuideProbe.text)
+      && !/cardInstanceId|cardId|instanceId|hand|deck|loadoutSnapshot|reward|rating|elo|token|opponentHand|opponentDeck/i.test(mobileCounterplayGuideProbe.text)
+      && mobileCounterplayGuideProbe.whiteSpace !== 'nowrap'
+      && mobileCounterplayGuideProbe.overflow !== 'hidden'
+      && (mobileCounterplayGuideProbe.overflowWrap === 'anywhere' || mobileCounterplayGuideProbe.overflowWrap === 'break-word')
+      && mobileCounterplayGuideProbe.scrollWidth <= mobileCounterplayGuideProbe.clientWidth + 2
+      && mobileCounterplayGuideProbe.rect?.left >= -1
+      && mobileCounterplayGuideProbe.rect?.right <= mobileCounterplayGuideProbe.viewportWidth + 2
+      && mobileCounterplayGuideProbe.chips.every(chip => chip.display !== 'none' && chip.visibility !== 'hidden' && chip.width > 0 && chip.height > 0)
+      && mobileCounterplayGuideProbe.chips.every(chip => chip.left >= -1 && chip.right <= mobileCounterplayGuideProbe.viewportWidth + 2),
+    JSON.stringify(mobileCounterplayGuideProbe),
+  );
   const mobileCardPreviewProbe = await mobilePage.evaluate(() => {
     const card = document.querySelector('[data-live-card]');
     const preview = document.querySelector('[data-live-card-preview]');
