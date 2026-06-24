@@ -759,6 +759,16 @@ const defenderEndTurn = reduceIntent(markEndTurn.state, {
   stateVersion: markEndTurn.state.stateVersion,
   payload: {}
 });
+const defenderHandoffReceipt = projectStateView(defenderEndTurn.state, 'A').actionReceiptReport;
+assert(defenderHandoffReceipt.actionType === 'end_turn', 'defender unmitigated response-window end turn should expose an end-turn receipt');
+assert(defenderHandoffReceipt.handoffRisk && defenderHandoffReceipt.handoffRisk.active === true, 'defender unmitigated response-window end turn should expose a public handoff risk receipt');
+assert(defenderHandoffReceipt.handoffRisk.riskState === 'status_response_handoff', 'handoff risk should identify status-response handoff state');
+assert(defenderHandoffReceipt.handoffRisk.seatId === 'B' && defenderHandoffReceipt.handoffRisk.nextSeat === 'A', 'handoff risk should expose the public acting and next seats');
+assert(defenderHandoffReceipt.handoffRisk.statusCount === 1, 'handoff risk should count unresolved public statuses');
+assert(defenderHandoffReceipt.handoffRisk.statuses.some(status => status.statusId === 'vulnerable_mark' && status.label === '破绽'), 'handoff risk should summarize the unresolved public status');
+assert(/破绽|行动权交给 A|后续兑现/.test(defenderHandoffReceipt.handoffRisk.summaryLine), 'handoff risk should explain the public consequence of ending the response window');
+assert(defenderHandoffReceipt.safeguards.includes('public_status_handoff_risk'), 'handoff receipt should carry a public status handoff safeguard marker');
+assert(!/\bhand\b|hand":\[|deck|cardId|instanceId|loadoutSnapshot|rating|elo|reward|token/i.test(JSON.stringify(defenderHandoffReceipt.handoffRisk)), 'handoff risk must not leak hidden hand, deck, card ids, rating, reward, or token data');
 const delayedPayoff = reduceIntent(defenderEndTurn.state, {
   intentId: 'intent-public-status-delayed-payoff-1',
   intentType: 'play_card',
@@ -1120,7 +1130,7 @@ assert(protectedEndReceiptB.actingSeat === 'A' && protectedEndReceiptB.nextSeat 
 assert(protectedEndReceiptB.draw.count === 3 && protectedEndReceiptB.draw.seatId === 'B', 'end-turn receipt should expose only public draw count');
 assert(protectedEndReceiptB.counterplay.granted === true && protectedEndReceiptB.counterplay.seatId === 'B' && protectedEndReceiptB.counterplay.block === 8, 'end-turn receipt should expose public counterplay grant');
 assert(/行动权交给 B/.test(protectedEndReceiptB.summaryLine) && /抽 3/.test(protectedEndReceiptB.summaryLine) && /反打缓冲 \+8/.test(protectedEndReceiptB.summaryLine), 'end-turn receipt should give a readable handoff and counterplay line');
-assert(!/hand|deck|cardId|instanceId|loadoutSnapshot|rating|elo|reward/i.test(JSON.stringify(protectedEndReceiptB)), 'end-turn receipt must remain public and no-impact');
+assert(!/\bhand\b|hand":\[|deck|cardId|instanceId|loadoutSnapshot|rating|elo|reward/i.test(JSON.stringify(protectedEndReceiptB)), 'end-turn receipt must remain public and no-impact');
 const protectedMomentumB = projectStateView(protectedEndTurn.state, 'B').duelMomentumReport;
 assert(protectedMomentumB.pressureState === 'reversal_window', 'protected defender should see an explicit reversal window');
 assert(protectedMomentumB.isViewerTurn === true, 'protected defender should see the counterplay window on their own turn');

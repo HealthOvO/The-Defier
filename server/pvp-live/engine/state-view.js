@@ -1733,6 +1733,39 @@ function collectEndTurnResolutionEvents(events, turnEndedIndex) {
     return collected;
 }
 
+function projectEndTurnHandoffRisk(state, actingSeat, nextSeat) {
+    const seat = state && state.seats ? state.seats[actingSeat] : null;
+    const currentTurn = normalizeCount(state && state.turnIndex);
+    if (!seat || !Array.isArray(seat.publicStatuses)) return null;
+    const statuses = seat.publicStatuses.filter(status => (
+        status
+        && status.statusId === 'vulnerable_mark'
+        && status.seatId === actingSeat
+        && status.sourceSeat === nextSeat
+        && currentTurn >= normalizeCount(status.earliestConsumeTurnIndex)
+        && (normalizeCount(status.expiresAtTurnIndex) <= 0 || currentTurn <= normalizeCount(status.expiresAtTurnIndex))
+    )).map(status => ({
+        statusId: String(status.statusId || ''),
+        label: String(status.label || '公开状态'),
+        seatId: actingSeat,
+        sourceSeat: nextSeat,
+        responseWindow: String(status.responseWindow || ''),
+        earliestConsumeTurnIndex: normalizeCount(status.earliestConsumeTurnIndex),
+        expiresAtTurnIndex: normalizeCount(status.expiresAtTurnIndex)
+    })).filter(status => status.statusId).slice(0, 3);
+    if (!statuses.length) return null;
+    const labelLine = statuses.map(status => status.label || '公开状态').join('、');
+    return {
+        active: true,
+        riskState: 'status_response_handoff',
+        seatId: actingSeat,
+        nextSeat,
+        statusCount: statuses.length,
+        statuses,
+        summaryLine: `${actingSeat} 结束回合时${labelLine}仍在；行动权交给 ${nextSeat} 后，对手下一轮可能兑现。`
+    };
+}
+
 function projectEndTurnActionReceipt(state, seatId, turnEndedIndex) {
     const events = Array.isArray(state && state.events) ? state.events : [];
     const turnEvent = events[turnEndedIndex];
@@ -1748,8 +1781,11 @@ function projectEndTurnActionReceipt(state, seatId, turnEndedIndex) {
     const counterplayBlock = normalizeCount(counterplayPayload.block);
     const drawLine = drawEvent ? `，${String(drawPayload.seatId || nextSeat || '下家')} 抽 ${drawCount} 张` : '';
     const counterplayLine = counterplayEvent ? `；反打缓冲 +${counterplayBlock} 给 ${String(counterplayPayload.seatId || nextSeat || '')}` : '';
+    const handoffRisk = projectEndTurnHandoffRisk(state, actingSeat, nextSeat);
+    const handoffRiskLine = handoffRisk && handoffRisk.summaryLine ? `；${handoffRisk.summaryLine}` : '';
     const safeguards = ['public_events'];
     if (counterplayEvent) safeguards.push('counterplay_granted');
+    if (handoffRisk) safeguards.push('public_status_handoff_risk');
     return {
         reportVersion: 'pvp-live-action-receipt-v1',
         sourceVisibility: 'authoritative_public_projection',
@@ -1775,7 +1811,8 @@ function projectEndTurnActionReceipt(state, seatId, turnEndedIndex) {
             totalBlock: normalizeCount(counterplayPayload.totalBlock),
             minimumHp: normalizeCount(counterplayPayload.minimumHp)
         },
-        summaryLine: `${actingSeat} 结束回合：行动权交给 ${nextSeat || '下家'}${drawLine}${counterplayLine}。`,
+        handoffRisk,
+        summaryLine: `${actingSeat} 结束回合：行动权交给 ${nextSeat || '下家'}${drawLine}${counterplayLine}${handoffRiskLine}。`,
         safeguards: Array.from(new Set(safeguards))
     };
 }

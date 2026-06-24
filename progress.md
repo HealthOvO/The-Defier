@@ -1,5 +1,30 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-24: V10-S73 live PVP handoff risk receipt
+  - 本轮完成
+    - `server/pvp-live/engine/state-view.js` 在权威 `end_turn` 行动回执里新增 `handoffRisk`：当玩家确认结束公开状态响应窗口、且自身破绽仍在并已进入对手可兑现窗口时，服务端公开投影 `status_response_handoff`。
+    - 新回执固定在 `pvp-live-action-receipt-v1` 下输出，携带 `sourceVisibility=authoritative_public_projection`、`usesHiddenInformation=false`、`rankedImpact=none`、`public_status_handoff_risk` safeguard，只包含公开席位、公开状态 id/标签、响应窗口和回合索引，不读取或展示手牌、牌库、卡实例、谱快照、rating、reward 或 token。
+    - `js/scenes/pvp-scene.js` 将 `handoffRisk` 归一化进 `getLiveActionReceiptReport()`，并在现有 `[data-live-action-receipt]` 内渲染“交权风险” chip，固定 `data-live-action-handoff-risk*` source/hidden/impact/status-count/safeguard marker。
+    - `tests/sanity_pvp_live_engine_checks.cjs` 覆盖未清除破绽后确认交权的权威 projector；`tests/sanity_pvp_live_route_checks.cjs` 补 HTTP route 级断言，确认 `/api/pvp/live/matches/:id/intents` 返回同一份公开 `handoffRisk`。
+    - `tests/sanity_pvp_live_ui_runtime_checks.mjs`、`tests/sanity_pvp_live_ui_contract_checks.cjs`、`tests/sanity_release_gate_coverage_checks.cjs` 与 `tests/browser_pvp_live_audit.mjs` 同步锁住归一化、DOM marker、release gate 和真实浏览器 finding。
+    - `tests/browser_pvp_live_audit.mjs` 顺手收紧两处旧门禁：隐藏信息正则不再把公开字段名 `handoffRisk/status_response_handoff` 误判成手牌泄漏；foreground resume finding 按生产逻辑接受实时 heartbeat 或 REST heartbeat 任一路径。
+    - `game-intro.html` 同步玩家说明：交权前有行动窗口回执，确认交权后若破绽仍在，权威行动回执继续说明对手后续可能兑现。
+  - 已验证
+    - 红测：`node tests/sanity_pvp_live_engine_checks.cjs` 在实现前失败于 `defender unmitigated response-window end turn should expose a public handoff risk receipt`。
+    - 红测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs` 在实现前失败于 `live UI should preserve public handoff risk activity`。
+    - 绿测：`node tests/sanity_pvp_live_engine_checks.cjs`
+    - 绿测：`node tests/sanity_pvp_live_route_checks.cjs`
+    - 绿测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs`
+    - 绿测：`node tests/sanity_pvp_live_ui_contract_checks.cjs`
+    - 绿测：`node tests/sanity_release_gate_coverage_checks.cjs`
+    - 绿测：`node tests/sanity_intro_progress_sync_checks.cjs`
+    - 浏览器审计：`node tests/browser_pvp_live_audit.mjs http://127.0.0.1:4174 output/pvp-live-handoff-risk-receipt-audit-final3-20260624`，128/128 findings、0 failed、0 console error。
+    - 完整 Node 门禁：`npm run test:node`
+    - 构建：`npm run build:pages`
+    - 空白检查：`git diff --check`
+  - 当前结论
+    - live PVP 的破绽响应体验从“结束回合前提醒你可能放弃窗口”推进到“确认交权后也收到权威公开后果回执”：行动方知道自己已经把仍未处理的公开风险交给对手，对手也能看到这不是隐藏爆发或突然结算，而是公开状态进入后续兑现窗口。该切片只改服务端公开投影、前端公开回执、玩家说明和门禁，不改变卡牌数值、破绽规则、伤害、护体、先后手、匹配、正式积分、奖励或结算。
+
 - 2026-06-24: V10-S72 live PVP action-window receipt
   - 本轮完成
     - `js/scenes/pvp-scene.js` 新增 `getLiveActionWindowReceipt()` / `renderLiveActionWindowReceipt()`，在 active 且轮到自己行动的 `opening_window` / `status_response_window` / `reversal_window` 公开窗口中生成“行动窗口回执”。

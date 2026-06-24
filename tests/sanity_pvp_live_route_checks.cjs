@@ -1419,6 +1419,25 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
         assert.equal(wrongSeatB.payload.result, 'rejected', 'non-current live seat action should be rejected');
         assert.equal(wrongSeatB.payload.reason, 'not_current_turn', 'non-current live seat should receive not_current_turn reason');
 
+        const routeHandoffMatch = pvpLiveRoutes.__livePvpStore.matches.get(joinB.payload.matchId);
+        const routeHandoffSeat = routeHandoffMatch.state.seats[firstSeat];
+        const routeHandoffTurn = Math.max(0, Math.floor(Number(routeHandoffMatch.state.turnIndex) || 0));
+        routeHandoffSeat.publicStatuses = Array.isArray(routeHandoffSeat.publicStatuses)
+            ? routeHandoffSeat.publicStatuses.filter(status => status && status.statusId !== 'vulnerable_mark')
+            : [];
+        routeHandoffSeat.publicStatuses.push({
+            statusId: 'vulnerable_mark',
+            label: '破绽',
+            seatId: firstSeat,
+            sourceSeat: secondSeat,
+            stacks: 1,
+            appliedTurnIndex: routeHandoffTurn,
+            earliestConsumeTurnIndex: routeHandoffTurn + 1,
+            expiresAtTurnIndex: routeHandoffTurn + 3,
+            responseWindow: 'defender_turn_before_payoff',
+            summary: '破绽已公开；防守方至少拥有一个行动窗口后才可被兑现。'
+        });
+
         const endTurnA = await submitIntent(baseUrl, firstToken, joinB.payload.matchId, {
                 intentId: 'route-intent-end-turn-1',
                 intentType: 'end_turn',
@@ -1431,6 +1450,15 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
         assert.equal(endTurnA.payload.stateView.turnTimer.currentSeat, secondSeat, 'end turn timer should switch to next seat');
         assert.ok(endTurnA.payload.stateView.turnTimer.startedAt > activeTurnStartedAt, 'end turn should start a fresh timer for next seat');
         assert.ok(endTurnA.payload.stateView.turnTimer.deadlineAt > activeTurnDeadlineAt, 'end turn should move deadline to next seat timer');
+        assert.equal(endTurnA.payload.stateView.actionReceiptReport?.handoffRisk?.active, true, 'route end-turn response should expose public handoff risk when unresolved status remains');
+        assert.equal(endTurnA.payload.stateView.actionReceiptReport?.handoffRisk?.riskState, 'status_response_handoff', 'route handoff risk should identify status-response handoff');
+        assert.equal(endTurnA.payload.stateView.actionReceiptReport?.handoffRisk?.seatId, firstSeat, 'route handoff risk should expose public acting seat');
+        assert.equal(endTurnA.payload.stateView.actionReceiptReport?.handoffRisk?.nextSeat, secondSeat, 'route handoff risk should expose public next seat');
+        assert.equal(endTurnA.payload.stateView.actionReceiptReport?.handoffRisk?.statusCount, 1, 'route handoff risk should count unresolved public statuses');
+        assert.ok(endTurnA.payload.stateView.actionReceiptReport?.handoffRisk?.statuses?.some(status => status.statusId === 'vulnerable_mark' && status.label === '破绽'), 'route handoff risk should summarize unresolved public status');
+        assert.ok(/破绽|行动权交给|后续兑现/.test(endTurnA.payload.stateView.actionReceiptReport?.handoffRisk?.summaryLine || ''), 'route handoff risk should explain public consequence');
+        assert.ok(endTurnA.payload.stateView.actionReceiptReport?.safeguards?.includes('public_status_handoff_risk'), 'route handoff risk receipt should carry public safeguard marker');
+        assert.ok(!/cardInstanceId|cardId|instanceId|\bhand\b|hand":\[|deck|loadoutSnapshot|reward|rating|elo|token|opponentHand|opponentDeck/i.test(JSON.stringify(endTurnA.payload.stateView.actionReceiptReport?.handoffRisk || {})), 'route handoff risk must not leak hidden cards, hands, decks, rewards, ratings, or tokens');
 
         const staleAAfterEnd = await submitIntent(baseUrl, firstToken, joinB.payload.matchId, {
                 intentId: 'route-intent-a-after-end-1',

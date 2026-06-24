@@ -1572,6 +1572,7 @@ export const PVPScene = {
     const cardDraw = report.cardDraw && typeof report.cardDraw === 'object' ? report.cardDraw : null;
     const draw = report.draw && typeof report.draw === 'object' ? report.draw : {};
     const counterplay = report.counterplay && typeof report.counterplay === 'object' ? report.counterplay : {};
+    const handoffRisk = report.handoffRisk && typeof report.handoffRisk === 'object' ? report.handoffRisk : null;
     const normalizeStatusEffect = (status = {}) => ({
       statusId: String(status.statusId || ''),
       label: String(status.label || ''),
@@ -1585,6 +1586,15 @@ export const PVPScene = {
       consumedTurnIndex: Math.max(0, Math.floor(Number(status.consumedTurnIndex) || 0)),
       responseWindow: String(status.responseWindow || ''),
       mitigation: String(status.mitigation || '')
+    });
+    const normalizeHandoffRiskStatus = (status = {}) => ({
+      statusId: String(status.statusId || ''),
+      label: String(status.label || ''),
+      seatId: String(status.seatId || ''),
+      sourceSeat: String(status.sourceSeat || ''),
+      responseWindow: String(status.responseWindow || ''),
+      earliestConsumeTurnIndex: Math.max(0, Math.floor(Number(status.earliestConsumeTurnIndex) || 0)),
+      expiresAtTurnIndex: Math.max(0, Math.floor(Number(status.expiresAtTurnIndex) || 0))
     });
     return {
       reportVersion: String(report.reportVersion || 'pvp-live-action-receipt-v1'),
@@ -1654,6 +1664,17 @@ export const PVPScene = {
         totalBlock: Math.max(0, Math.floor(Number(counterplay.totalBlock) || 0)),
         minimumHp: Math.max(0, Math.floor(Number(counterplay.minimumHp) || 0))
       },
+      handoffRisk: handoffRisk ? {
+        active: handoffRisk.active === true,
+        riskState: String(handoffRisk.riskState || ''),
+        seatId: String(handoffRisk.seatId || ''),
+        nextSeat: String(handoffRisk.nextSeat || ''),
+        statusCount: Math.max(0, Math.floor(Number(handoffRisk.statusCount) || 0)),
+        statuses: Array.isArray(handoffRisk.statuses)
+          ? handoffRisk.statuses.map(normalizeHandoffRiskStatus).filter(status => status.statusId).slice(0, 3)
+          : [],
+        summaryLine: String(handoffRisk.summaryLine || '')
+      } : null,
       summaryLine: String(report.summaryLine || ''),
       safeguards: Array.isArray(report.safeguards)
         ? report.safeguards.map(item => String(item || '')).filter(Boolean).slice(0, 8)
@@ -1703,6 +1724,22 @@ export const PVPScene = {
     const cardDrawChip = report.cardDraw
       ? `<span class="pvp-live-action-receipt-chip" data-live-card-cycle="public_card_cycle">${this.escapeHtml(report.cardDraw.capped ? '抽滤已满' : report.cardDraw.count > 0 ? `抽滤 +${report.cardDraw.count}` : '抽滤暂停')}</span>`
       : '';
+    const handoffRisk = report.handoffRisk && report.handoffRisk.active ? report.handoffRisk : null;
+    const handoffRiskText = handoffRisk
+      ? handoffRisk.summaryLine || `${handoffRisk.seatId || report.actingSeat || '--'} 结束回合后仍有公开状态风险；行动权交给 ${handoffRisk.nextSeat || report.nextSeat || '--'}。`
+      : '';
+    const handoffRiskChip = handoffRisk
+      ? `<span
+          class="pvp-live-action-receipt-chip"
+          data-live-action-handoff-risk="${this.escapeHtml(handoffRisk.riskState || 'status_response_handoff')}"
+          data-live-action-handoff-risk-state="${this.escapeHtml(handoffRisk.riskState || '')}"
+          data-live-action-handoff-risk-source="${this.escapeHtml(report.sourceVisibility || '')}"
+          data-live-action-handoff-risk-hidden="${report.usesHiddenInformation ? 'true' : 'false'}"
+          data-live-action-handoff-risk-impact="${this.escapeHtml(report.rankedImpact || 'none')}"
+          data-live-action-handoff-risk-status-count="${this.escapeHtml(String(handoffRisk.statusCount || handoffRisk.statuses.length || 0))}"
+          data-live-action-handoff-risk-safeguard="public_status_handoff_risk"
+        >${this.escapeHtml(`交权风险 · ${handoffRiskText}`)}</span>`
+      : '';
     return `
       <span class="pvp-live-action-receipt-chip">${this.escapeHtml(receiptLabel)}</span>
       <span class="pvp-live-action-receipt-line">${this.escapeHtml(summary)}</span>
@@ -1713,6 +1750,7 @@ export const PVPScene = {
       ${weakFocusChip}
       ${healingChip}
       ${cardDrawChip}
+      ${handoffRiskChip}
       <span class="pvp-live-action-receipt-chip">${this.escapeHtml(source)} · ${this.escapeHtml(hidden)} · ${this.escapeHtml(report.rankedImpact || 'none')}</span>
     `;
   },

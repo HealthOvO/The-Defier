@@ -340,6 +340,55 @@ assert.match(renderedEndTurnReceipt, /行动权交给 B/, 'live UI end-turn rece
 assert.match(renderedEndTurnReceipt, /抽 3 张/, 'live UI end-turn receipt should render public draw count');
 assert.match(renderedEndTurnReceipt, /反打缓冲 \+8/, 'live UI end-turn receipt should render public counterplay grant');
 assert.doesNotMatch(renderedEndTurnReceipt, /cardInstanceId|sourceCardId|deck|rating|reward/i, 'live UI end-turn receipt rendering must not expose hidden ids or rewards');
+const normalizedStatusHandoffReceipt = PVPScene.getLiveActionReceiptReport({
+  actionReceiptReport: {
+    reportVersion: 'pvp-live-action-receipt-v1',
+    sourceVisibility: 'authoritative_public_projection',
+    usesHiddenInformation: false,
+    rankedImpact: 'none',
+    viewerSeat: 'A',
+    actingSeat: 'B',
+    actionType: 'end_turn',
+    latestSequence: 18,
+    nextSeat: 'A',
+    draw: { seatId: 'A', count: 3, capped: false },
+    counterplay: { granted: false, seatId: '', block: 0, totalBlock: 0, minimumHp: 0 },
+    handoffRisk: {
+      active: true,
+      riskState: 'status_response_handoff',
+      seatId: 'B',
+      nextSeat: 'A',
+      statusCount: 1,
+      statuses: [{
+        statusId: 'vulnerable_mark',
+        label: '破绽',
+        seatId: 'B',
+        sourceSeat: 'A',
+        responseWindow: 'defender_turn_before_payoff',
+        cardInstanceId: 'hidden-status-source'
+      }],
+      summaryLine: 'B 结束回合时破绽仍在；行动权交给 A 后，对手下一轮可能兑现。',
+      token: 'hidden-token'
+    },
+    summaryLine: 'B 结束回合：行动权交给 A，A 抽 3 张；破绽仍在，后续可能被兑现。',
+    safeguards: ['public_events', 'public_status_handoff_risk']
+  }
+});
+const renderedStatusHandoffReceipt = PVPScene.renderLiveActionReceiptReport({ actionReceiptReport: normalizedStatusHandoffReceipt });
+assert.equal(normalizedStatusHandoffReceipt.handoffRisk.active, true, 'live UI should preserve public handoff risk activity');
+assert.equal(normalizedStatusHandoffReceipt.handoffRisk.riskState, 'status_response_handoff', 'live UI should preserve public handoff risk state');
+assert.equal(normalizedStatusHandoffReceipt.handoffRisk.statusCount, 1, 'live UI should preserve unresolved public status count');
+assert.equal(normalizedStatusHandoffReceipt.handoffRisk.statuses[0].statusId, 'vulnerable_mark', 'live UI should preserve unresolved public status id');
+assert.equal(Object.prototype.hasOwnProperty.call(normalizedStatusHandoffReceipt.handoffRisk.statuses[0], 'cardInstanceId'), false, 'live UI handoff risk status must drop hidden card instance ids');
+assert.equal(Object.prototype.hasOwnProperty.call(normalizedStatusHandoffReceipt.handoffRisk, 'token'), false, 'live UI handoff risk must drop hidden token fields');
+assert.match(renderedStatusHandoffReceipt, /data-live-action-handoff-risk="status_response_handoff"/, 'live UI should render a stable public handoff risk marker');
+assert.match(renderedStatusHandoffReceipt, /data-live-action-handoff-risk-state="status_response_handoff"/, 'live UI should render public handoff risk state');
+assert.match(renderedStatusHandoffReceipt, /data-live-action-handoff-risk-source="authoritative_public_projection"/, 'live UI should render handoff risk public source');
+assert.match(renderedStatusHandoffReceipt, /data-live-action-handoff-risk-hidden="false"/, 'live UI should mark handoff risk as hidden-info safe');
+assert.match(renderedStatusHandoffReceipt, /data-live-action-handoff-risk-impact="none"/, 'live UI should mark handoff risk as no ranked impact');
+assert.match(renderedStatusHandoffReceipt, /data-live-action-handoff-risk-safeguard="public_status_handoff_risk"/, 'live UI should render handoff risk safeguard marker');
+assert.match(renderedStatusHandoffReceipt, /交权风险|破绽仍在|行动权交给 A|后续兑现/, 'live UI should explain the public response-window handoff consequence');
+assert.doesNotMatch(renderedStatusHandoffReceipt, /cardInstanceId|sourceCardId|\bhand\b|hand":\[|deck|rating|reward|token/i, 'live UI handoff risk rendering must not expose hidden ids, cards, rewards, or tokens');
 
 assert.equal(
   PVPScene.getLiveLastSeenEventRevision({

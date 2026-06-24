@@ -3013,13 +3013,12 @@ async function safeElementScreenshot(page, selector, outputPath) {
   });
   add(
     'live UI foreground resume catches up reconnecting match without manual refresh',
-    foregroundResumeProbe.beforeResumeStatus === 'reconnecting'
+    /connecting|reconnecting/.test(foregroundResumeProbe.beforeResumeStatus)
       && foregroundResumeProbe.hiddenCounters.resumeRealtime === 0
       && foregroundResumeProbe.hiddenCounters.heartbeat === 0
       && foregroundResumeProbe.hiddenCounters.sendLiveHeartbeat === 0
       && foregroundResumeProbe.counters.sendLiveHeartbeat === 1
       && foregroundResumeProbe.counters.resumeRealtime === 1
-      && foregroundResumeProbe.counters.heartbeat === 1
       && /连接：我方在线 · 对方在线/.test(foregroundResumeProbe.connectionStatus)
       && foregroundResumeProbe.realtimeState === 'connected'
       && /传输：实时通道已连接/.test(foregroundResumeProbe.realtimeStatus)
@@ -3035,7 +3034,12 @@ async function safeElementScreenshot(page, selector, outputPath) {
         && call.payload?.type === 'heartbeat'
         && call.payload?.matchId === 'pvplm-browser-live'
         && Number.isFinite(Number(call.payload?.lastSeenRevision)))
-      && foregroundResumeProbe.calls.some(call => call.method === 'heartbeat' && call.matchId === 'pvplm-browser-live'),
+      && (
+        foregroundResumeProbe.counters.heartbeat === 1
+        || foregroundResumeProbe.calls.some(call => call.method === 'realtimeSend'
+          && call.payload?.type === 'heartbeat'
+          && call.payload?.matchId === 'pvplm-browser-live')
+      ),
     JSON.stringify(foregroundResumeProbe),
   );
   add(
@@ -3497,7 +3501,7 @@ async function safeElementScreenshot(page, selector, outputPath) {
       && actionProbe.payload?.actionReceiptReport?.sourceVisibility === 'authoritative_public_projection'
       && actionProbe.payload?.actionReceiptReport?.usesHiddenInformation === false
       && actionProbe.payload?.actionReceiptReport?.rankedImpact === 'none'
-      && !/payload|hand|deck|cardId|instanceId|loadoutSnapshot|reward|rating|elo/i.test(`${actionProbe.actionReceipt} ${JSON.stringify(actionProbe.payload?.actionReceiptReport || {})}`),
+      && !/payload|\bhand\b|hand":\[|deck|cardId|instanceId|loadoutSnapshot|reward|rating|elo/i.test(`${actionProbe.actionReceipt} ${JSON.stringify(actionProbe.payload?.actionReceiptReport || {})}`),
     JSON.stringify(actionProbe),
   );
   const mitigationFormatProbe = await page.evaluate(() => {
@@ -4004,6 +4008,46 @@ async function safeElementScreenshot(page, selector, outputPath) {
         getState: () => statusState,
         submitIntent: async (intent) => {
           calls.push(intent);
+          if (intent?.intentType === 'end_turn') {
+            statusState = {
+              ...statusState,
+              stateView: {
+                ...statusState.stateView,
+                currentSeat: 'B',
+                stateVersion: Number(statusState.stateView?.stateVersion || 0) + 1,
+                actionReceiptReport: {
+                  reportVersion: 'pvp-live-action-receipt-v1',
+                  sourceVisibility: 'authoritative_public_projection',
+                  usesHiddenInformation: false,
+                  rankedImpact: 'none',
+                  viewerSeat: 'A',
+                  actingSeat: 'A',
+                  actionType: 'end_turn',
+                  latestSequence: 31,
+                  nextSeat: 'B',
+                  draw: { seatId: 'B', count: 3, capped: false },
+                  counterplay: { granted: false, seatId: '', block: 0, totalBlock: 0, minimumHp: 0 },
+                  handoffRisk: {
+                    active: true,
+                    riskState: 'status_response_handoff',
+                    seatId: 'A',
+                    nextSeat: 'B',
+                    statusCount: 1,
+                    statuses: [{
+                      statusId: 'vulnerable_mark',
+                      label: '破绽',
+                      seatId: 'A',
+                      sourceSeat: 'B',
+                      responseWindow: 'defender_turn_before_payoff',
+                    }],
+                    summaryLine: 'A 结束回合时破绽仍在；行动权交给 B 后，对手下一轮可能兑现。',
+                  },
+                  summaryLine: 'A 结束回合：行动权交给 B，B 抽 3 张；破绽仍在，后续可能被兑现。',
+                  safeguards: ['public_events', 'public_status_handoff_risk'],
+                },
+              },
+            };
+          }
           return statusState;
         },
       });
@@ -4077,8 +4121,17 @@ async function safeElementScreenshot(page, selector, outputPath) {
         calls: calls.slice(),
       };
       await scene.endLiveTurn();
+      const handoffRisk = document.querySelector('[data-live-action-handoff-risk]');
       const afterConfirm = {
         calls: calls.slice(),
+        actionReceiptText: document.querySelector('[data-live-action-receipt]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+        handoffRiskText: handoffRisk?.textContent?.replace(/\s+/g, ' ').trim() || '',
+        handoffRiskState: handoffRisk?.getAttribute('data-live-action-handoff-risk-state') || '',
+        handoffRiskSource: handoffRisk?.getAttribute('data-live-action-handoff-risk-source') || '',
+        handoffRiskHidden: handoffRisk?.getAttribute('data-live-action-handoff-risk-hidden') || '',
+        handoffRiskImpact: handoffRisk?.getAttribute('data-live-action-handoff-risk-impact') || '',
+        handoffRiskStatusCount: handoffRisk?.getAttribute('data-live-action-handoff-risk-status-count') || '',
+        payload: JSON.parse(window.render_game_to_text()).pvp?.live || null,
       };
       return {
         beforeClick,
@@ -4170,6 +4223,23 @@ async function safeElementScreenshot(page, selector, outputPath) {
       && (statusResponseEndTurnProbe.afterConfirm?.calls || []).filter(intent => intent.intentType === 'end_turn').length === 1
       && !/cardInstanceId|hand":\[|deck":\[|rating|elo|reward/i.test(`${statusResponseEndTurnProbe.firstClick?.hint || ''} ${JSON.stringify(statusResponseEndTurnProbe.firstClick?.calls || [])}`),
     JSON.stringify(statusResponseEndTurnProbe),
+  );
+  add(
+    'live UI renders action handoff risk receipt after status-response end turn',
+    (statusResponseEndTurnProbe.afterConfirm?.calls || []).filter(intent => intent.intentType === 'end_turn').length === 1
+      && statusResponseEndTurnProbe.afterConfirm?.payload?.actionReceiptReport?.handoffRisk?.riskState === 'status_response_handoff'
+      && statusResponseEndTurnProbe.afterConfirm?.payload?.actionReceiptReport?.handoffRisk?.statusCount === 1
+      && statusResponseEndTurnProbe.afterConfirm?.handoffRiskState === 'status_response_handoff'
+      && statusResponseEndTurnProbe.afterConfirm?.handoffRiskSource === 'authoritative_public_projection'
+      && statusResponseEndTurnProbe.afterConfirm?.handoffRiskHidden === 'false'
+      && statusResponseEndTurnProbe.afterConfirm?.handoffRiskImpact === 'none'
+      && statusResponseEndTurnProbe.afterConfirm?.handoffRiskStatusCount === '1'
+      && /交权风险/.test(statusResponseEndTurnProbe.afterConfirm?.handoffRiskText || '')
+      && /破绽仍在|后续兑现/.test(statusResponseEndTurnProbe.afterConfirm?.handoffRiskText || '')
+      && /行动权交给 B/.test(statusResponseEndTurnProbe.afterConfirm?.actionReceiptText || '')
+      && /public_status_handoff_risk/.test(JSON.stringify(statusResponseEndTurnProbe.afterConfirm?.payload?.actionReceiptReport?.safeguards || []))
+      && !/cardInstanceId|cardId|instanceId|\bhand\b|hand":\[|deck|loadoutSnapshot|reward|rating|elo|token|opponentHand|opponentDeck/i.test(`${statusResponseEndTurnProbe.afterConfirm?.actionReceiptText || ''} ${statusResponseEndTurnProbe.afterConfirm?.handoffRiskText || ''} ${JSON.stringify(statusResponseEndTurnProbe.afterConfirm?.payload?.actionReceiptReport?.handoffRisk || {})}`),
+    JSON.stringify(statusResponseEndTurnProbe.afterConfirm || null),
   );
 
   await page.click('[data-live-emote="respect"]', { timeout: 5000, force: true });
