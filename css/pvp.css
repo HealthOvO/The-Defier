@@ -1820,6 +1820,115 @@
     line-height: 1.35;
 }
 
+.pvp-live-practice-plan {
+    margin-top: 8px;
+    padding: 8px;
+    border-radius: 8px;
+    border: 1px solid rgba(186, 210, 255, 0.16);
+    background: rgba(10, 16, 34, 0.26);
+    overflow-wrap: anywhere;
+}
+
+.pvp-live-practice-plan-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    min-width: 0;
+    color: rgba(232, 240, 255, 0.92);
+    font-size: 0.7rem;
+    font-weight: 650;
+}
+
+.pvp-live-practice-plan-head span:last-child {
+    color: rgba(207, 220, 246, 0.62);
+    text-align: right;
+}
+
+.pvp-live-practice-plan-objective,
+.pvp-live-practice-plan-coach,
+.pvp-live-practice-plan-guardrail {
+    margin-top: 5px;
+    color: rgba(226, 235, 248, 0.78);
+    font-size: 0.68rem;
+    line-height: 1.35;
+}
+
+.pvp-live-practice-plan-guardrail {
+    color: rgba(207, 220, 246, 0.62);
+    font-size: 0.64rem;
+}
+
+.pvp-live-practice-plan-grid,
+.pvp-live-practice-plan-checks {
+    margin-top: 7px;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+}
+
+.pvp-live-practice-plan-checks {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.pvp-live-practice-plan-step,
+.pvp-live-practice-plan-check {
+    min-width: 0;
+    padding: 7px;
+    border-radius: 8px;
+    border: 1px solid rgba(186, 210, 255, 0.12);
+    background: rgba(255, 255, 255, 0.035);
+    color: inherit;
+    text-align: left;
+    font: inherit;
+    cursor: pointer;
+    overflow-wrap: anywhere;
+}
+
+.pvp-live-practice-plan-step:hover,
+.pvp-live-practice-plan-step:focus-visible,
+.pvp-live-practice-plan-step[data-live-review-focus^="key_turn:"],
+.pvp-live-practice-plan-check:hover,
+.pvp-live-practice-plan-check:focus-visible,
+.pvp-live-practice-plan-check[data-live-review-focus^="experience_check:"] {
+    border-color: rgba(186, 210, 255, 0.36);
+    background: rgba(186, 210, 255, 0.08);
+    outline: none;
+}
+
+.pvp-live-practice-plan-step span,
+.pvp-live-practice-plan-check span,
+.pvp-live-practice-plan-step strong,
+.pvp-live-practice-plan-check strong {
+    display: block;
+}
+
+.pvp-live-practice-plan-step span,
+.pvp-live-practice-plan-check span {
+    color: rgba(239, 245, 255, 0.88);
+    font-size: 0.66rem;
+    font-weight: 650;
+}
+
+.pvp-live-practice-plan-step span + span {
+    margin-top: 3px;
+    color: rgba(207, 220, 246, 0.62);
+    font-weight: 500;
+}
+
+.pvp-live-practice-plan-step strong,
+.pvp-live-practice-plan-check strong {
+    margin-top: 5px;
+    color: rgba(226, 235, 248, 0.76);
+    font-size: 0.66rem;
+    line-height: 1.35;
+    font-weight: 500;
+}
+
+.pvp-live-practice-plan-check.watch {
+    border-color: rgba(242, 192, 121, 0.22);
+}
+
 .pvp-live-season-goal {
     margin-top: 8px;
     padding: 8px;

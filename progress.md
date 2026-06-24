@@ -1,5 +1,26 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-24: V10-S64 live PVP post-review practice plan card
+  - 本轮完成
+    - `js/scenes/pvp-scene.js` 新增 `renderLivePostReviewPracticePlan()`，把既有 `buildLivePostReviewPracticePlan()` 的公开训练计划直接渲染到赛后复盘里，不再只藏在点击“问道练习”后的 `drillScenario.practicePlan` payload。
+    - 练习单展示 `objectiveLine`、`coachLine`、关键回合节奏脚本和公平检查焦点，带 `data-live-practice-plan`、`data-live-practice-plan-key-turn`、`data-live-practice-plan-check`，并继续要求 `sourceVisibility=public_events`、`usesHiddenInformation=false`、`rankedImpact=none`。
+    - 练习单关键回合按钮复用 `focusLiveKeyTurn()`，公平检查按钮复用 `handleLiveExperienceCheckFocus()`；`renderLivePanel()` 的 `liveReviewFocus` 回填同步覆盖练习单 step/check，让源按钮、事件面板、关键回合复盘和体验检查保持同一焦点。
+    - `css/pvp.css` 新增练习单卡片、step/check 网格和 focus 态，和现有体验诊断、关键回合复盘保持同密度，移动端自动换行且不新建独立状态机。
+    - `tests/sanity_pvp_live_ui_runtime_checks.mjs` 先红后绿锁住：安全 review 必须渲染练习单，按钮必须复用现有 focus handler，unsafe `keyTurnReplay/experienceReport` 或缺安全元数据时整块不渲染。
+    - `tests/browser_pvp_live_audit.mjs` 新增真实 DOM finding：点击 practice 前能看到练习单并聚焦公开证据；点击 practice 后 `drillScenario.practicePlan` 的 `tempoScript` / `fairnessFocus` 与点击前可见练习单使用同一批 id。
+    - `tests/sanity_pvp_live_ui_contract_checks.cjs`、`tests/sanity_release_gate_coverage_checks.cjs` 和 `game-intro.html` 同步锁住练习单 helper、DOM marker、browser finding 与玩家说明。
+  - 已验证
+    - 红测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs` 在实现前失败于 `post-match review should render the public practice plan before practice handoff`，当时赛后复盘只有体验诊断和关键回合，没有 `data-live-practice-plan`。
+    - 绿测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs`
+    - 绿测：`node tests/sanity_pvp_live_ui_contract_checks.cjs`
+    - 绿测：`node tests/sanity_release_gate_coverage_checks.cjs`
+    - 绿测：`node tests/sanity_intro_progress_sync_checks.cjs`
+    - 构建：`npm run build:pages`
+    - 浏览器审计：`node tests/browser_pvp_live_audit.mjs http://127.0.0.1:4173 output/pvp-live-practice-plan-card-audit`，117/117 findings、0 failed、0 console error。
+    - 全量 Node 门禁：`npm run test:node`
+  - 当前结论
+    - live PVP 的赛后闭环从“点击问道练习后才知道要练什么”推进到“复盘页先看到练习单，再进入不计分训练”：玩家能直接点关键窗口和公平检查定位公开证据，再把同一批公开计划交接给 ChallengeHub。该切片只改前台复盘展示、焦点回填、说明和门禁，不改变后端战斗规则、卡牌数值、正式结算、奖励、匹配或线上配置。
+
 - 2026-06-24: V10-S63 live PVP status mitigation card marker
   - 本轮完成
     - `js/scenes/pvp-scene.js` 将 `actionPreviewReport.playableCards.publicStatusMitigation` 从结束回合确认文案进一步推进到卡面：能清除破绽等公开状态的防守牌会在出牌前预览里显示“响应牌 · 清除破绽”。

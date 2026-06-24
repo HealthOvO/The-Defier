@@ -4866,6 +4866,65 @@ async function safeElementScreenshot(page, selector, outputPath) {
     JSON.stringify(recommendationPracticePresetProbe),
   );
 
+  const visiblePracticePlanClicked = await page.evaluate(() => {
+    const step = document.querySelector('[data-live-practice-plan-key-turn]');
+    if (!step) return false;
+    step.click();
+    return true;
+  });
+  await page.waitForTimeout(120);
+  const visiblePracticePlanKeyTurnFocus = await page.evaluate(() => {
+    const step = document.querySelector('[data-live-practice-plan-key-turn]');
+    const keyTurnId = step?.getAttribute('data-live-practice-plan-key-turn') || '';
+    return {
+      keyTurnId,
+      eventPanelFocus: document.querySelector('[data-live-event-panel]')?.getAttribute('data-live-review-focus') || '',
+      stepFocus: step?.getAttribute('data-live-review-focus') || '',
+      focusedEvents: document.querySelector('[data-live-event-log]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+    };
+  });
+  const visiblePracticePlanCheckClicked = await page.evaluate(() => {
+    const check = document.querySelector('[data-live-practice-plan-check="decision_windows"]') || document.querySelector('[data-live-practice-plan-check]');
+    if (!check) return false;
+    check.click();
+    return true;
+  });
+  await page.waitForTimeout(120);
+  const visiblePracticePlanProbe = await page.evaluate(() => {
+    const plan = document.querySelector('[data-live-practice-plan]');
+    const focusedCheck = document.querySelector('[data-live-practice-plan-check][data-live-review-focus]');
+    return {
+      visible: !!plan,
+      text: plan?.textContent?.replace(/\s+/g, ' ').trim() || '',
+      source: plan?.getAttribute('data-live-practice-plan-source') || '',
+      hidden: plan?.getAttribute('data-live-practice-plan-hidden') || '',
+      impact: plan?.getAttribute('data-live-practice-plan-impact') || '',
+      keyTurnIds: Array.from(document.querySelectorAll('[data-live-practice-plan-key-turn]')).map(item => item.getAttribute('data-live-practice-plan-key-turn')),
+      checkIds: Array.from(document.querySelectorAll('[data-live-practice-plan-check]')).map(item => item.getAttribute('data-live-practice-plan-check')),
+      checkFocus: focusedCheck?.getAttribute('data-live-review-focus') || '',
+      focusedEvents: document.querySelector('[data-live-event-log]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+    };
+  });
+  add(
+    'live UI renders post-match practice plan before practice handoff and focuses public evidence',
+    visiblePracticePlanClicked === true
+      && visiblePracticePlanCheckClicked === true
+      && visiblePracticePlanProbe.visible === true
+      && visiblePracticePlanProbe.source === 'public_events'
+      && visiblePracticePlanProbe.hidden === 'false'
+      && visiblePracticePlanProbe.impact === 'none'
+      && /问道练习单|练习/.test(visiblePracticePlanProbe.text)
+      && /复刻|公开关键回合/.test(visiblePracticePlanProbe.text)
+      && visiblePracticePlanProbe.keyTurnIds.length > 0
+      && visiblePracticePlanProbe.checkIds.includes('decision_windows')
+      && visiblePracticePlanKeyTurnFocus.eventPanelFocus === `key_turn:${visiblePracticePlanKeyTurnFocus.keyTurnId}`
+      && visiblePracticePlanKeyTurnFocus.stepFocus === `key_turn:${visiblePracticePlanKeyTurnFocus.keyTurnId}`
+      && visiblePracticePlanProbe.checkFocus.startsWith('experience_check:')
+      && visiblePracticePlanProbe.focusedEvents.length > 0
+      && !/payload|\bhand\b|deck|cardId|instanceId|cardInstanceId|loadoutSnapshot|rawPayload|reward|rating|elo|token/i.test(visiblePracticePlanProbe.text),
+    JSON.stringify({ ...visiblePracticePlanProbe, keyTurnFocus: visiblePracticePlanKeyTurnFocus }),
+  );
+
   await page.click('[data-live-post-review-action="practice"]', { timeout: 5000, force: true });
   await page.waitForTimeout(450);
   const postReviewPracticeProbe = await page.evaluate(() => {
@@ -4908,6 +4967,8 @@ async function safeElementScreenshot(page, selector, outputPath) {
       && postReviewPracticeProbe.drillScenario?.practicePlan?.rankedImpact === 'none'
       && (postReviewPracticeProbe.drillScenario?.practicePlan?.tempoScript || []).some(item => item.eventType === 'battle_started')
       && (postReviewPracticeProbe.drillScenario?.practicePlan?.fairnessFocus || []).some(item => item.id === 'decision_windows')
+      && visiblePracticePlanProbe.keyTurnIds.every(id => (postReviewPracticeProbe.drillScenario?.practicePlan?.tempoScript || []).some(item => item.id === id))
+      && visiblePracticePlanProbe.checkIds.every(id => (postReviewPracticeProbe.drillScenario?.practicePlan?.fairnessFocus || []).some(item => item.id === id))
       && !/payload|hand|deck|cardId|instanceId|cardInstanceId|loadoutSnapshot|rawPayload|token/i.test(JSON.stringify(postReviewPracticeProbe.drillScenario?.practicePlan || {}))
       && (postReviewPracticeProbe.drillScenario?.trainingTags || []).includes('首败复盘')
       && (postReviewPracticeProbe.drillScenario?.publicEventTypes || []).includes('battle_started')

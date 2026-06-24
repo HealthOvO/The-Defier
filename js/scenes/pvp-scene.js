@@ -3239,6 +3239,68 @@ export const PVPScene = {
       fairnessFocus
     };
   },
+  renderLivePostReviewPracticePlan(review = null) {
+    const plan = this.buildLivePostReviewPracticePlan(review);
+    if (!plan) return '';
+    return `
+      <div
+        class="pvp-live-practice-plan"
+        data-live-practice-plan
+        data-live-practice-plan-source="${this.escapeHtml(plan.sourceVisibility)}"
+        data-live-practice-plan-hidden="${plan.usesHiddenInformation ? 'true' : 'false'}"
+        data-live-practice-plan-impact="${this.escapeHtml(plan.rankedImpact)}"
+      >
+        <div class="pvp-live-practice-plan-head">
+          <span>问道练习单</span>
+          <span>${this.escapeHtml(plan.sourceVisibility)} · ${this.escapeHtml(plan.rankedImpact)}</span>
+        </div>
+        <div class="pvp-live-practice-plan-objective">${this.escapeHtml(plan.objectiveLine)}</div>
+        <div class="pvp-live-practice-plan-coach">${this.escapeHtml(plan.coachLine)}</div>
+        ${plan.tempoScript.length ? `
+          <div class="pvp-live-practice-plan-grid">
+            ${plan.tempoScript.map(step => {
+              const stepId = String(step.id || '');
+              const handlerArg = this.escapeHtml(JSON.stringify(stepId));
+              return `
+                <button
+                  type="button"
+                  class="pvp-live-practice-plan-step severity-${this.escapeHtml(step.severity)}"
+                  data-live-practice-plan-key-turn="${this.escapeHtml(stepId)}"
+                  onclick="PVPScene.focusLiveKeyTurn(${handlerArg})"
+                  title="定位 ${this.escapeHtml(step.label)} 的公开事件"
+                >
+                  <span>${this.escapeHtml(step.label)}</span>
+                  <span>${step.sequence !== null ? `#${this.escapeHtml(step.sequence)}` : '--'} · ${this.escapeHtml(this.formatLiveEventTypeLabel(step.eventType))}</span>
+                  <strong>${this.escapeHtml(step.drillPrompt)}</strong>
+                </button>
+              `;
+            }).join('')}
+          </div>
+        ` : ''}
+        ${plan.fairnessFocus.length ? `
+          <div class="pvp-live-practice-plan-checks">
+            ${plan.fairnessFocus.map(check => {
+              const checkId = String(check.id || '');
+              const handlerArg = this.escapeHtml(JSON.stringify(checkId));
+              return `
+                <button
+                  type="button"
+                  class="pvp-live-practice-plan-check ${this.escapeHtml(check.status)}"
+                  data-live-practice-plan-check="${this.escapeHtml(checkId)}"
+                  onclick="PVPScene.handleLiveExperienceCheckFocus(${handlerArg})"
+                  title="定位 ${this.escapeHtml(check.label)} 的公开体验证据"
+                >
+                  <span>${this.escapeHtml(check.label)} · ${this.escapeHtml(check.status === 'passed' ? '通过' : '观察')}</span>
+                  <strong>${this.escapeHtml(check.detail)}</strong>
+                </button>
+              `;
+            }).join('')}
+          </div>
+        ` : ''}
+        <div class="pvp-live-practice-plan-guardrail">${this.escapeHtml(plan.guardrailLine)}</div>
+      </div>
+    `;
+  },
   getLiveSeasonGoalSeasonId(view) {
     const seasonId = String(view && view.matchQuality && view.matchQuality.seasonId || '').trim();
     return seasonId || 's1-genesis';
@@ -3895,6 +3957,7 @@ export const PVPScene = {
       ${this.renderLiveFairnessReceipt(review)}
       ${this.renderLiveExperienceReport(review)}
       ${this.renderLiveKeyTurnReplay(review)}
+      ${this.renderLivePostReviewPracticePlan(review)}
       ${this.renderLiveSeasonGoalCard(view)}
       ${this.renderLiveLoadoutRecommendation(review, phase)}
       <div class="pvp-live-review-actions">
@@ -4637,6 +4700,9 @@ export const PVPScene = {
           const focusedTurn = Array.from(root.querySelectorAll('[data-live-key-turn]'))
             .find(item => item.getAttribute('data-live-key-turn') === turnId);
           if (focusedTurn) focusedTurn.setAttribute('data-live-review-focus', this.liveReviewFocus);
+          const focusedPracticeStep = Array.from(root.querySelectorAll('[data-live-practice-plan-key-turn]'))
+            .find(item => item.getAttribute('data-live-practice-plan-key-turn') === turnId);
+          if (focusedPracticeStep) focusedPracticeStep.setAttribute('data-live-review-focus', this.liveReviewFocus);
         }
       } else if (this.liveReviewFocus.startsWith('experience_check:')) {
         const checkId = this.liveReviewFocus.slice('experience_check:'.length);
@@ -4644,6 +4710,8 @@ export const PVPScene = {
         if (focusedCheck) focusedCheck.setAttribute('data-live-review-focus', this.liveReviewFocus);
         const focusedFairnessCheck = Array.from(root.querySelectorAll('[data-live-fairness-check]')).find(item => item.getAttribute('data-live-fairness-check') === checkId);
         if (focusedFairnessCheck) focusedFairnessCheck.setAttribute('data-live-review-focus', this.liveReviewFocus);
+        const focusedPracticeCheck = Array.from(root.querySelectorAll('[data-live-practice-plan-check]')).find(item => item.getAttribute('data-live-practice-plan-check') === checkId);
+        if (focusedPracticeCheck) focusedPracticeCheck.setAttribute('data-live-review-focus', this.liveReviewFocus);
       }
     }
     if (this.liveLoadoutReviewFocused) {
@@ -5443,6 +5511,12 @@ export const PVPScene = {
     if (focusedFairnessCheck) {
       focusedFairnessCheck.setAttribute('data-live-review-focus', `experience_check:${id}`);
     }
+    const focusedPracticeCheck = nextRoot
+      ? Array.from(nextRoot.querySelectorAll('[data-live-practice-plan-check]')).find(item => item.getAttribute('data-live-practice-plan-check') === id)
+      : null;
+    if (focusedPracticeCheck) {
+      focusedPracticeCheck.setAttribute('data-live-review-focus', `experience_check:${id}`);
+    }
     const hint = nextRoot ? nextRoot.querySelector('[data-live-last-error]') : null;
     const message = this.liveInlineHint;
     if (hint) hint.textContent = message;
@@ -5468,9 +5542,13 @@ export const PVPScene = {
     const focusedTurn = nextRoot
       ? Array.from(nextRoot.querySelectorAll('[data-live-key-turn]')).find(item => item.getAttribute('data-live-key-turn') === id)
       : null;
+    const focusedPracticeStep = nextRoot
+      ? Array.from(nextRoot.querySelectorAll('[data-live-practice-plan-key-turn]')).find(item => item.getAttribute('data-live-practice-plan-key-turn') === id)
+      : null;
     if (nextEventPanel) nextEventPanel.setAttribute('data-live-review-focus', focus);
     if (keyTurnPanel) keyTurnPanel.setAttribute('data-live-review-focus', focus);
     if (focusedTurn) focusedTurn.setAttribute('data-live-review-focus', focus);
+    if (focusedPracticeStep) focusedPracticeStep.setAttribute('data-live-review-focus', focus);
     const eventLog = nextRoot ? nextRoot.querySelector('[data-live-event-log]') : null;
     if (eventLog) {
       const state = this.getLiveSession().getState();
@@ -5483,7 +5561,7 @@ export const PVPScene = {
       focusedEvents = this.filterLiveEventsForMute(focusedEvents);
       eventLog.innerHTML = focusedEvents.length > 0 ? this.renderLiveEventRows(focusedEvents.slice(0, 12)) : '暂无事件';
     }
-    const scrollTarget = nextEventPanel || focusedTurn || keyTurnPanel;
+    const scrollTarget = nextEventPanel || focusedPracticeStep || focusedTurn || keyTurnPanel;
     if (scrollTarget && typeof scrollTarget.scrollIntoView === 'function') {
       scrollTarget.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
     }
