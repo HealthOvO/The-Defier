@@ -1,5 +1,26 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-24: V10-S63 live PVP status mitigation card marker
+  - 本轮完成
+    - `js/scenes/pvp-scene.js` 将 `actionPreviewReport.playableCards.publicStatusMitigation` 从结束回合确认文案进一步推进到卡面：能清除破绽等公开状态的防守牌会在出牌前预览里显示“响应牌 · 清除破绽”。
+    - 响应牌预览新增 `data-live-card-status-mitigation`、`data-live-card-status-response-window` 和 `data-live-card-response-chip`，仍沿用服务端 `viewer_public_state`、`usesHiddenInformation=false`、`rankedImpact=none` 边界，不显示隐藏手牌、牌库、卡牌实例、奖励或 rating。
+    - `css/pvp.css` 为响应牌 chip 补紧凑绿色标识，让破绽响应窗口里的可用防守牌比普通伤害/护盾预览更容易扫到，但不改变卡面尺寸和移动端换行规则。
+    - `tests/sanity_pvp_live_ui_runtime_checks.mjs` 先红后绿锁住：status-response mitigation 卡必须带公开 marker、专用 response chip 和“响应牌 / 清除破绽”短文案，不得泄露隐藏或收益字段。
+    - `tests/browser_pvp_live_audit.mjs` 新增真实 DOM finding：在点击结束回合前就能从卡面读到响应牌 marker，且该 marker 与后续 status-response end-turn 二次确认使用同一批公开 `actionPreviewReport` 证据。
+    - `tests/sanity_pvp_live_ui_contract_checks.cjs`、`tests/sanity_release_gate_coverage_checks.cjs` 和 `game-intro.html` 同步锁住响应牌 marker、CSS/DOM marker、browser finding 与玩家说明。
+    - subagent 只读巡检建议下一刀做“赛后练习单前置显示”：把已生成的 `practicePlan` 从点击问道练习后的 payload 提前渲染到赛后复盘，形成更强的“复盘 -> 训练”闭环。
+  - 已验证
+    - 红测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs` 在实现前失败于 `status-response mitigation card should carry a direct public mitigation marker`，当时卡面只有普通 `data-live-card-preview` 文本。
+    - 绿测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs`
+    - 绿测：`node tests/sanity_pvp_live_ui_contract_checks.cjs`
+    - 绿测：`node tests/sanity_release_gate_coverage_checks.cjs`
+    - 绿测：`node tests/sanity_intro_progress_sync_checks.cjs`
+    - 构建：`npm run build:pages`
+    - 浏览器审计：`node tests/browser_pvp_live_audit.mjs http://127.0.0.1:4173 output/pvp-live-status-mitigation-card-audit`，116/116 findings、0 failed、0 console error。
+    - 全量 Node 门禁：`npm run test:node`
+  - 当前结论
+    - live PVP 的破绽响应窗口从“结束回合前提醒你还有防守牌”推进到“卡面直接标出哪张是响应牌”：玩家不用在压力窗口里从长句里反查，能更快做出防守选择。该切片只改前台卡面标识、说明和门禁，不改变卡牌数值、状态规则、先后手、正式结算、奖励、匹配或线上配置。
+
 - 2026-06-24: V10-S62 live PVP status response end-turn confirmation
   - 本轮完成
     - `js/scenes/pvp-scene.js` 将既有二次确认机制从 `opening_window` 扩展到 `status_response_window` 的结束回合：当玩家处在破绽响应窗口、公开预览显示可用防守牌清除破绽时，第一次结束回合只弹确认，不会直接提交 `end_turn`。

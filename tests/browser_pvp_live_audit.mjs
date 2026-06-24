@@ -3826,6 +3826,19 @@ async function safeElementScreenshot(page, selector, outputPath) {
       scene.liveOpeningActionConfirm = null;
       scene.liveInlineHint = '';
       scene.renderLivePanel();
+      const mitigationPreview = document.querySelector('[data-live-card-status-mitigation]');
+      const beforeClick = {
+        phase: scene.getLiveSnapshot?.()?.phase || '',
+        currentSeat: scene.getLiveSnapshot?.()?.currentSeat || '',
+        cardText: document.querySelector('[data-live-card]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+        previewText: mitigationPreview?.textContent?.replace(/\s+/g, ' ').trim() || '',
+        chipText: document.querySelector('[data-live-card-response-chip]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+        mitigationId: mitigationPreview?.getAttribute('data-live-card-status-mitigation') || '',
+        responseWindow: mitigationPreview?.getAttribute('data-live-card-status-response-window') || '',
+        previewSource: mitigationPreview?.getAttribute('data-live-card-preview-source') || '',
+        previewHidden: mitigationPreview?.getAttribute('data-live-card-preview-hidden') || '',
+        previewImpact: mitigationPreview?.getAttribute('data-live-card-preview-impact') || '',
+      };
       await scene.endLiveTurn();
       const firstClick = {
         hint: document.querySelector('[data-live-last-error]')?.textContent || '',
@@ -3850,6 +3863,7 @@ async function safeElementScreenshot(page, selector, outputPath) {
         calls: calls.slice(),
       };
       return {
+        beforeClick,
         firstClick,
         afterVersionAdvance,
         afterConfirm,
@@ -3862,6 +3876,20 @@ async function safeElementScreenshot(page, selector, outputPath) {
       originalRenderLivePanel();
     }
   });
+  add(
+    'live UI marks status-response mitigation cards before click without hidden payloads',
+    statusResponseEndTurnProbe.beforeClick?.phase === 'active'
+      && statusResponseEndTurnProbe.beforeClick?.currentSeat === 'A'
+      && statusResponseEndTurnProbe.beforeClick?.mitigationId === 'vulnerable_mark'
+      && statusResponseEndTurnProbe.beforeClick?.responseWindow === 'status_response_window'
+      && /响应牌/.test(statusResponseEndTurnProbe.beforeClick?.chipText || '')
+      && /清除破绽/.test(statusResponseEndTurnProbe.beforeClick?.previewText || '')
+      && statusResponseEndTurnProbe.beforeClick?.previewSource === 'viewer_public_state'
+      && statusResponseEndTurnProbe.beforeClick?.previewHidden === 'false'
+      && statusResponseEndTurnProbe.beforeClick?.previewImpact === 'none'
+      && !/cardInstanceId|loadoutSnapshot|reward|rating|elo|opponentHand|opponentDeck/i.test(`${statusResponseEndTurnProbe.beforeClick?.cardText || ''} ${statusResponseEndTurnProbe.beforeClick?.previewText || ''}`),
+    JSON.stringify(statusResponseEndTurnProbe.beforeClick || null),
+  );
   add(
     'live UI requires a second click before status-response end turn submits',
     /再次点击确认结束回合/.test(statusResponseEndTurnProbe.firstClick?.hint || '')

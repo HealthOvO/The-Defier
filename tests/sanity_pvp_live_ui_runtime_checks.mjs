@@ -1762,6 +1762,36 @@ assert.match(openingHandEl.innerHTML, /破盾\s*3/, 'pre-click card preview shou
 assert.match(openingHandEl.innerHTML, /生命伤害\s*5/, 'pre-click card preview should show HP damage');
 assert.match(openingHandEl.innerHTML, /B\s*预计\s*45\s*血/, 'pre-click card preview should show target HP after the action');
 assert.doesNotMatch(openingHandEl.innerHTML, /cardInstanceId|loadoutSnapshot|rating|elo|opponentHand|opponentDeck/i, 'pre-click card preview must not expose hidden payload markers');
+const statusMitigationPreviewMarkup = PVPScene.renderLiveCardActionPreview({
+  actionPreviewReport: {
+    ...openingActionState.stateView.actionPreviewReport,
+    playableCards: [{
+      cardInstanceId: 'A-guard-response',
+      cardName: '护体诀',
+      targetSeat: 'A',
+      rawDamage: 0,
+      damageBudget: 0,
+      budgetedDamage: 0,
+      blockedDamage: 0,
+      hpDamage: 0,
+      blockGain: 7,
+      selfBlockAfter: 7,
+      publicStatusMitigation: {
+        statusId: 'vulnerable_mark',
+        label: '破绽',
+        seatId: 'A',
+        sourceSeat: 'B',
+        responseWindow: 'status_response_window',
+        mitigation: 'cleared'
+      },
+      summaryLine: '护体诀：自身护盾 +7；清除破绽，阻止后续兑现。'
+    }]
+  }
+}, 'A-guard-response', 'active');
+assert.match(statusMitigationPreviewMarkup, /data-live-card-status-mitigation="vulnerable_mark"/, 'status-response mitigation card should carry a direct public mitigation marker');
+assert.match(statusMitigationPreviewMarkup, /data-live-card-response-chip/, 'status-response mitigation card should render a dedicated response chip');
+assert.match(statusMitigationPreviewMarkup, /响应牌[\s\S]*清除破绽/, 'status-response mitigation card should make the clearable public status visible before click');
+assert.doesNotMatch(statusMitigationPreviewMarkup, /cardInstanceId|loadoutSnapshot|rating|elo|opponentHand|opponentDeck|reward/i, 'status-response mitigation marker must not expose hidden payload or reward/rating data');
 const notViewerTurnState = {
   ...openingActionState,
   stateView: {

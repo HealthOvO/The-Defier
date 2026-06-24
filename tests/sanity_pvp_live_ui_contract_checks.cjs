@@ -178,8 +178,11 @@ const liveBrowserAudit = read('tests/browser_pvp_live_audit.mjs');
   'getLiveActionPreviewReport(',
   'getLiveCardActionPreview(',
   'formatLiveActionPreviewLine(',
+  'formatLiveStatusMitigationLine(',
   'renderLiveCardActionPreview(',
   'data-live-card-preview',
+  'data-live-card-status-mitigation',
+  'data-live-card-response-chip',
   'getLiveActionReceiptReport(',
   'renderLiveActionReceiptReport(',
   'cardDraw',
@@ -503,6 +506,15 @@ const openingConfirmMessageBody = methodBody(scene, 'formatLiveOpeningActionConf
   '权威预览',
 ].forEach((needle) => {
   assert.ok(openingConfirmMessageBody.includes(needle), `opening confirmation formatter should consume authoritative action preview: ${needle}`);
+});
+
+const liveCardActionPreviewBody = methodBody(scene, 'renderLiveCardActionPreview');
+[
+  'formatLiveStatusMitigationLine',
+  'data-live-card-status-mitigation',
+  'data-live-card-response-chip',
+].forEach((needle) => {
+  assert.ok(liveCardActionPreviewBody.includes(needle), `live card action preview should render status mitigation marker: ${needle}`);
 });
 
 const endLiveTurnBody = methodBody(scene, 'endLiveTurn');

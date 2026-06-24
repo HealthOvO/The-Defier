@@ -1409,6 +1409,15 @@ export const PVPScene = {
       : '';
     return `${preview.cardName || '术式'}：预算后 ${preview.budgetedDamage}，破盾 ${preview.blockedDamage}，生命伤害 ${preview.hpDamage}，${targetSeat} 预计 ${preview.targetHpAfter} 血${protectionText}${blockText}${healText}。`;
   },
+  formatLiveStatusMitigationLine(preview) {
+    const mitigation = preview && preview.publicStatusMitigation && typeof preview.publicStatusMitigation === 'object'
+      ? preview.publicStatusMitigation
+      : null;
+    if (!mitigation) return '';
+    const label = mitigation.label || '公开状态';
+    const action = mitigation.mitigation === 'cleared' ? `清除${label}` : `处理${label}`;
+    return `响应牌 · ${action}`;
+  },
   renderLiveCardActionPreview(view, cardInstanceId = '', phase = '') {
     if (String(phase || '') !== 'active') return '';
     const report = this.getLiveActionPreviewReport(view);
@@ -1417,14 +1426,20 @@ export const PVPScene = {
     const preview = this.getLiveCardActionPreview({ actionPreviewReport: report }, cardInstanceId);
     const previewLine = this.formatLiveActionPreviewLine(preview);
     if (!previewLine) return '';
+    const mitigation = preview && preview.publicStatusMitigation ? preview.publicStatusMitigation : null;
+    const mitigationLine = this.formatLiveStatusMitigationLine(preview);
+    const mitigationAttrs = mitigation
+      ? ` data-live-card-status-mitigation="${this.escapeHtml(mitigation.statusId || '')}" data-live-card-status-response-window="${this.escapeHtml(mitigation.responseWindow || '')}"`
+      : '';
     return `
               <span
-                class="pvp-live-card-preview"
+                class="pvp-live-card-preview${mitigation ? ' has-status-mitigation' : ''}"
                 data-live-card-preview
                 data-live-card-preview-source="${this.escapeHtml(report.sourceVisibility)}"
                 data-live-card-preview-hidden="${report.usesHiddenInformation ? 'true' : 'false'}"
                 data-live-card-preview-impact="${this.escapeHtml(report.rankedImpact)}"
-              >${this.escapeHtml(previewLine)}</span>
+                ${mitigationAttrs}
+              >${mitigationLine ? `<span class="pvp-live-card-response-chip" data-live-card-response-chip>${this.escapeHtml(mitigationLine)}</span> ` : ''}${this.escapeHtml(previewLine)}</span>
             `;
   },
   getLiveActionReceiptReport(view) {
