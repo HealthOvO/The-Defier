@@ -4925,6 +4925,54 @@ async function safeElementScreenshot(page, selector, outputPath) {
     JSON.stringify({ ...visiblePracticePlanProbe, keyTurnFocus: visiblePracticePlanKeyTurnFocus }),
   );
 
+  const nextStepGuideProbe = await page.evaluate(() => {
+    const guide = document.querySelector('[data-live-post-review-next-step]');
+    const primary = guide?.querySelector('[data-live-post-review-next-step-rank="primary"]');
+    const secondary = guide?.querySelector('[data-live-post-review-next-step-rank="secondary"]');
+    return {
+      visible: !!guide,
+      text: guide?.textContent?.replace(/\s+/g, ' ').trim() || '',
+      source: guide?.getAttribute('data-live-post-review-next-step-source') || '',
+      hidden: guide?.getAttribute('data-live-post-review-next-step-hidden') || '',
+      impact: guide?.getAttribute('data-live-post-review-next-step-impact') || '',
+      primaryAttr: guide?.getAttribute('data-live-post-review-next-step-primary') || '',
+      primary: primary?.getAttribute('data-live-post-review-next-step-action') || '',
+      secondary: secondary?.getAttribute('data-live-post-review-next-step-action') || '',
+      primaryText: primary?.textContent?.replace(/\s+/g, ' ').trim() || '',
+      secondaryText: secondary?.textContent?.replace(/\s+/g, ' ').trim() || '',
+    };
+  });
+  add(
+    'live UI post-match next-step guide routes loss through key-turn review before no-score practice',
+    nextStepGuideProbe.visible === true
+      && nextStepGuideProbe.source === 'public_review'
+      && nextStepGuideProbe.hidden === 'false'
+      && nextStepGuideProbe.impact === 'none'
+      && nextStepGuideProbe.primaryAttr === 'review_key_turns'
+      && nextStepGuideProbe.primary === 'review_key_turns'
+      && nextStepGuideProbe.secondary === 'practice'
+      && /下一步建议|关键回合复盘/.test(nextStepGuideProbe.text)
+      && /问道练习|不写正式积分/.test(nextStepGuideProbe.text)
+      && !/payload|\bhand\b|deck|cardId|instanceId|cardInstanceId|loadoutSnapshot|rawPayload|reward|rating|elo|token/i.test(nextStepGuideProbe.text),
+    JSON.stringify(nextStepGuideProbe),
+  );
+
+  await page.click('[data-live-post-review-next-step-rank="primary"]', { timeout: 5000, force: true });
+  await page.waitForTimeout(180);
+  const nextStepPrimaryFocusProbe = await page.evaluate(() => ({
+    eventPanelFocus: document.querySelector('[data-live-event-panel]')?.getAttribute('data-live-review-focus') || '',
+    keyTurnFocus: document.querySelector('[data-live-key-turn-replay]')?.getAttribute('data-live-review-focus') || '',
+    hint: document.querySelector('[data-live-last-error]')?.textContent || '',
+  }));
+  add(
+    'live UI post-match next-step primary CTA reuses key-turn replay focus',
+    nextStepPrimaryFocusProbe.eventPanelFocus === 'key_turns'
+      && nextStepPrimaryFocusProbe.keyTurnFocus === 'key_turns'
+      && /关键回合|公开事件|回放/.test(nextStepPrimaryFocusProbe.hint)
+      && !/\bhand\b|deck|cardId|instanceId|cardInstanceId|loadoutSnapshot|rawPayload|reward|rating|elo|token/i.test(nextStepPrimaryFocusProbe.hint),
+    JSON.stringify(nextStepPrimaryFocusProbe),
+  );
+
   await page.click('[data-live-post-review-action="practice"]', { timeout: 5000, force: true });
   await page.waitForTimeout(450);
   const postReviewPracticeProbe = await page.evaluate(() => {
@@ -6783,6 +6831,74 @@ async function safeElementScreenshot(page, selector, outputPath) {
       && mobileRecommendationProbe.cardScrollWidth <= mobileRecommendationProbe.cardClientWidth + 2
       && mobileRecommendationProbe.overflowWrap !== 'normal',
     JSON.stringify(mobileRecommendationProbe),
+  );
+
+  const mobileNextStepProbe = await mobilePage.evaluate(() => {
+    const guide = document.querySelector('[data-live-post-review-next-step]');
+    const primary = guide?.querySelector('[data-live-post-review-next-step-rank="primary"]');
+    const secondary = guide?.querySelector('[data-live-post-review-next-step-rank="secondary"]');
+    const guideStyle = guide ? window.getComputedStyle(guide) : null;
+    const guideRect = guide?.getBoundingClientRect();
+    const primaryRect = primary?.getBoundingClientRect();
+    const secondaryRect = secondary?.getBoundingClientRect();
+    return {
+      text: guide?.textContent?.replace(/\s+/g, ' ').trim() || '',
+      source: guide?.getAttribute('data-live-post-review-next-step-source') || '',
+      hidden: guide?.getAttribute('data-live-post-review-next-step-hidden') || '',
+      impact: guide?.getAttribute('data-live-post-review-next-step-impact') || '',
+      primaryAttr: guide?.getAttribute('data-live-post-review-next-step-primary') || '',
+      primary: primary?.getAttribute('data-live-post-review-next-step-action') || '',
+      secondary: secondary?.getAttribute('data-live-post-review-next-step-action') || '',
+      primaryText: primary?.textContent?.replace(/\s+/g, ' ').trim() || '',
+      secondaryText: secondary?.textContent?.replace(/\s+/g, ' ').trim() || '',
+      overflowWrap: guideStyle?.overflowWrap || '',
+      scrollWidth: guide ? Math.round(guide.scrollWidth) : 0,
+      clientWidth: guide ? Math.round(guide.clientWidth) : 0,
+      guideRect: guideRect ? {
+        left: Math.round(guideRect.left),
+        right: Math.round(guideRect.right),
+        width: Math.round(guideRect.width),
+        height: Math.round(guideRect.height),
+      } : null,
+      primaryRect: primaryRect ? {
+        left: Math.round(primaryRect.left),
+        right: Math.round(primaryRect.right),
+        width: Math.round(primaryRect.width),
+        height: Math.round(primaryRect.height),
+      } : null,
+      secondaryRect: secondaryRect ? {
+        left: Math.round(secondaryRect.left),
+        right: Math.round(secondaryRect.right),
+        width: Math.round(secondaryRect.width),
+        height: Math.round(secondaryRect.height),
+      } : null,
+      viewportWidth: window.innerWidth,
+    };
+  });
+  add(
+    'live UI mobile renders post-match next-step guide readably',
+    /下一步建议/.test(mobileNextStepProbe.text)
+      && /问道练习/.test(mobileNextStepProbe.text)
+      && /继续真人排位/.test(mobileNextStepProbe.text)
+      && /不写正式积分/.test(mobileNextStepProbe.text)
+      && mobileNextStepProbe.source === 'public_review'
+      && mobileNextStepProbe.hidden === 'false'
+      && mobileNextStepProbe.impact === 'none'
+      && mobileNextStepProbe.primaryAttr === 'practice'
+      && mobileNextStepProbe.primary === 'practice'
+      && mobileNextStepProbe.secondary === 'queue_again'
+      && mobileNextStepProbe.guideRect?.left >= -1
+      && mobileNextStepProbe.guideRect?.right <= mobileNextStepProbe.viewportWidth + 2
+      && mobileNextStepProbe.primaryRect?.height >= 32
+      && mobileNextStepProbe.secondaryRect?.height >= 32
+      && mobileNextStepProbe.primaryRect?.left >= -1
+      && mobileNextStepProbe.primaryRect?.right <= mobileNextStepProbe.viewportWidth + 2
+      && mobileNextStepProbe.secondaryRect?.left >= -1
+      && mobileNextStepProbe.secondaryRect?.right <= mobileNextStepProbe.viewportWidth + 2
+      && mobileNextStepProbe.scrollWidth <= mobileNextStepProbe.clientWidth + 2
+      && mobileNextStepProbe.overflowWrap !== 'normal'
+      && !/payload|\bhand\b|deck|cardId|instanceId|cardInstanceId|loadoutSnapshot|rawPayload|reward|rating|elo|token/i.test(mobileNextStepProbe.text),
+    JSON.stringify(mobileNextStepProbe),
   );
 
   await safeElementScreenshot(page, '[data-live-pvp-root]', path.join(outDir, 'pvp-live-panel.png'));

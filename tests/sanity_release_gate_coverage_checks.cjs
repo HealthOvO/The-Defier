@@ -633,6 +633,11 @@ const browserAutomationBootAudit = read('tests/browser_automation_boot_audit.mjs
   'accept_wide_match',
   '接受宽分差',
   'live UI renders post-match review MVP from public finished state',
+  'data-live-post-review-next-step',
+  'data-live-post-review-next-step-action',
+  'data-live-post-review-next-step-primary',
+  'live UI post-match next-step guide routes loss through key-turn review before no-score practice',
+  'live UI post-match next-step primary CTA reuses key-turn replay focus',
   'review_key_turns:key_turn_replay',
   'report_issue:report_issue',
   'avoid_opponent:avoid_opponent',
@@ -886,6 +891,7 @@ const browserAutomationBootAudit = read('tests/browser_automation_boot_audit.mjs
   'live UI post-match loadout receipts do not mask queue or rematch failures',
   'live UI post-match practice drill follows public loadout recommendation over current preset',
   'live UI mobile renders post-match loadout recommendation card readably',
+  'live UI mobile renders post-match next-step guide readably',
   'live UI mobile post-match practice handoff keeps public selection plan accessible and scroll-safe',
   'pvplm-browser-live-mobile',
   "mobilePostReviewPracticeProbe.targetReach.every(item => item.reachable === true)",
@@ -907,8 +913,23 @@ assert.ok(
 );
 
 [
+  '.pvp-live-next-step-guide',
+  '.pvp-live-next-step-actions',
+].forEach((needle) => {
+  assert.ok(
+    pvpCss.includes(needle),
+    `PVP CSS should pin post-match next-step guide marker: ${needle}`,
+  );
+});
+
+[
   'buildLivePostReviewPracticePlan(',
   'renderLivePostReviewPracticePlan(',
+  'getLivePostReviewNextStepGuide(',
+  'renderLivePostReviewNextStepGuide(',
+  'pvp-live-post-review-next-step-v1',
+  'data-live-post-review-next-step-source',
+  'data-live-post-review-next-step-hidden',
   'data-live-practice-plan',
   'data-live-practice-plan-key-turn',
   'data-live-practice-plan-check',
@@ -2985,6 +3006,11 @@ assert.ok(
   'opening safeguard should tell players the protection prevents first-seat burst kills',
   'opening safeguard should tell players the counterplay buffer preserves second-seat agency',
   'post-match review normalizer should preserve audit action ids for real UI buttons',
+  'post-match review should render a dedicated next-step guide from public recommendations',
+  'watch-loss next-step guide should make key-turn review the primary action',
+  'low-risk win next-step guide should make queue-again the primary action',
+  'next-step guide should not relabel unsafe subreports as public no-impact advice',
+  'friendly series next-step guide should prioritize low-pressure rematch over queue-again',
   'key-turn review action should fetch the authoritative replay_self layer',
   'key-turn replay should render each key turn as a clickable focus step',
   'key-turn focus should reuse matching public evidence details when available',

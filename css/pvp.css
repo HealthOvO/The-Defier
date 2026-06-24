@@ -1929,6 +1929,84 @@
     border-color: rgba(242, 192, 121, 0.22);
 }
 
+.pvp-live-next-step-guide {
+    margin-top: 8px;
+    padding: 8px;
+    border-radius: 8px;
+    border: 1px solid rgba(153, 214, 170, 0.2);
+    background: rgba(12, 39, 36, 0.24);
+    overflow-wrap: anywhere;
+}
+
+.pvp-live-next-step-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    min-width: 0;
+    color: rgba(229, 246, 233, 0.94);
+    font-size: 0.72rem;
+    font-weight: 700;
+}
+
+.pvp-live-next-step-head span:last-child {
+    color: rgba(153, 214, 170, 0.84);
+    text-align: right;
+}
+
+.pvp-live-next-step-summary,
+.pvp-live-next-step-reason,
+.pvp-live-next-step-boundary {
+    margin-top: 5px;
+    color: rgba(226, 241, 231, 0.78);
+    font-size: 0.68rem;
+    line-height: 1.35;
+}
+
+.pvp-live-next-step-reason,
+.pvp-live-next-step-boundary {
+    color: rgba(205, 226, 211, 0.64);
+}
+
+.pvp-live-next-step-actions {
+    margin-top: 7px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.pvp-live-next-step-actions button {
+    min-width: 0;
+    min-height: 32px;
+    padding: 5px 9px;
+    border-radius: 999px;
+    border: 1px solid rgba(153, 214, 170, 0.22);
+    background: rgba(255, 255, 255, 0.045);
+    color: rgba(229, 246, 233, 0.88);
+    font: inherit;
+    font-size: 0.68rem;
+    cursor: pointer;
+    overflow-wrap: anywhere;
+}
+
+.pvp-live-next-step-actions button[data-live-post-review-next-step-rank="primary"] {
+    border-color: rgba(153, 214, 170, 0.42);
+    background: rgba(153, 214, 170, 0.12);
+    color: rgba(241, 252, 244, 0.94);
+}
+
+.pvp-live-next-step-actions button:hover,
+.pvp-live-next-step-actions button:focus-visible {
+    border-color: rgba(153, 214, 170, 0.48);
+    background: rgba(153, 214, 170, 0.14);
+    outline: none;
+}
+
+.pvp-live-next-step-actions button:disabled {
+    cursor: not-allowed;
+    opacity: 0.62;
+}
+
 .pvp-live-season-goal {
     margin-top: 8px;
     padding: 8px;
@@ -4561,6 +4639,7 @@ input:checked+.seal-slider .seal-face.on {
     }
 
     .pvp-live-season-goal-head,
+    .pvp-live-next-step-head,
     .pvp-live-loadout-recommendation-head,
     .pvp-live-loadout-exploration-head,
     .pvp-live-loadout-exploration-card-head {
@@ -4570,6 +4649,7 @@ input:checked+.seal-slider .seal-face.on {
     }
 
     .pvp-live-season-goal-head span:last-child,
+    .pvp-live-next-step-head span:last-child,
     .pvp-live-loadout-recommendation-head span:last-child,
     .pvp-live-loadout-exploration-head span:last-child,
     .pvp-live-loadout-exploration-card-head span:last-child {

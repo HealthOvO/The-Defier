@@ -2683,6 +2683,9 @@ assert.equal(winningRecommendationScenario.recommendedLoadoutId, 'sword', 'post-
 assert.equal(winningRecommendationScenario.recommendedLoadoutLabel, '破阵斗法谱', 'post-match practice drill should carry the recommended preset label');
 assert.match(winningRecommendationScenario.drillObjective, /破阵斗法谱/, 'post-match practice objective should explain the recommended loadout');
 assert.equal(winningRecommendationScenario.rankedImpact, 'none', 'post-match practice drill from loadout recommendation must not write ranked state');
+const winningNextStepMarkup = PVPScene.renderLivePostMatchReview(winningRecommendationState.stateView, 'finished');
+assert.match(winningNextStepMarkup, /data-live-post-review-next-step-primary="queue_again"/, 'low-risk win next-step guide should make queue-again the primary action');
+assert.match(winningNextStepMarkup, /data-live-post-review-next-step-action="queue_again"[\s\S]*data-live-post-review-next-step-rank="primary"/, 'winning next-step guide primary CTA should reuse queue-again');
 
 const visiblePracticePlanReview = {
   ...baseRecommendationState.stateView,
@@ -2713,10 +2716,35 @@ const visiblePracticePlanReview = {
         { id: 'decision_windows', label: '公开决策窗口', passed: false, detail: '公开事件只看到一个短窗口。' },
         { id: 'opening_protection', label: '开局护体', passed: true, detail: '未行动方不会被开局直接终结。' }
       ]
-    }
+    },
+    fairnessReceipt: {
+      reportVersion: 'pvp-live-fairness-receipt-v1',
+      sourceVisibility: 'public_events',
+      usesHiddenInformation: false,
+      rankedImpact: 'none',
+      receiptState: 'watch',
+      agencyLabel: '行动窗口偏短',
+      nextStepLine: '下一步：先复盘关键回合，再用问道练习复刻公开窗口。',
+      evidenceSummary: [
+        { id: 'decision_windows', label: '公开决策窗口', passed: false, evidenceSequences: [4, 8] }
+      ],
+      boundary: '公平回执只汇总公开复盘证据，不读取隐藏手牌、牌库或原始事件明细，也不改正式积分或结算。'
+    },
+    nextActions: [
+      { id: 'review_key_turns', auditActionId: 'key_turn_replay', label: '关键回合复盘', detail: '先定位公开关键回合。' },
+      { id: 'practice', auditActionId: 'practice_topic', label: '问道练习', detail: '复刻公开窗口，不写正式积分。' },
+      { id: 'queue_again', auditActionId: 'queue_again', label: '继续真人排位', detail: '带着本局结论重新入队。' }
+    ]
   }
 };
 const visiblePracticePlanMarkup = PVPScene.renderLivePostMatchReview(visiblePracticePlanReview, 'finished');
+assert.match(visiblePracticePlanMarkup, /data-live-post-review-next-step/, 'post-match review should render a dedicated next-step guide from public recommendations');
+assert.match(visiblePracticePlanMarkup, /data-live-post-review-next-step-primary="review_key_turns"/, 'watch-loss next-step guide should make key-turn review the primary action');
+assert.match(visiblePracticePlanMarkup, /data-live-post-review-next-step-action="review_key_turns"[\s\S]*data-live-post-review-next-step-rank="primary"/, 'next-step guide primary CTA should reuse the key-turn review action');
+assert.match(visiblePracticePlanMarkup, /data-live-post-review-next-step-action="practice"[\s\S]*data-live-post-review-next-step-rank="secondary"/, 'next-step guide should keep no-score practice as the secondary action');
+assert.match(visiblePracticePlanMarkup, /下一步建议|先复盘关键回合|问道练习/, 'next-step guide should explain the recovery path in player-facing copy');
+assert.match(visiblePracticePlanMarkup, /不写正式积分/, 'next-step guide should keep the no-score boundary visible');
+assert.doesNotMatch(visiblePracticePlanMarkup, /payload|\bhand\b|deck|cardId|instanceId|loadoutSnapshot|reward|rating|elo|token/i, 'next-step guide must not expose hidden or reward/rating data');
 assert.match(visiblePracticePlanMarkup, /data-live-practice-plan/, 'post-match review should render the public practice plan before practice handoff');
 assert.match(visiblePracticePlanMarkup, /首败练习|公开关键回合复刻节奏/, 'visible practice plan should show the objective line');
 assert.match(visiblePracticePlanMarkup, /data-live-practice-plan-key-turn="opening_window"/, 'visible practice plan should expose key-turn focus steps');
@@ -2725,6 +2753,25 @@ assert.match(visiblePracticePlanMarkup, /data-live-practice-plan-check="decision
 assert.match(visiblePracticePlanMarkup, /handleLiveExperienceCheckFocus\(&quot;decision_windows&quot;\)/, 'visible practice plan fairness step should reuse experience-check focus handler');
 assert.match(visiblePracticePlanMarkup, /复刻开局读题|复刻压力窗口/, 'visible practice plan should show at least one tempo drill prompt');
 assert.doesNotMatch(visiblePracticePlanMarkup, /payload|\bhand\b|deck|cardId|instanceId|loadoutSnapshot|reward|rating|elo|token/i, 'visible practice plan must not expose hidden or reward/rating data');
+const unsafeNextStepMarkup = PVPScene.renderLivePostMatchReview({
+  ...visiblePracticePlanReview,
+  postMatchReview: {
+    ...visiblePracticePlanReview.postMatchReview,
+    experienceReport: {
+      ...visiblePracticePlanReview.postMatchReview.experienceReport,
+      sourceVisibility: 'private_state',
+      usesHiddenInformation: true,
+      summary: 'hidden hand reward rating should not be relabeled as public copy'
+    },
+    fairnessReceipt: {
+      ...visiblePracticePlanReview.postMatchReview.fairnessReceipt,
+      sourceVisibility: 'private_state',
+      usesHiddenInformation: true,
+      nextStepLine: 'hidden deck rating reward should not render'
+    }
+  }
+}, 'finished');
+assert.doesNotMatch(unsafeNextStepMarkup, /data-live-post-review-next-step/, 'next-step guide should not relabel unsafe subreports as public no-impact advice');
 const unsafePracticePlanMarkup = PVPScene.renderLivePostMatchReview({
   ...visiblePracticePlanReview,
   postMatchReview: {
@@ -2736,6 +2783,37 @@ const unsafePracticePlanMarkup = PVPScene.renderLivePostMatchReview({
   }
 }, 'finished');
 assert.doesNotMatch(unsafePracticePlanMarkup, /data-live-practice-plan/, 'post-match review should hide practice plan when replay source is not public-safe');
+
+const friendlyNextStepMarkup = PVPScene.renderLivePostMatchReview({
+  ...visiblePracticePlanReview,
+  postMatchReview: {
+    ...visiblePracticePlanReview.postMatchReview,
+    result: 'win',
+    experienceReport: {
+      ...visiblePracticePlanReview.postMatchReview.experienceReport,
+      nonGameRisk: 'low',
+      recommendedAction: 'queue_again'
+    },
+    friendlySeries: {
+      reportVersion: 'pvp-live-friendly-series-v1',
+      sourceVisibility: 'public_review',
+      usesHiddenInformation: false,
+      rankedImpact: 'none',
+      seriesStatus: 'in_progress',
+      canRequestNextRound: true,
+      requesterSourceSeat: 'A',
+      opponentSourceSeat: 'B',
+      nextRoundIndex: 2
+    },
+    nextActions: [
+      { id: 'friendly_rematch', auditActionId: 'friendly_rematch', label: '低压力再战', detail: '同对手换边再打一局。' },
+      { id: 'practice', auditActionId: 'practice_topic', label: '问道练习', detail: '不写正式积分。' },
+      { id: 'queue_again', auditActionId: 'queue_again', label: '继续真人排位', detail: '重新入队。' }
+    ]
+  }
+}, 'finished');
+assert.match(friendlyNextStepMarkup, /data-live-post-review-next-step-primary="friendly_rematch"/, 'friendly series next-step guide should prioritize low-pressure rematch over queue-again');
+assert.match(friendlyNextStepMarkup, /data-live-post-review-next-step-action="friendly_rematch"[\s\S]*data-live-post-review-next-step-rank="primary"/, 'friendly next-step guide primary CTA should reuse friendly rematch');
 
 const bridgedReview = PVPScene.getLivePostMatchReview({
   postMatchReview: {

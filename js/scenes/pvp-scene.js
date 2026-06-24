@@ -3178,19 +3178,158 @@ export const PVPScene = {
       && source.usesHiddenInformation === false
       && source.rankedImpact === 'none';
   },
-  hasUnsafeLivePostReviewPracticeSource(review = null) {
-    const source = review && typeof review === 'object' ? review : null;
-    if (!source) return true;
-    const hasReplay = !!source.keyTurnReplay;
-    const hasExperience = !!source.experienceReport;
+	  hasUnsafeLivePostReviewPracticeSource(review = null) {
+	    const source = review && typeof review === 'object' ? review : null;
+	    if (!source) return true;
+	    const hasReplay = !!source.keyTurnReplay;
+	    const hasExperience = !!source.experienceReport;
     const replay = hasReplay ? this.getRawLivePostReviewPracticeReport(source, 'keyTurnReplay') : null;
     const experience = hasExperience ? this.getRawLivePostReviewPracticeReport(source, 'experienceReport') : null;
-    return (hasReplay && !this.isExplicitLivePublicNoImpactReport(replay))
-      || (hasExperience && !this.isExplicitLivePublicNoImpactReport(experience));
-  },
-  buildLivePostReviewPracticePlan(review = null) {
-    const source = review && typeof review === 'object' ? review : null;
-    if (!source) return null;
+	    return (hasReplay && !this.isExplicitLivePublicNoImpactReport(replay))
+	      || (hasExperience && !this.isExplicitLivePublicNoImpactReport(experience));
+	  },
+	  getLivePostReviewNextStepGuide(review = null, phase = 'idle') {
+	    const source = review && typeof review === 'object' ? review : null;
+	    if (!source) return null;
+	    const actions = Array.isArray(source.nextActions) ? source.nextActions : [];
+	    if (actions.length === 0) return null;
+	    const actionById = new Map(actions.map(action => [String(action && action.id || ''), action]).filter(([id]) => id));
+	    const hasAction = (id) => actionById.has(id);
+	    const rawExperience = source.experienceReport ? this.getRawLivePostReviewPracticeReport(source, 'experienceReport') : null;
+	    const rawReplay = source.keyTurnReplay ? this.getRawLivePostReviewPracticeReport(source, 'keyTurnReplay') : null;
+	    const rawReceipt = source.fairnessReceipt ? this.getRawLivePostReviewPracticeReport(source, 'fairnessReceipt') : null;
+	    if ((rawExperience && !this.isExplicitLivePublicNoImpactReport(rawExperience))
+	      || (rawReplay && !this.isExplicitLivePublicNoImpactReport(rawReplay))
+	      || (rawReceipt && !this.isExplicitLivePublicNoImpactReport(rawReceipt))) {
+	      return null;
+	    }
+	    const experience = rawExperience ? this.getLiveExperienceReport(rawExperience) : null;
+	    const replay = rawReplay ? this.getLiveKeyTurnReplay(rawReplay) : null;
+	    const receipt = rawReceipt ? this.getLiveFairnessReceipt(rawReceipt) : null;
+	    const recommendation = source.loadoutRecommendation ? this.getLiveLoadoutRecommendation(source.loadoutRecommendation) : null;
+	    const friendlySeries = source.friendlySeries ? this.getLiveFriendlySeries(source.friendlySeries) : null;
+	    const recommendedActions = [
+	      experience && experience.recommendedAction,
+	      replay && replay.recommendedAction
+	    ].map(item => String(item || '')).filter(Boolean);
+	    const receiptLine = String(receipt && receipt.nextStepLine || '');
+	    const needsReviewFirst = source.result === 'loss'
+	      || (experience && experience.nonGameRisk === 'watch')
+	      || (receipt && (receipt.receiptState === 'watch' || receipt.riskState === 'watch'))
+	      || /复盘|关键|窗口|练习/.test(receiptLine);
+	    let primaryId = '';
+	    if (friendlySeries && friendlySeries.canRequestNextRound && hasAction('friendly_rematch')) {
+	      primaryId = 'friendly_rematch';
+	    } else if (source.result === 'win' && hasAction('queue_again') && !(experience && experience.nonGameRisk === 'watch')) {
+	      primaryId = 'queue_again';
+	    } else if (needsReviewFirst && hasAction('review_key_turns') && (replay && replay.turns.length > 0 || /关键|复盘|窗口/.test(receiptLine))) {
+	      primaryId = 'review_key_turns';
+	    } else if ((recommendedActions.includes('practice') || needsReviewFirst) && hasAction('practice')) {
+	      primaryId = 'practice';
+	    } else if (recommendation && hasAction('adjust_loadout')) {
+	      primaryId = 'adjust_loadout';
+	    } else if (hasAction('queue_again')) {
+	      primaryId = 'queue_again';
+	    } else {
+	      primaryId = String(actions[0] && actions[0].id || '');
+	    }
+	    if (!primaryId || !hasAction(primaryId)) return null;
+	    const secondaryOrder = primaryId === 'friendly_rematch'
+	      ? ['queue_again', 'practice', 'review_events']
+	      : primaryId === 'review_key_turns'
+	      ? ['practice', 'adjust_loadout', 'queue_again', 'review_events']
+	      : primaryId === 'practice'
+	        ? ['queue_again', 'adjust_loadout', 'review_events']
+	        : primaryId === 'queue_again'
+	          ? ['practice', 'friendly_rematch', 'review_events']
+	          : ['practice', 'queue_again', 'review_key_turns', 'review_events'];
+	    const secondaryId = secondaryOrder.find(id => id !== primaryId && hasAction(id)) || '';
+	    const getAction = (id, rank) => {
+	      const action = actionById.get(id);
+	      if (!action) return null;
+	      return {
+	        id,
+	        rank,
+	        auditActionId: String(action.auditActionId || id),
+	        label: String(action.label || id),
+	        detail: String(action.detail || action.label || id),
+	        disabled: this.isLivePostReviewActionDisabled(id, phase)
+	      };
+	    };
+	    const guideActions = [
+	      getAction(primaryId, 'primary'),
+	      secondaryId ? getAction(secondaryId, 'secondary') : null
+	    ].filter(Boolean);
+	    const summaryByPrimary = {
+	      review_key_turns: '先复盘关键回合，再进入问道练习复刻公开窗口。',
+	      practice: '先进入问道练习复刻公开窗口，再手动决定是否继续真人排位。',
+	      queue_again: '本局公开轨迹可解释，可以带着结论继续真人排位。',
+	      adjust_loadout: '先按公开改谱建议调整候选斗法谱，再决定练习或回排。',
+	      friendly_rematch: '先低压力再战或换边复现，再决定是否回到真人排位。',
+	      review_events: '先查看权威事件序列，再决定练习、改谱或继续排位。'
+	    };
+	    const reasonLine = receiptLine
+	      || String(experience && experience.summary || '')
+	      || String(replay && replay.summary || '')
+	      || String(recommendation && recommendation.reasonLine || '')
+	      || String(source.summary || '');
+	    return {
+	      reportVersion: 'pvp-live-post-review-next-step-v1',
+	      sourceVisibility: 'public_review',
+	      usesHiddenInformation: false,
+	      rankedImpact: 'none',
+	      recommendedAction: primaryId,
+	      primaryActionId: primaryId,
+	      summaryLine: summaryByPrimary[primaryId] || '按公开复盘建议选择下一步。',
+	      reasonLine,
+	      boundaryLine: primaryId === 'practice' || secondaryId === 'practice'
+	        ? '问道练习不写正式积分；继续真人排位仍需玩家手动点击。'
+	        : '只使用公开赛后建议；不会自动入队，也不会改写本局正式积分。',
+	      actions: guideActions
+	    };
+	  },
+	  renderLivePostReviewNextStepGuide(review = null, phase = 'idle') {
+	    const guide = this.getLivePostReviewNextStepGuide(review, phase);
+	    if (!guide) return '';
+	    return `
+	      <div
+	        class="pvp-live-next-step-guide"
+	        data-live-post-review-next-step
+	        data-live-post-review-next-step-source="${this.escapeHtml(guide.sourceVisibility)}"
+	        data-live-post-review-next-step-hidden="${guide.usesHiddenInformation ? 'true' : 'false'}"
+	        data-live-post-review-next-step-impact="${this.escapeHtml(guide.rankedImpact)}"
+	        data-live-post-review-next-step-primary="${this.escapeHtml(guide.primaryActionId)}"
+	        data-live-post-review-next-step-recommended-action="${this.escapeHtml(guide.recommendedAction)}"
+	      >
+	        <div class="pvp-live-next-step-head">
+	          <span>下一步建议</span>
+	          <span>${this.escapeHtml(guide.actions[0] && guide.actions[0].label || '公开建议')}</span>
+	        </div>
+	        <div class="pvp-live-next-step-summary">${this.escapeHtml(guide.summaryLine)}</div>
+	        ${guide.reasonLine ? `<div class="pvp-live-next-step-reason">${this.escapeHtml(guide.reasonLine)}</div>` : ''}
+	        <div class="pvp-live-next-step-boundary">${this.escapeHtml(guide.boundaryLine)}</div>
+	        <div class="pvp-live-next-step-actions">
+	          ${guide.actions.map(action => {
+	            const handlerArg = this.escapeHtml(JSON.stringify(action.id));
+	            return `
+	              <button
+	                type="button"
+	                data-live-post-review-next-step-action="${this.escapeHtml(action.id)}"
+	                data-live-post-review-next-step-rank="${this.escapeHtml(action.rank)}"
+	                data-live-post-review-audit-action="${this.escapeHtml(action.auditActionId)}"
+	                onclick="PVPScene.handleLivePostReviewAction(${handlerArg})"
+	                title="${this.escapeHtml(action.detail)}"
+	                ${action.disabled ? 'disabled aria-disabled="true"' : ''}
+	              >${this.escapeHtml(action.label)}</button>
+	            `;
+	          }).join('')}
+	        </div>
+	      </div>
+	    `;
+	  },
+	  buildLivePostReviewPracticePlan(review = null) {
+	    const source = review && typeof review === 'object' ? review : null;
+	    if (!source) return null;
     if (this.hasUnsafeLivePostReviewPracticeSource(source)) return null;
     const replay = source.keyTurnReplay ? this.getLiveKeyTurnReplay(source.keyTurnReplay) : null;
     const experience = source.experienceReport ? this.getLiveExperienceReport(source.experienceReport) : null;
@@ -3955,11 +4094,12 @@ export const PVPScene = {
         </div>
       ` : ''}
       ${this.renderLiveFriendlySeries(review.friendlySeries)}
-      ${this.renderLiveFairnessReceipt(review)}
-      ${this.renderLiveExperienceReport(review)}
-      ${this.renderLiveKeyTurnReplay(review)}
-      ${this.renderLivePostReviewPracticePlan(review)}
-      ${this.renderLiveSeasonGoalCard(view)}
+	      ${this.renderLiveFairnessReceipt(review)}
+	      ${this.renderLiveExperienceReport(review)}
+	      ${this.renderLiveKeyTurnReplay(review)}
+	      ${this.renderLivePostReviewNextStepGuide(review, phase)}
+	      ${this.renderLivePostReviewPracticePlan(review)}
+	      ${this.renderLiveSeasonGoalCard(view)}
       ${this.renderLiveLoadoutRecommendation(review, phase)}
       <div class="pvp-live-review-actions">
         ${review.nextActions.map(action => `

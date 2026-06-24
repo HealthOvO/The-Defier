@@ -1,5 +1,23 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-24: V10-S68 live PVP post-match next-step guide
+  - 本轮完成
+    - `js/scenes/pvp-scene.js` 新增 `getLivePostReviewNextStepGuide()` / `renderLivePostReviewNextStepGuide()`，把既有 `experienceReport.recommendedAction`、`keyTurnReplay.recommendedAction`、`fairnessReceipt.nextStepLine`、`loadoutRecommendation` 和 `review.nextActions` 聚合成赛后“下一步建议”卡。
+    - 败局或行动窗口需复查时，如果真实 action 池里有 `review_key_turns`，主 CTA 会先导向“关键回合复盘”，次 CTA 再给“问道练习”；没有关键回合入口的移动端样本会把“问道练习”作为主 CTA，并保留“继续真人排位”作为次级选择。
+    - 低风险胜局会把 `queue_again` 作为主 CTA；所有按钮继续复用 `handleLivePostReviewAction()`，不新增后端动作、不自动排队、不改写本局积分。
+    - 新卡固定 `data-live-post-review-next-step*` marker，来源为 `public_review`、`usesHiddenInformation=false`、`rankedImpact=none`；CSS 补 `.pvp-live-next-step-guide` 与移动端换行，390px 审计确认按钮和卡片不横向溢出。
+    - `game-intro.html` 同步玩家说明：赛后下一步建议会把败局导向关键回合复盘或问道练习，把低风险胜局导向继续真人排位。
+  - 已验证
+    - 红测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs` 在实现前失败于 `low-risk win next-step guide should make queue-again the primary action`，当时赛后复盘没有 `data-live-post-review-next-step`。
+    - 红测：`node tests/sanity_pvp_live_ui_contract_checks.cjs` 在实现前失败于 `PVPScene should expose live UI marker: getLivePostReviewNextStepGuide(`。
+    - 红测：`node tests/browser_pvp_live_audit.mjs http://127.0.0.1:4173 output/pvp-live-next-step-guide-red` 在实现前找不到 `[data-live-post-review-next-step-rank="primary"]`。
+    - 绿测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs`
+    - 绿测：`node tests/sanity_pvp_live_ui_contract_checks.cjs`
+    - 绿测：`node tests/sanity_release_gate_coverage_checks.cjs`
+    - 浏览器审计：`node tests/browser_pvp_live_audit.mjs http://127.0.0.1:4173 output/pvp-live-next-step-guide-green`，121/121 findings、0 failed、0 console error。
+  - 当前结论
+    - live PVP 赛后闭环从“玩家自己在复盘、练习单、改谱和继续排位里判断下一步”推进到“系统用公开赛后信号给出主/次 CTA”：败局先学会复盘或练习，胜局再鼓励继续真人排位。该切片只改前端聚合、可见 CTA、样式、说明和门禁，不改变服务端战斗规则、先后手、伤害预算、匹配、正式积分、奖励或结算。
+
 - 2026-06-24: V10-S67 live PVP opening safeguard readable fairness copy
   - 本轮完成
     - `js/scenes/pvp-scene.js` 将实时论道开局公平保护从通用 chip 文案进一步拆成玩家能直接理解的公平反馈：首动预算、先后手预算线、后手护盾、防先手秒杀开局护体、后手行动窗口反打缓冲分别有独立 `data-live-opening-*` marker。
