@@ -1,5 +1,24 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-24: V10-S75 live PVP surviving damage receipt
+  - 本轮完成
+    - `js/scenes/pvp-scene.js` 在权威 `[data-live-action-receipt]` 内新增“承伤回执” chip：当 `play_card` 造成公开生命伤害、目标 `targetHpAfter > 0` 时，渲染 `data-live-action-survival*` target/hp/source/hidden/impact marker，明确“目标剩余 X 血，对局继续”。
+    - 新 chip 只使用 `actionReceiptReport.damage.targetSeat / hpDamage / targetHpAfter` 等服务端公开结算字段，不读取或展示当前玩家手牌、响应牌数量、响应牌名、牌库、谱快照、rating、reward、token 或原始 payload；对手侧也只看到同一份公开承伤事实。
+    - `tests/sanity_pvp_live_ui_runtime_checks.mjs` 先红后绿锁住非致命伤害回执 marker、目标席位、剩余血量、source/hidden/impact 边界和隐藏字段防泄漏。
+    - `tests/sanity_pvp_live_engine_checks.cjs` 补强公开事实来源：非致命伤害必须保留 `targetHpAfter > 0`、不触发 `match_finished`，A/B 两侧 action receipt 都能看到同一份公开剩余血量且不泄漏隐藏 payload。
+    - `tests/sanity_pvp_live_ui_contract_checks.cjs`、`tests/sanity_release_gate_coverage_checks.cjs` 与 `tests/browser_pvp_live_audit.mjs` 同步锁住 `public_damage_survival` marker、release gate finding 和真实浏览器 DOM probe。
+    - `game-intro.html` 同步玩家说明：行动回执会拆出承伤回执，让双方知道首动伤害如何被预算和护体压住，以及目标承伤后是否仍可继续行动。
+  - 已验证
+    - 红测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs` 在实现前失败于 `live UI action receipt should expose a stable surviving damage marker`。
+    - 红测：`node tests/sanity_pvp_live_ui_contract_checks.cjs` 在实现前失败于 `PVPScene live practice handoff should include marker: public_damage_survival`。
+    - 绿测：`node tests/sanity_pvp_live_engine_checks.cjs`
+    - 绿测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs`
+    - 绿测：`node tests/sanity_pvp_live_ui_contract_checks.cjs`
+    - 绿测：`node tests/sanity_release_gate_coverage_checks.cjs`
+    - 浏览器审计：`node tests/browser_pvp_live_audit.mjs http://127.0.0.1:5173 output/pvp-live-surviving-damage-receipt-audit-20260624`，130/130 findings、0 failed、0 console error。
+  - 当前结论
+    - live PVP 的行动回执从“说明伤害数字和护体挡伤”推进到“明确承伤后仍未终结、对局继续”：被打方能立刻知道自己还有窗口，进攻方也能看到没有发生隐藏秒杀或异常结算。该切片只改前端公开回执、玩家说明和门禁，不改变卡牌数值、伤害、护体、破绽、先后手、匹配、正式积分、奖励或结算。
+
 - 2026-06-24: V10-S74 live PVP public status payoff receipt
   - 本轮完成
     - `server/pvp-live/engine/state-view.js` 现有权威 `actionReceiptReport.statusEffects.consumed` 已包含 `statusId / label / seatId / sourceSeat / damageBonus / consumedTurnIndex`，并在 `summaryLine` 中写明“消耗破绽，额外伤害 +X”；本轮确认该服务端公开投影足够，不新增隐藏来源字段。

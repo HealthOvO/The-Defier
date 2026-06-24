@@ -171,8 +171,15 @@ assert.match(renderedActionReceipt, /破盾 3/, 'live UI action receipt should r
 assert.match(renderedActionReceipt, /生命伤害 15/, 'live UI action receipt should render HP damage');
 assert.match(renderedActionReceipt, /data-live-action-budget-clamp="public_first_action_budget"/, 'live UI action receipt should expose the public first-action budget clamp marker');
 assert.match(renderedActionReceipt, /首动预算挡下 1/, 'live UI action receipt should explain how much damage the first-action budget prevented');
+assert.match(renderedActionReceipt, /data-live-action-survival="public_damage_survival"/, 'live UI action receipt should expose a stable surviving damage marker');
+assert.match(renderedActionReceipt, /data-live-action-survival-target="B"/, 'live UI action receipt should expose the public surviving target seat');
+assert.match(renderedActionReceipt, /data-live-action-survival-hp-after="35"/, 'live UI action receipt should expose the public target HP after resolved damage');
+assert.match(renderedActionReceipt, /data-live-action-survival-source="authoritative_public_projection"/, 'live UI action survival receipt should expose public source');
+assert.match(renderedActionReceipt, /data-live-action-survival-hidden="false"/, 'live UI action survival receipt should mark hidden-info safe');
+assert.match(renderedActionReceipt, /data-live-action-survival-impact="none"/, 'live UI action survival receipt should mark no ranked impact');
+assert.match(renderedActionReceipt, /承伤回执|B 剩余 35 血|对局继续/, 'live UI action receipt should explain resolved surviving damage as a continuing duel state');
 assert.match(renderedActionReceipt, /权威公开投影/, 'live UI action receipt should render accurate projection source');
-assert.doesNotMatch(renderedActionReceipt, /cardInstanceId|sourceCardId|deck|rating|reward/i, 'live UI action receipt rendering must not expose hidden ids or rewards');
+assert.doesNotMatch(renderedActionReceipt, /payload|cardInstanceId|sourceCardId|\bhand\b|hand":\[|deck|loadoutSnapshot|rating|reward|token/i, 'live UI action receipt rendering must not expose hidden ids, payloads, decks, rewards, or tokens');
 
 const normalizedCardDrawReceipt = PVPScene.getLiveActionReceiptReport({
   actionReceiptReport: {

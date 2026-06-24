@@ -3420,6 +3420,13 @@ async function safeElementScreenshot(page, selector, outputPath) {
     actionBudgetClampAttr: document.querySelector('[data-live-action-budget-clamp]')?.getAttribute('data-live-action-budget-clamp') || '',
     actionOpeningProtection: document.querySelector('[data-live-action-opening-protection]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
     actionOpeningProtectionAttr: document.querySelector('[data-live-action-opening-protection]')?.getAttribute('data-live-action-opening-protection') || '',
+    actionSurvival: document.querySelector('[data-live-action-survival]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+    actionSurvivalAttr: document.querySelector('[data-live-action-survival]')?.getAttribute('data-live-action-survival') || '',
+    actionSurvivalTarget: document.querySelector('[data-live-action-survival]')?.getAttribute('data-live-action-survival-target') || '',
+    actionSurvivalHpAfter: document.querySelector('[data-live-action-survival]')?.getAttribute('data-live-action-survival-hp-after') || '',
+    actionSurvivalSource: document.querySelector('[data-live-action-survival]')?.getAttribute('data-live-action-survival-source') || '',
+    actionSurvivalHidden: document.querySelector('[data-live-action-survival]')?.getAttribute('data-live-action-survival-hidden') || '',
+    actionSurvivalImpact: document.querySelector('[data-live-action-survival]')?.getAttribute('data-live-action-survival-impact') || '',
     handoffReceipt: window.PVPScene.renderLiveActionReceiptReport({
       actionReceiptReport: {
         reportVersion: 'pvp-live-action-receipt-v1',
@@ -3502,6 +3509,20 @@ async function safeElementScreenshot(page, selector, outputPath) {
       && actionProbe.payload?.actionReceiptReport?.usesHiddenInformation === false
       && actionProbe.payload?.actionReceiptReport?.rankedImpact === 'none'
       && !/payload|\bhand\b|hand":\[|deck|cardId|instanceId|loadoutSnapshot|reward|rating|elo/i.test(`${actionProbe.actionReceipt} ${JSON.stringify(actionProbe.payload?.actionReceiptReport || {})}`),
+    JSON.stringify(actionProbe),
+  );
+  add(
+    'live UI renders surviving damage receipt after public damage',
+    actionProbe.actionSurvivalAttr === 'public_damage_survival'
+      && actionProbe.actionSurvivalTarget === 'B'
+      && actionProbe.actionSurvivalHpAfter === '1'
+      && actionProbe.actionSurvivalSource === 'authoritative_public_projection'
+      && actionProbe.actionSurvivalHidden === 'false'
+      && actionProbe.actionSurvivalImpact === 'none'
+      && /承伤回执/.test(actionProbe.actionSurvival || '')
+      && /B\s*剩余\s*1\s*血/.test(actionProbe.actionSurvival || '')
+      && /对局继续/.test(actionProbe.actionSurvival || '')
+      && !/payload|cardInstanceId|sourceCardId|cardId|instanceId|\bhand\b|hand":\[|deck|loadoutSnapshot|reward|rating|elo|token/i.test(`${actionProbe.actionSurvival || ''} ${JSON.stringify(actionProbe.payload?.actionReceiptReport || {})}`),
     JSON.stringify(actionProbe),
   );
   const mitigationFormatProbe = await page.evaluate(() => {

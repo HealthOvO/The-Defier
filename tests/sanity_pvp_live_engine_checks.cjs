@@ -854,11 +854,15 @@ assert(burstReceiptA.damage.preventedByBudget === 1, 'action receipt should expo
 assert(burstReceiptA.damage.blockedDamage === 3, 'action receipt should expose public block absorption');
 assert(burstReceiptA.damage.hpDamage === 15, 'action receipt should expose HP damage');
 assert(burstReceiptA.damage.targetSeat === 'B' && burstReceiptA.damage.targetHpAfter === 35, 'action receipt should expose target HP after resolution');
+assert(burstReceiptA.damage.targetHpAfter > 0, 'surviving damage action receipt should preserve the public target HP after resolution');
+assert(!burst.events.some(e => e.eventType === 'match_finished'), 'surviving public damage must not emit match_finished');
 assert(/预算后 18/.test(burstReceiptA.summaryLine) && /破盾 3/.test(burstReceiptA.summaryLine) && /生命伤害 15/.test(burstReceiptA.summaryLine), 'action receipt should give a readable resolved damage line');
 assert(!/deck|loadoutSnapshot|rating|elo|reward|opponentHand|opponentDeck|cardInstanceId|sourceCardId/i.test(JSON.stringify(burstReceiptA)), 'action receipt must not leak hidden deck, rating, reward, or card instance ids');
 const burstReceiptB = projectStateView(burst.state, 'B').actionReceiptReport;
 assert(burstReceiptB && burstReceiptB.viewerSeat === 'B', 'opponent should receive the same public action receipt scoped to their viewer seat');
 assert(burstReceiptB.damage.hpDamage === 15 && burstReceiptB.damage.targetSeat === 'B', 'opponent receipt should preserve public resolved damage without hidden payloads');
+assert(burstReceiptB.damage.targetHpAfter === 35, 'opponent receipt should preserve public surviving target HP after resolved damage');
+assert(!/deck|loadoutSnapshot|rating|elo|reward|opponentHand|opponentDeck|cardInstanceId|sourceCardId|payload/i.test(JSON.stringify(burstReceiptB)), 'opponent surviving damage receipt must not leak hidden payloads or rewards');
 const unknownCardReceiptState = JSON.parse(JSON.stringify(burst.state));
 unknownCardReceiptState.events.forEach(event => {
   if (!event || !event.payload) return;

@@ -1701,6 +1701,22 @@ export const PVPScene = {
       && report.openingProtection.preventedDamage > 0
       ? `<span class="pvp-live-action-receipt-chip" data-live-action-opening-protection="public_opening_protection">${this.escapeHtml(`开局护体保底 ${report.openingProtection.minimumHp || 1} 血 · 挡下 ${report.openingProtection.preventedDamage}`)}</span>`
       : '';
+    const survivalChip = !report.usesHiddenInformation
+      && report.actionType === 'play_card'
+      && report.damage
+      && report.damage.hpDamage > 0
+      && report.damage.targetSeat
+      && report.damage.targetHpAfter > 0
+      ? `<span
+          class="pvp-live-action-receipt-chip"
+          data-live-action-survival="public_damage_survival"
+          data-live-action-survival-target="${this.escapeHtml(report.damage.targetSeat || '')}"
+          data-live-action-survival-hp-after="${this.escapeHtml(String(report.damage.targetHpAfter || 0))}"
+          data-live-action-survival-source="${this.escapeHtml(report.sourceVisibility || '')}"
+          data-live-action-survival-hidden="${report.usesHiddenInformation ? 'true' : 'false'}"
+          data-live-action-survival-impact="${this.escapeHtml(report.rankedImpact || 'none')}"
+        >${this.escapeHtml(`承伤回执 · ${report.damage.targetSeat} 剩余 ${report.damage.targetHpAfter} 血，对局继续`)}</span>`
+      : '';
     const consumedStatuses = report.statusEffects && Array.isArray(report.statusEffects.consumed)
       ? report.statusEffects.consumed.filter(status => status && status.statusId)
       : [];
@@ -1765,6 +1781,7 @@ export const PVPScene = {
       <span class="pvp-live-action-receipt-line">${this.escapeHtml(summary)}</span>
       ${budgetClampChip}
       ${openingProtectionChip}
+      ${survivalChip}
       ${statusPayoffChip}
       ${mitigationChip}
       ${guardStanceChip}
