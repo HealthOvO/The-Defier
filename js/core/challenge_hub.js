@@ -1059,6 +1059,8 @@ const challengeHubMethods = Object.create(null);
     if (tempoScript.length === 0 && fairnessFocus.length === 0) return '';
     return `
             <div class="challenge-selection-practice-plan"
+                role="region"
+                aria-label="真人练习计划"
                 data-pvp-live-practice-selection-plan="true"
                 data-pvp-live-practice-plan-source="${escapeHtml(src.sourceVisibility)}"
                 data-pvp-live-practice-plan-hidden="${escapeHtml(String(src.usesHiddenInformation))}"

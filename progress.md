@@ -1,5 +1,23 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-24: V10-S66 live PVP practice selection mobile audit
+  - 本轮完成
+    - `tests/browser_challenge_mobile_flow_audit.mjs` 新增 390×844 移动端 live PVP 练习选择页 finding，直接从 `pvp-live-drill-scenario-v1` 进入 `practiceOnly + replayOnly` 锁定选择页，覆盖 `data-pvp-live-practice-selection-plan`、3 条关键回合、3 条体验复查和公开事件安全 marker。
+    - 移动端 ChallengeHub 审计现在会断言练习计划必须是 `role="region"`、`aria-label="真人练习计划"` 的可访问区域，并逐项命中 `真人练习计划 / 关键回合 / 体验复查 / 公平护栏`、3 条关键回合、3 条体验复查、无 hidden/card/reward/rating 等英文泄漏词、无横向溢出、确认按钮仍在 sticky footer 内可见。
+    - 针对 challenger 反馈补强尾部可达性：审计会分别把首/尾关键回合、首/尾体验复查和公平护栏滚到视口中部，确认它们都位于 sticky footer 上方，避免只看第一条内容导致尾部被底栏遮挡仍假绿。
+    - `js/core/challenge_hub.js` 给选择页练习计划外层补区域语义；`css/style.css` 给练习计划标题、行文和护栏增加 `min-width:0` / `overflow-wrap:anywhere` 兜底，防止长回合标签或中英混排在窄屏撑宽。
+    - `tests/browser_pvp_live_audit.mjs` 在现有 mobile live 段补真实赛后 handoff：从移动端 finished live state 点击 `[data-live-post-review-action="practice"]`，进入 ChallengeHub 选择页后校验 DOM 的 turn/focus id、标签和说明都来自 `drillScenario.practicePlan`，并继续检查区域语义、滚动可达、无横向溢出和 no-score/no-reward/no-rating 边界。
+    - `tests/sanity_release_gate_coverage_checks.cjs` 同步锁住移动端 live PVP practice finding、真实 mobile handoff finding、区域语义断言和尾部可达断言，避免选择页计划只停留在桌面 live audit。
+  - 已验证
+    - 红测：`node tests/browser_challenge_mobile_flow_audit.mjs http://127.0.0.1:4173 output/browser-challenge-mobile-pvp-practice-red` 在实现前失败于 `planRole=""`、`planAriaLabel=""`，说明移动端计划区没有可访问区域语义。
+    - 绿测：`node --check tests/browser_challenge_mobile_flow_audit.mjs`
+    - 绿测：`node tests/browser_challenge_mobile_flow_audit.mjs http://127.0.0.1:4173 output/browser-challenge-mobile-pvp-practice-green`
+    - challenger 补强绿测：`node tests/browser_challenge_mobile_flow_audit.mjs http://127.0.0.1:4173 output/browser-challenge-mobile-pvp-practice-strengthened`，12/12 findings、0 failed、0 console error。
+    - challenger 补强绿测：`node tests/browser_pvp_live_audit.mjs http://127.0.0.1:4173 output/pvp-live-mobile-practice-handoff-strengthened`，118/118 findings、0 failed、0 console error。
+    - 绿测：`node tests/sanity_release_gate_coverage_checks.cjs`
+  - 当前结论
+    - live PVP 的公开练习计划现在不只在桌面赛后/选择页合同里可见，移动端真实赛后 handoff 与 ChallengeHub 选择页也被正式门禁覆盖：玩家能在开练前读到关键回合、体验复查和公平护栏，计划卡不会横向撑破 390px 视口，尾部内容可滚到 sticky footer 上方，底部确认按钮仍可操作。该切片只补选择页展示语义、窄屏换行和测试覆盖，不改变匹配、后端、先后手、公平结算、奖励或积分。
+
 - 2026-06-24: V10-S65 live PVP practice selection plan and return context
   - 本轮完成
     - `js/core/challenge_hub.js` 新增 `renderPvpLivePracticeSelectionPlanMarkup()`，把 `pvp-live-practice-plan-v1` 从 bundle 的 `meta.practicePlan` 继续渲染到锁定角色选择页；玩家点击“问道练习”后，在真正开练前仍能看到同一份公开练习计划。

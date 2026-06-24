@@ -882,6 +882,9 @@ const browserAutomationBootAudit = read('tests/browser_automation_boot_audit.mjs
   'live UI post-match loadout receipts do not mask queue or rematch failures',
   'live UI post-match practice drill follows public loadout recommendation over current preset',
   'live UI mobile renders post-match loadout recommendation card readably',
+  'live UI mobile post-match practice handoff keeps public selection plan accessible and scroll-safe',
+  'pvplm-browser-live-mobile',
+  "mobilePostReviewPracticeProbe.targetReach.every(item => item.reachable === true)",
   'live UI should not call legacy PVP matching or settlement',
   'live UI renders ready_timeout invalidated as no-score terminal state',
   'postReviewHidden',
@@ -3429,8 +3432,16 @@ assert.ok(
 [
   'challenge mobile active banner keeps shared danger axis and training focus visible after launch',
   'challenge mobile replay banner preserves replay-only state and sample focus without overflow',
+  'challenge mobile live PVP practice selection keeps public plan readable, accessible, and confirmable',
   'rectFitsViewport(activeBannerProbe.bannerRect',
   'rectFitsViewport(replayBannerProbe.bannerRect',
+  "pvpPracticeSelectionProbe.planRole === 'region'",
+  "pvpPracticeSelectionProbe.planAriaLabel === '真人练习计划'",
+  "['真人练习计划', '关键回合', '体验复查', '公平护栏'].every",
+  "pvpPracticeSelectionProbe.targetReach.every((item) => item.reachable === true)",
+  'data-pvp-live-practice-selection-plan',
+  'mobile_turn_guard',
+  'mobile_focus_isolated',
 ].forEach((needle) => {
   assert.ok(
     challengeMobileAudit.includes(needle),
