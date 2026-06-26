@@ -1717,6 +1717,28 @@ export const PVPScene = {
           data-live-action-survival-impact="${this.escapeHtml(report.rankedImpact || 'none')}"
         >${this.escapeHtml(`承伤回执 · ${report.damage.targetSeat} 剩余 ${report.damage.targetHpAfter} 血，对局继续`)}</span>`
       : '';
+    const handoffDrawCount = report.draw ? Math.max(0, Math.floor(Number(report.draw.count) || 0)) : 0;
+    const handoffCounterplayBlock = report.counterplay && report.counterplay.granted
+      ? Math.max(0, Math.floor(Number(report.counterplay.block) || 0))
+      : 0;
+    const handoffResourceLine = [
+      handoffDrawCount > 0 ? `抽 ${handoffDrawCount}` : '',
+      handoffCounterplayBlock > 0 ? `反打缓冲 +${handoffCounterplayBlock}` : ''
+    ].filter(Boolean).join('，');
+    const turnHandoffChip = !report.usesHiddenInformation
+      && report.actionType === 'end_turn'
+      && report.nextSeat
+      ? `<span
+          class="pvp-live-action-receipt-chip"
+          data-live-action-turn-handoff="public_turn_handoff"
+          data-live-action-turn-handoff-next-seat="${this.escapeHtml(report.nextSeat || '')}"
+          data-live-action-turn-handoff-draw-count="${this.escapeHtml(String(handoffDrawCount))}"
+          data-live-action-turn-handoff-counterplay-block="${this.escapeHtml(String(handoffCounterplayBlock))}"
+          data-live-action-turn-handoff-source="${this.escapeHtml(report.sourceVisibility || '')}"
+          data-live-action-turn-handoff-hidden="${report.usesHiddenInformation ? 'true' : 'false'}"
+          data-live-action-turn-handoff-impact="${this.escapeHtml(report.rankedImpact || 'none')}"
+        >${this.escapeHtml(`接手回执 · ${report.nextSeat} 接手${handoffResourceLine ? `，${handoffResourceLine}` : ''}`)}</span>`
+      : '';
     const consumedStatuses = report.statusEffects && Array.isArray(report.statusEffects.consumed)
       ? report.statusEffects.consumed.filter(status => status && status.statusId)
       : [];
@@ -1782,6 +1804,7 @@ export const PVPScene = {
       ${budgetClampChip}
       ${openingProtectionChip}
       ${survivalChip}
+      ${turnHandoffChip}
       ${statusPayoffChip}
       ${mitigationChip}
       ${guardStanceChip}

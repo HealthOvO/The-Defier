@@ -346,7 +346,32 @@ assert.match(renderedEndTurnReceipt, /交权回执/, 'live UI should label end-t
 assert.match(renderedEndTurnReceipt, /行动权交给 B/, 'live UI end-turn receipt should render handoff seat');
 assert.match(renderedEndTurnReceipt, /抽 3 张/, 'live UI end-turn receipt should render public draw count');
 assert.match(renderedEndTurnReceipt, /反打缓冲 \+8/, 'live UI end-turn receipt should render public counterplay grant');
-assert.doesNotMatch(renderedEndTurnReceipt, /cardInstanceId|sourceCardId|deck|rating|reward/i, 'live UI end-turn receipt rendering must not expose hidden ids or rewards');
+assert.match(renderedEndTurnReceipt, /data-live-action-turn-handoff="public_turn_handoff"/, 'live UI end-turn receipt should expose a stable public turn handoff marker');
+assert.match(renderedEndTurnReceipt, /data-live-action-turn-handoff-next-seat="B"/, 'live UI end-turn receipt should expose the public next seat in the handoff chip');
+assert.match(renderedEndTurnReceipt, /data-live-action-turn-handoff-draw-count="3"/, 'live UI end-turn receipt should expose the public draw count in the handoff chip');
+assert.match(renderedEndTurnReceipt, /data-live-action-turn-handoff-counterplay-block="8"/, 'live UI end-turn receipt should expose the public counterplay block in the handoff chip');
+assert.match(renderedEndTurnReceipt, /data-live-action-turn-handoff-source="authoritative_public_projection"/, 'live UI end-turn receipt should expose public handoff source');
+assert.match(renderedEndTurnReceipt, /data-live-action-turn-handoff-hidden="false"/, 'live UI end-turn receipt should mark the handoff chip hidden-info safe');
+assert.match(renderedEndTurnReceipt, /data-live-action-turn-handoff-impact="none"/, 'live UI end-turn receipt should mark the handoff chip no-impact');
+assert.match(renderedEndTurnReceipt, /接手回执|B 接手|抽 3|反打缓冲 \+8/, 'live UI end-turn receipt should explain public draw and counterplay resources as the next player takes the turn');
+assert.doesNotMatch(renderedEndTurnReceipt, /cardInstanceId|sourceCardId|\bhand\b|hand":\[|deck|loadoutSnapshot|rating|reward|token/i, 'live UI end-turn receipt rendering must not expose hidden ids, hands, decks, rewards, or tokens');
+const renderedPlayCardWithNextSeat = PVPScene.renderLiveActionReceiptReport({
+  actionReceiptReport: {
+    ...normalizedEndTurnReceipt,
+    actionType: 'play_card',
+    summaryLine: 'A 打出试探斩：生命伤害 5，B 剩余 45 血。',
+    damage: { targetSeat: 'B', hpDamage: 5, targetHpAfter: 45 }
+  }
+});
+assert.doesNotMatch(renderedPlayCardWithNextSeat, /data-live-action-turn-handoff|public_turn_handoff|接手回执/, 'live UI must not render public turn handoff chip for play-card receipts even if a nextSeat field is present');
+const renderedHiddenEndTurnReceipt = PVPScene.renderLiveActionReceiptReport({
+  actionReceiptReport: {
+    ...normalizedEndTurnReceipt,
+    usesHiddenInformation: true,
+    summaryLine: 'A 结束回合：行动权交给 B。'
+  }
+});
+assert.doesNotMatch(renderedHiddenEndTurnReceipt, /data-live-action-turn-handoff|public_turn_handoff|接手回执/, 'live UI must not render public turn handoff chip for hidden-info end-turn receipts');
 const normalizedStatusHandoffReceipt = PVPScene.getLiveActionReceiptReport({
   actionReceiptReport: {
     reportVersion: 'pvp-live-action-receipt-v1',

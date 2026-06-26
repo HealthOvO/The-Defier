@@ -1,5 +1,29 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-24: V10-S76 live PVP public turn handoff receipt
+  - 本轮完成
+    - `js/scenes/pvp-scene.js` 在权威 `[data-live-action-receipt]` 的 `end_turn` 回执中新增“接手回执” chip：当服务端公开 `nextSeat` 时，渲染 `data-live-action-turn-handoff*` next-seat/draw-count/counterplay-block/source/hidden/impact marker。
+    - 新 chip 只读取 `actionReceiptReport.nextSeat / draw.count / counterplay.block` 等公开交权字段，明确“下一位接手、抽几张、是否获得公开反打缓冲”，不读取或展示手牌、牌库、卡实例、斗法谱快照、rating、reward、token 或 raw payload。
+    - `tests/sanity_pvp_live_ui_runtime_checks.mjs` 先红后绿锁住接手回执 marker、下一手席位、公开抽牌数、公开反打缓冲、source/hidden/impact 边界和隐藏字段防泄漏；同时增加负向门禁，确认 `play_card` 或隐藏信息 `end_turn` 即使带有 `nextSeat` 也不会渲染接手回执。
+    - `tests/sanity_pvp_live_ui_contract_checks.cjs` 与 `tests/sanity_release_gate_coverage_checks.cjs` 同步锁住生产 marker、browser finding 和 release gate 覆盖，避免 marker 只存在于测试脚本。
+    - `tests/browser_pvp_live_audit.mjs` 新增桌面 synthetic handoff probe 和 390px 移动端真实 DOM 可读性 finding，确认接手回执不会横向溢出、chip 可见且不泄漏隐藏字段；foreground resume 审计继续保持真实心跳证据要求，只接受 REST heartbeat 或 realtime heartbeat 分支作为恢复证明，`sendLiveHeartbeat` wrapper 调用本身不作为充分证据。
+    - `game-intro.html` 同步玩家说明：行动回执会拆出接手回执，让双方知道目标承伤后是否仍可接手、抽牌并获得公开反打缓冲。
+  - 已验证
+    - 红测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs` 在实现前失败于 `live UI end-turn receipt should expose a stable public turn handoff marker`。
+    - 红测：`node tests/sanity_pvp_live_ui_contract_checks.cjs` 在实现前失败于 `PVPScene live practice handoff should include marker: public_turn_handoff`。
+    - 绿测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs`
+    - 绿测：`node tests/sanity_pvp_live_ui_contract_checks.cjs`
+    - 绿测：`node tests/sanity_release_gate_coverage_checks.cjs`
+    - 绿测：`node tests/sanity_pvp_live_engine_checks.cjs`
+    - 绿测：`node tests/sanity_intro_progress_sync_checks.cjs`
+    - 语法检查：`node --check tests/browser_pvp_live_audit.mjs`
+    - 浏览器审计：`node tests/browser_pvp_live_audit.mjs http://127.0.0.1:5173 output/pvp-live-turn-handoff-receipt-audit-strict-20260626`，132/132 findings、0 failed、0 console error。
+    - 完整 Node 门禁：`PVP_LIVE_WS_FANOUT_MESSAGE_TIMEOUT_MS=30000 npm run test:node`
+    - 构建：`npm run build:pages`
+    - 空白检查：`git diff --check`
+  - 当前结论
+    - live PVP 的开局保护链路从“承伤后知道没有被秒杀”推进到“交权后知道谁接手、拿到多少公开资源和反打缓冲”：被保护方能确认自己真的有下一手，进攻方也能理解对手抽牌与缓冲不是隐藏补偿或系统偏袒，而是公开交权结算。该切片只改前端公开回执、玩家说明和门禁，不改变卡牌数值、伤害、护体、反打缓冲、先后手、匹配、正式积分、奖励或结算。
+
 - 2026-06-24: V10-S75 live PVP surviving damage receipt
   - 本轮完成
     - `js/scenes/pvp-scene.js` 在权威 `[data-live-action-receipt]` 内新增“承伤回执” chip：当 `play_card` 造成公开生命伤害、目标 `targetHpAfter > 0` 时，渲染 `data-live-action-survival*` target/hp/source/hidden/impact marker，明确“目标剩余 X 血，对局继续”。

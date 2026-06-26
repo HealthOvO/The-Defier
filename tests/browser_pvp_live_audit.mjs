@@ -3030,10 +3030,6 @@ async function safeElementScreenshot(page, selector, outputPath) {
         && call.payload?.type === 'join_match'
         && call.payload?.matchId === 'pvplm-browser-live'
         && Number.isFinite(Number(call.payload?.lastSeenRevision)))
-      && foregroundResumeProbe.calls.some(call => call.method === 'realtimeSend'
-        && call.payload?.type === 'heartbeat'
-        && call.payload?.matchId === 'pvplm-browser-live'
-        && Number.isFinite(Number(call.payload?.lastSeenRevision)))
       && (
         foregroundResumeProbe.counters.heartbeat === 1
         || foregroundResumeProbe.calls.some(call => call.method === 'realtimeSend'
@@ -3443,6 +3439,36 @@ async function safeElementScreenshot(page, selector, outputPath) {
         summaryLine: 'A 结束回合：行动权交给 B，B 抽 3 张；反打缓冲 +8 给 B。'
       }
     }),
+    handoffTurnAttr: (() => {
+      const wrapper = document.createElement('div');
+      wrapper.innerHTML = window.PVPScene.renderLiveActionReceiptReport({
+        actionReceiptReport: {
+          reportVersion: 'pvp-live-action-receipt-v1',
+          sourceVisibility: 'authoritative_public_projection',
+          usesHiddenInformation: false,
+          rankedImpact: 'none',
+          viewerSeat: 'B',
+          actingSeat: 'A',
+          actionType: 'end_turn',
+          latestSequence: 9,
+          nextSeat: 'B',
+          draw: { seatId: 'B', count: 3, capped: false },
+          counterplay: { granted: true, seatId: 'B', block: 8, totalBlock: 8, minimumHp: 1 },
+          summaryLine: 'A 结束回合：行动权交给 B，B 抽 3 张；反打缓冲 +8 给 B。'
+        }
+      });
+      const chip = wrapper.querySelector('[data-live-action-turn-handoff]');
+      return {
+        text: chip?.textContent?.replace(/\s+/g, ' ').trim() || '',
+        attr: chip?.getAttribute('data-live-action-turn-handoff') || '',
+        nextSeat: chip?.getAttribute('data-live-action-turn-handoff-next-seat') || '',
+        drawCount: chip?.getAttribute('data-live-action-turn-handoff-draw-count') || '',
+        counterplayBlock: chip?.getAttribute('data-live-action-turn-handoff-counterplay-block') || '',
+        source: chip?.getAttribute('data-live-action-turn-handoff-source') || '',
+        hidden: chip?.getAttribute('data-live-action-turn-handoff-hidden') || '',
+        impact: chip?.getAttribute('data-live-action-turn-handoff-impact') || '',
+      };
+    })(),
     duelMomentum: document.querySelector('[data-live-duel-momentum]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
     duelMomentumState: document.querySelector('[data-live-duel-momentum]')?.getAttribute('data-live-duel-momentum-state') || '',
     events: document.querySelector('[data-live-event-log]')?.textContent || '',
@@ -3963,6 +3989,22 @@ async function safeElementScreenshot(page, selector, outputPath) {
       && /反打缓冲 \+8/.test(actionProbe.handoffReceipt)
       && !/cardInstanceId|sourceCardId|deck|rating|reward/i.test(actionProbe.handoffReceipt),
     JSON.stringify(actionProbe),
+  );
+  add(
+    'live UI renders public turn handoff receipt with draw and counterplay resources',
+    actionProbe.handoffTurnAttr?.attr === 'public_turn_handoff'
+      && actionProbe.handoffTurnAttr?.nextSeat === 'B'
+      && actionProbe.handoffTurnAttr?.drawCount === '3'
+      && actionProbe.handoffTurnAttr?.counterplayBlock === '8'
+      && actionProbe.handoffTurnAttr?.source === 'authoritative_public_projection'
+      && actionProbe.handoffTurnAttr?.hidden === 'false'
+      && actionProbe.handoffTurnAttr?.impact === 'none'
+      && /接手回执/.test(actionProbe.handoffTurnAttr?.text || '')
+      && /B\s*接手/.test(actionProbe.handoffTurnAttr?.text || '')
+      && /抽\s*3/.test(actionProbe.handoffTurnAttr?.text || '')
+      && /反打缓冲\s*\+8/.test(actionProbe.handoffTurnAttr?.text || '')
+      && !/payload|cardInstanceId|sourceCardId|cardId|instanceId|\bhand\b|hand":\[|deck|loadoutSnapshot|reward|rating|elo|token/i.test(`${actionProbe.handoffTurnAttr?.text || ''} ${JSON.stringify(actionProbe.handoffTurnAttr || {})}`),
+    JSON.stringify(actionProbe.handoffTurnAttr || null),
   );
   add(
     'live UI keeps duel momentum counterplay window readable after protection',
@@ -7082,6 +7124,92 @@ async function safeElementScreenshot(page, selector, outputPath) {
       && mobileActionProbe.eventPanel?.left >= -1
       && mobileActionProbe.eventPanel?.right <= mobileActionProbe.viewportWidth + 2,
     JSON.stringify(mobileActionProbe),
+  );
+  const mobileTurnHandoffProbe = await mobilePage.evaluate(() => {
+    const node = document.querySelector('[data-live-action-receipt]');
+    if (node) {
+      const report = {
+        reportVersion: 'pvp-live-action-receipt-v1',
+        sourceVisibility: 'authoritative_public_projection',
+        usesHiddenInformation: false,
+        rankedImpact: 'none',
+        viewerSeat: 'B',
+        actingSeat: 'A',
+        actionType: 'end_turn',
+        latestSequence: 9,
+        nextSeat: 'B',
+        draw: { seatId: 'B', count: 3, capped: false },
+        counterplay: { granted: true, seatId: 'B', block: 8, totalBlock: 8, minimumHp: 1 },
+        summaryLine: 'A 结束回合：行动权交给 B，B 抽 3 张；反打缓冲 +8 给 B。',
+      };
+      node.hidden = false;
+      node.setAttribute('data-live-action-receipt-source', report.sourceVisibility);
+      node.setAttribute('data-live-action-receipt-hidden', String(report.usesHiddenInformation === true));
+      node.setAttribute('data-live-action-receipt-type', report.actionType);
+      node.setAttribute('data-live-action-receipt-next-seat', report.nextSeat);
+      node.innerHTML = window.PVPScene.renderLiveActionReceiptReport({ actionReceiptReport: report });
+    }
+    const chip = document.querySelector('[data-live-action-turn-handoff]');
+    const chipStyle = chip ? window.getComputedStyle(chip) : null;
+    const chipRect = chip?.getBoundingClientRect();
+    const receiptRect = node?.getBoundingClientRect();
+    const receiptStyle = node ? window.getComputedStyle(node) : null;
+    return {
+      text: node?.textContent?.replace(/\s+/g, ' ').trim() || '',
+      attr: chip?.getAttribute('data-live-action-turn-handoff') || '',
+      nextSeat: chip?.getAttribute('data-live-action-turn-handoff-next-seat') || '',
+      drawCount: chip?.getAttribute('data-live-action-turn-handoff-draw-count') || '',
+      counterplayBlock: chip?.getAttribute('data-live-action-turn-handoff-counterplay-block') || '',
+      source: chip?.getAttribute('data-live-action-turn-handoff-source') || '',
+      hidden: chip?.getAttribute('data-live-action-turn-handoff-hidden') || '',
+      impact: chip?.getAttribute('data-live-action-turn-handoff-impact') || '',
+      chipDisplay: chipStyle?.display || '',
+      chipVisibility: chipStyle?.visibility || '',
+      whiteSpace: receiptStyle?.whiteSpace || '',
+      overflow: receiptStyle?.overflow || '',
+      overflowWrap: receiptStyle?.overflowWrap || '',
+      scrollWidth: node ? Math.round(node.scrollWidth) : 0,
+      clientWidth: node ? Math.round(node.clientWidth) : 0,
+      receiptRect: receiptRect ? {
+        left: Math.round(receiptRect.left),
+        right: Math.round(receiptRect.right),
+        width: Math.round(receiptRect.width),
+      } : null,
+      chipRect: chipRect ? {
+        left: Math.round(chipRect.left),
+        right: Math.round(chipRect.right),
+        width: Math.round(chipRect.width),
+        height: Math.round(chipRect.height),
+      } : null,
+      viewportWidth: window.innerWidth,
+    };
+  });
+  add(
+    'live UI mobile renders public turn handoff receipt readably',
+    mobileTurnHandoffProbe.attr === 'public_turn_handoff'
+      && mobileTurnHandoffProbe.nextSeat === 'B'
+      && mobileTurnHandoffProbe.drawCount === '3'
+      && mobileTurnHandoffProbe.counterplayBlock === '8'
+      && mobileTurnHandoffProbe.source === 'authoritative_public_projection'
+      && mobileTurnHandoffProbe.hidden === 'false'
+      && mobileTurnHandoffProbe.impact === 'none'
+      && /接手回执/.test(mobileTurnHandoffProbe.text)
+      && /B\s*接手/.test(mobileTurnHandoffProbe.text)
+      && /抽\s*3/.test(mobileTurnHandoffProbe.text)
+      && /反打缓冲\s*\+8/.test(mobileTurnHandoffProbe.text)
+      && !/payload|cardInstanceId|sourceCardId|cardId|instanceId|\bhand\b|hand":\[|deck|loadoutSnapshot|reward|rating|elo|token/i.test(mobileTurnHandoffProbe.text)
+      && mobileTurnHandoffProbe.chipDisplay !== 'none'
+      && mobileTurnHandoffProbe.chipVisibility !== 'hidden'
+      && mobileTurnHandoffProbe.chipRect?.height > 0
+      && mobileTurnHandoffProbe.whiteSpace !== 'nowrap'
+      && mobileTurnHandoffProbe.overflow !== 'hidden'
+      && (mobileTurnHandoffProbe.overflowWrap === 'anywhere' || mobileTurnHandoffProbe.overflowWrap === 'break-word')
+      && mobileTurnHandoffProbe.scrollWidth <= mobileTurnHandoffProbe.clientWidth + 2
+      && mobileTurnHandoffProbe.receiptRect?.left >= -1
+      && mobileTurnHandoffProbe.receiptRect?.right <= mobileTurnHandoffProbe.viewportWidth + 2
+      && mobileTurnHandoffProbe.chipRect?.left >= -1
+      && mobileTurnHandoffProbe.chipRect?.right <= mobileTurnHandoffProbe.viewportWidth + 2,
+    JSON.stringify(mobileTurnHandoffProbe),
   );
   await mobilePage.evaluate(() => {
     const statusCard = document.querySelector('.pvp-live-status-card');
