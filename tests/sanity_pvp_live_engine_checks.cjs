@@ -874,6 +874,24 @@ unknownCardReceiptState.events.forEach(event => {
 const unknownCardReceipt = projectStateView(unknownCardReceiptState, 'A').actionReceiptReport;
 assert(unknownCardReceipt.cardName === '术式', 'unknown card ids should fall back to a generic public card label');
 assert(!/debug_unknown_internal_card_id|cardId|sourceCardId/i.test(JSON.stringify(unknownCardReceipt)), 'unknown card fallback must not leak internal card ids');
+const missingTargetHpReceiptState = JSON.parse(JSON.stringify(burst.state));
+missingTargetHpReceiptState.events.forEach(event => {
+  if (event && event.eventType === 'damage_applied' && event.payload) {
+    delete event.payload.targetHp;
+  }
+});
+const missingTargetHpReceipt = projectStateView(missingTargetHpReceiptState, 'A').actionReceiptReport;
+assert(missingTargetHpReceipt.damage.hasTargetHpAfter === false, 'action receipt should flag missing target HP as unproven instead of a public zero');
+assert(!/剩余 0 血/.test(missingTargetHpReceipt.summaryLine), 'action receipt summary must not present missing target HP as a zero-HP terminal proof');
+const invalidTargetHpReceiptState = JSON.parse(JSON.stringify(burst.state));
+invalidTargetHpReceiptState.events.forEach(event => {
+  if (event && event.eventType === 'damage_applied' && event.payload) {
+    event.payload.targetHp = 'not-a-number';
+  }
+});
+const invalidTargetHpReceipt = projectStateView(invalidTargetHpReceiptState, 'A').actionReceiptReport;
+assert(invalidTargetHpReceipt.damage.hasTargetHpAfter === false, 'action receipt should flag non-finite target HP as unproven instead of a public zero');
+assert(!/剩余 0 血/.test(invalidTargetHpReceipt.summaryLine), 'action receipt summary must not present non-finite target HP as a zero-HP terminal proof');
 
 const duplicate = reduceIntent(burst.state, burstIntent);
 assert(duplicate.result === 'duplicate', 'same intent should return duplicate');
@@ -1154,6 +1172,15 @@ const normalLethal = reduceIntent(protectedEndTurn.state, {
   payload: { cardInstanceId: protectedEndTurn.state.seats.B.hand[0].instanceId, targetSeat: 'A' }
 });
 assert(normalLethal.result === 'accepted' && normalLethal.state.status === 'finished', 'normal lethal should still finish after the target already had a turn');
+const normalLethalWinnerReceipt = projectStateView(normalLethal.state, 'B').actionReceiptReport;
+const normalLethalLoserReceipt = projectStateView(normalLethal.state, 'A').actionReceiptReport;
+assert(normalLethalWinnerReceipt.damage.hasTargetHpAfter === true, 'normal lethal winner receipt should preserve proven target HP after match_finished');
+assert(normalLethalWinnerReceipt.damage.targetSeat === 'A', 'normal lethal winner receipt should expose the defeated target seat');
+assert(normalLethalWinnerReceipt.damage.targetHpAfter === 0, 'normal lethal winner receipt should expose public zero target HP');
+assert(normalLethalWinnerReceipt.damage.hpDamage > 0, 'normal lethal winner receipt should preserve public lethal HP damage');
+assert(/A 剩余 0 血/.test(normalLethalWinnerReceipt.summaryLine), 'normal lethal winner receipt should explain public zero HP in the summary');
+assert(normalLethalLoserReceipt.viewerSeat === 'A' && normalLethalLoserReceipt.damage.targetSeat === 'A', 'normal lethal loser receipt should see the same public defeated target seat');
+assert(normalLethalLoserReceipt.damage.hasTargetHpAfter === true && normalLethalLoserReceipt.damage.targetHpAfter === 0, 'normal lethal loser receipt should see the same proven public zero HP');
 const finishedMomentumA = projectStateView(normalLethal.state, 'A').duelMomentumReport;
 assert(finishedMomentumA.pressureState === 'finished', 'finished duel momentum should expose closed finished state');
 assert(/对局已结束/.test(finishedMomentumA.summaryLine), 'finished duel momentum should explain the match is over');

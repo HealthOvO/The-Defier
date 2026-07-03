@@ -180,6 +180,94 @@ assert.match(renderedActionReceipt, /data-live-action-survival-impact="none"/, '
 assert.match(renderedActionReceipt, /承伤回执|B 剩余 35 血|对局继续/, 'live UI action receipt should explain resolved surviving damage as a continuing duel state');
 assert.match(renderedActionReceipt, /权威公开投影/, 'live UI action receipt should render accurate projection source');
 assert.doesNotMatch(renderedActionReceipt, /payload|cardInstanceId|sourceCardId|\bhand\b|hand":\[|deck|loadoutSnapshot|rating|reward|token/i, 'live UI action receipt rendering must not expose hidden ids, payloads, decks, rewards, or tokens');
+const renderedTerminalDamageReceipt = PVPScene.renderLiveActionReceiptReport({
+  actionReceiptReport: {
+    ...normalizedActionReceipt,
+    summaryLine: 'A 打出破阵爆发：预算后 18，破盾 0，生命伤害 18，B 剩余 0 血。',
+    damage: {
+      ...normalizedActionReceipt.damage,
+      blockedDamage: 0,
+      hpDamage: 18,
+      targetHpAfter: 0
+    }
+  }
+});
+assert.match(renderedTerminalDamageReceipt, /data-live-action-terminal="public_terminal_damage"/, 'live UI terminal damage receipt should expose a stable public terminal marker');
+assert.match(renderedTerminalDamageReceipt, /data-live-action-terminal-target="B"/, 'live UI terminal damage receipt should expose the public defeated target seat');
+assert.match(renderedTerminalDamageReceipt, /data-live-action-terminal-hp-after="0"/, 'live UI terminal damage receipt should expose public zero HP');
+assert.match(renderedTerminalDamageReceipt, /data-live-action-terminal-source="authoritative_public_projection"/, 'live UI terminal damage receipt should expose public source');
+assert.match(renderedTerminalDamageReceipt, /data-live-action-terminal-hidden="false"/, 'live UI terminal damage receipt should mark hidden-info safe');
+assert.match(renderedTerminalDamageReceipt, /data-live-action-terminal-impact="none"/, 'live UI terminal damage receipt should mark no ranked impact');
+assert.match(renderedTerminalDamageReceipt, /终局回执|B 归零|公开伤害结算结束本局/, 'live UI terminal damage receipt should explain public lethal damage without hidden information');
+assert.doesNotMatch(renderedTerminalDamageReceipt, /data-live-action-survival|public_damage_survival|对局继续/, 'live UI terminal damage receipt must not also render a survival receipt');
+assert.doesNotMatch(renderedTerminalDamageReceipt, /payload|cardInstanceId|sourceCardId|\bhand\b|hand":\[|deck|loadoutSnapshot|rating|reward|token/i, 'live UI terminal damage receipt rendering must not expose hidden ids, hands, decks, rewards, or tokens');
+const renderedHiddenTerminalDamageReceipt = PVPScene.renderLiveActionReceiptReport({
+  actionReceiptReport: {
+    ...normalizedActionReceipt,
+    usesHiddenInformation: true,
+    damage: {
+      ...normalizedActionReceipt.damage,
+      hpDamage: 18,
+      targetHpAfter: 0
+    }
+  }
+});
+assert.doesNotMatch(renderedHiddenTerminalDamageReceipt, /data-live-action-terminal|public_terminal_damage|终局回执/, 'live UI must not render terminal damage chip for hidden-info receipts');
+const renderedIncompleteTerminalDamageReceipt = PVPScene.renderLiveActionReceiptReport({
+  actionReceiptReport: {
+    ...normalizedActionReceipt,
+    summaryLine: 'A 打出破阵爆发：预算后 18，破盾 0，生命伤害 18。',
+    damage: {
+      targetSeat: 'B',
+      rawDamage: 18,
+      budgetedDamage: 18,
+      preventedByBudget: 0,
+      blockedDamage: 0,
+      hpDamage: 18
+    }
+  }
+});
+assert.doesNotMatch(renderedIncompleteTerminalDamageReceipt, /data-live-action-terminal|public_terminal_damage|终局回执/, 'live UI must not infer terminal damage from missing target HP evidence');
+const renderedNullTerminalDamageReceipt = PVPScene.renderLiveActionReceiptReport({
+  actionReceiptReport: {
+    ...normalizedActionReceipt,
+    summaryLine: 'A 打出破阵爆发：预算后 18，破盾 0，生命伤害 18。',
+    damage: {
+      ...normalizedActionReceipt.damage,
+      blockedDamage: 0,
+      hpDamage: 18,
+      targetHpAfter: null
+    }
+  }
+});
+assert.doesNotMatch(renderedNullTerminalDamageReceipt, /data-live-action-terminal|public_terminal_damage|终局回执/, 'live UI must not infer terminal damage from null target HP evidence');
+const renderedInvalidTerminalDamageReceipt = PVPScene.renderLiveActionReceiptReport({
+  actionReceiptReport: {
+    ...normalizedActionReceipt,
+    summaryLine: 'A 打出破阵爆发：预算后 18，破盾 0，生命伤害 18。',
+    damage: {
+      ...normalizedActionReceipt.damage,
+      blockedDamage: 0,
+      hpDamage: 18,
+      targetHpAfter: 'not-a-number'
+    }
+  }
+});
+assert.doesNotMatch(renderedInvalidTerminalDamageReceipt, /data-live-action-terminal|public_terminal_damage|终局回执/, 'live UI must not infer terminal damage from non-finite target HP evidence');
+const renderedExplicitlyUnprovenTerminalDamageReceipt = PVPScene.renderLiveActionReceiptReport({
+  actionReceiptReport: {
+    ...normalizedActionReceipt,
+    summaryLine: 'A 打出破阵爆发：预算后 18，破盾 0，生命伤害 18。',
+    damage: {
+      ...normalizedActionReceipt.damage,
+      blockedDamage: 0,
+      hpDamage: 18,
+      targetHpAfter: 0,
+      hasTargetHpAfter: false
+    }
+  }
+});
+assert.doesNotMatch(renderedExplicitlyUnprovenTerminalDamageReceipt, /data-live-action-terminal|public_terminal_damage|终局回执/, 'live UI must respect explicit unproven target HP evidence from the server');
 
 const normalizedCardDrawReceipt = PVPScene.getLiveActionReceiptReport({
   actionReceiptReport: {

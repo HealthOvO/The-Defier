@@ -1319,6 +1319,12 @@ function normalizeCount(value) {
     return Math.max(0, Math.floor(Number(value) || 0));
 }
 
+function hasFiniteCountValue(value) {
+    if (typeof value === 'number') return Number.isFinite(value);
+    if (typeof value === 'string') return value.trim() !== '' && Number.isFinite(Number(value));
+    return false;
+}
+
 function getOpeningSeatDamageBudget(firstSeat, seatId) {
     const isFirstSeat = seatId === firstSeat;
     const key = isFirstSeat ? 'firstSeat' : 'secondSeat';
@@ -1532,6 +1538,15 @@ function collectCardResolutionEvents(events, cardPlayedIndex, cardId, actingSeat
     const collected = [];
     for (let index = cardPlayedIndex - 1; index >= 0; index -= 1) {
         const event = events[index];
+        const payload = getPublicEventPayload(event);
+        if (
+            event
+            && event.actingSeat === actingSeat
+            && event.eventType === 'match_finished'
+            && String(payload.finishReason || '') === 'lethal'
+        ) {
+            continue;
+        }
         if (!isCardResolutionEvent(event, cardId, actingSeat)) break;
         collected.unshift(event);
     }
@@ -1567,11 +1582,13 @@ function projectCardActionReceipt(state, seatId, cardPlayedIndex) {
     const blockedDamage = normalizeCount(damagePayload.blockedDamage);
     const hpDamage = normalizeCount(damagePayload.hpDamage);
     const targetSeat = String(damagePayload.targetSeat || budgetPayload.targetSeat || protectionPayload.protectedSeat || '');
-    const targetHpAfter = normalizeCount(damagePayload.targetHp);
+    const hasTargetHpAfter = hasFiniteCountValue(damagePayload.targetHp);
+    const targetHpAfter = hasTargetHpAfter ? normalizeCount(damagePayload.targetHp) : 0;
     const blockGain = normalizeCount(blockPayload.block);
     const cardName = getPublicCardName(cardId);
+    const targetHpLine = targetSeat && hasTargetHpAfter ? `，${targetSeat} 剩余 ${targetHpAfter} 血` : '';
     const damageLine = rawDamage > 0 || damageEvent
-        ? `预算后 ${budgetedDamage}，破盾 ${blockedDamage}，生命伤害 ${hpDamage}${targetSeat ? `，${targetSeat} 剩余 ${targetHpAfter} 血` : ''}`
+        ? `预算后 ${budgetedDamage}，破盾 ${blockedDamage}，生命伤害 ${hpDamage}${targetHpLine}`
         : '不造成伤害';
     const protectionTriggered = !!protectionEvent;
     const protectionLine = protectionTriggered
@@ -1694,7 +1711,8 @@ function projectCardActionReceipt(state, seatId, cardPlayedIndex) {
             preventedByBudget,
             blockedDamage,
             hpDamage,
-            targetHpAfter
+            targetHpAfter,
+            hasTargetHpAfter
         },
         openingProtection: {
             triggered: protectionTriggered,

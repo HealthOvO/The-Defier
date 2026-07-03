@@ -3423,6 +3423,43 @@ async function safeElementScreenshot(page, selector, outputPath) {
     actionSurvivalSource: document.querySelector('[data-live-action-survival]')?.getAttribute('data-live-action-survival-source') || '',
     actionSurvivalHidden: document.querySelector('[data-live-action-survival]')?.getAttribute('data-live-action-survival-hidden') || '',
     actionSurvivalImpact: document.querySelector('[data-live-action-survival]')?.getAttribute('data-live-action-survival-impact') || '',
+    terminalDamageAttr: (() => {
+      const wrapper = document.createElement('div');
+      wrapper.innerHTML = window.PVPScene.renderLiveActionReceiptReport({
+        actionReceiptReport: {
+          reportVersion: 'pvp-live-action-receipt-v1',
+          sourceVisibility: 'authoritative_public_projection',
+          usesHiddenInformation: false,
+          rankedImpact: 'none',
+          viewerSeat: 'A',
+          actingSeat: 'A',
+          actionType: 'play_card',
+          latestSequence: 12,
+          cardName: '破阵爆发',
+          damage: {
+            targetSeat: 'B',
+            rawDamage: 18,
+            budgetedDamage: 18,
+            preventedByBudget: 0,
+            blockedDamage: 0,
+            hpDamage: 18,
+            targetHpAfter: 0,
+          },
+          summaryLine: 'A 打出破阵爆发：预算后 18，破盾 0，生命伤害 18，B 剩余 0 血。'
+        }
+      });
+      const chip = wrapper.querySelector('[data-live-action-terminal]');
+      return {
+        text: chip?.textContent?.replace(/\s+/g, ' ').trim() || '',
+        attr: chip?.getAttribute('data-live-action-terminal') || '',
+        target: chip?.getAttribute('data-live-action-terminal-target') || '',
+        hpAfter: chip?.getAttribute('data-live-action-terminal-hp-after') || '',
+        source: chip?.getAttribute('data-live-action-terminal-source') || '',
+        hidden: chip?.getAttribute('data-live-action-terminal-hidden') || '',
+        impact: chip?.getAttribute('data-live-action-terminal-impact') || '',
+        survivalText: wrapper.querySelector('[data-live-action-survival]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+      };
+    })(),
     handoffReceipt: window.PVPScene.renderLiveActionReceiptReport({
       actionReceiptReport: {
         reportVersion: 'pvp-live-action-receipt-v1',
@@ -3550,6 +3587,21 @@ async function safeElementScreenshot(page, selector, outputPath) {
       && /对局继续/.test(actionProbe.actionSurvival || '')
       && !/payload|cardInstanceId|sourceCardId|cardId|instanceId|\bhand\b|hand":\[|deck|loadoutSnapshot|reward|rating|elo|token/i.test(`${actionProbe.actionSurvival || ''} ${JSON.stringify(actionProbe.payload?.actionReceiptReport || {})}`),
     JSON.stringify(actionProbe),
+  );
+  add(
+    'live UI renders terminal damage receipt after public lethal damage',
+    actionProbe.terminalDamageAttr?.attr === 'public_terminal_damage'
+      && actionProbe.terminalDamageAttr?.target === 'B'
+      && actionProbe.terminalDamageAttr?.hpAfter === '0'
+      && actionProbe.terminalDamageAttr?.source === 'authoritative_public_projection'
+      && actionProbe.terminalDamageAttr?.hidden === 'false'
+      && actionProbe.terminalDamageAttr?.impact === 'none'
+      && /终局回执/.test(actionProbe.terminalDamageAttr?.text || '')
+      && /B\s*归零/.test(actionProbe.terminalDamageAttr?.text || '')
+      && /公开伤害结算结束本局/.test(actionProbe.terminalDamageAttr?.text || '')
+      && !/承伤回执|对局继续/.test(actionProbe.terminalDamageAttr?.survivalText || '')
+      && !/payload|cardInstanceId|sourceCardId|cardId|instanceId|\bhand\b|hand":\[|deck|loadoutSnapshot|reward|rating|elo|token/i.test(`${actionProbe.terminalDamageAttr?.text || ''} ${JSON.stringify(actionProbe.terminalDamageAttr || {})}`),
+    JSON.stringify(actionProbe.terminalDamageAttr || null),
   );
   const mitigationFormatProbe = await page.evaluate(() => {
     const event = window.PVPScene.formatLiveEvent({
@@ -7124,6 +7176,99 @@ async function safeElementScreenshot(page, selector, outputPath) {
       && mobileActionProbe.eventPanel?.left >= -1
       && mobileActionProbe.eventPanel?.right <= mobileActionProbe.viewportWidth + 2,
     JSON.stringify(mobileActionProbe),
+  );
+  const mobileTerminalDamageProbe = await mobilePage.evaluate(() => {
+    const node = document.querySelector('[data-live-action-receipt]');
+    if (node) {
+      const report = {
+        reportVersion: 'pvp-live-action-receipt-v1',
+        sourceVisibility: 'authoritative_public_projection',
+        usesHiddenInformation: false,
+        rankedImpact: 'none',
+        viewerSeat: 'A',
+        actingSeat: 'A',
+        actionType: 'play_card',
+        latestSequence: 12,
+        cardName: '破阵爆发',
+        damage: {
+          targetSeat: 'B',
+          rawDamage: 18,
+          budgetedDamage: 18,
+          preventedByBudget: 0,
+          blockedDamage: 0,
+          hpDamage: 18,
+          targetHpAfter: 0,
+        },
+        summaryLine: 'A 打出破阵爆发：预算后 18，破盾 0，生命伤害 18，B 剩余 0 血。',
+      };
+      node.hidden = false;
+      node.setAttribute('data-live-action-receipt-source', report.sourceVisibility);
+      node.setAttribute('data-live-action-receipt-hidden', String(report.usesHiddenInformation === true));
+      node.setAttribute('data-live-action-receipt-type', report.actionType);
+      node.setAttribute('data-live-action-receipt-next-seat', '');
+      node.innerHTML = window.PVPScene.renderLiveActionReceiptReport({ actionReceiptReport: report });
+    }
+    const chip = document.querySelector('[data-live-action-terminal]');
+    const survival = document.querySelector('[data-live-action-survival]');
+    const chipStyle = chip ? window.getComputedStyle(chip) : null;
+    const chipRect = chip?.getBoundingClientRect();
+    const receiptRect = node?.getBoundingClientRect();
+    const receiptStyle = node ? window.getComputedStyle(node) : null;
+    return {
+      text: node?.textContent?.replace(/\s+/g, ' ').trim() || '',
+      attr: chip?.getAttribute('data-live-action-terminal') || '',
+      target: chip?.getAttribute('data-live-action-terminal-target') || '',
+      hpAfter: chip?.getAttribute('data-live-action-terminal-hp-after') || '',
+      source: chip?.getAttribute('data-live-action-terminal-source') || '',
+      hidden: chip?.getAttribute('data-live-action-terminal-hidden') || '',
+      impact: chip?.getAttribute('data-live-action-terminal-impact') || '',
+      survivalText: survival?.textContent?.replace(/\s+/g, ' ').trim() || '',
+      chipDisplay: chipStyle?.display || '',
+      chipVisibility: chipStyle?.visibility || '',
+      whiteSpace: receiptStyle?.whiteSpace || '',
+      overflow: receiptStyle?.overflow || '',
+      overflowWrap: receiptStyle?.overflowWrap || '',
+      scrollWidth: node ? Math.round(node.scrollWidth) : 0,
+      clientWidth: node ? Math.round(node.clientWidth) : 0,
+      receiptRect: receiptRect ? {
+        left: Math.round(receiptRect.left),
+        right: Math.round(receiptRect.right),
+        width: Math.round(receiptRect.width),
+      } : null,
+      chipRect: chipRect ? {
+        left: Math.round(chipRect.left),
+        right: Math.round(chipRect.right),
+        width: Math.round(chipRect.width),
+        height: Math.round(chipRect.height),
+      } : null,
+      viewportWidth: window.innerWidth,
+    };
+  });
+  add(
+    'live UI mobile renders terminal damage receipt readably',
+    mobileTerminalDamageProbe.attr === 'public_terminal_damage'
+      && mobileTerminalDamageProbe.target === 'B'
+      && mobileTerminalDamageProbe.hpAfter === '0'
+      && mobileTerminalDamageProbe.source === 'authoritative_public_projection'
+      && mobileTerminalDamageProbe.hidden === 'false'
+      && mobileTerminalDamageProbe.impact === 'none'
+      && /终局回执/.test(mobileTerminalDamageProbe.text)
+      && /B\s*归零/.test(mobileTerminalDamageProbe.text)
+      && /公开伤害结算结束本局/.test(mobileTerminalDamageProbe.text)
+      && !/承伤回执|对局继续/.test(mobileTerminalDamageProbe.survivalText)
+      && !/payload|cardInstanceId|sourceCardId|cardId|instanceId|\bhand\b|hand":\[|deck|loadoutSnapshot|reward|rating|elo|token/i.test(mobileTerminalDamageProbe.text)
+      && mobileTerminalDamageProbe.chipDisplay !== 'none'
+      && mobileTerminalDamageProbe.chipVisibility !== 'hidden'
+      && mobileTerminalDamageProbe.chipRect?.height > 0
+      && mobileTerminalDamageProbe.whiteSpace !== 'nowrap'
+      && mobileTerminalDamageProbe.overflow !== 'hidden'
+      && (mobileTerminalDamageProbe.overflowWrap === 'anywhere' || mobileTerminalDamageProbe.overflowWrap === 'break-word')
+      && mobileTerminalDamageProbe.scrollWidth <= mobileTerminalDamageProbe.clientWidth + 2
+      && mobileTerminalDamageProbe.receiptRect?.left >= -1
+      && mobileTerminalDamageProbe.receiptRect?.right <= mobileTerminalDamageProbe.viewportWidth + 2
+      && mobileTerminalDamageProbe.chipRect?.left >= -1
+      && mobileTerminalDamageProbe.chipRect?.right <= mobileTerminalDamageProbe.viewportWidth + 2,
+    JSON.stringify(mobileTerminalDamageProbe),
   );
   const mobileTurnHandoffProbe = await mobilePage.evaluate(() => {
     const node = document.querySelector('[data-live-action-receipt]');

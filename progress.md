@@ -1,5 +1,36 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-06-26: V10-S77 live PVP public terminal damage receipt
+  - 本轮完成
+    - `server/pvp-live/engine/state-view.js` 为 `actionReceiptReport.damage` 增加 `hasTargetHpAfter` 证据位：只有真实 `damage_applied.targetHp` 是显式有限数值时，才允许前端把 `targetHpAfter <= 0` 当作公开归零证明；缺失、`null` 或非数字不会被归一成“0 血终局”。
+    - `js/scenes/pvp-scene.js` 在权威 `[data-live-action-receipt]` 的 `play_card` 回执中新增“终局回执” chip：当服务端公开 `damage.targetSeat`、`hpDamage > 0`、`hasTargetHpAfter=true` 且 `targetHpAfter <= 0` 时，渲染 `data-live-action-terminal*` target/hp-after/source/hidden/impact marker。
+    - 新 chip 只读取 `actionReceiptReport.damage.targetSeat / hpDamage / targetHpAfter / hasTargetHpAfter` 等公开致命伤害结算字段，明确“目标归零、公开伤害结算结束本局”，不读取或展示手牌、牌库、卡实例、斗法谱快照、rating、reward、token 或 raw payload。
+    - `tests/sanity_pvp_live_ui_runtime_checks.mjs` 先红后绿锁住终局回执 marker、目标席位、归零血量、source/hidden/impact 边界和隐藏字段防泄漏；同时增加负向门禁，确认隐藏信息、缺失 HP、`null` HP、非数字 HP 或服务端显式未证实 HP 时都不会渲染终局回执，也不会和“承伤回执/对局继续”混在一起。
+    - `tests/sanity_pvp_live_engine_checks.cjs` 补强服务端投影边界：缺失或非法 `targetHp` 只能标记 `hasTargetHpAfter=false`，summary 不得写成“剩余 0 血”的终局证据。
+    - `tests/sanity_pvp_live_ui_contract_checks.cjs` 与 `tests/sanity_release_gate_coverage_checks.cjs` 同步锁住生产 marker、browser finding、真实后端双方 receipt finding 和 release gate 覆盖，避免 marker 只存在于测试脚本。
+    - `tests/browser_pvp_live_audit.mjs` 保留桌面 synthetic terminal-damage probe 和 390px 移动端 DOM 可读性 finding，负责布局、marker 和隐藏字段防泄漏；`tests/browser_pvp_live_real_backend_smoke.mjs` 在真实后端、双账号、真实点击 lethal 链路中新增胜方/败方双方终局回执断言，负责证明双方都能看到同一份公开归零解释。
+    - `game-intro.html` 同步玩家说明：行动回执会拆出终局回执，让双方知道本局是公开致命伤害归零而结束，不是隐藏爆发或先手秒杀感。
+  - 已验证
+    - 红测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs` 在实现前失败于 `live UI terminal damage receipt should expose a stable public terminal marker`。
+    - 红测：`node tests/sanity_pvp_live_ui_contract_checks.cjs` 在实现前失败于 `PVPScene live practice handoff should include marker: public_terminal_damage`。
+    - 红测：`node tests/sanity_release_gate_coverage_checks.cjs` 在实现前失败于 `live PVP browser audit should pin UI wiring marker: public_terminal_damage`。
+    - 红测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs` 在补强证据位前失败于 `live UI must not infer terminal damage from null target HP evidence`。
+    - 红测：`node tests/sanity_pvp_live_engine_checks.cjs` 在补强服务端投影前失败于 `action receipt should flag missing target HP as unproven instead of a public zero`。
+    - 红测：`node tests/sanity_pvp_live_engine_checks.cjs` 在修复终局事件收集前失败于 `normal lethal winner receipt should preserve proven target HP after match_finished`。
+    - 绿测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs`
+    - 绿测：`node tests/sanity_pvp_live_engine_checks.cjs`
+    - 绿测：`node tests/sanity_pvp_live_ui_contract_checks.cjs`
+    - 绿测：`node tests/sanity_release_gate_coverage_checks.cjs`
+    - 绿测：`node tests/sanity_intro_progress_sync_checks.cjs`
+    - 语法检查：`node --check tests/browser_pvp_live_audit.mjs`
+    - 浏览器审计：`node tests/browser_pvp_live_audit.mjs http://127.0.0.1:5173 output/pvp-live-terminal-damage-receipt-audit-20260626-s77-fix`，134/134 findings、0 failed、0 console error。
+    - 真实后端 browser smoke：`node tests/browser_pvp_live_real_backend_smoke.mjs http://127.0.0.1:5173 output/pvp-live-terminal-damage-real-backend-20260626-green2`，73/73 findings、0 failed、0 console error；其中胜方/败方双方 `public_terminal_damage` 终局回执 finding 均通过。
+    - 完整 Node 门禁：`PVP_LIVE_WS_FANOUT_MESSAGE_TIMEOUT_MS=30000 npm run test:node`
+    - 构建：`npm run build:pages`
+    - 空白检查：`git diff --check`
+  - 当前结论
+    - live PVP 的行动回执从“承伤后能确认没结束”推进到“公开致命伤害也有明确终局解释”：真实后端 lethal 链路中，被击败方能看到归零来自公开伤害结算，进攻方也能看到本局结束不是隐藏手牌、奖励或评分暗改；缺失或非法 HP 证据不会被误判成归零。该切片只改公开回执投影、前端公开回执、玩家说明和门禁，不改变卡牌数值、伤害、护体、反打缓冲、先后手、匹配、正式积分、奖励或结算。
+
 - 2026-06-24: V10-S76 live PVP public turn handoff receipt
   - 本轮完成
     - `js/scenes/pvp-scene.js` 在权威 `[data-live-action-receipt]` 的 `end_turn` 回执中新增“接手回执” chip：当服务端公开 `nextSeat` 时，渲染 `data-live-action-turn-handoff*` next-seat/draw-count/counterplay-block/source/hidden/impact marker。

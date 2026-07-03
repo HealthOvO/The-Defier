@@ -2043,7 +2043,7 @@ async function writeReport() {
         && afterPlayReceiptProbe.textPayload?.sourceVisibility === afterPlayReceiptProbe.payload?.sourceVisibility
         && afterPlayReceiptProbe.textPayload?.latestSequence === afterPlayReceiptProbe.payload?.latestSequence
         && afterPlayReceiptProbe.textPayload?.summaryLine === afterPlayReceiptProbe.payload?.summaryLine
-        && !/hand|deck|cardId|instanceId|loadoutSnapshot|reward|rating|elo|opponentHand|opponentDeck/i.test(`${afterPlayReceiptProbe.text} ${JSON.stringify(afterPlayReceiptProbe.payload || {})}`),
+        && !/\bhand\b|hand":\[|deck|cardId|instanceId|loadoutSnapshot|reward|rating|elo|opponentHand|opponentDeck/i.test(`${afterPlayReceiptProbe.text} ${JSON.stringify(afterPlayReceiptProbe.payload || {})}`),
       JSON.stringify({ activeFirstSeat, activeSecondSeat, afterPlayReceiptProbe }),
     );
     const afterPlayMomentumProbe = await secondSeatClient.page.evaluate(() => ({
@@ -2166,7 +2166,7 @@ async function writeReport() {
         && afterEndTurnReceiptProbe.textPayload?.actionType === 'end_turn'
         && afterEndTurnReceiptProbe.textPayload?.latestSequence === afterEndTurnReceiptProbe.payload?.latestSequence
         && afterEndTurnReceiptProbe.textPayload?.summaryLine === afterEndTurnReceiptProbe.payload?.summaryLine
-        && !/hand|deck|cardId|instanceId|loadoutSnapshot|reward|rating|elo|opponentHand|opponentDeck/i.test(`${afterEndTurnReceiptProbe.text} ${JSON.stringify(afterEndTurnReceiptProbe.payload || {})}`),
+        && !/\bhand\b|hand":\[|deck|cardId|instanceId|loadoutSnapshot|reward|rating|elo|opponentHand|opponentDeck/i.test(`${afterEndTurnReceiptProbe.text} ${JSON.stringify(afterEndTurnReceiptProbe.payload || {})}`),
       JSON.stringify({ activeFirstSeat, activeSecondSeat, afterEndTurnReceiptProbe }),
     );
     const protectedCounterplayBeforeProbe = await secondSeatClient.page.evaluate(() => {
@@ -2256,7 +2256,7 @@ async function writeReport() {
         && protectedCounterplayActionProbe.receiptType === 'play_card'
         && afterProtectedCounterplayFirst.stateVersion === protectedCounterplayActionProbe.after?.stateVersion
         && afterProtectedCounterplayFirst.currentSeat === protectedCounterplayActionProbe.after?.currentSeat
-        && !/hand|deck|cardId|instanceId|loadoutSnapshot|reward|rating|elo|opponentHand|opponentDeck/i.test(`${protectedCounterplayActionProbe.receiptText} ${protectedCounterplayActionProbe.momentumText} ${JSON.stringify(protectedCounterplayActionProbe.after?.actionReceiptReport || {})}`),
+        && !/\bhand\b|hand":\[|deck|cardId|instanceId|loadoutSnapshot|reward|rating|elo|opponentHand|opponentDeck/i.test(`${protectedCounterplayActionProbe.receiptText} ${protectedCounterplayActionProbe.momentumText} ${JSON.stringify(protectedCounterplayActionProbe.after?.actionReceiptReport || {})}`),
       JSON.stringify({
         activeFirstSeat,
         activeSecondSeat,
@@ -2381,11 +2381,33 @@ async function writeReport() {
     const lethalFinishProbe = await winnerClient.page.evaluate(() => {
       const snapshot = window.PVPScene.getLiveSnapshot();
       const receiptEl = document.querySelector('[data-live-action-receipt]');
+      const terminalEl = document.querySelector('[data-live-action-terminal]');
       return {
         snapshot,
         receiptText: receiptEl?.textContent?.replace(/\s+/g, ' ').trim() || '',
         receiptType: receiptEl?.getAttribute('data-live-action-receipt-type') || '',
+        terminalText: terminalEl?.textContent?.replace(/\s+/g, ' ').trim() || '',
+        terminalAttr: terminalEl?.getAttribute('data-live-action-terminal') || '',
+        terminalTarget: terminalEl?.getAttribute('data-live-action-terminal-target') || '',
+        terminalHpAfter: terminalEl?.getAttribute('data-live-action-terminal-hp-after') || '',
+        terminalSource: terminalEl?.getAttribute('data-live-action-terminal-source') || '',
+        terminalHidden: terminalEl?.getAttribute('data-live-action-terminal-hidden') || '',
+        terminalImpact: terminalEl?.getAttribute('data-live-action-terminal-impact') || '',
         events: document.querySelector('[data-live-event-log]')?.textContent || '',
+      };
+    });
+    const lethalLoserReceiptProbe = await loserClient.page.evaluate(() => {
+      const snapshot = window.PVPScene.getLiveSnapshot();
+      const terminalEl = document.querySelector('[data-live-action-terminal]');
+      return {
+        actionReceiptReport: snapshot?.actionReceiptReport || null,
+        terminalText: terminalEl?.textContent?.replace(/\s+/g, ' ').trim() || '',
+        terminalAttr: terminalEl?.getAttribute('data-live-action-terminal') || '',
+        terminalTarget: terminalEl?.getAttribute('data-live-action-terminal-target') || '',
+        terminalHpAfter: terminalEl?.getAttribute('data-live-action-terminal-hp-after') || '',
+        terminalSource: terminalEl?.getAttribute('data-live-action-terminal-source') || '',
+        terminalHidden: terminalEl?.getAttribute('data-live-action-terminal-hidden') || '',
+        terminalImpact: terminalEl?.getAttribute('data-live-action-terminal-impact') || '',
       };
     });
     add(
@@ -2411,6 +2433,9 @@ async function writeReport() {
         && lethalFinishProbe.snapshot?.postMatchReview?.loserSeat === loserSeat
         && lethalFinishProbe.snapshot?.postMatchReview?.evidence?.some(event => event.eventType === 'damage_applied')
         && lethalFinishProbe.snapshot?.postMatchReview?.evidence?.some(event => event.eventType === 'match_finished')
+        && lethalFinishProbe.snapshot?.actionReceiptReport?.damage?.hasTargetHpAfter === true
+        && lethalFinishProbe.snapshot?.actionReceiptReport?.damage?.targetSeat === loserSeat
+        && lethalFinishProbe.snapshot?.actionReceiptReport?.damage?.targetHpAfter === 0
         && !/player_surrendered|认输/.test(`${lethalFinishProbe.events} ${lethalFinishProbe.snapshot?.postMatchReview?.summary || ''}`),
       JSON.stringify({
         activeFirstSeat,
@@ -2422,7 +2447,41 @@ async function writeReport() {
         finishedWinner,
         finishedLoser,
         lethalFinishProbe,
+        lethalLoserReceiptProbe,
       }),
+    );
+    add(
+      'real browser winner sees public terminal damage receipt after real lethal',
+      lethalFinishProbe.terminalAttr === 'public_terminal_damage'
+        && lethalFinishProbe.terminalTarget === loserSeat
+        && lethalFinishProbe.terminalHpAfter === '0'
+        && lethalFinishProbe.terminalSource === 'authoritative_public_projection'
+        && lethalFinishProbe.terminalHidden === 'false'
+        && lethalFinishProbe.terminalImpact === 'none'
+        && /终局回执/.test(lethalFinishProbe.terminalText)
+        && new RegExp(`${loserSeat}\\s*归零`).test(lethalFinishProbe.terminalText)
+        && /公开伤害结算结束本局/.test(lethalFinishProbe.terminalText)
+        && !/payload|cardInstanceId|sourceCardId|cardId|instanceId|\bhand\b|hand":\[|deck|loadoutSnapshot|reward|rating|elo|token/i.test(`${lethalFinishProbe.terminalText} ${JSON.stringify(lethalFinishProbe.snapshot?.actionReceiptReport || {})}`),
+      JSON.stringify({ loserSeat, winnerSeat, lethalFinishProbe }),
+    );
+    add(
+      'real browser loser sees public terminal damage receipt after real lethal',
+      lethalLoserReceiptProbe.actionReceiptReport?.viewerSeat === loserSeat
+        && lethalLoserReceiptProbe.actionReceiptReport?.actingSeat === winnerSeat
+        && lethalLoserReceiptProbe.actionReceiptReport?.damage?.hasTargetHpAfter === true
+        && lethalLoserReceiptProbe.actionReceiptReport?.damage?.targetSeat === loserSeat
+        && lethalLoserReceiptProbe.actionReceiptReport?.damage?.targetHpAfter === 0
+        && lethalLoserReceiptProbe.terminalAttr === 'public_terminal_damage'
+        && lethalLoserReceiptProbe.terminalTarget === loserSeat
+        && lethalLoserReceiptProbe.terminalHpAfter === '0'
+        && lethalLoserReceiptProbe.terminalSource === 'authoritative_public_projection'
+        && lethalLoserReceiptProbe.terminalHidden === 'false'
+        && lethalLoserReceiptProbe.terminalImpact === 'none'
+        && /终局回执/.test(lethalLoserReceiptProbe.terminalText)
+        && new RegExp(`${loserSeat}\\s*归零`).test(lethalLoserReceiptProbe.terminalText)
+        && /公开伤害结算结束本局/.test(lethalLoserReceiptProbe.terminalText)
+        && !/payload|cardInstanceId|sourceCardId|cardId|instanceId|\bhand\b|hand":\[|deck|loadoutSnapshot|reward|rating|elo|token/i.test(`${lethalLoserReceiptProbe.terminalText} ${JSON.stringify(lethalLoserReceiptProbe.actionReceiptReport || {})}`),
+      JSON.stringify({ loserSeat, winnerSeat, lethalLoserReceiptProbe }),
     );
     const postMatchProbe = await loserClient.page.evaluate(() => ({
       text: document.querySelector('[data-live-post-match-review]')?.textContent?.replace(/\s+/g, ' ').trim() || '',

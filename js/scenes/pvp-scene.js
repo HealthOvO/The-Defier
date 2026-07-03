@@ -1596,6 +1596,17 @@ export const PVPScene = {
       earliestConsumeTurnIndex: Math.max(0, Math.floor(Number(status.earliestConsumeTurnIndex) || 0)),
       expiresAtTurnIndex: Math.max(0, Math.floor(Number(status.expiresAtTurnIndex) || 0))
     });
+    const hasFiniteCountValue = (value) => {
+      if (typeof value === 'number') return Number.isFinite(value);
+      if (typeof value === 'string') return value.trim() !== '' && Number.isFinite(Number(value));
+      return false;
+    };
+    const rawTargetHpAfter = damage.targetHpAfter;
+    const hasExplicitTargetHpAfter = Object.prototype.hasOwnProperty.call(damage, 'targetHpAfter')
+      && hasFiniteCountValue(rawTargetHpAfter);
+    const hasTargetHpAfter = damage.hasTargetHpAfter === false
+      ? false
+      : hasExplicitTargetHpAfter;
     return {
       reportVersion: String(report.reportVersion || 'pvp-live-action-receipt-v1'),
       sourceVisibility: String(report.sourceVisibility || 'authoritative_public_projection'),
@@ -1615,7 +1626,8 @@ export const PVPScene = {
         preventedByBudget: Math.max(0, Math.floor(Number(damage.preventedByBudget) || 0)),
         blockedDamage: Math.max(0, Math.floor(Number(damage.blockedDamage) || 0)),
         hpDamage: Math.max(0, Math.floor(Number(damage.hpDamage) || 0)),
-        targetHpAfter: Math.max(0, Math.floor(Number(damage.targetHpAfter) || 0))
+        targetHpAfter: hasTargetHpAfter ? Math.max(0, Math.floor(Number(rawTargetHpAfter) || 0)) : 0,
+        hasTargetHpAfter
       },
       openingProtection: {
         triggered: protection.triggered === true,
@@ -1717,6 +1729,23 @@ export const PVPScene = {
           data-live-action-survival-impact="${this.escapeHtml(report.rankedImpact || 'none')}"
         >${this.escapeHtml(`承伤回执 · ${report.damage.targetSeat} 剩余 ${report.damage.targetHpAfter} 血，对局继续`)}</span>`
       : '';
+    const terminalDamageChip = !report.usesHiddenInformation
+      && report.actionType === 'play_card'
+      && report.damage
+      && report.damage.hpDamage > 0
+      && report.damage.targetSeat
+      && report.damage.hasTargetHpAfter
+      && report.damage.targetHpAfter <= 0
+      ? `<span
+          class="pvp-live-action-receipt-chip"
+          data-live-action-terminal="public_terminal_damage"
+          data-live-action-terminal-target="${this.escapeHtml(report.damage.targetSeat || '')}"
+          data-live-action-terminal-hp-after="${this.escapeHtml(String(report.damage.targetHpAfter || 0))}"
+          data-live-action-terminal-source="${this.escapeHtml(report.sourceVisibility || '')}"
+          data-live-action-terminal-hidden="${report.usesHiddenInformation ? 'true' : 'false'}"
+          data-live-action-terminal-impact="${this.escapeHtml(report.rankedImpact || 'none')}"
+        >${this.escapeHtml(`终局回执 · ${report.damage.targetSeat} 归零，公开伤害结算结束本局`)}</span>`
+      : '';
     const handoffDrawCount = report.draw ? Math.max(0, Math.floor(Number(report.draw.count) || 0)) : 0;
     const handoffCounterplayBlock = report.counterplay && report.counterplay.granted
       ? Math.max(0, Math.floor(Number(report.counterplay.block) || 0))
@@ -1804,6 +1833,7 @@ export const PVPScene = {
       ${budgetClampChip}
       ${openingProtectionChip}
       ${survivalChip}
+      ${terminalDamageChip}
       ${turnHandoffChip}
       ${statusPayoffChip}
       ${mitigationChip}
