@@ -1,0 +1,27 @@
+game-intro.html
+  s_bae69f1b7fab46::t_cdce02309e055e 131
+progress.md
+  s_bae69f1b7fab46::t_3941f90d8f2483 3-20
+tests/browser_pvp_live_real_backend_smoke.mjs
+  s_bae69f1b7fab46::t_5f0f48be777758 864-965
+tests/sanity_release_gate_coverage_checks.cjs
+  s_bae69f1b7fab46::t_e20acdf7c28342 2679-2680,2690-2698
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.5",
+  "base_commit_sha": "3e996bbc9687d7642da50c73a97c85fd5132b203",
+  "prompts": {},
+  "sessions": {
+    "s_bae69f1b7fab46": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ed4f6-e7ac-73e0-a29e-119f3eddb407",
+        "model": "unknown"
+      },
+      "human_author": "AI Agent <bot@example.com>"
+    }
+  },
+  "attestation_metadata": {},
+  "remote_transcripts": {}
+}
