@@ -513,6 +513,31 @@ async function clickLiveControl(page, selector, label) {
   return null;
 }
 
+async function clickLiveEndTurnUntilSeat(page, expectedNextSeat, label, maxTouches = 3) {
+  const touches = [];
+  let probe = null;
+  for (let attempt = 1; attempt <= maxTouches; attempt += 1) {
+    await waitForLiveActionUnlocked(page, `${label}-attempt-${attempt}`);
+    touches.push(await clickLiveControl(page, '[data-live-action="end-turn"]', `${label}-touch-${attempt}`));
+    await page.waitForTimeout(250);
+    probe = await page.evaluate(({ expectedNextSeat }) => {
+      const scene = window.PVPScene;
+      const session = scene?.getLiveSession?.();
+      const state = session?.getState?.();
+      const snapshot = scene?.getLiveSnapshot?.() || null;
+      return {
+        snapshot,
+        reached: snapshot?.currentSeat === expectedNextSeat,
+        confirmArmed: !!scene?.isLiveOpeningActionConfirmArmed?.(state, 'end_turn', {}),
+        hint: document.querySelector('[data-live-last-error]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+        buttonText: document.querySelector('[data-live-action="end-turn"]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+      };
+    }, { expectedNextSeat });
+    if (probe.reached) break;
+  }
+  return { touches, probe };
+}
+
 async function waitForLiveActionUnlocked(page, label, timeoutMs = 10000) {
   try {
     await page.waitForFunction(() => {
@@ -574,6 +599,103 @@ async function readyLiveSetupSeat(page, label, timeoutMs = 8000) {
     await page.waitForTimeout(250);
   }
   throw new Error(`timed out readying live setup seat ${label}: ${JSON.stringify(lastProbe)}`);
+}
+
+async function joinLiveQueueWithLoadout(page, displayName, loadout, testMatchScope = TEST_MATCH_SCOPE) {
+  return await page.evaluate(async ({ displayName, loadout, testMatchScope }) => {
+    window.__DEFIER_PVP_REAL_TEST_SCOPE = testMatchScope;
+    window.game.player.name = displayName;
+    window.PVPScene.switchTab('live');
+    const presetId = `real_smoke_${String(loadout.identitySlot || 'custom').replace(/[^a-z0-9_-]/gi, '_').toLowerCase()}`;
+    if (!window.PVPScene.__realSmokeOriginalGetLiveLoadoutPresets) {
+      window.PVPScene.__realSmokeOriginalGetLiveLoadoutPresets = window.PVPScene.getLiveLoadoutPresets.bind(window.PVPScene);
+    }
+    const originalGetPresets = window.PVPScene.__realSmokeOriginalGetLiveLoadoutPresets;
+    const testPreset = {
+      id: presetId,
+      identitySlot: String(loadout.identitySlot || 'real_smoke_custom'),
+      label: String(loadout.label || '真实测试斗法谱'),
+      summary: '真实后端 smoke 测试谱',
+      pattern: Array.isArray(loadout.deck) ? loadout.deck.map(entry => String(entry && entry.id || '')).filter(Boolean) : [],
+    };
+    window.PVPScene.getLiveLoadoutPresets = function getLiveLoadoutPresetsWithRealSmokePreset() {
+      return [testPreset, ...originalGetPresets()];
+    };
+    window.PVPScene.liveSelectedLoadoutPreset = presetId;
+    await window.PVPScene.joinLiveQueue({
+      loadoutPresetId: presetId,
+      testMatchScope,
+    });
+    const result = window.PVPScene.getLiveSession().getState();
+    return {
+      result,
+      snapshot: window.PVPScene.getLiveSnapshot(),
+    };
+  }, { displayName, loadout, testMatchScope });
+}
+
+async function getLiveHandoffRiskReceiptProbe(page) {
+  return await page.evaluate(() => {
+    if (window.PVPScene && typeof window.PVPScene.renderLivePanel === 'function') {
+      window.PVPScene.renderLivePanel();
+    }
+    const snapshot = window.PVPScene.getLiveSnapshot();
+    const textPayload = JSON.parse(window.render_game_to_text()).pvp?.live || null;
+    const receiptEl = document.querySelector('[data-live-action-receipt]');
+    const riskEl = receiptEl?.querySelector('[data-live-action-handoff-risk="status_response_handoff"]') || null;
+    return {
+      snapshot,
+      text: receiptEl?.textContent?.replace(/\s+/g, ' ').trim() || '',
+      typeAttr: receiptEl?.getAttribute('data-live-action-receipt-type') || '',
+      actorAttr: receiptEl?.getAttribute('data-live-action-receipt-acting') || '',
+      nextSeatAttr: receiptEl?.getAttribute('data-live-action-receipt-next-seat') || '',
+      sourceAttr: receiptEl?.getAttribute('data-live-action-receipt-source') || '',
+      hiddenAttr: receiptEl?.getAttribute('data-live-action-receipt-hidden') || '',
+      seqAttr: receiptEl?.getAttribute('data-live-action-receipt-seq') || '',
+      riskAttr: riskEl?.getAttribute('data-live-action-handoff-risk') || '',
+      riskState: riskEl?.getAttribute('data-live-action-handoff-risk-state') || '',
+      riskSource: riskEl?.getAttribute('data-live-action-handoff-risk-source') || '',
+      riskHidden: riskEl?.getAttribute('data-live-action-handoff-risk-hidden') || '',
+      riskImpact: riskEl?.getAttribute('data-live-action-handoff-risk-impact') || '',
+      riskStatusCount: riskEl?.getAttribute('data-live-action-handoff-risk-status-count') || '',
+      riskSafeguard: riskEl?.getAttribute('data-live-action-handoff-risk-safeguard') || '',
+      payload: snapshot?.actionReceiptReport || null,
+      textPayload: textPayload?.actionReceiptReport || null,
+    };
+  });
+}
+
+async function getLiveStatusPayoffReceiptProbe(page) {
+  return await page.evaluate(() => {
+    if (window.PVPScene && typeof window.PVPScene.renderLivePanel === 'function') {
+      window.PVPScene.renderLivePanel();
+    }
+    const snapshot = window.PVPScene.getLiveSnapshot();
+    const textPayload = JSON.parse(window.render_game_to_text()).pvp?.live || null;
+    const receiptEl = document.querySelector('[data-live-action-receipt]');
+    const payoffEl = receiptEl?.querySelector('[data-live-action-status-payoff="vulnerable_mark"]') || null;
+    return {
+      snapshot,
+      text: receiptEl?.textContent?.replace(/\s+/g, ' ').trim() || '',
+      typeAttr: receiptEl?.getAttribute('data-live-action-receipt-type') || '',
+      actorAttr: receiptEl?.getAttribute('data-live-action-receipt-acting') || '',
+      nextSeatAttr: receiptEl?.getAttribute('data-live-action-receipt-next-seat') || '',
+      sourceAttr: receiptEl?.getAttribute('data-live-action-receipt-source') || '',
+      hiddenAttr: receiptEl?.getAttribute('data-live-action-receipt-hidden') || '',
+      seqAttr: receiptEl?.getAttribute('data-live-action-receipt-seq') || '',
+      payoffAttr: payoffEl?.getAttribute('data-live-action-status-payoff') || '',
+      payoffState: payoffEl?.getAttribute('data-live-action-status-payoff-state') || '',
+      payoffSource: payoffEl?.getAttribute('data-live-action-status-payoff-source') || '',
+      payoffHidden: payoffEl?.getAttribute('data-live-action-status-payoff-hidden') || '',
+      payoffImpact: payoffEl?.getAttribute('data-live-action-status-payoff-impact') || '',
+      payoffBonus: payoffEl?.getAttribute('data-live-action-status-payoff-bonus') || '',
+      payoffSafeguard: payoffEl?.getAttribute('data-live-action-status-payoff-safeguard') || '',
+      payload: snapshot?.actionReceiptReport || null,
+      textPayload: textPayload?.actionReceiptReport || null,
+      lastEvents: snapshot?.lastEvents || [],
+      recentEvents: snapshot?.recentEvents || [],
+    };
+  });
 }
 
 async function refreshUntilLivePhase(page, phase, timeoutMs = 10000) {
@@ -1046,6 +1168,410 @@ async function writeReport() {
     );
     await inviteHost.context.close().catch(() => {});
     await inviteGuest.context.close().catch(() => {});
+
+    let statusPayoffHost = null;
+    let statusPayoffGuest = null;
+    try {
+      const statusPayoffTestScope = `${TEST_MATCH_SCOPE}_status_payoff`;
+      statusPayoffHost = await preparePage(browser, `live_real_status_payoff_host_${runId}`, '破甲');
+      statusPayoffGuest = await preparePage(browser, `live_real_status_payoff_guest_${runId}`, '承伤');
+      await seedRankedHistory(statusPayoffHost.username, 1000, 6);
+      await seedRankedHistory(statusPayoffGuest.username, 1000, 6);
+      const statusPayoffAttackerLoadout = makeLoadout('status_payoff_attacker', ['exposedCircuit', 'pvp_strike', 'pvp_guard', 'surgeStep', 'forkedNeedle']);
+      const statusPayoffDefenderLoadout = makeLoadout('status_payoff_defender', ['exposedCircuit', 'pvp_guard', 'pvp_strike', 'surgeStep', 'stormWard', 'forkedNeedle']);
+      const statusPayoffJoinHost = await joinLiveQueueWithLoadout(statusPayoffHost.page, '破甲', statusPayoffAttackerLoadout, statusPayoffTestScope);
+      if (statusPayoffJoinHost.snapshot?.phase !== 'waiting') {
+        throw new Error(`status payoff host did not enter waiting: ${JSON.stringify(statusPayoffJoinHost)}`);
+      }
+      const statusPayoffWaitingHost = statusPayoffJoinHost.snapshot;
+      const statusPayoffJoinGuest = await joinLiveQueueWithLoadout(statusPayoffGuest.page, '承伤', statusPayoffDefenderLoadout, statusPayoffTestScope);
+      const statusPayoffSetupGuest = await waitForLivePhase(statusPayoffGuest.page, 'setup');
+      const statusPayoffSetupHost = await statusPayoffHost.page.evaluate(async () => {
+        const session = window.PVPScene.getLiveSession();
+        session.reset();
+        await session.resumeCurrentMatch();
+        window.PVPScene.renderLivePanel();
+        return window.PVPScene.getLiveSnapshot();
+      });
+      if (statusPayoffSetupHost.phase !== 'setup') {
+        throw new Error(`status payoff host did not resume setup after guest join: ${JSON.stringify({ statusPayoffJoinHost, statusPayoffJoinGuest, statusPayoffSetupGuest, statusPayoffSetupHost })}`);
+      }
+      await ensureLiveRealtime(statusPayoffHost.page);
+      await ensureLiveRealtime(statusPayoffGuest.page);
+      const statusPayoffReadyHost = await readyLiveSetupSeat(statusPayoffHost.page, 'status-payoff-host');
+      const statusPayoffReadyGuest = await readyLiveSetupSeat(statusPayoffGuest.page, 'status-payoff-guest');
+      const statusPayoffActiveHost = await waitForLivePhase(statusPayoffHost.page, 'active');
+      const statusPayoffActiveGuest = await waitForLivePhase(statusPayoffGuest.page, 'active');
+      const statusPayoffFirstSeat = statusPayoffActiveHost.openerAssignment?.firstSeat
+        || statusPayoffActiveHost.setup?.firstSeat
+        || statusPayoffActiveHost.currentSeat;
+      const statusPayoffSecondSeat = otherSeatId(statusPayoffFirstSeat);
+      const statusPayoffClientBySeat = {
+        [statusPayoffActiveHost.seatId]: statusPayoffHost,
+        [statusPayoffActiveGuest.seatId]: statusPayoffGuest,
+      };
+      const statusPayoffSnapshotBySeat = {
+        [statusPayoffActiveHost.seatId]: statusPayoffActiveHost,
+        [statusPayoffActiveGuest.seatId]: statusPayoffActiveGuest,
+      };
+      const statusPayoffAttackerClient = statusPayoffClientBySeat[statusPayoffFirstSeat];
+      const statusPayoffDefenderClient = statusPayoffClientBySeat[statusPayoffSecondSeat];
+      const statusPayoffAttackerStart = statusPayoffSnapshotBySeat[statusPayoffFirstSeat];
+      if (!statusPayoffAttackerClient || !statusPayoffDefenderClient || !statusPayoffAttackerStart) {
+        throw new Error(`invalid status payoff opener assignment: ${JSON.stringify({ statusPayoffFirstSeat, statusPayoffSecondSeat, statusPayoffActiveHost, statusPayoffActiveGuest })}`);
+      }
+
+      const statusPayoffInitialEndTurn = await clickLiveEndTurnUntilSeat(
+        statusPayoffAttackerClient.page,
+        statusPayoffSecondSeat,
+        `${seatSlug(statusPayoffFirstSeat)}-status-payoff-initial-end-turn`,
+      );
+      const statusPayoffInitialEndTurnActionable = statusPayoffInitialEndTurn.touches[0] || null;
+      const statusPayoffInitialEndTurnSubmitActionable = statusPayoffInitialEndTurn.touches[1] || null;
+      const statusPayoffInitialEndTurnThirdTouchActionable = statusPayoffInitialEndTurn.touches[2] || null;
+      const statusPayoffInitialEndTurnConfirmProbe = statusPayoffInitialEndTurn.probe || {};
+      const statusPayoffDefenderTurn = await refreshUntilLiveSnapshot(
+        statusPayoffDefenderClient.page,
+        ({ expectedSeat, previousVersion }) => {
+          const snapshot = window.PVPScene?.getLiveSnapshot?.();
+          return snapshot?.currentSeat === expectedSeat && Number(snapshot?.stateVersion || 0) > Number(previousVersion || 0);
+        },
+        { expectedSeat: statusPayoffSecondSeat, previousVersion: statusPayoffAttackerStart.stateVersion },
+        10000,
+      );
+      const statusPayoffSetupProbe = await statusPayoffDefenderClient.page.evaluate(async ({ markedSeat, sourceSeat, testMatchScope }) => {
+        window.__DEFIER_PVP_REAL_TEST_SCOPE = testMatchScope;
+        const BackendClient = window.__THE_DEFIER_SERVICES__?.BackendClient;
+        const before = window.PVPScene.getLiveSnapshot();
+        const response = await BackendClient.requestServer(`/api/pvp/live/test/matches/${before.matchId}/seats/${markedSeat}`, {
+          method: 'POST',
+          data: {
+            publicStatus: {
+              statusId: 'vulnerable_mark',
+              label: '破绽',
+              sourceSeat,
+              responseWindow: 'defender_turn_before_payoff',
+              payload: { hand: ['hidden-card'], deck: ['hidden-deck'] },
+              cardInstanceId: 'hidden-card-instance',
+              sourceCardId: 'hidden-source-card',
+              token: 'hidden-token',
+            },
+            testMatchScope,
+          },
+        });
+        await window.PVPScene.refreshLiveMatch();
+        window.PVPScene.renderLivePanel();
+        const after = window.PVPScene.getLiveSnapshot();
+        const sameMatchMitigationCards = Array.isArray(after?.actionPreviewReport?.playableCards)
+          ? after.actionPreviewReport.playableCards.filter(card => card?.publicStatusMitigation?.statusId === 'vulnerable_mark')
+          : [];
+        const mitigationPreview = document.querySelector('[data-live-card-status-mitigation="vulnerable_mark"]');
+        const cardEl = mitigationPreview?.closest('[data-live-card]') || null;
+        return {
+          before,
+          response,
+          after,
+          sameMatchMitigationCards,
+          sameMatchMitigationAttr: mitigationPreview?.getAttribute('data-live-card-status-mitigation') || '',
+          sameMatchMitigationResponseWindow: mitigationPreview?.getAttribute('data-live-card-status-response-window') || '',
+          sameMatchMitigationPreviewSource: mitigationPreview?.getAttribute('data-live-card-preview-source') || '',
+          sameMatchMitigationPreviewHidden: mitigationPreview?.getAttribute('data-live-card-preview-hidden') || '',
+          sameMatchMitigationPreviewImpact: mitigationPreview?.getAttribute('data-live-card-preview-impact') || '',
+          sameMatchMitigationCardInstanceId: cardEl?.getAttribute('data-live-card') || '',
+          sameMatchMitigationPreviewText: mitigationPreview?.textContent?.replace(/\s+/g, ' ').trim() || '',
+          sameMatchMitigationCardText: cardEl?.textContent?.replace(/\s+/g, ' ').trim() || '',
+          statusText: document.querySelector('[data-live-self-statuses]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+          momentumText: document.querySelector('[data-live-duel-momentum]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+        };
+      }, { markedSeat: statusPayoffSecondSeat, sourceSeat: statusPayoffFirstSeat, testMatchScope: statusPayoffTestScope });
+
+      const statusPayoffHiddenLeakPattern = /payload|cardInstanceId|sourceCardId|cardId|instanceId|\bhand\b|hand":\[|deck|loadoutSnapshot|reward|rating|elo|token|opponentHand|opponentDeck/i;
+      add(
+        'real browser defender sees same-match response card before intentionally missing status window',
+        statusPayoffSetupProbe.before?.currentSeat === statusPayoffSecondSeat
+          && statusPayoffSetupProbe.response?.success === true
+          && statusPayoffSetupProbe.response?.stateView?.self?.publicStatuses?.some(status => status.statusId === 'vulnerable_mark' && status.seatId === statusPayoffSecondSeat && status.sourceSeat === statusPayoffFirstSeat)
+          && statusPayoffSetupProbe.after?.currentSeat === statusPayoffSecondSeat
+          && statusPayoffSetupProbe.after?.self?.publicStatuses?.some(status => status.statusId === 'vulnerable_mark' && status.sourceSeat === statusPayoffFirstSeat)
+          && statusPayoffSetupProbe.sameMatchMitigationCards?.some(card => card?.publicStatusMitigation?.statusId === 'vulnerable_mark' && card.publicStatusMitigation?.responseWindow === 'defender_turn_before_payoff')
+          && statusPayoffSetupProbe.sameMatchMitigationAttr === 'vulnerable_mark'
+          && statusPayoffSetupProbe.sameMatchMitigationResponseWindow === 'defender_turn_before_payoff'
+          && statusPayoffSetupProbe.sameMatchMitigationPreviewSource === 'viewer_public_state'
+          && statusPayoffSetupProbe.sameMatchMitigationPreviewHidden === 'false'
+          && statusPayoffSetupProbe.sameMatchMitigationPreviewImpact === 'none'
+          && statusPayoffSetupProbe.sameMatchMitigationCardInstanceId
+          && /响应牌|清除破绽|处理破绽/.test(`${statusPayoffSetupProbe.sameMatchMitigationPreviewText} ${statusPayoffSetupProbe.sameMatchMitigationCardText}`)
+          && !statusPayoffHiddenLeakPattern.test(`${statusPayoffSetupProbe.sameMatchMitigationPreviewText} ${statusPayoffSetupProbe.sameMatchMitigationCardText} ${JSON.stringify(statusPayoffSetupProbe.after?.self?.publicStatuses || [])}`),
+        JSON.stringify({
+          statusPayoffFirstSeat,
+          statusPayoffSecondSeat,
+          statusPayoffTestScope,
+          statusPayoffSetupProbe,
+        }),
+      );
+
+      const statusPayoffHandoffEndTurn = await clickLiveEndTurnUntilSeat(
+        statusPayoffDefenderClient.page,
+        statusPayoffFirstSeat,
+        `${seatSlug(statusPayoffSecondSeat)}-status-payoff-handoff-end-turn`,
+      );
+      const statusPayoffHandoffFirstTouchActionable = statusPayoffHandoffEndTurn.touches[0] || null;
+      const statusPayoffHandoffSecondTouchActionable = statusPayoffHandoffEndTurn.touches[1] || null;
+      const statusPayoffHandoffThirdTouchActionable = statusPayoffHandoffEndTurn.touches[2] || null;
+      const statusPayoffHandoffConfirmProbe = statusPayoffHandoffEndTurn.probe || {};
+      const statusPayoffHandoffDefenderAfter = await refreshUntilLiveSnapshot(
+        statusPayoffDefenderClient.page,
+        ({ expectedSeat, previousVersion }) => {
+          const snapshot = window.PVPScene?.getLiveSnapshot?.();
+          return snapshot?.currentSeat === expectedSeat && Number(snapshot?.stateVersion || 0) > Number(previousVersion || 0);
+        },
+        { expectedSeat: statusPayoffFirstSeat, previousVersion: statusPayoffSetupProbe.after?.stateVersion || statusPayoffDefenderTurn.stateVersion },
+        10000,
+      );
+      const statusPayoffHandoffAttackerAfter = await refreshUntilLiveSnapshot(
+        statusPayoffAttackerClient.page,
+        ({ expectedSeat, previousVersion }) => {
+          const snapshot = window.PVPScene?.getLiveSnapshot?.();
+          return snapshot?.currentSeat === expectedSeat && Number(snapshot?.stateVersion || 0) > Number(previousVersion || 0);
+        },
+        { expectedSeat: statusPayoffFirstSeat, previousVersion: statusPayoffDefenderTurn.stateVersion },
+        10000,
+      );
+      const statusPayoffDefenderHandoffProbe = await getLiveHandoffRiskReceiptProbe(statusPayoffDefenderClient.page);
+      add(
+        'real browser defender end turn exposes authoritative handoff risk after leaving public status unresolved',
+        statusPayoffJoinHost.snapshot?.phase === 'waiting'
+          && statusPayoffJoinGuest.snapshot?.phase === 'setup'
+          && statusPayoffWaitingHost.phase === 'waiting'
+          && statusPayoffSetupHost.phase === 'setup'
+          && statusPayoffSetupGuest.phase === 'setup'
+          && statusPayoffReadyHost.done === true
+          && statusPayoffReadyGuest.done === true
+          && statusPayoffDefenderTurn.currentSeat === statusPayoffSecondSeat
+          && statusPayoffSetupProbe.before?.currentSeat === statusPayoffSecondSeat
+          && statusPayoffSetupProbe.response?.success === true
+          && statusPayoffSetupProbe.response?.stateView?.self?.publicStatuses?.some(status => status.statusId === 'vulnerable_mark' && status.seatId === statusPayoffSecondSeat && status.sourceSeat === statusPayoffFirstSeat)
+          && statusPayoffSetupProbe.response?.stateView?.recentEvents?.some(event => event.eventType === 'test_state_forced' && (event.publicData?.fields || []).includes('publicStatus') && event.publicData?.scope === statusPayoffTestScope)
+          && statusPayoffSetupProbe.after?.self?.publicStatuses?.some(status => status.statusId === 'vulnerable_mark' && status.sourceSeat === statusPayoffFirstSeat)
+          && statusPayoffHandoffDefenderAfter.currentSeat === statusPayoffFirstSeat
+          && statusPayoffHandoffAttackerAfter.currentSeat === statusPayoffFirstSeat
+          && statusPayoffDefenderHandoffProbe.typeAttr === 'end_turn'
+          && statusPayoffDefenderHandoffProbe.actorAttr === statusPayoffSecondSeat
+          && statusPayoffDefenderHandoffProbe.nextSeatAttr === statusPayoffFirstSeat
+          && statusPayoffDefenderHandoffProbe.sourceAttr === 'authoritative_public_projection'
+          && statusPayoffDefenderHandoffProbe.hiddenAttr === 'false'
+          && statusPayoffDefenderHandoffProbe.payload?.viewerSeat === statusPayoffSecondSeat
+          && statusPayoffDefenderHandoffProbe.payload?.actingSeat === statusPayoffSecondSeat
+          && statusPayoffDefenderHandoffProbe.payload?.actionType === 'end_turn'
+          && statusPayoffDefenderHandoffProbe.payload?.nextSeat === statusPayoffFirstSeat
+          && statusPayoffDefenderHandoffProbe.payload?.handoffRisk?.active === true
+          && statusPayoffDefenderHandoffProbe.payload?.handoffRisk?.riskState === 'status_response_handoff'
+          && statusPayoffDefenderHandoffProbe.payload?.handoffRisk?.statusCount === 1
+          && statusPayoffDefenderHandoffProbe.payload?.handoffRisk?.statuses?.some(status => status.statusId === 'vulnerable_mark' && status.label === '破绽' && status.seatId === statusPayoffSecondSeat && status.sourceSeat === statusPayoffFirstSeat && status.responseWindow === 'defender_turn_before_payoff')
+          && (statusPayoffDefenderHandoffProbe.payload?.safeguards || []).includes('public_status_handoff_risk')
+          && statusPayoffDefenderHandoffProbe.riskAttr === 'status_response_handoff'
+          && statusPayoffDefenderHandoffProbe.riskState === 'status_response_handoff'
+          && statusPayoffDefenderHandoffProbe.riskSource === 'authoritative_public_projection'
+          && statusPayoffDefenderHandoffProbe.riskHidden === 'false'
+          && statusPayoffDefenderHandoffProbe.riskImpact === 'none'
+          && statusPayoffDefenderHandoffProbe.riskStatusCount === '1'
+          && statusPayoffDefenderHandoffProbe.riskSafeguard === 'public_status_handoff_risk'
+          && /交权风险/.test(statusPayoffDefenderHandoffProbe.text)
+          && /破绽/.test(statusPayoffDefenderHandoffProbe.text)
+          && /下一轮可能兑现|后续兑现/.test(statusPayoffDefenderHandoffProbe.text)
+          && statusPayoffDefenderHandoffProbe.textPayload?.summaryLine === statusPayoffDefenderHandoffProbe.payload?.summaryLine
+          && (!isMobileViewport || [
+            statusPayoffInitialEndTurnActionable,
+            statusPayoffInitialEndTurnSubmitActionable,
+            statusPayoffInitialEndTurnThirdTouchActionable,
+            statusPayoffHandoffFirstTouchActionable,
+            statusPayoffHandoffSecondTouchActionable,
+            statusPayoffHandoffThirdTouchActionable,
+          ].filter(Boolean).every(item => item?.ok === true))
+          && !statusPayoffHiddenLeakPattern.test(`${statusPayoffDefenderHandoffProbe.text} ${JSON.stringify(statusPayoffDefenderHandoffProbe.payload || {})} ${JSON.stringify(statusPayoffDefenderHandoffProbe.textPayload || {})} ${JSON.stringify(statusPayoffSetupProbe.after?.self?.publicStatuses || [])}`),
+        JSON.stringify({
+          statusPayoffFirstSeat,
+          statusPayoffSecondSeat,
+          statusPayoffTestScope,
+          statusPayoffJoinHost,
+          statusPayoffJoinGuest,
+          statusPayoffWaitingHost,
+          statusPayoffSetupHost,
+          statusPayoffSetupGuest,
+          statusPayoffReadyHost,
+          statusPayoffReadyGuest,
+          statusPayoffInitialEndTurnConfirmProbe,
+          statusPayoffDefenderTurn,
+          statusPayoffSetupProbe,
+          statusPayoffHandoffConfirmProbe,
+          statusPayoffHandoffDefenderAfter,
+          statusPayoffHandoffAttackerAfter,
+          statusPayoffDefenderHandoffProbe,
+          statusPayoffInitialEndTurnActionable,
+          statusPayoffInitialEndTurnSubmitActionable,
+          statusPayoffInitialEndTurnThirdTouchActionable,
+          statusPayoffHandoffFirstTouchActionable,
+          statusPayoffHandoffSecondTouchActionable,
+          statusPayoffHandoffThirdTouchActionable,
+        }),
+      );
+
+      const statusPayoffCardBeforeProbe = await statusPayoffAttackerClient.page.evaluate(({ targetSeat }) => {
+        const before = window.PVPScene.getLiveSnapshot();
+        const sessionState = window.PVPScene.getLiveSession().getState();
+        const hand = Array.isArray(sessionState.stateView?.self?.hand) ? sessionState.stateView.self.hand : [];
+        const previews = Array.isArray(before?.actionPreviewReport?.playableCards) ? before.actionPreviewReport.playableCards : [];
+        const card = hand.find(item => item?.cardId === 'exposedCircuit' && item?.instanceId) || null;
+        const preview = previews.find(item => item?.cardInstanceId && item.cardInstanceId === card?.instanceId) || null;
+        return {
+          before,
+          card,
+          preview,
+          handCount: hand.length,
+          targetSeat,
+        };
+      }, { targetSeat: statusPayoffSecondSeat });
+      if (!statusPayoffCardBeforeProbe.card?.instanceId) {
+        throw new Error(`missing exposedCircuit in status payoff attacker hand: ${JSON.stringify({ statusPayoffFirstSeat, statusPayoffSecondSeat, statusPayoffCardBeforeProbe })}`);
+      }
+      const statusPayoffCardSelector = liveCardSelector(statusPayoffCardBeforeProbe.card.instanceId);
+      const statusPayoffCardFirstTouchActionable = await clickLiveControl(statusPayoffAttackerClient.page, statusPayoffCardSelector, `${seatSlug(statusPayoffFirstSeat)}-status-payoff-card-confirm`);
+      await statusPayoffAttackerClient.page.waitForTimeout(250);
+      const statusPayoffCardConfirmProbe = await statusPayoffAttackerClient.page.evaluate(({ before, cardSelector }) => {
+        const after = window.PVPScene.getLiveSnapshot();
+        const selectedCard = document.querySelector(cardSelector);
+        const confirmingCard = document.querySelector('.pvp-live-card.confirming');
+        return {
+          before,
+          after,
+          hint: document.querySelector('[data-live-last-error]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+          selectedCardInstanceId: selectedCard?.getAttribute('data-live-card') || '',
+          confirmingCardInstanceId: confirmingCard?.getAttribute('data-live-card') || '',
+          cardText: selectedCard?.textContent?.replace(/\s+/g, ' ').trim() || '',
+        };
+      }, { before: statusPayoffCardBeforeProbe.before, cardSelector: statusPayoffCardSelector });
+      let statusPayoffCardSecondTouchActionable = null;
+      if (statusPayoffCardConfirmProbe.after?.stateVersion === statusPayoffCardBeforeProbe.before?.stateVersion) {
+        statusPayoffCardSecondTouchActionable = await clickLiveControl(statusPayoffAttackerClient.page, statusPayoffCardSelector, `${seatSlug(statusPayoffFirstSeat)}-status-payoff-card-submit`);
+      }
+      const statusPayoffAttackerAfter = await waitForLiveSnapshot(
+        statusPayoffAttackerClient.page,
+        previousVersion => {
+          const snapshot = window.PVPScene?.getLiveSnapshot?.();
+          return Number(snapshot?.stateVersion || 0) > Number(previousVersion || 0)
+            && snapshot?.actionReceiptReport?.statusEffects?.consumed?.some(status => status.statusId === 'vulnerable_mark');
+        },
+        statusPayoffCardBeforeProbe.before?.stateVersion,
+        10000,
+      );
+      const statusPayoffAttackerProbe = await getLiveStatusPayoffReceiptProbe(statusPayoffAttackerClient.page);
+      const statusPayoffConsumed = statusPayoffAttackerProbe.payload?.statusEffects?.consumed?.find(status => status.statusId === 'vulnerable_mark') || null;
+      add(
+        'real browser attacker sees authoritative public status payoff after defender passes response window',
+        statusPayoffCardBeforeProbe.before?.currentSeat === statusPayoffFirstSeat
+          && statusPayoffCardBeforeProbe.preview?.cardInstanceId === statusPayoffCardBeforeProbe.card?.instanceId
+          && statusPayoffCardBeforeProbe.preview?.targetSeat === statusPayoffSecondSeat
+          && (/再次点击确认出牌/.test(statusPayoffCardConfirmProbe.hint)
+            || Number(statusPayoffCardConfirmProbe.after?.stateVersion || 0) > Number(statusPayoffCardBeforeProbe.before?.stateVersion || 0))
+          && statusPayoffAttackerAfter.stateVersion > statusPayoffCardBeforeProbe.before?.stateVersion
+          && statusPayoffAttackerProbe.typeAttr === 'play_card'
+          && statusPayoffAttackerProbe.actorAttr === statusPayoffFirstSeat
+          && statusPayoffAttackerProbe.sourceAttr === 'authoritative_public_projection'
+          && statusPayoffAttackerProbe.hiddenAttr === 'false'
+          && statusPayoffAttackerProbe.payload?.viewerSeat === statusPayoffFirstSeat
+          && statusPayoffAttackerProbe.payload?.actingSeat === statusPayoffFirstSeat
+          && statusPayoffAttackerProbe.payload?.actionType === 'play_card'
+          && statusPayoffAttackerProbe.payload?.sourceVisibility === 'authoritative_public_projection'
+          && statusPayoffAttackerProbe.payload?.usesHiddenInformation === false
+          && statusPayoffAttackerProbe.payload?.rankedImpact === 'none'
+          && statusPayoffConsumed?.seatId === statusPayoffSecondSeat
+          && statusPayoffConsumed?.sourceSeat === statusPayoffFirstSeat
+          && statusPayoffConsumed?.label === '破绽'
+          && Number(statusPayoffConsumed?.damageBonus || 0) > 0
+          && Number.isFinite(statusPayoffConsumed?.consumedTurnIndex)
+          && statusPayoffAttackerProbe.payload?.damage?.targetSeat === statusPayoffSecondSeat
+          && statusPayoffAttackerProbe.payload?.damage?.hpDamage > 0
+          && (statusPayoffAttackerProbe.payload?.safeguards || []).includes('public_status_consumed')
+          && [...(statusPayoffAttackerProbe.lastEvents || []), ...(statusPayoffAttackerProbe.recentEvents || [])].some(event => event.eventType === 'status_consumed' && Number.isFinite(Number(event.sequence)))
+          && statusPayoffAttackerProbe.payoffAttr === 'vulnerable_mark'
+          && statusPayoffAttackerProbe.payoffState === 'public_status_consumed'
+          && statusPayoffAttackerProbe.payoffSource === 'authoritative_public_projection'
+          && statusPayoffAttackerProbe.payoffHidden === 'false'
+          && statusPayoffAttackerProbe.payoffImpact === 'none'
+          && statusPayoffAttackerProbe.payoffBonus === String(statusPayoffConsumed?.damageBonus || '')
+          && statusPayoffAttackerProbe.payoffSafeguard === 'public_status_consumed'
+          && /公开兑现|破绽|额外/.test(statusPayoffAttackerProbe.text)
+          && statusPayoffAttackerProbe.textPayload?.summaryLine === statusPayoffAttackerProbe.payload?.summaryLine
+          && (!isMobileViewport || [
+            statusPayoffCardFirstTouchActionable,
+            statusPayoffCardSecondTouchActionable,
+          ].filter(Boolean).every(item => item?.ok === true))
+          && !statusPayoffHiddenLeakPattern.test(`${statusPayoffAttackerProbe.text} ${JSON.stringify(statusPayoffAttackerProbe.payload || {})} ${JSON.stringify(statusPayoffAttackerProbe.textPayload || {})}`),
+        JSON.stringify({
+          statusPayoffFirstSeat,
+          statusPayoffSecondSeat,
+          statusPayoffCardBeforeProbe,
+          statusPayoffCardConfirmProbe,
+          statusPayoffAttackerAfter,
+          statusPayoffAttackerProbe,
+          statusPayoffCardFirstTouchActionable,
+          statusPayoffCardSecondTouchActionable,
+        }),
+      );
+
+      await refreshUntilLiveSnapshot(
+        statusPayoffDefenderClient.page,
+        ({ expectedSequence, previousVersion }) => {
+          const snapshot = window.PVPScene?.getLiveSnapshot?.();
+          return Number(snapshot?.stateVersion || 0) > Number(previousVersion || 0)
+            && snapshot?.actionReceiptReport?.latestSequence === expectedSequence
+            && snapshot?.actionReceiptReport?.statusEffects?.consumed?.some(status => status.statusId === 'vulnerable_mark');
+        },
+        { expectedSequence: statusPayoffAttackerProbe.payload?.latestSequence, previousVersion: statusPayoffHandoffDefenderAfter.stateVersion },
+        10000,
+      );
+      const statusPayoffDefenderProbe = await getLiveStatusPayoffReceiptProbe(statusPayoffDefenderClient.page);
+      const statusPayoffDefenderConsumed = statusPayoffDefenderProbe.payload?.statusEffects?.consumed?.find(status => status.statusId === 'vulnerable_mark') || null;
+      add(
+        'real browser defender also sees the same public status payoff without hidden payloads',
+        statusPayoffDefenderProbe.typeAttr === 'play_card'
+          && statusPayoffDefenderProbe.actorAttr === statusPayoffFirstSeat
+          && statusPayoffDefenderProbe.sourceAttr === 'authoritative_public_projection'
+          && statusPayoffDefenderProbe.hiddenAttr === 'false'
+          && statusPayoffDefenderProbe.payload?.viewerSeat === statusPayoffSecondSeat
+          && statusPayoffDefenderProbe.payload?.actingSeat === statusPayoffFirstSeat
+          && statusPayoffDefenderProbe.payload?.actionType === 'play_card'
+          && statusPayoffDefenderProbe.payload?.latestSequence === statusPayoffAttackerProbe.payload?.latestSequence
+          && statusPayoffDefenderProbe.payload?.sourceVisibility === 'authoritative_public_projection'
+          && statusPayoffDefenderProbe.payload?.usesHiddenInformation === false
+          && statusPayoffDefenderProbe.payload?.rankedImpact === 'none'
+          && statusPayoffDefenderConsumed?.seatId === statusPayoffSecondSeat
+          && statusPayoffDefenderConsumed?.sourceSeat === statusPayoffFirstSeat
+          && statusPayoffDefenderConsumed?.label === '破绽'
+          && statusPayoffDefenderConsumed?.damageBonus === statusPayoffConsumed?.damageBonus
+          && (statusPayoffDefenderProbe.payload?.safeguards || []).includes('public_status_consumed')
+          && statusPayoffDefenderProbe.payoffAttr === 'vulnerable_mark'
+          && statusPayoffDefenderProbe.payoffState === 'public_status_consumed'
+          && statusPayoffDefenderProbe.payoffSource === 'authoritative_public_projection'
+          && statusPayoffDefenderProbe.payoffHidden === 'false'
+          && statusPayoffDefenderProbe.payoffImpact === 'none'
+          && statusPayoffDefenderProbe.payoffBonus === String(statusPayoffConsumed?.damageBonus || '')
+          && statusPayoffDefenderProbe.payoffSafeguard === 'public_status_consumed'
+          && /公开兑现|破绽|额外/.test(statusPayoffDefenderProbe.text)
+          && statusPayoffDefenderProbe.textPayload?.summaryLine === statusPayoffDefenderProbe.payload?.summaryLine
+          && statusPayoffDefenderProbe.textPayload?.summaryLine === statusPayoffAttackerProbe.textPayload?.summaryLine
+          && !statusPayoffHiddenLeakPattern.test(`${statusPayoffDefenderProbe.text} ${JSON.stringify(statusPayoffDefenderProbe.payload || {})} ${JSON.stringify(statusPayoffDefenderProbe.textPayload || {})}`),
+        JSON.stringify({
+          statusPayoffFirstSeat,
+          statusPayoffSecondSeat,
+          statusPayoffAttackerProbe,
+          statusPayoffDefenderProbe,
+        }),
+      );
+    } finally {
+      await statusPayoffHost?.context?.close?.().catch(() => {});
+      await statusPayoffGuest?.context?.close?.().catch(() => {});
+    }
 
     const changedLoadoutA = makeLoadout('curse', ['pvp_guard', 'pvp_guard', 'pvp_strike', 'pvp_burst']);
 

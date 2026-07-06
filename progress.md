@@ -1,5 +1,27 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-07-06: V10-S80 live PVP missed-response public payoff real backend proof
+  - 本轮完成
+    - `tests/browser_pvp_live_real_backend_smoke.mjs` 新增一条独立真实后端双账号 mini-match：双方用隔离 `testMatchScope` 入队、完成准备、由服务端公开种子决定先后手；首手真实交权后，防守方被 test-only 服务端接口注入公开 `vulnerable_mark`，并在自己的行动窗口选择不处理该公开破绽。
+    - 新链路锁住 missed-response 的双方体验：同一局防守方先看到可处理 `vulnerable_mark` 的真实响应牌，再选择不处理并真实点击结束回合；随后页面和 `render_game_to_text()` 都必须出现 `data-live-action-handoff-risk="status_response_handoff"`、`public_status_handoff_risk` 和“交权风险”；随后进攻方真实打出 `exposedCircuit`，进攻方与防守方都必须看到同一条 `data-live-action-status-payoff="vulnerable_mark"` / `public_status_consumed` 的“公开兑现”回执。
+    - 新增 smoke helper：支持带自定义斗法谱的真实后端入队、隔离测试 scope、行动收据 DOM 与文本 payload probe，以及“点击结束回合直到权威座位切换”的确认节奏 helper，避免把开局/破绽响应窗口的二次确认抖动误判成后端失败。
+    - 测试谱保证双方都具备 `exposedCircuit`，不依赖房主或排队顺序；因此服务端公平随机先后手落在任一座位时，都能验证“未处理公开破绽 -> 交权风险 -> 真实兑现 -> 双方同屏回执”。
+    - 隐藏字段防泄漏继续覆盖：注入 payload 中刻意包含 hidden hand/deck/cardInstanceId/sourceCardId/token，最终交权风险、公开兑现回执以及 `render_game_to_text()` 的 action receipt 都只能展示服务端公开投影，不得泄漏手牌、牌库、卡实例、斗法谱快照、rating、reward、token 或 raw payload。
+    - `tests/sanity_release_gate_coverage_checks.cjs` 将真实后端 smoke finding、同局响应牌 proof、`data-live-action-handoff-risk="status_response_handoff"`、`public_status_handoff_risk`、`data-live-action-status-payoff="vulnerable_mark"` 与 `public_status_consumed` 纳入发布门禁，避免真实后端证明退化回 synthetic-only。
+    - `game-intro.html` 同步玩家说明：如果对手真实消耗破绽，双方都会看到同一条“公开兑现”行动回执，确认额外伤害来自已公开状态而不是隐藏爆发。
+  - 已验证
+    - 红测：`node tests/sanity_release_gate_coverage_checks.cjs` 在真实后端 missed-response finding 未加入前失败。
+    - 语法检查：`node --check tests/browser_pvp_live_real_backend_smoke.mjs`
+    - 绿测：`node tests/sanity_release_gate_coverage_checks.cjs`
+    - 绿测：`node tests/sanity_intro_progress_sync_checks.cjs`
+    - 真实后端 browser smoke：`node tests/browser_pvp_live_real_backend_smoke.mjs http://127.0.0.1:4173 output/browser-pvp-live-real-backend-smoke-status-payoff`，78/78 findings、0 failed、0 console error。
+    - 浏览器审计：`node tests/browser_pvp_live_audit.mjs http://127.0.0.1:4173 output/browser-pvp-live-audit-status-payoff-s80`，134/134 findings、0 failed。
+    - 完整 Node 门禁：`PVP_LIVE_WS_FANOUT_MESSAGE_TIMEOUT_MS=60000 npm run test:node`
+    - 构建：`npm run build:pages`
+    - 空白检查：`git diff --check`
+  - 当前结论
+    - live PVP 的公开破绽链路从“交权风险和公开兑现各自有 UI/服务端证明”推进到“同一局真实后端双账号链路证明双方都能看懂 missed-response 的后果”：防守方不会把额外伤害误读成隐藏爆发，进攻方也能确认 payoff 来自已公开状态，双方都看到公开状态被放过、交权、再被兑现的完整原因。该切片只补真实后端验收、玩家说明和 release gate，不改变卡牌数值、破绽规则、伤害、护体、先后手、匹配、正式积分、奖励或结算。
+
 - 2026-07-06: V10-S79 live PVP defensive mitigation post-match proof
   - 本轮完成
     - `server/pvp-live/engine/state-view.js` 将后手有效行动报告从泛化“正向行动”细化为公开 action proof：当后手的有效行动来自 `status_mitigated` 时，输出 `primaryActionKind=status_mitigated`、`primaryActionLabel=稳住破绽` 与 `effectiveActionLine`，公平检查和公平回执都会明确说明“后手公开窗口已稳住破绽，这次威胁没有被直接兑现”。
