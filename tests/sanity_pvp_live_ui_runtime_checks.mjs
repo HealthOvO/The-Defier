@@ -3112,6 +3112,50 @@ assert.match(fairnessReceiptMarkup, /onclick="PVPScene\.handleLiveExperienceChec
 assert.match(fairnessReceiptMarkup, /公开决策窗口 · 观察/, 'fairness receipt focus button should keep the readable evidence label');
 assert.doesNotMatch(fairnessReceiptMarkup, /payload|\bhand\b|deck|cardId|instanceId|loadoutSnapshot|reward|rating|elo/i, 'fairness receipt focus controls must not expose hidden or reward/rating data');
 
+const mitigatedExperienceMarkup = PVPScene.renderLiveExperienceReport({
+  reportVersion: 'pvp-live-experience-report-v1',
+  title: '双方体验诊断',
+  sourceVisibility: 'public_events',
+  usesHiddenInformation: false,
+  rankedImpact: 'none',
+  nonGameRisk: 'low',
+  agencyLabel: '双方均有可读窗口',
+  decisionWindowCount: 3,
+  effectiveActionReport: {
+    reportVersion: 'pvp-live-effective-action-report-v1',
+    sourceVisibility: 'public_events',
+    usesHiddenInformation: false,
+    rankedImpact: 'none',
+    secondSeat: 'B',
+    secondSeatState: 'confirmed',
+    observedActionKinds: ['status_mitigated'],
+    primaryActionLabel: '稳住破绽',
+    effectiveActionLine: '后手公开清除了破绽，先手后续无法直接兑现该公开状态。',
+    evidence: [
+      { eventType: 'status_mitigated', sequence: 14, actingSeat: 'B', publicData: { statusId: 'vulnerable_mark', label: '破绽', mitigatedBySeat: 'B' } }
+    ],
+    reasons: ['public_defensive_status_mitigation'],
+    summary: '公开事件显示后手稳住破绽，先手后续无法直接兑现该公开状态。'
+  },
+  safeguardSummary: {
+    setupReady: 'confirmed',
+    firstActionBudget: 'not_triggered',
+    openingProtection: 'not_needed',
+    effectiveAction: 'confirmed'
+  },
+  summary: '本局公开轨迹能解释开战、压力和终局，不属于无解释先手秒杀。',
+  recommendedAction: 'queue_again',
+  fairnessChecks: [
+    { id: 'second_seat_effective_action', label: '后手有效行动', passed: true, detail: '公开事件显示后手稳住破绽，先手后续无法直接兑现该公开状态。', linkedEvidence: [
+      { eventType: 'status_mitigated', sequence: 14, actingSeat: 'B', publicData: { statusId: 'vulnerable_mark', label: '破绽', mitigatedBySeat: 'B' } }
+    ] }
+  ]
+});
+assert.match(mitigatedExperienceMarkup, /data-live-effective-action-proof="status_mitigated"/, 'experience report should expose a stable DOM proof for status mitigation agency');
+assert.match(mitigatedExperienceMarkup, /data-live-effective-action-kind="status_mitigated"/, 'experience report should expose the effective action kind for audits');
+assert.match(mitigatedExperienceMarkup, /稳住破绽/, 'experience report should visibly credit defensive status mitigation');
+assert.doesNotMatch(mitigatedExperienceMarkup, /payload|\bhand\b|deck|cardId|instanceId|loadoutSnapshot|reward|rating|elo/i, 'experience mitigation proof must not expose hidden or reward/rating data');
+
 let recommendationState = {
   phase: 'finished',
   matchId: 'pvpm-ui-runtime-loadout-recommendation',

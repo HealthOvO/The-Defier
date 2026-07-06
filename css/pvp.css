@@ -1832,6 +1832,25 @@
     line-height: 1.35;
 }
 
+.pvp-live-effective-action-proof {
+    margin-top: 6px;
+    padding: 6px 7px;
+    border-radius: 8px;
+    border: 1px solid rgba(153, 214, 170, 0.18);
+    background: rgba(89, 172, 109, 0.08);
+    color: rgba(232, 246, 237, 0.84);
+    font-size: 0.66rem;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+}
+
+.pvp-live-effective-action-proof span:first-child {
+    display: inline-block;
+    margin-right: 6px;
+    color: rgba(166, 232, 184, 0.92);
+    font-weight: 700;
+}
+
 .pvp-live-experience-checks {
     margin-top: 7px;
     display: grid;

@@ -3381,6 +3381,9 @@ export const PVPScene = {
         observedActionKinds: Array.isArray(report.effectiveActionReport.observedActionKinds)
           ? report.effectiveActionReport.observedActionKinds.map(item => String(item || '')).filter(Boolean).slice(0, 6)
           : [],
+        primaryActionKind: String(report.effectiveActionReport.primaryActionKind || ''),
+        primaryActionLabel: String(report.effectiveActionReport.primaryActionLabel || ''),
+        effectiveActionLine: String(report.effectiveActionReport.effectiveActionLine || ''),
         reasons: Array.isArray(report.effectiveActionReport.reasons)
           ? report.effectiveActionReport.reasons.map(item => String(item || '')).filter(Boolean).slice(0, 6)
           : [],
@@ -3474,6 +3477,15 @@ export const PVPScene = {
     const report = this.getLiveExperienceReport(review);
     if (!report) return '';
     const riskLabel = report.nonGameRisk === 'low' ? '低风险' : '需观察';
+    const effectiveAction = report.effectiveActionReport && report.effectiveActionReport.secondSeatState === 'confirmed'
+      ? report.effectiveActionReport
+      : null;
+    const effectiveActionKind = effectiveAction
+      ? String(effectiveAction.primaryActionKind || effectiveAction.observedActionKinds[0] || '')
+      : '';
+    const effectiveActionLine = effectiveAction
+      ? String(effectiveAction.effectiveActionLine || effectiveAction.summary || '')
+      : '';
     return `
       <div
         class="pvp-live-experience-report risk-${this.escapeHtml(report.nonGameRisk)}"
@@ -3486,6 +3498,16 @@ export const PVPScene = {
           <span>${this.escapeHtml(riskLabel)} · ${this.escapeHtml(report.agencyLabel)}</span>
         </div>
         <div class="pvp-live-experience-summary">${this.escapeHtml(report.summary)}</div>
+        ${effectiveAction && effectiveActionKind && effectiveActionLine ? `
+          <div
+            class="pvp-live-effective-action-proof"
+            data-live-effective-action-proof="${this.escapeHtml(effectiveActionKind)}"
+            data-live-effective-action-kind="${this.escapeHtml(effectiveActionKind)}"
+          >
+            <span>${this.escapeHtml(effectiveAction.primaryActionLabel || '后手有效行动')}</span>
+            <span>${this.escapeHtml(effectiveActionLine)}</span>
+          </div>
+        ` : ''}
         <div class="pvp-live-experience-checks">
           ${report.fairnessChecks.map(check => `
             <button

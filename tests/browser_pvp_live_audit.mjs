@@ -246,12 +246,15 @@ async function safeElementScreenshot(page, selector, outputPath) {
           rankedImpact: 'none',
           secondSeat: 'B',
           secondSeatState: 'confirmed',
-          observedActionKinds: ['block_gained'],
-          reasons: ['public_positive_second_seat_action'],
+          observedActionKinds: ['status_mitigated'],
+          primaryActionKind: 'status_mitigated',
+          primaryActionLabel: '稳住破绽',
+          effectiveActionLine: '稳住破绽：后手公开清除了破绽，先手后续无法直接兑现该公开状态。',
+          reasons: ['public_defensive_status_mitigation'],
           evidence: [
-            { eventType: 'block_gained', sequence: 8, actingSeat: 'B', publicData: { block: 3, seatId: 'B', totalBlock: 3 } },
+            { eventType: 'status_mitigated', sequence: 8, actingSeat: 'B', publicData: { statusId: 'vulnerable_mark', label: '破绽', seatId: 'B', sourceSeat: 'A', mitigatedBySeat: 'B', mitigatedTurnIndex: 2, responseWindow: 'defender_turn_before_payoff', mitigation: 'guard_response' } },
           ],
-          summary: '公开事件显示后手窗口产生了护盾等正向行动。',
+          summary: '公开事件显示后手稳住破绽，先手后续无法直接兑现该公开状态。',
         },
         safeguardSummary: {
           setupReady: 'confirmed',
@@ -279,8 +282,8 @@ async function safeElementScreenshot(page, selector, outputPath) {
             { eventType: 'battle_started', sequence: 5, actingSeat: 'B', publicData: { firstSeat: 'A' } },
             { eventType: 'turn_ended', sequence: 7, actingSeat: 'A', publicData: { nextSeat: 'B' } },
           ] },
-          { id: 'second_seat_effective_action', label: '后手有效行动', passed: true, detail: '公开事件显示后手窗口产生了能改变局面的正向行动。', linkedEvidence: [
-            { eventType: 'block_gained', sequence: 8, actingSeat: 'B', publicData: { block: 3, seatId: 'B', totalBlock: 3 } },
+          { id: 'second_seat_effective_action', label: '后手有效行动', passed: true, detail: '稳住破绽：后手公开清除了破绽，先手后续无法直接兑现该公开状态。', linkedEvidence: [
+            { eventType: 'status_mitigated', sequence: 8, actingSeat: 'B', publicData: { statusId: 'vulnerable_mark', label: '破绽', seatId: 'B', sourceSeat: 'A', mitigatedBySeat: 'B', mitigatedTurnIndex: 2, responseWindow: 'defender_turn_before_payoff', mitigation: 'guard_response' } },
           ] },
         ],
       },
@@ -299,7 +302,7 @@ async function safeElementScreenshot(page, selector, outputPath) {
         budgetVerdict: '本局按首动预算规则运行。',
         counterplayVerdict: '反打回执：护体未触发，但公开事件显示双方已有行动窗口。',
         windowVerdict: '行动窗口：公开事件至少覆盖 2 个行动席位。',
-        effectiveActionVerdict: '有效行动：后手公开窗口已产生能改变局面的正向行动。',
+        effectiveActionVerdict: '有效行动：后手公开窗口已稳住破绽，这次威胁没有被直接兑现。',
         terminalVerdict: '终局边界：认输只说明本局提前结束，真正要复盘的是认输前公开压力。',
         nextStepLine: '下一步：按回执里的压力窗口调整斗法谱或进入问道练习。',
         evidenceSummary: [
@@ -4598,6 +4601,8 @@ async function safeElementScreenshot(page, selector, outputPath) {
     experienceText: document.querySelector('[data-live-experience-report]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
     experienceSource: document.querySelector('[data-live-experience-report]')?.getAttribute('data-live-experience-source') || '',
     experienceHidden: document.querySelector('[data-live-experience-report]')?.getAttribute('data-live-experience-hidden') || '',
+    effectiveActionProof: document.querySelector('[data-live-effective-action-proof]')?.getAttribute('data-live-effective-action-proof') || '',
+    effectiveActionKind: document.querySelector('[data-live-effective-action-proof]')?.getAttribute('data-live-effective-action-kind') || '',
     experienceCheckIds: Array.from(document.querySelectorAll('[data-live-experience-check]')).map(item => item.getAttribute('data-live-experience-check')),
     fairnessText: document.querySelector('[data-live-fairness-receipt]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
     fairnessSource: document.querySelector('[data-live-fairness-receipt]')?.getAttribute('data-live-fairness-source') || '',
@@ -4682,6 +4687,7 @@ async function safeElementScreenshot(page, selector, outputPath) {
       && surrenderProbe.reviewPayload?.fairnessReceipt?.rankedImpact === 'none'
       && surrenderProbe.reviewPayload?.fairnessReceipt?.receiptState === 'accepted'
       && /有效行动/.test(surrenderProbe.reviewPayload?.fairnessReceipt?.effectiveActionVerdict || '')
+      && /稳住破绽/.test(surrenderProbe.reviewPayload?.fairnessReceipt?.effectiveActionVerdict || '')
       && surrenderProbe.fairnessCheckIds.includes('second_seat_effective_action')
       && (surrenderProbe.reviewPayload?.fairnessReceipt?.evidenceSummary || []).length >= 3
       && (surrenderProbe.reviewPayload?.fairnessReceipt?.evidenceSummary || []).some(item => item.id === 'second_seat_effective_action')
@@ -4708,9 +4714,11 @@ async function safeElementScreenshot(page, selector, outputPath) {
   );
   add(
     'live UI renders post-match experience report from public events',
-    /双方体验诊断|低风险|双方均有可读窗口|公开轨迹|后手有效行动/.test(surrenderProbe.experienceText)
+    /双方体验诊断|低风险|双方均有可读窗口|公开轨迹|后手有效行动|稳住破绽/.test(surrenderProbe.experienceText)
       && surrenderProbe.experienceSource === 'public_events'
       && surrenderProbe.experienceHidden === 'false'
+      && surrenderProbe.effectiveActionProof === 'status_mitigated'
+      && surrenderProbe.effectiveActionKind === 'status_mitigated'
       && ['setup_ready_required', 'first_action_budget', 'opening_protection', 'decision_windows', 'second_seat_effective_action'].every(id => surrenderProbe.experienceCheckIds.includes(id))
       && surrenderProbe.reviewPayload?.experienceReport?.reportVersion === 'pvp-live-experience-report-v1'
       && surrenderProbe.reviewPayload?.experienceReport?.sourceVisibility === 'public_events'
@@ -4720,6 +4728,8 @@ async function safeElementScreenshot(page, selector, outputPath) {
       && surrenderProbe.reviewPayload?.experienceReport?.decisionWindowCount >= 1
       && surrenderProbe.reviewPayload?.experienceReport?.effectiveActionReport?.reportVersion === 'pvp-live-effective-action-report-v1'
       && surrenderProbe.reviewPayload?.experienceReport?.effectiveActionReport?.secondSeatState === 'confirmed'
+      && surrenderProbe.reviewPayload?.experienceReport?.effectiveActionReport?.observedActionKinds?.includes('status_mitigated')
+      && /稳住破绽/.test(surrenderProbe.reviewPayload?.experienceReport?.effectiveActionReport?.primaryActionLabel || '')
       && surrenderProbe.reviewPayload?.experienceReport?.safeguardSummary?.effectiveAction === 'confirmed'
       && reviewParity?.experienceChecks === true
       && !/payload|hand|deck|cardId|instanceId|loadoutSnapshot|reward|rating|elo/i.test(JSON.stringify(surrenderProbe.reviewPayload?.experienceReport || {})),
@@ -4751,10 +4761,10 @@ async function safeElementScreenshot(page, selector, outputPath) {
       && /体验诊断证据/.test(fairnessFocusProbe.hint)
       && fairnessFocusProbe.eventsPanelFocused === 'experience_check:second_seat_effective_action'
       && fairnessFocusProbe.fairnessFocused === 'experience_check:second_seat_effective_action'
-      && fairnessFocusProbe.eventTypes.includes('block_gained')
-      && /护盾结算/.test(fairnessFocusProbe.focusedEvents)
+      && fairnessFocusProbe.eventTypes.includes('status_mitigated')
+      && /公开状态缓解/.test(fairnessFocusProbe.focusedEvents)
       && (fairnessFocusProbe.receiptPayload?.evidenceSummary || []).some(item => item.id === 'second_seat_effective_action')
-      && (fairnessFocusProbe.experiencePayload?.fairnessChecks || []).some(item => item.id === 'second_seat_effective_action' && (item.linkedEvidence || []).some(event => event.eventType === 'block_gained'))
+      && (fairnessFocusProbe.experiencePayload?.fairnessChecks || []).some(item => item.id === 'second_seat_effective_action' && (item.linkedEvidence || []).some(event => event.eventType === 'status_mitigated'))
       && !/payload|hand|deck|cardId|instanceId|loadoutSnapshot|reward|rating|elo/i.test(`${fairnessFocusProbe.focusedEvents} ${JSON.stringify(fairnessFocusProbe.receiptPayload || {})}`)
       && !/findOpponent|reportMatchResult|GhostEnemy|startPVPBattle|didWin|matchTicket/.test(JSON.stringify(fairnessFocusProbe.calls)),
     JSON.stringify(fairnessFocusProbe),

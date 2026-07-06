@@ -2579,6 +2579,8 @@ async function writeReport() {
       experienceText: document.querySelector('[data-live-experience-report]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
       experienceSource: document.querySelector('[data-live-experience-report]')?.getAttribute('data-live-experience-source') || '',
       experienceHidden: document.querySelector('[data-live-experience-report]')?.getAttribute('data-live-experience-hidden') || '',
+      effectiveActionProof: document.querySelector('[data-live-effective-action-proof]')?.getAttribute('data-live-effective-action-proof') || '',
+      effectiveActionKind: document.querySelector('[data-live-effective-action-proof]')?.getAttribute('data-live-effective-action-kind') || '',
       experienceCheckIds: Array.from(document.querySelectorAll('[data-live-experience-check]')).map(item => item.getAttribute('data-live-experience-check')),
       fairnessText: document.querySelector('[data-live-fairness-receipt]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
       fairnessSource: document.querySelector('[data-live-fairness-receipt]')?.getAttribute('data-live-fairness-source') || '',
@@ -2831,7 +2833,8 @@ async function writeReport() {
         && postMatchProbe.payload?.fairnessReceipt?.rankedImpact === 'none'
         && postMatchProbe.payload?.fairnessReceipt?.result === 'loss'
         && postMatchProbe.payload?.fairnessReceipt?.finishReason === 'lethal'
-        && /有效行动/.test(postMatchProbe.payload?.fairnessReceipt?.effectiveActionVerdict || '')
+        && /有效行动|稳住破绽/.test(postMatchProbe.payload?.fairnessReceipt?.effectiveActionVerdict || '')
+        && /稳住破绽/.test(postMatchProbe.payload?.fairnessReceipt?.effectiveActionVerdict || '')
         && (postMatchProbe.payload?.fairnessReceipt?.evidenceSummary || []).length >= 3
         && (postMatchProbe.payload?.fairnessReceipt?.evidenceSummary || []).some(item => item.id === 'second_seat_effective_action')
         && postMatchParity?.fairnessReceipt === true
@@ -2856,9 +2859,11 @@ async function writeReport() {
     );
     add(
       'real browser live match renders experience report from public post-match events',
-      /双方体验诊断|公开|窗口/.test(postMatchProbe.experienceText)
+      /双方体验诊断|公开|窗口|稳住破绽/.test(postMatchProbe.experienceText)
         && postMatchProbe.experienceSource === 'public_events'
         && postMatchProbe.experienceHidden === 'false'
+        && postMatchProbe.effectiveActionProof === 'status_mitigated'
+        && postMatchProbe.effectiveActionKind === 'status_mitigated'
         && ['setup_ready_required', 'first_action_budget', 'opening_protection', 'decision_windows', 'second_seat_effective_action'].every(id => postMatchProbe.experienceCheckIds.includes(id))
         && postMatchProbe.payload?.experienceReport?.reportVersion === 'pvp-live-experience-report-v1'
         && postMatchProbe.payload?.experienceReport?.sourceVisibility === 'public_events'
@@ -2869,6 +2874,8 @@ async function writeReport() {
         && postMatchProbe.payload?.experienceReport?.seatWindowSummary?.firstSeat
         && postMatchProbe.payload?.experienceReport?.effectiveActionReport?.reportVersion === 'pvp-live-effective-action-report-v1'
         && ['confirmed', 'watch', 'missing_window'].includes(postMatchProbe.payload?.experienceReport?.effectiveActionReport?.secondSeatState)
+        && postMatchProbe.payload?.experienceReport?.effectiveActionReport?.observedActionKinds?.includes('status_mitigated')
+        && /稳住破绽/.test(postMatchProbe.payload?.experienceReport?.effectiveActionReport?.primaryActionLabel || '')
         && ['confirmed', 'watch', 'missing_window'].includes(postMatchProbe.payload?.experienceReport?.safeguardSummary?.effectiveAction)
         && postMatchProbe.payload?.experienceReport?.safeguardSummary?.setupReady === 'confirmed'
         && (postMatchProbe.payload?.experienceReport?.fairnessChecks || []).every(item => Array.isArray(item.linkedEvidence) && item.linkedEvidence.length >= 1)

@@ -1,5 +1,31 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-07-06: V10-S79 live PVP defensive mitigation post-match proof
+  - 本轮完成
+    - `server/pvp-live/engine/state-view.js` 将后手有效行动报告从泛化“正向行动”细化为公开 action proof：当后手的有效行动来自 `status_mitigated` 时，输出 `primaryActionKind=status_mitigated`、`primaryActionLabel=稳住破绽` 与 `effectiveActionLine`，公平检查和公平回执都会明确说明“后手公开窗口已稳住破绽，这次威胁没有被直接兑现”。
+    - proof 归因限定为 `mitigation=guard_response` 且 `statusId=vulnerable_mark` 的公开防守响应；`guard_stance_damage_reduction` 和 `public_weak_damage_reduction` 等减伤类 `status_mitigated` 不会被误报成“后手稳住破绽”，而会回到真实的公开伤害/反压等有效行动解释。
+    - `js/scenes/pvp-scene.js` 保留并渲染这组公开 proof 字段，在赛后体验诊断中新增稳定 DOM marker：`data-live-effective-action-proof="status_mitigated"` 与 `data-live-effective-action-kind="status_mitigated"`，让浏览器审计和玩家都能确认防守型响应不是被结算吞掉的“空操作”。
+    - `css/pvp.css` 为新 proof 行补充紧凑样式，保持赛后面板可读、可换行、不挤压体验检查按钮。
+    - `tests/sanity_pvp_live_engine_checks.cjs` 新增真实 reducer 终局链：后手打出防守牌清除破绽后再通过真实 surrender 结束比赛，断言赛后有效行动报告、体验检查和公平回执都点名“稳住破绽”，且不泄漏手牌、牌库、卡实例、斗法谱快照、积分、奖励或 raw payload。
+    - `tests/sanity_pvp_live_ui_runtime_checks.mjs` 锁住前端赛后 proof DOM marker 和隐藏字段防泄漏；`tests/browser_pvp_live_audit.mjs` 将 synthetic 赛后有效行动样本从泛化护盾改为 `status_mitigated`，并验证公平回执聚焦证据能定位到公开状态缓解事件；`tests/browser_pvp_live_real_backend_smoke.mjs` 在真实后端双账号 smoke 中断言真实赛后 payload 与页面 DOM 都出现 `status_mitigated` proof。
+    - `game-intro.html` 同步说明：赛后公平回执不只判断“后手有过行动”，也会把“稳住破绽”这类防守型有效行动作为公开证据展示给双方。
+  - 已验证
+    - 红测：`node tests/sanity_pvp_live_engine_checks.cjs` 在实现前失败于 `effective action report should label defensive mitigation as stabilizing the exposed flaw`。
+    - 红测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs` 在实现前失败于 `experience report should expose a stable DOM proof for status mitigation agency`。
+    - 红测：`node tests/sanity_pvp_live_engine_checks.cjs` 在挑战者巡检后补负例，修复前失败于 `guard stance damage reduction must not be mislabeled as defensive status mitigation by the attacking second seat`。
+    - 绿测：`node tests/sanity_pvp_live_engine_checks.cjs`
+    - 绿测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs`
+    - 绿测：`node tests/sanity_pvp_live_ui_contract_checks.cjs`
+    - 绿测：`node tests/sanity_release_gate_coverage_checks.cjs`
+    - 语法检查：`node --check tests/browser_pvp_live_audit.mjs && node --check tests/browser_pvp_live_real_backend_smoke.mjs && node --check server/pvp-live/engine/state-view.js && node --check js/scenes/pvp-scene.js`
+    - 浏览器审计：`node tests/browser_pvp_live_audit.mjs`，134/134 findings、0 failed、0 console error；最新报告写入 `output/web-pvp-live-audit/report.json`。
+    - 真实后端 browser smoke：`node tests/browser_pvp_live_real_backend_smoke.mjs`，74/74 findings、0 failed、0 console error。
+    - 完整 Node 门禁：`PVP_LIVE_WS_FANOUT_MESSAGE_TIMEOUT_MS=30000 npm run test:node`
+    - 构建：`npm run build:pages`
+    - 空白检查：`git diff --check`
+  - 当前结论
+    - live PVP 的赛后公平回执从“确认后手窗口产生过泛化有效行动”推进到“能明确承认防守方稳住破绽这类反制行为”：双方在结算页能看到这次防守确实阻断了公开威胁，不会把后手的防守成功误感知为没有贡献。该切片只改公开赛后报告、前端展示、玩家说明和门禁，不改变卡牌数值、伤害、护体、先后手、匹配、正式积分、奖励或结算。
+
 - 2026-07-06: V10-S78 live PVP public status-response mitigation receipt
   - 本轮完成
     - `js/scenes/pvp-scene.js` 将 `actionReceiptReport.statusEffects.mitigated` 从泛化“公开状态缓解”推进到逐状态“稳住回执”：对破绽、守势、虚弱分别渲染稳定 `data-live-action-status-mitigation*` marker，包含公开状态 id、目标席位、处理席位、响应窗口、prevented/type/source/hidden/impact/safeguard。

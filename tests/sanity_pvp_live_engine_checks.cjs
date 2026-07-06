@@ -505,6 +505,27 @@ assert(guardStanceHitViewA.recentEvents.some(event => event.eventType === 'statu
 assert(guardStanceHitViewA.actionReceiptReport.statusEffects && guardStanceHitViewA.actionReceiptReport.statusEffects.mitigated.some(status => status.statusId === 'guard_stance' && status.preventedDamage === 2), 'damage receipt should preserve guard stance mitigation');
 assert(/守势|减伤/.test(guardStanceHitViewA.actionReceiptReport.summaryLine), 'damage receipt should explain guard stance damage reduction');
 assert(!/sourceCardId|cardId|instanceId|loadoutSnapshot|rating|elo|reward/i.test(JSON.stringify(guardStanceHitViewA.actionReceiptReport.statusEffects)), 'guard stance receipt must not leak hidden ids, rating, or reward data');
+const guardStanceSurrender = reduceIntent(guardStanceHit.state, {
+  intentId: 'intent-guard-stance-b-surrender-1',
+  intentType: 'surrender',
+  matchId: 'pvpm-guard-stance-test',
+  seatId: 'B',
+  ruleVersion: RULE_VERSION,
+  stateVersion: guardStanceHit.state.stateVersion,
+  payload: {}
+});
+assert(guardStanceSurrender.result === 'accepted', 'guard stance reduction sample should finish through the real surrender reducer');
+const guardStanceReviewB = projectStateView(guardStanceSurrender.state, 'B').postMatchReview;
+assertPostMatchReview(guardStanceReviewB, {
+  result: 'loss',
+  winnerSeat: 'A',
+  loserSeat: 'B',
+  finishReason: 'surrender'
+});
+assert(guardStanceReviewB.experienceReport.effectiveActionReport.observedActionKinds.includes('damage_applied'), 'guard stance reduction sample should still credit the second seat public damage as the effective action');
+assert(guardStanceReviewB.experienceReport.effectiveActionReport.primaryActionKind === 'damage_applied', 'guard stance damage reduction must not be mislabeled as defensive status mitigation by the attacking second seat');
+assert(!/稳住守势|稳住破绽|稳住虚弱/.test(JSON.stringify(guardStanceReviewB.experienceReport.effectiveActionReport)), 'guard stance damage reduction must not render as a second-seat stabilizing proof');
+assert(!/稳住守势|稳住破绽|稳住虚弱/.test(guardStanceReviewB.fairnessReceipt.effectiveActionVerdict || ''), 'guard stance damage reduction must not leak misleading stabilizing copy into fairness receipt');
 
 assert((RULES.softControlWeakness || {}).reduction === 2, 'soft control weakness should expose a small public next-attack damage reduction');
 const weakFocusState = createReadyLiveState('pvpm-weak-focus-test');
@@ -557,6 +578,27 @@ assert(weakFocusHitViewA.recentEvents.some(event => event.eventType === 'status_
 assert(weakFocusHitViewA.actionReceiptReport.statusEffects && weakFocusHitViewA.actionReceiptReport.statusEffects.mitigated.some(status => status.statusId === 'weak_focus' && status.preventedDamage === 2), 'damage receipt should preserve weak_focus mitigation');
 assert(/虚弱|削减 2|伤害降低 2/.test(weakFocusHitViewA.actionReceiptReport.summaryLine), 'damage receipt should explain weak_focus damage reduction');
 assert(!/sourceCardId|cardId|instanceId|loadoutSnapshot|rating|elo|reward/i.test(JSON.stringify(weakFocusHitViewA.actionReceiptReport.statusEffects)), 'weak_focus receipt must not leak hidden ids, rating, or reward data');
+const weakFocusSurrender = reduceIntent(weakFocusHit.state, {
+  intentId: 'intent-weak-focus-b-surrender-1',
+  intentType: 'surrender',
+  matchId: 'pvpm-weak-focus-test',
+  seatId: 'B',
+  ruleVersion: RULE_VERSION,
+  stateVersion: weakFocusHit.state.stateVersion,
+  payload: {}
+});
+assert(weakFocusSurrender.result === 'accepted', 'weak focus reduction sample should finish through the real surrender reducer');
+const weakFocusReviewB = projectStateView(weakFocusSurrender.state, 'B').postMatchReview;
+assertPostMatchReview(weakFocusReviewB, {
+  result: 'loss',
+  winnerSeat: 'A',
+  loserSeat: 'B',
+  finishReason: 'surrender'
+});
+assert(weakFocusReviewB.experienceReport.effectiveActionReport.observedActionKinds.includes('damage_applied'), 'weak focus reduction sample should still credit the second seat public damage as the effective action');
+assert(weakFocusReviewB.experienceReport.effectiveActionReport.primaryActionKind === 'damage_applied', 'weak focus damage reduction must not be mislabeled as defensive status mitigation by the attacking second seat');
+assert(!/稳住守势|稳住破绽|稳住虚弱/.test(JSON.stringify(weakFocusReviewB.experienceReport.effectiveActionReport)), 'weak focus damage reduction must not render as a second-seat stabilizing proof');
+assert(!/稳住守势|稳住破绽|稳住虚弱/.test(weakFocusReviewB.fairnessReceipt.effectiveActionVerdict || ''), 'weak focus damage reduction must not leak misleading stabilizing copy into fairness receipt');
 
 assert(RULES.cards.innerPeace.heal === 3, 'innerPeace should expose a small public self-heal amount');
 assert(RULES.cards.mendThread.heal === 3, 'mendThread should expose a small public self-heal amount');
@@ -750,6 +792,32 @@ assert(mitigatedPayoff.result === 'accepted', 'payoff after mitigation should st
 assert(!mitigatedPayoff.events.some(e => e.eventType === 'status_consumed'), 'payoff after mitigation should not consume a removed public mark');
 const mitigatedPayoffReceipt = projectStateView(mitigatedPayoff.state, 'A').actionReceiptReport;
 assert(!mitigatedPayoffReceipt.statusEffects.consumed.some(status => status.statusId === 'vulnerable_mark'), 'payoff receipt after mitigation should not claim a public status bonus');
+const mitigatedSurrender = reduceIntent(guardMitigation.state, {
+  intentId: 'intent-public-status-mitigated-surrender-1',
+  intentType: 'surrender',
+  matchId: 'pvpm-public-status-test',
+  seatId: 'B',
+  ruleVersion: RULE_VERSION,
+  stateVersion: guardMitigation.state.stateVersion,
+  payload: {}
+});
+assert(mitigatedSurrender.result === 'accepted', 'mitigated public-status match should still finish through the real surrender reducer');
+const mitigatedReview = projectStateView(mitigatedSurrender.state, 'B').postMatchReview;
+assertPostMatchReview(mitigatedReview, {
+  result: 'loss',
+  winnerSeat: 'A',
+  loserSeat: 'B',
+  finishReason: 'surrender'
+});
+const mitigatedEffectiveAction = mitigatedReview.experienceReport.effectiveActionReport;
+const mitigatedEffectiveCheck = mitigatedReview.experienceReport.fairnessChecks.find(item => item.id === 'second_seat_effective_action');
+assert(mitigatedEffectiveAction.secondSeatState === 'confirmed', 'status mitigation should count as confirmed second-seat effective action');
+assert(mitigatedEffectiveAction.observedActionKinds.includes('status_mitigated'), 'effective action report should preserve status_mitigated as the observed action kind');
+assert(/稳住破绽/.test(mitigatedEffectiveAction.primaryActionLabel || ''), 'effective action report should label defensive mitigation as stabilizing the exposed flaw');
+assert(/稳住破绽|公开状态/.test(mitigatedEffectiveAction.effectiveActionLine || ''), 'effective action report should explain status mitigation as visible defensive agency');
+assert(/稳住破绽/.test(mitigatedEffectiveCheck.detail || ''), 'fairness check should explicitly credit the defender for stabilizing the exposed flaw');
+assert(/稳住破绽/.test(mitigatedReview.fairnessReceipt.effectiveActionVerdict || ''), 'fairness receipt should carry the same defensive mitigation proof to the player-facing receipt');
+assert(!/payload|hand|deck|cardId|instanceId|loadoutSnapshot|rating|elo|reward/i.test(JSON.stringify(mitigatedEffectiveAction)), 'status mitigation proof must stay public and non-rewarding');
 const defenderEndTurn = reduceIntent(markEndTurn.state, {
   intentId: 'intent-public-status-b-end-1',
   intentType: 'end_turn',

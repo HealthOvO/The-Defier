@@ -740,17 +740,102 @@ function isEffectiveSecondSeatEvent(event, secondSeat) {
         return actingSeat === secondSeat || publicEventSeat(event, 'sourceSeat') === secondSeat;
     }
     if (eventType === 'status_mitigated') {
-        return actingSeat === secondSeat || publicEventSeat(event, 'mitigatedBySeat') === secondSeat;
+        return String(data.mitigation || '') === 'guard_response'
+            && String(data.statusId || '') === 'vulnerable_mark'
+            && publicEventSeat(event, 'mitigatedBySeat') === secondSeat;
     }
     return false;
+}
+
+function getEffectiveActionProof(events) {
+    const safeEvents = Array.isArray(events) ? events : [];
+    const kinds = Array.from(new Set(safeEvents.map(event => String(event && event.eventType || '')).filter(Boolean)));
+    const defensiveStatusMitigationEvent = safeEvents.find(event => {
+        if (String(event && event.eventType || '') !== 'status_mitigated') return false;
+        const data = event.publicData && typeof event.publicData === 'object' ? event.publicData : {};
+        return String(data.mitigation || '') === 'guard_response'
+            && String(data.statusId || '') === 'vulnerable_mark';
+    });
+    if (defensiveStatusMitigationEvent) {
+        const mitigationEvent = defensiveStatusMitigationEvent || {};
+        const data = mitigationEvent.publicData && typeof mitigationEvent.publicData === 'object' ? mitigationEvent.publicData : {};
+        const statusLabel = String(data.label || data.statusId || '公开状态');
+        const primaryActionLabel = '稳住破绽';
+        return {
+            primaryActionKind: 'status_mitigated',
+            primaryActionLabel,
+            effectiveActionLine: `${primaryActionLabel}：后手公开清除了${statusLabel}，先手后续无法直接兑现该公开状态。`,
+            summary: `公开事件显示后手${primaryActionLabel}，先手后续无法直接兑现该公开状态。`,
+            fairnessDetail: `公开事件显示后手${primaryActionLabel}，先手后续无法直接兑现该公开状态。`,
+            reasons: ['public_defensive_status_mitigation']
+        };
+    }
+    if (kinds.includes('block_gained')) {
+        return {
+            primaryActionKind: 'block_gained',
+            primaryActionLabel: '架起护盾',
+            effectiveActionLine: '架起护盾：后手公开获得护盾，伤害节奏被实际改变。',
+            summary: '公开事件显示后手架起护盾，伤害节奏被实际改变。',
+            fairnessDetail: '公开事件显示后手窗口产生了护盾，伤害节奏被实际改变。',
+            reasons: ['public_positive_second_seat_action']
+        };
+    }
+    if (kinds.includes('hp_recovered')) {
+        return {
+            primaryActionKind: 'hp_recovered',
+            primaryActionLabel: '拉回血线',
+            effectiveActionLine: '拉回血线：后手公开恢复生命，终局压力被实际延后。',
+            summary: '公开事件显示后手拉回血线，终局压力被实际延后。',
+            fairnessDetail: '公开事件显示后手窗口产生了恢复，终局压力被实际延后。',
+            reasons: ['public_positive_second_seat_action']
+        };
+    }
+    if (kinds.includes('card_cycled')) {
+        return {
+            primaryActionKind: 'card_cycled',
+            primaryActionLabel: '调整手牌',
+            effectiveActionLine: '调整手牌：后手公开完成抽滤，后续选择空间被实际扩大。',
+            summary: '公开事件显示后手调整手牌，后续选择空间被实际扩大。',
+            fairnessDetail: '公开事件显示后手窗口产生了抽滤，后续选择空间被实际扩大。',
+            reasons: ['public_positive_second_seat_action']
+        };
+    }
+    if (kinds.includes('damage_applied')) {
+        return {
+            primaryActionKind: 'damage_applied',
+            primaryActionLabel: '打出反压',
+            effectiveActionLine: '打出反压：后手公开造成伤害，局势不是单边承伤。',
+            summary: '公开事件显示后手打出反压，局势不是单边承伤。',
+            fairnessDetail: '公开事件显示后手窗口产生了伤害，局势不是单边承伤。',
+            reasons: ['public_positive_second_seat_action']
+        };
+    }
+    if (kinds.includes('status_applied') || kinds.includes('status_consumed')) {
+        return {
+            primaryActionKind: kinds.includes('status_applied') ? 'status_applied' : 'status_consumed',
+            primaryActionLabel: '改变公开状态',
+            effectiveActionLine: '改变公开状态：后手公开改变状态压力，后续回合已有可读博弈点。',
+            summary: '公开事件显示后手改变公开状态，后续回合已有可读博弈点。',
+            fairnessDetail: '公开事件显示后手窗口产生了公开状态变化，后续回合已有可读博弈点。',
+            reasons: ['public_positive_second_seat_action']
+        };
+    }
+    return {
+        primaryActionKind: '',
+        primaryActionLabel: '',
+        effectiveActionLine: '',
+        summary: '公开事件显示后手窗口产生了伤害、护盾、恢复、抽滤或公开状态变化。',
+        fairnessDetail: '公开事件显示后手窗口产生了能改变局面的正向行动。',
+        reasons: ['public_positive_second_seat_action']
+    };
 }
 
 function buildEffectiveActionReport(evidence, seatWindowSummary) {
     const safeEvidence = Array.isArray(evidence) ? evidence : [];
     const windowSummary = seatWindowSummary && typeof seatWindowSummary === 'object' ? seatWindowSummary : getSeatWindowSummary(safeEvidence);
     const secondSeat = windowSummary.secondSeat || '';
-    const secondSeatEvents = safeEvidence
-        .filter(event => isEffectiveSecondSeatEvent(event, secondSeat))
+    const effectiveEvents = safeEvidence.filter(event => isEffectiveSecondSeatEvent(event, secondSeat));
+    const secondSeatEvents = effectiveEvents
         .map(compactPublicEventRef)
         .filter(Boolean)
         .slice(0, 4);
@@ -758,14 +843,15 @@ function buildEffectiveActionReport(evidence, seatWindowSummary) {
         ? 'confirmed'
         : windowSummary.secondSeatWindowObserved ? 'watch' : 'missing_window';
     const reasons = [];
+    const observedActionKinds = Array.from(new Set(secondSeatEvents.map(event => String(event.eventType || '')).filter(Boolean)));
+    const actionProof = secondSeatState === 'confirmed' ? getEffectiveActionProof(secondSeatEvents) : null;
     if (secondSeatState === 'confirmed') {
-        reasons.push('public_positive_second_seat_action');
+        reasons.push(...(actionProof && Array.isArray(actionProof.reasons) ? actionProof.reasons : ['public_positive_second_seat_action']));
     } else if (secondSeatState === 'watch') {
         reasons.push('second_seat_window_without_public_positive_change');
     } else {
         reasons.push('missing_public_second_seat_window');
     }
-    const observedActionKinds = Array.from(new Set(secondSeatEvents.map(event => String(event.eventType || '')).filter(Boolean)));
     return {
         reportVersion: 'pvp-live-effective-action-report-v1',
         sourceVisibility: 'public_events',
@@ -774,10 +860,13 @@ function buildEffectiveActionReport(evidence, seatWindowSummary) {
         secondSeat: secondSeat || null,
         secondSeatState,
         observedActionKinds,
+        primaryActionKind: actionProof ? actionProof.primaryActionKind : '',
+        primaryActionLabel: actionProof ? actionProof.primaryActionLabel : '',
+        effectiveActionLine: actionProof ? actionProof.effectiveActionLine : '',
         reasons,
         evidence: secondSeatEvents,
         summary: secondSeatState === 'confirmed'
-            ? '公开事件显示后手窗口产生了伤害、护盾、恢复、抽滤或公开状态变化。'
+            ? actionProof.summary
             : secondSeatState === 'watch'
                 ? '公开事件显示后手获得窗口，但暂未看到能改变局面的正向公开行动。'
                 : '公开事件未证明后手获得过有效行动窗口，本局需要重点复查。'
@@ -858,7 +947,7 @@ function buildExperienceReport(evidence, { result, finishReason }) {
             '后手有效行动',
             effectiveActionReport.secondSeatState === 'confirmed',
             effectiveActionReport.secondSeatState === 'confirmed'
-                ? '公开事件显示后手窗口产生了能改变局面的正向行动。'
+                ? (effectiveActionReport.effectiveActionLine || '公开事件显示后手窗口产生了能改变局面的正向行动。')
                 : effectiveActionReport.secondSeatState === 'watch'
                     ? '后手获得过公开窗口，但未看到伤害、护盾、恢复、抽滤或公开状态变化。'
                     : '公开事件未证明后手获得过有效行动窗口。',
@@ -924,6 +1013,10 @@ function buildFairnessReceipt(experienceReport, { result, finishReason }) {
     const protectionCheck = checks.find(check => check && check.id === 'opening_protection');
     const windowCheck = checks.find(check => check && check.id === 'decision_windows');
     const effectiveActionCheck = checks.find(check => check && check.id === 'second_seat_effective_action');
+    const effectiveActionReport = report && report.effectiveActionReport && typeof report.effectiveActionReport === 'object'
+        ? report.effectiveActionReport
+        : {};
+    const effectiveActionLabel = String(effectiveActionReport.primaryActionLabel || '').trim();
     const round14Check = checks.find(check => check && check.id === 'round14_resolution');
     const safeguard = report && report.safeguardSummary && typeof report.safeguardSummary === 'object'
         ? report.safeguardSummary
@@ -956,7 +1049,9 @@ function buildFairnessReceipt(experienceReport, { result, finishReason }) {
         ? `行动窗口：公开事件至少覆盖 ${decisionWindowCount} 个行动席位。`
         : '行动窗口：公开窗口偏短，先确认是否认输、超时或连接中断导致。';
     const effectiveActionVerdict = effectiveActionCheck && effectiveActionCheck.passed
-        ? '有效行动：后手公开窗口已产生能改变局面的正向行动。'
+        ? effectiveActionLabel
+            ? `有效行动：后手公开窗口已${effectiveActionLabel}，这次威胁没有被直接兑现。`
+            : '有效行动：后手公开窗口已产生能改变局面的正向行动。'
         : safeguard.effectiveAction === 'watch'
             ? '有效行动：后手有窗口但正向行动证据不足，建议复盘是否只能空过。'
             : '有效行动：未看到后手有效行动窗口，本局不能只按“没被秒”判定体验公平。';
