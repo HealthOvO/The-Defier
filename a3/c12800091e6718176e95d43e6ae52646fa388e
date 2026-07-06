@@ -1,0 +1,41 @@
+game-intro.html
+  s_bae69f1b7fab46::t_c20c9927d7d4bd 133,172
+js/scenes/pvp-scene.js
+  s_760227967830bd::t_a1f0706b06a83a 1791-1821
+tests/browser_pvp_live_audit.mjs
+  s_bae69f1b7fab46::t_1d3b634149eb30 3658-3663
+tests/browser_pvp_live_real_backend_smoke.mjs
+  s_bae69f1b7fab46::t_f7377f64b48b93 2172-2225,2229-2234,2272-2278,2314,2322-2325,2327-2334,2337,2459-2467
+tests/sanity_pvp_live_ui_contract_checks.cjs
+  s_bae69f1b7fab46::t_6717496e15f1aa 196-201,350
+tests/sanity_pvp_live_ui_runtime_checks.mjs
+  s_760227967830bd::t_bc3dd8c870bcf5 2425-2430,2438-2454
+tests/sanity_release_gate_coverage_checks.cjs
+  s_bae69f1b7fab46::t_6fbd4acea76e84 667-672,881,1261-1266
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.5",
+  "base_commit_sha": "a3c12800091e6718176e95d43e6ae52646fa388e",
+  "prompts": {},
+  "sessions": {
+    "s_760227967830bd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f357d-1615-72d1-b2dd-798b18f26d22",
+        "model": "unknown"
+      },
+      "human_author": "AI Agent <bot@example.com>"
+    },
+    "s_bae69f1b7fab46": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ed4f6-e7ac-73e0-a29e-119f3eddb407",
+        "model": "unknown"
+      },
+      "human_author": "AI Agent <bot@example.com>"
+    }
+  },
+  "attestation_metadata": {},
+  "remote_transcripts": {}
+}
