@@ -1788,8 +1788,37 @@ export const PVPScene = {
           data-live-action-status-payoff-safeguard="public_status_consumed"
         >${this.escapeHtml(payoffText)}</span>`;
     }).join('');
-    const mitigationChip = report.statusEffects && Array.isArray(report.statusEffects.mitigated) && report.statusEffects.mitigated.length > 0
-      ? '<span class="pvp-live-action-receipt-chip" data-live-public-status-mitigation="public_status_mitigated">公开状态缓解</span>'
+    const mitigatedStatuses = report.statusEffects && Array.isArray(report.statusEffects.mitigated)
+      ? report.statusEffects.mitigated.filter(status => status && status.statusId)
+      : [];
+    const mitigationChip = !report.usesHiddenInformation
+      ? mitigatedStatuses.map((status) => {
+        const label = status.label || '公开状态';
+        const targetSeat = status.seatId || '';
+        const mitigatingSeat = status.mitigatedBySeat || report.actingSeat || '';
+        const preventedDamage = Math.max(0, Math.floor(Number(status.preventedDamage) || 0));
+        let mitigationText = `稳住回执 · ${mitigatingSeat ? `${mitigatingSeat} ` : ''}稳住${label}，阻止后续兑现`;
+        if (status.statusId === 'guard_stance' || status.mitigation === 'guard_stance_damage_reduction') {
+          mitigationText = `稳住回执 · ${targetSeat || mitigatingSeat || '目标'} 守势减伤 ${preventedDamage}`;
+        } else if (status.statusId === 'weak_focus' || status.mitigation === 'public_weak_damage_reduction') {
+          mitigationText = `稳住回执 · ${targetSeat || '目标'} 虚弱削减 ${preventedDamage}`;
+        }
+        return `<span
+          class="pvp-live-action-receipt-chip"
+          data-live-public-status-mitigation="public_status_mitigated"
+          data-live-action-status-mitigation="${this.escapeHtml(status.statusId || '')}"
+          data-live-action-status-mitigation-state="public_status_mitigated"
+          data-live-action-status-mitigation-target="${this.escapeHtml(targetSeat)}"
+          data-live-action-status-mitigation-by="${this.escapeHtml(mitigatingSeat)}"
+          data-live-action-status-mitigation-response-window="${this.escapeHtml(status.responseWindow || '')}"
+          data-live-action-status-mitigation-prevented="${this.escapeHtml(String(preventedDamage))}"
+          data-live-action-status-mitigation-type="${this.escapeHtml(status.mitigation || '')}"
+          data-live-action-status-mitigation-source="${this.escapeHtml(report.sourceVisibility || '')}"
+          data-live-action-status-mitigation-hidden="${report.usesHiddenInformation ? 'true' : 'false'}"
+          data-live-action-status-mitigation-impact="${this.escapeHtml(report.rankedImpact || 'none')}"
+          data-live-action-status-mitigation-safeguard="public_status_mitigated"
+        >${this.escapeHtml(mitigationText)}</span>`;
+      }).join('')
       : '';
     const guardStanceStatus = report.statusEffects && (
       (Array.isArray(report.statusEffects.applied) && report.statusEffects.applied.some(status => status.statusId === 'guard_stance'))

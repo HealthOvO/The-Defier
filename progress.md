@@ -1,5 +1,28 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-07-06: V10-S78 live PVP public status-response mitigation receipt
+  - 本轮完成
+    - `js/scenes/pvp-scene.js` 将 `actionReceiptReport.statusEffects.mitigated` 从泛化“公开状态缓解”推进到逐状态“稳住回执”：对破绽、守势、虚弱分别渲染稳定 `data-live-action-status-mitigation*` marker，包含公开状态 id、目标席位、处理席位、响应窗口、prevented/type/source/hidden/impact/safeguard。
+    - 新回执只读取服务端公开投影后的 mitigated 状态字段；`getLiveActionReceiptReport()` 会丢弃 `cardInstanceId`、`sourceCardId`、raw payload、斗法谱快照、token 等隐藏字段，避免把响应牌或私有构筑暴露给对手。
+    - `server/pvp-live/live-store.js` 的 test-only 强制状态接口补充 `publicStatus` 注入能力，仅在 `DEFIER_PVP_TEST_MODE`、非生产环境和匹配 `testMatchScope` 下可用；只允许白名单公开字段和 `vulnerable_mark`，不支持的测试状态会硬失败，summary 固定为服务端公开文案，用于真实后端烟测制造“防守方可响应破绽”的稳定局面。
+    - `tests/browser_pvp_live_real_backend_smoke.mjs` 补上真实后端双账号链路：先注入公开破绽，确认防守方手牌出现 `data-live-card-status-mitigation="vulnerable_mark"` 响应牌；真实点击后断言 `status_mitigated`、破绽从公开状态移除、双方看到具体稳住回执，且后续不会错误兑现 `status_consumed`。
+    - `tests/browser_pvp_live_audit.mjs`、`tests/sanity_pvp_live_ui_runtime_checks.mjs`、`tests/sanity_pvp_live_route_checks.cjs`、`tests/sanity_pvp_live_ui_contract_checks.cjs` 与 `tests/sanity_release_gate_coverage_checks.cjs` 同步锁住 UI marker、route 测试口、release gate finding 和隐藏字段防泄漏；同时修正 foreground resume audit 的证据口径，接受 `resumeRealtime + join_match + realtime heartbeat` 的真实恢复路径，不再误绑必须出现新的 `connectRealtime` 调用。
+    - `game-intro.html` 同步玩家说明：行动回执现在会拆出“公开状态稳住回执”，让双方知道谁在什么响应窗口处理了哪个公开状态，不会把可反制的破绽误感知成隐藏爆发或先手秒杀。
+  - 已验证
+    - 红测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs` 在实现前失败于 `live UI should render a stable per-status mitigation marker`。
+    - 红测：`node tests/sanity_pvp_live_route_checks.cjs` 在实现前失败于 test-only route 无法返回注入的 `publicStatus`。
+    - 绿测：`node tests/sanity_pvp_live_route_checks.cjs`
+    - 绿测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs`
+    - 绿测：`node tests/sanity_pvp_live_ui_contract_checks.cjs`
+    - 绿测：`node tests/sanity_release_gate_coverage_checks.cjs`
+    - 语法检查：`node --check tests/browser_pvp_live_audit.mjs && node --check tests/browser_pvp_live_real_backend_smoke.mjs`
+    - 浏览器审计：`node tests/browser_pvp_live_audit.mjs http://127.0.0.1:5173 output/pvp-live-status-mitigation-receipt-audit-20260706-s78-final2`，134/134 findings、0 failed、0 console error。
+    - 真实后端 browser smoke：`node tests/browser_pvp_live_real_backend_smoke.mjs http://127.0.0.1:5173 output/pvp-live-status-response-real-backend-20260706-s78-final2`，74/74 findings、0 failed、0 console error。
+    - 完整 Node 门禁：`PVP_LIVE_WS_FANOUT_MESSAGE_TIMEOUT_MS=30000 npm run test:node`
+    - 构建：`npm run build:pages`
+  - 当前结论
+    - live PVP 的公开状态响应链路从“交权前提醒风险、兑现后解释伤害”推进到“防守方真实看到响应牌、真实打出后双方都看到稳住回执”：破绽不再只是等待被对手兑现的公开风险，而是有可读、可操作、可验证的防守窗口。该切片只改公开回执、测试模式注入口、玩家说明和门禁，不改变卡牌数值、伤害、护体、先后手、匹配、正式积分、奖励或结算。
+
 - 2026-06-26: V10-S77 live PVP public terminal damage receipt
   - 本轮完成
     - `server/pvp-live/engine/state-view.js` 为 `actionReceiptReport.damage` 增加 `hasTargetHpAfter` 证据位：只有真实 `damage_applied.targetHp` 是显式有限数值时，才允许前端把 `targetHpAfter <= 0` 当作公开归零证明；缺失、`null` 或非数字不会被归一成“0 血终局”。

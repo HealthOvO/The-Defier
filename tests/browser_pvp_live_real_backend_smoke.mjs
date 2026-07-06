@@ -2169,10 +2169,69 @@ async function writeReport() {
         && !/\bhand\b|hand":\[|deck|cardId|instanceId|loadoutSnapshot|reward|rating|elo|opponentHand|opponentDeck/i.test(`${afterEndTurnReceiptProbe.text} ${JSON.stringify(afterEndTurnReceiptProbe.payload || {})}`),
       JSON.stringify({ activeFirstSeat, activeSecondSeat, afterEndTurnReceiptProbe }),
     );
+    const statusResponseSetupProbe = await secondSeatClient.page.evaluate(async ({ markedSeat, sourceSeat }) => {
+      const BackendClient = window.__THE_DEFIER_SERVICES__?.BackendClient;
+      const before = window.PVPScene.getLiveSnapshot();
+      const response = await BackendClient.requestServer(`/api/pvp/live/test/matches/${before.matchId}/seats/${markedSeat}`, {
+        method: 'POST',
+        data: {
+          publicStatus: {
+            statusId: 'vulnerable_mark',
+            label: '破绽',
+            sourceSeat,
+            responseWindow: 'defender_turn_before_payoff',
+            payload: { hand: ['hidden-card'], deck: ['hidden-deck'] },
+            cardInstanceId: 'hidden-card-instance',
+            sourceCardId: 'hidden-source-card',
+            token: 'hidden-token',
+          },
+          testMatchScope: window.__DEFIER_PVP_REAL_TEST_SCOPE,
+        },
+      });
+      await window.PVPScene.refreshLiveMatch();
+      await new Promise(resolve => setTimeout(resolve, 300));
+      const after = window.PVPScene.getLiveSnapshot();
+      const mitigationPreview = document.querySelector('[data-live-card-status-mitigation="vulnerable_mark"]');
+      const cardEl = mitigationPreview?.closest('[data-live-card]') || null;
+      return {
+        before,
+        response,
+        after,
+        previewText: mitigationPreview?.textContent?.replace(/\s+/g, ' ').trim() || '',
+        responseWindow: mitigationPreview?.getAttribute('data-live-card-status-response-window') || '',
+        previewSource: mitigationPreview?.getAttribute('data-live-card-preview-source') || '',
+        previewHidden: mitigationPreview?.getAttribute('data-live-card-preview-hidden') || '',
+        previewImpact: mitigationPreview?.getAttribute('data-live-card-preview-impact') || '',
+        cardInstanceId: cardEl?.getAttribute('data-live-card') || '',
+        cardText: cardEl?.textContent?.replace(/\s+/g, ' ').trim() || '',
+        eventText: document.querySelector('[data-live-event-log]')?.textContent || '',
+      };
+    }, { markedSeat: activeSecondSeat, sourceSeat: activeFirstSeat });
+    add(
+      'real browser status-response window marks a real mitigation card before click',
+      statusResponseSetupProbe.response?.success === true
+        && statusResponseSetupProbe.response?.stateView?.self?.publicStatuses?.some(status => status.statusId === 'vulnerable_mark' && status.seatId === activeSecondSeat && status.sourceSeat === activeFirstSeat)
+        && statusResponseSetupProbe.response?.stateView?.recentEvents?.some(event => event.eventType === 'test_state_forced' && (event.publicData?.fields || []).includes('publicStatus') && event.publicData?.scope === TEST_MATCH_SCOPE)
+        && statusResponseSetupProbe.after?.currentSeat === activeSecondSeat
+        && statusResponseSetupProbe.after?.self?.publicStatuses?.some(status => status.statusId === 'vulnerable_mark' && status.sourceSeat === activeFirstSeat)
+        && statusResponseSetupProbe.after?.actionPreviewReport?.playableCards?.some(card => card.publicStatusMitigation?.statusId === 'vulnerable_mark')
+        && statusResponseSetupProbe.cardInstanceId
+        && /响应牌|清除破绽/.test(`${statusResponseSetupProbe.previewText} ${statusResponseSetupProbe.cardText}`)
+        && statusResponseSetupProbe.responseWindow === 'defender_turn_before_payoff'
+        && statusResponseSetupProbe.previewHidden === 'false'
+        && statusResponseSetupProbe.previewImpact === 'none'
+        && !/payload|cardInstanceId|sourceCardId|\bhand\b|hand":\[|deck|loadoutSnapshot|reward|rating|elo|token/i.test(`${statusResponseSetupProbe.previewText} ${statusResponseSetupProbe.cardText} ${JSON.stringify(statusResponseSetupProbe.after?.self?.publicStatuses || [])}`),
+      JSON.stringify({ activeFirstSeat, activeSecondSeat, statusResponseSetupProbe }),
+    );
     const protectedCounterplayBeforeProbe = await secondSeatClient.page.evaluate(() => {
       const before = window.PVPScene.getLiveSnapshot();
       const sessionState = window.PVPScene.getLiveSession().getState();
-      const playable = before?.actionPreviewReport?.playableCards?.[0] || null;
+      const playableCards = Array.isArray(before?.actionPreviewReport?.playableCards)
+        ? before.actionPreviewReport.playableCards
+        : [];
+      const playable = playableCards.find(card => card?.publicStatusMitigation?.statusId === 'vulnerable_mark')
+        || playableCards[0]
+        || null;
       const fallbackCard = sessionState.stateView?.self?.hand?.[0] || null;
       const cardInstanceId = playable?.cardInstanceId || fallbackCard?.instanceId || '';
       if (!cardInstanceId) {
@@ -2210,6 +2269,13 @@ async function writeReport() {
         hint: document.querySelector('[data-live-last-error]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
         receiptText: receiptEl?.textContent?.replace(/\s+/g, ' ').trim() || '',
         receiptType: receiptEl?.getAttribute('data-live-action-receipt-type') || '',
+        mitigationAttr: receiptEl?.querySelector('[data-live-action-status-mitigation="vulnerable_mark"]')?.getAttribute('data-live-action-status-mitigation') || '',
+        mitigationState: receiptEl?.querySelector('[data-live-action-status-mitigation="vulnerable_mark"]')?.getAttribute('data-live-action-status-mitigation-state') || '',
+        mitigationTarget: receiptEl?.querySelector('[data-live-action-status-mitigation="vulnerable_mark"]')?.getAttribute('data-live-action-status-mitigation-target') || '',
+        mitigationBy: receiptEl?.querySelector('[data-live-action-status-mitigation="vulnerable_mark"]')?.getAttribute('data-live-action-status-mitigation-by') || '',
+        mitigationResponseWindow: receiptEl?.querySelector('[data-live-action-status-mitigation="vulnerable_mark"]')?.getAttribute('data-live-action-status-mitigation-response-window') || '',
+        mitigationHidden: receiptEl?.querySelector('[data-live-action-status-mitigation="vulnerable_mark"]')?.getAttribute('data-live-action-status-mitigation-hidden') || '',
+        mitigationImpact: receiptEl?.querySelector('[data-live-action-status-mitigation="vulnerable_mark"]')?.getAttribute('data-live-action-status-mitigation-impact') || '',
         momentumText: document.querySelector('[data-live-duel-momentum]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
         events: document.querySelector('[data-live-event-log]')?.textContent || '',
       };
@@ -2245,7 +2311,7 @@ async function writeReport() {
       protectedCounterplayActionProbe.before?.currentSeat === activeSecondSeat
         && protectedCounterplayActionProbe.before?.self?.hp === 1
         && protectedCounterplayActionProbe.before?.self?.block >= 8
-        && protectedCounterplayActionProbe.before?.duelMomentumReport?.pressureState === 'reversal_window'
+        && ['reversal_window', 'status_response_window'].includes(protectedCounterplayActionProbe.before?.duelMomentumReport?.pressureState)
         && protectedCounterplayActionProbe.before?.duelMomentumReport?.isViewerTurn === true
         && /你的反打窗口|反打窗口/.test(protectedCounterplayActionProbe.momentumText)
         && !!protectedCounterplayActionProbe.cardInstanceId
@@ -2253,10 +2319,22 @@ async function writeReport() {
         && protectedCounterplayActionProbe.after?.stateVersion > protectedCounterplayActionProbe.before?.stateVersion
         && protectedCounterplayActionProbe.after?.actionReceiptReport?.actingSeat === activeSecondSeat
         && protectedCounterplayActionProbe.after?.actionReceiptReport?.actionType === 'play_card'
+        && protectedCounterplayActionProbe.after?.actionReceiptReport?.statusEffects?.mitigated?.some(status => status.statusId === 'vulnerable_mark' && status.seatId === activeSecondSeat && status.mitigatedBySeat === activeSecondSeat)
+        && !protectedCounterplayActionProbe.after?.self?.publicStatuses?.some(status => status.statusId === 'vulnerable_mark')
+        && protectedCounterplayActionProbe.after?.lastEvents?.some(event => event.eventType === 'status_mitigated')
+        && !protectedCounterplayActionProbe.after?.lastEvents?.some(event => event.eventType === 'status_consumed')
         && protectedCounterplayActionProbe.receiptType === 'play_card'
+        && protectedCounterplayActionProbe.mitigationAttr === 'vulnerable_mark'
+        && protectedCounterplayActionProbe.mitigationState === 'public_status_mitigated'
+        && protectedCounterplayActionProbe.mitigationTarget === activeSecondSeat
+        && protectedCounterplayActionProbe.mitigationBy === activeSecondSeat
+        && protectedCounterplayActionProbe.mitigationResponseWindow === 'defender_turn_before_payoff'
+        && protectedCounterplayActionProbe.mitigationHidden === 'false'
+        && protectedCounterplayActionProbe.mitigationImpact === 'none'
+        && /稳住回执|稳住破绽|阻止后续兑现/.test(protectedCounterplayActionProbe.receiptText)
         && afterProtectedCounterplayFirst.stateVersion === protectedCounterplayActionProbe.after?.stateVersion
         && afterProtectedCounterplayFirst.currentSeat === protectedCounterplayActionProbe.after?.currentSeat
-        && !/\bhand\b|hand":\[|deck|cardId|instanceId|loadoutSnapshot|reward|rating|elo|opponentHand|opponentDeck/i.test(`${protectedCounterplayActionProbe.receiptText} ${protectedCounterplayActionProbe.momentumText} ${JSON.stringify(protectedCounterplayActionProbe.after?.actionReceiptReport || {})}`),
+        && !/\bhand\b|hand":\[|deck|cardId|instanceId|loadoutSnapshot|reward|rating|elo|token|opponentHand|opponentDeck/i.test(`${protectedCounterplayActionProbe.receiptText} ${protectedCounterplayActionProbe.momentumText} ${JSON.stringify(protectedCounterplayActionProbe.after?.actionReceiptReport || {})}`),
       JSON.stringify({
         activeFirstSeat,
         activeSecondSeat,
@@ -2378,6 +2456,15 @@ async function writeReport() {
     const winnerSeat = activeSecondSeat;
     const finishedLoser = await waitForLivePhase(loserClient.page, 'finished');
     const finishedWinner = await waitForLivePhase(winnerClient.page, 'finished');
+    try {
+      await winnerClient.page.waitForFunction(() => {
+        const chip = document.querySelector('[data-live-action-terminal="public_terminal_damage"]');
+        const snapshot = window.PVPScene?.getLiveSnapshot?.();
+        return !!chip && snapshot?.phase === 'finished';
+      }, null, { timeout: 5000 });
+    } catch (error) {
+      // Keep the finding diagnostic instead of aborting the whole smoke run.
+    }
     const lethalFinishProbe = await winnerClient.page.evaluate(() => {
       const snapshot = window.PVPScene.getLiveSnapshot();
       const receiptEl = document.querySelector('[data-live-action-receipt]');

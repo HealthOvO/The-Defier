@@ -2422,7 +2422,12 @@ const mitigatedReceipt = PVPScene.getLiveActionReceiptReport({
         mitigatedBySeat: 'B',
         mitigatedTurnIndex: 12,
         responseWindow: 'defender_turn_before_payoff',
-        mitigation: 'guard_response'
+        mitigation: 'guard_response',
+        cardInstanceId: 'hidden-response-card',
+        sourceCardId: 'hidden-source-card',
+        payload: { hand: ['hidden-card'], deck: ['hidden-deck'] },
+        loadoutSnapshot: { hidden: true },
+        token: 'hidden-status-token'
       }]
     },
     summaryLine: 'B 打出护体诀：不造成伤害；自身护盾 +7；稳住破绽，阻止后续兑现。',
@@ -2430,7 +2435,23 @@ const mitigatedReceipt = PVPScene.getLiveActionReceiptReport({
   }
 });
 assert.equal(mitigatedReceipt.statusEffects.mitigated[0].statusId, 'vulnerable_mark', 'live UI should preserve mitigated public status effects in action receipts');
-assert.match(PVPScene.renderLiveActionReceiptReport({ actionReceiptReport: mitigatedReceipt }), /稳住破绽|阻止后续兑现/, 'live UI action receipt should explain public status mitigation');
+const mitigatedReceiptMarkup = PVPScene.renderLiveActionReceiptReport({ actionReceiptReport: mitigatedReceipt });
+assert.match(mitigatedReceiptMarkup, /data-live-action-status-mitigation="vulnerable_mark"/, 'live UI should render a stable per-status mitigation marker');
+assert.match(mitigatedReceiptMarkup, /data-live-action-status-mitigation-state="public_status_mitigated"/, 'live UI should render public status mitigation state');
+assert.match(mitigatedReceiptMarkup, /data-live-action-status-mitigation-target="B"/, 'live UI should render mitigated status target seat');
+assert.match(mitigatedReceiptMarkup, /data-live-action-status-mitigation-by="B"/, 'live UI should render the public mitigating seat');
+assert.match(mitigatedReceiptMarkup, /data-live-action-status-mitigation-response-window="defender_turn_before_payoff"/, 'live UI should render the public response window for status mitigation');
+assert.match(mitigatedReceiptMarkup, /data-live-action-status-mitigation-source="authoritative_public_projection"/, 'live UI should render status mitigation public source');
+assert.match(mitigatedReceiptMarkup, /data-live-action-status-mitigation-hidden="false"/, 'live UI should mark status mitigation as hidden-info safe');
+assert.match(mitigatedReceiptMarkup, /data-live-action-status-mitigation-impact="none"/, 'live UI should mark status mitigation as no ranked impact');
+assert.match(mitigatedReceiptMarkup, /data-live-action-status-mitigation-safeguard="public_status_mitigated"/, 'live UI should render status mitigation safeguard marker');
+assert.match(mitigatedReceiptMarkup, /稳住回执|稳住破绽|阻止后续兑现/, 'live UI action receipt should explain public status mitigation');
+assert.equal(Object.prototype.hasOwnProperty.call(mitigatedReceipt.statusEffects.mitigated[0], 'cardInstanceId'), false, 'live UI mitigated status receipt must drop hidden card instance ids');
+assert.equal(Object.prototype.hasOwnProperty.call(mitigatedReceipt.statusEffects.mitigated[0], 'sourceCardId'), false, 'live UI mitigated status receipt must drop hidden source card ids');
+assert.equal(Object.prototype.hasOwnProperty.call(mitigatedReceipt.statusEffects.mitigated[0], 'payload'), false, 'live UI mitigated status receipt must drop raw payloads');
+assert.equal(Object.prototype.hasOwnProperty.call(mitigatedReceipt.statusEffects.mitigated[0], 'loadoutSnapshot'), false, 'live UI mitigated status receipt must drop loadout snapshots');
+assert.equal(Object.prototype.hasOwnProperty.call(mitigatedReceipt.statusEffects.mitigated[0], 'token'), false, 'live UI mitigated status receipt must drop hidden tokens');
+assert.doesNotMatch(mitigatedReceiptMarkup, /payload|cardInstanceId|sourceCardId|\bhand\b|hand":\[|deck|loadoutSnapshot|rating|reward|token/i, 'live UI status mitigation rendering must not expose hidden ids, cards, payloads, rewards, or tokens');
 const consumedReceipt = PVPScene.getLiveActionReceiptReport({
   actionReceiptReport: {
     reportVersion: 'pvp-live-action-receipt-v1',

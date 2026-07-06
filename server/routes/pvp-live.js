@@ -331,6 +331,13 @@ router.post('/test/matches/:matchId/seats/:seatId', authenticate, asyncHandler(a
     if (!result) {
         return res.status(404).json({ success: false, message: '实时论道战局不存在' });
     }
+    if (result.rejected) {
+        return res.status(result.statusCode || 400).json({
+            success: false,
+            reason: result.reason || 'test_state_rejected',
+            message: result.message || '实时论道测试状态不支持'
+        });
+    }
     res.json({
         success: true,
         matchId: result.match.matchId,

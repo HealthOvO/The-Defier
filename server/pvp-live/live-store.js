@@ -3794,6 +3794,37 @@ class LivePvpStore {
             targetSeat.energy = Math.max(0, Math.min(maxEnergy, Math.floor(Number(patch.energy) || 0)));
             changedFields.push('energy');
         }
+        if (patch.publicStatus && typeof patch.publicStatus === 'object') {
+            const statusPatch = patch.publicStatus;
+            const statusId = String(statusPatch.statusId || '').trim();
+            if (statusId !== 'vulnerable_mark') {
+                return {
+                    rejected: true,
+                    statusCode: 400,
+                    reason: 'unsupported_test_public_status',
+                    message: '实时论道测试状态只支持公开破绽注入'
+                };
+            }
+            const currentTurn = Math.max(0, Math.floor(Number(match.state.turnIndex) || 0));
+            const sourceSeat = normalizeSourceSeat(statusPatch.sourceSeat, otherSourceSeat(safeTargetSeatId));
+            const publicStatus = {
+                statusId,
+                label: String(statusPatch.label || '破绽').trim().slice(0, 24) || '破绽',
+                seatId: safeTargetSeatId,
+                sourceSeat: sourceSeat === safeTargetSeatId ? otherSourceSeat(safeTargetSeatId) : sourceSeat,
+                stacks: Math.max(1, Math.min(3, Math.floor(Number(statusPatch.stacks) || 1))),
+                appliedTurnIndex: Math.max(0, Math.floor(Number(statusPatch.appliedTurnIndex) || currentTurn)),
+                earliestConsumeTurnIndex: Math.max(currentTurn + 1, Math.floor(Number(statusPatch.earliestConsumeTurnIndex) || (currentTurn + 1))),
+                expiresAtTurnIndex: Math.max(currentTurn + 1, Math.floor(Number(statusPatch.expiresAtTurnIndex) || (currentTurn + 3))),
+                responseWindow: String(statusPatch.responseWindow || 'defender_turn_before_payoff').trim().slice(0, 48) || 'defender_turn_before_payoff',
+                summary: '破绽已公开；防守方至少拥有一个行动窗口后才可被兑现。'
+            };
+            targetSeat.publicStatuses = Array.isArray(targetSeat.publicStatuses)
+                ? targetSeat.publicStatuses.filter(status => status && status.statusId !== publicStatus.statusId)
+                : [];
+            targetSeat.publicStatuses.push(publicStatus);
+            changedFields.push('publicStatus');
+        }
         if (Object.prototype.hasOwnProperty.call(patch, 'heartbeatElapsedMs')) {
             const connection = this.ensureMatchConnection(match);
             const targetConnectionSeat = connection && connection.seats ? connection.seats[safeTargetSeatId] : null;

@@ -1897,6 +1897,35 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
             token: protectFirstToken,
             body: { hp: 10, heartbeatElapsedMs: 0, testMatchScope: routeTestMatchScope }
         });
+        const routeForceInvalidPublicStatus = await request(baseUrl, `/api/pvp/live/test/matches/${joinProtectB.payload.matchId}/seats/${protectSecondSeat}`, {
+            method: 'POST',
+            token: protectFirstToken,
+            body: {
+                publicStatus: {
+                    statusId: 'hidden_payload_mark',
+                    label: '隐藏状态',
+                    summary: 'hand deck cardInstanceId sourceCardId token payload'
+                },
+                testMatchScope: routeTestMatchScope
+            }
+        });
+        const routeForcePublicStatusSecond = await request(baseUrl, `/api/pvp/live/test/matches/${joinProtectB.payload.matchId}/seats/${protectSecondSeat}`, {
+            method: 'POST',
+            token: protectFirstToken,
+            body: {
+                publicStatus: {
+                    statusId: 'vulnerable_mark',
+                    label: '破绽',
+                    sourceSeat: protectFirstSeat,
+                    responseWindow: 'defender_turn_before_payoff',
+                    payload: { hand: ['hidden-card'], deck: ['hidden-deck'] },
+                    cardInstanceId: 'hidden-card-instance',
+                    sourceCardId: 'hidden-source-card',
+                    token: 'hidden-token'
+                },
+                testMatchScope: routeTestMatchScope
+            }
+        });
         if (previousTestMode === undefined) delete process.env.DEFIER_PVP_TEST_MODE;
         else process.env.DEFIER_PVP_TEST_MODE = previousTestMode;
         assert.equal(blockedMissingScopeForce.status, 404, 'live PVP test-only state route should reject scoped test matches without matching testMatchScope');
@@ -1910,6 +1939,14 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
         assert.equal(routeForceProtectedSecond.payload.stateView.opponent.hp, 10, 'live PVP test-only state route should return the updated public opponent hp');
         assert.equal(routeForceProtectedSecond.payload.stateView.connectionReport?.opponent?.status, 'online', 'live PVP test-only state route should restore forced connection status before follow-up combat checks');
         assert.ok(routeForceProtectedSecond.payload.stateView.recentEvents.some(event => event.eventType === 'test_state_forced' && event.publicData?.scope === routeTestMatchScope), 'live PVP test-only state route should expose a public scoped setup event');
+        assert.equal(routeForceInvalidPublicStatus.status, 400, 'live PVP test-only state route should hard-reject unsupported public status injections');
+        assert.equal(routeForceInvalidPublicStatus.payload.reason, 'unsupported_test_public_status', 'unsupported test public status should return a precise reason');
+        assert.ok(!/payload|cardInstanceId|sourceCardId|\bhand\b|hand":\[|deck|loadoutSnapshot|reward|rating|elo|token/i.test(JSON.stringify(routeForceInvalidPublicStatus.payload || {})), 'unsupported test public status rejection must not echo hidden request fields');
+        assert.equal(routeForcePublicStatusSecond.status, 200, 'live PVP test-only state route should support scoped public status injection');
+        assert.equal(routeForcePublicStatusSecond.payload.stateView.opponent.publicStatuses.some(status => status.statusId === 'vulnerable_mark' && status.label === '破绽'), true, 'test-only public status injection should return the public status in opponent view');
+        assert.equal(routeForcePublicStatusSecond.payload.stateView.opponent.publicStatuses.some(status => status.seatId === protectSecondSeat && status.sourceSeat === protectFirstSeat), true, 'test-only public status injection should preserve public seat ownership');
+        assert.ok(routeForcePublicStatusSecond.payload.stateView.recentEvents.some(event => event.eventType === 'test_state_forced' && (event.publicData?.fields || []).includes('publicStatus') && event.publicData?.scope === routeTestMatchScope), 'test-only public status injection should expose public test evidence');
+        assert.ok(!/payload|cardInstanceId|sourceCardId|\bhand\b|hand":\[|deck|loadoutSnapshot|reward|rating|elo|token/i.test(JSON.stringify(routeForcePublicStatusSecond.payload.stateView.opponent.publicStatuses || [])), 'test-only public status injection must not leak hidden cards, decks, payloads, rewards, ratings, or tokens');
         const routeLethalPreviewFirst = await request(baseUrl, `/api/pvp/live/matches/${joinProtectB.payload.matchId}`, {
             token: protectFirstToken
         });
@@ -1920,7 +1957,7 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
         const protectedBurstFirst = await submitIntent(baseUrl, protectFirstToken, joinProtectB.payload.matchId, {
             intentId: `route-intent-opening-protected-burst-${protectFirstSeat.toLowerCase()}`,
             intentType: 'play_card',
-            stateVersion: routeForceProtectedSecond.payload.stateView.stateVersion,
+            stateVersion: routeForcePublicStatusSecond.payload.stateView.stateVersion,
             payload: { cardInstanceId: protectFirstBurstCard, targetSeat: protectSecondSeat }
         });
         assert.equal(protectedBurstFirst.payload.result, 'accepted', 'opening protected burst should be accepted');

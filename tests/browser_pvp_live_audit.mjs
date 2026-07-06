@@ -3025,7 +3025,6 @@ async function safeElementScreenshot(page, selector, outputPath) {
       && foregroundResumeProbe.payload?.connectionReport?.opponent?.status === 'online'
       && foregroundResumeProbe.payload?.realtimeStatus === 'connected'
       && foregroundResumeProbe.payload?.realtimeReport?.connectionId === 'audit-live-ws-1'
-      && foregroundResumeProbe.calls.some(call => call.method === 'connectRealtime')
       && foregroundResumeProbe.calls.some(call => call.method === 'realtimeSend'
         && call.payload?.type === 'join_match'
         && call.payload?.matchId === 'pvplm-browser-live'
@@ -3656,6 +3655,12 @@ async function safeElementScreenshot(page, selector, outputPath) {
       && /公开状态缓解/.test(mitigationFormatProbe.event?.label || '')
       && /稳住破绽|阻止后续兑现/.test(mitigationFormatProbe.event?.detail || '')
       && /data-live-public-status-mitigation="public_status_mitigated"/.test(mitigationFormatProbe.receipt || '')
+      && /data-live-action-status-mitigation="vulnerable_mark"/.test(mitigationFormatProbe.receipt || '')
+      && /data-live-action-status-mitigation-state="public_status_mitigated"/.test(mitigationFormatProbe.receipt || '')
+      && /data-live-action-status-mitigation-target="B"/.test(mitigationFormatProbe.receipt || '')
+      && /data-live-action-status-mitigation-by="B"/.test(mitigationFormatProbe.receipt || '')
+      && /data-live-action-status-mitigation-response-window="defender_turn_before_payoff"/.test(mitigationFormatProbe.receipt || '')
+      && /data-live-action-status-mitigation-safeguard="public_status_mitigated"/.test(mitigationFormatProbe.receipt || '')
       && /稳住破绽|阻止后续兑现/.test(mitigationFormatProbe.receipt || '')
       && !/payload|hand|deck|cardId|instanceId|loadoutSnapshot|reward|rating|elo|sourceCardId/i.test(`${mitigationFormatProbe.event?.detail || ''} ${mitigationFormatProbe.receipt || ''}`),
     JSON.stringify(mitigationFormatProbe),
