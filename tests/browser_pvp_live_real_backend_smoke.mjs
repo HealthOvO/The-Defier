@@ -861,6 +861,108 @@ async function writeReport() {
       JSON.stringify({ longWaitPracticeProbe, longWaitPracticeActionable }),
     );
 
+    const lowSampleTestScope = `${TEST_MATCH_SCOPE}_low_sample_guard`;
+    const lowSampleLoadout = makeLoadout('low_sample_guard', ['pvp_guard', 'pvp_strike', 'surgeStep', 'tacticalExpose', 'innerPeace']);
+    const matureLoadout = makeLoadout('mature_guard', ['pvp_guard', 'pvp_strike', 'shieldBash', 'tacticalExpose', 'surgeStep']);
+    const lowSampleSeat = await preparePage(browser, `live_real_low_sample_${runId}`, '新');
+    const matureSeat = await preparePage(browser, `live_real_mature_guard_${runId}`, '熟');
+    await seedRankedHistory(matureSeat.username, 1000, 6);
+    const lowSampleJoin = await joinLiveQueueWithLoadout(lowSampleSeat.page, '新', lowSampleLoadout, lowSampleTestScope);
+    const matureBlockedJoin = await joinLiveQueueWithLoadout(matureSeat.page, '熟', matureLoadout, lowSampleTestScope);
+    await matureSeat.page.waitForFunction(() => {
+      const report = window.PVPScene?.getLiveSnapshot?.()?.waitingReport;
+      return report?.protectionReason === 'low_sample_protection'
+        && report?.releaseMode === 'need_third_player';
+    }, null, { timeout: 5000 });
+    await matureSeat.page.evaluate(async () => {
+      if (window.PVPScene && typeof window.PVPScene.renderLivePanel === 'function') {
+        window.PVPScene.renderLivePanel();
+      }
+    });
+    const lowSampleGuardProbe = await matureSeat.page.evaluate(() => {
+      const snapshot = window.PVPScene.getLiveSnapshot();
+      const textPayload = JSON.parse(window.render_game_to_text()).pvp?.live || null;
+      const reportText = document.querySelector('[data-live-waiting-report]')?.textContent?.replace(/\s+/g, ' ').trim() || '';
+      return {
+        phase: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-phase') || '',
+        reportText,
+        practiceDisabled: !!document.querySelector('[data-live-action="practice-live"]')?.disabled,
+        cancelDisabled: !!document.querySelector('[data-live-action="cancel-queue"]')?.disabled,
+        snapshot,
+        textPayload,
+      };
+    });
+    add(
+      'real browser low-sample waiting guard keeps mature player from immediate fragile match',
+      lowSampleJoin?.snapshot?.phase === 'waiting'
+        && matureBlockedJoin?.snapshot?.phase === 'waiting'
+        && lowSampleGuardProbe.phase === 'waiting'
+        && lowSampleGuardProbe.snapshot?.waitingReport?.protectionReason === 'low_sample_protection'
+        && lowSampleGuardProbe.snapshot?.waitingReport?.releaseMode === 'need_third_player'
+        && lowSampleGuardProbe.snapshot?.waitingReport?.requiresPoolSize === 3
+        && lowSampleGuardProbe.snapshot?.waitingReport?.candidatePoolSize >= 2
+        && ['continue_waiting', 'accept_wide_match', 'practice', 'cancel_queue'].every(actionId => lowSampleGuardProbe.snapshot?.waitingReport?.currentEligibleActions?.includes(actionId))
+        && ['continue_waiting', 'accept_wide_match', 'practice', 'cancel_queue'].every(actionId => lowSampleGuardProbe.snapshot?.waitingReport?.actions?.some(action => action.id === actionId))
+        && lowSampleGuardProbe.snapshot?.waitingReport?.currentEligibleActions?.includes('accept_wide_match')
+        && lowSampleGuardProbe.snapshot?.waitingReport?.currentEligibleActions?.includes('practice')
+        && lowSampleGuardProbe.textPayload?.waitingReport?.protectionReason === 'low_sample_protection'
+        && /匹配质量护栏|匹配样本保护/.test(lowSampleGuardProbe.reportText)
+        && /等待更多真人/.test(lowSampleGuardProbe.reportText)
+        && /接受宽分差|问道练习/.test(lowSampleGuardProbe.reportText)
+        && lowSampleGuardProbe.practiceDisabled === false
+        && lowSampleGuardProbe.cancelDisabled === false
+        && !/rankedGames|ranked_games|lowSampleProtected|low_sample_protected|rating":|score":|elo/i.test(`${lowSampleGuardProbe.reportText} ${JSON.stringify(lowSampleGuardProbe.snapshot?.waitingReport || {})} ${JSON.stringify(lowSampleGuardProbe.textPayload?.waitingReport || {})}`),
+      JSON.stringify({ lowSampleJoin, matureBlockedJoin, lowSampleGuardProbe }),
+    );
+    const lowSamplePracticeActionable = await clickLiveControl(matureSeat.page, '[data-live-action="practice-live"]', 'low-sample-practice-live');
+    let lowSamplePracticeWaitError = '';
+    try {
+      await matureSeat.page.waitForFunction(() => {
+        if (window.game?.currentScreen !== 'character-selection-screen') return false;
+        const payload = JSON.parse(window.render_game_to_text());
+        return payload?.challenge?.pending?.practiceOnly === true;
+      }, null, { timeout: 10000 });
+    } catch (error) {
+      lowSamplePracticeWaitError = error && error.message ? error.message : String(error);
+    }
+    const lowSamplePracticeProbe = await matureSeat.page.evaluate(() => {
+      const payload = JSON.parse(window.render_game_to_text());
+      const screenId = window.game?.currentScreen || '';
+      const visibleText = document.getElementById(screenId)?.textContent?.replace(/\s+/g, ' ').trim() || '';
+      return {
+        currentScreen: screenId,
+        visibleText,
+        pending: payload?.challenge?.pending || null,
+        focus: payload?.challenge?.trainingFocus || null,
+        drillScenario: payload?.pvp?.live?.drillScenario || window.PVPScene.getLiveSnapshot()?.drillScenario || null,
+        livePhase: window.PVPScene.getLiveSnapshot()?.phase || '',
+      };
+    });
+    add(
+      'real browser low-sample guard opens no-score drill without exposing sample counters',
+      lowSamplePracticeProbe.currentScreen === 'character-selection-screen'
+        && !lowSamplePracticeWaitError
+        && lowSamplePracticeProbe.pending?.replayOnly === true
+        && lowSamplePracticeProbe.pending?.practiceOnly === true
+        && /^pvp_live_drill_/.test(lowSamplePracticeProbe.pending?.ruleId || '')
+        && lowSamplePracticeProbe.focus?.sourceRunId === `pvp_live:waiting:${matureBlockedJoin.result?.queueTicket}`
+        && lowSamplePracticeProbe.drillScenario?.reportVersion === 'pvp-live-drill-scenario-v1'
+        && lowSamplePracticeProbe.drillScenario?.sourceMatchId === `waiting:${matureBlockedJoin.result?.queueTicket}`
+        && lowSamplePracticeProbe.drillScenario?.sourceVisibility === 'replay_self'
+        && lowSamplePracticeProbe.drillScenario?.usesHiddenInformation === false
+        && lowSamplePracticeProbe.drillScenario?.rankedImpact === 'none'
+        && lowSamplePracticeProbe.drillScenario?.finishReason === 'low_sample_protection'
+        && (lowSamplePracticeProbe.drillScenario?.trainingTags || []).includes('匹配样本保护')
+        && lowSamplePracticeProbe.drillScenario?.waitingReport?.protectionReason === 'low_sample_protection'
+        && !Object.prototype.hasOwnProperty.call(lowSamplePracticeProbe.drillScenario || {}, 'practicePlan')
+        && /匹配样本保护/.test(lowSamplePracticeProbe.visibleText)
+        && /不写正式积分|不计积分/.test(lowSamplePracticeProbe.visibleText)
+        && !/rankedGames|ranked_games|lowSampleProtected|low_sample_protected|reward|"rating":|"elo":|"score":/i.test(JSON.stringify(lowSamplePracticeProbe.drillScenario || {}))
+        && !/rankedGames|ranked_games|lowSampleProtected|low_sample_protected|reward|rating|elo|score/i.test(lowSamplePracticeProbe.visibleText)
+        && (!isMobileViewport || lowSamplePracticeActionable?.ok === true),
+      JSON.stringify({ lowSamplePracticeProbe, lowSamplePracticeActionable, lowSamplePracticeWaitError }),
+    );
+
     const inviteCancelHost = await preparePage(browser, `live_real_invite_cancel_host_${runId}`, '消甲');
     const inviteCancelGuest = await preparePage(browser, `live_real_invite_cancel_guest_${runId}`, '消乙');
     await reloadAndOpenLivePanel(inviteCancelGuest.page);

@@ -1,5 +1,23 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-07-06: V10-S81 live PVP low-sample real-backend waiting guard proof
+  - 本轮完成
+    - `tests/browser_pvp_live_real_backend_smoke.mjs` 新增独立真实后端双账号低样本保护链路：低样本账号先入队，成熟账号随后用同一隔离 `testMatchScope` 入队；服务端必须保持双方 `waiting`，不得因为“有真人”就立刻开启脆弱首战。
+    - 新 smoke finding 锁住真实页面和 `render_game_to_text()` 的 `waitingReport`：成熟玩家看到 `protectionReason='low_sample_protection'`、`releaseMode='need_third_player'`、`requiresPoolSize=3`、候选池人数、继续等待 / 接受宽分差 / 问道练习 / 取消匹配动作，以及“匹配样本保护 / 等待更多真人”玩家文案。
+    - 同一真实页面继续点击“问道练习”，必须进入 `pvp-live-drill-scenario-v1` 的 no-score drill：`sourceVisibility='replay_self'`、`usesHiddenInformation=false`、`rankedImpact='none'`、`finishReason='low_sample_protection'`，且不携带 `practicePlan`，不泄漏 `rankedGames / lowSampleProtected / rating / elo / score` 等样本或评分字段。
+    - `tests/sanity_release_gate_coverage_checks.cjs` 新增真实后端 smoke marker，防止低样本保护只停留在 route / synthetic browser audit，而缺少真实浏览器、真实后端、真实账号链路证明。
+    - `game-intro.html` 同步玩家说明：匹配质量会解释“匹配样本保护”，低样本或小池子不稳时会给继续等待、双方确认宽分差或问道练习选择，不展示 exact rating、score 或 ELO。
+  - 已验证
+    - 红测：`node tests/sanity_release_gate_coverage_checks.cjs` 在真实后端 low-sample finding 未加入前失败于 `real browser low-sample waiting guard keeps mature player from immediate fragile match`。
+    - 绿测：`node tests/sanity_release_gate_coverage_checks.cjs`
+    - 语法检查：`node --check tests/browser_pvp_live_real_backend_smoke.mjs`
+    - 真实后端 browser smoke：`node tests/browser_pvp_live_real_backend_smoke.mjs http://127.0.0.1:4173 output/browser-pvp-live-real-backend-smoke-low-sample-s81-reviewfix3`，80/80 findings、0 failed、0 console error。
+    - 完整 Node 门禁：`PVP_LIVE_WS_FANOUT_MESSAGE_TIMEOUT_MS=60000 npm run test:node`
+    - 构建：`npm run build:pages`
+    - 空白检查：`git diff --check`
+  - 当前结论
+    - live PVP 的低样本保护从 route / synthetic UI 证据推进到真实浏览器双账号后端证据：系统不会把“刚好有真人”误当成可以牺牲首战质量，玩家能明确看到等待原因和无积分练习出口。该切片只强化真实后端验收、玩家说明和 release gate，不改变卡牌数值、匹配数值、先后手、护体、正式积分、奖励或结算。
+
 - 2026-07-06: V10-S80 live PVP missed-response public payoff real backend proof
   - 本轮完成
     - `tests/browser_pvp_live_real_backend_smoke.mjs` 新增一条独立真实后端双账号 mini-match：双方用隔离 `testMatchScope` 入队、完成准备、由服务端公开种子决定先后手；首手真实交权后，防守方被 test-only 服务端接口注入公开 `vulnerable_mark`，并在自己的行动窗口选择不处理该公开破绽。
