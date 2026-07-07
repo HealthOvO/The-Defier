@@ -6126,6 +6126,9 @@ export const PVPScene = {
       ...(options && options.wideMatchConsent === true ? { wideMatchConsent: true } : {}),
       ...(options && typeof options.testMatchScope === 'string' && options.testMatchScope.trim()
         ? { testMatchScope: options.testMatchScope }
+        : {}),
+      ...(options && typeof options.testOpenerSeed === 'string' && options.testOpenerSeed.trim()
+        ? { testOpenerSeed: options.testOpenerSeed }
         : {})
     });
     const state = session.getState();

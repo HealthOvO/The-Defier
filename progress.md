@@ -1,5 +1,26 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-07-07: V10-S87B live PVP browser natural lethal proof
+  - 本轮完成
+    - `tests/browser_pvp_live_real_backend_smoke.mjs` 新增真实后端、双浏览器账号、真实 UI 点击推进的 deterministic natural lethal 场景：双方使用相同测试种子与固定斗法谱入队，ready 后只通过真实卡牌点击与结束回合推进，不调用 `/test/matches/:matchId/seats/:seatId`，不依赖 `test_state_forced`。
+    - `PVPScene.joinLiveQueue()` 与 `BackendClient.joinLivePvpQueue()` 仅在测试选项存在时透传 `testOpenerSeed`，用于稳定首动/起手顺序；服务端仍由 test-mode route 控制该字段，未引入生产 secret 或前端 HMAC。
+    - 新 smoke finding 锁住自然击杀证据：replay 必须包含真实 damage / turn / match_finished 事件，`forcedEventCount === 0`，eventTypes 不含 `test_state_forced`，且双方都出现过行动窗口，避免把“先手秒杀”或测试强制终局当成体验证明。
+    - 同一链路继续验证终局结算 reason lines：自然 lethal 后 winner / loser 页面必须渲染 `finish_type / score_delta / reward_boundary`，并保持公开、服务端权威、无隐藏评分泄漏。
+    - 为真实浏览器 smoke 补强移动端稳定性：invite inbox 轮询改为主动 refresh/poll，移动端触控等待支持重试和可滚动按钮可达性检查，真实卡牌点击前会刷新并确认目标卡 DOM 已渲染。
+    - `tests/sanity_release_gate_coverage_checks.cjs` 新增 natural lethal、无 `test_state_forced`、`testOpenerSeed` 从 `PVPScene` 到 `BackendClient` 透传的 release marker。
+  - 已验证
+    - 红测：`node tests/sanity_release_gate_coverage_checks.cjs` 在 natural lethal marker 未加入前失败于缺少自然击杀 smoke marker。
+    - 语法检查：`node --check tests/browser_pvp_live_real_backend_smoke.mjs`
+    - 绿测：`node tests/sanity_release_gate_coverage_checks.cjs`
+    - 桌面真实后端 browser smoke：`node tests/browser_pvp_live_real_backend_smoke.mjs http://127.0.0.1:4173 output/browser-pvp-live-real-backend-smoke-s87b-natural-lethal-rerun8`，86/86 findings、0 failed、0 console error。
+    - 移动端真实后端 browser smoke：`BROWSER_PVP_LIVE_REAL_VIEWPORT=mobile BROWSER_PVP_LIVE_REAL_REQUIRE_MOBILE=1 node tests/browser_pvp_live_real_backend_smoke.mjs http://127.0.0.1:4173 output/browser-pvp-live-mobile-real-s87b-natural-lethal`，87/87 findings、0 failed、0 console error。
+    - 完整 Node 门禁：`PVP_LIVE_WS_FANOUT_MESSAGE_TIMEOUT_MS=60000 npm run test:node`
+    - 构建：`npm run build:pages`
+    - 介绍同步校验：`node tests/sanity_intro_progress_sync_checks.cjs`
+    - 空白检查：`git diff --check`
+  - 当前结论
+    - live PVP 现在已有桌面与移动端真实后端浏览器证据，证明双方在自然出牌/自然回合推进下可以完成 deterministic lethal，且不是先手一拍秒杀、不是 surrender、不是测试强制 seat state。该切片只强化测试种子透传和真实端验收门禁，不改变卡牌数值、伤害公式、匹配算法、正式积分、奖励或生产部署；这不是线上部署记录。
+
 - 2026-07-07: V10-S87A live PVP prod real-card lethal settlement reason gate
   - 本轮完成
     - `tests/prod_api_smoke.cjs` 在已有 production API 语义的 ranked live PVP 链路上补结算解释断言：公开队列成局、双方 ready 后，smoke 会用真实 `play_card / end_turn` intent 自然推进到 real-card lethal，不使用 surrender shortcut；终局后 loser / winner 两侧 `settlementReport.reasonLines` 都必须保留 `finish_type / score_delta / reward_boundary`。

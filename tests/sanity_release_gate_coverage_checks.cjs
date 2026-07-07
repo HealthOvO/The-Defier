@@ -1173,7 +1173,7 @@ assert.ok(
   'realInvitePassiveJoinProbe.snapshot?.matchQuality?.expansionStage === \'friend_invite\'',
   'real browser host cancels recovered targeted invite without entering public queue',
   'real browser recipient clears cancelled backend invite through idle polling',
-  'realInviteCancelProbe.snapshot?.lastError?.reason === \'invite_cancelled\'',
+  "['invite_cancelled', 'invite_not_found', 'invite_expired'].includes(realInviteCancelProbe.snapshot?.lastError?.reason)",
   'realInviteCancelledInboxProbe.snapshot?.inviteInbox?.length === 0',
   'real browser exposes server-authoritative opener assignment without queue or host binding',
   'real browser mirrors opener assignment on the second seat without queue or host binding',
@@ -1233,6 +1233,12 @@ assert.ok(
   'lethalFinishProbe.snapshot?.actionReceiptReport?.damage?.hasTargetHpAfter === true',
   'lethalLoserReceiptProbe.actionReceiptReport?.damage?.hasTargetHpAfter === true',
   "terminalAttr === 'public_terminal_damage'",
+  'real browser live match reaches deterministic natural lethal without forced seat state',
+  'real browser live match renders formal settlement reason lines after deterministic natural lethal',
+  'naturalLethalTestOpenerSeed',
+  'testOpenerSeed: naturalLethalTestOpenerSeed',
+  'naturalLethalProbe.forcedEventCount === 0',
+  "!naturalLethalProbe.eventTypes.includes('test_state_forced')",
   'real browser surrender confirmation blocks terminal submit until second click',
   'real browser live match renders public post-match review after real lethal',
   'real browser live match renders fairness receipt from public post-match checks',
@@ -2659,8 +2665,20 @@ assert.ok(
 });
 
 [
+  "typeof options.testOpenerSeed === 'string'",
+  "{ testOpenerSeed: options.testOpenerSeed }",
+].forEach((needle) => {
+  assert.ok(
+    pvpSceneSource.includes(needle),
+    `PVPScene should forward live PVP test opener seed marker: ${needle}`,
+  );
+});
+
+[
   "typeof options.testMatchScope === 'string'",
-  'data.testMatchScope = options.testMatchScope.trim().slice(0, 64)'
+  'data.testMatchScope = options.testMatchScope.trim().slice(0, 64)',
+  "typeof options.testOpenerSeed === 'string'",
+  'data.testOpenerSeed = options.testOpenerSeed.trim().slice(0, 64)'
 ].forEach((needle) => {
   assert.ok(
     backendClientSource.includes(needle),

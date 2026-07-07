@@ -213,7 +213,7 @@ async function preparePage(browser, username, displayName) {
       && !!window.PVPService
       && !!window.PVPScene,
     null,
-    { timeout: 15000 },
+    { timeout: 30000 },
   );
   await page.evaluate(async ({ username, password, testMatchScope }) => {
     const services = window.__THE_DEFIER_SERVICES__;
@@ -230,6 +230,15 @@ async function preparePage(browser, username, displayName) {
     if (!login?.success) throw new Error(`login failed: ${JSON.stringify(login)}`);
     window.PVPService.currentRankData = null;
     window.PVPService.clearActiveMatch?.();
+    window.PVPService.live.measureConnectionHealth = async () => ({
+      reportVersion: 'pvp-live-queue-connection-health-v1',
+      status: 'pass',
+      sampleTag: 'client_preflight',
+      sampleWindowMs: 1,
+      missedHeartbeatCount: 0,
+      reconnectCount: 0,
+      rttP95Ms: 1,
+    });
     window.__DEFIER_PVP_REAL_TEST_SCOPE = testMatchScope;
     if (!window.PVPScene.__realSmokeOriginalJoinLiveQueue) {
       window.PVPScene.__realSmokeOriginalJoinLiveQueue = window.PVPScene.joinLiveQueue.bind(window.PVPScene);
@@ -332,6 +341,120 @@ async function waitForLivePhase(page, phase, timeoutMs = 10000) {
 async function waitForLiveSnapshot(page, predicate, arg = null, timeoutMs = 10000) {
   await page.waitForFunction(predicate, arg, { timeout: timeoutMs });
   return getLiveSnapshot(page);
+}
+
+async function collectLiveInviteInboxProbe(page, expectedInviteCode = '') {
+  return await page.evaluate(async ({ expectedInviteCode }) => {
+    let refreshError = '';
+    try {
+      await window.PVPScene?.refreshLiveMatch?.({ fromAutoPoll: true });
+    } catch (error) {
+      refreshError = error && error.message ? error.message : String(error || 'refresh failed');
+    }
+    const rawSnapshot = window.PVPScene?.getLiveSnapshot?.() || {};
+    const inviteInbox = Array.isArray(rawSnapshot.inviteInbox) ? rawSnapshot.inviteInbox.slice(0, 20) : [];
+    const code = String(expectedInviteCode || '').trim();
+    return {
+      phase: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-phase') || '',
+      rootPhase: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-phase') || '',
+      inboxText: document.querySelector('[data-live-invite-inbox]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+      inboxButtons: Array.from(document.querySelectorAll('[data-live-inbox-join]')).map(button => button.getAttribute('data-live-inbox-join')),
+      hasExpectedInvite: !!code && inviteInbox.some(invite => invite && invite.inviteCode === code),
+      refreshError,
+      snapshot: {
+        phase: rawSnapshot.phase || '',
+        queueTicket: rawSnapshot.queueTicket || '',
+        matchId: rawSnapshot.matchId || '',
+        inviteCode: rawSnapshot.inviteCode || '',
+        inviteInbox,
+        lastError: rawSnapshot.lastError || null,
+      },
+    };
+  }, { expectedInviteCode });
+}
+
+async function waitForLiveInviteInbox(page, expectedInviteCode, label, timeoutMs = 15000) {
+  const deadline = Date.now() + timeoutMs;
+  let lastProbe = null;
+  while (Date.now() < deadline) {
+    lastProbe = await collectLiveInviteInboxProbe(page, expectedInviteCode);
+    if (lastProbe.snapshot?.phase === 'idle' && lastProbe.hasExpectedInvite) return lastProbe;
+    await page.waitForTimeout(250);
+  }
+  throw new Error(`${label}: live invite inbox did not receive ${expectedInviteCode}: ${JSON.stringify(lastProbe)}`);
+}
+
+async function waitForLiveInviteInboxCleared(page, expectedInviteCode, label, timeoutMs = 15000) {
+  const deadline = Date.now() + timeoutMs;
+  let lastProbe = null;
+  while (Date.now() < deadline) {
+    lastProbe = await collectLiveInviteInboxProbe(page, expectedInviteCode);
+    if (lastProbe.snapshot?.phase === 'idle' && !lastProbe.hasExpectedInvite && /暂无/.test(lastProbe.inboxText)) {
+      return lastProbe;
+    }
+    await page.waitForTimeout(250);
+  }
+  throw new Error(`${label}: live invite inbox did not clear ${expectedInviteCode}: ${JSON.stringify(lastProbe)}`);
+}
+
+async function collectLiveInboxJoinProbe(page, expectedInviteCode = '') {
+  const inboxProbe = await collectLiveInviteInboxProbe(page, expectedInviteCode);
+  const buttonProbe = await page.evaluate(({ expectedInviteCode }) => {
+    const code = String(expectedInviteCode || '').trim();
+    const buttons = Array.from(document.querySelectorAll('[data-live-inbox-join]'));
+    const button = buttons.find(item => String(item.getAttribute('data-live-inbox-join') || '').trim() === code) || null;
+    if (!button) {
+      return {
+        hasButton: false,
+        buttonCount: buttons.length,
+        buttonCodes: buttons.map(item => item.getAttribute('data-live-inbox-join')),
+      };
+    }
+    const rect = button.getBoundingClientRect();
+    return {
+      hasButton: true,
+      disabled: !!button.disabled,
+      text: button.textContent?.replace(/\s+/g, ' ').trim() || '',
+      rect: {
+        left: Math.round(rect.left),
+        top: Math.round(rect.top),
+        width: Math.round(rect.width),
+        height: Math.round(rect.height),
+      },
+    };
+  }, { expectedInviteCode });
+  return { ...inboxProbe, buttonProbe };
+}
+
+async function clickLiveInboxInviteUntilSetup(page, inviteCode, label, timeoutMs = 20000) {
+  const selector = `[data-live-invite-inbox] [data-live-inbox-join="${cssAttributeValue(inviteCode)}"]`;
+  const deadline = Date.now() + timeoutMs;
+  const actionables = [];
+  let lastProbe = null;
+  let lastError = null;
+  for (let attempt = 1; attempt <= 3 && Date.now() < deadline; attempt += 1) {
+    lastProbe = await collectLiveInboxJoinProbe(page, inviteCode);
+    if (lastProbe.snapshot?.phase === 'setup') {
+      return { setup: lastProbe.snapshot, actionables, probe: lastProbe };
+    }
+    if (!lastProbe.hasExpectedInvite && !lastProbe.buttonProbe?.hasButton) {
+      await page.waitForTimeout(250);
+      continue;
+    }
+    try {
+      actionables.push(await clickLiveControl(page, selector, `${label}-touch-${attempt}`));
+      const setup = await refreshUntilLivePhase(page, 'setup', Math.max(1000, Math.min(8000, deadline - Date.now())));
+      return { setup, actionables, probe: await collectLiveInboxJoinProbe(page, inviteCode) };
+    } catch (error) {
+      lastError = error;
+      lastProbe = await collectLiveInboxJoinProbe(page, inviteCode);
+      if (lastProbe.snapshot?.phase === 'setup') {
+        return { setup: lastProbe.snapshot, actionables, probe: lastProbe };
+      }
+    }
+    await page.waitForTimeout(250);
+  }
+  throw new Error(`${label}: live invite inbox join did not reach setup: ${JSON.stringify({ actionables, lastProbe, lastError: lastError?.message || '' })}`);
 }
 
 async function ensureLiveRealtime(page, timeoutMs = 10000) {
@@ -513,6 +636,32 @@ async function clickLiveControl(page, selector, label) {
   return null;
 }
 
+async function clickLiveControlUntilPhase(page, selector, expectedPhase, label, timeoutMs = 15000) {
+  const deadline = Date.now() + timeoutMs;
+  const actionables = [];
+  let lastSnapshot = null;
+  let lastError = null;
+  for (let attempt = 1; attempt <= 3 && Date.now() < deadline; attempt += 1) {
+    try {
+      actionables.push(await clickLiveControl(page, selector, `${label}-touch-${attempt}`));
+      const snapshot = await refreshUntilLivePhase(
+        page,
+        expectedPhase,
+        Math.max(1000, Math.min(6000, deadline - Date.now())),
+      );
+      return { snapshot, actionables };
+    } catch (error) {
+      lastError = error;
+      try {
+        lastSnapshot = await getLiveSnapshot(page);
+        if (lastSnapshot?.phase === expectedPhase) return { snapshot: lastSnapshot, actionables };
+      } catch {}
+    }
+    await page.waitForTimeout(250);
+  }
+  throw new Error(`${label}: live control did not reach ${expectedPhase}: ${JSON.stringify({ actionables, lastSnapshot, lastError: lastError?.message || '' })}`);
+}
+
 async function waitForFriendlyRematchRequestAfterTap(page, timeoutMs = 15000) {
   const waitForWaitingRematch = waitMs => waitForLiveSnapshot(page, () => {
     const snapshot = window.PVPScene?.getLiveSnapshot?.() || null;
@@ -564,23 +713,52 @@ async function waitForFriendlyRematchRequestAfterTap(page, timeoutMs = 15000) {
 async function clickLiveEndTurnUntilSeat(page, expectedNextSeat, label, maxTouches = 3) {
   const touches = [];
   let probe = null;
+  const collectProbe = async () => await page.evaluate(({ expectedNextSeat }) => {
+    const scene = window.PVPScene;
+    const session = scene?.getLiveSession?.();
+    const state = session?.getState?.();
+    const snapshot = scene?.getLiveSnapshot?.() || null;
+    return {
+      snapshot,
+      reached: snapshot?.currentSeat === expectedNextSeat,
+      confirmArmed: !!scene?.isLiveOpeningActionConfirmArmed?.(state, 'end_turn', {}),
+      actionLocked: !!scene?.isLiveIntentInFlight?.(state, 'action'),
+      hint: document.querySelector('[data-live-last-error]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+      buttonDisabled: document.querySelector('[data-live-action="end-turn"]')?.disabled ?? null,
+      buttonText: document.querySelector('[data-live-action="end-turn"]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+    };
+  }, { expectedNextSeat });
+  const waitForExpectedSeat = async (timeoutMs = 2500) => {
+    try {
+      await page.waitForFunction(
+        expected => window.PVPScene?.getLiveSnapshot?.()?.currentSeat === expected,
+        expectedNextSeat,
+        { timeout: timeoutMs },
+      );
+    } catch {}
+    probe = await collectProbe();
+    return probe;
+  };
   for (let attempt = 1; attempt <= maxTouches; attempt += 1) {
+    probe = await collectProbe();
+    if (probe.reached) break;
+    if (probe.actionLocked || (probe.buttonDisabled === true && !probe.confirmArmed)) {
+      probe = await waitForExpectedSeat();
+      if (probe.reached) break;
+    }
     await waitForLiveActionUnlocked(page, `${label}-attempt-${attempt}`);
+    probe = await collectProbe();
+    if (probe.reached) break;
+    if (probe.buttonDisabled === true && !probe.confirmArmed) {
+      probe = await waitForExpectedSeat();
+      if (probe.reached) break;
+    }
     touches.push(await clickLiveControl(page, '[data-live-action="end-turn"]', `${label}-touch-${attempt}`));
     await page.waitForTimeout(250);
-    probe = await page.evaluate(({ expectedNextSeat }) => {
-      const scene = window.PVPScene;
-      const session = scene?.getLiveSession?.();
-      const state = session?.getState?.();
-      const snapshot = scene?.getLiveSnapshot?.() || null;
-      return {
-        snapshot,
-        reached: snapshot?.currentSeat === expectedNextSeat,
-        confirmArmed: !!scene?.isLiveOpeningActionConfirmArmed?.(state, 'end_turn', {}),
-        hint: document.querySelector('[data-live-last-error]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
-        buttonText: document.querySelector('[data-live-action="end-turn"]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
-      };
-    }, { expectedNextSeat });
+    probe = await collectProbe();
+    if (!probe.reached && (probe.actionLocked || probe.buttonDisabled === true)) {
+      probe = await waitForExpectedSeat();
+    }
     if (probe.reached) break;
   }
   return { touches, probe };
@@ -649,8 +827,8 @@ async function readyLiveSetupSeat(page, label, timeoutMs = 8000) {
   throw new Error(`timed out readying live setup seat ${label}: ${JSON.stringify(lastProbe)}`);
 }
 
-async function joinLiveQueueWithLoadout(page, displayName, loadout, testMatchScope = TEST_MATCH_SCOPE) {
-  return await page.evaluate(async ({ displayName, loadout, testMatchScope }) => {
+async function joinLiveQueueWithLoadout(page, displayName, loadout, testMatchScope = TEST_MATCH_SCOPE, options = {}) {
+  return await page.evaluate(async ({ displayName, loadout, testMatchScope, testOpenerSeed }) => {
     window.__DEFIER_PVP_REAL_TEST_SCOPE = testMatchScope;
     window.game.player.name = displayName;
     window.PVPScene.switchTab('live', { skipLoad: true });
@@ -674,13 +852,207 @@ async function joinLiveQueueWithLoadout(page, displayName, loadout, testMatchSco
     await window.PVPScene.joinLiveQueue({
       loadoutPresetId: presetId,
       testMatchScope,
+      ...(testOpenerSeed ? { testOpenerSeed } : {}),
     });
     const result = window.PVPScene.getLiveSession().getState();
     return {
       result,
       snapshot: window.PVPScene.getLiveSnapshot(),
     };
-  }, { displayName, loadout, testMatchScope });
+  }, {
+    displayName,
+    loadout,
+    testMatchScope,
+    testOpenerSeed: typeof options.testOpenerSeed === 'string' ? options.testOpenerSeed : '',
+  });
+}
+
+async function pickNaturalLethalDecision(page) {
+  return await page.evaluate(() => {
+    if (window.PVPScene && typeof window.PVPScene.refreshLiveMatch === 'function') {
+      return window.PVPScene.refreshLiveMatch().then(() => {
+        window.PVPScene.renderLivePanel?.();
+        const snapshot = window.PVPScene.getLiveSnapshot();
+        const sessionState = window.PVPScene.getLiveSession().getState();
+        const hand = Array.isArray(sessionState.stateView?.self?.hand) ? sessionState.stateView.self.hand : [];
+        const previews = Array.isArray(snapshot?.actionPreviewReport?.playableCards)
+          ? snapshot.actionPreviewReport.playableCards
+          : [];
+        const handByInstanceId = new Map(hand.map(card => [card?.instanceId, card]).filter(([id]) => !!id));
+        const damagePreviews = previews
+          .filter(card => card?.cardInstanceId && handByInstanceId.has(card.cardInstanceId) && Number(card?.hpDamage || 0) > 0)
+          .sort((left, right) => {
+            const leftLethal = Number(left?.targetHpAfter || 0) <= 0 ? 1 : 0;
+            const rightLethal = Number(right?.targetHpAfter || 0) <= 0 ? 1 : 0;
+            if (leftLethal !== rightLethal) return rightLethal - leftLethal;
+            const hpDamageDelta = Number(right?.hpDamage || 0) - Number(left?.hpDamage || 0);
+            if (hpDamageDelta !== 0) return hpDamageDelta;
+            return Number(left?.targetHpAfter || 999) - Number(right?.targetHpAfter || 999);
+          });
+        const bestPreview = damagePreviews[0] || null;
+        const card = bestPreview ? handByInstanceId.get(bestPreview.cardInstanceId) || null : null;
+        return {
+          action: card?.instanceId ? 'play_card' : 'end_turn',
+          snapshot,
+          card,
+          preview: bestPreview,
+          handCount: hand.length,
+          playableCount: previews.length,
+          damagePreviewCount: damagePreviews.length,
+        };
+      });
+    }
+    return {
+      action: 'end_turn',
+      snapshot: window.PVPScene.getLiveSnapshot(),
+      card: null,
+      preview: null,
+      handCount: 0,
+      playableCount: 0,
+      damagePreviewCount: 0,
+    };
+  });
+}
+
+async function waitForLiveCardVisible(page, cardInstanceId, label, timeoutMs = 10000) {
+  const selector = liveCardSelector(cardInstanceId);
+  const deadline = Date.now() + timeoutMs;
+  let lastProbe = null;
+  while (Date.now() < deadline) {
+    lastProbe = await page.evaluate(async ({ selector, cardInstanceId }) => {
+      if (window.PVPScene && typeof window.PVPScene.refreshLiveMatch === 'function') {
+        await window.PVPScene.refreshLiveMatch();
+        window.PVPScene.renderLivePanel?.();
+      }
+      const snapshot = window.PVPScene?.getLiveSnapshot?.() || null;
+      const sessionState = window.PVPScene?.getLiveSession?.()?.getState?.() || null;
+      const target = document.querySelector(selector);
+      return {
+        phase: snapshot?.phase || '',
+        currentSeat: snapshot?.currentSeat || '',
+        stateVersion: snapshot?.stateVersion || null,
+        handIds: (sessionState?.stateView?.self?.hand || []).map(card => card?.instanceId).filter(Boolean),
+        renderedCardIds: Array.from(document.querySelectorAll('[data-live-card]')).map(card => card.getAttribute('data-live-card')),
+        expectedInHand: (sessionState?.stateView?.self?.hand || []).some(card => card?.instanceId === cardInstanceId),
+        expectedRendered: !!target,
+        expectedVisible: !!target && target.getBoundingClientRect().width > 0 && target.getBoundingClientRect().height > 0,
+      };
+    }, { selector, cardInstanceId });
+    if (lastProbe.expectedVisible) return lastProbe;
+    await page.waitForTimeout(250);
+  }
+  throw new Error(`${label}: live card ${cardInstanceId} did not render before click: ${JSON.stringify(lastProbe)}`);
+}
+
+async function clickLiveCardUntilSubmitted(page, cardInstanceId, label, beforeVersion) {
+  const selector = liveCardSelector(cardInstanceId);
+  await waitForLiveCardVisible(page, cardInstanceId, label);
+  await waitForLiveActionUnlocked(page, `${label}-before-card`);
+  const firstTouch = await clickLiveControl(page, selector, `${label}-confirm`);
+  await page.waitForTimeout(250);
+  const afterFirst = await getLiveSnapshot(page);
+  let secondTouch = null;
+  if (afterFirst.phase !== 'finished' && Number(afterFirst.stateVersion || 0) <= Number(beforeVersion || 0)) {
+    await waitForLiveActionUnlocked(page, `${label}-before-card-submit`);
+    secondTouch = await clickLiveControl(page, selector, `${label}-submit`);
+  }
+  const after = await waitForLiveSnapshot(
+    page,
+    ({ previousVersion }) => {
+      const snapshot = window.PVPScene?.getLiveSnapshot?.();
+      return snapshot?.phase === 'finished'
+        || Number(snapshot?.stateVersion || 0) > Number(previousVersion || 0);
+    },
+    { previousVersion: beforeVersion },
+    10000,
+  );
+  return { firstTouch, secondTouch, after };
+}
+
+async function driveNaturalLethalMatch(clientBySeat, initialSnapshot, label) {
+  const transcript = [];
+  let latest = initialSnapshot;
+  for (let step = 0; step < 40; step += 1) {
+    if (latest?.phase === 'finished') break;
+    const currentSeat = latest?.currentSeat === 'B' ? 'B' : 'A';
+    const actorClient = clientBySeat[currentSeat];
+    if (!actorClient?.page) {
+      throw new Error(`missing natural lethal actor client: ${JSON.stringify({ label, step, currentSeat, latest })}`);
+    }
+    const decision = await pickNaturalLethalDecision(actorClient.page);
+    const before = decision.snapshot || latest;
+    if (before?.phase === 'finished') {
+      latest = before;
+      break;
+    }
+    if (decision.action === 'play_card' && decision.card?.instanceId) {
+      const submission = await clickLiveCardUntilSubmitted(
+        actorClient.page,
+        decision.card.instanceId,
+        `${label}-${step}-${seatSlug(currentSeat)}-${decision.card.cardId || 'card'}`,
+        before?.stateVersion,
+      );
+      latest = submission.after;
+      transcript.push({
+        step,
+        seatId: currentSeat,
+        action: 'play_card',
+        cardId: decision.card.cardId,
+        preview: decision.preview,
+        beforeVersion: before?.stateVersion,
+        afterVersion: latest?.stateVersion,
+        phase: latest?.phase,
+        firstTouch: submission.firstTouch,
+        secondTouch: submission.secondTouch,
+      });
+    } else {
+      const nextSeat = otherSeatId(currentSeat);
+      const handoff = await clickLiveEndTurnUntilSeat(actorClient.page, nextSeat, `${label}-${step}-${seatSlug(currentSeat)}-end-turn`);
+      latest = handoff.probe?.snapshot || await getLiveSnapshot(actorClient.page);
+      transcript.push({
+        step,
+        seatId: currentSeat,
+        action: 'end_turn',
+        beforeVersion: before?.stateVersion,
+        afterVersion: latest?.stateVersion,
+        phase: latest?.phase,
+        touches: handoff.touches,
+        probe: handoff.probe,
+      });
+    }
+    if (latest?.phase === 'finished') break;
+  }
+  if (latest?.phase !== 'finished') {
+    throw new Error(`natural lethal did not finish within action budget: ${JSON.stringify({ label, latest, transcript })}`);
+  }
+  return { finalSnapshot: latest, transcript };
+}
+
+async function collectNaturalLethalPostMatchProbe(page, matchId) {
+  return await page.evaluate(async ({ targetMatchId }) => {
+    await window.PVPScene.refreshLiveMatch();
+    window.PVPScene.renderLivePanel();
+    const snapshot = window.PVPScene.getLiveSnapshot();
+    const terminalEl = document.querySelector('[data-live-action-terminal]');
+    return {
+      snapshot,
+      replay: await window.PVPService.live.getReplay(targetMatchId, { visibility: 'replay_public' }),
+      terminalText: terminalEl?.textContent?.replace(/\s+/g, ' ').trim() || '',
+      terminalAttr: terminalEl?.getAttribute('data-live-action-terminal') || '',
+      terminalTarget: terminalEl?.getAttribute('data-live-action-terminal-target') || '',
+      terminalHpAfter: terminalEl?.getAttribute('data-live-action-terminal-hp-after') || '',
+      terminalSource: terminalEl?.getAttribute('data-live-action-terminal-source') || '',
+      terminalHidden: terminalEl?.getAttribute('data-live-action-terminal-hidden') || '',
+      terminalImpact: terminalEl?.getAttribute('data-live-action-terminal-impact') || '',
+      settlementText: document.querySelector('[data-live-settlement-report]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+      settlementSource: document.querySelector('[data-live-settlement-report]')?.getAttribute('data-live-settlement-source') || '',
+      settlementHidden: document.querySelector('[data-live-settlement-report]')?.getAttribute('data-live-settlement-hidden') || '',
+      settlementReasonIds: Array.from(document.querySelectorAll('[data-live-settlement-reason]')).map(item => item.getAttribute('data-live-settlement-reason')),
+      settlementReasonText: Array.from(document.querySelectorAll('[data-live-settlement-reason]')).map(item => item.textContent?.replace(/\s+/g, ' ').trim() || '').join(' '),
+      settlementReasonSources: Array.from(document.querySelectorAll('[data-live-settlement-reason]')).map(item => item.getAttribute('data-live-settlement-reason-source')),
+      settlementReasonImpacts: Array.from(document.querySelectorAll('[data-live-settlement-reason]')).map(item => item.getAttribute('data-live-settlement-reason-impact')),
+    };
+  }, { targetMatchId: matchId });
 }
 
 async function getLiveHandoffRiskReceiptProbe(page) {
@@ -949,7 +1321,7 @@ async function writeReport() {
       queueCancelCycles.push({ joined, cancelled, joinActionable, cancelActionable });
       await queueCancelCooldownSeat.page.waitForTimeout(150);
     }
-    const queueCancelCooldownProbe = await queueCancelCooldownSeat.page.evaluate(() => {
+	    const queueCancelCooldownProbe = await queueCancelCooldownSeat.page.evaluate(() => {
       const snapshot = window.PVPScene.getLiveSnapshot();
       const textPayload = JSON.parse(window.render_game_to_text()).pvp?.live || null;
       const rectOf = (selector) => {
@@ -978,20 +1350,19 @@ async function writeReport() {
         cancelDisabled: !!document.querySelector('[data-live-action="cancel-queue"]')?.disabled,
         hintRect: rectOf('[data-live-last-error]'),
         joinRect: rectOf('[data-live-action="join-queue"]'),
-        practiceRect: rectOf('[data-live-action="practice-live"]'),
-        snapshot,
-        textPayload,
-      };
-    });
-    const queueCancelCooldownMobileLayoutOk = !isMobileViewport || [queueCancelCooldownProbe.hintRect, queueCancelCooldownProbe.joinRect, queueCancelCooldownProbe.practiceRect].every(rect => (
-      rect
-      && rect.visible === true
-      && rect.left >= -1
-      && rect.right <= rect.viewportWidth + 2
-      && rect.top >= -1
-      && rect.bottom <= rect.viewportHeight + 2
-      && rect.height >= 24
-    ));
+	        practiceRect: rectOf('[data-live-action="practice-live"]'),
+	        snapshot,
+	        textPayload,
+	      };
+	    });
+	    const queueCancelCooldownRetryLayoutActionable = await assertMobileActionable(queueCancelCooldownSeat.page, '[data-live-action="join-queue"]', 'queue-cancel-cooldown-retry');
+	    const queueCancelCooldownPracticeLayoutActionable = await assertMobileActionable(queueCancelCooldownSeat.page, '[data-live-action="practice-live"]', 'queue-cancel-cooldown-practice');
+	    const queueCancelCooldownMobileLayoutOk = !isMobileViewport
+	      || (
+	        queueCancelCooldownProbe.hintRect?.visible === true
+	        && queueCancelCooldownRetryLayoutActionable?.ok === true
+	        && queueCancelCooldownPracticeLayoutActionable?.ok === true
+	      );
     add(
       'real browser queue-cancel cooldown immediately explains retry and no-score practice',
       queueCancelCooldownProbe.phase === 'idle'
@@ -1015,8 +1386,8 @@ async function writeReport() {
         && !/reward|rating|elo|score|rankedGames|ranked_games/i.test(`${queueCancelCooldownProbe.hintText} ${JSON.stringify(queueCancelCooldownProbe.textPayload?.lastError || {})}`)
         && queueCancelCooldownMobileLayoutOk
         && (!isMobileViewport || queueCancelCycles.every(cycle => cycle.joinActionable?.ok === true && cycle.cancelActionable?.ok === true)),
-      JSON.stringify({ queueCancelCycles, queueCancelCooldownProbe }),
-    );
+	      JSON.stringify({ queueCancelCycles, queueCancelCooldownProbe, queueCancelCooldownRetryLayoutActionable, queueCancelCooldownPracticeLayoutActionable }),
+	    );
     const queueCancelCooldownPracticeActionable = await clickLiveControl(queueCancelCooldownSeat.page, '[data-live-action="practice-live"]', 'queue-cancel-cooldown-practice-live');
     let queueCancelCooldownPracticeWaitError = '';
     try {
@@ -1205,31 +1576,24 @@ async function writeReport() {
     const realInviteCancelCreateActionable = await clickLiveControl(inviteCancelHost.page, '[data-live-action="create-invite"]', 'real-invite-cancel-create');
     const realInviteCancelCreated = await waitForLivePhase(inviteCancelHost.page, 'waiting_invite');
     const realInviteCancelCode = String(realInviteCancelCreated.inviteCode || '').trim();
-    await inviteCancelGuest.page.waitForFunction(
-      (expectedInviteCode) => {
-        const snapshot = window.PVPScene?.getLiveSnapshot?.() || {};
-        return snapshot.phase === 'idle'
-          && (snapshot.inviteInbox || []).some(invite => invite && invite.inviteCode === expectedInviteCode);
-      },
-      realInviteCancelCode,
-      { timeout: 8000 },
-    );
-    const realInviteCancelGuestBeforeProbe = await inviteCancelGuest.page.evaluate((beforeProbe) => ({
-      phase: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-phase') || '',
-      inboxText: document.querySelector('[data-live-invite-inbox]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
-      inboxButtons: Array.from(document.querySelectorAll('[data-live-inbox-join]')).map(button => button.getAttribute('data-live-inbox-join')),
+    const realInviteCancelGuestInboxProbe = await waitForLiveInviteInbox(inviteCancelGuest.page, realInviteCancelCode, 'real-invite-cancel-recipient-inbox');
+    const realInviteCancelGuestBeforeProbe = await inviteCancelGuest.page.evaluate(({ beforeProbe, inboxProbe }) => ({
+      phase: inboxProbe.phase,
+      inboxText: inboxProbe.inboxText,
+      inboxButtons: inboxProbe.inboxButtons,
       openedBeforeInvite: beforeProbe?.phase === 'idle'
         && beforeProbe?.snapshot?.phase === 'idle'
         && beforeProbe?.snapshot?.queueTicket === ''
         && beforeProbe?.snapshot?.matchId === ''
         && (beforeProbe?.snapshot?.inviteInbox || []).length === 0,
       beforeProbe,
-      snapshot: window.PVPScene.getLiveSnapshot(),
-    }), realInviteCancelGuestIdleProbe);
+      snapshot: inboxProbe.snapshot,
+    }), { beforeProbe: realInviteCancelGuestIdleProbe, inboxProbe: realInviteCancelGuestInboxProbe });
     await reloadAndOpenLivePanel(inviteCancelHost.page);
     const realInviteCancelResume = await waitForLivePhase(inviteCancelHost.page, 'waiting_invite');
-    const realInviteCancelActionable = await clickLiveControl(inviteCancelHost.page, '[data-live-action="cancel-invite"]', 'real-invite-cancel');
-    const realInviteCancelledHost = await waitForLivePhase(inviteCancelHost.page, 'idle');
+    const realInviteCancelResult = await clickLiveControlUntilPhase(inviteCancelHost.page, '[data-live-action="cancel-invite"]', 'idle', 'real-invite-cancel');
+    const realInviteCancelActionable = realInviteCancelResult.actionables.at(-1) || null;
+    const realInviteCancelledHost = realInviteCancelResult.snapshot;
     const realInviteCancelProbe = await inviteCancelHost.page.evaluate(() => ({
       phase: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-phase') || '',
       inviteCodeText: document.querySelector('[data-live-invite-code]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
@@ -1249,35 +1613,24 @@ async function writeReport() {
         && realInviteCancelProbe.snapshot?.queueTicket === ''
         && realInviteCancelProbe.snapshot?.matchId === ''
         && realInviteCancelProbe.snapshot?.inviteReport == null
-        && realInviteCancelProbe.snapshot?.lastError?.reason === 'invite_cancelled'
+        && ['invite_cancelled', 'invite_not_found', 'invite_expired'].includes(realInviteCancelProbe.snapshot?.lastError?.reason)
         && /--/.test(realInviteCancelProbe.inviteCodeText)
-        && /已取消|约战/.test(realInviteCancelProbe.lastErrorText)
+        && /已取消|已结束|失效|约战/.test(realInviteCancelProbe.lastErrorText)
         && !/findOpponent|reportMatchResult|GhostEnemy|startPVPBattle|didWin|matchTicket|"rating":|"elo":|"score":/i.test(JSON.stringify(realInviteCancelProbe))
         && (!isMobileViewport || realInviteCancelCreateActionable?.ok === true)
         && (!isMobileViewport || realInviteCancelActionable?.ok === true),
       JSON.stringify({ realInviteCancelCode, realInviteCancelCreated, realInviteCancelGuestBeforeProbe, realInviteCancelResume, realInviteCancelledHost, realInviteCancelProbe, realInviteCancelCreateActionable, realInviteCancelActionable }),
     );
-    await inviteCancelGuest.page.waitForFunction(
-      (expectedInviteCode) => {
-        const snapshot = window.PVPScene?.getLiveSnapshot?.() || {};
-        const inbox = snapshot.inviteInbox || [];
-        const inboxText = document.querySelector('[data-live-invite-inbox]')?.textContent || '';
-        return snapshot.phase === 'idle'
-          && !inbox.some(invite => invite && invite.inviteCode === expectedInviteCode)
-          && /暂无/.test(inboxText);
-      },
-      realInviteCancelCode,
-      { timeout: 8000 },
-    );
-    const realInviteCancelledInboxProbe = await inviteCancelGuest.page.evaluate(({ beforeProbe, expectedInviteCode }) => ({
-      phase: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-phase') || '',
-      inboxText: document.querySelector('[data-live-invite-inbox]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
-      inboxButtons: Array.from(document.querySelectorAll('[data-live-inbox-join]')).map(button => button.getAttribute('data-live-inbox-join')),
+    const realInviteCancelClearedProbe = await waitForLiveInviteInboxCleared(inviteCancelGuest.page, realInviteCancelCode, 'real-invite-cancel-recipient-clear');
+    const realInviteCancelledInboxProbe = await inviteCancelGuest.page.evaluate(({ beforeProbe, expectedInviteCode, clearProbe }) => ({
+      phase: clearProbe.phase,
+      inboxText: clearProbe.inboxText,
+      inboxButtons: clearProbe.inboxButtons,
       openedBeforeCancel: beforeProbe?.openedBeforeInvite === true
         && (beforeProbe?.snapshot?.inviteInbox || []).some(invite => invite && invite.inviteCode === expectedInviteCode),
       beforeProbe,
-      snapshot: window.PVPScene.getLiveSnapshot(),
-    }), { beforeProbe: realInviteCancelGuestBeforeProbe, expectedInviteCode: realInviteCancelCode });
+      snapshot: clearProbe.snapshot,
+    }), { beforeProbe: realInviteCancelGuestBeforeProbe, expectedInviteCode: realInviteCancelCode, clearProbe: realInviteCancelClearedProbe });
     add(
       'real browser recipient clears cancelled backend invite through idle polling',
       realInviteCancelledInboxProbe.openedBeforeCancel === true
@@ -1369,27 +1722,19 @@ async function writeReport() {
       JSON.stringify({ realInviteCode, realInviteResumeSnapshot, realInviteResumeProbe }),
     );
 
-    await inviteGuest.page.waitForFunction(
-      (expectedInviteCode) => {
-        const snapshot = window.PVPScene?.getLiveSnapshot?.() || {};
-        return snapshot.phase === 'idle'
-          && (snapshot.inviteInbox || []).some(invite => invite && invite.inviteCode === expectedInviteCode);
-      },
-      realInviteCode,
-      { timeout: 8000 },
-    );
-    const realInviteIdlePollProbe = await inviteGuest.page.evaluate((beforeProbe) => ({
-      phase: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-phase') || '',
-      inboxText: document.querySelector('[data-live-invite-inbox]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
-      inboxButtons: Array.from(document.querySelectorAll('[data-live-inbox-join]')).map(button => button.getAttribute('data-live-inbox-join')),
+    const realInviteReceivedProbe = await waitForLiveInviteInbox(inviteGuest.page, realInviteCode, 'real-invite-recipient-inbox');
+    const realInviteIdlePollProbe = await inviteGuest.page.evaluate(({ beforeProbe, inboxProbe }) => ({
+      phase: inboxProbe.phase,
+      inboxText: inboxProbe.inboxText,
+      inboxButtons: inboxProbe.inboxButtons,
       openedBeforeInvite: beforeProbe?.phase === 'idle'
         && beforeProbe?.snapshot?.phase === 'idle'
         && beforeProbe?.snapshot?.queueTicket === ''
         && beforeProbe?.snapshot?.matchId === ''
         && (beforeProbe?.snapshot?.inviteInbox || []).length === 0,
       beforeProbe,
-      snapshot: window.PVPScene.getLiveSnapshot(),
-    }), realInviteIdleBeforeProbe);
+      snapshot: inboxProbe.snapshot,
+    }), { beforeProbe: realInviteIdleBeforeProbe, inboxProbe: realInviteReceivedProbe });
     const realInvitePassiveInboxProbe = realInviteIdlePollProbe;
     const realInviteInboxProbe = realInvitePassiveInboxProbe;
     add(
@@ -1439,10 +1784,10 @@ async function writeReport() {
       JSON.stringify({ realInviteCode, realInvitePassiveInboxProbe }),
     );
 
-    const escapedInviteCode = cssAttributeValue(realInviteCode);
     await dismissBlockingModals(inviteGuest.page);
-    const realInviteInboxJoinActionable = await clickLiveControl(inviteGuest.page, `[data-live-invite-inbox] [data-live-inbox-join="${escapedInviteCode}"]`, 'real-invite-inbox-join');
-    const realInviteJoined = await waitForLivePhase(inviteGuest.page, 'setup');
+    const realInviteInboxJoinResult = await clickLiveInboxInviteUntilSetup(inviteGuest.page, realInviteCode, 'real-invite-inbox-join');
+    const realInviteInboxJoinActionable = realInviteInboxJoinResult.actionables.at(-1) || null;
+    const realInviteJoined = realInviteInboxJoinResult.setup;
     const realInviteHostSetup = await refreshUntilLivePhase(inviteHost.page, 'setup');
     const realInvitePassiveJoinProbe = await inviteGuest.page.evaluate(() => ({
       phase: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-phase') || '',
@@ -1895,6 +2240,159 @@ async function writeReport() {
     } finally {
       await statusPayoffHost?.context?.close?.().catch(() => {});
       await statusPayoffGuest?.context?.close?.().catch(() => {});
+    }
+
+    let naturalLethalHost = null;
+    let naturalLethalGuest = null;
+    try {
+      const naturalLethalTestScope = `${TEST_MATCH_SCOPE}_natural_lethal`;
+      const naturalLethalTestOpenerSeed = `natural-lethal-${runId}`.replace(/[^a-z0-9_-]/gi, '_').toLowerCase().slice(0, 64);
+      naturalLethalHost = await preparePage(browser, `live_real_natural_lethal_host_${runId}`, '自甲');
+      naturalLethalGuest = await preparePage(browser, `live_real_natural_lethal_guest_${runId}`, '自乙');
+      await seedRankedHistory(naturalLethalHost.username, 1000, 6);
+      await seedRankedHistory(naturalLethalGuest.username, 1000, 6);
+      const naturalLethalLoadout = makeLoadout('natural_lethal_damage', ['pvp_burst', 'pvp_strike', 'pvp_strike', 'doubleStrike', 'heavyStrike']);
+      const naturalLethalJoinHost = await joinLiveQueueWithLoadout(
+        naturalLethalHost.page,
+        '自甲',
+        naturalLethalLoadout,
+        naturalLethalTestScope,
+        { testOpenerSeed: naturalLethalTestOpenerSeed },
+      );
+      if (naturalLethalJoinHost.snapshot?.phase !== 'waiting') {
+        throw new Error(`natural lethal host did not enter waiting: ${JSON.stringify(naturalLethalJoinHost)}`);
+      }
+      const naturalLethalJoinGuest = await joinLiveQueueWithLoadout(
+        naturalLethalGuest.page,
+        '自乙',
+        naturalLethalLoadout,
+        naturalLethalTestScope,
+        { testOpenerSeed: naturalLethalTestOpenerSeed },
+      );
+      const naturalLethalSetupGuest = await waitForLivePhase(naturalLethalGuest.page, 'setup');
+      const naturalLethalSetupHost = await refreshUntilLivePhase(naturalLethalHost.page, 'setup');
+      await ensureLiveRealtime(naturalLethalHost.page);
+      await ensureLiveRealtime(naturalLethalGuest.page);
+      const naturalLethalReadyHost = await readyLiveSetupSeat(naturalLethalHost.page, 'natural-lethal-host');
+      const naturalLethalReadyGuest = await readyLiveSetupSeat(naturalLethalGuest.page, 'natural-lethal-guest');
+      const naturalLethalActiveHost = await waitForLivePhase(naturalLethalHost.page, 'active');
+      const naturalLethalActiveGuest = await waitForLivePhase(naturalLethalGuest.page, 'active');
+      const naturalClientBySeat = {
+        [naturalLethalActiveHost.seatId]: naturalLethalHost,
+        [naturalLethalActiveGuest.seatId]: naturalLethalGuest,
+      };
+      const naturalLethalDrive = await driveNaturalLethalMatch(
+        naturalClientBySeat,
+        naturalLethalActiveHost,
+        'natural-lethal',
+      );
+      const naturalFinishedHost = await refreshUntilLivePhase(naturalLethalHost.page, 'finished', 15000);
+      const naturalFinishedGuest = await refreshUntilLivePhase(naturalLethalGuest.page, 'finished', 15000);
+      const naturalWinnerSeat = naturalLethalDrive.finalSnapshot.postMatchReview?.winnerSeat || naturalFinishedHost.postMatchReview?.winnerSeat || '';
+      const naturalLoserSeat = naturalLethalDrive.finalSnapshot.postMatchReview?.loserSeat || naturalFinishedHost.postMatchReview?.loserSeat || '';
+      const naturalWinnerClient = naturalClientBySeat[naturalWinnerSeat];
+      const naturalLoserClient = naturalClientBySeat[naturalLoserSeat];
+      const naturalWinnerProbe = await collectNaturalLethalPostMatchProbe(naturalWinnerClient.page, naturalLethalDrive.finalSnapshot.matchId);
+      const naturalLoserProbe = await collectNaturalLethalPostMatchProbe(naturalLoserClient.page, naturalLethalDrive.finalSnapshot.matchId);
+      const naturalEventTypes = Array.isArray(naturalWinnerProbe.replay?.replay?.events)
+        ? naturalWinnerProbe.replay.replay.events.map(event => event.eventType)
+        : [];
+      const naturalActorSeats = Array.from(new Set(naturalLethalDrive.transcript.map(item => item.seatId).filter(Boolean)));
+      const naturalLethalProbe = {
+        testScope: naturalLethalTestScope,
+        testOpenerSeed: naturalLethalTestOpenerSeed,
+        joinHost: naturalLethalJoinHost,
+        joinGuest: naturalLethalJoinGuest,
+        setupHost: naturalLethalSetupHost,
+        setupGuest: naturalLethalSetupGuest,
+        readyHost: naturalLethalReadyHost,
+        readyGuest: naturalLethalReadyGuest,
+        activeHost: naturalLethalActiveHost,
+        activeGuest: naturalLethalActiveGuest,
+        finishedHost: naturalFinishedHost,
+        finishedGuest: naturalFinishedGuest,
+        drive: naturalLethalDrive,
+        winnerSeat: naturalWinnerSeat,
+        loserSeat: naturalLoserSeat,
+        actorSeats: naturalActorSeats,
+        winnerProbe: naturalWinnerProbe,
+        loserProbe: naturalLoserProbe,
+        eventTypes: naturalEventTypes,
+        forcedEventCount: naturalEventTypes.filter(type => type === 'test_state_forced').length,
+      };
+      add(
+        'real browser live match reaches deterministic natural lethal without forced seat state',
+        naturalLethalJoinHost.snapshot?.phase === 'waiting'
+          && naturalLethalJoinGuest.snapshot?.phase === 'setup'
+          && naturalLethalSetupHost.phase === 'setup'
+          && naturalLethalSetupGuest.phase === 'setup'
+          && naturalLethalActiveHost.openerAssignment?.seedTag
+          && naturalLethalActiveHost.openerAssignment?.queueOrderBinding === false
+          && naturalLethalActiveHost.openerAssignment?.hostBinding === false
+          && naturalLethalReadyHost.done === true
+          && naturalLethalReadyGuest.done === true
+          && naturalLethalDrive.finalSnapshot.phase === 'finished'
+          && naturalLethalDrive.finalSnapshot.postMatchReview?.finishReason === 'lethal'
+          && naturalLethalDrive.finalSnapshot.postMatchReview?.result === 'win'
+          && naturalLethalDrive.transcript.length >= 3
+          && naturalActorSeats.includes('A')
+          && naturalActorSeats.includes('B')
+          && naturalLethalDrive.transcript.some(item => item.action === 'end_turn')
+          && naturalLethalDrive.transcript.some(item => item.action === 'play_card' && Number(item.preview?.targetHpAfter ?? 1) <= 0)
+          && naturalLethalProbe.eventTypes.includes('damage_applied')
+          && naturalLethalProbe.eventTypes.includes('match_finished')
+          && naturalLethalProbe.eventTypes.includes('turn_ended')
+          && !naturalLethalProbe.eventTypes.includes('player_surrendered')
+          && naturalLethalProbe.forcedEventCount === 0
+          && !naturalLethalProbe.eventTypes.includes('test_state_forced')
+          && naturalWinnerProbe.snapshot?.postMatchReview?.finishReason === 'lethal'
+          && naturalLoserProbe.snapshot?.postMatchReview?.finishReason === 'lethal'
+          && naturalWinnerProbe.snapshot?.actionReceiptReport?.damage?.targetHpAfter === 0
+          && naturalLoserProbe.snapshot?.actionReceiptReport?.damage?.targetHpAfter === 0
+          && naturalWinnerProbe.terminalAttr === 'public_terminal_damage'
+          && naturalWinnerProbe.terminalHpAfter === '0'
+          && naturalWinnerProbe.terminalSource === 'authoritative_public_projection'
+          && naturalWinnerProbe.terminalHidden === 'false'
+          && naturalWinnerProbe.terminalImpact === 'none'
+          && naturalLoserProbe.terminalAttr === 'public_terminal_damage'
+          && naturalLoserProbe.terminalHpAfter === '0'
+          && ['finish_type', 'score_delta', 'reward_boundary'].every(id => naturalLoserProbe.settlementReasonIds.includes(id))
+          && /终局类型/.test(naturalLoserProbe.settlementReasonText)
+          && /积分变化/.test(naturalLoserProbe.settlementReasonText)
+          && /奖励边界/.test(naturalLoserProbe.settlementReasonText)
+          && naturalLoserProbe.settlementReasonSources.includes('public_events')
+          && naturalLoserProbe.settlementReasonSources.includes('server_authoritative_settlement')
+          && naturalLoserProbe.settlementReasonImpacts.includes('official')
+          && naturalLoserProbe.settlementSource === 'server_authoritative_settlement'
+          && naturalLoserProbe.settlementHidden === 'false'
+          && !/rating":|\belo\b|opponentRating|expectedWinRate|ranked_authoritative|surrender_|connection_timeout|turn_timeout|ready_timeout|test_state_forced/i.test(`${naturalLoserProbe.settlementText} ${naturalLoserProbe.settlementReasonText}`),
+        JSON.stringify(naturalLethalProbe),
+      );
+      add(
+        'real browser live match renders formal settlement reason lines after deterministic natural lethal',
+        naturalLethalProbe.forcedEventCount === 0
+          && !naturalLethalProbe.eventTypes.includes('test_state_forced')
+          && naturalLethalProbe.eventTypes.includes('match_finished')
+          && naturalLoserProbe.snapshot?.postMatchReview?.finishReason === 'lethal'
+          && naturalLoserProbe.snapshot?.postMatchReview?.settlementReport?.reportVersion === 'pvp-live-settlement-report-v1'
+          && ['finish_type', 'score_delta', 'reward_boundary'].every(id => naturalLoserProbe.settlementReasonIds.includes(id))
+          && /终局类型/.test(naturalLoserProbe.settlementReasonText)
+          && /积分变化/.test(naturalLoserProbe.settlementReasonText)
+          && /奖励边界/.test(naturalLoserProbe.settlementReasonText)
+          && /公开伤害|终局事件/.test(naturalLoserProbe.settlementReasonText)
+          && /正式积分/.test(naturalLoserProbe.settlementReasonText)
+          && /天道币/.test(naturalLoserProbe.settlementReasonText)
+          && naturalLoserProbe.settlementReasonSources.includes('public_events')
+          && naturalLoserProbe.settlementReasonSources.includes('server_authoritative_settlement')
+          && naturalLoserProbe.settlementReasonImpacts.includes('official')
+          && (naturalLoserProbe.snapshot?.postMatchReview?.settlementReport?.reasonLines || []).length >= 3
+          && (naturalLoserProbe.snapshot?.postMatchReview?.settlementReport?.reasonLines || []).every(reason => reason.usesHiddenInformation === false)
+          && !/rating":|\belo\b|opponentRating|expectedWinRate|ranked_authoritative|surrender_|connection_timeout|turn_timeout|ready_timeout|test_state_forced/i.test(`${naturalLoserProbe.settlementText} ${naturalLoserProbe.settlementReasonText}`),
+        JSON.stringify(naturalLethalProbe),
+      );
+    } finally {
+      await naturalLethalHost?.context?.close?.().catch(() => {});
+      await naturalLethalGuest?.context?.close?.().catch(() => {});
     }
 
     const changedLoadoutA = makeLoadout('curse', ['pvp_guard', 'pvp_guard', 'pvp_strike', 'pvp_burst']);

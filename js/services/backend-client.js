@@ -811,6 +811,9 @@ export const BackendClient = {
       if (typeof options.testMatchScope === 'string' && options.testMatchScope.trim()) {
         data.testMatchScope = options.testMatchScope.trim().slice(0, 64);
       }
+      if (typeof options.testOpenerSeed === 'string' && options.testOpenerSeed.trim()) {
+        data.testOpenerSeed = options.testOpenerSeed.trim().slice(0, 64);
+      }
       const result = await this.requestServer(`${this.getLivePvpPathPrefix()}/queue/join`, {
         method: 'POST',
         data
