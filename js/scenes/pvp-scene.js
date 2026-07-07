@@ -2513,6 +2513,15 @@ export const PVPScene = {
   getLiveWaitingQualitySafeguard(state) {
     const report = this.getLiveWaitingReport(state);
     const safeguards = report && Array.isArray(report.safeguards) ? report.safeguards : [];
+    if (safeguards.includes('player_avoid_opponent')) {
+      return {
+        reason: 'player_avoid_opponent',
+        title: '匹配质量护栏',
+        themeLabel: '赛后避开对手',
+        trainingTag: '赛后避开对手',
+        advice: '赛后避开练习：系统正在跳过你赛后避开的对手，先练首轮稳血、反制和低费节奏；不写正式积分。'
+      };
+    }
     if (safeguards.includes('recent_opponent_suppression')) {
       return {
         reason: 'recent_opponent_suppression',
@@ -2993,7 +3002,7 @@ export const PVPScene = {
         usesHiddenInformation: actionBridge.usesHiddenInformation === true,
         rankedImpact: String(actionBridge.rankedImpact || 'none'),
         coveredAuditActions: Array.isArray(actionBridge.coveredAuditActions)
-          ? actionBridge.coveredAuditActions.map(item => String(item || '')).filter(Boolean).slice(0, 8)
+          ? actionBridge.coveredAuditActions.map(item => String(item || '')).filter(Boolean).slice(0, 12)
           : [],
         uiActionIdsByAuditAction: actionBridge.uiActionIdsByAuditAction && typeof actionBridge.uiActionIdsByAuditAction === 'object'
           ? Object.fromEntries(Object.entries(actionBridge.uiActionIdsByAuditAction).map(([key, value]) => [
@@ -3002,7 +3011,7 @@ export const PVPScene = {
           ]).filter(([key]) => key))
           : {}
       } : null,
-      nextActions: nextActions.slice(0, 8).map(action => ({
+      nextActions: nextActions.slice(0, 12).map(action => ({
         id: String(action && action.id || ''),
         auditActionId: String(action && action.auditActionId || ''),
         label: String(action && action.label || ''),

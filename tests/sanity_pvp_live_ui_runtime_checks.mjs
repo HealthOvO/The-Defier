@@ -1722,6 +1722,36 @@ assert.equal(
   'recent_opponent_suppression',
   'recent-opponent waiting safeguard should create a no-score practice handoff scenario',
 );
+const avoidOpponentWaitingState = {
+  ...recentOpponentWaitingState,
+  queueTicket: 'pvplq-ui-avoid-opponent',
+  waitingReport: {
+    ...recentOpponentWaitingState.waitingReport,
+    protectionReason: 'player_avoid_opponent',
+    releaseMode: 'quality_safeguard_wait',
+    message: '已优先避开你赛后屏蔽的对手，正在为你换一位真人；若真人池过小，系统会继续解释等待原因。',
+    safeguards: ['real_player_only', 'player_avoid_opponent', 'no_ghost_fallback', 'no_score_change']
+  }
+};
+const avoidOpponentWaitingMarkup = PVPScene.renderLiveWaitingReport(avoidOpponentWaitingState);
+assert.match(
+  avoidOpponentWaitingMarkup,
+  /匹配质量护栏|赛后避开对手|换一位真人/,
+  'avoid-opponent waiting safeguard should explain the player_avoid_opponent branch before long-wait',
+);
+for (const button of recentOpponentButtons.values()) {
+  button.disabled = true;
+}
+PVPScene.getLiveSession = () => ({ getState: () => avoidOpponentWaitingState });
+PVPScene.updateLiveButtons('waiting', false, null);
+assert.equal(recentOpponentButtons.get('practice-live').disabled, false, 'avoid-opponent waiting safeguard should keep no-score practice available');
+assert.equal(recentOpponentButtons.get('cancel-queue').disabled, false, 'avoid-opponent waiting safeguard should keep cancellation available');
+const avoidOpponentPracticeScenario = PVPScene.buildLiveWaitingPracticeScenario(avoidOpponentWaitingState);
+assert.equal(
+  avoidOpponentPracticeScenario?.finishReason,
+  'player_avoid_opponent',
+  'avoid-opponent waiting safeguard should create a no-score practice handoff scenario',
+);
 documentStub.querySelector = oldDocumentQuerySelector;
 
 const lowSampleWaitingState = {
@@ -3801,18 +3831,22 @@ const bridgedReview = PVPScene.getLivePostMatchReview({
     finishReason: 'lethal',
     summary: '公开轨迹显示血线被压低。',
     nextActions: [
+      { id: 'review_events', auditActionId: 'review_events', label: '查看权威事件', detail: '查看公开事件。' },
       { id: 'review_key_turns', auditActionId: 'key_turn_replay', label: '关键回合复盘', detail: '按公开事件复盘。' },
       { id: 'share_replay', auditActionId: 'public_replay_share', label: '分享脱敏战报', detail: '生成公开战报。' },
+      { id: 'friendly_rematch', auditActionId: 'friendly_rematch', label: '低压力再战', detail: '换边再来一局。' },
       { id: 'adjust_loadout', auditActionId: 'apply_loadout_recommendation', label: '调整斗法谱', detail: '按公开推荐改谱。' },
       { id: 'practice', auditActionId: 'practice_topic', label: '问道练习', detail: '练习不写正式结果。' },
-      { id: 'report_issue', auditActionId: 'report_issue', label: '举报异常', detail: '提交异常反馈。' }
+      { id: 'queue_again', auditActionId: 'queue_again', label: '继续真人排位', detail: '重新入队。' },
+      { id: 'report_issue', auditActionId: 'report_issue', label: '举报异常', detail: '提交异常反馈。' },
+      { id: 'avoid_opponent', auditActionId: 'avoid_opponent', label: '避开此对手', detail: '后续匹配优先避开。' }
     ]
   }
 });
 assert.deepEqual(
   bridgedReview.nextActions.map(action => `${action.id}:${action.auditActionId}`),
-  ['review_key_turns:key_turn_replay', 'share_replay:public_replay_share', 'adjust_loadout:apply_loadout_recommendation', 'practice:practice_topic', 'report_issue:report_issue'],
-  'post-match review normalizer should preserve audit action ids for real UI buttons'
+  ['review_events:review_events', 'review_key_turns:key_turn_replay', 'share_replay:public_replay_share', 'friendly_rematch:friendly_rematch', 'adjust_loadout:apply_loadout_recommendation', 'practice:practice_topic', 'queue_again:queue_again', 'report_issue:report_issue', 'avoid_opponent:avoid_opponent'],
+  'post-match review normalizer should preserve all real UI button audit action ids'
 );
 
 let replayReviewState = {

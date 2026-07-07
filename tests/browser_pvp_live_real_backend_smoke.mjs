@@ -18,6 +18,7 @@ const dbPath = process.env.BROWSER_PVP_LIVE_REAL_DB_PATH
 const viewportMode = String(process.env.BROWSER_PVP_LIVE_REAL_VIEWPORT || 'desktop').trim().toLowerCase();
 const isMobileViewport = viewportMode === 'mobile';
 const requireMobileViewport = process.env.BROWSER_PVP_LIVE_REAL_REQUIRE_MOBILE === '1';
+const onlySafetyExit = process.env.BROWSER_PVP_LIVE_REAL_ONLY_SAFETY_EXIT === '1';
 const runId = `${Date.now()}_${Math.random().toString(16).slice(2, 10)}`;
 const password = `pwd_${runId}`;
 const TEST_MATCH_SCOPE = `real_backend_smoke_${runId}`.replace(/[^a-z0-9_-]/gi, '_').toLowerCase();
@@ -43,6 +44,10 @@ function cssAttributeValue(value) {
 
 function liveCardSelector(cardInstanceId) {
   return `[data-live-card="${cssAttributeValue(cardInstanceId)}"]`;
+}
+
+function hasLiveMatchId(value) {
+  return /^pvplm-/.test(String(value || '').trim());
 }
 
 function otherSeatId(seatId) {
@@ -1189,6 +1194,273 @@ async function requestLivePvpReplay(page, matchId, options = {}) {
   }, { targetMatchId: matchId, replayOptions: options });
 }
 
+async function runFocusedPostMatchSafetyExit(browser) {
+  const focusedScope = `${TEST_MATCH_SCOPE}_safety_exit`;
+  const winnerLoadout = makeLoadout('focused_safety_winner', ['pvp_guard', 'pvp_strike', 'surgeStep', 'tacticalExpose']);
+  const loserLoadout = makeLoadout('focused_safety_loser', ['pvp_guard', 'pvp_strike', 'innerPeace', 'tacticalExpose']);
+  const winnerClient = await preparePage(browser, `live_real_safety_winner_${runId}`, '安甲');
+  const loserClient = await preparePage(browser, `live_real_safety_loser_${runId}`, '安乙');
+  try {
+    await seedRankedHistory(winnerClient.username, 1000, 6);
+    await seedRankedHistory(loserClient.username, 1000, 6);
+
+    const loserJoin = await joinLiveQueueWithLoadout(loserClient.page, '安乙', loserLoadout, focusedScope);
+    const winnerJoin = await joinLiveQueueWithLoadout(winnerClient.page, '安甲', winnerLoadout, focusedScope);
+    const [loserSetup, winnerSetup] = await Promise.all([
+      refreshUntilLivePhase(loserClient.page, 'setup', 10000),
+      refreshUntilLivePhase(winnerClient.page, 'setup', 10000),
+    ]);
+    const [loserSetupReady, winnerSetupReady] = await Promise.all([
+      readyLiveSetupSeat(loserClient.page, 'focused-safety-loser-ready', 10000),
+      readyLiveSetupSeat(winnerClient.page, 'focused-safety-winner-ready', 10000),
+    ]);
+    const [loserActive, winnerActive] = await Promise.all([
+      refreshUntilLivePhase(loserClient.page, 'active', 12000),
+      refreshUntilLivePhase(winnerClient.page, 'active', 12000),
+    ]);
+
+    await clickLiveControl(loserClient.page, '[data-live-action="surrender"]', 'focused-safety-loser-surrender-confirm');
+    await loserClient.page.waitForTimeout(250);
+    await clickLiveControl(loserClient.page, '[data-live-action="surrender"]', 'focused-safety-loser-surrender-submit');
+    const loserFinished = await refreshUntilLivePhase(loserClient.page, 'finished', 15000);
+    const winnerFinished = await refreshUntilLivePhase(winnerClient.page, 'finished', 15000);
+
+    const reportIssueActionable = await clickLiveControl(
+      loserClient.page,
+      '[data-live-post-review-action="report_issue"]',
+      'focused-safety-report-issue',
+    );
+    await loserClient.page.waitForSelector('[data-live-dispute-report]', { timeout: 8000 });
+    const avoidOpponentActionable = await clickLiveControl(
+      loserClient.page,
+      '[data-live-post-review-action="avoid_opponent"]',
+      'focused-safety-avoid-opponent',
+    );
+    await loserClient.page.waitForSelector('[data-live-avoid-opponent]', { timeout: 8000 });
+    const postSafetyExitProbe = await loserClient.page.evaluate(() => {
+      const snapshot = window.PVPScene.getLiveSnapshot() || null;
+      const textPayload = JSON.parse(window.render_game_to_text()).pvp?.live || null;
+      const disputeEl = document.querySelector('[data-live-dispute-report]');
+      const avoidEl = document.querySelector('[data-live-avoid-opponent]');
+      const review = snapshot?.postMatchReview || null;
+      return {
+        phase: snapshot?.phase || '',
+        rootPhase: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-phase') || '',
+        hint: document.querySelector('[data-live-last-error]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+        disputeText: disputeEl?.textContent?.replace(/\s+/g, ' ').trim() || '',
+        disputeHidden: disputeEl?.getAttribute('data-live-dispute-report-hidden') || '',
+        disputeImpact: disputeEl?.getAttribute('data-live-dispute-report-ranked-impact') || '',
+        disputeStatus: disputeEl?.getAttribute('data-live-dispute-report-status') || '',
+        avoidText: avoidEl?.textContent?.replace(/\s+/g, ' ').trim() || '',
+        avoidHidden: avoidEl?.getAttribute('data-live-avoid-opponent-hidden') || '',
+        avoidImpact: avoidEl?.getAttribute('data-live-avoid-opponent-ranked-impact') || '',
+        avoidStatus: avoidEl?.getAttribute('data-live-avoid-opponent-status') || '',
+        avoidSafeguard: avoidEl?.getAttribute('data-live-avoid-opponent-safeguard') || '',
+        disputeReceipt: snapshot?.lastDisputeReport || null,
+        avoidReceipt: snapshot?.lastAvoidOpponentReport || null,
+        textDisputeReceipt: textPayload?.lastDisputeReport || null,
+        textAvoidReceipt: textPayload?.lastAvoidOpponentReport || null,
+        settlementReport: review?.settlementReport || null,
+        fairnessReceipt: review?.fairnessReceipt || null,
+      };
+    });
+    add(
+      'focused real browser post-match safety exits return audit-safe no-score receipts',
+      loserFinished.phase === 'finished'
+        && winnerFinished.phase === 'finished'
+        && loserFinished.matchId === winnerFinished.matchId
+        && loserFinished.postMatchReview?.result === 'loss'
+        && winnerFinished.postMatchReview?.result === 'win'
+        && postSafetyExitProbe.phase === 'finished'
+        && postSafetyExitProbe.rootPhase === 'finished'
+        && postSafetyExitProbe.disputeStatus === 'reported'
+        && postSafetyExitProbe.disputeHidden === 'false'
+        && postSafetyExitProbe.disputeImpact === 'none'
+        && postSafetyExitProbe.disputeReceipt?.reportVersion === 'pvp-live-dispute-report-receipt-v1'
+        && postSafetyExitProbe.disputeReceipt?.sourceVisibility === 'audit_safe_public_state'
+        && postSafetyExitProbe.disputeReceipt?.usesHiddenInformation === false
+        && postSafetyExitProbe.disputeReceipt?.rankedImpact === 'none'
+        && postSafetyExitProbe.disputeReceipt?.evidencePackage?.usesHiddenInformation === false
+        && postSafetyExitProbe.disputeReceipt?.evidencePackage?.rankedImpact === 'none'
+        && postSafetyExitProbe.textDisputeReceipt?.rankedImpact === 'none'
+        && postSafetyExitProbe.avoidStatus === 'active'
+        && postSafetyExitProbe.avoidHidden === 'false'
+        && postSafetyExitProbe.avoidImpact === 'none'
+        && postSafetyExitProbe.avoidSafeguard === 'player_avoid_opponent'
+        && postSafetyExitProbe.avoidReceipt?.reportVersion === 'pvp-live-avoid-opponent-receipt-v1'
+        && postSafetyExitProbe.avoidReceipt?.sourceVisibility === 'account_preference'
+        && postSafetyExitProbe.avoidReceipt?.usesHiddenInformation === false
+        && postSafetyExitProbe.avoidReceipt?.rankedImpact === 'none'
+        && postSafetyExitProbe.avoidReceipt?.formalResultPolicy === 'no_result_change'
+        && postSafetyExitProbe.avoidReceipt?.safeguard === 'player_avoid_opponent'
+        && postSafetyExitProbe.textAvoidReceipt?.safeguard === 'player_avoid_opponent'
+        && postSafetyExitProbe.settlementReport?.reportVersion === 'pvp-live-settlement-report-v1'
+        && postSafetyExitProbe.fairnessReceipt?.reportVersion === 'pvp-live-fairness-receipt-v1'
+        && (!isMobileViewport || reportIssueActionable?.ok === true)
+        && (!isMobileViewport || avoidOpponentActionable?.ok === true)
+        && !/payload|hand|deck|cardId|instanceId|loadoutSnapshot|reward":|rating|elo|token/i.test(`${postSafetyExitProbe.disputeText} ${postSafetyExitProbe.avoidText} ${JSON.stringify(postSafetyExitProbe.disputeReceipt || {})} ${JSON.stringify(postSafetyExitProbe.avoidReceipt || {})}`),
+      JSON.stringify({
+        focusedScope,
+        loserJoin,
+        winnerJoin,
+        loserSetup,
+        winnerSetup,
+        loserSetupReady,
+        winnerSetupReady,
+        loserActive,
+        winnerActive,
+        loserFinished,
+        winnerFinished,
+        postSafetyExitProbe,
+        reportIssueActionable,
+        avoidOpponentActionable,
+      }),
+    );
+
+    const winnerRequeueActionable = await clickLiveControl(
+      winnerClient.page,
+      '[data-live-post-review-action="queue_again"]',
+      'focused-safety-winner-queue-again',
+    );
+    const winnerWaiting = await refreshUntilLivePhase(winnerClient.page, 'waiting', 10000);
+    const loserRequeueActionable = await clickLiveControl(
+      loserClient.page,
+      '[data-live-post-review-action="queue_again"]',
+      'focused-safety-loser-queue-again',
+    );
+    const waitForAvoidSuppressedQueue = async (page, label, timeoutMs = 12000) => {
+      let waitError = '';
+      let snapshot = null;
+      try {
+        snapshot = await refreshUntilLiveSnapshot(page, () => {
+          const current = window.PVPScene?.getLiveSnapshot?.();
+          const report = current?.waitingReport;
+          return current?.phase === 'waiting'
+            && !current?.matchId
+            && report?.protectionReason === 'player_avoid_opponent'
+            && report?.releaseMode === 'quality_safeguard_wait'
+            && report?.safeguards?.includes('player_avoid_opponent');
+        }, null, timeoutMs);
+      } catch (error) {
+        waitError = error?.message || String(error || `${label} wait failed`);
+        try {
+          await page.evaluate(async () => {
+            await window.PVPScene?.refreshLiveMatch?.();
+            window.PVPScene?.renderLivePanel?.();
+          });
+          snapshot = await getLiveSnapshot(page);
+        } catch (snapshotError) {
+          waitError = `${waitError}; snapshot=${snapshotError?.message || String(snapshotError || '')}`;
+        }
+      }
+      return { label, waitError, snapshot };
+    };
+    const winnerProtectedResult = await waitForAvoidSuppressedQueue(winnerClient.page, 'focused-avoided-winner');
+    const loserProtectedResult = await waitForAvoidSuppressedQueue(loserClient.page, 'focused-avoider');
+    await winnerClient.page.evaluate(() => window.PVPScene.renderLivePanel());
+    await loserClient.page.evaluate(() => window.PVPScene.renderLivePanel());
+    const suppressionProbe = {
+      avoided: await winnerClient.page.evaluate(() => {
+        const snapshot = window.PVPScene.getLiveSnapshot();
+        const textPayload = JSON.parse(window.render_game_to_text()).pvp?.live || null;
+        return {
+          phase: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-phase') || '',
+          matchId: document.querySelector('[data-live-match-id]')?.textContent?.trim() || snapshot?.matchId || '',
+          ticket: document.querySelector('[data-live-queue-ticket]')?.textContent?.trim() || snapshot?.queueTicket || '',
+          waitingText: document.querySelector('[data-live-waiting-report]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+          hint: document.querySelector('[data-live-last-error]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+          practiceDisabled: !!document.querySelector('[data-live-action="practice-live"]')?.disabled,
+          cancelDisabled: !!document.querySelector('[data-live-action="cancel-queue"]')?.disabled,
+          snapshot,
+          textPayload,
+        };
+      }),
+      avoider: await loserClient.page.evaluate(() => {
+        const snapshot = window.PVPScene.getLiveSnapshot();
+        const textPayload = JSON.parse(window.render_game_to_text()).pvp?.live || null;
+        return {
+          phase: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-phase') || '',
+          matchId: document.querySelector('[data-live-match-id]')?.textContent?.trim() || snapshot?.matchId || '',
+          ticket: document.querySelector('[data-live-queue-ticket]')?.textContent?.trim() || snapshot?.queueTicket || '',
+          waitingText: document.querySelector('[data-live-waiting-report]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+          hint: document.querySelector('[data-live-last-error]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+          practiceDisabled: !!document.querySelector('[data-live-action="practice-live"]')?.disabled,
+          cancelDisabled: !!document.querySelector('[data-live-action="cancel-queue"]')?.disabled,
+          snapshot,
+          textPayload,
+        };
+      }),
+    };
+    const suppressionReports = [
+      suppressionProbe.avoided?.snapshot?.waitingReport,
+      suppressionProbe.avoider?.snapshot?.waitingReport,
+      suppressionProbe.avoided?.textPayload?.waitingReport,
+      suppressionProbe.avoider?.textPayload?.waitingReport,
+    ].filter(Boolean);
+    const suppressionPass = winnerWaiting.phase === 'waiting'
+      && winnerProtectedResult.snapshot?.phase === 'waiting'
+      && loserProtectedResult.snapshot?.phase === 'waiting'
+      && !winnerProtectedResult.waitError
+      && !loserProtectedResult.waitError
+      && suppressionProbe.avoided.phase === 'waiting'
+      && suppressionProbe.avoider.phase === 'waiting'
+      && !hasLiveMatchId(suppressionProbe.avoided.matchId)
+      && !hasLiveMatchId(suppressionProbe.avoider.matchId)
+      && /^pvplq-/.test(suppressionProbe.avoided.ticket)
+      && /^pvplq-/.test(suppressionProbe.avoider.ticket)
+      && suppressionReports.length >= 4
+      && suppressionReports.every(report => report?.reportVersion === 'pvp-live-waiting-report-v1')
+      && suppressionReports.every(report => report?.protectionReason === 'player_avoid_opponent')
+      && suppressionReports.every(report => report?.releaseMode === 'quality_safeguard_wait')
+      && suppressionReports.every(report => report?.safeguards?.includes('player_avoid_opponent'))
+      && suppressionReports.every(report => report?.currentEligibleActions?.includes('practice'))
+      && suppressionReports.every(report => report?.currentEligibleActions?.includes('cancel_queue'))
+      && /匹配质量护栏|赛后避开对手|换一位真人/.test(`${suppressionProbe.avoided.waitingText} ${suppressionProbe.avoider.waitingText}`)
+      && /不会自动切残影|不会自动切换残影/.test(`${suppressionProbe.avoided.waitingText} ${suppressionProbe.avoider.waitingText} ${suppressionProbe.avoided.hint} ${suppressionProbe.avoider.hint}`)
+      && suppressionProbe.avoided.practiceDisabled === false
+      && suppressionProbe.avoider.practiceDisabled === false
+      && suppressionProbe.avoided.cancelDisabled === false
+      && suppressionProbe.avoider.cancelDisabled === false
+      && (!isMobileViewport || winnerRequeueActionable?.ok === true)
+      && (!isMobileViewport || loserRequeueActionable?.ok === true)
+      && !/payload|hand|deck|cardId|instanceId|loadoutSnapshot|reward":|rating|elo|token/i.test(`${suppressionProbe.avoided.waitingText} ${suppressionProbe.avoider.waitingText} ${JSON.stringify(suppressionReports)}`);
+    add(
+      'focused real browser avoid-opponent suppresses immediate rematch and keeps no-score practice available',
+      suppressionPass,
+      JSON.stringify({
+        focusedScope,
+        winnerWaiting,
+        winnerProtectedResult,
+        loserProtectedResult,
+        suppressionProbe,
+        winnerRequeueActionable,
+        loserRequeueActionable,
+      }),
+    );
+    if (!suppressionPass) {
+      throw new Error(`focused avoid-opponent suppression did not hold: ${JSON.stringify({
+        winnerWaiting,
+        winnerProtectedResult,
+        loserProtectedResult,
+        suppressionProbe,
+      })}`);
+    }
+
+    await winnerClient.page.evaluate(async () => {
+      await window.PVPScene.cancelLiveQueue();
+    });
+    await loserClient.page.evaluate(async () => {
+      await window.PVPScene.cancelLiveQueue();
+    });
+    await refreshUntilLivePhase(winnerClient.page, 'idle', 8000);
+    await refreshUntilLivePhase(loserClient.page, 'idle', 8000);
+    add('focused real browser post-match safety exit smoke has no console errors', consoleErrors.length === 0, JSON.stringify(consoleErrors));
+  } finally {
+    await winnerClient.context.close().catch(() => {});
+    await loserClient.context.close().catch(() => {});
+  }
+}
+
 async function writeReport() {
   const report = {
     url: appUrl,
@@ -1223,6 +1495,10 @@ async function writeReport() {
   let seatB = null;
   try {
     await waitForHealth(backend);
+    if (onlySafetyExit) {
+      await runFocusedPostMatchSafetyExit(browser);
+      return;
+    }
     seatA = await preparePage(browser, `live_real_a_${runId}`, '甲');
     seatB = await preparePage(browser, `live_real_b_${runId}`, '乙');
     await seedRankedHistory(seatA.username, 1000, 6);
@@ -4363,6 +4639,81 @@ async function writeReport() {
       JSON.stringify({ winnerSeat, loserSeat, finishedWinner, finishedLoser, postMatchProbe, postMatchParity }),
     );
 
+    const reportIssueActionable = await clickLiveControl(loserClient.page, '[data-live-post-review-action="report_issue"]', `${seatSlug(loserSeat)}-report-issue`);
+    await loserClient.page.waitForSelector('[data-live-dispute-report]', { timeout: 8000 });
+    const avoidOpponentActionable = await clickLiveControl(loserClient.page, '[data-live-post-review-action="avoid_opponent"]', `${seatSlug(loserSeat)}-avoid-opponent`);
+    await loserClient.page.waitForSelector('[data-live-avoid-opponent]', { timeout: 8000 });
+    const postSafetyExitProbe = await loserClient.page.evaluate(() => {
+      const snapshot = window.PVPScene.getLiveSnapshot() || null;
+      const textPayload = JSON.parse(window.render_game_to_text()).pvp?.live || null;
+      const disputeEl = document.querySelector('[data-live-dispute-report]');
+      const avoidEl = document.querySelector('[data-live-avoid-opponent]');
+      const review = snapshot?.postMatchReview || null;
+      return {
+        phase: snapshot?.phase || '',
+        rootPhase: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-phase') || '',
+        hint: document.querySelector('[data-live-last-error]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+        disputeText: disputeEl?.textContent?.replace(/\s+/g, ' ').trim() || '',
+        disputeHidden: disputeEl?.getAttribute('data-live-dispute-report-hidden') || '',
+        disputeImpact: disputeEl?.getAttribute('data-live-dispute-report-ranked-impact') || '',
+        disputeStatus: disputeEl?.getAttribute('data-live-dispute-report-status') || '',
+        avoidText: avoidEl?.textContent?.replace(/\s+/g, ' ').trim() || '',
+        avoidHidden: avoidEl?.getAttribute('data-live-avoid-opponent-hidden') || '',
+        avoidImpact: avoidEl?.getAttribute('data-live-avoid-opponent-ranked-impact') || '',
+        avoidStatus: avoidEl?.getAttribute('data-live-avoid-opponent-status') || '',
+        avoidSafeguard: avoidEl?.getAttribute('data-live-avoid-opponent-safeguard') || '',
+        disputeReceipt: snapshot?.lastDisputeReport || null,
+        avoidReceipt: snapshot?.lastAvoidOpponentReport || null,
+        textDisputeReceipt: textPayload?.lastDisputeReport || null,
+        textAvoidReceipt: textPayload?.lastAvoidOpponentReport || null,
+        settlementReport: review?.settlementReport || null,
+        fairnessReceipt: review?.fairnessReceipt || null,
+      };
+    });
+    add(
+      'real browser post-match dispute report returns audit-safe receipt without changing settlement',
+      postSafetyExitProbe.phase === 'finished'
+        && postSafetyExitProbe.rootPhase === 'finished'
+        && postSafetyExitProbe.disputeStatus === 'reported'
+        && postSafetyExitProbe.disputeHidden === 'false'
+        && postSafetyExitProbe.disputeImpact === 'none'
+        && /异常反馈已提交/.test(postSafetyExitProbe.disputeText)
+        && /不会立即改写本局结算/.test(`${postSafetyExitProbe.disputeText} ${postSafetyExitProbe.hint}`)
+        && postSafetyExitProbe.disputeReceipt?.reportVersion === 'pvp-live-dispute-report-receipt-v1'
+        && postSafetyExitProbe.disputeReceipt?.sourceVisibility === 'audit_safe_public_state'
+        && postSafetyExitProbe.disputeReceipt?.usesHiddenInformation === false
+        && postSafetyExitProbe.disputeReceipt?.rankedImpact === 'none'
+        && postSafetyExitProbe.disputeReceipt?.evidencePackage?.sourceVisibility === 'audit_safe_public_state'
+        && postSafetyExitProbe.disputeReceipt?.evidencePackage?.usesHiddenInformation === false
+        && postSafetyExitProbe.disputeReceipt?.evidencePackage?.rankedImpact === 'none'
+        && postSafetyExitProbe.textDisputeReceipt?.rankedImpact === 'none'
+        && postSafetyExitProbe.settlementReport?.reportVersion === 'pvp-live-settlement-report-v1'
+        && postSafetyExitProbe.fairnessReceipt?.reportVersion === 'pvp-live-fairness-receipt-v1'
+        && !/payload|hand|deck|cardId|instanceId|loadoutSnapshot|reward":|rating|elo|token/i.test(`${postSafetyExitProbe.disputeText} ${JSON.stringify(postSafetyExitProbe.disputeReceipt || {})}`),
+      JSON.stringify({ postSafetyExitProbe, reportIssueActionable }),
+    );
+    add(
+      'real browser post-match avoid-opponent returns no-score future-match receipt',
+      postSafetyExitProbe.phase === 'finished'
+        && postSafetyExitProbe.avoidStatus === 'active'
+        && postSafetyExitProbe.avoidHidden === 'false'
+        && postSafetyExitProbe.avoidImpact === 'none'
+        && postSafetyExitProbe.avoidSafeguard === 'player_avoid_opponent'
+        && /已优先避开此对手|后续匹配优先避开/.test(postSafetyExitProbe.avoidText)
+        && /不改写本局结算|不影响积分/.test(postSafetyExitProbe.avoidText)
+        && postSafetyExitProbe.avoidReceipt?.reportVersion === 'pvp-live-avoid-opponent-receipt-v1'
+        && postSafetyExitProbe.avoidReceipt?.sourceVisibility === 'account_preference'
+        && postSafetyExitProbe.avoidReceipt?.usesHiddenInformation === false
+        && postSafetyExitProbe.avoidReceipt?.rankedImpact === 'none'
+        && postSafetyExitProbe.avoidReceipt?.formalResultPolicy === 'no_result_change'
+        && postSafetyExitProbe.avoidReceipt?.safeguard === 'player_avoid_opponent'
+        && postSafetyExitProbe.textAvoidReceipt?.safeguard === 'player_avoid_opponent'
+        && (!isMobileViewport || reportIssueActionable?.ok === true)
+        && (!isMobileViewport || avoidOpponentActionable?.ok === true)
+        && !/payload|hand|deck|cardId|instanceId|loadoutSnapshot|reward":|rating|elo|token/i.test(`${postSafetyExitProbe.avoidText} ${JSON.stringify(postSafetyExitProbe.avoidReceipt || {})}`),
+      JSON.stringify({ postSafetyExitProbe, reportIssueActionable, avoidOpponentActionable }),
+    );
+
     const postActionProbe = await loserClient.page.evaluate(async () => {
       document.querySelector('[data-live-experience-check="decision_windows"]')?.click();
       await new Promise(resolve => setTimeout(resolve, 100));
@@ -4493,28 +4844,11 @@ async function writeReport() {
       JSON.stringify(postActionProbe),
     );
 
-    await loserClient.page.reload({ waitUntil: 'domcontentloaded' });
-    await loserClient.page.waitForFunction(
-      () => !!window.game && !!window.PVPScene && typeof window.render_game_to_text === 'function',
-      null,
-      { timeout: 15000 },
-    );
-    await loserClient.page.evaluate(async () => {
-      window.game.showScreen('pvp-screen');
-      window.PVPScene.activeTab = 'live';
-      document.querySelectorAll('.rune-tab').forEach(btn => btn.classList.remove('active'));
-      document.querySelector('.rune-tab[onclick*="live"]')?.classList.add('active');
-      document.querySelectorAll('.pvp-tab-pane').forEach(el => {
-        el.classList.remove('active');
-        el.style.display = '';
-      });
-      document.getElementById('tab-live')?.classList.add('active');
-      await window.PVPScene.loadLivePanel();
-    });
-    await dismissBlockingModals(loserClient.page);
+    await reloadAndOpenLivePanel(loserClient.page);
     const restoredPostMatch = await waitForLivePhase(loserClient.page, 'finished');
     const reloadPostMatchProbe = await loserClient.page.evaluate(() => ({
       phase: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-phase') || '',
+      testMatchScope: window.__DEFIER_PVP_REAL_TEST_SCOPE || '',
       reviewText: document.querySelector('[data-live-post-match-review]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
       payload: window.PVPScene.getLiveSnapshot()?.postMatchReview || null,
       textPayload: JSON.parse(window.render_game_to_text()).pvp?.live?.postMatchReview || null,
@@ -4530,6 +4864,7 @@ async function writeReport() {
         && reloadPostMatchProbe.storedMatchIds.includes(finishedLoser.matchId)
         && /复盘/.test(reloadPostMatchProbe.reviewText)
         && /查看权威事件/.test(reloadPostMatchProbe.reviewText)
+        && reloadPostMatchProbe.testMatchScope === TEST_MATCH_SCOPE
         && reloadPostMatchProbe.payload?.reportVersion === 'pvp-live-post-match-review-v1'
         && reloadPostMatchProbe.textPayload?.reportVersion === 'pvp-live-post-match-review-v1',
       JSON.stringify({ restoredPostMatch, reloadPostMatchProbe }),
@@ -4772,6 +5107,147 @@ async function writeReport() {
     await loserClient.page.evaluate(async () => {
       await window.PVPScene.cancelLiveQueue();
     });
+    await waitForLivePhase(loserClient.page, 'idle', 8000);
+
+    const avoidedWinnerRequeueActionable = await clickLiveControl(winnerClient.page, '[data-live-post-review-action="queue_again"]', `${seatSlug(winnerSeat)}-avoid-suppression-queue-first`);
+    const avoidedWinnerWaiting = await waitForLivePhase(winnerClient.page, 'waiting', 8000);
+    const avoiderRequeueActionable = await clickLiveControl(loserClient.page, '[data-live-action="join-queue"]', `${seatSlug(loserSeat)}-avoid-suppression-join`);
+    const waitForAvoidSuppressedQueue = async (page, label, timeoutMs = 10000) => {
+      let waitError = '';
+      let snapshot = null;
+      try {
+        snapshot = await refreshUntilLiveSnapshot(page, () => {
+          const current = window.PVPScene?.getLiveSnapshot?.();
+          const report = current?.waitingReport;
+          return current?.phase === 'waiting'
+            && report?.protectionReason === 'player_avoid_opponent'
+            && report?.safeguards?.includes('player_avoid_opponent');
+        }, null, timeoutMs);
+      } catch (error) {
+        waitError = error && error.message ? error.message : String(error || `${label} wait failed`);
+        try {
+          await page.evaluate(async () => {
+            if (window.PVPScene && typeof window.PVPScene.refreshLiveMatch === 'function') {
+              await window.PVPScene.refreshLiveMatch();
+            }
+            if (window.PVPScene && typeof window.PVPScene.renderLivePanel === 'function') {
+              window.PVPScene.renderLivePanel();
+            }
+          });
+          snapshot = await getLiveSnapshot(page);
+        } catch (snapshotError) {
+          waitError = `${waitError}; snapshot=${snapshotError && snapshotError.message ? snapshotError.message : String(snapshotError || '')}`;
+        }
+      }
+      return { label, waitError, snapshot };
+    };
+    const avoiderWaitingResult = await waitForAvoidSuppressedQueue(loserClient.page, 'avoider');
+    const avoidedWinnerProtectedWaitingResult = await waitForAvoidSuppressedQueue(winnerClient.page, 'avoided-winner', 12000);
+    const avoiderWaiting = avoiderWaitingResult.snapshot || {};
+    const avoidedWinnerProtectedWaiting = avoidedWinnerProtectedWaitingResult.snapshot || {};
+    await winnerClient.page.evaluate(() => {
+      window.PVPScene.renderLivePanel();
+    });
+    await loserClient.page.evaluate(() => {
+      window.PVPScene.renderLivePanel();
+    });
+    const avoidSuppressionProbe = {
+      avoided: await winnerClient.page.evaluate(() => {
+        const snapshot = window.PVPScene.getLiveSnapshot();
+        const textPayload = JSON.parse(window.render_game_to_text()).pvp?.live || null;
+        return {
+          phase: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-phase') || '',
+          matchId: document.querySelector('[data-live-match-id]')?.textContent?.trim() || snapshot?.matchId || '',
+          ticket: document.querySelector('[data-live-queue-ticket]')?.textContent?.trim() || snapshot?.queueTicket || '',
+          waitingText: document.querySelector('[data-live-waiting-report]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+          hint: document.querySelector('[data-live-last-error]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+          practiceDisabled: !!document.querySelector('[data-live-action="practice-live"]')?.disabled,
+          cancelDisabled: !!document.querySelector('[data-live-action="cancel-queue"]')?.disabled,
+          snapshot,
+          textPayload,
+        };
+      }),
+      avoider: await loserClient.page.evaluate(() => {
+        const snapshot = window.PVPScene.getLiveSnapshot();
+        const textPayload = JSON.parse(window.render_game_to_text()).pvp?.live || null;
+        return {
+          phase: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-phase') || '',
+          matchId: document.querySelector('[data-live-match-id]')?.textContent?.trim() || snapshot?.matchId || '',
+          ticket: document.querySelector('[data-live-queue-ticket]')?.textContent?.trim() || snapshot?.queueTicket || '',
+          waitingText: document.querySelector('[data-live-waiting-report]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+          hint: document.querySelector('[data-live-last-error]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+          practiceDisabled: !!document.querySelector('[data-live-action="practice-live"]')?.disabled,
+          cancelDisabled: !!document.querySelector('[data-live-action="cancel-queue"]')?.disabled,
+          snapshot,
+          textPayload,
+        };
+      }),
+    };
+    const avoidSuppressionReports = [
+      avoidSuppressionProbe.avoided?.snapshot?.waitingReport,
+      avoidSuppressionProbe.avoider?.snapshot?.waitingReport,
+      avoidSuppressionProbe.avoided?.textPayload?.waitingReport,
+      avoidSuppressionProbe.avoider?.textPayload?.waitingReport,
+    ].filter(Boolean);
+    const avoidSuppressionPass = avoidedWinnerWaiting.phase === 'waiting'
+      && avoiderWaiting.phase === 'waiting'
+      && avoidedWinnerProtectedWaiting.phase === 'waiting'
+      && !avoiderWaitingResult.waitError
+      && !avoidedWinnerProtectedWaitingResult.waitError
+      && avoidSuppressionProbe.avoided.phase === 'waiting'
+      && avoidSuppressionProbe.avoider.phase === 'waiting'
+      && !hasLiveMatchId(avoidSuppressionProbe.avoided.matchId)
+      && !hasLiveMatchId(avoidSuppressionProbe.avoider.matchId)
+      && /^pvplq-/.test(avoidSuppressionProbe.avoided.ticket)
+      && /^pvplq-/.test(avoidSuppressionProbe.avoider.ticket)
+      && avoidSuppressionReports.length >= 4
+      && avoidSuppressionReports.every(report => report?.reportVersion === 'pvp-live-waiting-report-v1')
+      && avoidSuppressionReports.every(report => report?.protectionReason === 'player_avoid_opponent')
+      && avoidSuppressionReports.every(report => report?.releaseMode === 'quality_safeguard_wait')
+      && avoidSuppressionReports.every(report => report?.safeguards?.includes('player_avoid_opponent'))
+      && avoidSuppressionReports.every(report => report?.currentEligibleActions?.includes('practice'))
+      && avoidSuppressionReports.every(report => report?.currentEligibleActions?.includes('cancel_queue'))
+      && /匹配质量护栏|赛后避开对手|换一位真人/.test(`${avoidSuppressionProbe.avoided.waitingText} ${avoidSuppressionProbe.avoider.waitingText}`)
+      && /不会自动切残影|不会自动切换残影/.test(`${avoidSuppressionProbe.avoided.waitingText} ${avoidSuppressionProbe.avoider.waitingText} ${avoidSuppressionProbe.avoided.hint} ${avoidSuppressionProbe.avoider.hint}`)
+      && avoidSuppressionProbe.avoided.practiceDisabled === false
+      && avoidSuppressionProbe.avoider.practiceDisabled === false
+      && avoidSuppressionProbe.avoided.cancelDisabled === false
+      && avoidSuppressionProbe.avoider.cancelDisabled === false
+      && (!isMobileViewport || avoidedWinnerRequeueActionable?.ok === true)
+      && (!isMobileViewport || avoiderRequeueActionable?.ok === true)
+      && !/payload|hand|deck|cardId|instanceId|loadoutSnapshot|reward":|rating|elo|token/i.test(`${avoidSuppressionProbe.avoided.waitingText} ${avoidSuppressionProbe.avoider.waitingText} ${JSON.stringify(avoidSuppressionReports)}`);
+    add(
+      'real browser avoid-opponent suppresses immediate rematch and explains player_avoid_opponent waiting',
+      avoidSuppressionPass,
+      JSON.stringify({
+        avoidedWinnerWaiting,
+        avoiderWaiting,
+        avoidedWinnerProtectedWaiting,
+        avoiderWaitingResult,
+        avoidedWinnerProtectedWaitingResult,
+        avoidSuppressionProbe,
+        avoidedWinnerRequeueActionable,
+        avoiderRequeueActionable,
+      }),
+    );
+    if (!avoidSuppressionPass) {
+      throw new Error(`avoid-opponent suppression did not hold: ${JSON.stringify({
+        avoidedWinnerWaiting,
+        avoiderWaiting,
+        avoidedWinnerProtectedWaiting,
+        avoiderWaitingResult,
+        avoidedWinnerProtectedWaitingResult,
+        avoidSuppressionProbe,
+      })}`);
+    }
+
+    await winnerClient.page.evaluate(async () => {
+      await window.PVPScene.cancelLiveQueue();
+    });
+    await loserClient.page.evaluate(async () => {
+      await window.PVPScene.cancelLiveQueue();
+    });
+    await waitForLivePhase(winnerClient.page, 'idle', 8000);
     await waitForLivePhase(loserClient.page, 'idle', 8000);
 
     const seatC = await preparePage(browser, `live_real_c_${runId}`, '丙');

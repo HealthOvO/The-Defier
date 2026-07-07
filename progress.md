@@ -1,5 +1,28 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-07-07: V10-S90 live PVP post-match safety exits and avoid-opponent waiting guard
+  - 本轮完成
+    - `PVPScene.getLivePostMatchReview()` 的赛后动作 normalizer 从 8 个动作放宽到 12 个动作，修复真实后端返回 9 个动作时第 9 个 `avoid_opponent` 被前端截掉、玩家看不到“避开此对手”按钮的问题；`postGameActionBridge.coveredAuditActions` 同步保留完整安全动作集。
+    - `PVPScene.getLiveWaitingQualitySafeguard()` 新增 `player_avoid_opponent` 分支，把“赛后避开对手”等待态归入匹配质量护栏，并开放无积分 `practice-live` 与取消队列，让避开对手后的等待不只是被动卡住。
+    - `tests/sanity_pvp_live_ui_runtime_checks.mjs` 新增两类回归：赛后 normalizer 必须保留 9 个真实 UI 动作及 audit action id；`player_avoid_opponent` waiting safeguard 必须渲染可读说明、开放无积分练习并生成 `finishReason=player_avoid_opponent` 的练习场景。
+    - `tests/browser_pvp_live_real_backend_smoke.mjs` 新增真实浏览器 finding：败方赛后点击 `report_issue` 必须返回 audit-safe dispute receipt 且不改写结算；点击 `avoid_opponent` 必须返回 no-score future-match receipt；后续同对手复配应停留在带 `player_avoid_opponent` 的 waitingReport。该脚本还改为复用 `reloadAndOpenLivePanel()`，避免练习跳转后的 reload 丢失本轮 `testMatchScope`。
+    - `tests/browser_pvp_live_real_backend_smoke.mjs` 新增 `BROWSER_PVP_LIVE_REAL_ONLY_SAFETY_EXIT=1` 聚焦模式，只跑真实后端开局、认输结算、赛后举报、赛后避开、避开后双方真实入队不复配的闭环，给本轮新增链路一条稳定 smoke 证据。
+    - `tests/sanity_release_gate_coverage_checks.cjs` 同步加入本轮 browser smoke、聚焦 safety-exit smoke 和 UI runtime marker，防止只保留 bridge 合约却漏掉真实按钮、真实回执或复配等待证明。
+  - 已验证
+    - 红测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs` 在 normalizer 修复前失败，实际动作列表缺少 `avoid_opponent:avoid_opponent`。
+    - 红测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs` 在 waiting safeguard 修复前失败于 `avoid-opponent waiting safeguard should keep no-score practice available`。
+    - 目标 UI 回归：`node tests/sanity_pvp_live_ui_runtime_checks.mjs`
+    - 语法检查：`node --check js/scenes/pvp-scene.js`
+    - 语法检查：`node --check tests/browser_pvp_live_real_backend_smoke.mjs`
+    - 绿测：`node tests/sanity_release_gate_coverage_checks.cjs`
+    - 构建：`npm run build:pages`
+    - 完整 Node 门禁：`npm run test:node`
+    - 聚焦真实后端 browser smoke：`BROWSER_PVP_LIVE_REAL_ONLY_SAFETY_EXIT=1 node tests/browser_pvp_live_real_backend_smoke.mjs http://127.0.0.1:4173 output/browser-pvp-live-real-backend-smoke-s90-safety-exit-focused` ✅，`report.json` 生成时间 `2026-07-07T15:41:52.341Z`，3/3 finding 通过、0 console error，覆盖 audit-safe dispute receipt、no-score avoid receipt、`player_avoid_opponent` 等待抑制与无积分练习可用。
+  - 未完成验证
+    - 完整桌面真实后端 browser smoke 本轮未跑通到最终绿灯：`output/browser-pvp-live-real-backend-smoke-s90-safety-exit-rerun1` / `rerun2` 曾在新增 avoid-opponent 抑制段暴露测试作用域丢失与 DOM 占位符误判，后续已在聚焦 smoke 中闭环；`output/browser-pvp-live-real-backend-smoke-s90-safety-exit-rerun3` 失败在既有 status-payoff handoff 等待，`output/browser-pvp-live-real-backend-smoke-s90-safety-exit-rerun4` 失败在既有 lethal finish 等待，均发生在本轮新增的 post-match safety exit finding 之前；因此本轮不能宣称完整 browser smoke 通过。
+  - 当前结论
+    - live PVP 的赛后安全出口现在不会因为前端动作截断而丢掉“避开此对手”，且避开对手后的等待态会被当成明确的匹配质量护栏处理，玩家可选择继续等待、取消或进入无积分练习。该切片强化 UI/会话/真实后端 smoke 门禁，不改变卡牌数值、伤害公式、正式积分结算、奖励或生产部署；这不是线上部署记录。
+
 - 2026-07-07: V10-S89 live PVP post-review goal coherence
   - 本轮完成
     - `PVPScene.getLiveSeasonGoalRecommendedMode()` 现在会优先复用同一份 `getLivePostReviewNextStepGuide()` 的主动作，只在该动作属于赛季目标支持范围且存在于赛后动作列表时采用，避免同一张赛后页同时给出“下一步建议：调整斗法谱”和“本赛季下一局目标：问道练习”的分叉。
