@@ -1,0 +1,35 @@
+js/scenes/pvp-scene.js
+  s_bae69f1b7fab46::t_2371b52775742f 26-27,439,537-565,2594-2595,2601-2604,2612-2615,2622-2626,2864-2868,2874,5273-5276,5531,6072,6102,6194,6197-6205
+js/services/pvp-live-session.js
+  s_bae69f1b7fab46::t_03a34140955091 1208-1211,1214-1223
+progress.md
+  s_bae69f1b7fab46::t_db8dfc95a8ad34 3-26
+server/pvp-live/live-store.js
+  s_bae69f1b7fab46::t_137f5a8487c27d 2117-2118,2121-2129
+tests/sanity_pvp_live_route_checks.cjs
+  s_bae69f1b7fab46::t_ba09425402c9ac 1004-1012,1176-1180
+tests/sanity_pvp_live_session_checks.mjs
+  s_bae69f1b7fab46::t_e8df499b555978 744-745,748-785
+tests/sanity_pvp_live_ui_runtime_checks.mjs
+  s_bae69f1b7fab46::t_5043197149c781 1430-1551,1748-1801
+tests/sanity_release_gate_coverage_checks.cjs
+  s_bae69f1b7fab46::t_00bd512c4ae267 2125-2128,2920-2922,3006,3146-3155,3194-3208
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.5",
+  "base_commit_sha": "bf3403a24a47abf93db56f1815d7f21258e7cab1",
+  "prompts": {},
+  "sessions": {
+    "s_bae69f1b7fab46": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ed4f6-e7ac-73e0-a29e-119f3eddb407",
+        "model": "unknown"
+      },
+      "human_author": "AI Agent <bot@example.com>"
+    }
+  },
+  "attestation_metadata": {},
+  "remote_transcripts": {}
+}
