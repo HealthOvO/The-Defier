@@ -1,5 +1,22 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-07-07: V10-S92 live PVP desktop/mobile real-backend release gate closure
+  - 本轮完成
+    - `tests/browser_pvp_live_real_backend_smoke.mjs` 将真实后端 smoke 的关键等待从“一次点击后固定等待”收紧为状态驱动：收件箱约战加入、排队取消冷却、断线超时入队、卡牌确认/提交、赛后关键回合动作、友谊再战 ready 和 safety-exit 连接恢复都改为真实点击后等待服务端权威相位或 stateVersion。
+    - `ensureLiveRealtime()` 现在会同时恢复 live tab、realtime、heartbeat、foreground resume 和权威刷新，并要求 viewer online 且不处于 `shouldWaitForAuthority`；断线模拟后会同时恢复双方页面，避免长链测试在 connection grace 中继续提交动作。
+    - `readyLiveSetupSeat()` 改为只在当前 seat 的 `player_ready` 权威事件出现或 match 进入 active 后返回，避免移动端本地乐观状态被误判为已正式 ready；同时把 status-payoff、natural-lethal、friendly-rematch 等双方 ready 改为并发确认，避免准备窗口被顺序等待耗尽。
+    - `tests/sanity_release_gate_coverage_checks.cjs` 同步更新 release marker 到新的 after-play predicate 与 refresh fallback，移除已经被权威状态检查替代的旧 DOM 字符串 marker。
+  - 已验证
+    - 语法检查：`node --check tests/browser_pvp_live_real_backend_smoke.mjs`
+    - 绿测：`node tests/sanity_release_gate_coverage_checks.cjs`
+    - 聚焦移动 safety-exit：`BROWSER_PVP_LIVE_REAL_ONLY_SAFETY_EXIT=1 BROWSER_PVP_LIVE_REAL_VIEWPORT=mobile BROWSER_PVP_LIVE_REAL_REQUIRE_MOBILE=1 node tests/browser_pvp_live_real_backend_smoke.mjs http://127.0.0.1:4173 output/browser-pvp-live-mobile-real-s92-safety-exit-focused-rerun2` ✅，`report.json` 生成时间 `2026-07-07T16:51:15.242Z`，3/3 findings、0 failed、0 console error。
+    - 移动真实后端单项 release gate：`AUDIT_FILTER='pvp-live-mobile-real' npm run test:browser:release -- http://127.0.0.1:4173 output/release-browser-audits-s92-pvp-live-mobile-real-rerun6` ✅，`report.json` 生成时间 `2026-07-07T17:06:23.800Z`，93/93 findings、0 failed、0 console error。
+    - 桌面真实后端单项 release gate：`AUDIT_FILTER='pvp-live-real' npm run test:browser:release -- http://127.0.0.1:4173 output/release-browser-audits-s92-pvp-live-real-rerun8` ✅，`report.json` 生成时间 `2026-07-07T17:15:02.173Z`，92/92 findings、0 failed、0 console error。
+    - 桌面+移动真实后端成对 release gate：`AUDIT_FILTER='pvp-live-real,pvp-live-mobile-real' npm run test:browser:release -- http://127.0.0.1:4173 output/release-browser-audits-s92-pvp-live-real-pair-rerun9` ✅，桌面 `2026-07-07T17:23:33.588Z` 92/92 findings、0 failed、0 console error；移动 `2026-07-07T17:25:21.778Z` 93/93 findings、0 failed、0 console error。
+    - 完整 Node 门禁：`npm run test:node`
+  - 当前结论
+    - S91 后缺失的移动真实后端 release gate 证据已补齐，且桌面与移动在同一成对门禁中均已 fresh 通过。该切片只强化真实后端浏览器 smoke 的同步、连接恢复和 release marker，不改变卡牌数值、战斗公式、匹配规则、正式积分、奖励或生产部署；这不是线上部署记录。
+
 - 2026-07-07: V10-S91 live PVP full real-backend smoke closure
   - 本轮完成
     - `tests/browser_pvp_live_real_backend_smoke.mjs` 将完整长流程里的 avoid-opponent 抑制证明拆到 fresh safety-exit helper 中执行；原同账号链路仍保留“赛后 queue_again 可重新入队”的真实按钮证明，但不再把 queue_again/cancel 边界和“避开对手抑制复配”塞到同一对账号里，避免测试顺序污染。
