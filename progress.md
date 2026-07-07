@@ -1,5 +1,25 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-07-07: V10-S88 live PVP natural lethal fairness and next-step polish
+  - 本轮完成
+    - `tests/browser_pvp_live_real_backend_smoke.mjs` 在 S87B 自然击杀链路后继续锁赛后公平与体验证据：loser 页面必须能看到 `fairnessReceipt` / `experienceReport` 均来自 `public_events`、不读隐藏信息、不写正式积分影响，且 `second_seat_effective_action` 通过、有效行动类型包含 `damage_applied`。
+    - 新增真实后端 smoke finding `real browser natural lethal post-match fairness confirms both players had agency`：同一局必须证明没有 `test_state_forced`、双方都出现过行动席位、终局为 lethal，并展示“不是无解释先手秒杀”的公平回执与双方体验诊断。
+    - `PVPScene.getLivePostReviewNextStepGuide()` 调整赛后主建议：低风险且公平回执 `accepted/low` 的败局不再因为 `result === loss` 被强制优先“关键回合复盘”；有公开改谱建议时优先 `adjust_loadout`，否则走无积分 `practice`，观察态 / 风险态败局仍优先复盘。
+    - `tests/sanity_pvp_live_ui_runtime_checks.mjs` 新增 accepted low-risk loss 用例，分别锁住公开改谱建议优先 `adjust_loadout`、无改谱建议时兜底无积分 `practice`，防止自然公平败局继续被当成异常败局处理；`tests/sanity_release_gate_coverage_checks.cjs` 同步补 marker。
+  - 已验证
+    - 红测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs` 在产品逻辑修复前失败于 `accepted low-risk loss next-step guide should prioritize loadout adjustment over forced review`。
+    - 语法检查：`node --check js/scenes/pvp-scene.js`
+    - 语法检查：`node --check tests/browser_pvp_live_real_backend_smoke.mjs`
+    - 目标 UI 回归：`node tests/sanity_pvp_live_ui_runtime_checks.mjs`
+    - 绿测：`node tests/sanity_release_gate_coverage_checks.cjs`
+    - 完整 Node 门禁：`npm run test:node`
+    - 构建：`npm run build:pages`
+    - 空白检查：`git diff --check`
+    - 桌面真实后端 browser smoke：`node tests/browser_pvp_live_real_backend_smoke.mjs http://127.0.0.1:4173 output/browser-pvp-live-real-backend-smoke-s88-natural-fairness-final`，87/87 findings、0 failed、0 console error。
+    - 移动真实后端 browser smoke：`BROWSER_PVP_LIVE_REAL_VIEWPORT=mobile BROWSER_PVP_LIVE_REAL_REQUIRE_MOBILE=1 node tests/browser_pvp_live_real_backend_smoke.mjs http://127.0.0.1:4173 output/browser-pvp-live-mobile-real-s88-natural-fairness`，88/88 findings、0 failed、0 console error。
+  - 当前结论
+    - live PVP 现在不仅证明自然出牌可以 lethal，也在真实后端桌面 / 移动浏览器里证明败方赛后能看到公开、公平、无隐藏泄漏的行动窗口与有效行动证据；低风险公平败局的下一步从“默认先复盘”收紧为“先改谱或无积分练习”，减少输方被系统二次惩罚的感受。该切片只强化赛后公平证据、下一步建议与验收门禁，不改变卡牌数值、伤害公式、先后手、匹配、正式积分、奖励或生产部署；这不是线上部署记录。
+
 - 2026-07-07: V10-S87B live PVP browser natural lethal proof
   - 本轮完成
     - `tests/browser_pvp_live_real_backend_smoke.mjs` 新增真实后端、双浏览器账号、真实 UI 点击推进的 deterministic natural lethal 场景：双方使用相同测试种子与固定斗法谱入队，ready 后只通过真实卡牌点击与结束回合推进，不调用 `/test/matches/:matchId/seats/:seatId`，不依赖 `test_state_forced`。

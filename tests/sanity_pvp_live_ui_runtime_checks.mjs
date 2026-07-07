@@ -3662,6 +3662,73 @@ assert.match(visiblePracticePlanMarkup, /data-live-practice-plan-check="decision
 assert.match(visiblePracticePlanMarkup, /handleLiveExperienceCheckFocus\(&quot;decision_windows&quot;\)/, 'visible practice plan fairness step should reuse experience-check focus handler');
 assert.match(visiblePracticePlanMarkup, /复刻开局读题|复刻压力窗口/, 'visible practice plan should show at least one tempo drill prompt');
 assert.doesNotMatch(visiblePracticePlanMarkup, /payload|\bhand\b|deck|cardId|instanceId|loadoutSnapshot|reward|rating|elo|token/i, 'visible practice plan must not expose hidden or reward/rating data');
+const acceptedLowRiskLossNextStepMarkup = PVPScene.renderLivePostMatchReview({
+  ...visiblePracticePlanReview,
+  postMatchReview: {
+    ...visiblePracticePlanReview.postMatchReview,
+    result: 'loss',
+    experienceReport: {
+      ...visiblePracticePlanReview.postMatchReview.experienceReport,
+      nonGameRisk: 'low',
+      recommendedAction: 'practice',
+      summary: '公开轨迹显示双方均有行动窗口，败因可通过改谱和练习复现。'
+    },
+    fairnessReceipt: {
+      ...visiblePracticePlanReview.postMatchReview.fairnessReceipt,
+      receiptState: 'accepted',
+      riskState: 'low',
+      agencyLabel: '双方均有可读窗口',
+      nextStepLine: '下一步：按回执里的压力窗口调整斗法谱或进入问道练习。'
+    },
+    loadoutRecommendation: {
+      reportVersion: 'pvp-live-loadout-recommendation-v1',
+      sourceVisibility: 'public_events_and_public_content',
+      usesHiddenInformation: false,
+      rankedImpact: 'none',
+      recommendedPresetId: 'shield',
+      recommendedPresetLabel: '守势斗法谱',
+      reasonLine: '本局公开压力窗口足够，下一局先补防守窗口。'
+    },
+    nextActions: [
+      { id: 'review_key_turns', auditActionId: 'key_turn_replay', label: '关键回合复盘', detail: '按公开事件复盘。' },
+      { id: 'adjust_loadout', auditActionId: 'apply_loadout_recommendation', label: '调整斗法谱', detail: '按公开推荐改谱。' },
+      { id: 'practice', auditActionId: 'practice_topic', label: '问道练习', detail: '复刻公开窗口，不写正式积分。' },
+      { id: 'queue_again', auditActionId: 'queue_again', label: '继续真人排位', detail: '带着本局结论重新入队。' }
+    ]
+  }
+}, 'finished');
+assert.match(acceptedLowRiskLossNextStepMarkup, /data-live-post-review-next-step-primary="adjust_loadout"/, 'accepted low-risk loss next-step guide should prioritize loadout adjustment over forced review');
+assert.match(acceptedLowRiskLossNextStepMarkup, /data-live-post-review-next-step-action="adjust_loadout"[\s\S]*data-live-post-review-next-step-rank="primary"/, 'accepted low-risk loss next-step guide primary CTA should reuse loadout adjustment');
+assert.doesNotMatch(acceptedLowRiskLossNextStepMarkup, /data-live-post-review-next-step-action="review_key_turns"[\s\S]*data-live-post-review-next-step-rank="primary"/, 'accepted low-risk loss next-step guide should not make review the primary CTA');
+const acceptedLowRiskLossPracticeFallbackMarkup = PVPScene.renderLivePostMatchReview({
+  ...visiblePracticePlanReview,
+  postMatchReview: {
+    ...visiblePracticePlanReview.postMatchReview,
+    result: 'loss',
+    loadoutRecommendation: null,
+    experienceReport: {
+      ...visiblePracticePlanReview.postMatchReview.experienceReport,
+      nonGameRisk: 'low',
+      recommendedAction: 'practice',
+      summary: '公开轨迹显示双方均有行动窗口，先练习复现失守窗口。'
+    },
+    fairnessReceipt: {
+      ...visiblePracticePlanReview.postMatchReview.fairnessReceipt,
+      receiptState: 'accepted',
+      riskState: 'low',
+      agencyLabel: '双方均有可读窗口',
+      nextStepLine: '下一步：进入问道练习复刻公开窗口。'
+    },
+    nextActions: [
+      { id: 'review_key_turns', auditActionId: 'key_turn_replay', label: '关键回合复盘', detail: '按公开事件复盘。' },
+      { id: 'practice', auditActionId: 'practice_topic', label: '问道练习', detail: '复刻公开窗口，不写正式积分。' },
+      { id: 'queue_again', auditActionId: 'queue_again', label: '继续真人排位', detail: '带着本局结论重新入队。' }
+    ]
+  }
+}, 'finished');
+assert.match(acceptedLowRiskLossPracticeFallbackMarkup, /data-live-post-review-next-step-primary="practice"/, 'accepted low-risk loss next-step guide should fall back to no-score practice without loadout advice');
+assert.match(acceptedLowRiskLossPracticeFallbackMarkup, /data-live-post-review-next-step-action="practice"[\s\S]*data-live-post-review-next-step-rank="primary"/, 'accepted low-risk loss practice fallback should reuse the no-score practice CTA');
+assert.doesNotMatch(acceptedLowRiskLossPracticeFallbackMarkup, /data-live-post-review-next-step-action="review_key_turns"[\s\S]*data-live-post-review-next-step-rank="primary"/, 'accepted low-risk loss practice fallback should not force key-turn review');
 const unsafeNextStepMarkup = PVPScene.renderLivePostMatchReview({
   ...visiblePracticePlanReview,
   postMatchReview: {

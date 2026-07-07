@@ -1031,12 +1031,15 @@ async function driveNaturalLethalMatch(clientBySeat, initialSnapshot, label) {
 async function collectNaturalLethalPostMatchProbe(page, matchId) {
   return await page.evaluate(async ({ targetMatchId }) => {
     await window.PVPScene.refreshLiveMatch();
-    window.PVPScene.renderLivePanel();
-    const snapshot = window.PVPScene.getLiveSnapshot();
-    const terminalEl = document.querySelector('[data-live-action-terminal]');
-    return {
-      snapshot,
-      replay: await window.PVPService.live.getReplay(targetMatchId, { visibility: 'replay_public' }),
+	    window.PVPScene.renderLivePanel();
+	    const snapshot = window.PVPScene.getLiveSnapshot();
+	    const terminalEl = document.querySelector('[data-live-action-terminal]');
+	    const fairnessEl = document.querySelector('[data-live-fairness-receipt]');
+	    const experienceEl = document.querySelector('[data-live-experience-report]');
+	    const effectiveActionEl = document.querySelector('[data-live-effective-action-proof]');
+	    return {
+	      snapshot,
+	      replay: await window.PVPService.live.getReplay(targetMatchId, { visibility: 'replay_public' }),
       terminalText: terminalEl?.textContent?.replace(/\s+/g, ' ').trim() || '',
       terminalAttr: terminalEl?.getAttribute('data-live-action-terminal') || '',
       terminalTarget: terminalEl?.getAttribute('data-live-action-terminal-target') || '',
@@ -1048,12 +1051,27 @@ async function collectNaturalLethalPostMatchProbe(page, matchId) {
       settlementSource: document.querySelector('[data-live-settlement-report]')?.getAttribute('data-live-settlement-source') || '',
       settlementHidden: document.querySelector('[data-live-settlement-report]')?.getAttribute('data-live-settlement-hidden') || '',
       settlementReasonIds: Array.from(document.querySelectorAll('[data-live-settlement-reason]')).map(item => item.getAttribute('data-live-settlement-reason')),
-      settlementReasonText: Array.from(document.querySelectorAll('[data-live-settlement-reason]')).map(item => item.textContent?.replace(/\s+/g, ' ').trim() || '').join(' '),
-      settlementReasonSources: Array.from(document.querySelectorAll('[data-live-settlement-reason]')).map(item => item.getAttribute('data-live-settlement-reason-source')),
-      settlementReasonImpacts: Array.from(document.querySelectorAll('[data-live-settlement-reason]')).map(item => item.getAttribute('data-live-settlement-reason-impact')),
-    };
-  }, { targetMatchId: matchId });
-}
+	      settlementReasonText: Array.from(document.querySelectorAll('[data-live-settlement-reason]')).map(item => item.textContent?.replace(/\s+/g, ' ').trim() || '').join(' '),
+	      settlementReasonSources: Array.from(document.querySelectorAll('[data-live-settlement-reason]')).map(item => item.getAttribute('data-live-settlement-reason-source')),
+	      settlementReasonImpacts: Array.from(document.querySelectorAll('[data-live-settlement-reason]')).map(item => item.getAttribute('data-live-settlement-reason-impact')),
+	      fairnessText: fairnessEl?.textContent?.replace(/\s+/g, ' ').trim() || '',
+	      fairnessSource: fairnessEl?.getAttribute('data-live-fairness-source') || '',
+	      fairnessHidden: fairnessEl?.getAttribute('data-live-fairness-hidden') || '',
+	      fairnessState: fairnessEl?.getAttribute('data-live-fairness-state') || '',
+	      fairnessCheckIds: Array.from(document.querySelectorAll('[data-live-fairness-check]')).map(item => item.getAttribute('data-live-fairness-check')),
+	      experienceText: experienceEl?.textContent?.replace(/\s+/g, ' ').trim() || '',
+	      experienceSource: experienceEl?.getAttribute('data-live-experience-source') || '',
+	      experienceHidden: experienceEl?.getAttribute('data-live-experience-hidden') || '',
+	      experienceCheckIds: Array.from(document.querySelectorAll('[data-live-experience-check]')).map(item => item.getAttribute('data-live-experience-check')),
+	      effectiveActionProof: effectiveActionEl?.getAttribute('data-live-effective-action-proof') || '',
+	      effectiveActionKind: effectiveActionEl?.getAttribute('data-live-effective-action-kind') || '',
+	      effectiveActionState: snapshot?.postMatchReview?.experienceReport?.effectiveActionReport?.secondSeatState || '',
+	      effectiveActionKinds: snapshot?.postMatchReview?.experienceReport?.effectiveActionReport?.observedActionKinds || [],
+	      nextStepLine: snapshot?.postMatchReview?.fairnessReceipt?.nextStepLine || '',
+	      nextActionIds: Array.from(document.querySelectorAll('[data-live-post-review-action]')).map(item => item.getAttribute('data-live-post-review-action')),
+	    };
+	  }, { targetMatchId: matchId });
+	}
 
 async function getLiveHandoffRiskReceiptProbe(page) {
   return await page.evaluate(() => {
@@ -2368,9 +2386,9 @@ async function writeReport() {
           && !/rating":|\belo\b|opponentRating|expectedWinRate|ranked_authoritative|surrender_|connection_timeout|turn_timeout|ready_timeout|test_state_forced/i.test(`${naturalLoserProbe.settlementText} ${naturalLoserProbe.settlementReasonText}`),
         JSON.stringify(naturalLethalProbe),
       );
-      add(
-        'real browser live match renders formal settlement reason lines after deterministic natural lethal',
-        naturalLethalProbe.forcedEventCount === 0
+	      add(
+	        'real browser live match renders formal settlement reason lines after deterministic natural lethal',
+	        naturalLethalProbe.forcedEventCount === 0
           && !naturalLethalProbe.eventTypes.includes('test_state_forced')
           && naturalLethalProbe.eventTypes.includes('match_finished')
           && naturalLoserProbe.snapshot?.postMatchReview?.finishReason === 'lethal'
@@ -2388,9 +2406,49 @@ async function writeReport() {
           && (naturalLoserProbe.snapshot?.postMatchReview?.settlementReport?.reasonLines || []).length >= 3
           && (naturalLoserProbe.snapshot?.postMatchReview?.settlementReport?.reasonLines || []).every(reason => reason.usesHiddenInformation === false)
           && !/rating":|\belo\b|opponentRating|expectedWinRate|ranked_authoritative|surrender_|connection_timeout|turn_timeout|ready_timeout|test_state_forced/i.test(`${naturalLoserProbe.settlementText} ${naturalLoserProbe.settlementReasonText}`),
-        JSON.stringify(naturalLethalProbe),
-      );
-    } finally {
+	        JSON.stringify(naturalLethalProbe),
+	      );
+	      add(
+	        'real browser natural lethal post-match fairness confirms both players had agency',
+	        naturalLethalProbe.forcedEventCount === 0
+	          && !naturalLethalProbe.eventTypes.includes('test_state_forced')
+	          && naturalLethalDrive.transcript.length >= 3
+	          && naturalActorSeats.includes('A')
+	          && naturalActorSeats.includes('B')
+	          && naturalLoserProbe.snapshot?.postMatchReview?.fairnessReceipt?.reportVersion === 'pvp-live-fairness-receipt-v1'
+	          && naturalLoserProbe.snapshot?.postMatchReview?.fairnessReceipt?.sourceVisibility === 'public_events'
+	          && naturalLoserProbe.snapshot?.postMatchReview?.fairnessReceipt?.usesHiddenInformation === false
+	          && naturalLoserProbe.snapshot?.postMatchReview?.fairnessReceipt?.rankedImpact === 'none'
+	          && naturalLoserProbe.snapshot?.postMatchReview?.fairnessReceipt?.finishReason === 'lethal'
+	          && naturalLoserProbe.snapshot?.postMatchReview?.fairnessReceipt?.receiptState === 'accepted'
+	          && naturalLoserProbe.fairnessSource === 'public_events'
+	          && naturalLoserProbe.fairnessHidden === 'false'
+	          && naturalLoserProbe.fairnessState === 'accepted'
+	          && /公平回执/.test(naturalLoserProbe.fairnessText)
+	          && /不属于无解释先手秒杀/.test(naturalLoserProbe.fairnessText)
+	          && /双方均有可读窗口|行动窗口/.test(naturalLoserProbe.fairnessText)
+	          && naturalLoserProbe.fairnessCheckIds.includes('second_seat_effective_action')
+	          && naturalLoserProbe.snapshot?.postMatchReview?.experienceReport?.reportVersion === 'pvp-live-experience-report-v1'
+	          && naturalLoserProbe.snapshot?.postMatchReview?.experienceReport?.sourceVisibility === 'public_events'
+	          && naturalLoserProbe.snapshot?.postMatchReview?.experienceReport?.usesHiddenInformation === false
+	          && naturalLoserProbe.snapshot?.postMatchReview?.experienceReport?.rankedImpact === 'none'
+	          && naturalLoserProbe.snapshot?.postMatchReview?.experienceReport?.decisionWindowCount >= 2
+	          && naturalLoserProbe.snapshot?.postMatchReview?.experienceReport?.seatWindowSummary?.secondSeatWindowObserved === true
+	          && naturalLoserProbe.effectiveActionState === 'confirmed'
+	          && naturalLoserProbe.effectiveActionKinds.includes('damage_applied')
+	          && /双方体验诊断/.test(naturalLoserProbe.experienceText)
+	          && /打出反压|不是单边承伤/.test(naturalLoserProbe.experienceText)
+	          && naturalLoserProbe.experienceSource === 'public_events'
+	          && naturalLoserProbe.experienceHidden === 'false'
+	          && naturalLoserProbe.experienceCheckIds.includes('second_seat_effective_action')
+	          && naturalLoserProbe.nextStepLine
+	          && /调整斗法谱|问道练习|继续真人排位/.test(naturalLoserProbe.nextStepLine)
+	          && naturalLoserProbe.nextActionIds.includes('review_key_turns')
+	          && naturalLoserProbe.nextActionIds.includes('practice')
+	          && !/payload|hand|deck|cardId|instanceId|loadoutSnapshot|reward|rating|elo|test_state_forced/i.test(`${naturalLoserProbe.fairnessText} ${naturalLoserProbe.experienceText} ${JSON.stringify(naturalLoserProbe.snapshot?.postMatchReview?.fairnessReceipt || {})} ${JSON.stringify(naturalLoserProbe.snapshot?.postMatchReview?.experienceReport || {})}`),
+	        JSON.stringify(naturalLethalProbe),
+	      );
+	    } finally {
       await naturalLethalHost?.context?.close?.().catch(() => {});
       await naturalLethalGuest?.context?.close?.().catch(() => {});
     }

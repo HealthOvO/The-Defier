@@ -3810,13 +3810,23 @@ export const PVPScene = {
 	      replay && replay.recommendedAction
 	    ].map(item => String(item || '')).filter(Boolean);
 	    const receiptLine = String(receipt && receipt.nextStepLine || '');
-	    const needsReviewFirst = source.result === 'loss'
+	    const acceptedLowRiskLoss = source.result === 'loss'
+	      && experience
+	      && experience.nonGameRisk === 'low'
+	      && receipt
+	      && receipt.receiptState === 'accepted'
+	      && receipt.riskState === 'low';
+	    const needsReviewFirst = !acceptedLowRiskLoss && (source.result === 'loss'
 	      || (experience && experience.nonGameRisk === 'watch')
 	      || (receipt && (receipt.receiptState === 'watch' || receipt.riskState === 'watch'))
-	      || /复盘|关键|窗口|练习/.test(receiptLine);
+	      || /复盘|关键|窗口|练习/.test(receiptLine));
 	    let primaryId = '';
 	    if (friendlySeries && friendlySeries.canRequestNextRound && hasAction('friendly_rematch')) {
 	      primaryId = 'friendly_rematch';
+	    } else if (acceptedLowRiskLoss && recommendation && hasAction('adjust_loadout')) {
+	      primaryId = 'adjust_loadout';
+	    } else if (acceptedLowRiskLoss && hasAction('practice')) {
+	      primaryId = 'practice';
 	    } else if (source.result === 'win' && hasAction('queue_again') && !(experience && experience.nonGameRisk === 'watch')) {
 	      primaryId = 'queue_again';
 	    } else if (needsReviewFirst && hasAction('review_key_turns') && (replay && replay.turns.length > 0 || /关键|复盘|窗口/.test(receiptLine))) {
