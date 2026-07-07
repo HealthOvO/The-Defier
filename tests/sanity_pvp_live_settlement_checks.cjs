@@ -357,6 +357,12 @@ function dbGet(sql, params = []) {
     assert.equal(surrenderB.payload.stateView.postMatchReview?.settlementReport?.reportVersion, 'pvp-live-settlement-report-v1', 'loser state view should expose settlement report after live settlement');
     assert.equal(surrenderB.payload.stateView.postMatchReview?.settlementReport?.result, 'loss', 'loser settlement report should be scoped to the viewer');
     assert.equal(surrenderB.payload.stateView.postMatchReview?.settlementReport?.oldScore, initialRankB.payload.rank.score, 'loser settlement report should expose old score');
+    const loserSettlementReasons = surrenderB.payload.stateView.postMatchReview?.settlementReport?.reasonLines || [];
+    assert.ok(loserSettlementReasons.some(reason => reason?.id === 'finish_type' && /认负|投降/.test(reason.line || '')), 'loser settlement report should explain the finish type in player-readable copy');
+    assert.ok(loserSettlementReasons.some(reason => reason?.id === 'score_delta' && /正式积分|对手强度|服务端权威/.test(reason.line || '')), 'loser settlement report should explain why score changed');
+    assert.ok(loserSettlementReasons.some(reason => reason?.id === 'reward_boundary' && /天道币|战斗数值|不改变/.test(reason.line || '')), 'loser settlement report should explain reward and non-power boundary');
+    assert.ok(loserSettlementReasons.every(reason => reason?.usesHiddenInformation === false), 'settlement reason lines must not use hidden information');
+    assert.doesNotMatch(JSON.stringify(loserSettlementReasons), /rating":|elo|opponentRating|expectedWinRate|ranked_authoritative|surrender_/i, 'settlement reasons must not expose hidden rating or raw settlement protocol values');
     assert.equal(surrenderB.payload.stateView.postMatchReview?.settlementReport?.seasonHonorReport?.reportVersion, 'pvp-live-season-honor-v1', 'loser settlement report should expose season honor progress');
     assert.equal(surrenderB.payload.stateView.postMatchReview?.settlementReport?.seasonHonorReport?.sourceVisibility, 'server_authoritative_settlement', 'season honor progress should come from authoritative settlement');
     assert.equal(surrenderB.payload.stateView.postMatchReview?.settlementReport?.seasonHonorReport?.powerImpact, 'none', 'season honor progress must not grant combat power');

@@ -3152,6 +3152,26 @@ export const PVPScene = {
     const scoreAfter = Math.max(0, Math.floor(Number(report.scoreAfter) || 0));
     const oldScore = Math.max(0, Math.floor(Number(report.oldScore) || 0));
     const deltaText = ratingDelta > 0 ? `+${ratingDelta}` : `${ratingDelta}`;
+    const supportedReasonIds = new Set(['finish_type', 'score_delta', 'reward_boundary']);
+    const forbiddenReasonPattern = /rating":|\belo\b|opponentRating|expectedWinRate|ranked_authoritative|surrender_|connection_timeout|turn_timeout|ready_timeout/i;
+    const reasonLines = Array.isArray(report.reasonLines)
+      ? report.reasonLines
+        .slice(0, 4)
+        .map(reason => reason && typeof reason === 'object' ? {
+          id: String(reason.id || ''),
+          label: String(reason.label || ''),
+          line: String(reason.line || ''),
+          sourceVisibility: String(reason.sourceVisibility || 'server_authoritative_settlement'),
+          usesHiddenInformation: !!reason.usesHiddenInformation,
+          rankedImpact: String(reason.rankedImpact || 'none')
+        } : null)
+        .filter(reason => reason
+          && supportedReasonIds.has(reason.id)
+          && reason.label
+          && reason.line
+          && !reason.usesHiddenInformation
+          && !forbiddenReasonPattern.test(`${reason.label} ${reason.line} ${reason.sourceVisibility} ${reason.rankedImpact}`))
+      : [];
     return {
       reportVersion: 'pvp-live-settlement-report-v1',
       sourceVisibility: String(report.sourceVisibility || 'server_authoritative_settlement'),
@@ -3167,6 +3187,7 @@ export const PVPScene = {
       coinsAwarded,
       settledAt: Math.max(0, Math.floor(Number(report.settledAt) || 0)),
       summaryLine: String(report.summaryLine || `正式积分 ${deltaText} · 当前 ${scoreAfter} · 天道币 +${coinsAwarded}`),
+      reasonLines,
       boundary: String(report.boundary || '本报告来自服务端权威 live ranked 结算；好友约战、问道练习和无效局不会生成正式结算报告。'),
       seasonHonorReport: this.getLiveSeasonHonorReport(report.seasonHonorReport)
     };
@@ -3250,6 +3271,21 @@ export const PVPScene = {
     const policyLabel = this.formatLivePolicyLabel(report.formalResultPolicy);
     const honor = report.seasonHonorReport;
     const getCollectionLabel = (state) => state === 'newly_unlocked' ? '新入库' : state === 'owned' ? '已入库' : '待入库';
+    const reasonMarkup = report.reasonLines.length ? `
+        <div class="pvp-live-settlement-reasons" data-live-settlement-reasons>
+          ${report.reasonLines.map(reason => `
+            <div
+              class="pvp-live-settlement-reason"
+              data-live-settlement-reason="${this.escapeHtml(reason.id)}"
+              data-live-settlement-reason-source="${this.escapeHtml(reason.sourceVisibility)}"
+              data-live-settlement-reason-impact="${this.escapeHtml(reason.rankedImpact)}"
+            >
+              <span>${this.escapeHtml(reason.label)}</span>
+              <span>${this.escapeHtml(reason.line)}</span>
+            </div>
+          `).join('')}
+        </div>
+      ` : '';
     return `
       <div
         class="pvp-live-settlement-report"
@@ -3268,6 +3304,7 @@ export const PVPScene = {
           <span>当前 ${this.escapeHtml(report.scoreAfter)}</span>
           <span>天道币 +${this.escapeHtml(report.coinsAwarded)}</span>
         </div>
+        ${reasonMarkup}
         <div class="pvp-live-settlement-boundary">${this.escapeHtml(report.boundary)}</div>
         ${honor ? `
           <div

@@ -1243,6 +1243,72 @@ function buildLoadoutRecommendation(evidence, context = {}) {
     };
 }
 
+function getSettlementFinishTypeLine(finishReason, result) {
+    const won = result === 'win';
+    if (finishReason === 'round14_draw') return '本局打满第 14 轮后分差不足，按公开长局规则记为平局。';
+    if (finishReason === 'round14_score') {
+        return won
+            ? '本局打满第 14 轮后，你凭公开血线、伤害、防守和资源效率取得胜利。'
+            : '本局打满第 14 轮后，对手凭公开血线、伤害、防守和资源效率取得胜利。';
+    }
+    if (finishReason === 'surrender') {
+        return won
+            ? '本局因对手认负结束，服务端按公开终局事件结算。'
+            : '本局因你认负结束，服务端按公开终局事件结算。';
+    }
+    if (finishReason === 'timeout') {
+        return won
+            ? '本局因对手行动超时结束，服务端按公开计时裁决结算。'
+            : '本局因你行动超时结束，服务端按公开计时裁决结算。';
+    }
+    if (finishReason === 'connection_timeout') {
+        return won
+            ? '本局因对手连接超时结束，服务端按公开连接裁决结算。'
+            : '本局因你连接超时结束，服务端按公开连接裁决结算。';
+    }
+    return won
+        ? '本局由公开伤害终结对手，服务端按终局事件结算。'
+        : '本局因你被公开伤害终结，服务端按终局事件结算。';
+}
+
+function getSettlementScoreDeltaLine(ratingDelta) {
+    const deltaText = ratingDelta > 0 ? `+${ratingDelta}` : `${ratingDelta}`;
+    return `正式积分 ${deltaText} 由服务端权威结算，核心依据本局胜负、终局类型和对手强度生成；隐藏评分和预期胜率不展示。`;
+}
+
+function getSettlementRewardBoundaryLine(coinsAwarded) {
+    return `天道币 +${coinsAwarded} 只来自正式结算记录；赛季荣誉和外观目标不改变战斗数值、起手或匹配。`;
+}
+
+function buildSettlementReasonLines({ finishReason, result, ratingDelta, coinsAwarded }) {
+    return [
+        {
+            id: 'finish_type',
+            label: '终局类型',
+            line: getSettlementFinishTypeLine(finishReason, result),
+            sourceVisibility: 'public_events',
+            usesHiddenInformation: false,
+            rankedImpact: 'none'
+        },
+        {
+            id: 'score_delta',
+            label: '积分变化',
+            line: getSettlementScoreDeltaLine(ratingDelta),
+            sourceVisibility: 'server_authoritative_settlement',
+            usesHiddenInformation: false,
+            rankedImpact: 'official'
+        },
+        {
+            id: 'reward_boundary',
+            label: '奖励边界',
+            line: getSettlementRewardBoundaryLine(coinsAwarded),
+            sourceVisibility: 'server_authoritative_settlement',
+            usesHiddenInformation: false,
+            rankedImpact: 'none'
+        }
+    ];
+}
+
 function projectSettlementReport(state, seatId) {
     if (!state || state.status !== 'finished' || state.mode === 'friendly') return null;
     const report = state.settlementReport && typeof state.settlementReport === 'object' ? state.settlementReport : null;
@@ -1254,6 +1320,7 @@ function projectSettlementReport(state, seatId) {
     const coinsAwarded = Math.max(0, Math.floor(Number(participant.coinsAwarded) || 0));
     const result = participant.result === 'win' || participant.didWin === true ? 'win' : 'loss';
     const deltaText = ratingDelta > 0 ? `+${ratingDelta}` : `${ratingDelta}`;
+    const finishReason = String(report.finishReason || '');
     return {
         reportVersion: 'pvp-live-settlement-report-v1',
         sourceVisibility: 'server_authoritative_settlement',
@@ -1262,13 +1329,14 @@ function projectSettlementReport(state, seatId) {
         settlementSource: 'live_ranked',
         formalResultPolicy: 'ranked_authoritative',
         result,
-        finishReason: String(report.finishReason || ''),
+        finishReason,
         oldScore: Math.max(0, Math.floor(Number(participant.oldScore) || 0)),
         scoreAfter: Math.max(0, Math.floor(Number(participant.scoreAfter) || 0)),
         ratingDelta,
         coinsAwarded,
         settledAt: Math.max(0, Math.floor(Number(report.settledAt) || 0)),
         summaryLine: `正式积分 ${deltaText} · 当前 ${Math.max(0, Math.floor(Number(participant.scoreAfter) || 0))} · 天道币 +${coinsAwarded}`,
+        reasonLines: buildSettlementReasonLines({ finishReason, result, ratingDelta, coinsAwarded }),
         boundary: '本报告来自服务端权威 live ranked 结算；好友约战、问道练习和无效局不会生成正式结算报告。',
         seasonHonorReport: projectSeasonHonorReport(participant.seasonHonorReport)
     };

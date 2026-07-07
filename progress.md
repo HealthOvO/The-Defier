@@ -1,5 +1,27 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-07-07: V10-S85 live PVP authoritative settlement reason lines
+  - 本轮完成
+    - `server/pvp-live/engine/state-view.js` 在正式 live ranked `settlementReport` 中新增 `reasonLines[]`，稳定输出 `finish_type / score_delta / reward_boundary` 三条玩家可读解释：终局类型、正式积分变化原因、天道币/赛季荣誉不改战斗数值的边界。
+    - 解释层只来自公开终局事件和服务端权威结算投影，明确 `usesHiddenInformation=false`，不暴露 hidden rating、ELO、对手内部评分、expected win rate、原始 `ranked_authoritative` 或 `surrender_*` 协议值。
+    - `js/scenes/pvp-scene.js` 归一化并白名单三类 reason id，只渲染非隐藏解释；同时增加前端 raw token 防线，白名单 reason 若误带 `elo / opponentRating / expectedWinRate / ranked_authoritative / surrender_* / *_timeout` 等协议或隐藏评分 token 会被丢弃。
+    - `renderLiveSettlementReport()` 在正式结算卡内新增稳定 DOM marker：`data-live-settlement-reasons` 与 `data-live-settlement-reason="finish_type|score_delta|reward_boundary"`。
+    - `css/pvp.css` 补结算解释区布局，桌面双列展示、移动端单列换行，避免长解释挤压或溢出。
+    - `tests/sanity_pvp_live_settlement_checks.cjs`、`tests/sanity_pvp_live_ui_runtime_checks.mjs`、`tests/sanity_pvp_live_ui_contract_checks.cjs`、`tests/browser_pvp_live_audit.mjs` 和 `tests/sanity_release_gate_coverage_checks.cjs` 同步锁住服务端字段、UI marker、白名单合同、浏览器 DOM finding 和 release gate 覆盖。
+  - 已验证
+    - 红测：`node tests/sanity_pvp_live_settlement_checks.cjs` 在实现前失败于 `loser settlement report should explain the finish type in player-readable copy`。
+    - 红测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs` 在实现前失败于 `settlement report should render stable finish reason marker`。
+    - 绿测：`node tests/sanity_pvp_live_settlement_checks.cjs`
+    - 绿测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs`，包含白名单 reason 被恶意塞入 raw token 时不渲染的防线样本。
+    - 绿测：`node tests/sanity_pvp_live_ui_contract_checks.cjs`
+    - 绿测：`node tests/sanity_release_gate_coverage_checks.cjs`
+    - 完整 Node 门禁：`PVP_LIVE_WS_FANOUT_MESSAGE_TIMEOUT_MS=60000 npm run test:node`
+    - 构建：`npm run build:pages`
+    - 空白检查：`git diff --check`
+    - 浏览器审计：`node tests/browser_pvp_live_audit.mjs http://127.0.0.1:4173 output/browser-pvp-live-audit-s85-settlement-reasons-final-rerun`，135/135 findings、0 failed、0 console error；新增 `live UI renders formal settlement reason lines without hidden protocol leaks`。
+  - 当前结论
+    - live PVP 正式结算现在不只是告诉玩家“加了/扣了多少分”，还会说明“本局为什么结束、积分为什么变化、奖励为什么不会影响战斗强度”。该切片只补解释层和验收门禁，不改变 ratingDelta 公式、天道币发放、赛季荣誉奖励、匹配算法、卡牌数值、先后手或正式结算真值。
+
 - 2026-07-07: V10-S84 live PVP queue-cancel cooldown real-backend proof
   - 本轮完成
     - `tests/browser_pvp_live_real_backend_smoke.mjs` 将 S83 的排队取消冷却从 route / session / synthetic UI 证明推进到真实后端、真实账号、真实浏览器页面：独立账号在隔离 `testMatchScope` 下通过真实入队 / 取消按钮连续三次取消公开队列，第三次必须即时回到 idle 并展示 `queue_cooldown`。

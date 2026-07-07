@@ -330,6 +330,49 @@ async function safeElementScreenshot(page, selector, outputPath) {
           { eventType: 'match_finished', sequence: 8, actingSeat: 'B' },
         ],
       },
+      settlementReport: {
+        reportVersion: 'pvp-live-settlement-report-v1',
+        sourceVisibility: 'server_authoritative_settlement',
+        usesHiddenInformation: false,
+        rankedImpact: 'official',
+        settlementSource: 'live_ranked',
+        formalResultPolicy: 'ranked_authoritative',
+        result: 'loss',
+        finishReason: 'surrender',
+        oldScore: 1000,
+        scoreAfter: 990,
+        ratingDelta: -10,
+        coinsAwarded: 8,
+        settledAt: Date.now(),
+        summaryLine: '正式积分 -10 · 当前 990 · 天道币 +8',
+        reasonLines: [
+          {
+            id: 'finish_type',
+            label: '终局类型',
+            line: '本局因你认负结束，服务端按公开终局事件结算。',
+            sourceVisibility: 'public_events',
+            usesHiddenInformation: false,
+            rankedImpact: 'none',
+          },
+          {
+            id: 'score_delta',
+            label: '积分变化',
+            line: '正式积分 -10 由服务端权威结算，核心依据本局胜负、终局类型和对手强度生成。',
+            sourceVisibility: 'server_authoritative_settlement',
+            usesHiddenInformation: false,
+            rankedImpact: 'official',
+          },
+          {
+            id: 'reward_boundary',
+            label: '奖励边界',
+            line: '天道币 +8 只来自正式结算记录；赛季荣誉和外观目标不改变战斗数值、起手或匹配。',
+            sourceVisibility: 'server_authoritative_settlement',
+            usesHiddenInformation: false,
+            rankedImpact: 'none',
+          },
+        ],
+        boundary: '本报告来自服务端权威 live ranked 结算；好友约战、问道练习和无效局不会生成正式结算报告。',
+      },
       suggestions: [
         '查看认输前的生命、灵力和手牌窗口，确认是不是过早放弃。',
         '如果连续被压低血线，下一局先换守势斗法谱或保留低费防御。',
@@ -4621,6 +4664,24 @@ async function safeElementScreenshot(page, selector, outputPath) {
     loadoutRecommendationHidden: document.querySelector('[data-live-loadout-recommendation]')?.getAttribute('data-live-loadout-recommendation-hidden') || '',
     loadoutRecommendationPreset: document.querySelector('[data-live-loadout-recommendation]')?.getAttribute('data-live-loadout-recommendation-preset') || '',
     loadoutRecommendationAction: document.querySelector('[data-live-loadout-recommendation-action]')?.getAttribute('data-live-loadout-recommendation-action') || '',
+    settlementText: document.querySelector('[data-live-settlement-report]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+    settlementSource: document.querySelector('[data-live-settlement-report]')?.getAttribute('data-live-settlement-source') || '',
+    settlementHidden: document.querySelector('[data-live-settlement-report]')?.getAttribute('data-live-settlement-hidden') || '',
+    settlementReasonIds: Array.from(document.querySelectorAll('[data-live-settlement-reason]')).map(item => item.getAttribute('data-live-settlement-reason')),
+    settlementReasonText: Array.from(document.querySelectorAll('[data-live-settlement-reason]')).map(item => item.textContent?.replace(/\s+/g, ' ').trim() || '').join(' '),
+    settlementReasonSources: Array.from(document.querySelectorAll('[data-live-settlement-reason]')).map(item => item.getAttribute('data-live-settlement-reason-source')),
+    settlementReasonImpacts: Array.from(document.querySelectorAll('[data-live-settlement-reason]')).map(item => item.getAttribute('data-live-settlement-reason-impact')),
+    settlementReasonLayout: Array.from(document.querySelectorAll('[data-live-settlement-reason]')).map(item => {
+      const rect = item.getBoundingClientRect();
+      const style = getComputedStyle(item);
+      return {
+        width: rect.width,
+        scrollWidth: item.scrollWidth,
+        clientWidth: item.clientWidth,
+        overflowWrap: style.overflowWrap,
+        whiteSpace: style.whiteSpace,
+      };
+    }),
     reviewActionIds: Array.from(document.querySelectorAll('[data-live-post-review-action]')).map(button => button.getAttribute('data-live-post-review-action')),
     reviewActionAuditIds: Array.from(document.querySelectorAll('[data-live-post-review-action]')).map(button => `${button.getAttribute('data-live-post-review-action')}:${button.getAttribute('data-live-post-review-audit-action')}`),
     reviewPayload: window.PVPScene.getLiveSnapshot()?.postMatchReview || null,
@@ -4637,6 +4698,10 @@ async function safeElementScreenshot(page, selector, outputPath) {
     experienceChecks: JSON.stringify((surrenderProbe.reviewPayload.experienceReport?.fairnessChecks || []).map(item => item.id)) === JSON.stringify((surrenderProbe.textPayload.experienceReport?.fairnessChecks || []).map(item => item.id)),
     fairnessReceipt: JSON.stringify((surrenderProbe.reviewPayload.fairnessReceipt?.evidenceSummary || []).map(item => item.id)) === JSON.stringify((surrenderProbe.textPayload.fairnessReceipt?.evidenceSummary || []).map(item => item.id)),
   } : null;
+  const reviewPayloadWithoutFormalSettlement = surrenderProbe.reviewPayload
+    ? { ...surrenderProbe.reviewPayload, settlementReport: null }
+    : null;
+  const settlementReasonForbiddenPattern = /rating":|\belo\b|opponentRating|expectedWinRate|ranked_authoritative|surrender_|connection_timeout|turn_timeout|ready_timeout/i;
   add(
     'live UI surrenders through live intent and reaches finished phase',
     surrenderProbe.phase === 'finished'
@@ -4672,7 +4737,27 @@ async function safeElementScreenshot(page, selector, outputPath) {
       && surrenderProbe.reviewPayload?.loadoutRecommendation?.reportVersion === 'pvp-live-loadout-recommendation-v1'
       && surrenderProbe.textPayload?.loadoutRecommendation?.recommendedPresetId === 'shield'
       && !/payload|hand|deck|cardId|instanceId|loadoutSnapshot|reward|rating|elo/i.test(JSON.stringify(surrenderProbe.reviewPayload?.loadoutRecommendation || {}))
-      && !/reward|rating|elo/i.test(`${surrenderProbe.reviewText} ${JSON.stringify(surrenderProbe.reviewPayload || {})}`),
+      && !/reward|rating|elo/i.test(`${surrenderProbe.reviewText} ${JSON.stringify(reviewPayloadWithoutFormalSettlement || {})}`),
+    JSON.stringify({ ...surrenderProbe, reviewParity }),
+  );
+  add(
+    'live UI renders formal settlement reason lines without hidden protocol leaks',
+    /正式积分/.test(surrenderProbe.settlementText)
+      && /终局类型/.test(surrenderProbe.settlementReasonText)
+      && /积分变化/.test(surrenderProbe.settlementReasonText)
+      && /奖励边界/.test(surrenderProbe.settlementReasonText)
+      && ['finish_type', 'score_delta', 'reward_boundary'].every(id => surrenderProbe.settlementReasonIds.includes(id))
+      && surrenderProbe.settlementSource === 'server_authoritative_settlement'
+      && surrenderProbe.settlementHidden === 'false'
+      && surrenderProbe.settlementReasonSources.includes('public_events')
+      && surrenderProbe.settlementReasonSources.includes('server_authoritative_settlement')
+      && surrenderProbe.settlementReasonImpacts.includes('official')
+      && surrenderProbe.reviewPayload?.settlementReport?.reportVersion === 'pvp-live-settlement-report-v1'
+      && surrenderProbe.textPayload?.settlementReport?.reportVersion === 'pvp-live-settlement-report-v1'
+      && (surrenderProbe.reviewPayload?.settlementReport?.reasonLines || []).length >= 3
+      && (surrenderProbe.reviewPayload?.settlementReport?.reasonLines || []).every(reason => reason.usesHiddenInformation === false)
+      && surrenderProbe.settlementReasonLayout.every(item => item.scrollWidth <= item.clientWidth + 1 || item.overflowWrap === 'anywhere')
+      && !settlementReasonForbiddenPattern.test(`${surrenderProbe.settlementReasonText} ${JSON.stringify(surrenderProbe.reviewPayload?.settlementReport?.reasonLines || [])}`),
     JSON.stringify({ ...surrenderProbe, reviewParity }),
   );
   add(

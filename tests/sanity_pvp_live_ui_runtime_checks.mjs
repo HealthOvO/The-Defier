@@ -641,7 +641,7 @@ const opponentDisconnectedCurrentTurnCopy = PVPScene.formatLiveConnectionStatus(
 assert.match(opponentDisconnectedCurrentTurnCopy, /当前行动|连接超时|超时结算/, 'live UI should name the authoritative timeout boundary when the disconnected opponent owns the action window');
 assert.doesNotMatch(opponentDisconnectedCurrentTurnCopy, /connection_timeout|turn_timeout|ranked_authoritative|swap_sides|forfeit_disconnect/, 'live UI opponent disconnect copy should not expose internal protocol codes');
 
-const rawProtocolPattern = /connection_timeout|turn_timeout|ready_timeout|ranked_authoritative|swap_sides|forfeit_disconnect/;
+const rawProtocolPattern = /connection_timeout|turn_timeout|ready_timeout|ranked_authoritative|swap_sides|forfeit_disconnect|elo|opponentRating|expectedWinRate|surrender_/i;
 
 const protocolLabelReviewMarkup = PVPScene.renderLivePostMatchReview({
   status: 'finished',
@@ -672,7 +672,41 @@ const protocolLabelReviewMarkup = PVPScene.renderLivePostMatchReview({
       coinsAwarded: 0,
       oldScore: 1000,
       scoreAfter: 990,
-      summaryLine: '正式积分 -10 · 当前 990 · 天道币 +0'
+      summaryLine: '正式积分 -10 · 当前 990 · 天道币 +0',
+      reasonLines: [
+        {
+          id: 'finish_type',
+          label: '终局类型',
+          line: '本局因连接超时结束，服务端按公开终局事件结算。',
+          sourceVisibility: 'public_events',
+          usesHiddenInformation: false,
+          rankedImpact: 'none'
+        },
+        {
+          id: 'score_delta',
+          label: '积分变化',
+          line: '正式积分 -10 来自服务端权威排位结算，不展示隐藏评分。',
+          sourceVisibility: 'server_authoritative_settlement',
+          usesHiddenInformation: false,
+          rankedImpact: 'official'
+        },
+        {
+          id: 'reward_boundary',
+          label: '奖励边界',
+          line: '天道币 +0 仅来自正式结算记录，不改变战斗数值。',
+          sourceVisibility: 'server_authoritative_settlement',
+          usesHiddenInformation: false,
+          rankedImpact: 'none'
+        },
+        {
+          id: 'score_delta',
+          label: 'expectedWinRate',
+          line: 'elo opponentRating ranked_authoritative surrender_loss connection_timeout',
+          sourceVisibility: 'ranked_authoritative',
+          usesHiddenInformation: false,
+          rankedImpact: 'official'
+        }
+      ]
     },
     friendlySeries: {
       reportVersion: 'pvp-live-friendly-series-v1',
@@ -692,6 +726,12 @@ assert.match(protocolLabelReviewMarkup, /连接超时/, 'post-match review shoul
 assert.match(protocolLabelReviewMarkup, /行动超时/, 'key turn replay should map turn timeout to player copy');
 assert.match(protocolLabelReviewMarkup, /准备超时/, 'invalidated event reason should map ready timeout to player copy');
 assert.match(protocolLabelReviewMarkup, /服务端权威结算/, 'settlement report should map ranked authoritative policy to player copy');
+assert.match(protocolLabelReviewMarkup, /data-live-settlement-reason="finish_type"/, 'settlement report should render stable finish reason marker');
+assert.match(protocolLabelReviewMarkup, /data-live-settlement-reason="score_delta"/, 'settlement report should render stable score-delta reason marker');
+assert.match(protocolLabelReviewMarkup, /data-live-settlement-reason="reward_boundary"/, 'settlement report should render stable reward-boundary reason marker');
+assert.match(protocolLabelReviewMarkup, /终局类型/, 'settlement report should show finish type explanation label');
+assert.match(protocolLabelReviewMarkup, /积分变化/, 'settlement report should show score delta explanation label');
+assert.match(protocolLabelReviewMarkup, /奖励边界/, 'settlement report should show reward boundary explanation label');
 assert.match(protocolLabelReviewMarkup, /换边再战/, 'friendly series should map swap-side policy to player copy');
 assert.doesNotMatch(protocolLabelReviewMarkup, rawProtocolPattern, 'post-match visible review should not expose internal protocol codes');
 
