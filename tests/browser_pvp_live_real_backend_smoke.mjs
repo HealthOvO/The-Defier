@@ -910,6 +910,164 @@ async function writeReport() {
       JSON.stringify({ longWaitPracticeProbe, longWaitPracticeActionable }),
     );
 
+    const queueCancelCooldownScope = `${TEST_MATCH_SCOPE}_queue_cancel_cooldown`;
+    let queueCancelCooldownSeat = null;
+    try {
+    queueCancelCooldownSeat = await preparePage(browser, `live_real_queue_cancel_${runId}`, '退');
+    await seedRankedHistory(queueCancelCooldownSeat.username, 1000, 6);
+    await queueCancelCooldownSeat.page.evaluate((testMatchScope) => {
+      window.__DEFIER_PVP_REAL_TEST_SCOPE = testMatchScope;
+      window.game.player.name = '退';
+      window.PVPScene.switchTab('live');
+    }, queueCancelCooldownScope);
+    await queueCancelCooldownSeat.page.waitForSelector('[data-live-action="join-queue"]', { timeout: 5000 });
+    const queueCancelCycles = [];
+    for (let index = 0; index < 3; index += 1) {
+      const joinActionable = await clickLiveControl(queueCancelCooldownSeat.page, '[data-live-action="join-queue"]', `queue-cancel-cooldown-join-${index + 1}`);
+      const joined = await waitForLivePhase(queueCancelCooldownSeat.page, 'waiting', 8000);
+      const cancelActionable = await clickLiveControl(queueCancelCooldownSeat.page, '[data-live-action="cancel-queue"]', `queue-cancel-cooldown-cancel-${index + 1}`);
+      const cancelled = index === 2
+        ? await waitForLiveSnapshot(queueCancelCooldownSeat.page, () => {
+          const snapshot = window.PVPScene?.getLiveSnapshot?.() || {};
+          const root = document.querySelector('[data-live-pvp-root]');
+          const hintText = document.querySelector('[data-live-last-error]')?.textContent?.replace(/\s+/g, ' ').trim() || '';
+          const joinText = document.querySelector('[data-live-action="join-queue"]')?.textContent?.replace(/\s+/g, ' ').trim() || '';
+          const practiceDisabled = !!document.querySelector('[data-live-action="practice-live"]')?.disabled;
+          const cancelDisabled = !!document.querySelector('[data-live-action="cancel-queue"]')?.disabled;
+          return snapshot.phase === 'idle'
+            && snapshot.lastError?.reason === 'queue_cooldown'
+            && snapshot.lastError?.matchmakingGuard?.cooldownSource === 'queue_cancel_abuse'
+            && root?.getAttribute('data-live-phase') === 'idle'
+            && /频繁取消冷却|排队冷却/.test(hintText)
+            && /剩余\s*\d+\s*秒/.test(hintText)
+            && /问道练习|不写正式积分/.test(hintText)
+            && /^\d+s 后重试$/.test(joinText)
+            && practiceDisabled === false
+            && cancelDisabled === true;
+        }, null, 8000)
+        : await waitForLivePhase(queueCancelCooldownSeat.page, 'idle', 8000);
+      queueCancelCycles.push({ joined, cancelled, joinActionable, cancelActionable });
+      await queueCancelCooldownSeat.page.waitForTimeout(150);
+    }
+    const queueCancelCooldownProbe = await queueCancelCooldownSeat.page.evaluate(() => {
+      const snapshot = window.PVPScene.getLiveSnapshot();
+      const textPayload = JSON.parse(window.render_game_to_text()).pvp?.live || null;
+      const rectOf = (selector) => {
+        const el = document.querySelector(selector);
+        if (!el) return null;
+        const rect = el.getBoundingClientRect();
+        const style = window.getComputedStyle(el);
+        return {
+          visible: style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0,
+          left: Math.round(rect.left),
+          right: Math.round(rect.right),
+          top: Math.round(rect.top),
+          bottom: Math.round(rect.bottom),
+          width: Math.round(rect.width),
+          height: Math.round(rect.height),
+          viewportWidth: window.innerWidth,
+          viewportHeight: window.innerHeight,
+        };
+      };
+      return {
+        phase: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-phase') || '',
+        hintText: document.querySelector('[data-live-last-error]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+        joinDisabled: !!document.querySelector('[data-live-action="join-queue"]')?.disabled,
+        joinText: document.querySelector('[data-live-action="join-queue"]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+        practiceDisabled: !!document.querySelector('[data-live-action="practice-live"]')?.disabled,
+        cancelDisabled: !!document.querySelector('[data-live-action="cancel-queue"]')?.disabled,
+        hintRect: rectOf('[data-live-last-error]'),
+        joinRect: rectOf('[data-live-action="join-queue"]'),
+        practiceRect: rectOf('[data-live-action="practice-live"]'),
+        snapshot,
+        textPayload,
+      };
+    });
+    const queueCancelCooldownMobileLayoutOk = !isMobileViewport || [queueCancelCooldownProbe.hintRect, queueCancelCooldownProbe.joinRect, queueCancelCooldownProbe.practiceRect].every(rect => (
+      rect
+      && rect.visible === true
+      && rect.left >= -1
+      && rect.right <= rect.viewportWidth + 2
+      && rect.top >= -1
+      && rect.bottom <= rect.viewportHeight + 2
+      && rect.height >= 24
+    ));
+    add(
+      'real browser queue-cancel cooldown immediately explains retry and no-score practice',
+      queueCancelCooldownProbe.phase === 'idle'
+        && queueCancelCooldownProbe.snapshot?.phase === 'idle'
+        && queueCancelCooldownProbe.snapshot?.queueTicket === ''
+        && queueCancelCooldownProbe.snapshot?.lastError?.reason === 'queue_cooldown'
+        && queueCancelCooldownProbe.snapshot?.lastError?.matchmakingGuard?.reportVersion === 'pvp-live-matchmaking-guard-v1'
+        && queueCancelCooldownProbe.snapshot?.lastError?.matchmakingGuard?.status === 'blocked'
+        && queueCancelCooldownProbe.snapshot?.lastError?.matchmakingGuard?.cooldownSource === 'queue_cancel_abuse'
+        && queueCancelCooldownProbe.snapshot?.lastError?.matchmakingGuard?.rankedImpact === 'none'
+        && queueCancelCooldownProbe.snapshot?.lastError?.matchmakingGuard?.cooldownRemainingMs > 0
+        && queueCancelCooldownProbe.snapshot?.lastError?.matchmakingGuard?.actions?.some(action => action.id === 'practice')
+        && queueCancelCooldownProbe.textPayload?.lastError?.matchmakingGuard?.cooldownSource === 'queue_cancel_abuse'
+        && /频繁取消冷却|排队冷却/.test(queueCancelCooldownProbe.hintText)
+        && /剩余\s*\d+\s*秒/.test(queueCancelCooldownProbe.hintText)
+        && /问道练习|不写正式积分/.test(queueCancelCooldownProbe.hintText)
+        && /^\d+s 后重试$/.test(queueCancelCooldownProbe.joinText)
+        && queueCancelCooldownProbe.joinDisabled === false
+        && queueCancelCooldownProbe.practiceDisabled === false
+        && queueCancelCooldownProbe.cancelDisabled === true
+        && !/reward|rating|elo|score|rankedGames|ranked_games/i.test(`${queueCancelCooldownProbe.hintText} ${JSON.stringify(queueCancelCooldownProbe.textPayload?.lastError || {})}`)
+        && queueCancelCooldownMobileLayoutOk
+        && (!isMobileViewport || queueCancelCycles.every(cycle => cycle.joinActionable?.ok === true && cycle.cancelActionable?.ok === true)),
+      JSON.stringify({ queueCancelCycles, queueCancelCooldownProbe }),
+    );
+    const queueCancelCooldownPracticeActionable = await clickLiveControl(queueCancelCooldownSeat.page, '[data-live-action="practice-live"]', 'queue-cancel-cooldown-practice-live');
+    let queueCancelCooldownPracticeWaitError = '';
+    try {
+      await queueCancelCooldownSeat.page.waitForFunction(() => {
+        if (window.game?.currentScreen !== 'character-selection-screen') return false;
+        const payload = JSON.parse(window.render_game_to_text());
+        return payload?.challenge?.pending?.practiceOnly === true;
+      }, null, { timeout: 10000 });
+    } catch (error) {
+      queueCancelCooldownPracticeWaitError = error && error.message ? error.message : String(error);
+    }
+    const queueCancelCooldownPracticeProbe = await queueCancelCooldownSeat.page.evaluate(() => {
+      const payload = JSON.parse(window.render_game_to_text());
+      const screenId = window.game?.currentScreen || '';
+      const visibleText = document.getElementById(screenId)?.textContent?.replace(/\s+/g, ' ').trim() || '';
+      return {
+        currentScreen: screenId,
+        visibleText,
+        pending: payload?.challenge?.pending || null,
+        focus: payload?.challenge?.trainingFocus || null,
+        drillScenario: payload?.pvp?.live?.drillScenario || window.PVPScene.getLiveSnapshot()?.drillScenario || null,
+        livePhase: window.PVPScene.getLiveSnapshot()?.phase || '',
+      };
+    });
+    add(
+      'real browser queue-cancel cooldown opens no-score drill without exposing ranked fields',
+      queueCancelCooldownPracticeProbe.currentScreen === 'character-selection-screen'
+        && !queueCancelCooldownPracticeWaitError
+        && queueCancelCooldownPracticeProbe.pending?.replayOnly === true
+        && queueCancelCooldownPracticeProbe.pending?.practiceOnly === true
+        && /^pvp_live_drill_/.test(queueCancelCooldownPracticeProbe.pending?.ruleId || '')
+        && queueCancelCooldownPracticeProbe.focus?.sourceRunId === 'pvp_live:entry_safeguard:queue_cooldown'
+        && queueCancelCooldownPracticeProbe.drillScenario?.reportVersion === 'pvp-live-drill-scenario-v1'
+        && queueCancelCooldownPracticeProbe.drillScenario?.sourceMatchId === 'entry_safeguard:queue_cooldown'
+        && queueCancelCooldownPracticeProbe.drillScenario?.sourceVisibility === 'replay_self'
+        && queueCancelCooldownPracticeProbe.drillScenario?.usesHiddenInformation === false
+        && queueCancelCooldownPracticeProbe.drillScenario?.rankedImpact === 'none'
+        && queueCancelCooldownPracticeProbe.drillScenario?.finishReason === 'queue_cooldown'
+        && queueCancelCooldownPracticeProbe.drillScenario?.matchmakingGuard?.cooldownSource === 'queue_cancel_abuse'
+        && (queueCancelCooldownPracticeProbe.drillScenario?.trainingTags || []).includes('排队冷却练习')
+        && /排队冷却|频繁取消|不写正式积分|不计积分/.test(queueCancelCooldownPracticeProbe.visibleText)
+        && !Object.prototype.hasOwnProperty.call(queueCancelCooldownPracticeProbe.drillScenario || {}, 'practicePlan')
+        && !/rankedGames|ranked_games|reward|"rating":|"elo":|"score":/i.test(JSON.stringify(queueCancelCooldownPracticeProbe.drillScenario || {}))
+        && !/rankedGames|ranked_games|reward|rating|elo|score/i.test(queueCancelCooldownPracticeProbe.visibleText)
+        && (!isMobileViewport || queueCancelCooldownPracticeActionable?.ok === true),
+      JSON.stringify({ queueCancelCooldownPracticeProbe, queueCancelCooldownPracticeWaitError, queueCancelCooldownPracticeActionable }),
+    );
+    } finally {
+      await queueCancelCooldownSeat?.context?.close?.().catch(() => {});
+    }
+
     const lowSampleTestScope = `${TEST_MATCH_SCOPE}_low_sample_guard`;
     const lowSampleLoadout = makeLoadout('low_sample_guard', ['pvp_guard', 'pvp_strike', 'surgeStep', 'tacticalExpose', 'innerPeace']);
     const matureLoadout = makeLoadout('mature_guard', ['pvp_guard', 'pvp_strike', 'shieldBash', 'tacticalExpose', 'surgeStep']);

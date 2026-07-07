@@ -1,5 +1,23 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-07-07: V10-S84 live PVP queue-cancel cooldown real-backend proof
+  - 本轮完成
+    - `tests/browser_pvp_live_real_backend_smoke.mjs` 将 S83 的排队取消冷却从 route / session / synthetic UI 证明推进到真实后端、真实账号、真实浏览器页面：独立账号在隔离 `testMatchScope` 下通过真实入队 / 取消按钮连续三次取消公开队列，第三次必须即时回到 idle 并展示 `queue_cooldown`。
+    - 新真实后端 finding 锁住玩家可见反馈：`lastError.matchmakingGuard` 必须是 `pvp-live-matchmaking-guard-v1`、`status=blocked`、`cooldownSource=queue_cancel_abuse`、`rankedImpact=none`，页面提示必须显示频繁取消 / 排队冷却、剩余秒数、问道练习和不写正式积分，入队按钮必须变成 `Ns 后重试`，取消按钮关闭而练习入口可用。
+    - 同一真实页面继续点击“问道练习”，必须进入 `pvp-live-drill-scenario-v1` 的 no-score drill：`sourceMatchId=entry_safeguard:queue_cooldown`、`sourceVisibility=replay_self`、`usesHiddenInformation=false`、`rankedImpact=none`、`finishReason=queue_cooldown`、`matchmakingGuard.cooldownSource=queue_cancel_abuse`，并禁止泄漏 `rankedGames / reward / rating / elo / score` 或 `practicePlan`。
+    - 挑战者巡检后收紧证明方式：第三次取消后不再手动 `renderLivePanel()`，而是在 wait predicate 中直接等待 DOM 自己出现 idle、冷却提示、剩余秒数、`Ns 后重试` 和练习入口；移动端还检查提示 / 入队按钮 / 练习按钮仍在视口内可见。
+    - `tests/sanity_release_gate_coverage_checks.cjs` 新增并加强真实后端 smoke marker，防止排队取消冷却体验退化回只在 route / session / synthetic UI 中证明，缺少真实账号页面、玩家文案、按钮状态或真实点击证据。
+  - 已验证
+    - 红测：`node tests/sanity_release_gate_coverage_checks.cjs` 在真实后端 queue-cancel cooldown finding 未加入前失败于 `real browser queue-cancel cooldown immediately explains retry and no-score practice`。
+    - 语法检查：`node --check tests/browser_pvp_live_real_backend_smoke.mjs`
+    - 绿测：`node tests/sanity_release_gate_coverage_checks.cjs`
+    - 真实后端 browser smoke：`node tests/browser_pvp_live_real_backend_smoke.mjs http://127.0.0.1:4173 output/browser-pvp-live-real-backend-smoke-s84-queue-cancel-final-rerun`，83/83 findings、0 failed、0 console error；新增 queue-cancel cooldown 两条 finding 均通过，且没有手动重渲染。
+    - 移动端真实后端 browser smoke：`BROWSER_PVP_LIVE_REAL_VIEWPORT=mobile BROWSER_PVP_LIVE_REAL_REQUIRE_MOBILE=1 node tests/browser_pvp_live_real_backend_smoke.mjs http://127.0.0.1:4173 output/browser-pvp-live-mobile-real-s84-queue-cancel`，84/84 findings、0 failed、0 console error。
+    - 构建：`npm run build:pages`
+    - 完整 Node 门禁：`PVP_LIVE_WS_FANOUT_MESSAGE_TIMEOUT_MS=60000 npm run test:node`
+  - 当前结论
+    - live PVP 的频繁取消冷却不再只靠单元和 synthetic 证明：真实账号在真实页面上连续取消后，会立即看到为什么被短暂冷却、多久后能重试，以及可选的无积分问道练习出口。该切片只强化真实后端验收和 release gate，不改变匹配算法、取消阈值、冷却时长、卡牌数值、先后手、正式积分、奖励或结算；这不是线上部署记录。
+
 - 2026-07-07: V10-S83 live PVP queue-cancel immediate recovery feedback
   - 本轮完成
     - `server/pvp-live/live-store.js` 将公开队列取消后的 `recordQueueCancellation()` 结果透传回取消响应：前两次普通取消仍只返回 `cancelled`，第三次触发 `queue_cancel_abuse` 时会立即返回 `reason=queue_cooldown`、`pvp-live-matchmaking-guard-v1`、`retryAt / cooldownSource` 和不写正式积分的 `practice` 行动。
