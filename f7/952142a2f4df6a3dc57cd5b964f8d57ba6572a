@@ -1,0 +1,25 @@
+progress.md
+  s_bae69f1b7fab46::t_ac76165073094b 3-22
+tests/browser_pvp_live_real_backend_smoke.mjs
+  s_bae69f1b7fab46::t_19dd213ffa0abb 3471-3482,3551-3582
+tests/sanity_release_gate_coverage_checks.cjs
+  s_bae69f1b7fab46::t_1ea33f7994bb0a 2668-2679
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.5",
+  "base_commit_sha": "f7952142a2f4df6a3dc57cd5b964f8d57ba6572a",
+  "prompts": {},
+  "sessions": {
+    "s_bae69f1b7fab46": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ed4f6-e7ac-73e0-a29e-119f3eddb407",
+        "model": "unknown"
+      },
+      "human_author": "AI Agent <bot@example.com>"
+    }
+  },
+  "attestation_metadata": {},
+  "remote_transcripts": {}
+}
