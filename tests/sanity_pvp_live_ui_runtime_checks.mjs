@@ -3700,6 +3700,8 @@ const acceptedLowRiskLossNextStepMarkup = PVPScene.renderLivePostMatchReview({
 assert.match(acceptedLowRiskLossNextStepMarkup, /data-live-post-review-next-step-primary="adjust_loadout"/, 'accepted low-risk loss next-step guide should prioritize loadout adjustment over forced review');
 assert.match(acceptedLowRiskLossNextStepMarkup, /data-live-post-review-next-step-action="adjust_loadout"[\s\S]*data-live-post-review-next-step-rank="primary"/, 'accepted low-risk loss next-step guide primary CTA should reuse loadout adjustment');
 assert.doesNotMatch(acceptedLowRiskLossNextStepMarkup, /data-live-post-review-next-step-action="review_key_turns"[\s\S]*data-live-post-review-next-step-rank="primary"/, 'accepted low-risk loss next-step guide should not make review the primary CTA');
+assert.match(acceptedLowRiskLossNextStepMarkup, /data-live-season-goal-mode="adjust_loadout"/, 'accepted low-risk loss season goal should match the loadout-adjustment next-step');
+assert.match(acceptedLowRiskLossNextStepMarkup, /本赛季下一局目标：先改一个弱点/, 'accepted low-risk loss season goal should not keep the generic loss practice copy');
 const acceptedLowRiskLossPracticeFallbackMarkup = PVPScene.renderLivePostMatchReview({
   ...visiblePracticePlanReview,
   postMatchReview: {
@@ -3729,6 +3731,7 @@ const acceptedLowRiskLossPracticeFallbackMarkup = PVPScene.renderLivePostMatchRe
 assert.match(acceptedLowRiskLossPracticeFallbackMarkup, /data-live-post-review-next-step-primary="practice"/, 'accepted low-risk loss next-step guide should fall back to no-score practice without loadout advice');
 assert.match(acceptedLowRiskLossPracticeFallbackMarkup, /data-live-post-review-next-step-action="practice"[\s\S]*data-live-post-review-next-step-rank="primary"/, 'accepted low-risk loss practice fallback should reuse the no-score practice CTA');
 assert.doesNotMatch(acceptedLowRiskLossPracticeFallbackMarkup, /data-live-post-review-next-step-action="review_key_turns"[\s\S]*data-live-post-review-next-step-rank="primary"/, 'accepted low-risk loss practice fallback should not force key-turn review');
+assert.match(acceptedLowRiskLossPracticeFallbackMarkup, /data-live-season-goal-mode="practice"/, 'accepted low-risk loss season goal should fall back to practice without loadout advice');
 const unsafeNextStepMarkup = PVPScene.renderLivePostMatchReview({
   ...visiblePracticePlanReview,
   postMatchReview: {

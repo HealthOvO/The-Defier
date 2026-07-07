@@ -1,5 +1,20 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-07-07: V10-S89 live PVP post-review goal coherence
+  - 本轮完成
+    - `PVPScene.getLiveSeasonGoalRecommendedMode()` 现在会优先复用同一份 `getLivePostReviewNextStepGuide()` 的主动作，只在该动作属于赛季目标支持范围且存在于赛后动作列表时采用，避免同一张赛后页同时给出“下一步建议：调整斗法谱”和“本赛季下一局目标：问道练习”的分叉。
+    - `tests/sanity_pvp_live_ui_runtime_checks.mjs` 新增 accepted low-risk loss 断言：有公开改谱建议时，next-step 与 season goal 都必须指向 `adjust_loadout`；无改谱建议时，两者都回落到无积分 `practice`。
+    - `tests/sanity_release_gate_coverage_checks.cjs` 同步加入 season goal marker，防止后续保留 next-step 测试却删掉长期目标一致性约束。
+  - 已验证
+    - 红测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs` 在修复前失败于 `accepted low-risk loss season goal should match the loadout-adjustment next-step`，实际 DOM 显示 next-step 为 `adjust_loadout`、season goal 仍为 `practice`。
+    - 目标 UI 回归：`node tests/sanity_pvp_live_ui_runtime_checks.mjs`
+    - 语法检查：`node --check js/scenes/pvp-scene.js`
+    - 绿测：`node tests/sanity_release_gate_coverage_checks.cjs`
+    - 介绍同步校验：`node tests/sanity_intro_progress_sync_checks.cjs`
+    - 空白检查：`git diff --check`
+  - 当前结论
+    - live PVP 低风险公平败局的“下一步建议”和“本赛季下一局目标”现在使用同一主动作，不再让败方同时看到两个互相竞争的恢复路径。该切片只统一赛后引导，不改变战斗数值、伤害公式、先后手、匹配、正式积分、奖励或生产部署；这不是线上部署记录。
+
 - 2026-07-07: V10-S88 live PVP natural lethal fairness and next-step polish
   - 本轮完成
     - `tests/browser_pvp_live_real_backend_smoke.mjs` 在 S87B 自然击杀链路后继续锁赛后公平与体验证据：loser 页面必须能看到 `fairnessReceipt` / `experienceReport` 均来自 `public_events`、不读隐藏信息、不写正式积分影响，且 `second_seat_effective_action` 通过、有效行动类型包含 `damage_applied`。

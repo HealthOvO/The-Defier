@@ -3251,6 +3251,7 @@ assert.ok(
   'watch-loss next-step guide should make key-turn review the primary action',
   'accepted low-risk loss next-step guide should prioritize loadout adjustment over forced review',
   'accepted low-risk loss next-step guide should fall back to no-score practice without loadout advice',
+  'accepted low-risk loss season goal should match the loadout-adjustment next-step',
   'low-risk win next-step guide should make queue-again the primary action',
   'next-step guide should not relabel unsafe subreports as public no-impact advice',
   'friendly series next-step guide should prioritize low-pressure rematch over queue-again',

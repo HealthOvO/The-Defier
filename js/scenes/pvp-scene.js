@@ -4056,6 +4056,10 @@ export const PVPScene = {
     const actionIds = new Set((Array.isArray(review && review.nextActions) ? review.nextActions : [])
       .map(action => String(action && action.id || ''))
       .filter(Boolean));
+    const seasonGoalActions = new Set(['friendly_rematch', 'adjust_loadout', 'practice', 'queue_again']);
+    const nextStepGuide = this.getLivePostReviewNextStepGuide(review, 'finished');
+    const nextStepAction = String(nextStepGuide && nextStepGuide.primaryActionId || '');
+    if (seasonGoalActions.has(nextStepAction) && actionIds.has(nextStepAction)) return nextStepAction;
     const experienceReport = review && review.experienceReport ? this.getLiveExperienceReport(review.experienceReport) : null;
     if ((review && review.result === 'loss') || (experienceReport && experienceReport.nonGameRisk === 'watch')) {
       if (actionIds.has('practice')) return 'practice';
