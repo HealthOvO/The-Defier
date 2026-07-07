@@ -226,6 +226,57 @@ function pickLiveDamageCard(stateView) {
     })[0] || null;
 }
 
+function assertRankedLethalSettlementReasons(settlement, label) {
+  const reasons = Array.isArray(settlement?.reasonLines) ? settlement.reasonLines : [];
+  assert(reasons.length >= 3, `prod live ranked lethal settlement should expose player-readable reason lines (${label}): ${JSON.stringify(settlement)}`);
+  const byId = Object.fromEntries(reasons.map(reason => [reason?.id, reason]));
+  assert.ok(
+    byId.finish_type
+      && byId.finish_type.label === '终局类型'
+      && /公开伤害|终局事件/.test(String(byId.finish_type.line || ''))
+      && byId.finish_type.sourceVisibility === 'public_events',
+    `prod live ranked lethal settlement should explain finish type (${label}): ${JSON.stringify(reasons)}`
+  );
+  assert.ok(
+    byId.score_delta
+      && byId.score_delta.label === '积分变化'
+      && /正式积分/.test(String(byId.score_delta.line || ''))
+      && /服务端权威/.test(String(byId.score_delta.line || ''))
+      && /对手强度/.test(String(byId.score_delta.line || ''))
+      && byId.score_delta.sourceVisibility === 'server_authoritative_settlement'
+      && byId.score_delta.rankedImpact === 'official',
+    `prod live ranked lethal settlement should explain score delta (${label}): ${JSON.stringify(reasons)}`
+  );
+  assert.ok(
+    byId.reward_boundary
+      && byId.reward_boundary.label === '奖励边界'
+      && /天道币/.test(String(byId.reward_boundary.line || ''))
+      && /不改变战斗数值/.test(String(byId.reward_boundary.line || ''))
+      && byId.reward_boundary.sourceVisibility === 'server_authoritative_settlement',
+    `prod live ranked lethal settlement should explain reward boundary (${label}): ${JSON.stringify(reasons)}`
+  );
+  assert.ok(
+    reasons.every(reason => reason?.usesHiddenInformation === false),
+    `prod live ranked lethal settlement reasons should not use hidden information (${label}): ${JSON.stringify(reasons)}`
+  );
+
+  const reasonCopyHaystack = [
+    settlement?.summaryLine,
+    settlement?.boundary,
+    JSON.stringify(reasons)
+  ].join(' ');
+  assert.ok(
+    !/rating":|\belo\b|opponentRating|expectedWinRate|ranked_authoritative|surrender_|connection_timeout|turn_timeout|ready_timeout/i.test(reasonCopyHaystack),
+    `prod live ranked lethal settlement copy should not leak hidden rating or raw protocol tokens (${label}): ${reasonCopyHaystack}`
+  );
+
+  const settlementHiddenHaystack = JSON.stringify(settlement || {});
+  assert.ok(
+    !/rating":|\belo\b|opponentRating|expectedWinRate/i.test(settlementHiddenHaystack),
+    `prod live ranked lethal settlement report should not expose hidden rating fields (${label}): ${settlementHiddenHaystack}`
+  );
+}
+
 async function readLiveMatchForSeat(matchId, participant, label) {
   const result = await request(`/api/pvp/live/matches/${encodeURIComponent(matchId)}`, { token: participant.sessionToken });
   requireOk(label, result);
@@ -592,6 +643,7 @@ async function assertLivePvpRankedQueueSmoke({ playerA, playerB, playerC, player
   assert.strictEqual(loserSettlement?.result, 'loss', `prod live ranked loser settlement should be scoped to loser: ${JSON.stringify(loserSettlement)}`);
   assert.strictEqual(loserSettlement?.sourceVisibility, 'server_authoritative_settlement', `prod live ranked settlement should expose server source: ${JSON.stringify(loserSettlement)}`);
   assert.strictEqual(loserSettlement?.formalResultPolicy, 'ranked_authoritative', `prod live ranked settlement should be formal authoritative: ${JSON.stringify(loserSettlement)}`);
+  assertRankedLethalSettlementReasons(loserSettlement, 'prod live ranked lethal settlement');
   assert.strictEqual(loserSettlement?.seasonHonorReport?.reportVersion, 'pvp-live-season-honor-v1', `prod live ranked settlement should expose season honor: ${JSON.stringify(loserSettlement)}`);
   assert.strictEqual(loserSettlement?.seasonHonorReport?.cosmeticReward?.rewardImpact, 'cosmetic_only', `prod live ranked season honor should remain cosmetic only: ${JSON.stringify(loserSettlement)}`);
   assert.strictEqual(loserSettlement?.seasonHonorReport?.powerImpact, 'none', `prod live ranked season honor should not grant power: ${JSON.stringify(loserSettlement)}`);
@@ -603,6 +655,7 @@ async function assertLivePvpRankedQueueSmoke({ playerA, playerB, playerC, player
   assert.strictEqual(winnerState.payload.stateView?.postMatchReview?.finishReason, 'lethal', `prod live ranked winner review should stay lethal: ${JSON.stringify(winnerState.payload.stateView?.postMatchReview)}`);
   assert.strictEqual(winnerSettlement?.result, 'win', `prod live ranked winner should see win settlement: ${JSON.stringify(winnerSettlement)}`);
   assert.strictEqual(winnerSettlement?.formalResultPolicy, 'ranked_authoritative', `prod live ranked winner settlement should be formal authoritative: ${JSON.stringify(winnerSettlement)}`);
+  assertRankedLethalSettlementReasons(winnerSettlement, 'prod live ranked lethal winner settlement');
 
   const rankAfterA = await request('/api/pvp/rank', { token: playerA.sessionToken });
   requireOk('prod live ranked player A rank after', rankAfterA);

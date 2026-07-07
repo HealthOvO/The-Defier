@@ -1,5 +1,24 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-07-07: V10-S87A live PVP prod real-card lethal settlement reason gate
+  - 本轮完成
+    - `tests/prod_api_smoke.cjs` 在已有 production API 语义的 ranked live PVP 链路上补结算解释断言：公开队列成局、双方 ready 后，smoke 会用真实 `play_card / end_turn` intent 自然推进到 real-card lethal，不使用 surrender shortcut；终局后 loser / winner 两侧 `settlementReport.reasonLines` 都必须保留 `finish_type / score_delta / reward_boundary`。
+    - 新 helper `assertRankedLethalSettlementReasons()` 锁住三条玩家可读解释：终局类型必须来自公开伤害 / 终局事件，积分变化必须说明正式积分、服务端权威和对手强度，奖励边界必须说明天道币和不改变战斗数值。
+    - 同一 production API smoke 继续禁止 reason copy 泄漏 `rating` 原始 JSON、ELO、`opponentRating`、`expectedWinRate`、`ranked_authoritative`、`surrender_*`、连接 / 行动 / ready timeout 等 raw protocol token；完整 settlement report 额外禁止 hidden rating、ELO、对手内部评分和 expected win rate 字段。
+    - `tests/sanity_release_gate_coverage_checks.cjs` 新增 prod API marker，防止自然 real-card lethal 的生产语义 smoke 只证明 lethal / replay / 正式结算，而漏掉玩家可读 reason lines 与泄漏边界。
+  - 已验证
+    - 红测：`node tests/sanity_release_gate_coverage_checks.cjs` 在 prod API settlement reason marker 未加入前失败于 `prod live ranked lethal settlement should expose player-readable reason lines`。
+    - 绿测：`node --check tests/prod_api_smoke.cjs`
+    - 绿测：`node tests/sanity_release_gate_coverage_checks.cjs`
+    - 目标 live 测试：`node tests/sanity_pvp_live_settlement_checks.cjs`
+    - 目标 live 测试：`node tests/sanity_pvp_live_route_checks.cjs`
+    - 本地 production API smoke：`node tests/prod_api_smoke.cjs http://127.0.0.1:9024`，服务端使用临时 SQLite、`DEFIER_INTEGRITY_REQUIRED=1`、本地 HMAC/JWT secret，结果 `[prod-smoke] API smoke passed.`；未写线上数据。
+    - 完整 Node 门禁：`PVP_LIVE_WS_FANOUT_MESSAGE_TIMEOUT_MS=60000 npm run test:node`
+    - 构建：`npm run build:pages`
+    - 空白检查：`git diff --check`
+  - 当前结论
+    - live PVP 的正式结算解释现在不只由服务端单元、UI runtime、synthetic browser 和 test-scope real backend 证明，也进入了 production API 语义的自然 real-card lethal smoke：真实意图自然推进到 lethal 后，双方 settlement report 都必须解释“为什么结束、为什么变分、奖励为何不改战斗强度”。该切片只强化 API smoke 与 release gate，不改变卡牌数值、伤害、护体、先后手、匹配、正式积分公式、奖励或结算真值；这不是线上部署记录。后续更高收益切片仍应补 browser real-backend 的 deterministic natural lethal，减少对 test-only seat patch 的依赖。
+
 - 2026-07-07: V10-S86 live PVP settlement reason real-backend proof
   - 本轮完成
     - `tests/browser_pvp_live_real_backend_smoke.mjs` 将 S85 的正式结算解释从服务端 / UI runtime / synthetic browser 证明推进到真实后端双账号链路：在隔离 `testMatchScope` 中预摆盘后，通过真实页面点击真实卡牌完成终局，页面必须渲染 `finish_type / score_delta / reward_boundary` 三条玩家可见结算 reason。
