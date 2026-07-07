@@ -741,8 +741,47 @@ assert.equal(calls.at(-1).options.wideMatchConsent, true, 'joinQueue should pres
 const cancelled = await session.cancelQueue();
 assert.equal(cancelled.phase, 'idle', 'cancel queue should return session to idle');
 assert.equal(cancelled.queueTicket, '', 'cancel queue should clear queue ticket');
-assert.equal(cancelled.lastError, null, 'cancel queue should clear previous error');
+assert.equal(cancelled.lastError?.reason, 'queue_cancelled', 'cancel queue should expose a readable cancellation hint');
+assert.match(cancelled.lastError?.message || '', /已退出|取消/, 'cancel queue should tell the player they left the queue');
 assert.equal(calls.at(-1).method, 'cancelQueue', 'cancelQueue should call live service cancelQueue');
+
+const cancelCooldownSession = createPvpLiveSession({
+  liveService: {
+    joinQueue: async () => ({
+      success: true,
+      status: 'waiting',
+      queueTicket: 'pvplq-cancel-cooldown-session'
+    }),
+    cancelQueue: async (queueTicket) => ({
+      success: true,
+      status: 'cancelled',
+      queueTicket,
+      reason: 'queue_cooldown',
+      message: '频繁取消冷却触发真人排位短暂冷却；可先进入问道练习，不写正式积分。',
+      matchmakingGuard: {
+        reportVersion: 'pvp-live-matchmaking-guard-v1',
+        status: 'blocked',
+        cooldownSource: 'queue_cancel_abuse',
+        sourceLabel: '频繁取消冷却',
+        retryAt: Date.now() + 60000,
+        cooldownRemainingMs: 60000,
+        rankedImpact: 'none',
+        actions: [
+          { id: 'retry_queue_later', label: '稍后重试', detail: '冷却结束后再进入正式排位。' },
+          { id: 'practice', label: '问道练习', detail: '练习不写正式积分。' },
+        ],
+      },
+    })
+  }
+});
+await cancelCooldownSession.joinQueue({ displayName: '甲' });
+const cancelledIntoCooldown = await cancelCooldownSession.cancelQueue();
+assert.equal(cancelledIntoCooldown.phase, 'idle', 'cancel-triggered cooldown should return session to idle');
+assert.equal(cancelledIntoCooldown.queueTicket, '', 'cancel-triggered cooldown should clear queue ticket');
+assert.equal(cancelledIntoCooldown.lastError?.reason, 'queue_cooldown', 'cancel-triggered cooldown should preserve stable cooldown reason');
+assert.equal(cancelledIntoCooldown.lastError?.matchmakingGuard?.reportVersion, 'pvp-live-matchmaking-guard-v1', 'cancel-triggered cooldown should retain structured matchmaking guard');
+assert.equal(cancelledIntoCooldown.lastError?.matchmakingGuard?.cooldownSource, 'queue_cancel_abuse', 'cancel-triggered cooldown should retain cooldown source');
+assert.ok(cancelledIntoCooldown.lastError?.matchmakingGuard?.actions?.some(action => action.id === 'practice' && /不写正式积分/.test(action.detail)), 'cancel-triggered cooldown should retain no-score practice action');
 
 await session.joinQueue({ displayName: '甲' });
 

@@ -1001,6 +1001,15 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
             });
             assert.equal(cancelForCooldown.status, 200, `cancel cooldown cancel ${index + 1} should succeed`);
             assert.equal(cancelForCooldown.payload.status, 'cancelled', `cancel cooldown cancel ${index + 1} should return cancelled`);
+            if (index < 2) {
+                assert.equal(cancelForCooldown.payload.matchmakingGuard, undefined, `cancel cooldown cancel ${index + 1} should not warn before cooldown triggers`);
+            } else {
+                assert.equal(cancelForCooldown.payload.reason, 'queue_cooldown', 'third queue cancellation should immediately explain the queue cooldown');
+                assert.equal(cancelForCooldown.payload.matchmakingGuard?.reportVersion, 'pvp-live-matchmaking-guard-v1', 'third queue cancellation should return matchmaking guard report');
+                assert.equal(cancelForCooldown.payload.matchmakingGuard?.cooldownSource, 'queue_cancel_abuse', 'third queue cancellation should expose cancel-abuse cooldown source');
+                assert.ok(cancelForCooldown.payload.matchmakingGuard?.retryAt > Date.now(), 'third queue cancellation should expose immediate retryAt');
+                assert.ok(cancelForCooldown.payload.matchmakingGuard?.actions?.some(action => action.id === 'practice' && /不写正式积分/.test(action.detail)), 'third queue cancellation should offer no-score practice immediately');
+            }
         }
         assert.equal(new Set(cancelCooldownTickets).size, 3, 'cancel cooldown seed should create three distinct queue tickets before blocking');
         const cooldownBlockedJoin = await request(baseUrl, '/api/pvp/live/queue/join', {
@@ -1164,6 +1173,11 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
             body: { queueTicket: joinA.payload.queueTicket }
         });
         assert.equal(cancelMatchedTicket.status, 404, 'matched queue ticket should not be cancellable as a waiting ticket');
+        const matchedCancelGuard = await pvpLiveRoutes.__livePvpStore.loadMatchmakingGuard('live-user-a');
+        assert.ok(
+            !matchedCancelGuard || Math.max(0, Number(matchedCancelGuard.cancelCount) || 0) === 0,
+            'matched queue ticket cancel race should not count toward queue-cancel abuse cooldown'
+        );
 
         const pollWrongUser = await request(baseUrl, `/api/pvp/live/queue/status/${joinA.payload.queueTicket}`, {
             token: tokenB

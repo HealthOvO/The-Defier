@@ -1205,8 +1205,22 @@ export function createPvpLiveSession({
     }
     clearStoredWaitingQueueTicket();
     clearStoredTerminalMatchId();
+    const matchmakingGuard = result && result.matchmakingGuard && typeof result.matchmakingGuard === 'object'
+      ? result.matchmakingGuard
+      : null;
+    const cancelledIntoCooldown = String(result && result.reason || '') === 'queue_cooldown' && matchmakingGuard;
     return publish({
       ...DEFAULT_STATE,
+      lastError: cancelledIntoCooldown
+        ? {
+          reason: 'queue_cooldown',
+          message: result.message || matchmakingGuard.message || '真人排位短暂冷却中；可先进入问道练习。',
+          matchmakingGuard
+        }
+        : {
+          reason: 'queue_cancelled',
+          message: result.message || '已退出真人排位队列；可稍后重试或先进入问道练习。'
+        },
       updatedAt: now()
     });
   }

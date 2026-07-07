@@ -2122,6 +2122,10 @@ assert.ok(
   'setup timeout should emit match_invalidated ready_timeout reason',
   'ready participant should not be punished after opponent setup timeout',
   'frequent queue cancellation should block the next ranked join',
+  'third queue cancellation should immediately explain the queue cooldown',
+  'third queue cancellation should return matchmaking guard report',
+  'third queue cancellation should offer no-score practice immediately',
+  'matched queue ticket cancel race should not count toward queue-cancel abuse cooldown',
   'unready setup timeout participant should receive queue cooldown',
   'setup timeout should record unready cooldown only once during a single invalidation release chain',
   'queue_cancel_abuse',
@@ -2913,6 +2917,9 @@ assert.ok(
   'session should inject latest heartbeat-refreshed stateVersion into live intent',
   'live session state must not expose opponent hand',
   'cancel queue should return session to idle',
+  'cancel queue should expose a readable cancellation hint',
+  'cancel-triggered cooldown should preserve stable cooldown reason',
+  'cancel-triggered cooldown should retain structured matchmaking guard',
   'sync_required should retain latest authoritative state view',
   'expired queue ticket should leave waiting phase',
   'long wait queue poll should keep waiting phase',
@@ -2996,6 +3003,7 @@ assert.ok(
   'presence WS message should update authoritative connection tempo report',
   'queue cooldown block should retain structured matchmaking guard report',
   'queue cooldown block should retain cooldown source',
+  'cancel-triggered cooldown should retain no-score practice action',
   'live session should expose public replay share API',
   'live session should expose public replay share revoke API',
   'createReplayShare should store returned public share receipt',
@@ -3135,6 +3143,16 @@ assert.ok(
   'queue cooldown countdown should expose rounded remaining seconds',
   'queue cooldown countdown should prefer retryAt over stale server remaining time',
   'queue cooldown should relabel join button with retry countdown',
+  'expired queue cooldown countdown should not keep showing one more second',
+  'expired queue cooldown should not keep live entry safeguard blocked',
+  'queue cooldown ticker should schedule one 1s refresh interval while blocked',
+  'queue cooldown ticker should stop after the retry time has passed',
+  'queue cooldown ticker should not restart while the live tab is inactive',
+  'cancel queue should expose an immediate player-visible cancellation hint',
+  'cancel-triggered cooldown should let the live countdown hint render instead of freezing static copy',
+  'cancel-triggered cooldown should immediately expose remaining seconds',
+  'waiting practice handoff should still open after a readable queue_cancelled receipt',
+  'waiting practice should replace stale entry-safeguard drill scenario',
   'entry_safeguard:queue_cooldown',
   '排队冷却练习',
   'live UI should keep one realtime intent in-flight and ignore double-click submits',
@@ -3170,6 +3188,21 @@ assert.ok(
   assert.ok(
     pvpLiveUiRuntimeChecks.includes(needle),
     `live PVP UI runtime should pin authoritative heartbeat scheduling marker: ${needle}`,
+  );
+});
+
+[
+  'liveQueueCooldownTimer',
+  'startLiveQueueCooldownTicker(',
+  'syncLiveQueueCooldownTicker(',
+  'stopLiveQueueCooldownTicker(',
+  "this.activeTab === 'live'",
+  '已结束，可以重新进入真人排位',
+  'cancelReceiptIsTerminal',
+].forEach((needle) => {
+  assert.ok(
+    pvpSceneSource.includes(needle),
+    `PVPScene should pin live queue cooldown ticker marker: ${needle}`,
   );
 });
 

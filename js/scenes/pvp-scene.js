@@ -23,6 +23,8 @@ export const PVPScene = {
   matchingTimeoutMs: 8000,
   liveSession: null,
   livePollTimer: null,
+  liveQueueCooldownTimer: null,
+  liveQueueCooldownTickMs: 1000,
   liveHeartbeatTimer: null,
   liveHeartbeatIntervalMs: 0,
   liveLifecycleBound: false,
@@ -434,6 +436,7 @@ export const PVPScene = {
     const shouldSkipLoad = !!(options && typeof options === 'object' && options.skipLoad);
     if (this.activeTab === 'live' && tabName !== 'live') {
       this.stopLivePolling();
+      this.stopLiveQueueCooldownTicker();
       this.stopLiveHeartbeat();
     }
     this.activeTab = tabName;
@@ -530,6 +533,35 @@ export const PVPScene = {
       this.liveRealtimeRenderQueued = false;
       this.renderLivePanel();
     });
+  },
+  startLiveQueueCooldownTicker() {
+    if (typeof window === 'undefined') return;
+    if (this.liveQueueCooldownTimer) return;
+    this.liveQueueCooldownTimer = window.setInterval(() => {
+      const state = this.getLiveSession().getState();
+      const countdown = this.getLiveQueueCooldownCountdown(state);
+      if (!state || state.phase !== 'idle' || !countdown || countdown.remainingMs <= 0) {
+        this.stopLiveQueueCooldownTicker();
+        this.renderLivePanel();
+        return;
+      }
+      this.renderLivePanel();
+    }, this.liveQueueCooldownTickMs);
+  },
+  stopLiveQueueCooldownTicker() {
+    if (this.liveQueueCooldownTimer && typeof window !== 'undefined') {
+      window.clearInterval(this.liveQueueCooldownTimer);
+    }
+    this.liveQueueCooldownTimer = null;
+  },
+  syncLiveQueueCooldownTicker(phase = '', state = null) {
+    const sourceState = state || this.getLiveSession().getState();
+    const countdown = this.getLiveQueueCooldownCountdown(sourceState);
+    if (this.activeTab === 'live' && phase === 'idle' && countdown && countdown.remainingMs > 0) {
+      this.startLiveQueueCooldownTicker();
+    } else {
+      this.stopLiveQueueCooldownTicker();
+    }
   },
   getLiveLoadoutPresets() {
     return [
@@ -2559,14 +2591,17 @@ export const PVPScene = {
     const reportedRemainingMs = Math.max(0, Math.floor(Number(guard.cooldownRemainingMs) || 0));
     const derivedRemainingMs = retryAt > 0 ? Math.max(0, retryAt - Date.now()) : 0;
     const remainingMs = retryAt > 0 ? derivedRemainingMs : reportedRemainingMs;
-    const remainingSeconds = Math.max(1, Math.ceil(remainingMs / 1000));
+    const cooldownActive = remainingMs > 0;
+    const remainingSeconds = cooldownActive ? Math.max(1, Math.ceil(remainingMs / 1000)) : 0;
     const sourceLabel = String(guard.sourceLabel || '排队冷却');
     return {
       remainingMs,
       remainingSeconds,
       retryAt,
-      buttonText: `${remainingSeconds}s 后重试`,
-      hint: `${sourceLabel}触发真人排位短暂冷却，剩余 ${remainingSeconds} 秒；可先进入问道练习，练习不写正式积分。`
+      buttonText: cooldownActive ? `${remainingSeconds}s 后重试` : '入队',
+      hint: cooldownActive
+        ? `${sourceLabel}触发真人排位短暂冷却，剩余 ${remainingSeconds} 秒；可先进入问道练习，练习不写正式积分。`
+        : `${sourceLabel}已结束，可以重新进入真人排位。`
     };
   },
   isLiveEntrySafeguardBlocked(state = null) {
@@ -2574,14 +2609,21 @@ export const PVPScene = {
     const status = String(report && report.connectionHealth && report.connectionHealth.status || '');
     if (status === 'blocked' || status === 'risky') return true;
     const cooldownReport = this.getLiveQueueCooldownError(state);
-    return String(cooldownReport && cooldownReport.matchmakingGuard && cooldownReport.matchmakingGuard.status || '') === 'blocked';
+    const cooldownCountdown = this.getLiveQueueCooldownCountdown(state);
+    return String(cooldownReport && cooldownReport.matchmakingGuard && cooldownReport.matchmakingGuard.status || '') === 'blocked'
+      && !!cooldownCountdown
+      && cooldownCountdown.remainingMs > 0;
   },
   hasLiveEntrySafeguardAction(state = null, actionId = '') {
     const id = String(actionId || '');
     const report = this.getLiveConnectionHealthError(state);
     if (report && report.connectionHealth.actions.some(action => action.id === id)) return true;
     const cooldownReport = this.getLiveQueueCooldownError(state);
-    return !!(cooldownReport && cooldownReport.matchmakingGuard.actions.some(action => action.id === id));
+    const cooldownCountdown = this.getLiveQueueCooldownCountdown(state);
+    return !!(cooldownReport
+      && cooldownCountdown
+      && cooldownCountdown.remainingMs > 0
+      && cooldownReport.matchmakingGuard.actions.some(action => action.id === id));
   },
   shouldLivePoll(state) {
     if (!state) return false;
@@ -2819,12 +2861,17 @@ export const PVPScene = {
         cancelError = error;
       }
       const afterCancelState = session.getState();
+      const afterCancelError = afterCancelState && afterCancelState.lastError ? afterCancelState.lastError : null;
+      const afterCancelReason = String(afterCancelError && afterCancelError.reason || '');
+      const cancelReceiptIsTerminal = !afterCancelError
+        || afterCancelReason === 'queue_cancelled'
+        || (afterCancelReason === 'queue_cooldown' && !!afterCancelError.matchmakingGuard);
       const cancelSucceeded = !cancelError
         && afterCancelState
         && afterCancelState.phase === 'idle'
         && !afterCancelState.queueTicket
         && !afterCancelState.matchId
-        && !afterCancelState.lastError;
+        && cancelReceiptIsTerminal;
       if (!cancelSucceeded) {
         this.liveDrillScenario = null;
         this.liveLongWaitPollUntil = Date.now() + 30 * 1000;
@@ -5223,7 +5270,10 @@ export const PVPScene = {
   },
   renderLivePanel() {
     const root = document.querySelector('[data-live-pvp-root]');
-    if (!root) return;
+    if (!root) {
+      this.stopLiveQueueCooldownTicker();
+      return;
+    }
     this.ensureLiveSocialPreferencesLoaded();
     const session = this.getLiveSession();
     const state = session.getState();
@@ -5478,6 +5528,7 @@ export const PVPScene = {
     const errorText = this.liveInlineHint || (queueCooldownCountdown ? queueCooldownCountdown.hint : state.lastError ? `${state.lastError.message || state.lastError.reason}` : phase === 'invalidated' ? '本局在开战前无效，不写正式积分；可以重新匹配或先练习斗法谱。' : phase === 'setup' ? '准备阶段只能调息或确认准备，不能提前出牌。' : phase === 'waiting_rematch' ? '已发起低压力再战，等待本局对手确认；不写正式积分。' : phase === 'waiting' ? '等待真实玩家加入；不会自动切换残影。' : '实时论道不会自动匹配残影；没有真人时可取消排队。');
     setText('[data-live-last-error]', errorText);
     this.updateLiveButtons(phase, !!view && view.currentSeat === state.seatId, self);
+    this.syncLiveQueueCooldownTicker(phase, state);
     if (this.shouldLiveHeartbeat(phase)) {
       this.startLiveHeartbeat();
     } else {
@@ -6018,6 +6069,7 @@ export const PVPScene = {
   },
   async joinLiveQueue(options = {}) {
     this.liveInlineHint = '';
+    this.liveDrillScenario = null;
     const session = this.getLiveSession();
     const gameRef = this.getGameRef();
     const displayName = gameRef && gameRef.player && gameRef.player.name ? gameRef.player.name : '无名修士';
@@ -6044,10 +6096,10 @@ export const PVPScene = {
       this.liveInlineHint = this.formatLivePostReviewLoadoutResolution('queue_again', postReviewLoadoutResolution);
     }
     this.liveLongWaitPollUntil = 0;
-    this.renderLivePanel();
     if (['waiting', 'matched', 'setup', 'active'].includes(state.phase)) {
       this.liveDrillScenario = null;
     }
+    this.renderLivePanel();
     if (this.shouldLivePoll(state)) this.startLivePolling();
   },
   async acceptLiveWideMatch() {
@@ -6139,9 +6191,18 @@ export const PVPScene = {
   async cancelLiveQueue() {
     this.liveInlineHint = '';
     const session = this.getLiveSession();
-    await session.cancelQueue();
+    const nextState = await session.cancelQueue();
     this.liveLongWaitPollUntil = 0;
     this.stopLivePolling();
+    const state = nextState || session.getState();
+    const lastError = state && state.lastError ? state.lastError : null;
+    if (lastError && lastError.reason === 'queue_cooldown' && lastError.matchmakingGuard) {
+      this.liveInlineHint = '';
+    } else if (lastError && lastError.message) {
+      this.liveInlineHint = lastError.message;
+    } else {
+      this.liveInlineHint = '已退出真人排位队列；可稍后重试或先进入问道练习。';
+    }
     this.renderLivePanel();
   },
   async cancelLiveRematch() {

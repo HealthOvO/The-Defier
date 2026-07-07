@@ -1,5 +1,29 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-07-07: V10-S83 live PVP queue-cancel immediate recovery feedback
+  - 本轮完成
+    - `server/pvp-live/live-store.js` 将公开队列取消后的 `recordQueueCancellation()` 结果透传回取消响应：前两次普通取消仍只返回 `cancelled`，第三次触发 `queue_cancel_abuse` 时会立即返回 `reason=queue_cooldown`、`pvp-live-matchmaking-guard-v1`、`retryAt / cooldownSource` 和不写正式积分的 `practice` 行动。
+    - `js/services/pvp-live-session.js` 不再把取消成功抹成无提示 idle：普通取消会保留 `queue_cancelled` 玩家提示；取消刚好触发冷却时保留结构化 `lastError.matchmakingGuard`，让前端直接进入冷却倒计时和问道练习出口。
+    - `js/scenes/pvp-scene.js` 补 live PVP 冷却倒计时 ticker：冷却中每秒刷新按钮和提示，过期后恢复“入队”并关闭冷却-only 练习入口；离开 live tab 或 DOM 不存在时清理 timer。
+    - `cancelLiveQueue()` 现在会给普通取消即时显示“已退出真人排位队列”；取消触发冷却时不写静态 `liveInlineHint`，避免盖住“剩余 N 秒”的动态倒计时。
+    - 修复等待态练习与取消反馈的交叉问题：`queue_cancelled / queue_cooldown` 这类取消回执都算已退出队列，长等待/低样本问道练习不会误判为取消失败；重新发起正式入队会清掉旧 drill，避免连接超时/排队冷却练习污染后续等待练习 focus。
+    - 按挑战者巡检补两条额外 guard：matched/handoff 竞态下取消旧 ticket 不会累计 `queue_cancel_abuse`，非 live tab 后续渲染不会重新拉起冷却 ticker。
+    - `tests/sanity_pvp_live_route_checks.cjs`、`tests/sanity_pvp_live_session_checks.mjs`、`tests/sanity_pvp_live_ui_runtime_checks.mjs` 与 `tests/sanity_release_gate_coverage_checks.cjs` 同步锁住服务端取消响应、session 保留 guard、UI 即时提示、动态倒计时、过期解锁、stale drill 清理、matched race 不计冷却和非 live tab 不重启 ticker。
+  - 已验证
+    - 红测：`node tests/sanity_pvp_live_route_checks.cjs` 在实现前失败于 `third queue cancellation should immediately explain the queue cooldown`，实际 `reason` 为 `undefined`。
+    - 红测：`node tests/sanity_pvp_live_session_checks.mjs` 在实现前失败于 `cancel queue should expose a readable cancellation hint`，实际 `lastError.reason` 为 `undefined`。
+    - 红测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs` 在实现前分别失败于冷却过期仍显示 1 秒、普通取消无即时 hint、等待练习把 `queue_cancelled` 误判为取消失败。
+    - 绿测：`node tests/sanity_pvp_live_route_checks.cjs`
+    - 绿测：`node tests/sanity_pvp_live_session_checks.mjs`
+    - 绿测：`node tests/sanity_pvp_live_ui_runtime_checks.mjs`
+    - 绿测：`node tests/sanity_release_gate_coverage_checks.cjs`
+    - 浏览器审计：`node tests/browser_pvp_live_audit.mjs http://127.0.0.1:4173 output/browser-pvp-live-audit-s83-final`，134/134 findings、0 failed、0 console error。
+    - 完整 Node 门禁：`PVP_LIVE_WS_FANOUT_MESSAGE_TIMEOUT_MS=60000 npm run test:node`
+    - 构建：`npm run build:pages`
+    - 空白检查：`git diff --check`
+  - 当前结论
+    - live PVP 的排队冷却现在从“下一次入队才发现被挡”推进到“取消当下就知道原因、剩余时间和无积分练习出口”。玩家普通退出队列也会得到明确反馈，不会误以为点击无效；长等待/低样本练习不会被上一轮冷却练习污染。该切片只改取消反馈、冷却展示和练习 handoff 清理，不改变撮合选择、低样本放行阈值、ready_timeout 惩罚对象、卡牌数值、正式积分、奖励或结算。
+
 - 2026-07-06: V10-S82 live PVP public damage survival real-backend proof
   - 本轮完成
     - `tests/browser_pvp_live_real_backend_smoke.mjs` 将 S75 的“承伤回执”从 synthetic browser/runtime 证明推进到真实后端双账号链路：首手真实出牌后，被打方页面必须看到稳定 `data-live-action-survival="public_damage_survival"` chip。

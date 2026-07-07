@@ -1427,6 +1427,128 @@ assert.equal(queueCooldownButtons.get('join-queue').textContent, '60s 后重试'
 assert.equal(queueCooldownButtons.get('practice-live').disabled, false, 'queue cooldown should enable no-score practice');
 documentStub.querySelector = oldDocumentQuerySelector;
 
+const expiredQueueCooldownState = JSON.parse(JSON.stringify(queueCooldownState));
+expiredQueueCooldownState.lastError.matchmakingGuard.retryAt = Date.now() - 1000;
+expiredQueueCooldownState.lastError.matchmakingGuard.cooldownRemainingMs = 0;
+PVPScene.getLiveSession = () => ({ getState: () => expiredQueueCooldownState });
+const expiredQueueCooldownCountdown = PVPScene.getLiveQueueCooldownCountdown(expiredQueueCooldownState);
+assert.equal(expiredQueueCooldownCountdown?.remainingSeconds, 0, 'expired queue cooldown countdown should not keep showing one more second');
+assert.equal(expiredQueueCooldownCountdown?.buttonText, '入队', 'expired queue cooldown countdown should restore normal queue copy');
+assert.match(expiredQueueCooldownCountdown?.hint || '', /冷却已结束/, 'expired queue cooldown should tell the player they can queue again');
+assert.equal(PVPScene.isLiveEntrySafeguardBlocked(expiredQueueCooldownState), false, 'expired queue cooldown should not keep live entry safeguard blocked');
+const expiredQueueCooldownButtons = new Map([
+  ['join-queue', { disabled: true, textContent: '60s 后重试', querySelector() { return null; } }],
+  ['practice-live', { disabled: false, textContent: '问道练习', querySelector() { return null; } }],
+]);
+const expiredQueueCooldownRootStub = {
+  querySelector(selector) {
+    const actionMatch = String(selector || '').match(/^\[data-live-action="([^"]+)"\]$/);
+    return actionMatch ? expiredQueueCooldownButtons.get(actionMatch[1]) || null : null;
+  },
+  querySelectorAll() { return []; }
+};
+documentStub.querySelector = (selector) => selector === '[data-live-pvp-root]' ? expiredQueueCooldownRootStub : null;
+PVPScene.updateLiveButtons('idle', false, null);
+assert.equal(expiredQueueCooldownButtons.get('join-queue').textContent, '入队', 'expired queue cooldown should relabel retry button back to queue');
+assert.equal(expiredQueueCooldownButtons.get('practice-live').disabled, true, 'expired queue cooldown should hide the cooldown-only no-score practice action');
+documentStub.querySelector = oldDocumentQuerySelector;
+
+scheduledIntervals.length = 0;
+clearedTimers.length = 0;
+nextTimerId = 1;
+let cooldownTickerRenderCalls = 0;
+const previousRenderLivePanelForCooldownTicker = PVPScene.renderLivePanel;
+const tickerQueueCooldownState = JSON.parse(JSON.stringify(queueCooldownState));
+tickerQueueCooldownState.lastError.matchmakingGuard.retryAt = Date.now() + 3000;
+PVPScene.getLiveSession = () => ({ getState: () => tickerQueueCooldownState });
+PVPScene.renderLivePanel = () => {
+  cooldownTickerRenderCalls += 1;
+};
+PVPScene.syncLiveQueueCooldownTicker('idle', tickerQueueCooldownState);
+PVPScene.syncLiveQueueCooldownTicker('idle', tickerQueueCooldownState);
+assert.deepEqual(
+  scheduledIntervals.map(entry => entry.intervalMs),
+  [1000],
+  'queue cooldown ticker should schedule one 1s refresh interval while blocked',
+);
+scheduledIntervals[0].callback();
+assert.equal(cooldownTickerRenderCalls, 1, 'queue cooldown ticker should rerender so visible seconds keep moving');
+tickerQueueCooldownState.lastError.matchmakingGuard.retryAt = Date.now() - 1000;
+scheduledIntervals[0].callback();
+assert.deepEqual(clearedTimers, [1], 'queue cooldown ticker should stop after the retry time has passed');
+assert.equal(PVPScene.liveQueueCooldownTimer, null, 'queue cooldown ticker should clear the active timer handle after expiry');
+PVPScene.activeTab = 'ranking';
+tickerQueueCooldownState.lastError.matchmakingGuard.retryAt = Date.now() + 3000;
+PVPScene.syncLiveQueueCooldownTicker('idle', tickerQueueCooldownState);
+assert.equal(scheduledIntervals.length, 1, 'queue cooldown ticker should not restart while the live tab is inactive');
+PVPScene.activeTab = 'live';
+PVPScene.renderLivePanel = previousRenderLivePanelForCooldownTicker;
+scheduledIntervals.length = 0;
+clearedTimers.length = 0;
+nextTimerId = 1;
+
+let cancelLiveQueueRenderCalls = 0;
+let cancelLiveQueueState = {
+  phase: 'waiting',
+  queueTicket: 'pvplq-ui-cancel',
+  matchId: '',
+  lastError: null,
+  stateView: null,
+  lastEvents: []
+};
+PVPScene.liveInlineHint = '';
+PVPScene.liveLongWaitPollUntil = 12345;
+PVPScene.renderLivePanel = () => {
+  cancelLiveQueueRenderCalls += 1;
+};
+PVPScene.getLiveSession = () => ({
+  getState: () => cancelLiveQueueState,
+  cancelQueue: async () => {
+    cancelLiveQueueState = {
+      phase: 'idle',
+      queueTicket: '',
+      matchId: '',
+      lastError: {
+        reason: 'queue_cancelled',
+        message: '已退出真人排位队列；可稍后重试或先进入问道练习。'
+      },
+      stateView: null,
+      lastEvents: []
+    };
+    return cancelLiveQueueState;
+  }
+});
+await PVPScene.cancelLiveQueue();
+assert.equal(PVPScene.liveLongWaitPollUntil, 0, 'cancel queue should clear long-wait polling window');
+assert.equal(cancelLiveQueueRenderCalls, 1, 'cancel queue should rerender after returning to idle');
+assert.match(PVPScene.liveInlineHint, /已退出真人排位队列/, 'cancel queue should expose an immediate player-visible cancellation hint');
+
+let cancelCooldownState = {
+  phase: 'waiting',
+  queueTicket: 'pvplq-ui-cancel-cooldown',
+  matchId: '',
+  lastError: null,
+  stateView: null,
+  lastEvents: []
+};
+PVPScene.liveInlineHint = '旧取消提示';
+PVPScene.getLiveSession = () => ({
+  getState: () => cancelCooldownState,
+  cancelQueue: async () => {
+    cancelCooldownState = JSON.parse(JSON.stringify(queueCooldownState));
+    cancelCooldownState.lastError.matchmakingGuard.retryAt = Date.now() + 60000;
+    cancelCooldownState.lastError.matchmakingGuard.cooldownRemainingMs = 60000;
+    cancelCooldownState.lastError.message = '频繁取消冷却触发真人排位短暂冷却；可先进入问道练习，不写正式积分。';
+    return cancelCooldownState;
+  }
+});
+await PVPScene.cancelLiveQueue();
+assert.equal(PVPScene.liveInlineHint, '', 'cancel-triggered cooldown should let the live countdown hint render instead of freezing static copy');
+const cancelCooldownCountdown = PVPScene.getLiveQueueCooldownCountdown(cancelCooldownState);
+assert.match(cancelCooldownCountdown?.hint || '', /剩余 60 秒/, 'cancel-triggered cooldown should immediately expose remaining seconds');
+assert.equal(PVPScene.isLiveEntrySafeguardBlocked(cancelCooldownState), true, 'cancel-triggered cooldown should activate entry safeguard practice immediately');
+PVPScene.renderLivePanel = previousRenderLivePanelForCooldownTicker;
+
 const recentOpponentWaitingState = {
   phase: 'waiting',
   queueTicket: 'pvplq-ui-recent-opponent',
@@ -1622,6 +1744,60 @@ assert.equal(
   'low_sample_protection',
   'low-sample waiting safeguard should create a no-score practice handoff scenario',
 );
+
+let waitingPracticeState = JSON.parse(JSON.stringify(lowSampleWaitingState));
+waitingPracticeState.queueTicket = 'pvplq-ui-waiting-practice-cancelled';
+let waitingPracticeDrillScenario = null;
+let waitingPracticeFocus = null;
+let waitingPracticeRefreshCalls = 0;
+const previousGameForWaitingPractice = PVPScene.context.game;
+const previousRenderForWaitingPractice = PVPScene.renderLivePanel;
+const previousRefreshForWaitingPractice = PVPScene.refreshLiveMatch;
+PVPScene.context.game = {
+  async ensureChallengeHubLoaded() {},
+  setObservatoryTrainingFocus(focus) {
+    waitingPracticeFocus = focus;
+  },
+  beginPvpLiveDrillScenario(scenario) {
+    waitingPracticeDrillScenario = scenario;
+    return true;
+  }
+};
+PVPScene.renderLivePanel = () => {};
+PVPScene.refreshLiveMatch = async () => {
+  waitingPracticeRefreshCalls += 1;
+  return waitingPracticeState;
+};
+PVPScene.liveDrillScenario = {
+  reportVersion: 'pvp-live-drill-scenario-v1',
+  sourceMatchId: 'entry_safeguard:connection_timeout',
+  finishReason: 'queue_cooldown'
+};
+PVPScene.getLiveSession = () => ({
+  getState: () => waitingPracticeState,
+  cancelQueue: async () => {
+    waitingPracticeState = {
+      phase: 'idle',
+      queueTicket: '',
+      matchId: '',
+      lastError: {
+        reason: 'queue_cancelled',
+        message: '已退出真人排位队列；可稍后重试或先进入问道练习。'
+      },
+      stateView: null,
+      lastEvents: []
+    };
+    return waitingPracticeState;
+  }
+});
+const waitingPracticeCommitted = await PVPScene.commitLiveWaitingPracticeHandoff();
+assert.equal(waitingPracticeCommitted?.finishReason, 'low_sample_protection', 'waiting practice handoff should still open after a readable queue_cancelled receipt');
+assert.equal(waitingPracticeDrillScenario?.sourceMatchId, 'waiting:pvplq-ui-waiting-practice-cancelled', 'waiting practice should replace stale entry-safeguard drill scenario');
+assert.equal(waitingPracticeFocus?.sourceRunId, 'pvp_live:waiting:pvplq-ui-waiting-practice-cancelled', 'waiting practice should replace stale training focus');
+assert.equal(waitingPracticeRefreshCalls, 0, 'waiting practice should not treat queue_cancelled as a cancel failure');
+PVPScene.context.game = previousGameForWaitingPractice;
+PVPScene.renderLivePanel = previousRenderForWaitingPractice;
+PVPScene.refreshLiveMatch = previousRefreshForWaitingPractice;
 
 let currentState = {
   phase: 'active',

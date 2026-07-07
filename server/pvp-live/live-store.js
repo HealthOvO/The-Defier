@@ -2114,10 +2114,19 @@ class LivePvpStore {
         this.queueTickets.delete(ticket);
         this.waitingQueue = this.waitingQueue.filter(entry => entry.queueTicket !== ticket);
         await this.deleteQueueEntry(ticket);
-        await this.recordQueueCancellation(userId);
+        const matchmakingGuard = await this.recordQueueCancellation(userId);
+        const cooldownBlocked = matchmakingGuard && matchmakingGuard.status === 'blocked';
         return {
             status: 'cancelled',
-            queueTicket: ticket
+            queueTicket: ticket,
+            ...(cooldownBlocked ? {
+                reason: 'queue_cooldown',
+                message: matchmakingGuard.message,
+                matchmakingGuard,
+                retryAt: matchmakingGuard.retryAt,
+                cooldownUntil: matchmakingGuard.cooldownUntil,
+                cooldownSource: matchmakingGuard.cooldownSource
+            } : {})
         };
     }
 
