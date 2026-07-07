@@ -1,0 +1,29 @@
+js/scenes/pvp-scene.js
+  s_bae69f1b7fab46::t_d0bbbf2faa4422 6129-6131
+js/services/backend-client.js
+  s_bae69f1b7fab46::t_7088afd2b146b6 814-816
+progress.md
+  s_bae69f1b7fab46::t_a2003457702435 3-23
+tests/browser_pvp_live_real_backend_smoke.mjs
+  s_bae69f1b7fab46::t_3ebf3484abe96e 216,233-241,346-459,639-664,716-741,743-748,750-755,758-761,830-831,855,862-1055,1324,1353-1365,1389-1390,1579-1583,1590-1591,1594-1596,1616,1618,1624-1628,1632-1633,1725-1729,1736-1737,1788-1790,2245-2397
+tests/sanity_release_gate_coverage_checks.cjs
+  s_bae69f1b7fab46::t_ed549a9e09b875 1176,1236-1241,2667-2676,2679-2681
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.5",
+  "base_commit_sha": "a9702cd1a6840c6eaa0662c26f9289c4e42e21a7",
+  "prompts": {},
+  "sessions": {
+    "s_bae69f1b7fab46": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ed4f6-e7ac-73e0-a29e-119f3eddb407",
+        "model": "unknown"
+      },
+      "human_author": "AI Agent <bot@example.com>"
+    }
+  },
+  "attestation_metadata": {},
+  "remote_transcripts": {}
+}
