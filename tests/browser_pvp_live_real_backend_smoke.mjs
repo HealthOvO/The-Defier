@@ -513,6 +513,54 @@ async function clickLiveControl(page, selector, label) {
   return null;
 }
 
+async function waitForFriendlyRematchRequestAfterTap(page, timeoutMs = 15000) {
+  const waitForWaitingRematch = waitMs => waitForLiveSnapshot(page, () => {
+    const snapshot = window.PVPScene?.getLiveSnapshot?.() || null;
+    return snapshot?.phase === 'waiting_rematch';
+  }, null, waitMs);
+  const collectAfterTapProbe = () => page.evaluate(() => {
+    const snapshot = window.PVPScene?.getLiveSnapshot?.() || null;
+    const sessionState = window.PVPScene?.getLiveSession?.()?.getState?.() || null;
+    const button = document.querySelector('[data-live-post-review-action="friendly_rematch"]');
+    return {
+      phase: snapshot?.phase || '',
+      sessionPhase: sessionState?.phase || '',
+      rootPhase: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-phase') || '',
+      hint: document.querySelector('[data-live-last-error]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+      actionDisabled: button?.disabled ?? null,
+      actionText: button?.textContent?.replace(/\s+/g, ' ').trim() || '',
+      hasButton: !!button,
+    };
+  });
+  const maxRealTapAttempts = isMobileViewport ? 3 : 1;
+  const realTapRetryActionables = [];
+  const afterTapProbes = [];
+  let lastError = null;
+  const deadline = Date.now() + timeoutMs;
+  for (let attempt = 1; attempt <= maxRealTapAttempts; attempt += 1) {
+    if (attempt > 1) {
+      const retryActionable = await clickLiveControl(page, '[data-live-post-review-action="friendly_rematch"]', `friendly-rematch-real-touch-retry-${attempt}`);
+      realTapRetryActionables.push(retryActionable);
+    }
+    try {
+      await waitForWaitingRematch(Math.max(1000, Math.min(isMobileViewport ? 2500 : timeoutMs, deadline - Date.now())));
+      return {
+        usedSyntheticClick: false,
+        realTapAttempts: attempt,
+        realTapRetryActionables,
+        afterTapProbes,
+      };
+    } catch (error) {
+      lastError = error;
+      afterTapProbes.push(await collectAfterTapProbe());
+      if (!isMobileViewport || Date.now() >= deadline) {
+        break;
+      }
+    }
+  }
+  throw new Error(`friendly rematch did not reach waiting_rematch after real tap: ${JSON.stringify({ realTapAttempts: maxRealTapAttempts, afterTapProbes })}; ${lastError?.message || 'unknown wait failure'}`);
+}
+
 async function clickLiveEndTurnUntilSeat(page, expectedNextSeat, label, maxTouches = 3) {
   const touches = [];
   let probe = null;
@@ -605,7 +653,8 @@ async function joinLiveQueueWithLoadout(page, displayName, loadout, testMatchSco
   return await page.evaluate(async ({ displayName, loadout, testMatchScope }) => {
     window.__DEFIER_PVP_REAL_TEST_SCOPE = testMatchScope;
     window.game.player.name = displayName;
-    window.PVPScene.switchTab('live');
+    window.PVPScene.switchTab('live', { skipLoad: true });
+    await window.PVPScene.loadLivePanel();
     const presetId = `real_smoke_${String(loadout.identitySlot || 'custom').replace(/[^a-z0-9_-]/gi, '_').toLowerCase()}`;
     if (!window.PVPScene.__realSmokeOriginalGetLiveLoadoutPresets) {
       window.PVPScene.__realSmokeOriginalGetLiveLoadoutPresets = window.PVPScene.getLiveLoadoutPresets.bind(window.PVPScene);
@@ -869,11 +918,26 @@ async function writeReport() {
     await seedRankedHistory(matureSeat.username, 1000, 6);
     const lowSampleJoin = await joinLiveQueueWithLoadout(lowSampleSeat.page, '新', lowSampleLoadout, lowSampleTestScope);
     const matureBlockedJoin = await joinLiveQueueWithLoadout(matureSeat.page, '熟', matureLoadout, lowSampleTestScope);
-    await matureSeat.page.waitForFunction(() => {
-      const report = window.PVPScene?.getLiveSnapshot?.()?.waitingReport;
-      return report?.protectionReason === 'low_sample_protection'
-        && report?.releaseMode === 'need_third_player';
-    }, null, { timeout: 5000 });
+    const isLowSampleGuardReport = report => report?.protectionReason === 'low_sample_protection'
+      && report?.releaseMode === 'need_third_player';
+    let lowSampleWaitSnapshot = isLowSampleGuardReport(matureBlockedJoin?.snapshot?.waitingReport)
+      ? matureBlockedJoin.snapshot
+      : null;
+    if (!lowSampleWaitSnapshot) {
+      try {
+        lowSampleWaitSnapshot = await waitForLiveSnapshot(matureSeat.page, () => {
+          const report = window.PVPScene?.getLiveSnapshot?.()?.waitingReport;
+          return report?.protectionReason === 'low_sample_protection'
+            && report?.releaseMode === 'need_third_player';
+        }, null, 5000);
+      } catch (error) {
+        lowSampleWaitSnapshot = await refreshUntilLiveSnapshot(matureSeat.page, () => {
+          const report = window.PVPScene?.getLiveSnapshot?.()?.waitingReport;
+          return report?.protectionReason === 'low_sample_protection'
+            && report?.releaseMode === 'need_third_player';
+        }, null, 15000);
+      }
+    }
     await matureSeat.page.evaluate(async () => {
       if (window.PVPScene && typeof window.PVPScene.renderLivePanel === 'function') {
         window.PVPScene.renderLivePanel();
@@ -912,7 +976,7 @@ async function writeReport() {
         && lowSampleGuardProbe.practiceDisabled === false
         && lowSampleGuardProbe.cancelDisabled === false
         && !/rankedGames|ranked_games|lowSampleProtected|low_sample_protected|rating":|score":|elo/i.test(`${lowSampleGuardProbe.reportText} ${JSON.stringify(lowSampleGuardProbe.snapshot?.waitingReport || {})} ${JSON.stringify(lowSampleGuardProbe.textPayload?.waitingReport || {})}`),
-      JSON.stringify({ lowSampleJoin, matureBlockedJoin, lowSampleGuardProbe }),
+      JSON.stringify({ lowSampleJoin, matureBlockedJoin, lowSampleWaitSnapshot, lowSampleGuardProbe }),
     );
     const lowSamplePracticeActionable = await clickLiveControl(matureSeat.page, '[data-live-action="practice-live"]', 'low-sample-practice-live');
     let lowSamplePracticeWaitError = '';
@@ -2631,11 +2695,19 @@ async function writeReport() {
     const afterPlayReceiptProbe = await secondSeatClient.page.evaluate(() => {
       const snapshot = window.PVPScene.getLiveSnapshot();
       const textPayload = JSON.parse(window.render_game_to_text()).pvp?.live || null;
+      const survivalEl = document.querySelector('[data-live-action-survival]');
       return {
         text: document.querySelector('[data-live-action-receipt]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
         sourceAttr: document.querySelector('[data-live-action-receipt]')?.getAttribute('data-live-action-receipt-source') || '',
         hiddenAttr: document.querySelector('[data-live-action-receipt]')?.getAttribute('data-live-action-receipt-hidden') || '',
         seqAttr: document.querySelector('[data-live-action-receipt]')?.getAttribute('data-live-action-receipt-seq') || '',
+        actionSurvivalText: survivalEl?.textContent?.replace(/\s+/g, ' ').trim() || '',
+        actionSurvivalAttr: survivalEl?.getAttribute('data-live-action-survival') || '',
+        actionSurvivalTarget: survivalEl?.getAttribute('data-live-action-survival-target') || '',
+        actionSurvivalHpAfter: survivalEl?.getAttribute('data-live-action-survival-hp-after') || '',
+        actionSurvivalSource: survivalEl?.getAttribute('data-live-action-survival-source') || '',
+        actionSurvivalHidden: survivalEl?.getAttribute('data-live-action-survival-hidden') || '',
+        actionSurvivalImpact: survivalEl?.getAttribute('data-live-action-survival-impact') || '',
         payload: snapshot?.actionReceiptReport || null,
         textPayload: textPayload?.actionReceiptReport || null,
       };
@@ -2672,6 +2744,23 @@ async function writeReport() {
         && afterPlayReceiptProbe.textPayload?.latestSequence === afterPlayReceiptProbe.payload?.latestSequence
         && afterPlayReceiptProbe.textPayload?.summaryLine === afterPlayReceiptProbe.payload?.summaryLine
         && !/\bhand\b|hand":\[|deck|cardId|instanceId|loadoutSnapshot|reward|rating|elo|opponentHand|opponentDeck/i.test(`${afterPlayReceiptProbe.text} ${JSON.stringify(afterPlayReceiptProbe.payload || {})}`),
+      JSON.stringify({ activeFirstSeat, activeSecondSeat, afterPlayReceiptProbe }),
+    );
+    add(
+      'real browser opponent sees public damage survival receipt after accepted card',
+      afterPlayReceiptProbe.actionSurvivalAttr === 'public_damage_survival'
+        && afterPlayReceiptProbe.actionSurvivalTarget === activeSecondSeat
+        && afterPlayReceiptProbe.actionSurvivalHpAfter === '1'
+        && afterPlayReceiptProbe.actionSurvivalSource === 'authoritative_public_projection'
+        && afterPlayReceiptProbe.actionSurvivalHidden === 'false'
+        && afterPlayReceiptProbe.actionSurvivalImpact === 'none'
+        && /承伤回执/.test(afterPlayReceiptProbe.actionSurvivalText)
+        && /剩余\s*1\s*血/.test(afterPlayReceiptProbe.actionSurvivalText)
+        && /对局继续/.test(afterPlayReceiptProbe.actionSurvivalText)
+        && afterPlayReceiptProbe.textPayload?.damage?.targetSeat === afterPlayReceiptProbe.payload?.damage?.targetSeat
+        && afterPlayReceiptProbe.textPayload?.damage?.targetHpAfter === afterPlayReceiptProbe.payload?.damage?.targetHpAfter
+        && afterPlayReceiptProbe.textPayload?.sourceVisibility === afterPlayReceiptProbe.payload?.sourceVisibility
+        && !/payload|cardInstanceId|sourceCardId|cardId|instanceId|\bhand\b|hand":\[|deck|loadoutSnapshot|reward|rating|elo|token|opponentHand|opponentDeck/i.test(`${afterPlayReceiptProbe.actionSurvivalText} ${JSON.stringify(afterPlayReceiptProbe.textPayload || {})}`),
       JSON.stringify({ activeFirstSeat, activeSecondSeat, afterPlayReceiptProbe }),
     );
     const afterPlayMomentumProbe = await secondSeatClient.page.evaluate(() => ({
@@ -2883,6 +2972,8 @@ async function writeReport() {
     if (protectedCounterplayConfirming?.stateVersion === protectedCounterplayBeforeProbe.before?.stateVersion) {
       protectedCounterplaySecondTouchActionable = await clickLiveControl(secondSeatClient.page, protectedCounterplaySelector, `${seatSlug(activeSecondSeat)}-protected-counterplay-card-submit`);
     }
+    const protectedCounterplaySubmittedOnFirstTouch = Number(protectedCounterplayConfirming?.stateVersion || 0) > Number(protectedCounterplayBeforeProbe.before?.stateVersion || 0);
+    const protectedCounterplaySecondTouchOk = protectedCounterplaySecondTouchActionable?.ok === true || protectedCounterplaySubmittedOnFirstTouch;
     await secondSeatClient.page.waitForTimeout(500);
     const protectedCounterplayActionProbe = await secondSeatClient.page.evaluate(({ before, playable, fallbackCard, cardInstanceId, confirming }) => {
       const after = window.PVPScene.getLiveSnapshot();
@@ -3002,9 +3093,9 @@ async function writeReport() {
           acceptedCardTouchActionable,
           endTurnAfterPlayTouchActionable,
           protectedCounterplayFirstTouchActionable,
-          protectedCounterplaySecondTouchActionable,
           surrenderTouchActionable,
-        ].every(item => item?.ok === true),
+        ].every(item => item?.ok === true)
+        && protectedCounterplaySecondTouchOk,
       JSON.stringify({
         seatAReadyTouchActionable,
         seatBReadyTouchActionable,
@@ -3015,6 +3106,8 @@ async function writeReport() {
         endTurnAfterPlaySecondTouchActionable,
         protectedCounterplayFirstTouchActionable,
         protectedCounterplaySecondTouchActionable,
+        protectedCounterplaySubmittedOnFirstTouch,
+        protectedCounterplaySecondTouchOk,
         surrenderTouchActionable,
       }),
     );
@@ -3685,7 +3778,7 @@ async function writeReport() {
     );
 
     const loserFriendlyRematchActionable = await clickLiveControl(loserClient.page, '[data-live-post-review-action="friendly_rematch"]', `${seatSlug(loserSeat)}-friendly-rematch`);
-    await loserClient.page.waitForTimeout(200);
+    const friendlyRematchActivation = await waitForFriendlyRematchRequestAfterTap(loserClient.page, 15000);
     const friendlyRematchProbe = await loserClient.page.evaluate(() => ({
       phase: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-phase') || '',
       hint: document.querySelector('[data-live-last-error]')?.textContent || '',
@@ -3701,8 +3794,12 @@ async function writeReport() {
         && friendlyRematchProbe.snapshot?.reportVersion === 'pvp-live-friendly-series-v1'
         && friendlyRematchProbe.snapshot?.sourceMatchId === finishedLoser.matchId
         && (!isMobileViewport || loserFriendlyRematchActionable?.ok === true)
+        && friendlyRematchActivation.usedSyntheticClick === false
+        && Number(friendlyRematchActivation.realTapAttempts || 0) >= 1
+        && Number(friendlyRematchActivation.realTapAttempts || 0) <= (isMobileViewport ? 3 : 1)
+        && (friendlyRematchActivation.realTapRetryActionables || []).every(item => item?.ok === true)
         && friendlyRematchProbe.snapshot?.rankedImpact === 'none',
-      JSON.stringify({ friendlyRematchProbe, loserFriendlyRematchActionable }),
+      JSON.stringify({ friendlyRematchProbe, loserFriendlyRematchActionable, friendlyRematchActivation }),
     );
     const waitingRematchReloadPage = await loserClient.context.newPage();
     waitingRematchReloadPage.on('console', msg => {

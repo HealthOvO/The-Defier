@@ -1,5 +1,27 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-07-06: V10-S82 live PVP public damage survival real-backend proof
+  - 本轮完成
+    - `tests/browser_pvp_live_real_backend_smoke.mjs` 将 S75 的“承伤回执”从 synthetic browser/runtime 证明推进到真实后端双账号链路：首手真实出牌后，被打方页面必须看到稳定 `data-live-action-survival="public_damage_survival"` chip。
+    - 新 smoke finding 锁住真实 DOM marker：`data-live-action-survival-target` 等于被打方 seat、`data-live-action-survival-hp-after="1"`、`source="authoritative_public_projection"`、`hidden="false"`、`impact="none"`，文案必须包含“承伤回执 / 剩余 1 血 / 对局继续”。
+    - 同一 finding 还要求 `render_game_to_text()` 的 `actionReceiptReport` 与页面中的权威回执一致，并继续禁止 `cardInstanceId / sourceCardId / hand / deck / loadoutSnapshot / reward / rating / elo / token` 等隐藏或经济字段泄漏。
+    - `tests/sanity_release_gate_coverage_checks.cjs` 新增真实后端 smoke marker，防止“非致命伤害为什么没有结束本局”的证明退化回泛化 receipt 或 synthetic-only。
+    - `game-intro.html` 与 `js/views/SystemView.js` 清理过期版本标题，把“当前版本重点 / 当前迭代重点”从 V9.2 口径更新为 V10 真 PVP，并把指南里的“镜像演武兜底”收紧为“镜像练习 / 实时论道赛后复盘”；`tests/sanity_intro_progress_sync_checks.cjs` 与 `tests/browser_guide_modal_audit.mjs` 同步改为锁 V10 真 PVP 并阻止当前介绍页继续保留 V9.2 文案。
+  - 已验证
+    - 红测：`node tests/sanity_release_gate_coverage_checks.cjs` 在真实后端 survival finding 未加入前失败于 `real browser opponent sees public damage survival receipt after accepted card`。
+    - 绿测：`node tests/sanity_release_gate_coverage_checks.cjs`
+    - 绿测：`node tests/sanity_intro_progress_sync_checks.cjs`
+    - 语法检查：`node --check tests/browser_pvp_live_real_backend_smoke.mjs`
+    - 桌面真实后端 browser smoke：`node tests/browser_pvp_live_real_backend_smoke.mjs http://127.0.0.1:4173 output/browser-pvp-live-real-backend-smoke-s82-fix3`，81/81 findings、0 failed、0 console error。
+    - 移动真实后端 browser smoke：`BROWSER_PVP_LIVE_REAL_VIEWPORT=mobile BROWSER_PVP_LIVE_REAL_REQUIRE_MOBILE=1 node tests/browser_pvp_live_real_backend_smoke.mjs http://127.0.0.1:4173 output/browser-pvp-live-mobile-real-s82-realtap-retry`，82/82 findings、0 failed、0 console error；赛后低压力再战 finding 记录 `usedSyntheticClick=false`、`realTapAttempts=2`，确认移动端为真实触控重试而非 JS 合成点击。
+    - PVP 尾段浏览器发布门禁：`AUDIT_FILTER='pvp-live-real,pvp-live-mobile-real,pvp-mobile,pvp-mobile-result,challenge-mobile-flow' npm run test:browser:release -- http://127.0.0.1:4173 output/release-browser-audits-s82-pvp-final-realtap-retry`，所选 5 个 audit 全部 status=0。
+    - 完整 Node 门禁：`PVP_LIVE_WS_FANOUT_MESSAGE_TIMEOUT_MS=60000 npm run test:node`
+    - 构建：`npm run build:pages`
+    - 空白检查：`git diff --check`
+    - 指南浏览器审计：`node tests/browser_guide_modal_audit.mjs http://127.0.0.1:4173 output/browser-guide-modal-audit-s82-final`
+  - 当前结论
+    - live PVP 的首手高压场景现在同时有“终局为什么结束”和“非终局为什么继续”的真实后端证据：被打方不仅能看到生命被压到 1，还能看到这是权威公开投影下的承伤回执，不会把开局护体后的幸存误读成隐藏状态或前端错乱。移动端赛后再战也明确保持真实触控链路，不允许退回 synthetic click。该切片只强化真实后端验收、移动触控稳定性、玩家说明和 release gate，不改变卡牌数值、伤害、护体、先后手、匹配、正式积分、奖励或结算。
+
 - 2026-07-06: V10-S81 live PVP low-sample real-backend waiting guard proof
   - 本轮完成
     - `tests/browser_pvp_live_real_backend_smoke.mjs` 新增独立真实后端双账号低样本保护链路：低样本账号先入队，成熟账号随后用同一隔离 `testMatchScope` 入队；服务端必须保持双方 `waiting`，不得因为“有真人”就立刻开启脆弱首战。

@@ -260,7 +260,7 @@ export class SystemView {
                     <li><strong>主线挑战</strong>：读懂章节规则与 Boss 压力，闯过天域并完成逆天改命。</li>
                     <li><strong>局内成长</strong>：围绕 1-2 条核心主轴拿牌、拿法宝、偷法则、升命环。</li>
                     <li><strong>局外复盘</strong>：把章节答卷、构筑快照、洞府议程和赛季任务沉淀到下一轮。</li>
-                    <li><strong>对抗玩法</strong>：天道榜提供 PVP DRI、焦点约战、镜像演武兜底、赛后复盘与赛季商店。</li>
+                    <li><strong>对抗玩法</strong>：天道榜提供 PVP DRI、焦点约战、镜像练习、实时论道赛后复盘与赛季商店。</li>
                 </ul>
             </div>
 
@@ -345,7 +345,7 @@ export class SystemView {
                     <li><strong>洞府议程</strong>：把归卷答卷立项成研究，章中处置、锁线契约和章末结题会反哺后续路线。</li>
                     <li><strong>挑战观察站</strong>：固定命盘会沉淀成样本，可复刻、筛选和训练同类题面。</li>
                     <li><strong>无尽轮回</strong>：赛季词条、季签、崩盘账本与偏执层会折算为 DRI 主轴，强调长期止损。</li>
-                    <li><strong>天道榜 PVP</strong>：先读对手档案和 PVP DRI，再用焦点约战、镜像演武、赛后复盘和商店经济沉淀强势套路。</li>
+                    <li><strong>天道榜 PVP</strong>：先读对手档案和 PVP DRI，再用焦点约战、镜像练习、实时论道赛后复盘和商店经济沉淀强势套路。</li>
                 </ul>
             </div>
 `;
@@ -375,8 +375,8 @@ export class SystemView {
                 <h3>💾 存档与同步</h3>
                 <ul class="intro-list">
                     <li><strong>本地存档</strong>：自动保存，离线也可继续游玩。</li>
-                    <li><strong>云存档</strong>：登录后可同步账号、存档、PVP 残影等数据。</li>
-                    <li><strong>PVP 残影</strong>：防守上传后，其他玩家或镜像演武可以读取你的构筑快照。</li>
+                    <li><strong>云存档</strong>：登录后可同步账号、存档、练习快照等数据。</li>
+                    <li><strong>PVP 练习快照</strong>：防守上传后，问道练习和镜像练习可以读取你的公开构筑快照，但不写正式积分。</li>
                 </ul>
             </div>
 
@@ -393,10 +393,10 @@ export class SystemView {
     // Tab 4: Updates
     const updatesContent = `
             <div class="intro-section">
-                <h3>🌌 当前版本重点（V9.2）</h3>
+                <h3>🌌 当前版本重点（V10 真 PVP）</h3>
                 <p class="intro-text">
-                    V9.2 的目标是把“命途构筑、章节考试、赛季组织层、长线复盘”打通成一条玩家能读懂的成长链。
-                    当前版本不只是新增功能，而是让奖励页、地图、远征、洞府、构筑快照、挑战观察站与 PVP 使用同一套读题语言。
+                    V10 真 PVP 的目标是把真人论道、公平回执、赛后学习和长期复盘打通成一条玩家能读懂的成长链。
+                    当前版本不只是新增功能，而是让奖励页、地图、远征、洞府、构筑快照、挑战观察站与实时论道使用同一套读题语言。
                 </p>
             </div>
 
@@ -410,7 +410,7 @@ export class SystemView {
                     <li><strong>挑战观察站</strong>：固定命盘会沉淀成观星样本，支持复刻重点、失手剖面、训练标签、样本排序和常用训练视角。</li>
                     <li><strong>洞府议程</strong>：归卷书架、命盘研究、章中处置、锁线契约和残卷回收形成长期承诺循环。</li>
                     <li><strong>无尽轮回 DRI</strong>：赛季词条、季签、崩盘账本与偏执层会统一折算成主轴、对策和预留建议。</li>
-                    <li><strong>PVP 天道榜</strong>：PVP 风险画像、对手档案、PVP DRI、焦点约战、镜像演武兜底、赛后复盘、段位倍率、连胜奖励、商店与外观已打通。</li>
+                    <li><strong>PVP 天道榜</strong>：PVP 风险画像、对手档案、PVP DRI、焦点约战、镜像练习、实时论道赛后复盘、段位倍率、连胜奖励、商店与外观已打通。</li>
                 </ul>
             </div>
 
