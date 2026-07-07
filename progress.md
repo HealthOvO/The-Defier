@@ -1,5 +1,25 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-07-07: V10-S86 live PVP settlement reason real-backend proof
+  - 本轮完成
+    - `tests/browser_pvp_live_real_backend_smoke.mjs` 将 S85 的正式结算解释从服务端 / UI runtime / synthetic browser 证明推进到真实后端双账号链路：在隔离 `testMatchScope` 中预摆盘后，通过真实页面点击真实卡牌完成终局，页面必须渲染 `finish_type / score_delta / reward_boundary` 三条玩家可见结算 reason。
+    - 新真实后端 finding 锁住 DOM 与 payload 一致性：`data-live-settlement-reason` 必须包含三类 reason，文案必须覆盖“终局类型 / 积分变化 / 奖励边界 / 正式积分 / 对手强度 / 天道币”，并且来源必须包含 `public_events` 与 `server_authoritative_settlement`。
+    - 同一 finding 要求 `payload.settlementReport.reasonLines` 与 `render_game_to_text()` 的 `textPayload.settlementReport.reasonLines` 均保留 3 条以上解释，且所有 reason 都必须 `usesHiddenInformation=false`。
+    - 增加真实页面泄漏防线：玩家可见结算 DOM 文本和两份 `reasonLines` 不允许出现 `rating` 原始 JSON、`elo`、`opponentRating`、`expectedWinRate`、`ranked_authoritative`、`surrender_*`、`connection_timeout`、`turn_timeout` 或 `ready_timeout` 等隐藏评分或原始协议 token；完整 `settlementReport` 额外禁止 hidden rating、ELO、对手内部评分和 expected win rate 这类隐藏评分字段。
+    - 移动端也检查结算 reason 布局不会横向溢出；`tests/sanity_release_gate_coverage_checks.cjs` 同步新增真实后端 smoke marker，防止该解释层退回到只靠 synthetic 审计证明。
+  - 已验证
+    - 红测：`node tests/sanity_release_gate_coverage_checks.cjs` 在真实后端 settlement reason marker 未加入前失败于 `marker: settlementReasonIds`。
+    - 绿测：`node tests/sanity_release_gate_coverage_checks.cjs`
+    - 语法检查：`node --check tests/browser_pvp_live_real_backend_smoke.mjs`
+    - 桌面真实后端 browser smoke：`node tests/browser_pvp_live_real_backend_smoke.mjs http://127.0.0.1:4173 output/browser-pvp-live-real-backend-smoke-s86-settlement-reasons-final2`，84/84 findings、0 failed、0 console error。
+    - 移动端真实后端 browser smoke：`BROWSER_PVP_LIVE_REAL_VIEWPORT=mobile BROWSER_PVP_LIVE_REAL_REQUIRE_MOBILE=1 node tests/browser_pvp_live_real_backend_smoke.mjs http://127.0.0.1:4173 output/browser-pvp-live-mobile-real-s86-settlement-reasons-final2`，85/85 findings、0 failed、0 console error。
+    - 完整 Node 门禁：`PVP_LIVE_WS_FANOUT_MESSAGE_TIMEOUT_MS=60000 npm run test:node`
+    - 构建：`npm run build:pages`
+    - 介绍同步校验：`node tests/sanity_intro_progress_sync_checks.cjs`
+    - 空白检查：`git diff --check`
+  - 当前结论
+    - live PVP 正式结算解释现在有真实后端、真实账号、真实浏览器桌面/移动端证据；终局本身使用隔离 test-scope 预摆盘来稳定触发，再通过真实卡牌点击完成。玩家看到的“为什么结束、为什么变分、奖励为何不影响战斗强度”不再只停留在单元或 synthetic UI 证明。该切片只强化验收门禁和真实端证据，不改变 ratingDelta 公式、天道币发放、赛季荣誉奖励、匹配算法、卡牌数值、先后手或正式结算真值；这不是线上部署记录。
+
 - 2026-07-07: V10-S85 live PVP authoritative settlement reason lines
   - 本轮完成
     - `server/pvp-live/engine/state-view.js` 在正式 live ranked `settlementReport` 中新增 `reasonLines[]`，稳定输出 `finish_type / score_delta / reward_boundary` 三条玩家可读解释：终局类型、正式积分变化原因、天道币/赛季荣誉不改战斗数值的边界。

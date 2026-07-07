@@ -3468,6 +3468,18 @@ async function writeReport() {
       settlementText: document.querySelector('[data-live-settlement-report]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
       settlementSource: document.querySelector('[data-live-settlement-report]')?.getAttribute('data-live-settlement-source') || '',
       settlementHidden: document.querySelector('[data-live-settlement-report]')?.getAttribute('data-live-settlement-hidden') || '',
+      settlementReasonIds: Array.from(document.querySelectorAll('[data-live-settlement-reason]')).map(item => item.getAttribute('data-live-settlement-reason')),
+      settlementReasonText: Array.from(document.querySelectorAll('[data-live-settlement-reason]')).map(item => item.textContent?.replace(/\s+/g, ' ').trim() || '').join(' '),
+      settlementReasonSources: Array.from(document.querySelectorAll('[data-live-settlement-reason]')).map(item => item.getAttribute('data-live-settlement-reason-source')),
+      settlementReasonImpacts: Array.from(document.querySelectorAll('[data-live-settlement-reason]')).map(item => item.getAttribute('data-live-settlement-reason-impact')),
+      settlementReasonLayout: Array.from(document.querySelectorAll('[data-live-settlement-reason]')).map(item => {
+        const style = getComputedStyle(item);
+        return {
+          scrollWidth: item.scrollWidth,
+          clientWidth: item.clientWidth,
+          overflowWrap: style.overflowWrap,
+        };
+      }),
       seasonHonorText: document.querySelector('[data-live-season-honor]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
       seasonHonorPower: document.querySelector('[data-live-season-honor]')?.getAttribute('data-live-season-honor-power') || '',
       seasonHonorRewardText: document.querySelector('[data-live-season-honor-reward]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
@@ -3534,6 +3546,38 @@ async function writeReport() {
         && postMatchProbe.payload?.settlementReport?.seasonHonorReport?.cosmeticReward?.collectionReport?.reportVersion === 'pvp-live-season-honor-collection-v1'
         && postMatchProbe.textPayload?.settlementReport?.seasonHonorReport?.reportVersion === 'pvp-live-season-honor-v1'
         && postMatchProbe.textPayload?.settlementReport?.seasonHonorReport?.cosmeticReward?.reportVersion === 'pvp-live-season-honor-reward-v1',
+      JSON.stringify({ winnerSeat, loserSeat, finishedWinner, finishedLoser, postMatchProbe, postMatchParity }),
+    );
+    const settlementReasonCopyForbiddenPattern = /rating":|\belo\b|opponentRating|expectedWinRate|ranked_authoritative|surrender_|connection_timeout|turn_timeout|ready_timeout/i;
+    const settlementReportHiddenForbiddenPattern = /rating":|\belo\b|opponentRating|expectedWinRate/i;
+    const settlementReasonCopyHaystack = [
+      postMatchProbe.settlementText,
+      JSON.stringify(postMatchProbe.payload?.settlementReport?.reasonLines || []),
+      JSON.stringify(postMatchProbe.textPayload?.settlementReport?.reasonLines || []),
+    ].join(' ');
+    const settlementReportHiddenHaystack = [
+      JSON.stringify(postMatchProbe.payload?.settlementReport || {}),
+      JSON.stringify(postMatchProbe.textPayload?.settlementReport || {}),
+    ].join(' ');
+    add(
+      'real browser live match renders formal settlement reason lines after test-scoped lethal setup and real card click',
+      ['finish_type', 'score_delta', 'reward_boundary'].every(id => postMatchProbe.settlementReasonIds.includes(id))
+        && /终局类型/.test(postMatchProbe.settlementReasonText)
+        && /积分变化/.test(postMatchProbe.settlementReasonText)
+        && /奖励边界/.test(postMatchProbe.settlementReasonText)
+        && /正式积分/.test(postMatchProbe.settlementReasonText)
+        && /对手强度/.test(postMatchProbe.settlementReasonText)
+        && /天道币/.test(postMatchProbe.settlementReasonText)
+        && postMatchProbe.settlementReasonSources.includes('public_events')
+        && postMatchProbe.settlementReasonSources.includes('server_authoritative_settlement')
+        && postMatchProbe.settlementReasonImpacts.includes('official')
+        && (postMatchProbe.payload?.settlementReport?.reasonLines || []).length >= 3
+        && (postMatchProbe.textPayload?.settlementReport?.reasonLines || []).length >= 3
+        && (postMatchProbe.payload?.settlementReport?.reasonLines || []).every(reason => reason.usesHiddenInformation === false)
+        && (postMatchProbe.textPayload?.settlementReport?.reasonLines || []).every(reason => reason.usesHiddenInformation === false)
+        && postMatchProbe.settlementReasonLayout.every(item => item.scrollWidth <= item.clientWidth + 1 || item.overflowWrap === 'anywhere')
+        && !settlementReasonCopyForbiddenPattern.test(settlementReasonCopyHaystack)
+        && !settlementReportHiddenForbiddenPattern.test(settlementReportHiddenHaystack),
       JSON.stringify({ winnerSeat, loserSeat, finishedWinner, finishedLoser, postMatchProbe, postMatchParity }),
     );
     if (isMobileViewport) {
