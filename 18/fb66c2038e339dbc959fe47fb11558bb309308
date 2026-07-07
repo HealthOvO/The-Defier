@@ -1,0 +1,27 @@
+js/scenes/pvp-scene.js
+  s_bae69f1b7fab46::t_4e71db2255e5f2 2516-2524,3005,3014
+tests/browser_pvp_live_real_backend_smoke.mjs
+  s_bae69f1b7fab46::t_96c64d9e4cc81f 21,49-52,1197-1463,1498-1501,4642-4716,4847,4851,4867,5112-5252
+tests/sanity_pvp_live_ui_runtime_checks.mjs
+  s_bae69f1b7fab46::t_a7e73b327fd251 1725-1754,3834,3837,3840-3842,3848-3849
+tests/sanity_release_gate_coverage_checks.cjs
+  s_bae69f1b7fab46::t_103d47d6fb9099 1253-1261,3258
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.5",
+  "base_commit_sha": "18fb66c2038e339dbc959fe47fb11558bb309308",
+  "prompts": {},
+  "sessions": {
+    "s_bae69f1b7fab46": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ed4f6-e7ac-73e0-a29e-119f3eddb407",
+        "model": "unknown"
+      },
+      "human_author": "AI Agent <bot@example.com>"
+    }
+  },
+  "attestation_metadata": {},
+  "remote_transcripts": {}
+}
