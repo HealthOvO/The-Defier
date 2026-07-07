@@ -1,0 +1,31 @@
+game-intro.html
+  s_bae69f1b7fab46::t_5ef5a8786e3170 164,177
+js/views/SystemView.js
+  s_bae69f1b7fab46::t_c12c2ac442e38d 263,348,378-379,396,398-399,413
+tests/browser_guide_modal_audit.mjs
+  s_bae69f1b7fab46::t_9ea91d00d10150 139,141
+tests/browser_pvp_live_real_backend_smoke.mjs
+  s_bae69f1b7fab46::t_c4eb23c835a6fe 516-563,656-657,921-940,979,2698,2704-2710,2749-2765,2975-2976,3097-3098,3109-3110,3781,3797-3800,3802
+tests/sanity_intro_progress_sync_checks.cjs
+  s_bae69f1b7fab46::t_92c0df3553a9b1 26,30,33,61-62,74-81,95-105,107
+tests/sanity_release_gate_coverage_checks.cjs
+  s_bae69f1b7fab46::t_dfe9bbd8bac3f1 1190-1206
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.5",
+  "base_commit_sha": "2b40beadb9556141a413bfb4ff135fac8fa1de07",
+  "prompts": {},
+  "sessions": {
+    "s_bae69f1b7fab46": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ed4f6-e7ac-73e0-a29e-119f3eddb407",
+        "model": "unknown"
+      },
+      "human_author": "AI Agent <bot@example.com>"
+    }
+  },
+  "attestation_metadata": {},
+  "remote_transcripts": {}
+}
