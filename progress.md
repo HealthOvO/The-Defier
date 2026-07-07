@@ -1,5 +1,17 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-07-07: V10-S91 live PVP full real-backend smoke closure
+  - 本轮完成
+    - `tests/browser_pvp_live_real_backend_smoke.mjs` 将完整长流程里的 avoid-opponent 抑制证明拆到 fresh safety-exit helper 中执行；原同账号链路仍保留“赛后 queue_again 可重新入队”的真实按钮证明，但不再把 queue_again/cancel 边界和“避开对手抑制复配”塞到同一对账号里，避免测试顺序污染。
+    - `tests/sanity_release_gate_coverage_checks.cjs` 改为以 `BROWSER_PVP_LIVE_REAL_ONLY_SAFETY_EXIT=1` 和 `focused real browser avoid-opponent suppresses immediate rematch and keeps no-score practice available` 作为正式 release marker，锁住 fresh 真实后端避开抑制证据。
+    - 复核历史失败：`s90` 的 status-payoff handoff 与 lethal finish 在本轮完整 fresh smoke 中均已通过；当前阻塞点只剩旧 harness 把 queue-cancel 验证和 avoid-suppression 验证耦合在同一账号上的污染。
+  - 已验证
+    - 语法检查：`node --check tests/browser_pvp_live_real_backend_smoke.mjs`
+    - 绿测：`node tests/sanity_release_gate_coverage_checks.cjs`
+    - 完整桌面真实后端 browser smoke：`node tests/browser_pvp_live_real_backend_smoke.mjs http://127.0.0.1:4173 output/browser-pvp-live-real-backend-smoke-s91-full-rerun3` ✅，`report.json` 生成时间 `2026-07-07T15:54:38.468Z`，92/92 findings、0 failed、0 console error；其中 `real browser post-match queue again re-enters real live waiting queue`、`focused real browser post-match safety exits return audit-safe no-score receipts`、`focused real browser avoid-opponent suppresses immediate rematch and keeps no-score practice available` 均通过。
+  - 当前结论
+    - S90 未完成的完整真实后端 browser smoke 已收口；live PVP 赛后安全出口、queue_again、举报、避开对手和避开后的匹配质量护栏现在同时具备 UI runtime、release marker、聚焦 smoke 与完整真实后端 smoke 证据。该修复只调整 smoke harness 的验证隔离，不改变线上产品逻辑、卡牌数值、积分、奖励或部署配置。
+
 - 2026-07-07: V10-S90 live PVP post-match safety exits and avoid-opponent waiting guard
   - 本轮完成
     - `PVPScene.getLivePostMatchReview()` 的赛后动作 normalizer 从 8 个动作放宽到 12 个动作，修复真实后端返回 9 个动作时第 9 个 `avoid_opponent` 被前端截掉、玩家看不到“避开此对手”按钮的问题；`postGameActionBridge.coveredAuditActions` 同步保留完整安全动作集。

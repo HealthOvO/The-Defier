@@ -1252,7 +1252,6 @@ assert.ok(
   'real browser post-match loadout resolution keeps manual formal candidate while practice uses public recommendation',
   'real browser post-match dispute report returns audit-safe receipt without changing settlement',
   'real browser post-match avoid-opponent returns no-score future-match receipt',
-  'real browser avoid-opponent suppresses immediate rematch and explains player_avoid_opponent waiting',
   'BROWSER_PVP_LIVE_REAL_ONLY_SAFETY_EXIT',
   'focused real browser post-match safety exits return audit-safe no-score receipts',
   'focused real browser avoid-opponent suppresses immediate rematch and keeps no-score practice available',
