@@ -24,6 +24,77 @@ async function boot(page) {
   await page.waitForTimeout(1200);
 }
 
+async function showCharacterSelectionWithLoadedPortraits(page) {
+  await boot(page);
+  await page.waitForFunction(() => window.game && typeof game.showCharacterSelection === 'function');
+  await page.evaluate(() => {
+    game.guestMode = true;
+    game.showCharacterSelection();
+  });
+  await page.waitForFunction(() => {
+    const images = Array.from(document.querySelectorAll('.character-card .char-avatar-img'));
+    return images.length >= 4 && images.every((image) => image.complete && image.naturalWidth >= 256 && image.naturalHeight >= 256);
+  }, null, { timeout: 8000 });
+}
+
+function collectCharacterSelectionProbe() {
+  const container = document.getElementById('character-selection-container');
+  const cards = document.querySelectorAll('.character-card');
+  const destiny = document.getElementById('run-destiny-selection');
+  if (!container || cards.length < 4 || !destiny) return { ok: false, reason: 'missing_character_nodes' };
+  const rect = container.getBoundingClientRect();
+  const portraitProbes = Array.from(cards).map((card) => {
+    const header = card.querySelector('.char-header');
+    const wrapper = card.querySelector('.char-avatar-wrapper');
+    const image = card.querySelector('.char-avatar-img');
+    if (!header || !wrapper || !image) return { id: card.dataset.id, ok: false, reason: 'missing_portrait_nodes' };
+    const headerRect = header.getBoundingClientRect();
+    const wrapperRect = wrapper.getBoundingClientRect();
+    const visibleTop = Math.max(headerRect.top, wrapperRect.top);
+    const visibleBottom = Math.min(headerRect.bottom, wrapperRect.bottom);
+    const visibleHeight = Math.max(0, visibleBottom - visibleTop);
+    const visibleRatio = wrapperRect.height > 0 ? visibleHeight / wrapperRect.height : 0;
+    const squareDelta = Math.abs(wrapperRect.width - wrapperRect.height);
+    return {
+      id: card.dataset.id,
+      ok:
+        headerRect.height >= 120 &&
+        wrapperRect.width >= 88 &&
+        wrapperRect.height >= 88 &&
+        squareDelta <= 2 &&
+        visibleRatio >= 0.88 &&
+        image.complete &&
+        image.naturalWidth >= 256 &&
+        image.naturalHeight >= 256,
+      headerHeight: Math.round(headerRect.height),
+      wrapperWidth: Math.round(wrapperRect.width),
+      wrapperHeight: Math.round(wrapperRect.height),
+      visibleRatio: Number(visibleRatio.toFixed(2)),
+      naturalWidth: image.naturalWidth,
+      naturalHeight: image.naturalHeight,
+    };
+  });
+  const portraitsOk = portraitProbes.every((probe) => probe.ok);
+  return {
+    ok:
+      rect.left >= 8 &&
+      rect.right <= window.innerWidth - 8 &&
+      rect.bottom <= window.innerHeight - 8 &&
+      document.documentElement.scrollWidth <= window.innerWidth + 2 &&
+      portraitsOk,
+    cardCount: cards.length,
+    portraitProbes,
+    rect: {
+      left: Math.round(rect.left),
+      top: Math.round(rect.top),
+      right: Math.round(rect.right),
+      bottom: Math.round(rect.bottom),
+      width: Math.round(rect.width),
+      height: Math.round(rect.height),
+    }
+  };
+}
+
 (async () => {
   const executablePath = process.env.PLAYWRIGHT_EXECUTABLE_PATH || undefined;
   const browser = await chromium.launch({
@@ -80,35 +151,17 @@ async function boot(page) {
   add('main menu shell stays centered and keeps overview cards visible', !!mainMenuProbe?.ok, JSON.stringify(mainMenuProbe || null));
   await captureScreenshot(page, '01-main-menu.png');
 
-  await boot(page);
-  const characterProbe = await page.evaluate(() => {
-    if (!window.game || typeof game.showCharacterSelection !== 'function') return { ok: false, reason: 'no_game' };
-    game.guestMode = true;
-    game.showCharacterSelection();
-    const container = document.getElementById('character-selection-container');
-    const cards = document.querySelectorAll('.character-card');
-    const destiny = document.getElementById('run-destiny-selection');
-    if (!container || cards.length < 4 || !destiny) return { ok: false, reason: 'missing_character_nodes' };
-    const rect = container.getBoundingClientRect();
-    return {
-      ok:
-        rect.left >= 8 &&
-        rect.right <= window.innerWidth - 8 &&
-        rect.bottom <= window.innerHeight - 8 &&
-        document.documentElement.scrollWidth <= window.innerWidth + 2,
-      cardCount: cards.length,
-      rect: {
-        left: Math.round(rect.left),
-        top: Math.round(rect.top),
-        right: Math.round(rect.right),
-        bottom: Math.round(rect.bottom),
-        width: Math.round(rect.width),
-        height: Math.round(rect.height),
-      }
-    };
-  });
+  await showCharacterSelectionWithLoadedPortraits(page);
+  const characterProbe = await page.evaluate(collectCharacterSelectionProbe);
   add('character selection fits inside a single readable shell', !!characterProbe?.ok, JSON.stringify(characterProbe || null));
   await captureScreenshot(page, '02-character-selection.png');
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await showCharacterSelectionWithLoadedPortraits(page);
+  const mobileCharacterProbe = await page.evaluate(collectCharacterSelectionProbe);
+  add('character selection mobile keeps portraits visible and avoids horizontal overflow', !!mobileCharacterProbe?.ok, JSON.stringify(mobileCharacterProbe || null));
+  await captureScreenshot(page, '02b-character-selection-mobile.png');
+  await page.setViewportSize({ width: 1440, height: 960 });
 
   await boot(page);
   const challengeProbe = await page.evaluate(() => {
