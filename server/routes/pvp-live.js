@@ -50,6 +50,24 @@ function dbRun(sql, params = []) {
     });
 }
 
+function dbGet(sql, params = []) {
+    return new Promise((resolve, reject) => {
+        db.get(sql, params, (err, row) => {
+            if (err) reject(err);
+            else resolve(row || null);
+        });
+    });
+}
+
+function dbAll(sql, params = []) {
+    return new Promise((resolve, reject) => {
+        db.all(sql, params, (err, rows) => {
+            if (err) reject(err);
+            else resolve(Array.isArray(rows) ? rows : []);
+        });
+    });
+}
+
 async function appendPvpLiveOpsEvent(event) {
     if (typeof opsEventRecorder !== 'function') return null;
     try {
@@ -238,6 +256,123 @@ function makeDisputeReceipt({ reportId, reason, message, matchAccess }) {
         nextStepLine: '异常反馈已提交；复核不会立即改写本局结算，若确认异常会按公告处理。',
         boundary: '提交举报、拉黑或静音不能逃避失败结算，也不会即时改变正式积分、奖励、匹配评分或隐藏信息边界。'
     };
+}
+
+function getLiveOpsToken() {
+    return String(process.env.DEFIER_LIVE_OPS_TOKEN || '').trim();
+}
+
+function isSameSecret(provided, configured) {
+    const providedBuffer = Buffer.from(String(provided || ''));
+    const configuredBuffer = Buffer.from(String(configured || ''));
+    if (providedBuffer.length !== configuredBuffer.length) return false;
+    return crypto.timingSafeEqual(providedBuffer, configuredBuffer);
+}
+
+function verifyLiveOpsToken(req, res) {
+    const configured = getLiveOpsToken();
+    if (configured.length < 32) {
+        res.status(403).json({
+            success: false,
+            reason: 'live_ops_disabled',
+            message: '实时论道运营接口未启用'
+        });
+        return false;
+    }
+    const provided = String(req.get('x-defier-live-ops-token') || '').trim();
+    if (!provided || !isSameSecret(provided, configured)) {
+        res.status(403).json({
+            success: false,
+            reason: 'live_ops_forbidden',
+            message: '实时论道运营凭证无效'
+        });
+        return false;
+    }
+    return true;
+}
+
+function sanitizeDisputeStatus(value) {
+    const status = String(value || '').trim().toLowerCase();
+    return ['reported', 'reviewing', 'resolved', 'rejected'].includes(status) ? status : '';
+}
+
+function sanitizeDisputeResolution(value) {
+    return String(value || '')
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9_-]/g, '_')
+        .slice(0, 64);
+}
+
+function sanitizeReviewNote(value) {
+    return String(value || '').trim().slice(0, 240);
+}
+
+function sanitizeLiveOpsActor(req) {
+    const headerActor = req && typeof req.get === 'function' ? req.get('x-defier-live-ops-actor') : '';
+    const scopedActor = String(headerActor || 'live-ops')
+        .trim()
+        .replace(/[^a-zA-Z0-9:_-]/g, '_')
+        .slice(0, 80) || 'live-ops';
+    return `live-ops-token:${scopedActor}`.slice(0, 96);
+}
+
+function parseJson(raw, fallback = null) {
+    if (raw && typeof raw === 'object') return raw;
+    if (typeof raw !== 'string' || !raw.trim()) return fallback;
+    try {
+        return JSON.parse(raw);
+    } catch (error) {
+        return fallback;
+    }
+}
+
+function makeDisputeStatusReceipt(row, { includeEvidence = false } = {}) {
+    const evidence = parseJson(row && row.evidence_json, {});
+    const riskTags = Array.isArray(evidence && evidence.riskTags)
+        ? evidence.riskTags.map(tag => String(tag || '').trim()).filter(Boolean).slice(0, 12)
+        : [];
+    const status = sanitizeDisputeStatus(row && row.status) || 'reported';
+    const receipt = {
+        reportVersion: 'pvp-live-dispute-status-v1',
+        reportId: String(row && row.report_id || ''),
+        matchId: String(row && row.match_id || ''),
+        reporterSeat: row && row.reporter_seat === 'B' ? 'B' : 'A',
+        reason: sanitizeDisputeReason(row && row.reason),
+        status,
+        message: String(row && row.message || '').slice(0, 240),
+        resolution: sanitizeDisputeResolution(row && row.resolution),
+        reviewNote: sanitizeReviewNote(row && row.review_note),
+        riskTags,
+        eventCount: Math.max(0, Math.floor(Number(evidence && evidence.eventCount) || 0)),
+        rankedImpact: 'none',
+        rewardImpact: 'none',
+        usesHiddenInformation: false,
+        createdAt: Math.max(0, Math.floor(Number(row && row.created_at) || 0)),
+        updatedAt: Math.max(0, Math.floor(Number(row && row.updated_at) || 0)),
+        resolvedAt: Math.max(0, Math.floor(Number(row && row.resolved_at) || 0)),
+        boundary: '争议处理只改变反馈工单状态，不直接改写本局胜负、积分、奖励、手牌或牌库。'
+    };
+    if (includeEvidence) {
+        receipt.evidencePackage = evidence && typeof evidence === 'object' ? evidence : {};
+    }
+    return receipt;
+}
+
+function getDisputeReportLimit(value) {
+    const limit = Math.floor(Number(value));
+    if (!Number.isFinite(limit) || limit <= 0) return 20;
+    return Math.max(1, Math.min(50, limit));
+}
+
+function isValidDisputeTransition(previousStatus, nextStatus) {
+    const allowed = {
+        reported: ['reviewing', 'rejected'],
+        reviewing: ['resolved', 'rejected'],
+        resolved: [],
+        rejected: []
+    };
+    return (allowed[previousStatus] || []).includes(nextStatus);
 }
 
 function getDisplayName(req) {
@@ -478,6 +613,242 @@ router.get('/matches/current', authenticate, asyncHandler(async (req, res) => {
 
 router.get('/season', authenticate, asyncHandler(async (req, res) => {
     res.json(await buildLivePvpSeasonStatus(db, req.user.id));
+}));
+
+router.get('/reports/mine', authenticate, asyncHandler(async (req, res) => {
+    const rawStatus = String(req.query && req.query.status || '').trim();
+    const status = sanitizeDisputeStatus(rawStatus);
+    if (rawStatus && !status) {
+        return res.status(400).json({
+            success: false,
+            reason: 'invalid_dispute_status',
+            message: '争议状态必须是 reported、reviewing、resolved 或 rejected'
+        });
+    }
+    const limit = getDisputeReportLimit(req.query && req.query.limit);
+    const cursor = Math.max(0, Math.floor(Number(req.query && req.query.cursor) || 0));
+    const where = ['reporter_user_id = ?'];
+    const params = [req.user.id];
+    if (status) {
+        where.push('status = ?');
+        params.push(status);
+    }
+    if (cursor > 0) {
+        where.push('updated_at < ?');
+        params.push(cursor);
+    }
+    params.push(limit + 1);
+    const rows = await dbAll(
+        `SELECT *
+         FROM pvp_live_dispute_reports
+         WHERE ${where.join(' AND ')}
+         ORDER BY updated_at DESC, created_at DESC, report_id DESC
+         LIMIT ?`,
+        params
+    );
+    const reports = rows.slice(0, limit);
+    res.json({
+        success: true,
+        reportVersion: 'pvp-live-dispute-report-list-v1',
+        reports: reports.map(row => makeDisputeStatusReceipt(row)),
+        nextCursor: rows.length > limit && reports.length
+            ? Math.max(0, Math.floor(Number(reports[reports.length - 1].updated_at) || 0))
+            : 0
+    });
+}));
+
+router.get('/reports/:reportId', authenticate, asyncHandler(async (req, res) => {
+    const reportId = String(req.params.reportId || '').trim();
+    const row = reportId ? await dbGet(
+        `SELECT *
+         FROM pvp_live_dispute_reports
+         WHERE report_id = ? AND reporter_user_id = ?
+         LIMIT 1`,
+        [reportId, req.user.id]
+    ) : null;
+    if (!row) {
+        return res.status(404).json({
+            success: false,
+            reason: 'dispute_report_not_found',
+            message: '争议反馈不存在'
+        });
+    }
+    res.json({
+        success: true,
+        report: makeDisputeStatusReceipt(row)
+    });
+}));
+
+router.get('/ops/dispute-reports', asyncHandler(async (req, res) => {
+    if (!verifyLiveOpsToken(req, res)) return;
+    const rawStatus = String(req.query && req.query.status || '').trim();
+    const status = sanitizeDisputeStatus(rawStatus);
+    if (rawStatus && !status) {
+        return res.status(400).json({
+            success: false,
+            reason: 'invalid_dispute_status',
+            message: '争议状态必须是 reported、reviewing、resolved 或 rejected'
+        });
+    }
+    const limit = getDisputeReportLimit(req.query && req.query.limit);
+    const cursor = Math.max(0, Math.floor(Number(req.query && req.query.cursor) || 0));
+    const where = [];
+    const params = [];
+    if (status) {
+        where.push('status = ?');
+        params.push(status);
+    }
+    if (cursor > 0) {
+        where.push('updated_at < ?');
+        params.push(cursor);
+    }
+    params.push(limit + 1);
+    const rows = await dbAll(
+        `SELECT *
+         FROM pvp_live_dispute_reports
+         ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
+         ORDER BY updated_at DESC, created_at DESC, report_id DESC
+         LIMIT ?`,
+        params
+    );
+    const reports = rows.slice(0, limit);
+    res.json({
+        success: true,
+        reportVersion: 'pvp-live-dispute-ops-list-v1',
+        reports: reports.map(row => makeDisputeStatusReceipt(row, { includeEvidence: true })),
+        nextCursor: rows.length > limit && reports.length
+            ? Math.max(0, Math.floor(Number(reports[reports.length - 1].updated_at) || 0))
+            : 0
+    });
+}));
+
+router.post('/ops/dispute-reports/:reportId/status', asyncHandler(async (req, res) => {
+    if (!verifyLiveOpsToken(req, res)) return;
+    const reportId = String(req.params.reportId || '').trim();
+    const nextStatus = sanitizeDisputeStatus(req.body && req.body.status);
+    if (!reportId || !nextStatus) {
+        return res.status(400).json({
+            success: false,
+            reason: 'invalid_dispute_status',
+            message: '争议状态必须是 reported、reviewing、resolved 或 rejected'
+        });
+    }
+    const existing = await dbGet(
+        `SELECT *
+         FROM pvp_live_dispute_reports
+         WHERE report_id = ?
+         LIMIT 1`,
+        [reportId]
+    );
+    if (!existing) {
+        return res.status(404).json({
+            success: false,
+            reason: 'dispute_report_not_found',
+            message: '争议反馈不存在'
+        });
+    }
+    const previousStatus = sanitizeDisputeStatus(existing.status) || 'reported';
+    if (previousStatus === nextStatus && previousStatus !== 'reported') {
+        return res.json({
+            success: true,
+            idempotent: true,
+            report: makeDisputeStatusReceipt(existing, { includeEvidence: true })
+        });
+    }
+    if (!isValidDisputeTransition(previousStatus, nextStatus)) {
+        return res.status(409).json({
+            success: false,
+            reason: 'invalid_dispute_status_transition',
+            message: '争议反馈状态只能按 reported -> reviewing/rejected -> resolved/rejected 流转'
+        });
+    }
+    const now = Date.now();
+    const terminal = nextStatus === 'resolved' || nextStatus === 'rejected';
+    const resolution = sanitizeDisputeResolution(req.body && req.body.resolution);
+    const reviewNote = sanitizeReviewNote(req.body && req.body.reviewNote);
+    const reviewerUserId = sanitizeLiveOpsActor(req);
+    const updateResult = await dbRun(
+        `UPDATE pvp_live_dispute_reports
+         SET status = ?,
+             resolution = ?,
+             reviewer_user_id = ?,
+             review_note = ?,
+             resolved_at = ?,
+             updated_at = ?
+         WHERE report_id = ? AND status = ?`,
+        [
+            nextStatus,
+            terminal ? resolution || nextStatus : resolution,
+            reviewerUserId,
+            reviewNote,
+            terminal ? now : 0,
+            now,
+            reportId,
+            previousStatus
+        ]
+    );
+    if (!updateResult || updateResult.changes !== 1) {
+        const latest = await dbGet(
+            `SELECT *
+             FROM pvp_live_dispute_reports
+             WHERE report_id = ?
+             LIMIT 1`,
+            [reportId]
+        );
+        if (!latest) {
+            return res.status(404).json({
+                success: false,
+                reason: 'dispute_report_not_found',
+                message: '争议反馈不存在'
+            });
+        }
+        const latestStatus = sanitizeDisputeStatus(latest.status) || 'reported';
+        if (latestStatus === nextStatus && latestStatus !== 'reported') {
+            return res.json({
+                success: true,
+                idempotent: true,
+                report: makeDisputeStatusReceipt(latest, { includeEvidence: true })
+            });
+        }
+        return res.status(409).json({
+            success: false,
+            reason: 'dispute_status_conflict',
+            currentStatus: latestStatus,
+            message: '争议反馈状态已被其他运营操作更新，请刷新后重试'
+        });
+    }
+    const updated = await dbGet(
+        `SELECT *
+         FROM pvp_live_dispute_reports
+         WHERE report_id = ?
+         LIMIT 1`,
+        [reportId]
+    );
+    await appendPvpLiveOpsEvent({
+        eventType: 'dispute_status_changed',
+        subjectUserId: updated && updated.reporter_user_id,
+        matchId: updated && updated.match_id,
+        severity: terminal ? 'info' : 'review',
+        reason: nextStatus,
+        source: 'live_ops_review',
+        evidence: {
+            reportVersion: 'pvp-live-dispute-status-change-v1',
+            reportId,
+            previousStatus,
+            nextStatus,
+            resolution: terminal ? resolution || nextStatus : resolution,
+            reviewerUserId,
+            reviewNoteProvided: !!reviewNote,
+            rankedImpact: 'none',
+            rewardImpact: 'none',
+            usesHiddenInformation: false
+        },
+        createdAt: now
+    });
+    res.json({
+        success: true,
+        report: makeDisputeStatusReceipt(updated, { includeEvidence: true })
+    });
 }));
 
 router.get('/matches/:matchId', authenticate, asyncHandler(async (req, res) => {

@@ -18,8 +18,8 @@ function close(server) {
     return new Promise(resolve => server.close(resolve));
 }
 
-async function request(baseUrl, path, { method = 'GET', token, body } = {}) {
-    const headers = { 'Content-Type': 'application/json' };
+async function request(baseUrl, path, { method = 'GET', token, body, headers: extraHeaders = {} } = {}) {
+    const headers = { 'Content-Type': 'application/json', ...extraHeaders };
     if (token) headers.Authorization = `Bearer ${token}`;
     const response = await fetch(`${baseUrl}${path}`, {
         method,
@@ -2680,6 +2680,159 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
         assert.equal(persistedDisputeReport?.status, 'reported', 'persisted dispute report should stay in reported status');
         assert.equal(persistedDisputeReport?.reason, 'fairness_review', 'persisted dispute report should store the player reason');
         assert.ok(JSON.parse(persistedDisputeReport?.evidence_json || '{}').riskTags.includes('fairness_review_requested'), 'persisted dispute evidence should keep risk tags');
+        const disputeReportList = await request(baseUrl, '/api/pvp/live/reports/mine?status=reported&limit=5', {
+            token: tokenA
+        });
+        assert.equal(disputeReportList.status, 200, 'mine dispute report list should return the reporter reports');
+        assert.equal(disputeReportList.payload.reportVersion, 'pvp-live-dispute-report-list-v1', 'mine dispute report list should expose a stable list contract');
+        assert.equal(disputeReportList.payload.reports?.[0]?.reportId, disputeReport.payload.report.reportId, 'mine dispute report list should include the created report');
+        assert.equal(disputeReportList.payload.reports?.[0]?.status, 'reported', 'mine dispute report list should expose the current review status');
+        assert.equal(disputeReportList.payload.reports?.[0]?.rankedImpact, 'none', 'dispute report status should not imply ranked mutation');
+        assert.equal(disputeReportList.payload.reports?.[0]?.usesHiddenInformation, false, 'dispute report status should not use hidden information');
+        assert.doesNotMatch(JSON.stringify(disputeReportList.payload), /hand|deck|cardId|instanceId|loadoutSnapshot|randomSeed/i, 'mine dispute report list must not leak hidden cards, decks, loadouts, or seeds');
+        const disputeReportDetail = await request(baseUrl, `/api/pvp/live/reports/${disputeReport.payload.report.reportId}`, {
+            token: tokenA
+        });
+        assert.equal(disputeReportDetail.status, 200, 'reporter should fetch their own dispute report detail');
+        assert.equal(disputeReportDetail.payload.report?.reportId, disputeReport.payload.report.reportId, 'report detail should return the requested report');
+        assert.equal(disputeReportDetail.payload.report?.rankedImpact, 'none', 'report detail should not imply ranked mutation');
+        assert.doesNotMatch(JSON.stringify(disputeReportDetail.payload), /hand|deck|cardId|instanceId|loadoutSnapshot|randomSeed/i, 'report detail must not leak hidden cards, decks, loadouts, or seeds');
+        const opponentReportDetail = await request(baseUrl, `/api/pvp/live/reports/${disputeReport.payload.report.reportId}`, {
+            token: tokenB
+        });
+        assert.equal(opponentReportDetail.status, 404, 'opponent should not fetch another reporter dispute detail');
+        const opponentReportList = await request(baseUrl, '/api/pvp/live/reports/mine?status=reported&limit=5', {
+            token: tokenB
+        });
+        assert.equal(opponentReportList.status, 200, 'opponent should be allowed to query their own report list');
+        assert.equal(opponentReportList.payload.reports?.some(report => report.reportId === disputeReport.payload.report.reportId), false, 'mine dispute report list should not expose another reporter report');
+        const previousLiveOpsToken = process.env.DEFIER_LIVE_OPS_TOKEN;
+        try {
+            delete process.env.DEFIER_LIVE_OPS_TOKEN;
+            const disabledOpsReview = await request(baseUrl, `/api/pvp/live/ops/dispute-reports/${disputeReport.payload.report.reportId}/status`, {
+                method: 'POST',
+                body: { status: 'reviewing' }
+            });
+            assert.equal(disabledOpsReview.status, 403, 'live ops dispute status endpoint should be disabled without a configured token');
+            assert.equal(disabledOpsReview.payload.reason, 'live_ops_disabled', 'disabled live ops endpoint should explain missing server token');
+            const liveOpsToken = 'test-live-ops-token-32-characters';
+            process.env.DEFIER_LIVE_OPS_TOKEN = liveOpsToken;
+            const opsReportList = await request(baseUrl, '/api/pvp/live/ops/dispute-reports?status=reported&limit=5', {
+                headers: { 'x-defier-live-ops-token': liveOpsToken }
+            });
+            assert.equal(opsReportList.status, 200, 'live ops dispute list should require and accept the live ops token');
+            assert.equal(opsReportList.payload.reportVersion, 'pvp-live-dispute-ops-list-v1', 'live ops dispute list should expose a stable ops list contract');
+            assert.equal(opsReportList.payload.reports?.[0]?.reportId, disputeReport.payload.report.reportId, 'live ops dispute list should include the reported dispute');
+            assert.ok(opsReportList.payload.reports?.[0]?.evidencePackage?.riskTags?.includes('fairness_review_requested'), 'live ops dispute list should include audit-safe evidence');
+            assert.doesNotMatch(JSON.stringify(opsReportList.payload), /hand|deck|cardId|instanceId|loadoutSnapshot|randomSeed/i, 'live ops dispute list must not leak hidden cards, decks, loadouts, or seeds');
+            const bearerOnlyOpsReview = await request(baseUrl, `/api/pvp/live/ops/dispute-reports/${disputeReport.payload.report.reportId}/status`, {
+                method: 'POST',
+                token: tokenA,
+                body: { status: 'reviewing' }
+            });
+            assert.equal(bearerOnlyOpsReview.status, 403, 'live ops dispute status endpoint should require the live ops token even with bearer auth');
+            assert.equal(bearerOnlyOpsReview.payload.reason, 'live_ops_forbidden', 'bearer-only live ops endpoint should reject missing ops credential');
+            const forbiddenOpsReview = await request(baseUrl, `/api/pvp/live/ops/dispute-reports/${disputeReport.payload.report.reportId}/status`, {
+                method: 'POST',
+                headers: { 'x-defier-live-ops-token': 'wrong-token' },
+                body: { status: 'reviewing' }
+            });
+            assert.equal(forbiddenOpsReview.status, 403, 'live ops dispute status endpoint should reject invalid token');
+            assert.equal(forbiddenOpsReview.payload.reason, 'live_ops_forbidden', 'forbidden live ops endpoint should explain invalid credential');
+            const invalidOpsReview = await request(baseUrl, `/api/pvp/live/ops/dispute-reports/${disputeReport.payload.report.reportId}/status`, {
+                method: 'POST',
+                headers: { 'x-defier-live-ops-token': liveOpsToken },
+                body: { status: 'reported' }
+            });
+            assert.equal(invalidOpsReview.status, 409, 'live ops dispute status endpoint should reject no-op or backwards status transitions');
+            assert.equal(invalidOpsReview.payload.reason, 'invalid_dispute_status_transition', 'invalid dispute transition should explain bounded lifecycle');
+            const reviewingOpsReview = await request(baseUrl, `/api/pvp/live/ops/dispute-reports/${disputeReport.payload.report.reportId}/status`, {
+                method: 'POST',
+                headers: {
+                    'x-defier-live-ops-token': liveOpsToken,
+                    'x-defier-live-ops-actor': 'live-ops-reviewer'
+                },
+                body: {
+                    status: 'reviewing',
+                    reviewNote: '已进入公开事件复核。'
+                }
+            });
+            assert.equal(reviewingOpsReview.status, 200, 'live ops dispute status update should move the report into reviewing');
+            assert.equal(reviewingOpsReview.payload.report?.status, 'reviewing', 'live ops reviewing update should expose reviewing status');
+            const resolvedOpsReview = await request(baseUrl, `/api/pvp/live/ops/dispute-reports/${disputeReport.payload.report.reportId}/status`, {
+                method: 'POST',
+                headers: {
+                    'x-defier-live-ops-token': liveOpsToken,
+                    'x-defier-live-ops-actor': 'live-ops-reviewer'
+                },
+                body: {
+                    status: 'resolved',
+                    resolution: 'fairness_confirmed',
+                    reviewNote: '公开事件回放与第 14 回合判分一致。'
+                }
+            });
+            assert.equal(resolvedOpsReview.status, 200, 'live ops dispute status update should resolve the report');
+            assert.equal(resolvedOpsReview.payload.report?.reportVersion, 'pvp-live-dispute-status-v1', 'live ops status update should return a stable status receipt');
+            assert.equal(resolvedOpsReview.payload.report?.status, 'resolved', 'live ops status update should expose resolved status');
+            assert.equal(resolvedOpsReview.payload.report?.resolution, 'fairness_confirmed', 'live ops status update should persist bounded resolution');
+            assert.equal(resolvedOpsReview.payload.report?.rankedImpact, 'none', 'live ops dispute resolution should not directly mutate ranked state');
+            assert.equal(resolvedOpsReview.payload.report?.rewardImpact, 'none', 'live ops dispute resolution should not directly mutate rewards');
+            assert.equal(resolvedOpsReview.payload.report?.usesHiddenInformation, false, 'live ops dispute status receipt should not use hidden information');
+            assert.ok(resolvedOpsReview.payload.report?.evidencePackage?.riskTags?.includes('fairness_review_requested'), 'live ops status receipt should preserve audit-safe risk tags');
+            assert.doesNotMatch(JSON.stringify(resolvedOpsReview.payload), /hand|deck|cardId|instanceId|loadoutSnapshot|randomSeed/i, 'live ops dispute status receipt must not leak hidden cards, decks, loadouts, or seeds');
+            const duplicateResolvedOpsReview = await request(baseUrl, `/api/pvp/live/ops/dispute-reports/${disputeReport.payload.report.reportId}/status`, {
+                method: 'POST',
+                headers: {
+                    'x-defier-live-ops-token': liveOpsToken,
+                    'x-defier-live-ops-actor': 'live-ops-reviewer'
+                },
+                body: {
+                    status: 'resolved',
+                    resolution: 'fairness_confirmed',
+                    reviewNote: '公开事件回放与第 14 回合判分一致。'
+                }
+            });
+            assert.equal(duplicateResolvedOpsReview.status, 200, 'live ops duplicate terminal status update should be idempotent');
+            assert.equal(duplicateResolvedOpsReview.payload.report?.status, 'resolved', 'duplicate terminal update should return the current resolved report');
+            assert.equal(duplicateResolvedOpsReview.payload.idempotent, true, 'duplicate terminal update should be marked idempotent');
+            const resolvedDisputeReport = await dbGet(
+                `SELECT status, resolution, reviewer_user_id, review_note, resolved_at
+                 FROM pvp_live_dispute_reports
+                 WHERE report_id = ?
+                 LIMIT 1`,
+                [disputeReport.payload.report.reportId]
+            );
+            assert.equal(resolvedDisputeReport?.status, 'resolved', 'resolved dispute status should persist on the report row');
+            assert.equal(resolvedDisputeReport?.resolution, 'fairness_confirmed', 'resolved dispute should persist resolution');
+            assert.equal(resolvedDisputeReport?.reviewer_user_id, 'live-ops-token:live-ops-reviewer', 'resolved dispute should persist token-scoped reviewer marker from ops header');
+            assert.ok(Number(resolvedDisputeReport?.resolved_at) > 0, 'resolved dispute should persist a resolved timestamp');
+            assert.match(resolvedDisputeReport?.review_note || '', /公开事件回放/, 'resolved dispute should persist review note');
+            const statusChangeOpsEvent = await dbGet(
+                `SELECT event_type, subject_user_id, match_id, severity, reason, evidence_json
+                 FROM pvp_live_ops_events
+                 WHERE match_id = ? AND subject_user_id = ? AND event_type = 'dispute_status_changed'
+                 ORDER BY created_at DESC
+                 LIMIT 1`,
+                [joinRound14ScoreB.payload.matchId, 'live-user-a']
+            );
+            const statusChangeEvidence = JSON.parse(statusChangeOpsEvent?.evidence_json || '{}');
+            assert.equal(statusChangeOpsEvent?.severity, 'info', 'dispute status change should append ops ledger event');
+            assert.equal(statusChangeOpsEvent?.reason, 'resolved', 'dispute status change ops event should use the new status as reason');
+            assert.equal(statusChangeEvidence.previousStatus, 'reviewing', 'dispute status change ops event should persist previous status');
+            assert.equal(statusChangeEvidence.nextStatus, 'resolved', 'dispute status change ops event should persist next status');
+            assert.equal(statusChangeEvidence.rankedImpact, 'none', 'dispute status change ops event should document no ranked impact');
+            const resolvedDisputeReportList = await request(baseUrl, '/api/pvp/live/reports/mine?status=resolved&limit=5', {
+                token: tokenA
+            });
+            assert.equal(resolvedDisputeReportList.payload.reports?.[0]?.status, 'resolved', 'reporter should see the resolved dispute status');
+            assert.equal(resolvedDisputeReportList.payload.reports?.[0]?.resolution, 'fairness_confirmed', 'reporter should see bounded resolution');
+        } finally {
+            if (previousLiveOpsToken === undefined) {
+                delete process.env.DEFIER_LIVE_OPS_TOKEN;
+            } else {
+                process.env.DEFIER_LIVE_OPS_TOKEN = previousLiveOpsToken;
+            }
+        }
         const disputeOpsEvent = await dbGet(
             `SELECT event_type, subject_user_id, match_id, severity, reason, evidence_json
              FROM pvp_live_ops_events

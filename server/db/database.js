@@ -379,18 +379,40 @@ const initDb = () => {
                 reason TEXT NOT NULL,
                 status TEXT NOT NULL DEFAULT 'reported',
                 message TEXT NOT NULL DEFAULT '',
+                resolution TEXT NOT NULL DEFAULT '',
+                reviewer_user_id TEXT NOT NULL DEFAULT '',
+                review_note TEXT NOT NULL DEFAULT '',
                 evidence_json TEXT NOT NULL,
                 created_at INTEGER NOT NULL,
+                resolved_at INTEGER NOT NULL DEFAULT 0,
                 updated_at INTEGER NOT NULL,
                 FOREIGN KEY(match_id) REFERENCES pvp_live_matches(match_id),
                 FOREIGN KEY(reporter_user_id) REFERENCES users(id)
             )`, (err) => {
                 if (err) fail(err);
             });
+            [
+                `ALTER TABLE pvp_live_dispute_reports ADD COLUMN resolution TEXT NOT NULL DEFAULT ''`,
+                `ALTER TABLE pvp_live_dispute_reports ADD COLUMN reviewer_user_id TEXT NOT NULL DEFAULT ''`,
+                `ALTER TABLE pvp_live_dispute_reports ADD COLUMN review_note TEXT NOT NULL DEFAULT ''`,
+                `ALTER TABLE pvp_live_dispute_reports ADD COLUMN resolved_at INTEGER NOT NULL DEFAULT 0`
+            ].forEach((statement) => {
+                db.run(statement, (err) => {
+                    if (err && !/duplicate column/i.test(String(err.message || ''))) {
+                        fail(err);
+                    }
+                });
+            });
             db.run(`CREATE INDEX IF NOT EXISTS idx_pvp_live_dispute_reports_match ON pvp_live_dispute_reports(match_id, created_at)`, (err) => {
                 if (err) fail(err);
             });
             db.run(`CREATE INDEX IF NOT EXISTS idx_pvp_live_dispute_reports_user ON pvp_live_dispute_reports(reporter_user_id, created_at)`, (err) => {
+                if (err) fail(err);
+            });
+            db.run(`CREATE INDEX IF NOT EXISTS idx_pvp_live_dispute_reports_status ON pvp_live_dispute_reports(status, updated_at)`, (err) => {
+                if (err) fail(err);
+            });
+            db.run(`CREATE INDEX IF NOT EXISTS idx_pvp_live_dispute_reports_user_status ON pvp_live_dispute_reports(reporter_user_id, status, updated_at)`, (err) => {
                 if (err) fail(err);
             });
             db.run(`CREATE TABLE IF NOT EXISTS pvp_live_ops_events (
