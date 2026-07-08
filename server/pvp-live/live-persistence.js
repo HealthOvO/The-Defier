@@ -234,7 +234,9 @@ async function appendLiveWsSignalRow({
     const safeReason = String(reason || 'match_saved').trim().slice(0, 64) || 'match_saved';
     const safeSourceInstanceId = String(sourceInstanceId || '').trim().slice(0, 96);
     const safeCreatedAt = Math.max(0, Math.floor(Number(createdAt) || Date.now()));
-    const shouldDedupeSignal = safeReason === 'sync_required' || safeReason === 'duplicate_action';
+    const shouldDedupeSignal = safeSignalType === 'fairness_telemetry'
+        || safeReason === 'sync_required'
+        || safeReason === 'duplicate_action';
     if (shouldDedupeSignal) {
         const result = await dbRun(
             `INSERT INTO pvp_live_state_signals

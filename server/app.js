@@ -1,11 +1,13 @@
 const express = require('express');
 const cors = require('cors');
-const { initDb } = require('./db/database');
+const { db, getSchemaStatus, initDb } = require('./db/database');
 const { validateAuthConfig } = require('./middleware/auth');
 const { validateIntegrityConfig } = require('./utils/hmac');
 const { makeSqliteLivePvpPersistence } = require('./pvp-live/live-persistence');
 const { makeSqliteLivePvpSettlement } = require('./pvp-live/live-settlement');
 const { attachLivePvpWebSocket } = require('./pvp-live/live-ws');
+const { attachRequestContext } = require('./services/platform/request-context');
+const { makeHealthVersionSummary, makeVersionPayload } = require('./services/platform/runtime-info');
 
 const authRoutes = require('./routes/auth');
 const savesRoutes = require('./routes/saves');
@@ -19,6 +21,7 @@ const PORT = process.env.PORT || 9000;
 // Middleware
 app.use(cors()); // 允许跨域，方便前端直接调用
 app.use(express.json()); // 解析 JSON body
+app.use(attachRequestContext());
 
 // Routes
 app.use('/api/auth', authRoutes);
@@ -29,13 +32,56 @@ app.use('/api/ghosts', ghostsRoutes);
 app.use('/api/pvp/live', pvpLiveRoutes);
 app.use('/api/pvp', pvpRoutes);
 
-// Health check
-app.get('/health', (req, res) => {
-    res.json({ status: 'ok', message: 'The Defier Backend is running' });
-});
-app.get('/api/health', (req, res) => {
-    res.json({ status: 'ok', message: 'The Defier Backend is running' });
-});
+const getHealthPayload = async () => {
+    const schemaStatus = await getSchemaStatus();
+    return {
+        status: 'ok',
+        message: 'The Defier Backend is running',
+        checks: {
+            database: db.open ? 'ok' : 'unknown'
+        },
+        schema: {
+            version: schemaStatus.version,
+            currentMigrationId: schemaStatus.currentMigrationId
+        },
+        version: makeHealthVersionSummary(),
+        uptimeMs: Math.floor(process.uptime() * 1000)
+    };
+};
+
+const sendHealth = async (req, res) => {
+    try {
+        res.json(await getHealthPayload());
+    } catch (error) {
+        res.status(503).json({
+            status: 'error',
+            message: 'The Defier Backend health check failed',
+            checks: {
+                database: 'error'
+            },
+            requestId: req.requestId
+        });
+    }
+};
+
+// Health and runtime version checks
+app.get('/health', sendHealth);
+app.get('/api/health', sendHealth);
+const sendVersion = async (req, res) => {
+    try {
+        res.json(makeVersionPayload(await getSchemaStatus()));
+    } catch (error) {
+        res.status(503).json({
+            status: 'error',
+            service: 'the-defier-backend',
+            message: 'runtime version unavailable',
+            requestId: req.requestId
+        });
+    }
+};
+
+app.get('/version', sendVersion);
+app.get('/api/version', sendVersion);
 
 // Start Server
 const startServer = async () => {

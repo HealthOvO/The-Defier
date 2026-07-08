@@ -409,6 +409,55 @@ function activateStoreMatch(match, { stateVersion = 1, now = Date.now() } = {}) 
   return match;
 }
 
+async function assertFairnessTelemetrySignalsUseDurableNonSyncChannel() {
+  const signals = [];
+  const store = createLivePvpStore({
+    persistence: {
+      async appendLiveWsSignal(signal) {
+        signals.push(signal);
+        return { signalId: signals.length, ...signal };
+      },
+    },
+  });
+  const match = activateStoreMatch(makeStoreStaleMatch({
+    matchId: 'pvplm-telemetry-signal',
+    stateVersion: 7,
+    now: 1700000000000,
+  }), { stateVersion: 7, now: 1700000000000 });
+  match.state.matchQuality = {
+    reportVersion: 'pvp-live-match-quality-v1',
+    tag: 'wide_but_accepted',
+    expansionStage: 'accepted_200_399',
+    safeguards: ['explicit_wide_match_consent', 'no_exact_rating_exposure'],
+  };
+
+  await store.recordMatchQualityTelemetry(match, { liveWsSourceInstanceId: 'telemetry-test' });
+  await store.recordFairnessTelemetryFromStateView(match, {
+    stateVersion: 7,
+    connectionTempoReport: {
+      reportVersion: 'pvp-live-connection-tempo-v1',
+      tempoState: 'opponent_action_grace',
+    },
+    postMatchReview: {
+      fairnessReceipt: {
+        receiptState: 'watch',
+      },
+    },
+  }, { liveWsSourceInstanceId: 'telemetry-test' });
+
+  assert.deepEqual(
+    signals.map(signal => signal.reason),
+    ['match_quality_wide_but_accepted', 'connection_opponent_action_grace', 'fairness_receipt_watch'],
+    'fairness telemetry should append match quality, connection, and receipt reasons',
+  );
+  for (const signal of signals) {
+    assert.equal(signal.matchId, match.matchId, 'fairness telemetry should keep match id');
+    assert.equal(signal.signalType, 'fairness_telemetry', 'fairness telemetry should not masquerade as state_sync');
+    assert.equal(signal.stateVersion, 7, 'fairness telemetry should preserve state version without advancing combat state');
+    assert.equal(signal.sourceInstanceId, 'telemetry-test', 'fairness telemetry should keep source instance id');
+  }
+}
+
 async function readyBoth({ matchId, tokenA, tokenB, stateVersionA, prefix }) {
   const readyA = await submitIntent(matchId, tokenA, {
     intentId: `${prefix}-ready-a`,
@@ -431,6 +480,7 @@ async function readyBoth({ matchId, tokenA, tokenB, stateVersionA, prefix }) {
 (async () => {
   removeDbFiles();
   await assertLegacyQueueTicketMigrationAddsRankedGames();
+  await assertFairnessTelemetrySignalsUseDurableNonSyncChannel();
   // The second server below reuses the same DB path to prove restart recovery
   // is SQLite-backed, not just in-memory activeMatchByUserId state.
   let skippedEventSaveCount = 0;

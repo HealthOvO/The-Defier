@@ -1,12 +1,18 @@
 const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
 const fs = require('fs');
+const {
+    createSchemaMigrationsTableSql,
+    getSchemaStatus,
+    recordCurrentSchemaMigration
+} = require('../services/platform/schema-status');
 
 const dbPath = process.env.DEFIER_DB_PATH
     ? path.resolve(process.env.DEFIER_DB_PATH)
     : path.resolve(__dirname, 'database.sqlite');
 fs.mkdirSync(path.dirname(dbPath), { recursive: true });
 const db = new sqlite3.Database(dbPath);
+db.configure('busyTimeout', Number(process.env.DEFIER_SQLITE_BUSY_TIMEOUT_MS || 5000));
 
 const initDb = () => {
     return new Promise((resolve, reject) => {
@@ -24,6 +30,11 @@ const initDb = () => {
             }
         };
         db.serialize(() => {
+            db.run('PRAGMA journal_mode = WAL');
+            db.run(createSchemaMigrationsTableSql(), (err) => {
+                if (err) fail(err);
+            });
+
             // Users table
             db.run(`CREATE TABLE IF NOT EXISTS users (
                 id TEXT PRIMARY KEY,
@@ -432,8 +443,14 @@ const initDb = () => {
                 if (err) fail(err);
             });
             db.run(`CREATE INDEX IF NOT EXISTS idx_pvp_live_replay_shares_expires ON pvp_live_replay_shares(status, expires_at)`, (err) => {
-                if (err) fail(err);
-                else done();
+                if (err) {
+                    fail(err);
+                    return;
+                }
+                recordCurrentSchemaMigration(db, (migrationErr) => {
+                    if (migrationErr) fail(migrationErr);
+                    else done();
+                });
             });
         });
     });
@@ -441,5 +458,6 @@ const initDb = () => {
 
 module.exports = {
     db,
+    getSchemaStatus: () => getSchemaStatus(db),
     initDb
 };
