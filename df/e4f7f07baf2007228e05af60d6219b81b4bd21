@@ -1,0 +1,71 @@
+index.html
+  s_bae69f1b7fab46::t_d18e9b76607a05 143
+js/services/backend-client.js
+  s_bae69f1b7fab46::t_92df3e55a414d8 749-773,776-777,781,783-784
+js/services/pvp-live-session.js
+  s_bae69f1b7fab46::t_e1eb3e8c270001 1208-1220
+js/views/SystemView.js
+  s_bae69f1b7fab46::t_a48984639f0644 473
+server/pvp-live/live-persistence.js
+  s_bae69f1b7fab46::t_a75dc152c65343 944-948,1027-1028,1033
+server/pvp-live/live-store.js
+  s_bae69f1b7fab46::t_93359a867a10bc 2099-2128,2134-2136,2139-2142,2147-2154
+server/pvp-live/live-ws.js
+  s_bae69f1b7fab46::t_da33917b748bc0 101-119,123
+tests/browser_guide_modal_audit.mjs
+  s_bae69f1b7fab46::t_d84286bef33e34 141
+tests/run_browser_release_checks.sh
+  s_bae69f1b7fab46::t_65376865940928 123,131-135,177
+tests/sanity_intro_progress_sync_checks.cjs
+  s_bae69f1b7fab46::t_61f40b9cc12432 25,30,105-107
+tests/sanity_pvp_live_client_checks.mjs
+  s_8e215482345eba::t_0435a90cccc7d0 59,73-74,76-101
+tests/sanity_pvp_live_cross_process_ws_fanout_checks.cjs
+  s_bae69f1b7fab46::t_fa3b27f19adc59 157-162,164,331-332,456
+tests/sanity_pvp_live_persistence_checks.cjs
+  s_a3b7f8ccc1ba87::t_2068a8f61d6e54 1876-1890
+tests/sanity_pvp_live_route_checks.cjs
+  s_bae69f1b7fab46::t_d28879cdb81664 1175-1186,1201
+tests/sanity_pvp_live_session_checks.mjs
+  s_bae69f1b7fab46::t_ca429d3455f1ec 786-817
+tests/sanity_pvp_live_ws_checks.cjs
+  s_bae69f1b7fab46::t_3bfa859c9bbf11 105-110,112,338-339,504,600-601,695,800-801,891,896
+tests/sanity_release_gate_coverage_checks.cjs
+  s_bae69f1b7fab46::t_d49a5869642c12 482-492,525,533-557,2143-2144,2505,2903,2905-2908
+tests/summarize_browser_release_reports.cjs
+  s_bae69f1b7fab46::t_19120d0578b1c6 45-56,112,122,170
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.5",
+  "base_commit_sha": "dfe4f7f07baf2007228e05af60d6219b81b4bd21",
+  "prompts": {},
+  "sessions": {
+    "s_8e215482345eba": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f3fef-bb61-7fc1-9313-5d5bab682c87",
+        "model": "unknown"
+      },
+      "human_author": "AI Agent <bot@example.com>"
+    },
+    "s_a3b7f8ccc1ba87": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f3fe5-3f06-7ca3-af3a-36ba623a0526",
+        "model": "unknown"
+      },
+      "human_author": "AI Agent <bot@example.com>"
+    },
+    "s_bae69f1b7fab46": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ed4f6-e7ac-73e0-a29e-119f3eddb407",
+        "model": "unknown"
+      },
+      "human_author": "AI Agent <bot@example.com>"
+    }
+  },
+  "attestation_metadata": {},
+  "remote_transcripts": {}
+}
