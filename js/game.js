@@ -41,6 +41,7 @@ import { MetaProgressionManager } from "./managers/MetaProgressionManager.js";
 import { SeasonBoardManager } from "./managers/SeasonBoardManager.js";
 import { SanctumAgendaManager } from "./managers/SanctumAgendaManager.js";
 import { CampfireView } from "./views/CampfireView.js";
+import { attachRegisteredHubControllers } from "./runtime/hub-registry.js";
 /**
  * The Defier 4.2 - 逆命者
  * 主游戏控制器（修复版）
@@ -145,6 +146,7 @@ export class Game {
     this.inventoryView = new InventoryView(this);
     this.rewardView = new RewardView(this);
     this.eventView = new EventView(this);
+    this.publicReplayShareConfig = this.parsePublicReplayShareConfig();
     this.automationBootConfig = this.parseAutomationBootConfig();
     this.boundGlobalEvents = false;
     this.isAuthBusy = false;
@@ -252,14 +254,21 @@ export class Game {
   }
   attachHubControllers() {
     const runtimeGlobal = typeof window !== 'undefined' ? window : typeof global !== 'undefined' ? global : typeof globalThis !== 'undefined' ? globalThis : null;
+    const attached = typeof attachRegisteredHubControllers === 'function' ? attachRegisteredHubControllers(this) : {};
+    if (attached.collection) this.collectionHub = attached.collection;
+    if (attached.challenge) this.challengeHub = attached.challenge;
+    if (attached.expedition) this.expeditionHub = attached.expedition;
+    this.attachLegacyHubControllers(runtimeGlobal);
+  }
+  attachLegacyHubControllers(runtimeGlobal) {
     if (!runtimeGlobal) return;
-    if (typeof runtimeGlobal.__attachCollectionHubController === 'function') {
+    if (!this.collectionHub && typeof runtimeGlobal.__attachCollectionHubController === 'function') {
       this.collectionHub = runtimeGlobal.__attachCollectionHubController(this);
     }
-    if (typeof runtimeGlobal.__attachChallengeHubController === 'function') {
+    if (!this.challengeHub && typeof runtimeGlobal.__attachChallengeHubController === 'function') {
       this.challengeHub = runtimeGlobal.__attachChallengeHubController(this);
     }
-    if (typeof runtimeGlobal.__attachExpeditionHubController === 'function') {
+    if (!this.expeditionHub && typeof runtimeGlobal.__attachExpeditionHubController === 'function') {
       this.expeditionHub = runtimeGlobal.__attachExpeditionHubController(this);
     }
   }
@@ -344,14 +353,52 @@ export class Game {
     // 这里我们强制让用户选择，解决了刷新后乱入的问题
     this.showScreen('main-menu');
 
+    const publicReplayShareBooted = this.schedulePublicReplayShareBoot();
+
     // 安全检查：如果已登录但没有选中存档位（例如新标签页打开），强制显示存档选择，防止数据错乱
-    if (typeof AuthService !== 'undefined' && AuthService.isLoggedIn() && this.currentSaveSlot === null) {
+    if (!publicReplayShareBooted && typeof AuthService !== 'undefined' && AuthService.isLoggedIn() && this.currentSaveSlot === null) {
       console.log('Logged in but slot unknown. Prompting selection.');
       // 延迟一点以免与主菜单动画冲突
       setTimeout(() => this.openSaveSlotsWithSync(), 800);
     }
-    this.scheduleAutomationBoot();
+    if (!publicReplayShareBooted) this.scheduleAutomationBoot();
     console.log('The Defier 2.1 初始化完成！');
+  }
+  parsePublicReplayShareConfig() {
+    if (typeof window === 'undefined' || !window.location || !window.location.search) return null;
+    let params = null;
+    try {
+      params = new URLSearchParams(window.location.search);
+    } catch (error) {
+      console.warn('Public replay share config parse failed:', error);
+      return null;
+    }
+    const shareToken = String(params.get('pvpReplayShare') || '').trim();
+    if (!/^pvplrs-[a-zA-Z0-9_-]{24,80}$/.test(shareToken)) return null;
+    return {
+      shareToken
+    };
+  }
+  schedulePublicReplayShareBoot() {
+    if (!this.publicReplayShareConfig || !this.publicReplayShareConfig.shareToken) return false;
+    setTimeout(() => this.runPublicReplayShareBootFlow(), 80);
+    return true;
+  }
+  runPublicReplayShareBootFlow() {
+    const config = this.publicReplayShareConfig;
+    if (!config || !config.shareToken) return false;
+    if (typeof document !== 'undefined') {
+      ['auth-modal', 'save-slots-modal', 'generic-confirm-modal', 'save-conflict-modal'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.classList.remove('active');
+      });
+    }
+    this.showScreen('pvp-screen');
+    if (typeof window !== 'undefined' && PVPScene && typeof PVPScene.openLiveReplayShareViewer === 'function') {
+      PVPScene.openLiveReplayShareViewer(config.shareToken);
+      return true;
+    }
+    return false;
   }
   parseAutomationBootConfig() {
     if (typeof window === 'undefined' || !window.location || !window.location.search) return null;
@@ -452,6 +499,8 @@ export class Game {
     };
     const pvpMyRank = typeof PVPService !== 'undefined' && PVPService && PVPService.currentRankData ? PVPService.currentRankData : null;
     const pvpFocus = typeof window !== 'undefined' && typeof PVPScene !== 'undefined' && PVPScene && typeof PVPScene.getRankingFocusSnapshot === 'function' ? PVPScene.getRankingFocusSnapshot() : null;
+    const pvpReplayShareViewer = typeof window !== 'undefined' && typeof PVPScene !== 'undefined' && PVPScene && typeof PVPScene.getLiveReplayShareViewerSnapshot === 'function' ? PVPScene.getLiveReplayShareViewerSnapshot() : null;
+    const pvpLive = !pvpReplayShareViewer && typeof window !== 'undefined' && typeof PVPScene !== 'undefined' && PVPScene && typeof PVPScene.getLiveSnapshot === 'function' ? PVPScene.getLiveSnapshot() : null;
     const pvpDangerProfile = normalizePvpDanger(this.pvpDangerProfile);
     const pvpMatchIntent = this.pvpMatchIntent && typeof this.pvpMatchIntent === 'object' ? {
       targetName: String(this.pvpMatchIntent.targetName || ''),
@@ -495,6 +544,8 @@ export class Game {
     } : null;
     const pvpPayload = mode === 'pvp-screen' || this.mode === 'pvp' || !!pvpFocus || !!this.pvpOpponentRank || !!pvpDangerProfile || !!pvpResultReview ? {
       activeTab: typeof window !== 'undefined' && PVPScene ? PVPScene.activeTab || null : null,
+      live: pvpLive,
+      replayShareViewer: pvpReplayShareViewer,
       myRank: pvpMyRank ? {
         score: Math.max(0, Math.floor(Number(pvpMyRank.score) || 0)),
         realm: Math.max(1, Math.floor(Number(pvpMyRank.realm) || 1)),
@@ -5599,6 +5650,12 @@ export class Game {
     if (!this.pvpResultView) this.pvpResultView = new PVPResultView(this);
     return this.pvpResultView.renderPVPResultReview(review);
   }
+  shouldRecordPVPSeasonVerification(result = null) {
+    if (!result || typeof result !== 'object' || result.rejected) return false;
+    if (result.formalSeasonVerification !== true) return false;
+    const settlementSource = String(result.settlementSource || result.settlementMode || '').trim();
+    return ['live_ranked', 'ranked_live', 'server_live_ranked'].includes(settlementSource);
+  }
   async handlePVPVictory() {
     console.log('PVP Victory!');
     const overlay = document.getElementById('pvp-result-overlay');
@@ -5645,7 +5702,7 @@ export class Game {
     }
     if (result && result.rejected) {
       Utils.showBattleLog('PVP 结算校验未通过，本场积分未变动。');
-    } else if (typeof this.recordSeasonVerificationResult === 'function') {
+    } else if (this.shouldRecordPVPSeasonVerification(result) && typeof this.recordSeasonVerificationResult === 'function') {
       let pvpSeasonMeta = null;
       const weekMeta = typeof this.getHeavenlyMandateWeekMeta === 'function' ? this.getHeavenlyMandateWeekMeta() : null;
       if (typeof PVPService !== 'undefined' && PVPService && typeof PVPService.getCurrentSeasonMeta === 'function') {
@@ -5730,7 +5787,7 @@ export class Game {
     }
     if (result && result.rejected) {
       Utils.showBattleLog('PVP 结算校验未通过，本场积分未变动。');
-    } else if (typeof this.recordSeasonVerificationResult === 'function') {
+    } else if (this.shouldRecordPVPSeasonVerification(result) && typeof this.recordSeasonVerificationResult === 'function') {
       let pvpSeasonMeta = null;
       const weekMeta = typeof this.getHeavenlyMandateWeekMeta === 'function' ? this.getHeavenlyMandateWeekMeta() : null;
       if (typeof PVPService !== 'undefined' && PVPService && typeof PVPService.getCurrentSeasonMeta === 'function') {

@@ -127,6 +127,113 @@ async function waitForChallengeHubReady(page, expectedTab = 'daily') {
   await safeAuditScreenshot(page, path.join(outDir, 'challenge-hub-desktop.png'), 'browser_challenge_audit', { timeout: 9000 });
 
   await page.evaluate(() => {
+    if (!window.game || typeof game.showChallengeHub !== 'function') return;
+    game.ensureChallengeHubBootState?.();
+    game.challengeHubState = {
+      ...(game.challengeHubState || {}),
+      pvpLivePracticeReturn: {
+        reportVersion: 'pvp-live-practice-return-v1',
+        sourceMatchId: 'browser-practice-return-001',
+        sourceRunId: 'pvp_live:browser-practice-return-001',
+        completed: true,
+        result: 'loss',
+        finishReason: 'lethal',
+        recommendedLoadoutId: 'shield',
+        recommendedLoadoutLabel: '守势斗法谱',
+        themeKey: 'shield_counter',
+        themeLabel: '守势反击',
+        trainingAdvice: '先练开局稳血，再回到真人队列。',
+        drillObjective: '验证护体后的反打窗口。',
+        trainingTags: ['真人 PVP', '不计积分'],
+        rankedImpact: 'none',
+        usesHiddenInformation: false,
+        nextActionType: 'pvp_live',
+        actionValue: 'live',
+        ctaLabel: '继续真人排位',
+        summaryLine: '真人 PVP 练习已完成，可带着守势斗法谱回到 live 队列。',
+        updatedAt: Date.now()
+      }
+    };
+    if (typeof game.persistChallengeHubState === 'function') game.persistChallengeHubState();
+    game.showChallengeHub('daily');
+  });
+  await page.waitForTimeout(350);
+  const pvpPracticeReturnCardProbe = await page.evaluate(() => {
+    const payload = typeof window.render_game_to_text === 'function'
+      ? JSON.parse(window.render_game_to_text())
+      : null;
+    const card = document.querySelector('[data-pvp-live-practice-return]');
+    const button = document.querySelector('[data-pvp-live-practice-return-action="true"]');
+    return {
+      currentScreen: window.game?.currentScreen || '',
+      cardText: card?.textContent?.replace(/\s+/g, ' ').trim() || '',
+      buttonText: button?.textContent?.replace(/\s+/g, ' ').trim() || '',
+      payload: payload?.challenge?.pvpLivePracticeReturn || null
+    };
+  });
+  add(
+    'challenge hub browser renders PVP live practice-return card with no-score boundary',
+    pvpPracticeReturnCardProbe.currentScreen === 'challenge-screen'
+      && /真人 PVP 回流/.test(pvpPracticeReturnCardProbe.cardText)
+      && /守势斗法谱/.test(pvpPracticeReturnCardProbe.cardText)
+      && /正式积分不变/.test(pvpPracticeReturnCardProbe.cardText)
+      && /继续真人排位/.test(pvpPracticeReturnCardProbe.buttonText)
+      && pvpPracticeReturnCardProbe.payload?.reportVersion === 'pvp-live-practice-return-v1'
+      && pvpPracticeReturnCardProbe.payload?.rankedImpact === 'none'
+      && pvpPracticeReturnCardProbe.payload?.usesHiddenInformation === false,
+    JSON.stringify(pvpPracticeReturnCardProbe || null)
+  );
+  await page.evaluate(() => {
+    window.__challengePracticeReturnLiveCalls = [];
+    const scene = window.PVPScene;
+    if (!scene || scene.__challengePracticeReturnLoadLivePatched) return;
+    const originalLoadLivePanel = typeof scene.loadLivePanel === 'function'
+      ? scene.loadLivePanel.bind(scene)
+      : null;
+    scene.loadLivePanel = async (...args) => {
+      window.__challengePracticeReturnLiveCalls.push({ method: 'loadLivePanel' });
+      if (originalLoadLivePanel) return originalLoadLivePanel(...args);
+      return undefined;
+    };
+    scene.__challengePracticeReturnLoadLivePatched = true;
+  });
+  await page.click('[data-pvp-live-practice-return-action="true"]', { timeout: 5000, force: true });
+  await page.waitForTimeout(500);
+  const pvpPracticeReturnClickProbe = await page.evaluate(() => {
+    const payload = typeof window.render_game_to_text === 'function'
+      ? JSON.parse(window.render_game_to_text())
+      : null;
+    return {
+      currentScreen: window.game?.currentScreen || '',
+      activeTab: window.PVPScene?.activeTab || '',
+      selectedPreset: window.PVPScene?.liveSelectedLoadoutPreset || '',
+      liveTabActive: !!document.querySelector('[data-pvp-tab="live"]')?.classList.contains('active'),
+      pvpVisible: !!document.getElementById('pvp-screen')?.classList.contains('active'),
+      selectedLoadoutText: document.querySelector('[data-live-selected-loadout]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+      inlineHint: window.PVPScene?.liveInlineHint || '',
+      queueTicket: payload?.pvp?.live?.queueTicket || '',
+      matchId: payload?.pvp?.live?.matchId || '',
+      liveCalls: window.__challengePracticeReturnLiveCalls || []
+    };
+  });
+  add(
+    'challenge hub practice-return CTA opens live PVP with recommended loadout context but no auto-queue',
+    pvpPracticeReturnClickProbe.currentScreen === 'pvp-screen'
+      && pvpPracticeReturnClickProbe.activeTab === 'live'
+      && pvpPracticeReturnClickProbe.selectedPreset === 'shield'
+      && pvpPracticeReturnClickProbe.liveTabActive === true
+      && pvpPracticeReturnClickProbe.pvpVisible === true
+      && /守势斗法谱/.test(pvpPracticeReturnClickProbe.selectedLoadoutText || '')
+      && /守势斗法谱/.test(pvpPracticeReturnClickProbe.inlineHint || '')
+      && /手动|不会自动|不自动/.test(pvpPracticeReturnClickProbe.inlineHint || '')
+      && /继续真人排位|入队/.test(pvpPracticeReturnClickProbe.inlineHint || '')
+      && pvpPracticeReturnClickProbe.queueTicket === ''
+      && pvpPracticeReturnClickProbe.matchId === ''
+      && pvpPracticeReturnClickProbe.liveCalls.length === 0,
+    JSON.stringify(pvpPracticeReturnClickProbe || null)
+  );
+
+  await page.evaluate(() => {
     if (window.game && typeof game.beginChallengeStart === 'function') {
       game.beginChallengeStart('daily');
     }

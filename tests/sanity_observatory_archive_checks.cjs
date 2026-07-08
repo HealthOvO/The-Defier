@@ -53,6 +53,7 @@ function loadFile(ctx, filePath) {
       this.observatoryArchiveState = null;
       this.startedRealm = 0;
       this.unlocks = [];
+      this.screenTransitions = [];
     },
     document: {
       getElementById: () => null,
@@ -101,6 +102,19 @@ function loadFile(ctx, filePath) {
   ctx.Game.prototype.startRealm = function (realm) {
     this.startedRealm = realm;
   };
+  ctx.Game.prototype.showScreen = function (screenId) {
+    this.currentScreen = screenId;
+    this.screenTransitions.push(screenId);
+  };
+  ctx.PVPScene = {
+    activeTab: '',
+    tabSwitches: [],
+    switchTab(tab) {
+      this.activeTab = String(tab || '');
+      this.tabSwitches.push(this.activeTab);
+    }
+  };
+  ctx.window.PVPScene = ctx.PVPScene;
 
   loadFile(ctx, path.join(root, 'js/data/challenge_rules.js'));
   loadFile(ctx, path.join(root, 'js/core/challenge_hub.js'));
@@ -320,6 +334,139 @@ function loadFile(ctx, filePath) {
   assert(/回放不计奖励/.test(latestArchive.note || ''), `replay note should mention non-reward replay, got ${latestArchive.note}`);
   assert(latestArchive.insight && /回放/.test(latestArchive.insight.title || ''), `replay archive should expose replay insight, got ${JSON.stringify(latestArchive && latestArchive.insight)}`);
   assert(game.unlocks.some((entry) => /命盘回放/.test(entry.name || '')), 'replay result should also appear in unlock feed');
+
+  const drillScenario = {
+    reportVersion: 'pvp-live-drill-scenario-v1',
+    sourceMatchId: 'pvplm-sanity-practice',
+    sourceVisibility: 'replay_self',
+    usesHiddenInformation: false,
+    rankedImpact: 'none',
+    result: 'loss',
+    finishReason: 'surrender',
+    recommendedLoadoutId: 'shield',
+    recommendedLoadoutLabel: '守势斗法谱',
+    themeKey: 'bulwark',
+    themeLabel: '稳守续航',
+    trainingAdvice: '真人 PVP 首败复盘：先练低费防御和调息保留。',
+    drillObjective: '守势斗法谱：围绕稳守续航复刻公开失误窗口，不写正式积分。',
+    trainingTags: ['真人 PVP', '首败复盘', '不计积分', '稳守续航'],
+    publicEventTypes: ['snapshot_locked', 'player_ready', 'battle_started', 'match_finished'],
+    sourceEventSequences: [1, 2, 4, 9],
+    practicePlan: {
+      reportVersion: 'pvp-live-practice-plan-v1',
+      sourceVisibility: 'public_events',
+      usesHiddenInformation: false,
+      rankedImpact: 'none',
+      objectiveLine: '按公开关键回合复刻防守、调息和终局判断。',
+      coachLine: '先守住首轮，再找反打窗口。',
+      guardrailLine: '训练计划只读公开事件，不读取隐藏手牌或牌库。',
+      tempoScript: [
+        {
+          id: 'opening',
+          label: '开局窗口',
+          sequence: 4,
+          eventType: 'battle_started',
+          actingSeat: 'A',
+          severity: 'setup',
+          lesson: '确认先后手和初始护体。',
+          drillPrompt: '先检查开局护体，再决定是否调息。'
+        },
+        {
+          id: 'terminal',
+          label: '终局窗口',
+          sequence: 9,
+          eventType: 'match_finished',
+          actingSeat: 'B',
+          severity: 'terminal',
+          lesson: '复盘终局前是否还有防守动作。',
+          drillPrompt: '复刻终局前一拍，避免提前放弃行动窗口。'
+        }
+      ],
+      fairnessFocus: [
+        {
+          id: 'decision_windows',
+          label: '公开决策窗口',
+          status: 'watch',
+          detail: '公开窗口偏短，练习时优先补足第二行动窗口。'
+        }
+      ]
+    },
+  };
+  const invalidPlanScenario = {
+    ...drillScenario,
+    sourceMatchId: 'pvplm-sanity-invalid-practice',
+    practicePlan: {
+      ...drillScenario.practicePlan,
+      usesHiddenInformation: true,
+      guardrailLine: 'invalid plan tries to relabel hidden practice data'
+    }
+  };
+  const invalidPlanStarted = game.beginPvpLiveDrillScenario(invalidPlanScenario);
+  assert(invalidPlanStarted === false, 'beginPvpLiveDrillScenario must reject invalid supplied practice plans');
+  assert(game.pendingChallengeStart === null, 'invalid supplied PVP practice plan must not create pending challenge start');
+
+  const practiceStarted = game.beginPvpLiveDrillScenario(drillScenario);
+  assert(practiceStarted === true, 'beginPvpLiveDrillScenario should start a pending no-score practice drill');
+  assert(game.pendingChallengeStart && game.pendingChallengeStart.replayOnly === true, 'pending PVP drill should reuse replay-only challenge start');
+  assert(game.pendingChallengeStart.practiceOnly === true, 'pending PVP drill should mark practiceOnly');
+  assert(game.pendingChallengeStart.bundleSnapshot && game.pendingChallengeStart.bundleSnapshot.practiceOnly === true, 'pending PVP drill bundle should carry practiceOnly');
+  assert(game.pendingChallengeStart.archiveEntryId === 'pvp_live:pvplm-sanity-practice', `pending PVP drill should remember source match, got ${game.pendingChallengeStart.archiveEntryId}`);
+  assert(/真人 PVP/.test(game.pendingChallengeStart.archiveInsight?.title || ''), `pending PVP drill should carry PVP insight, got ${JSON.stringify(game.pendingChallengeStart.archiveInsight)}`);
+  assert(game.pendingChallengeStart.bundleSnapshot?.meta?.practicePlan?.reportVersion === 'pvp-live-practice-plan-v1', `pending PVP drill should carry a structured practice plan, got ${JSON.stringify(game.pendingChallengeStart.bundleSnapshot?.meta)}`);
+  assert(game.pendingChallengeStart.bundleSnapshot.meta.practicePlan.sourceVisibility === 'public_events', 'PVP drill practice plan should stay public-event scoped');
+  assert(game.pendingChallengeStart.bundleSnapshot.meta.practicePlan.usesHiddenInformation === false, 'PVP drill practice plan must not use hidden information');
+  assert(game.pendingChallengeStart.bundleSnapshot.meta.practicePlan.rankedImpact === 'none', 'PVP drill practice plan must not affect ranked state');
+  assert(game.pendingChallengeStart.bundleSnapshot.meta.practicePlan.tempoScript.length === 2, 'PVP drill practice plan should preserve key-turn tempo script');
+  assert(game.pendingChallengeStart.bundleSnapshot.meta.practicePlan.fairnessFocus.some(item => item.id === 'decision_windows'), 'PVP drill practice plan should preserve fairness focus');
+  assert(/节奏脚本/.test(game.pendingChallengeStart.archiveInsight?.focusLines?.join(' ') || ''), `PVP drill archive insight should surface the tempo script, got ${JSON.stringify(game.pendingChallengeStart.archiveInsight)}`);
+
+  const progressBeforePractice = JSON.stringify(game.challengeProgressState);
+  const archiveBeforePractice = game.getObservatoryArchiveSummary().totalRecords;
+  const unlocksBeforePractice = game.unlocks.length;
+  const verifications = [];
+  game.recordSeasonVerificationResult = (payload) => {
+    verifications.push(payload);
+    return true;
+  };
+
+  game.startNewGame('linFeng');
+  assert(game.activeChallengeRun && game.activeChallengeRun.replayOnly === true, 'PVP drill start should create replayOnly active run');
+  assert(game.activeChallengeRun.practiceOnly === true, 'PVP drill start should create practiceOnly active run');
+  assert(game.activeChallengeRun.archiveEntryId === 'pvp_live:pvplm-sanity-practice', `PVP drill active run should keep source match id, got ${game.activeChallengeRun.archiveEntryId}`);
+  const practicePayload = game.getChallengeHubPayload();
+  assert(practicePayload.activeRun && practicePayload.activeRun.practiceOnly === true && practicePayload.activeRun.currentScore === 0, `practiceOnly payload should hide score surface, got ${JSON.stringify(practicePayload.activeRun)}`);
+
+  game.finishStrategicNode(
+    { id: 202, type: 'observatory' },
+    '练习星轨',
+    '这条观星节点来自 PVP 练习，不应写入正式观星留痕。',
+    '🔭'
+  );
+  assert(game.getObservatoryArchiveSummary().totalRecords === archiveBeforePractice, 'practiceOnly observatory node should not add omen archive entries');
+  assert(game.unlocks.length === unlocksBeforePractice, 'practiceOnly observatory node should not add collection unlocks');
+
+  game.activeChallengeRun.progress.battleWins = 2;
+  game.activeChallengeRun.progress.realmClears = game.activeChallengeRun.goalRealm;
+  game.player.currentHp = 80;
+  const practiceResult = game.finalizeActiveChallengeRun({ completed: true, reason: 'practice_complete' });
+  assert(practiceResult && practiceResult.practiceOnly === true, 'practice finalize should return practiceOnly run');
+  assert(JSON.stringify(game.challengeProgressState) === progressBeforePractice, 'practiceOnly finalize must not mutate official challenge progress');
+  assert(game.getObservatoryArchiveSummary().totalRecords === archiveBeforePractice, 'practiceOnly finalize must not add observatory archive entries');
+  assert(game.unlocks.length === unlocksBeforePractice, 'practiceOnly finalize must not add challenge or observatory unlocks');
+  assert(verifications.length === 0, 'practiceOnly finalize must not write season verification results');
+  const practiceReturn = game.getPvpLivePracticeReturnReceipt();
+  assert(practiceReturn && practiceReturn.reportVersion === 'pvp-live-practice-return-v1', `practiceOnly finalize should expose a PVP return receipt, got ${JSON.stringify(practiceReturn)}`);
+  assert(practiceReturn.sourceMatchId === 'pvplm-sanity-practice', `PVP practice return should remember source match id, got ${JSON.stringify(practiceReturn)}`);
+  assert(practiceReturn.sourceRunId === 'pvp_live:pvplm-sanity-practice', `PVP practice return should expose source run id, got ${JSON.stringify(practiceReturn)}`);
+  assert(practiceReturn.completed === true && practiceReturn.reason === 'practice_complete', `PVP practice return should preserve completion reason, got ${JSON.stringify(practiceReturn)}`);
+  assert(practiceReturn.rankedImpact === 'none' && practiceReturn.usesHiddenInformation === false, `PVP practice return must stay no-score and public scoped, got ${JSON.stringify(practiceReturn)}`);
+  assert(practiceReturn.recommendedLoadoutId === 'shield' && /守势斗法谱/.test(practiceReturn.recommendedLoadoutLabel || ''), `PVP practice return should carry the recommended loadout label, got ${JSON.stringify(practiceReturn)}`);
+  assert(practiceReturn.nextActionType === 'pvp_live' && /继续真人排位/.test(practiceReturn.ctaLabel || ''), `PVP practice return should expose live PVP next action, got ${JSON.stringify(practiceReturn)}`);
+  const practiceReturnPayload = game.getChallengeHubPayload();
+  assert(practiceReturnPayload.pvpLivePracticeReturn?.reportVersion === 'pvp-live-practice-return-v1', `challenge payload should expose PVP practice return receipt, got ${JSON.stringify(practiceReturnPayload.pvpLivePracticeReturn)}`);
+  assert(game.openPvpLivePracticeReturn() === true, 'PVP practice return action should navigate back to live PVP');
+  assert(game.currentScreen === 'pvp-screen', `PVP practice return action should show pvp screen, got ${game.currentScreen}`);
+  assert(ctx.PVPScene.activeTab === 'live' && ctx.PVPScene.tabSwitches.includes('live'), `PVP practice return action should switch to live tab, got ${JSON.stringify(ctx.PVPScene.tabSwitches)}`);
 
   game.currentScreen = 'challenge-screen';
   game.challengeHubState = { tab: 'daily' };

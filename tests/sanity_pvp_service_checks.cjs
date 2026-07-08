@@ -74,6 +74,90 @@ function loadFile(ctx, filePath) {
   assert(wallet && wallet.coins >= 1200, 'wallet should initialize with starter pvp coins');
   const seasonMeta = PVPService.getCurrentSeasonMeta();
   assert(!!(seasonMeta && seasonMeta.name && seasonMeta.division), 'season meta should be available');
+  const honorEconomy = PVPService.normalizeEconomyState({
+    ...PVPService.getEconomySnapshot(),
+    wins: 2,
+    losses: 2,
+    totalMatches: 4,
+    ownedItems: {
+      unrelated_title: true
+    },
+    equippedTitleId: 'unrelated_title',
+    seasonHonorCollection: {
+      seasonId: seasonMeta.id,
+      unlockedRewards: {
+        s1_genesis_honor_mark_1: {
+          rewardId: 's1_genesis_honor_mark_1',
+          rewardType: 'cosmetic_badge',
+          rewardName: '开天见证徽记',
+          targetGames: 1,
+          unlockedAt: 1710000000000
+        },
+        s1_genesis_honor_frame_3: {
+          rewardId: 's1_genesis_honor_frame_3',
+          rewardType: 'cosmetic_frame',
+          rewardName: '三战问道边框',
+          targetGames: 3,
+          unlockedAt: 1710000003000
+        }
+      },
+      lastUnlockedRewardId: 's1_genesis_honor_frame_3'
+    }
+  });
+  const honorShowcase = PVPService.getSeasonHonorShowcase({
+    economyState: honorEconomy,
+    rankData: {
+      wins: 2,
+      losses: 2,
+      score: 1180,
+      division: PVPService.getDivisionByScore(1180)
+    }
+  });
+  assert(honorShowcase.reportVersion === 'pvp-live-season-honor-showcase-v1', 'season honor showcase should expose a stable report version');
+  assert(honorShowcase.rewardImpact === 'cosmetic_only' && honorShowcase.powerImpact === 'none', 'season honor showcase should stay cosmetic only');
+  assert(honorShowcase.sourceVisibility === 'self_only_ranked_economy', 'season honor showcase should stay self-only');
+  assert(honorShowcase.collectionSeasonMatched === true, 'season honor showcase should accept current-season honor collection');
+  assert(honorShowcase.totalUnlocked === 2, 'season honor showcase should count persisted honor cosmetics');
+  assert(honorShowcase.gamesPlayed === 4, 'season honor showcase should use ranked wins plus losses as games played');
+  assert(honorShowcase.latestReward && honorShowcase.latestReward.rewardId === 's1_genesis_honor_frame_3', 'season honor showcase should surface the latest unlocked honor');
+  assert(honorShowcase.nextReward && honorShowcase.nextReward.rewardId === 's1_genesis_honor_title_5', 'season honor showcase should point to the next honor target');
+  assert(honorShowcase.nextReward.remainingGames === 1, 'season honor showcase should expose remaining ranked games to next target');
+  assert(/仅本人洞府只读可见，不进入公开回放或审计回放/.test(honorShowcase.visibilityLine || ''), 'season honor showcase should state the self-only visibility boundary');
+  assert(/不授予卡牌、属性、资源、起手、匹配或战斗效果/.test(honorShowcase.boundary || ''), 'season honor showcase should state the non-power boundary');
+  assert(honorShowcase.ownedItems === undefined && honorShowcase.equippedTitleId === undefined && honorShowcase.equippedSkinId === undefined, 'season honor showcase must not become an equipment surface');
+  const archivedHonorEconomy = PVPService.normalizeEconomyState({
+    ...PVPService.getEconomySnapshot(),
+    wins: 2,
+    losses: 2,
+    totalMatches: 4,
+    seasonHonorCollection: {
+      seasonId: 's0-archived',
+      unlockedRewards: {
+        s1_genesis_honor_mark_1: {
+          rewardId: 's1_genesis_honor_mark_1',
+          rewardType: 'cosmetic_badge',
+          rewardName: '旧季徽记',
+          targetGames: 1,
+          unlockedAt: 1700000000000
+        }
+      },
+      lastUnlockedRewardId: 's1_genesis_honor_mark_1'
+    }
+  });
+  const archivedHonorShowcase = PVPService.getSeasonHonorShowcase({
+    economyState: archivedHonorEconomy,
+    rankData: {
+      wins: 2,
+      losses: 2,
+      score: 1180,
+      division: PVPService.getDivisionByScore(1180)
+    }
+  });
+  assert(archivedHonorShowcase.seasonId === seasonMeta.id, 'archived honor showcase should remain scoped to the current season');
+  assert(archivedHonorShowcase.collectionSeasonMatched === false, 'archived honor showcase should flag mismatched collection seasons');
+  assert(archivedHonorShowcase.totalUnlocked === 0, 'archived honor showcase should not count old-season honor cosmetics');
+  assert(Array.isArray(archivedHonorShowcase.unlockedRewards) && archivedHonorShowcase.unlockedRewards.length === 0, 'archived honor showcase should not expose old-season rewards');
+  assert(archivedHonorShowcase.latestReward === null, 'archived honor showcase should not surface old-season latest rewards');
 
   const lowPreview = PVPService.getRewardPreview(true, 1000);
   PVPService.currentRankData.score = 1950;

@@ -484,6 +484,240 @@ async function waitForChallengeHubReady(page, expectedTab = 'daily') {
   await safeAuditScreenshot(page, path.join(outDir, 'challenge-mobile-archive.png'), 'browser_challenge_mobile_flow_audit', { timeout: 9000 });
 
   await page.evaluate(() => {
+    const practicePlan = {
+      reportVersion: 'pvp-live-practice-plan-v1',
+      sourceVisibility: 'public_events',
+      usesHiddenInformation: false,
+      rankedImpact: 'none',
+      objectiveLine: '按公开关键回合复刻节奏，练习不写正式积分。',
+      coachLine: '先稳住前 4 回合血线，再判断第 6 回合是否换成防守路线。',
+      guardrailLine: '只读公开事件，不读取双方手牌、牌库或隐藏随机，不影响天梯。',
+      tempoScript: [
+        {
+          id: 'mobile_turn_guard',
+          label: '第 2 回合防守窗口',
+          sequence: 2,
+          eventType: '公开行动',
+          actingSeat: 'you',
+          lesson: '保留护盾牌，不要为了抢伤害把防线交空。',
+          drillPrompt: '本轮只练保血，允许少打 4 点伤害。'
+        },
+        {
+          id: 'mobile_turn_pivot',
+          label: '第 5 回合节奏转换',
+          sequence: 5,
+          eventType: '公开行动',
+          actingSeat: 'opponent',
+          lesson: '对手交爆发后下一回合才是反打点。',
+          drillPrompt: '记录自己还有几张低费应对。'
+        },
+        {
+          id: 'mobile_turn_close',
+          label: '第 8 回合收官判断',
+          sequence: 8,
+          eventType: '公开行动',
+          actingSeat: 'you',
+          lesson: '优势局不要继续贪成长，优先关掉对手二次爆发。',
+          drillPrompt: '如果血线低于 12，直接转防守路线。'
+        }
+      ],
+      fairnessFocus: [
+        {
+          id: 'mobile_focus_first',
+          label: '先后手压强',
+          status: 'watch',
+          detail: '复查首回合资源差是否被护盾补偿抵消。'
+        },
+        {
+          id: 'mobile_focus_burst',
+          label: '爆发窗口',
+          status: 'watch',
+          detail: '复查第 5 回合是否出现无法互动的连段。'
+        },
+        {
+          id: 'mobile_focus_isolated',
+          label: '练习隔离',
+          status: 'safe',
+          detail: '练习只给路线反馈，不发奖励、不写分。'
+        }
+      ]
+    };
+    game.beginPvpLiveDrillScenario?.({
+      reportVersion: 'pvp-live-drill-scenario-v1',
+      sourceVisibility: 'replay_self',
+      usesHiddenInformation: false,
+      rankedImpact: 'none',
+      sourceMatchId: 'mobile-practice-plan-audit',
+      result: 'loss',
+      finishReason: 'battle_lost',
+      recommendedLoadoutId: 'shield',
+      recommendedLoadoutLabel: '守势斗法谱',
+      themeKey: 'bulwark',
+      themeLabel: '守势复盘',
+      trainingAdvice: '用公开事件复盘真人对局，不看隐藏信息。',
+      drillObjective: '练第 2/5/8 回合的防守转节奏。',
+      trainingTags: ['守势', '节奏', '反打'],
+      publicEventTypes: ['公开行动', '公开伤害'],
+      practicePlan
+    });
+  });
+  await page.waitForTimeout(600);
+
+  const pvpPracticeSelectionProbe = await page.evaluate(async () => {
+    const rectObject = (rect) => {
+      if (!rect) return null;
+      return {
+        left: Math.round(rect.left),
+        right: Math.round(rect.right),
+        top: Math.round(rect.top),
+        bottom: Math.round(rect.bottom),
+        width: Math.round(rect.width),
+        height: Math.round(rect.height),
+      };
+    };
+    const payload = typeof window.render_game_to_text === 'function'
+      ? JSON.parse(window.render_game_to_text())
+      : null;
+    const container = document.getElementById('character-selection-container');
+    const plan = document.querySelector('[data-pvp-live-practice-selection-plan]');
+    const turnRows = Array.from(document.querySelectorAll('[data-pvp-live-practice-plan-turn]'));
+    const focusRows = Array.from(document.querySelectorAll('[data-pvp-live-practice-plan-focus]'));
+    const allRows = [...turnRows, ...focusRows];
+    const guard = document.querySelector('.challenge-selection-practice-guard');
+    const footer = document.querySelector('.character-selection-footer');
+    const confirmBtn = document.getElementById('confirm-character-btn');
+    const forbiddenText = plan?.textContent || '';
+    const beforeScrollTop = container?.scrollTop || 0;
+    if (plan && typeof plan.scrollIntoView === 'function') {
+      plan.scrollIntoView({ block: 'start', inline: 'nearest' });
+    }
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    const footerRect = rectObject(footer?.getBoundingClientRect() || null);
+    const confirmRect = rectObject(confirmBtn?.getBoundingClientRect() || null);
+    const measureReach = async (name, el) => {
+      if (!el || typeof el.scrollIntoView !== 'function') {
+        return { name, rect: null, footerRect: rectObject(footer?.getBoundingClientRect() || null), reachable: false };
+      }
+      el.scrollIntoView({ block: 'center', inline: 'nearest' });
+      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      const rect = rectObject(el.getBoundingClientRect());
+      const freshFooterRect = rectObject(footer?.getBoundingClientRect() || null);
+      return {
+        name,
+        rect,
+        footerRect: freshFooterRect,
+        reachable: !!rect
+          && !!freshFooterRect
+          && rect.left >= -1
+          && rect.right <= window.innerWidth + 2
+          && rect.top >= 0
+          && rect.bottom <= freshFooterRect.top - 4,
+      };
+    };
+    const targetReach = [];
+    for (const [name, el] of [
+      ['first-turn', turnRows[0]],
+      ['last-turn', turnRows[turnRows.length - 1]],
+      ['first-focus', focusRows[0]],
+      ['last-focus', focusRows[focusRows.length - 1]],
+      ['guardrail', guard],
+    ]) {
+      targetReach.push(await measureReach(name, el));
+    }
+    return {
+      mode: payload?.mode || '',
+      pending: payload?.challenge?.pending || null,
+      planText: forbiddenText.replace(/\s+/g, ' ').trim(),
+      guardText: guard?.textContent?.replace(/\s+/g, ' ').trim() || '',
+      planRole: plan?.getAttribute('role') || '',
+      planAriaLabel: plan?.getAttribute('aria-label') || '',
+      planSource: plan?.getAttribute('data-pvp-live-practice-plan-source') || '',
+      planHidden: plan?.getAttribute('data-pvp-live-practice-plan-hidden') || '',
+      planImpact: plan?.getAttribute('data-pvp-live-practice-plan-impact') || '',
+      turnIds: turnRows.map((row) => row.getAttribute('data-pvp-live-practice-plan-turn')),
+      focusIds: focusRows.map((row) => row.getAttribute('data-pvp-live-practice-plan-focus')),
+      viewportWidth: window.innerWidth,
+      viewportHeight: window.innerHeight,
+      docScrollWidth: Math.round(document.documentElement?.scrollWidth || 0),
+      bodyScrollWidth: Math.round(document.body?.scrollWidth || 0),
+      containerScrollWidth: Math.round(container?.scrollWidth || 0),
+      containerClientWidth: Math.round(container?.clientWidth || 0),
+      containerScrollTop: Math.round(container?.scrollTop || 0),
+      beforeScrollTop: Math.round(beforeScrollTop),
+      planRect: rectObject(plan?.getBoundingClientRect() || null),
+      firstTurnRect: rectObject(turnRows[0]?.getBoundingClientRect() || null),
+      firstFocusRect: rectObject(focusRows[0]?.getBoundingClientRect() || null),
+      lastTurnRect: rectObject(turnRows[turnRows.length - 1]?.getBoundingClientRect() || null),
+      lastFocusRect: rectObject(focusRows[focusRows.length - 1]?.getBoundingClientRect() || null),
+      guardRect: rectObject(guard?.getBoundingClientRect() || null),
+      targetReach,
+      rowOverflow: allRows.map((row) => {
+        const rect = rectObject(row.getBoundingClientRect());
+        return {
+          id: row.getAttribute('data-pvp-live-practice-plan-turn') || row.getAttribute('data-pvp-live-practice-plan-focus') || '',
+          scrollWidth: Math.round(row.scrollWidth || 0),
+          clientWidth: Math.round(row.clientWidth || 0),
+          rect,
+        };
+      }).filter((row) => row.scrollWidth > row.clientWidth + 2 || !row.rect || row.rect.left < 0 || row.rect.right > window.innerWidth),
+      footerRect,
+      confirmRect,
+    };
+  });
+  const pvpPracticeForbiddenTokens = /payload|\bhand\b|\bcard\b|hidden|deck|cardId|instanceId|cardInstanceId|loadoutSnapshot|rawPayload|reward|rating|elo|token/i;
+  add(
+    'challenge mobile live PVP practice selection keeps public plan readable, accessible, and confirmable',
+    !!pvpPracticeSelectionProbe
+      && pvpPracticeSelectionProbe.mode === 'character-selection-screen'
+      && pvpPracticeSelectionProbe.pending?.replayOnly === true
+      && pvpPracticeSelectionProbe.pending?.practiceOnly === true
+      && /^pvp_live_drill_/.test(pvpPracticeSelectionProbe.pending?.ruleId || '')
+      && pvpPracticeSelectionProbe.planRole === 'region'
+      && pvpPracticeSelectionProbe.planAriaLabel === '真人练习计划'
+      && pvpPracticeSelectionProbe.planSource === 'public_events'
+      && pvpPracticeSelectionProbe.planHidden === 'false'
+      && pvpPracticeSelectionProbe.planImpact === 'none'
+      && ['真人练习计划', '关键回合', '体验复查', '公平护栏'].every((term) => (pvpPracticeSelectionProbe.planText || '').includes(term))
+      && ['第 2 回合防守窗口', '第 5 回合节奏转换', '第 8 回合收官判断'].every((term) => (pvpPracticeSelectionProbe.planText || '').includes(term))
+      && ['先后手压强', '爆发窗口', '练习隔离'].every((term) => (pvpPracticeSelectionProbe.planText || '').includes(term))
+      && /公平护栏/.test(pvpPracticeSelectionProbe.guardText || '')
+      && !pvpPracticeForbiddenTokens.test(pvpPracticeSelectionProbe.planText || '')
+      && pvpPracticeSelectionProbe.turnIds.length === 3
+      && ['mobile_turn_guard', 'mobile_turn_pivot', 'mobile_turn_close'].every((id) => pvpPracticeSelectionProbe.turnIds.includes(id))
+      && pvpPracticeSelectionProbe.focusIds.length === 3
+      && ['mobile_focus_first', 'mobile_focus_burst', 'mobile_focus_isolated'].every((id) => pvpPracticeSelectionProbe.focusIds.includes(id))
+      && pvpPracticeSelectionProbe.docScrollWidth <= 398
+      && pvpPracticeSelectionProbe.bodyScrollWidth <= 398
+      && pvpPracticeSelectionProbe.containerScrollWidth <= pvpPracticeSelectionProbe.containerClientWidth + 2
+      && !!pvpPracticeSelectionProbe.planRect
+      && rectFitsWidth(pvpPracticeSelectionProbe.planRect, pvpPracticeSelectionProbe.viewportWidth)
+      && !!pvpPracticeSelectionProbe.firstTurnRect
+      && rectFitsWidth(pvpPracticeSelectionProbe.firstTurnRect, pvpPracticeSelectionProbe.viewportWidth)
+      && !!pvpPracticeSelectionProbe.firstFocusRect
+      && rectFitsWidth(pvpPracticeSelectionProbe.firstFocusRect, pvpPracticeSelectionProbe.viewportWidth)
+      && !!pvpPracticeSelectionProbe.lastTurnRect
+      && rectFitsWidth(pvpPracticeSelectionProbe.lastTurnRect, pvpPracticeSelectionProbe.viewportWidth)
+      && !!pvpPracticeSelectionProbe.lastFocusRect
+      && rectFitsWidth(pvpPracticeSelectionProbe.lastFocusRect, pvpPracticeSelectionProbe.viewportWidth)
+      && !!pvpPracticeSelectionProbe.guardRect
+      && rectFitsWidth(pvpPracticeSelectionProbe.guardRect, pvpPracticeSelectionProbe.viewportWidth)
+      && pvpPracticeSelectionProbe.targetReach.length === 5
+      && pvpPracticeSelectionProbe.targetReach.every((item) => item.reachable === true)
+      && pvpPracticeSelectionProbe.rowOverflow.length === 0
+      && !!pvpPracticeSelectionProbe.confirmRect
+      && rectFitsViewport(pvpPracticeSelectionProbe.confirmRect, pvpPracticeSelectionProbe.viewportWidth, pvpPracticeSelectionProbe.viewportHeight)
+      && !!pvpPracticeSelectionProbe.footerRect
+      && pvpPracticeSelectionProbe.confirmRect.bottom <= pvpPracticeSelectionProbe.footerRect.bottom,
+    JSON.stringify(pvpPracticeSelectionProbe || null)
+  );
+  await safeAuditScreenshot(page, path.join(outDir, 'challenge-mobile-live-pvp-practice-selection.png'), 'browser_challenge_mobile_flow_audit', { timeout: 9000 });
+
+  await page.evaluate(() => {
+    game.showChallengeHub?.('daily');
+  });
+  await page.waitForTimeout(350);
+
+  await page.evaluate(() => {
     if (typeof game.recordSeasonVerificationResult === 'function') {
       const weekMeta = typeof game.getHeavenlyMandateWeekMeta === 'function'
         ? game.getHeavenlyMandateWeekMeta()

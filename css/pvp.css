@@ -677,6 +677,2176 @@
     margin-top: 8px;
 }
 
+/* --- Live PVP Tab --- */
+.pvp-live-shell {
+    align-items: stretch;
+    scroll-margin-top: 18px;
+}
+
+.pvp-live-status-card {
+    width: calc(100% - 36px);
+    flex: 0 0 auto;
+    overflow: visible;
+    position: relative;
+    z-index: 8;
+}
+
+.pvp-live-replay-share-viewer {
+    margin-top: 12px;
+}
+
+.pvp-live-replay-share-viewer[hidden] {
+    display: none;
+}
+
+.pvp-live-replay-share-card {
+    padding: 12px;
+    border-radius: 8px;
+    border: 1px solid rgba(105, 211, 172, 0.22);
+    background: rgba(18, 55, 49, 0.26);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+    overflow-wrap: anywhere;
+}
+
+.pvp-live-replay-share-card.error {
+    border-color: rgba(237, 126, 126, 0.24);
+    background: rgba(75, 28, 28, 0.24);
+}
+
+.pvp-live-replay-share-summary {
+    margin-top: 9px;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 8px;
+}
+
+.pvp-live-replay-share-summary span {
+    min-width: 0;
+    padding: 7px 8px;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(255, 255, 255, 0.04);
+    color: rgba(238, 246, 242, 0.88);
+    font-size: 0.72rem;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+}
+
+.pvp-live-replay-share-highlights {
+    margin-top: 10px;
+    display: grid;
+    gap: 7px;
+}
+
+.pvp-live-replay-share-highlight-head {
+    color: rgba(238, 246, 242, 0.92);
+    font-size: 0.76rem;
+    font-weight: 700;
+}
+
+.pvp-live-replay-share-highlight {
+    display: grid;
+    grid-template-columns: minmax(56px, max-content) minmax(0, 1fr);
+    gap: 4px 8px;
+    padding: 8px;
+    border-radius: 8px;
+    border: 1px solid rgba(105, 211, 172, 0.18);
+    background: rgba(105, 211, 172, 0.08);
+    color: rgba(238, 246, 242, 0.86);
+    font-size: 0.72rem;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+}
+
+.pvp-live-replay-share-highlight-title {
+    color: #69d3ac;
+    font-weight: 700;
+}
+
+.pvp-live-replay-share-highlight-main {
+    min-width: 0;
+    font-weight: 700;
+}
+
+.pvp-live-replay-share-highlight-detail {
+    grid-column: 1 / -1;
+    min-width: 0;
+    color: rgba(238, 246, 242, 0.72);
+}
+
+.pvp-live-meta-grid {
+    margin-top: 14px;
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 10px;
+}
+
+.pvp-live-meta {
+    min-width: 0;
+    padding: 10px 12px;
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(255, 255, 255, 0.04);
+}
+
+.pvp-live-meta .label {
+    display: block;
+    color: rgba(148, 201, 255, 0.86);
+    font-size: 0.68rem;
+    letter-spacing: 0.1em;
+}
+
+.pvp-live-meta .value {
+    display: block;
+    margin-top: 5px;
+    color: rgba(248, 242, 228, 0.98);
+    font-size: 0.84rem;
+    line-height: 1.25;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.pvp-live-loadout-selector {
+    margin-top: 14px;
+    padding-top: 14px;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.pvp-live-quality {
+    margin-top: 12px;
+    padding: 9px 10px;
+    border-radius: 10px;
+    border: 1px solid rgba(147, 205, 255, 0.14);
+    background: rgba(72, 133, 190, 0.07);
+    color: rgba(219, 235, 249, 0.86);
+    font-size: 0.78rem;
+    line-height: 1.45;
+    overflow-wrap: anywhere;
+}
+
+.pvp-live-mode-boundary {
+    margin-top: 8px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    border: 1px solid rgba(214, 183, 111, 0.18);
+    background: rgba(214, 183, 111, 0.07);
+    color: rgba(247, 236, 206, 0.92);
+    font-size: 0.76rem;
+    line-height: 1.45;
+    overflow-wrap: anywhere;
+}
+
+.pvp-live-turn-timer {
+    margin-top: 8px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    border: 1px solid rgba(126, 231, 135, 0.18);
+    background: rgba(126, 231, 135, 0.07);
+    color: rgba(224, 247, 226, 0.92);
+    font-size: 0.78rem;
+    font-weight: 700;
+    line-height: 1.4;
+    overflow-wrap: anywhere;
+}
+
+.pvp-live-turn-timer[data-live-turn-timer-urgency="low"] {
+    border-color: rgba(255, 191, 92, 0.4);
+    background: rgba(255, 191, 92, 0.12);
+    color: rgba(255, 238, 190, 0.96);
+}
+
+.pvp-live-turn-timer[data-live-turn-timer-urgency="expired"] {
+    border-color: rgba(255, 107, 107, 0.42);
+    background: rgba(255, 107, 107, 0.11);
+    color: rgba(255, 214, 214, 0.96);
+}
+
+.pvp-live-timeout-forecast {
+    margin-top: 8px;
+    display: grid;
+    gap: 6px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 191, 92, 0.28);
+    background: rgba(255, 191, 92, 0.09);
+    color: rgba(255, 240, 210, 0.96);
+    font-size: 0.74rem;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+}
+
+.pvp-live-timeout-forecast[hidden] {
+    display: none;
+}
+
+.pvp-live-timeout-forecast-line {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    min-width: 0;
+}
+
+.pvp-live-timeout-forecast-line > span:last-child {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.pvp-live-timeout-forecast-line.compact {
+    color: rgba(255, 240, 210, 0.78);
+    font-size: 0.68rem;
+}
+
+.pvp-live-timeout-forecast-chip {
+    flex: 0 0 auto;
+    max-width: 42%;
+    padding: 3px 6px;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 191, 92, 0.22);
+    background: rgba(255, 255, 255, 0.05);
+    color: rgba(255, 246, 225, 0.98);
+    font-weight: 800;
+    overflow-wrap: anywhere;
+}
+
+.pvp-live-connection-status,
+.pvp-live-realtime-status {
+    margin-top: 8px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    border: 1px solid rgba(111, 200, 255, 0.18);
+    background: rgba(111, 200, 255, 0.07);
+    color: rgba(218, 240, 255, 0.92);
+    font-size: 0.78rem;
+    font-weight: 700;
+    line-height: 1.4;
+    overflow-wrap: anywhere;
+}
+
+.pvp-live-connection-tempo {
+    margin-top: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 191, 92, 0.28);
+    background: rgba(255, 191, 92, 0.1);
+    color: rgba(255, 239, 206, 0.96);
+    font-size: 0.76rem;
+    font-weight: 700;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+}
+
+.pvp-live-connection-tempo[hidden] {
+    display: none;
+}
+
+.pvp-live-connection-tempo[data-live-connection-tempo-severity="danger"] {
+    border-color: rgba(255, 107, 107, 0.38);
+    background: rgba(255, 107, 107, 0.1);
+    color: rgba(255, 223, 223, 0.96);
+}
+
+.pvp-live-connection-tempo[data-live-connection-tempo-severity="info"] {
+    border-color: rgba(111, 200, 255, 0.24);
+    background: rgba(111, 200, 255, 0.08);
+    color: rgba(218, 240, 255, 0.94);
+}
+
+.pvp-live-connection-tempo .pvp-live-tempo-copy {
+    min-width: 0;
+    flex: 1 1 auto;
+}
+
+.pvp-live-connection-tempo .pvp-live-tempo-action {
+    flex: 0 0 auto;
+    min-height: 30px;
+    padding: 5px 9px;
+}
+
+.pvp-live-opening-safeguard {
+    margin-top: 8px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 8px;
+    border-radius: 8px;
+    border: 1px solid rgba(242, 192, 121, 0.18);
+    background: rgba(242, 192, 121, 0.07);
+    color: rgba(249, 235, 214, 0.92);
+    font-size: 0.72rem;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+}
+
+.pvp-live-opening-safeguard-chip {
+    min-width: 0;
+    padding: 4px 6px;
+    border-radius: 8px;
+    border: 1px solid rgba(242, 192, 121, 0.16);
+    background: rgba(255, 255, 255, 0.04);
+    overflow-wrap: anywhere;
+}
+
+.pvp-live-action-receipt {
+    margin-top: 8px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    padding: 8px;
+    border-radius: 8px;
+    border: 1px solid rgba(170, 155, 255, 0.2);
+    background: rgba(170, 155, 255, 0.07);
+    color: rgba(236, 232, 255, 0.94);
+    font-size: 0.72rem;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+}
+
+.pvp-live-action-receipt-chip {
+    flex: 0 0 auto;
+    padding: 4px 6px;
+    border-radius: 8px;
+    border: 1px solid rgba(170, 155, 255, 0.18);
+    background: rgba(255, 255, 255, 0.05);
+    color: rgba(242, 240, 255, 0.96);
+    font-weight: 800;
+}
+
+.pvp-live-action-receipt-line {
+    min-width: 180px;
+    flex: 1 1 220px;
+    overflow-wrap: anywhere;
+}
+
+.pvp-live-duel-momentum {
+    margin-top: 8px;
+    display: grid;
+    gap: 6px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    border: 1px solid rgba(129, 213, 167, 0.2);
+    background: rgba(129, 213, 167, 0.07);
+    color: rgba(226, 249, 235, 0.94);
+    font-size: 0.74rem;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+}
+
+.pvp-live-duel-momentum-line {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    min-width: 0;
+}
+
+.pvp-live-duel-momentum-line > span:last-child {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.pvp-live-duel-momentum-line.compact {
+    color: rgba(226, 249, 235, 0.76);
+    font-size: 0.68rem;
+}
+
+.pvp-live-duel-momentum-chip {
+    flex: 0 0 auto;
+    max-width: 42%;
+    padding: 3px 6px;
+    border-radius: 8px;
+    border: 1px solid rgba(129, 213, 167, 0.18);
+    background: rgba(255, 255, 255, 0.05);
+    color: rgba(232, 255, 239, 0.96);
+    font-weight: 800;
+    overflow-wrap: anywhere;
+}
+
+.pvp-live-intent-signal {
+    margin-top: 8px;
+    display: grid;
+    gap: 6px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    border: 1px solid rgba(116, 198, 255, 0.22);
+    background: rgba(116, 198, 255, 0.07);
+    color: rgba(226, 245, 255, 0.94);
+    font-size: 0.74rem;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+}
+
+.pvp-live-intent-signal-line {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    min-width: 0;
+}
+
+.pvp-live-intent-signal-line > span:last-child {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.pvp-live-intent-signal-line.compact {
+    color: rgba(226, 245, 255, 0.76);
+    font-size: 0.68rem;
+}
+
+.pvp-live-intent-signal-chip {
+    flex: 0 0 auto;
+    max-width: 42%;
+    padding: 3px 6px;
+    border-radius: 8px;
+    border: 1px solid rgba(116, 198, 255, 0.2);
+    background: rgba(255, 255, 255, 0.05);
+    color: rgba(232, 248, 255, 0.96);
+    font-weight: 800;
+    overflow-wrap: anywhere;
+}
+
+.pvp-live-counterplay-guide {
+    margin-top: 8px;
+    display: grid;
+    gap: 6px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 191, 92, 0.26);
+    background: rgba(255, 191, 92, 0.08);
+    color: rgba(255, 240, 210, 0.95);
+    font-size: 0.74rem;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+}
+
+.pvp-live-counterplay-guide[hidden] {
+    display: none;
+}
+
+.pvp-live-counterplay-guide-line {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    min-width: 0;
+}
+
+.pvp-live-counterplay-guide-line > span:last-child {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.pvp-live-counterplay-guide-line.compact {
+    color: rgba(255, 240, 210, 0.78);
+    font-size: 0.68rem;
+}
+
+.pvp-live-counterplay-guide-chip {
+    flex: 0 0 auto;
+    max-width: 42%;
+    padding: 3px 6px;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 191, 92, 0.22);
+    background: rgba(255, 255, 255, 0.05);
+    color: rgba(255, 246, 225, 0.96);
+    font-weight: 800;
+    overflow-wrap: anywhere;
+}
+
+.pvp-live-action-window-receipt {
+    margin-top: 8px;
+    display: grid;
+    gap: 6px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    border: 1px solid rgba(142, 220, 171, 0.24);
+    background: rgba(28, 87, 54, 0.14);
+    color: rgba(229, 248, 236, 0.95);
+    font-size: 0.74rem;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+}
+
+.pvp-live-action-window-receipt[hidden] {
+    display: none;
+}
+
+.pvp-live-action-window-receipt-line {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    min-width: 0;
+}
+
+.pvp-live-action-window-receipt-line > span:last-child {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.pvp-live-action-window-receipt-line.compact {
+    color: rgba(229, 248, 236, 0.76);
+    font-size: 0.68rem;
+}
+
+.pvp-live-action-window-receipt-chip {
+    flex: 0 0 auto;
+    max-width: 42%;
+    padding: 3px 6px;
+    border-radius: 8px;
+    border: 1px solid rgba(142, 220, 171, 0.22);
+    background: rgba(255, 255, 255, 0.05);
+    color: rgba(237, 255, 242, 0.96);
+    font-weight: 800;
+    overflow-wrap: anywhere;
+}
+
+.pvp-live-social-panel {
+    margin-top: 8px;
+    padding: 8px;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: rgba(255, 255, 255, 0.045);
+}
+
+.pvp-live-emote-row {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.pvp-live-emote-button {
+    min-height: 32px;
+    padding: 5px 9px;
+    border-radius: 8px;
+    border: 1px solid rgba(243, 194, 107, 0.24);
+    background: rgba(243, 194, 107, 0.11);
+    color: rgba(255, 241, 214, 0.94);
+    font-size: 0.72rem;
+    font-weight: 700;
+    line-height: 1.1;
+    cursor: pointer;
+}
+
+.pvp-live-emote-button.secondary {
+    border-color: rgba(111, 200, 255, 0.2);
+    background: rgba(111, 200, 255, 0.08);
+    color: rgba(218, 240, 255, 0.92);
+}
+
+.pvp-live-emote-button.selected {
+    border-color: rgba(126, 231, 135, 0.32);
+    background: rgba(126, 231, 135, 0.12);
+    color: rgba(224, 247, 226, 0.95);
+}
+
+.pvp-live-emote-button:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+.pvp-live-social-status {
+    margin-top: 6px;
+    color: rgba(219, 235, 249, 0.72);
+    font-size: 0.7rem;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+}
+
+.pvp-live-first-guide {
+    margin-top: 10px;
+    padding: 10px;
+    border-radius: 10px;
+    border: 1px solid rgba(243, 194, 107, 0.16);
+    background: rgba(243, 194, 107, 0.07);
+    color: rgba(255, 241, 214, 0.9);
+    font-size: 0.78rem;
+    line-height: 1.5;
+    overflow-wrap: anywhere;
+}
+
+.pvp-live-guide-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    min-width: 0;
+}
+
+.pvp-live-guide-title,
+.pvp-live-guide-next {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.pvp-live-guide-title {
+    color: rgba(255, 231, 192, 0.95);
+    font-weight: 700;
+}
+
+.pvp-live-guide-next {
+    color: rgba(218, 232, 246, 0.78);
+    text-align: right;
+}
+
+.pvp-live-guide-steps {
+    margin-top: 8px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.pvp-live-guide-step {
+    min-width: 0;
+    padding: 5px 7px;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(255, 255, 255, 0.04);
+    color: rgba(225, 235, 246, 0.82);
+    font-size: 0.7rem;
+    overflow-wrap: anywhere;
+}
+
+.pvp-live-guide-loadouts {
+    margin-top: 8px;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+}
+
+.pvp-live-guide-loadout {
+    min-width: 0;
+    padding: 6px 7px;
+    border-radius: 8px;
+    border: 1px solid rgba(243, 194, 107, 0.13);
+    background: rgba(16, 24, 36, 0.45);
+    color: rgba(250, 238, 212, 0.78);
+    font-size: 0.68rem;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+}
+
+.pvp-live-guide-exceptions,
+.pvp-live-guide-review-actions {
+    margin-top: 8px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.pvp-live-guide-exception,
+.pvp-live-guide-review-action {
+    min-width: 0;
+    padding: 5px 7px;
+    border-radius: 8px;
+    font-size: 0.68rem;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+}
+
+.pvp-live-guide-exception {
+    border: 1px solid rgba(255, 128, 128, 0.16);
+    background: rgba(255, 128, 128, 0.08);
+    color: rgba(255, 224, 224, 0.86);
+}
+
+.pvp-live-guide-review-action {
+    border: 1px solid rgba(126, 231, 135, 0.16);
+    background: rgba(126, 231, 135, 0.08);
+    color: rgba(225, 248, 227, 0.86);
+}
+
+.pvp-live-loadout-exploration {
+    margin-top: 10px;
+    padding: 10px;
+    border-radius: 8px;
+    border: 1px solid rgba(119, 213, 184, 0.16);
+    background: rgba(13, 30, 32, 0.35);
+    color: rgba(224, 244, 236, 0.9);
+    overflow-wrap: anywhere;
+}
+
+.pvp-live-loadout-exploration-head,
+.pvp-live-loadout-exploration-card-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    min-width: 0;
+}
+
+.pvp-live-loadout-exploration-head {
+    font-size: 0.76rem;
+    font-weight: 700;
+}
+
+.pvp-live-loadout-exploration-head span:last-child,
+.pvp-live-loadout-exploration-card-head span:last-child {
+    color: rgba(154, 233, 206, 0.78);
+    font-size: 0.68rem;
+    font-weight: 600;
+    text-align: right;
+}
+
+.pvp-live-loadout-exploration-summary,
+.pvp-live-loadout-exploration-boundary {
+    margin-top: 6px;
+    color: rgba(222, 238, 232, 0.74);
+    font-size: 0.7rem;
+    line-height: 1.4;
+}
+
+.pvp-live-loadout-exploration-grid {
+    margin-top: 8px;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+}
+
+.pvp-live-loadout-exploration-card {
+    min-width: 0;
+    padding: 8px;
+    border-radius: 8px;
+    border: 1px solid rgba(154, 233, 206, 0.14);
+    background: rgba(7, 18, 24, 0.42);
+}
+
+.pvp-live-loadout-exploration-card-head {
+    font-size: 0.72rem;
+    font-weight: 700;
+}
+
+.pvp-live-loadout-exploration-hook {
+    margin-top: 5px;
+    color: rgba(244, 250, 247, 0.86);
+    font-size: 0.69rem;
+    line-height: 1.36;
+}
+
+.pvp-live-loadout-exploration-lines {
+    margin-top: 6px;
+    display: grid;
+    gap: 4px;
+}
+
+.pvp-live-loadout-exploration-lines span {
+    padding: 5px 6px;
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.04);
+    color: rgba(213, 232, 226, 0.72);
+    font-size: 0.66rem;
+    line-height: 1.32;
+}
+
+.pvp-live-waiting-report {
+    margin-top: 10px;
+    padding: 10px;
+    border-radius: 10px;
+    border: 1px solid rgba(147, 205, 255, 0.16);
+    background: rgba(32, 55, 78, 0.28);
+    color: rgba(223, 237, 250, 0.9);
+    font-size: 0.76rem;
+    line-height: 1.45;
+    overflow-wrap: anywhere;
+}
+
+.pvp-live-waiting-report[hidden] {
+    display: none;
+}
+
+.pvp-live-invite-panel {
+    margin-top: 10px;
+    padding: 10px;
+    border-radius: 8px;
+    border: 1px solid rgba(243, 194, 107, 0.18);
+    background: rgba(41, 32, 21, 0.24);
+    color: rgba(250, 238, 212, 0.9);
+    font-size: 0.76rem;
+    line-height: 1.45;
+}
+
+.pvp-live-invite-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    font-weight: 700;
+}
+
+.pvp-live-invite-code {
+    min-width: 72px;
+    padding: 3px 7px;
+    border-radius: 6px;
+    border: 1px solid rgba(243, 194, 107, 0.24);
+    background: rgba(8, 13, 20, 0.4);
+    text-align: center;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    overflow-wrap: anywhere;
+}
+
+.pvp-live-invite-controls {
+    margin-top: 8px;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(110px, 1fr)) repeat(3, auto);
+    gap: 8px;
+    align-items: center;
+}
+
+.pvp-live-invite-input {
+    min-width: 0;
+    height: 34px;
+    padding: 0 10px;
+    border-radius: 6px;
+    border: 1px solid rgba(250, 238, 212, 0.18);
+    background: rgba(8, 13, 20, 0.42);
+    color: rgba(250, 238, 212, 0.94);
+}
+
+.pvp-live-invite-report {
+    margin-top: 7px;
+    color: rgba(250, 238, 212, 0.72);
+    overflow-wrap: anywhere;
+}
+
+.pvp-live-invite-inbox {
+    margin-top: 8px;
+    display: grid;
+    gap: 6px;
+    color: rgba(250, 238, 212, 0.76);
+}
+
+.pvp-live-invite-inbox-item {
+    min-width: 0;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px;
+    align-items: center;
+    padding: 7px;
+    border-radius: 6px;
+    border: 1px solid rgba(147, 205, 255, 0.14);
+    background: rgba(18, 35, 47, 0.26);
+    overflow-wrap: anywhere;
+}
+
+[data-live-phase="matched"] .pvp-live-invite-panel,
+[data-live-phase="setup"] .pvp-live-invite-panel,
+[data-live-phase="active"] .pvp-live-invite-panel,
+[data-live-phase="finished"] .pvp-live-invite-panel,
+[data-live-phase="invalidated"] .pvp-live-invite-panel,
+[data-live-phase="sync_required"] .pvp-live-invite-panel {
+    display: none;
+}
+
+.pvp-live-waiting-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    color: rgba(232, 245, 255, 0.94);
+    font-weight: 700;
+}
+
+.pvp-live-waiting-signals {
+    margin-top: 7px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.pvp-live-waiting-signals span {
+    min-width: 0;
+    padding: 4px 6px;
+    border-radius: 6px;
+    background: rgba(147, 205, 255, 0.08);
+    color: rgba(225, 235, 246, 0.78);
+    font-size: 0.68rem;
+    overflow-wrap: anywhere;
+}
+
+.pvp-live-waiting-actions {
+    margin-top: 8px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.pvp-live-waiting-action {
+    min-width: 0;
+    padding: 5px 7px;
+    border-radius: 999px;
+    border: 1px solid rgba(147, 205, 255, 0.14);
+    background: rgba(255, 255, 255, 0.04);
+    color: rgba(225, 235, 246, 0.82);
+    font-size: 0.68rem;
+    overflow-wrap: anywhere;
+}
+
+.pvp-live-post-review {
+    margin-top: 10px;
+    padding: 10px;
+    border-radius: 8px;
+    border: 1px solid rgba(153, 214, 170, 0.18);
+    background: rgba(28, 63, 45, 0.24);
+    color: rgba(229, 246, 233, 0.9);
+    font-size: 0.76rem;
+    line-height: 1.45;
+    overflow-wrap: anywhere;
+    position: relative;
+    z-index: 4;
+}
+
+.pvp-live-post-review[hidden] {
+    display: none;
+}
+
+.pvp-live-review-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    min-width: 0;
+}
+
+.pvp-live-review-chip {
+    min-width: 0;
+    color: rgba(207, 238, 217, 0.82);
+    text-align: right;
+}
+
+.pvp-live-review-summary {
+    margin-top: 7px;
+    color: rgba(235, 247, 239, 0.9);
+}
+
+.pvp-live-review-evidence,
+.pvp-live-review-actions {
+    margin-top: 8px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.pvp-live-review-evidence span,
+.pvp-live-review-actions button {
+    min-width: 0;
+    padding: 5px 7px;
+    border-radius: 999px;
+    border: 1px solid rgba(153, 214, 170, 0.16);
+    background: rgba(255, 255, 255, 0.04);
+    color: rgba(225, 239, 229, 0.84);
+    font-size: 0.68rem;
+    overflow-wrap: anywhere;
+}
+
+.pvp-live-review-actions button {
+    cursor: pointer;
+    font-family: inherit;
+}
+
+.pvp-live-review-actions button:hover,
+.pvp-live-review-actions button:focus-visible {
+    border-color: rgba(153, 214, 170, 0.42);
+    background: rgba(153, 214, 170, 0.09);
+    outline: none;
+}
+
+.pvp-live-event-panel[data-live-review-focus="events"],
+.pvp-live-event-panel[data-live-review-focus="key_turns"],
+.pvp-live-event-panel[data-live-review-focus^="key_turn:"],
+.pvp-live-event-panel[data-live-review-focus^="experience_check:"],
+.pvp-live-key-turns[data-live-review-focus="key_turns"],
+.pvp-live-key-turns[data-live-review-focus^="key_turn:"],
+.pvp-live-key-turn[data-live-review-focus^="key_turn:"],
+.pvp-live-experience-check[data-live-review-focus^="experience_check:"],
+.pvp-live-loadout-selector[data-live-review-focus="loadout"] {
+    border-color: rgba(153, 214, 170, 0.38);
+    box-shadow: 0 0 0 1px rgba(153, 214, 170, 0.14);
+}
+
+.pvp-live-review-suggestions {
+    margin-top: 8px;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+}
+
+.pvp-live-review-suggestions span {
+    min-width: 0;
+    padding: 6px 7px;
+    border-radius: 8px;
+    border: 1px solid rgba(153, 214, 170, 0.13);
+    background: rgba(10, 26, 20, 0.32);
+    color: rgba(232, 244, 235, 0.82);
+    font-size: 0.68rem;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+}
+
+.pvp-live-friendly-series {
+    margin-top: 8px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    position: relative;
+    z-index: 5;
+}
+
+.pvp-live-friendly-series span {
+    min-width: 0;
+    padding: 5px 7px;
+    border-radius: 8px;
+    border: 1px solid rgba(153, 214, 170, 0.18);
+    background: rgba(18, 48, 35, 0.36);
+    color: rgba(232, 244, 235, 0.84);
+    font-size: 0.68rem;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+}
+
+.pvp-live-fairness-receipt {
+    margin-top: 8px;
+    padding: 8px;
+    border-radius: 8px;
+    border: 1px solid rgba(153, 214, 170, 0.16);
+    background: rgba(8, 24, 17, 0.3);
+}
+
+.pvp-live-fairness-receipt.state-watch {
+    border-color: rgba(242, 192, 121, 0.24);
+    background: rgba(36, 28, 14, 0.28);
+}
+
+.pvp-live-fairness-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    min-width: 0;
+    color: rgba(231, 246, 235, 0.9);
+    font-size: 0.7rem;
+    font-weight: 650;
+}
+
+.pvp-live-fairness-head span:last-child {
+    color: rgba(207, 238, 217, 0.64);
+    text-align: right;
+}
+
+.pvp-live-fairness-verdicts {
+    margin-top: 7px;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+}
+
+.pvp-live-fairness-verdicts span,
+.pvp-live-fairness-evidence button {
+    min-width: 0;
+    padding: 6px 7px;
+    border-radius: 8px;
+    border: 1px solid rgba(153, 214, 170, 0.12);
+    background: rgba(255, 255, 255, 0.035);
+    color: rgba(226, 241, 231, 0.78);
+    font-family: inherit;
+    font-size: 0.66rem;
+    line-height: 1.35;
+    text-align: left;
+    overflow-wrap: anywhere;
+}
+
+.pvp-live-fairness-evidence {
+    margin-top: 7px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.pvp-live-fairness-evidence button {
+    cursor: pointer;
+}
+
+.pvp-live-fairness-evidence button:hover,
+.pvp-live-fairness-evidence button:focus-visible,
+.pvp-live-fairness-evidence button[data-live-review-focus^="experience_check:"] {
+    border-color: rgba(153, 214, 170, 0.38);
+    background: rgba(153, 214, 170, 0.08);
+    outline: none;
+}
+
+.pvp-live-fairness-evidence button.passed {
+    border-color: rgba(153, 214, 170, 0.2);
+}
+
+.pvp-live-fairness-evidence button.watch {
+    border-color: rgba(242, 192, 121, 0.2);
+}
+
+.pvp-live-fairness-boundary {
+    margin-top: 7px;
+    color: rgba(207, 238, 217, 0.62);
+    font-size: 0.64rem;
+    line-height: 1.35;
+}
+
+.pvp-live-experience-report {
+    margin-top: 8px;
+    padding: 8px;
+    border-radius: 8px;
+    border: 1px solid rgba(147, 205, 255, 0.14);
+    background: rgba(7, 20, 30, 0.26);
+}
+
+.pvp-live-experience-report.risk-watch {
+    border-color: rgba(242, 192, 121, 0.22);
+}
+
+.pvp-live-experience-head,
+.pvp-live-experience-check-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    min-width: 0;
+}
+
+.pvp-live-experience-head {
+    color: rgba(232, 244, 255, 0.9);
+    font-size: 0.7rem;
+    font-weight: 650;
+}
+
+.pvp-live-experience-head span:last-child,
+.pvp-live-experience-check-head span:last-child {
+    color: rgba(207, 228, 246, 0.66);
+    text-align: right;
+}
+
+.pvp-live-experience-summary {
+    margin-top: 5px;
+    color: rgba(226, 238, 248, 0.78);
+    font-size: 0.68rem;
+    line-height: 1.35;
+}
+
+.pvp-live-effective-action-proof {
+    margin-top: 6px;
+    padding: 6px 7px;
+    border-radius: 8px;
+    border: 1px solid rgba(153, 214, 170, 0.18);
+    background: rgba(89, 172, 109, 0.08);
+    color: rgba(232, 246, 237, 0.84);
+    font-size: 0.66rem;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+}
+
+.pvp-live-effective-action-proof span:first-child {
+    display: inline-block;
+    margin-right: 6px;
+    color: rgba(166, 232, 184, 0.92);
+    font-weight: 700;
+}
+
+.pvp-live-experience-checks {
+    margin-top: 7px;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+}
+
+.pvp-live-experience-check {
+    width: 100%;
+    min-width: 0;
+    padding: 7px;
+    border-radius: 8px;
+    border: 1px solid rgba(147, 205, 255, 0.12);
+    background: rgba(255, 255, 255, 0.035);
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    overflow-wrap: anywhere;
+}
+
+.pvp-live-experience-check:hover {
+    border-color: rgba(147, 205, 255, 0.28);
+    background: rgba(255, 255, 255, 0.055);
+}
+
+.pvp-live-experience-check:focus-visible {
+    outline: 2px solid rgba(153, 214, 170, 0.44);
+    outline-offset: 2px;
+}
+
+.pvp-live-experience-check.watch {
+    border-color: rgba(242, 192, 121, 0.2);
+}
+
+.pvp-live-experience-check-head {
+    color: rgba(239, 247, 255, 0.86);
+    font-size: 0.66rem;
+    font-weight: 650;
+}
+
+.pvp-live-experience-check-detail {
+    margin-top: 5px;
+    color: rgba(226, 238, 248, 0.76);
+    font-size: 0.66rem;
+    line-height: 1.35;
+}
+
+.pvp-live-key-turns {
+    margin-top: 8px;
+    padding: 8px;
+    border-radius: 8px;
+    border: 1px solid rgba(153, 214, 170, 0.14);
+    background: rgba(6, 20, 16, 0.28);
+}
+
+.pvp-live-key-turns-head,
+.pvp-live-key-turn-meta {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    min-width: 0;
+}
+
+.pvp-live-key-turns-head {
+    color: rgba(231, 246, 235, 0.9);
+    font-size: 0.7rem;
+    font-weight: 650;
+}
+
+.pvp-live-key-turns-head span:last-child,
+.pvp-live-key-turn-meta span:last-child {
+    color: rgba(207, 238, 217, 0.62);
+    text-align: right;
+}
+
+.pvp-live-key-turns-summary {
+    margin-top: 5px;
+    color: rgba(226, 241, 231, 0.76);
+    font-size: 0.68rem;
+    line-height: 1.35;
+}
+
+.pvp-live-key-turn-grid {
+    margin-top: 7px;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+}
+
+.pvp-live-key-turn {
+    min-width: 0;
+    padding: 7px;
+    border-radius: 8px;
+    border: 1px solid rgba(153, 214, 170, 0.12);
+    background: rgba(255, 255, 255, 0.035);
+    overflow-wrap: anywhere;
+    color: inherit;
+    text-align: left;
+    font: inherit;
+    cursor: pointer;
+}
+
+.pvp-live-key-turn.severity-terminal {
+    border-color: rgba(242, 192, 121, 0.22);
+}
+
+.pvp-live-key-turn:hover,
+.pvp-live-key-turn:focus-visible,
+.pvp-live-key-turn[data-live-review-focus^="key_turn:"] {
+    border-color: rgba(153, 214, 170, 0.42);
+    background: rgba(153, 214, 170, 0.09);
+    outline: none;
+}
+
+.pvp-live-key-turn-meta {
+    color: rgba(239, 249, 242, 0.86);
+    font-size: 0.66rem;
+    font-weight: 650;
+}
+
+.pvp-live-key-turn-lesson {
+    margin-top: 5px;
+    color: rgba(226, 241, 231, 0.76);
+    font-size: 0.66rem;
+    line-height: 1.35;
+}
+
+.pvp-live-practice-plan {
+    margin-top: 8px;
+    padding: 8px;
+    border-radius: 8px;
+    border: 1px solid rgba(186, 210, 255, 0.16);
+    background: rgba(10, 16, 34, 0.26);
+    overflow-wrap: anywhere;
+}
+
+.pvp-live-practice-plan-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    min-width: 0;
+    color: rgba(232, 240, 255, 0.92);
+    font-size: 0.7rem;
+    font-weight: 650;
+}
+
+.pvp-live-practice-plan-head span:last-child {
+    color: rgba(207, 220, 246, 0.62);
+    text-align: right;
+}
+
+.pvp-live-practice-plan-objective,
+.pvp-live-practice-plan-coach,
+.pvp-live-practice-plan-guardrail {
+    margin-top: 5px;
+    color: rgba(226, 235, 248, 0.78);
+    font-size: 0.68rem;
+    line-height: 1.35;
+}
+
+.pvp-live-practice-plan-guardrail {
+    color: rgba(207, 220, 246, 0.62);
+    font-size: 0.64rem;
+}
+
+.pvp-live-practice-plan-grid,
+.pvp-live-practice-plan-checks {
+    margin-top: 7px;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+}
+
+.pvp-live-practice-plan-checks {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.pvp-live-practice-plan-step,
+.pvp-live-practice-plan-check {
+    min-width: 0;
+    padding: 7px;
+    border-radius: 8px;
+    border: 1px solid rgba(186, 210, 255, 0.12);
+    background: rgba(255, 255, 255, 0.035);
+    color: inherit;
+    text-align: left;
+    font: inherit;
+    cursor: pointer;
+    overflow-wrap: anywhere;
+}
+
+.pvp-live-practice-plan-step:hover,
+.pvp-live-practice-plan-step:focus-visible,
+.pvp-live-practice-plan-step[data-live-review-focus^="key_turn:"],
+.pvp-live-practice-plan-check:hover,
+.pvp-live-practice-plan-check:focus-visible,
+.pvp-live-practice-plan-check[data-live-review-focus^="experience_check:"] {
+    border-color: rgba(186, 210, 255, 0.36);
+    background: rgba(186, 210, 255, 0.08);
+    outline: none;
+}
+
+.pvp-live-practice-plan-step span,
+.pvp-live-practice-plan-check span,
+.pvp-live-practice-plan-step strong,
+.pvp-live-practice-plan-check strong {
+    display: block;
+}
+
+.pvp-live-practice-plan-step span,
+.pvp-live-practice-plan-check span {
+    color: rgba(239, 245, 255, 0.88);
+    font-size: 0.66rem;
+    font-weight: 650;
+}
+
+.pvp-live-practice-plan-step span + span {
+    margin-top: 3px;
+    color: rgba(207, 220, 246, 0.62);
+    font-weight: 500;
+}
+
+.pvp-live-practice-plan-step strong,
+.pvp-live-practice-plan-check strong {
+    margin-top: 5px;
+    color: rgba(226, 235, 248, 0.76);
+    font-size: 0.66rem;
+    line-height: 1.35;
+    font-weight: 500;
+}
+
+.pvp-live-practice-plan-check.watch {
+    border-color: rgba(242, 192, 121, 0.22);
+}
+
+.pvp-live-next-step-guide {
+    margin-top: 8px;
+    padding: 8px;
+    border-radius: 8px;
+    border: 1px solid rgba(153, 214, 170, 0.2);
+    background: rgba(12, 39, 36, 0.24);
+    overflow-wrap: anywhere;
+}
+
+.pvp-live-next-step-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    min-width: 0;
+    color: rgba(229, 246, 233, 0.94);
+    font-size: 0.72rem;
+    font-weight: 700;
+}
+
+.pvp-live-next-step-head span:last-child {
+    color: rgba(153, 214, 170, 0.84);
+    text-align: right;
+}
+
+.pvp-live-next-step-summary,
+.pvp-live-next-step-reason,
+.pvp-live-next-step-boundary {
+    margin-top: 5px;
+    color: rgba(226, 241, 231, 0.78);
+    font-size: 0.68rem;
+    line-height: 1.35;
+}
+
+.pvp-live-next-step-reason,
+.pvp-live-next-step-boundary {
+    color: rgba(205, 226, 211, 0.64);
+}
+
+.pvp-live-next-step-actions {
+    margin-top: 7px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.pvp-live-next-step-actions button {
+    min-width: 0;
+    min-height: 32px;
+    padding: 5px 9px;
+    border-radius: 999px;
+    border: 1px solid rgba(153, 214, 170, 0.22);
+    background: rgba(255, 255, 255, 0.045);
+    color: rgba(229, 246, 233, 0.88);
+    font: inherit;
+    font-size: 0.68rem;
+    cursor: pointer;
+    overflow-wrap: anywhere;
+}
+
+.pvp-live-next-step-actions button[data-live-post-review-next-step-rank="primary"] {
+    border-color: rgba(153, 214, 170, 0.42);
+    background: rgba(153, 214, 170, 0.12);
+    color: rgba(241, 252, 244, 0.94);
+}
+
+.pvp-live-next-step-actions button:hover,
+.pvp-live-next-step-actions button:focus-visible {
+    border-color: rgba(153, 214, 170, 0.48);
+    background: rgba(153, 214, 170, 0.14);
+    outline: none;
+}
+
+.pvp-live-next-step-actions button:disabled {
+    cursor: not-allowed;
+    opacity: 0.62;
+}
+
+.pvp-live-season-goal {
+    margin-top: 8px;
+    padding: 8px;
+    border-radius: 8px;
+    border: 1px solid rgba(243, 194, 107, 0.16);
+    background: rgba(32, 24, 8, 0.22);
+    overflow-wrap: anywhere;
+}
+
+.pvp-live-season-goal-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    min-width: 0;
+    color: rgba(250, 238, 212, 0.92);
+    font-size: 0.72rem;
+    font-weight: 700;
+}
+
+.pvp-live-season-goal-head span:last-child {
+    color: rgba(243, 194, 107, 0.78);
+    text-align: right;
+}
+
+.pvp-live-season-goal-detail,
+.pvp-live-season-goal-boundary,
+.pvp-live-season-goal-last {
+    margin-top: 5px;
+    color: rgba(244, 232, 207, 0.76);
+    font-size: 0.68rem;
+    line-height: 1.35;
+}
+
+.pvp-live-season-goal-boundary,
+.pvp-live-season-goal-last {
+    color: rgba(231, 216, 188, 0.62);
+}
+
+.pvp-live-season-goal-actions {
+    margin-top: 7px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.pvp-live-season-goal-actions button {
+    min-width: 0;
+    padding: 5px 8px;
+    border-radius: 999px;
+    border: 1px solid rgba(243, 194, 107, 0.18);
+    background: rgba(255, 255, 255, 0.045);
+    color: rgba(250, 238, 212, 0.86);
+    font: inherit;
+    font-size: 0.68rem;
+    cursor: pointer;
+}
+
+.pvp-live-season-goal-actions button:hover,
+.pvp-live-season-goal-actions button:focus-visible {
+    border-color: rgba(243, 194, 107, 0.42);
+    background: rgba(243, 194, 107, 0.1);
+    outline: none;
+}
+
+.pvp-live-loadout-recommendation {
+    margin-top: 8px;
+    padding: 8px;
+    border-radius: 8px;
+    border: 1px solid rgba(153, 214, 170, 0.18);
+    background: rgba(20, 48, 34, 0.25);
+    overflow-wrap: anywhere;
+}
+
+.pvp-live-loadout-recommendation-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    min-width: 0;
+    color: rgba(229, 246, 233, 0.92);
+    font-size: 0.72rem;
+    font-weight: 700;
+}
+
+.pvp-live-loadout-recommendation-head span:last-child {
+    color: rgba(153, 214, 170, 0.82);
+    text-align: right;
+}
+
+.pvp-live-loadout-recommendation-line,
+.pvp-live-loadout-recommendation-evidence,
+.pvp-live-loadout-recommendation-boundary {
+    margin-top: 5px;
+    color: rgba(226, 241, 231, 0.78);
+    font-size: 0.68rem;
+    line-height: 1.35;
+}
+
+.pvp-live-loadout-recommendation-evidence,
+.pvp-live-loadout-recommendation-boundary {
+    color: rgba(205, 226, 211, 0.64);
+}
+
+.pvp-live-loadout-recommendation-actions {
+    margin-top: 7px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.pvp-live-loadout-recommendation-actions button {
+    min-width: 0;
+    min-height: 32px;
+    padding: 5px 9px;
+    border-radius: 999px;
+    border: 1px solid rgba(153, 214, 170, 0.22);
+    background: rgba(255, 255, 255, 0.045);
+    color: rgba(229, 246, 233, 0.88);
+    font: inherit;
+    font-size: 0.68rem;
+    cursor: pointer;
+}
+
+.pvp-live-loadout-recommendation-actions button:hover,
+.pvp-live-loadout-recommendation-actions button:focus-visible {
+    border-color: rgba(153, 214, 170, 0.46);
+    background: rgba(153, 214, 170, 0.11);
+    outline: none;
+}
+
+.pvp-live-loadout-recommendation-actions button:disabled {
+    cursor: not-allowed;
+    opacity: 0.62;
+}
+
+.pvp-live-dispute-receipt {
+    margin-top: 8px;
+    padding: 8px;
+    border-radius: 8px;
+    border: 1px solid rgba(243, 194, 107, 0.2);
+    background: rgba(70, 48, 18, 0.22);
+    overflow-wrap: anywhere;
+}
+
+.pvp-live-dispute-receipt-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    min-width: 0;
+    color: rgba(247, 237, 215, 0.92);
+    font-size: 0.72rem;
+    font-weight: 700;
+}
+
+.pvp-live-dispute-receipt-head span:last-child {
+    color: rgba(243, 194, 107, 0.78);
+    text-align: right;
+}
+
+.pvp-live-dispute-receipt-line,
+.pvp-live-dispute-receipt-evidence,
+.pvp-live-dispute-receipt-boundary {
+    margin-top: 5px;
+    color: rgba(242, 232, 210, 0.78);
+    font-size: 0.68rem;
+    line-height: 1.35;
+}
+
+.pvp-live-dispute-receipt-evidence,
+.pvp-live-dispute-receipt-boundary {
+    color: rgba(228, 211, 177, 0.66);
+}
+
+.pvp-live-settlement-report {
+    margin-top: 8px;
+    padding: 8px;
+    border-radius: 8px;
+    border: 1px solid rgba(105, 211, 172, 0.2);
+    background: rgba(10, 33, 27, 0.26);
+    overflow-wrap: anywhere;
+}
+
+.pvp-live-settlement-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    min-width: 0;
+    color: rgba(223, 250, 239, 0.94);
+    font-size: 0.72rem;
+    font-weight: 750;
+}
+
+.pvp-live-settlement-head span:last-child {
+    color: rgba(149, 229, 192, 0.74);
+    text-align: right;
+}
+
+.pvp-live-settlement-summary {
+    margin-top: 6px;
+    color: rgba(229, 250, 240, 0.88);
+    font-size: 0.72rem;
+    font-weight: 700;
+    line-height: 1.35;
+}
+
+.pvp-live-settlement-grid {
+    margin-top: 6px;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 5px;
+}
+
+.pvp-live-settlement-grid span {
+    min-width: 0;
+    padding: 5px 6px;
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.045);
+    color: rgba(226, 245, 235, 0.8);
+    font-size: 0.66rem;
+    line-height: 1.25;
+}
+
+.pvp-live-settlement-reasons {
+    margin-top: 7px;
+    display: grid;
+    gap: 5px;
+}
+
+.pvp-live-settlement-reason {
+    min-width: 0;
+    display: grid;
+    grid-template-columns: minmax(4.75rem, max-content) minmax(0, 1fr);
+    gap: 7px;
+    align-items: start;
+    padding: 6px;
+    border-radius: 6px;
+    background: rgba(149, 229, 192, 0.055);
+    color: rgba(218, 240, 228, 0.78);
+    font-size: 0.66rem;
+    line-height: 1.35;
+}
+
+.pvp-live-settlement-reason span:first-child {
+    color: rgba(149, 229, 192, 0.86);
+    font-weight: 750;
+    white-space: nowrap;
+}
+
+.pvp-live-settlement-reason span:last-child {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.pvp-live-settlement-boundary {
+    margin-top: 6px;
+    color: rgba(210, 234, 220, 0.62);
+    font-size: 0.66rem;
+    line-height: 1.35;
+}
+
+.pvp-live-season-honor {
+    margin-top: 7px;
+    padding-top: 7px;
+    border-top: 1px solid rgba(149, 229, 192, 0.14);
+}
+
+.pvp-live-season-honor-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    color: rgba(232, 251, 241, 0.88);
+    font-size: 0.68rem;
+    font-weight: 750;
+}
+
+.pvp-live-season-honor-head span:last-child {
+    color: rgba(166, 236, 203, 0.72);
+    text-align: right;
+}
+
+.pvp-live-season-honor-summary,
+.pvp-live-season-honor-next,
+.pvp-live-season-honor-boundary {
+    margin-top: 5px;
+    color: rgba(226, 245, 235, 0.76);
+    font-size: 0.66rem;
+    line-height: 1.35;
+}
+
+.pvp-live-season-honor-boundary {
+    color: rgba(210, 234, 220, 0.58);
+}
+
+.pvp-live-season-honor-reward {
+    margin-top: 6px;
+    padding: 7px;
+    border-radius: 7px;
+    border: 1px solid rgba(243, 194, 107, 0.18);
+    background: rgba(62, 41, 12, 0.2);
+    overflow-wrap: anywhere;
+}
+
+.pvp-live-season-honor-reward-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    color: rgba(255, 237, 196, 0.9);
+    font-size: 0.66rem;
+    font-weight: 750;
+}
+
+.pvp-live-season-honor-reward-head span:last-child {
+    color: rgba(255, 219, 139, 0.7);
+    text-align: right;
+}
+
+.pvp-live-season-honor-reward-name {
+    margin-top: 5px;
+    color: rgba(255, 244, 219, 0.88);
+    font-size: 0.68rem;
+    font-weight: 750;
+    line-height: 1.35;
+}
+
+.pvp-live-season-honor-reward-progress,
+.pvp-live-season-honor-reward-collection,
+.pvp-live-season-honor-reward-next,
+.pvp-live-season-honor-reward-boundary {
+    margin-top: 4px;
+    color: rgba(248, 230, 188, 0.72);
+    font-size: 0.64rem;
+    line-height: 1.35;
+}
+
+.pvp-live-season-honor-reward-boundary {
+    color: rgba(238, 219, 176, 0.56);
+}
+
+.pvp-live-loadout-selector .pvp-live-seat-head {
+    align-items: center;
+}
+
+.pvp-live-loadout-selector .pvp-live-seat-badge {
+    max-width: 210px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.pvp-live-loadout-presets {
+    margin-top: 10px;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+}
+
+.pvp-live-loadout-option {
+    min-height: 76px;
+    padding: 11px 12px;
+    border-radius: 10px;
+    border: 1px solid rgba(147, 205, 255, 0.16);
+    background: rgba(20, 32, 48, 0.72);
+    color: rgba(235, 244, 255, 0.94);
+    cursor: pointer;
+    text-align: left;
+}
+
+.pvp-live-loadout-option:hover:not(:disabled) {
+    border-color: rgba(147, 205, 255, 0.36);
+    background: rgba(33, 50, 72, 0.78);
+}
+
+.pvp-live-loadout-option.selected {
+    border-color: rgba(243, 194, 107, 0.82);
+    background: rgba(74, 50, 22, 0.48);
+    box-shadow: 0 0 0 1px rgba(243, 194, 107, 0.22);
+}
+
+.pvp-live-loadout-option:disabled {
+    cursor: not-allowed;
+    opacity: 0.58;
+}
+
+.pvp-live-loadout-name,
+.pvp-live-loadout-desc {
+    display: block;
+    line-height: 1.35;
+}
+
+.pvp-live-loadout-name {
+    color: rgba(255, 231, 192, 0.95);
+    font-size: 0.82rem;
+}
+
+.pvp-live-loadout-desc {
+    margin-top: 7px;
+    color: rgba(216, 226, 238, 0.72);
+    font-size: 0.72rem;
+}
+
+.pvp-live-board {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.pvp-live-duel-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+}
+
+.pvp-live-seat-panel,
+.pvp-live-event-panel {
+    min-width: 0;
+    padding: 16px;
+    border-radius: 18px;
+    border: 1px solid rgba(207, 170, 112, 0.16);
+    background:
+        linear-gradient(145deg, rgba(17, 28, 45, 0.72), rgba(20, 16, 12, 0.68)),
+        radial-gradient(circle at top right, rgba(122, 190, 255, 0.08), transparent 42%);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+
+.pvp-live-seat-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.pvp-live-seat-title,
+.pvp-live-event-title {
+    color: rgba(255, 231, 192, 0.9);
+    font-size: 0.82rem;
+    letter-spacing: 0.12em;
+}
+
+.pvp-live-seat-badge {
+    flex-shrink: 0;
+    min-width: 34px;
+    padding: 5px 9px;
+    border-radius: 999px;
+    border: 1px solid rgba(147, 205, 255, 0.24);
+    color: rgba(225, 241, 255, 0.96);
+    text-align: center;
+}
+
+.pvp-live-statline,
+.pvp-live-loadout,
+.pvp-live-hidden-hand,
+.pvp-live-empty {
+    margin-top: 10px;
+    color: rgba(226, 232, 242, 0.82);
+    font-size: 0.8rem;
+    line-height: 1.55;
+}
+
+.pvp-live-loadout {
+    padding: 8px 10px;
+    border-radius: 10px;
+    border: 1px solid rgba(147, 205, 255, 0.14);
+    background: rgba(72, 133, 190, 0.08);
+    color: rgba(215, 235, 255, 0.88);
+    overflow-wrap: anywhere;
+}
+
+.pvp-live-public-statuses {
+    margin-top: 8px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    min-height: 22px;
+    color: rgba(228, 241, 255, 0.82);
+    font-size: 0.7rem;
+    line-height: 1.28;
+    overflow-wrap: anywhere;
+}
+
+.pvp-live-public-status,
+.pvp-live-public-status-empty {
+    min-width: 0;
+    padding: 3px 5px;
+    border-radius: 8px;
+    border: 1px solid rgba(116, 198, 255, 0.18);
+    background: rgba(116, 198, 255, 0.07);
+}
+
+.pvp-live-public-status {
+    display: inline-flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 4px;
+}
+
+.pvp-live-public-status-label {
+    color: rgba(234, 248, 255, 0.96);
+    font-weight: 800;
+}
+
+.pvp-live-public-status-window {
+    color: rgba(219, 239, 255, 0.86);
+    font-weight: 700;
+}
+
+.pvp-live-public-status-summary {
+    color: rgba(219, 239, 255, 0.72);
+}
+
+.pvp-live-card-row {
+    margin-top: 12px;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+    gap: 10px;
+}
+
+.pvp-live-card {
+    min-height: 96px;
+    padding: 11px 12px;
+    border-radius: 12px;
+    border: 1px solid rgba(207, 170, 112, 0.26);
+    background: rgba(207, 170, 112, 0.08);
+    color: rgba(255, 244, 224, 0.98);
+    cursor: pointer;
+    text-align: left;
+}
+
+.pvp-live-card:disabled {
+    cursor: not-allowed;
+    opacity: 0.48;
+}
+
+.pvp-live-card.selected {
+    border-color: rgba(243, 194, 107, 0.9);
+    box-shadow: 0 0 0 1px rgba(243, 194, 107, 0.35), 0 10px 24px rgba(243, 194, 107, 0.16);
+}
+
+.pvp-live-card.confirming {
+    border-color: rgba(255, 209, 122, 0.9);
+    background: rgba(255, 191, 92, 0.14);
+    box-shadow: 0 0 0 1px rgba(255, 209, 122, 0.28);
+}
+
+.pvp-live-card-name,
+.pvp-live-card-meta {
+    display: block;
+    line-height: 1.3;
+}
+
+.pvp-live-card-name {
+    font-size: 0.88rem;
+}
+
+.pvp-live-card-meta {
+    margin-top: 7px;
+    color: rgba(213, 224, 238, 0.72);
+    font-size: 0.72rem;
+}
+
+.pvp-live-card-preview {
+    display: block;
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid rgba(255, 244, 224, 0.1);
+    color: rgba(176, 228, 255, 0.9);
+    font-size: 0.68rem;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+}
+
+.pvp-live-card-preview.has-status-mitigation {
+    color: rgba(198, 245, 221, 0.95);
+}
+
+.pvp-live-card-response-chip {
+    display: inline-flex;
+    align-items: center;
+    margin: 0 6px 3px 0;
+    padding: 2px 6px;
+    border-radius: 6px;
+    background: rgba(64, 184, 133, 0.18);
+    color: rgba(210, 255, 230, 0.98);
+    font-weight: 700;
+}
+
+.pvp-live-event-log {
+    margin-top: 10px;
+    display: grid;
+    gap: 8px;
+    color: rgba(227, 234, 244, 0.8);
+    font-size: 0.78rem;
+}
+
+.pvp-live-event-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 7px 9px;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.04);
+    min-width: 0;
+}
+
+.pvp-live-event-main,
+.pvp-live-event-detail {
+    min-width: 0;
+    overflow-wrap: anywhere;
+    line-height: 1.45;
+}
+
+.pvp-live-event-main {
+    flex: 0 0 auto;
+    color: rgba(255, 231, 192, 0.92);
+}
+
+.pvp-live-event-detail {
+    flex: 1 1 auto;
+    color: rgba(213, 224, 238, 0.72);
+    text-align: right;
+}
+
+.pvp-live-footer {
+    gap: 14px;
+}
+
+.pvp-live-action-bar {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 10px;
+}
+
+.pvp-live-action-bar .challenge-btn {
+    min-width: 104px;
+    width: auto;
+    padding: 12px 18px;
+}
+
+.challenge-btn.secondary {
+    background: rgba(42, 52, 69, 0.82);
+    border-color: rgba(147, 205, 255, 0.18);
+}
+
+.challenge-btn.danger {
+    background: rgba(92, 32, 32, 0.84);
+    border-color: rgba(255, 130, 130, 0.28);
+}
+
+[data-live-phase="waiting"] .pvp-live-status-card {
+    border-color: rgba(147, 205, 255, 0.32);
+}
+
+[data-live-phase="matched"] .pvp-live-mode-boundary,
+[data-live-phase="setup"] .pvp-live-mode-boundary,
+[data-live-phase="active"] .pvp-live-mode-boundary,
+[data-live-phase="sync_required"] .pvp-live-mode-boundary,
+[data-live-phase="finished"] .pvp-live-mode-boundary,
+[data-live-phase="invalidated"] .pvp-live-mode-boundary {
+    display: none;
+}
+
+[data-live-phase="setup"] .pvp-live-status-card {
+    border-color: rgba(243, 194, 107, 0.42);
+}
+
+[data-live-phase="finished"] .pvp-live-status-card {
+    border-color: rgba(207, 170, 112, 0.36);
+}
+
+[data-live-phase="invalidated"] .pvp-live-status-card {
+    border-color: rgba(255, 156, 92, 0.38);
+}
+
 /* --- Ranking Tab --- */
 .pvp-tab-pane {
     height: 100%;
@@ -2537,6 +4707,11 @@ input:checked+.seal-slider .seal-face.on {
 }
 
 @media (max-width: 960px) {
+    #pvp-screen {
+        overflow-y: auto;
+        overflow-x: hidden;
+    }
+
     #pvp-screen .screen-header.transparent {
         height: auto;
         min-height: 90px;
@@ -2559,6 +4734,7 @@ input:checked+.seal-slider .seal-face.on {
     .pvp-nav-sidebar {
         width: 100%;
         flex-direction: row;
+        flex-wrap: wrap;
         justify-content: space-between;
         align-items: stretch;
         gap: 10px;
@@ -2566,7 +4742,8 @@ input:checked+.seal-slider .seal-face.on {
     }
 
     .rune-tab {
-        flex: 1;
+        flex: 1 1 calc(50% - 10px);
+        min-width: 0;
         justify-content: center;
         gap: 10px;
         padding: 10px 6px;
@@ -2609,6 +4786,414 @@ input:checked+.seal-slider .seal-face.on {
     .pvp-risk-axis-grid {
         grid-template-columns: 1fr;
         gap: 10px;
+    }
+
+    .pvp-live-meta-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        margin-top: 6px;
+        gap: 4px;
+    }
+
+    .pvp-live-meta {
+        padding: 4px 3px;
+        border-radius: 8px;
+    }
+
+    .pvp-live-meta .label {
+        font-size: 0.54rem;
+        letter-spacing: 0;
+    }
+
+    .pvp-live-meta .value {
+        margin-top: 3px;
+        font-size: 0.66rem;
+        line-height: 1.15;
+        white-space: normal;
+        overflow-wrap: anywhere;
+    }
+
+    .pvp-live-duel-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .pvp-live-card-row {
+        grid-template-columns: 1fr;
+    }
+
+    .pvp-live-loadout-presets {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 6px;
+    }
+
+    .pvp-live-loadout-exploration-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .pvp-live-season-goal-head,
+    .pvp-live-next-step-head,
+    .pvp-live-loadout-recommendation-head,
+    .pvp-live-loadout-exploration-head,
+    .pvp-live-loadout-exploration-card-head {
+        align-items: flex-start;
+        flex-direction: column;
+        gap: 3px;
+    }
+
+    .pvp-live-season-goal-head span:last-child,
+    .pvp-live-next-step-head span:last-child,
+    .pvp-live-loadout-recommendation-head span:last-child,
+    .pvp-live-loadout-exploration-head span:last-child,
+    .pvp-live-loadout-exploration-card-head span:last-child {
+        text-align: left;
+    }
+
+    .pvp-live-loadout-option {
+        min-height: 44px;
+        padding: 6px 5px;
+        text-align: center;
+    }
+
+    .pvp-live-loadout-selector {
+        margin-top: 6px;
+        padding-top: 6px;
+    }
+
+    [data-live-phase="matched"] .pvp-live-loadout-selector,
+    [data-live-phase="setup"] .pvp-live-loadout-selector,
+    [data-live-phase="active"] .pvp-live-loadout-selector {
+        display: none;
+    }
+
+    .pvp-live-invite-controls {
+        grid-template-columns: 1fr;
+    }
+
+    .pvp-live-invite-inbox-item {
+        grid-template-columns: 1fr;
+    }
+
+    .pvp-live-status-card {
+        padding-top: 5px;
+        padding-bottom: 5px;
+    }
+
+    .pvp-live-quality {
+        padding: 7px 8px;
+        font-size: 0.7rem;
+        line-height: 1.25;
+        overflow: visible;
+        text-overflow: clip;
+        white-space: normal;
+        overflow-wrap: anywhere;
+    }
+
+    .pvp-live-turn-timer {
+        margin-top: 4px;
+        padding: 5px 8px;
+        font-size: 0.7rem;
+        line-height: 1.2;
+        overflow: visible;
+        text-overflow: clip;
+        white-space: normal;
+        overflow-wrap: anywhere;
+    }
+
+    .pvp-live-timeout-forecast {
+        margin-top: 4px;
+        padding: 5px 6px;
+        gap: 4px;
+        font-size: 0.62rem;
+        line-height: 1.16;
+        overflow: visible;
+        white-space: normal;
+        overflow-wrap: anywhere;
+    }
+
+    .pvp-live-timeout-forecast-line {
+        gap: 4px;
+    }
+
+    .pvp-live-timeout-forecast-line.compact {
+        font-size: 0.56rem;
+    }
+
+    .pvp-live-timeout-forecast-chip {
+        max-width: 38%;
+        padding: 2px 4px;
+    }
+
+    .pvp-live-connection-status,
+    .pvp-live-connection-tempo,
+    .pvp-live-realtime-status {
+        margin-top: 4px;
+        padding: 5px 8px;
+        font-size: 0.7rem;
+        line-height: 1.25;
+        overflow: visible;
+        white-space: normal;
+        overflow-wrap: anywhere;
+    }
+
+    .pvp-live-connection-tempo {
+        align-items: stretch;
+        flex-direction: column;
+        gap: 6px;
+    }
+
+    .pvp-live-connection-tempo .pvp-live-tempo-action {
+        width: 100%;
+        min-height: 34px;
+    }
+
+    .pvp-live-opening-safeguard {
+        margin-top: 4px;
+        padding: 3px;
+        gap: 3px;
+        font-size: 0.62rem;
+        line-height: 1.16;
+    }
+
+    .pvp-live-opening-safeguard-chip {
+        padding: 2px 4px;
+    }
+
+    .pvp-live-action-receipt {
+        margin-top: 4px;
+        padding: 4px;
+        gap: 3px;
+        font-size: 0.62rem;
+        line-height: 1.18;
+    }
+
+    .pvp-live-action-receipt-chip {
+        padding: 2px 4px;
+    }
+
+    .pvp-live-action-receipt-line {
+        min-width: 100%;
+        flex-basis: 100%;
+    }
+
+    .pvp-live-duel-momentum {
+        margin-top: 4px;
+        padding: 5px 6px;
+        gap: 4px;
+        font-size: 0.62rem;
+        line-height: 1.18;
+    }
+
+    .pvp-live-duel-momentum-line {
+        gap: 4px;
+    }
+
+    .pvp-live-duel-momentum-line.compact {
+        font-size: 0.58rem;
+    }
+
+    .pvp-live-duel-momentum-chip {
+        max-width: 38%;
+        padding: 2px 4px;
+    }
+
+    .pvp-live-intent-signal {
+        margin-top: 3px;
+        padding: 4px 5px;
+        gap: 3px;
+        font-size: 0.6rem;
+        line-height: 1.14;
+    }
+
+    .pvp-live-intent-signal-line {
+        gap: 4px;
+    }
+
+    .pvp-live-intent-signal-line.compact {
+        font-size: 0.56rem;
+    }
+
+    .pvp-live-intent-signal-chip {
+        max-width: 38%;
+        padding: 2px 4px;
+    }
+
+    .pvp-live-counterplay-guide {
+        margin-top: 3px;
+        padding: 4px 5px;
+        gap: 3px;
+        font-size: 0.6rem;
+        line-height: 1.14;
+    }
+
+    .pvp-live-counterplay-guide-line {
+        gap: 4px;
+    }
+
+    .pvp-live-counterplay-guide-line.compact {
+        font-size: 0.56rem;
+    }
+
+    .pvp-live-counterplay-guide-chip {
+        max-width: 38%;
+        padding: 2px 4px;
+    }
+
+    .pvp-live-action-window-receipt {
+        margin-top: 3px;
+        padding: 4px 5px;
+        gap: 3px;
+        font-size: 0.6rem;
+        line-height: 1.14;
+    }
+
+    .pvp-live-action-window-receipt-line {
+        gap: 4px;
+    }
+
+    .pvp-live-action-window-receipt-line.compact {
+        font-size: 0.56rem;
+    }
+
+    .pvp-live-action-window-receipt-chip {
+        max-width: 38%;
+        padding: 2px 4px;
+    }
+
+    .pvp-live-social-panel {
+        margin-top: 4px;
+        padding: 4px;
+    }
+
+    .pvp-live-emote-row {
+        gap: 3px;
+    }
+
+    .pvp-live-emote-button {
+        min-height: 34px;
+        padding: 6px 8px;
+        font-size: 0.66rem;
+    }
+
+    .pvp-live-social-status {
+        display: none;
+    }
+
+    .pvp-live-first-guide {
+        margin-top: 5px;
+        padding: 5px;
+        font-size: 0.66rem;
+        line-height: 1.25;
+        max-height: none;
+        overflow: visible;
+    }
+
+    .pvp-live-post-review {
+        padding: 8px;
+        font-size: 0.7rem;
+        line-height: 1.35;
+        max-height: none;
+        overflow: visible;
+    }
+
+    .pvp-live-guide-head {
+        align-items: flex-start;
+        flex-direction: column;
+        gap: 4px;
+    }
+
+    .pvp-live-review-head {
+        align-items: flex-start;
+        flex-direction: column;
+        gap: 4px;
+    }
+
+    .pvp-live-guide-next {
+        text-align: left;
+    }
+
+    .pvp-live-review-chip {
+        text-align: left;
+    }
+
+    .pvp-live-settlement-head,
+    .pvp-live-season-honor-head,
+    .pvp-live-season-honor-reward-head {
+        align-items: flex-start;
+        flex-direction: column;
+        gap: 3px;
+    }
+
+    .pvp-live-settlement-head span:last-child,
+    .pvp-live-season-honor-head span:last-child,
+    .pvp-live-season-honor-reward-head span:last-child {
+        text-align: left;
+    }
+
+    .pvp-live-settlement-reason {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 3px;
+    }
+
+    .pvp-live-settlement-reason span:first-child {
+        white-space: normal;
+    }
+
+    .pvp-live-guide-steps {
+        gap: 5px;
+    }
+
+    .pvp-live-guide-step:nth-child(n + 3) {
+        display: none;
+    }
+
+    .pvp-live-guide-loadouts {
+        display: flex;
+        overflow-x: auto;
+        gap: 5px;
+    }
+
+    .pvp-live-guide-loadout {
+        flex: 0 0 168px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .pvp-live-review-suggestions {
+        grid-template-columns: 1fr;
+    }
+
+    .pvp-live-review-suggestions span:nth-child(n + 2) {
+        display: none;
+    }
+
+    .pvp-live-loadout-desc {
+        display: none;
+    }
+
+    .pvp-live-loadout-selector .pvp-live-seat-head {
+        align-items: flex-start;
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    .pvp-live-loadout-selector .pvp-live-seat-badge {
+        max-width: 100%;
+    }
+
+    .pvp-live-public-statuses {
+        margin-top: 5px;
+        gap: 3px;
+        font-size: 0.6rem;
+        line-height: 1.14;
+    }
+
+    .pvp-live-public-status,
+    .pvp-live-public-status-empty {
+        padding: 2px 4px;
+    }
+
+    .pvp-live-shell {
+        scroll-margin-top: 22px;
     }
 
     .pvp-dossier-grid {
@@ -2662,6 +5247,15 @@ input:checked+.seal-slider .seal-face.on {
     .pvp-nav-footer {
         padding: 0 16px 16px;
         align-items: stretch;
+    }
+
+    .pvp-live-action-bar {
+        justify-content: stretch;
+    }
+
+    .pvp-live-action-bar .challenge-btn {
+        flex: 1 1 136px;
+        min-width: 0;
     }
 
     .challenge-intent-line {

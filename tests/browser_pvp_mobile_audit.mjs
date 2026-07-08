@@ -91,6 +91,8 @@ function rectObj(el) {
   }
   await page.click('#pvp-btn', { timeout: 5000, force: true });
   await page.waitForTimeout(700);
+  await clickRuneTab(page, '天道榜');
+  await page.waitForTimeout(400);
 
   const rankingProbe = await page.evaluate(() => {
     const toRect = (el) => {

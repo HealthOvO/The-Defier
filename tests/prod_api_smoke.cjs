@@ -140,6 +140,568 @@ function makePvpBattleData(marker, overrides = {}) {
   };
 }
 
+function makeLivePvpLoadout(identitySlot, pattern) {
+  const deck = [];
+  for (let index = 0; index < 20; index += 1) {
+    deck.push({ id: pattern[index % pattern.length], upgraded: false });
+  }
+  return {
+    identitySlot,
+    label: `${identitySlot}-prod-smoke-live`,
+    deck
+  };
+}
+
+async function submitLiveIntent(matchId, token, intent) {
+  return request(`/api/pvp/live/matches/${encodeURIComponent(matchId)}/intents`, {
+    method: 'POST',
+    token,
+    body: intent
+  });
+}
+
+async function submitLiveHeartbeat(matchId, participant, label) {
+  const result = await request(`/api/pvp/live/matches/${encodeURIComponent(matchId)}/heartbeat`, {
+    method: 'POST',
+    token: participant.sessionToken,
+    body: {}
+  });
+  requireOk(label, result);
+  return result;
+}
+
+function hasLiveTerminalEvent(stateView) {
+  return Array.isArray(stateView?.recentEvents)
+    && stateView.recentEvents.some(event => ['connection_timeout', 'turn_timeout', 'match_finished'].includes(event?.eventType));
+}
+
+function assertRankAndWalletUnchanged(label, before, after) {
+  assert.strictEqual(after.payload.rank.score, before.payload.rank.score, `${label} prod live invite smoke should not change rank scores`);
+  assert.strictEqual(after.payload.rank.wins, before.payload.rank.wins, `${label} prod live invite smoke should not change rank wins`);
+  assert.strictEqual(after.payload.rank.losses, before.payload.rank.losses, `${label} prod live invite smoke should not change rank losses`);
+  assert.strictEqual(after.payload.wallet.coins, before.payload.wallet.coins, `${label} prod live invite smoke should not change wallet coins`);
+  assert.strictEqual(after.payload.wallet.totalMatches, before.payload.wallet.totalMatches, `${label} prod live invite smoke should not change wallet match count`);
+}
+
+async function readyLiveMatch({ matchId, tokenA, tokenB, stateVersionA, prefix }) {
+  const readyA = await submitLiveIntent(matchId, tokenA, {
+    intentId: `${prefix}-ready-a-${RUN_ID}`,
+    intentType: 'ready',
+    stateVersion: stateVersionA,
+    payload: {}
+  });
+  requireOk(`${prefix} ready A`, readyA);
+  assert.strictEqual(readyA.payload.result, 'accepted', `${prefix} ready A should be accepted: ${JSON.stringify(readyA.payload)}`);
+
+  const readyB = await submitLiveIntent(matchId, tokenB, {
+    intentId: `${prefix}-ready-b-${RUN_ID}`,
+    intentType: 'ready',
+    stateVersion: readyA.payload.stateView.stateVersion,
+    payload: {}
+  });
+  requireOk(`${prefix} ready B`, readyB);
+  assert.strictEqual(readyB.payload.result, 'accepted', `${prefix} ready B should be accepted: ${JSON.stringify(readyB.payload)}`);
+  assert.strictEqual(readyB.payload.stateView?.status, 'active', `${prefix} both ready should enter active: ${JSON.stringify(readyB.payload)}`);
+  return readyB;
+}
+
+function getPublicEventData(event) {
+  if (!event || typeof event !== 'object') return {};
+  if (event.publicData && typeof event.publicData === 'object') return event.publicData;
+  if (event.payload && typeof event.payload === 'object') return event.payload;
+  return {};
+}
+
+function pickLiveDamageCard(stateView) {
+  const playableCards = Array.isArray(stateView?.actionPreviewReport?.playableCards)
+    ? stateView.actionPreviewReport.playableCards
+    : [];
+  return playableCards
+    .filter(card => Math.max(0, Math.floor(Number(card?.hpDamage) || 0)) > 0)
+    .sort((left, right) => {
+      const leftLethal = Math.max(0, Math.floor(Number(left?.targetHpAfter) || 0)) <= 0 && left?.openingProtection?.willTrigger !== true;
+      const rightLethal = Math.max(0, Math.floor(Number(right?.targetHpAfter) || 0)) <= 0 && right?.openingProtection?.willTrigger !== true;
+      if (leftLethal !== rightLethal) return leftLethal ? -1 : 1;
+      return Math.max(0, Math.floor(Number(right?.hpDamage) || 0)) - Math.max(0, Math.floor(Number(left?.hpDamage) || 0));
+    })[0] || null;
+}
+
+function assertRankedLethalSettlementReasons(settlement, label) {
+  const reasons = Array.isArray(settlement?.reasonLines) ? settlement.reasonLines : [];
+  assert(reasons.length >= 3, `prod live ranked lethal settlement should expose player-readable reason lines (${label}): ${JSON.stringify(settlement)}`);
+  const byId = Object.fromEntries(reasons.map(reason => [reason?.id, reason]));
+  assert.ok(
+    byId.finish_type
+      && byId.finish_type.label === '终局类型'
+      && /公开伤害|终局事件/.test(String(byId.finish_type.line || ''))
+      && byId.finish_type.sourceVisibility === 'public_events',
+    `prod live ranked lethal settlement should explain finish type (${label}): ${JSON.stringify(reasons)}`
+  );
+  assert.ok(
+    byId.score_delta
+      && byId.score_delta.label === '积分变化'
+      && /正式积分/.test(String(byId.score_delta.line || ''))
+      && /服务端权威/.test(String(byId.score_delta.line || ''))
+      && /对手强度/.test(String(byId.score_delta.line || ''))
+      && byId.score_delta.sourceVisibility === 'server_authoritative_settlement'
+      && byId.score_delta.rankedImpact === 'official',
+    `prod live ranked lethal settlement should explain score delta (${label}): ${JSON.stringify(reasons)}`
+  );
+  assert.ok(
+    byId.reward_boundary
+      && byId.reward_boundary.label === '奖励边界'
+      && /天道币/.test(String(byId.reward_boundary.line || ''))
+      && /不改变战斗数值/.test(String(byId.reward_boundary.line || ''))
+      && byId.reward_boundary.sourceVisibility === 'server_authoritative_settlement',
+    `prod live ranked lethal settlement should explain reward boundary (${label}): ${JSON.stringify(reasons)}`
+  );
+  assert.ok(
+    reasons.every(reason => reason?.usesHiddenInformation === false),
+    `prod live ranked lethal settlement reasons should not use hidden information (${label}): ${JSON.stringify(reasons)}`
+  );
+
+  const reasonCopyHaystack = [
+    settlement?.summaryLine,
+    settlement?.boundary,
+    JSON.stringify(reasons)
+  ].join(' ');
+  assert.ok(
+    !/rating":|\belo\b|opponentRating|expectedWinRate|ranked_authoritative|surrender_|connection_timeout|turn_timeout|ready_timeout/i.test(reasonCopyHaystack),
+    `prod live ranked lethal settlement copy should not leak hidden rating or raw protocol tokens (${label}): ${reasonCopyHaystack}`
+  );
+
+  const settlementHiddenHaystack = JSON.stringify(settlement || {});
+  assert.ok(
+    !/rating":|\belo\b|opponentRating|expectedWinRate/i.test(settlementHiddenHaystack),
+    `prod live ranked lethal settlement report should not expose hidden rating fields (${label}): ${settlementHiddenHaystack}`
+  );
+}
+
+async function readLiveMatchForSeat(matchId, participant, label) {
+  const result = await request(`/api/pvp/live/matches/${encodeURIComponent(matchId)}`, { token: participant.sessionToken });
+  requireOk(label, result);
+  assert.strictEqual(result.payload.matchId, matchId, `${label} should read the same match: ${JSON.stringify(result.payload)}`);
+  return result;
+}
+
+async function finishRankedMatchWithRealLethal({ matchId, participantsBySeat }) {
+  const seatIds = Object.keys(participantsBySeat).filter(seatId => seatId === 'A' || seatId === 'B');
+  assert.strictEqual(seatIds.length, 2, `prod live ranked lethal needs both seat tokens: ${JSON.stringify(seatIds)}`);
+  let latest = await readLiveMatchForSeat(matchId, participantsBySeat[seatIds[0]], 'prod live ranked lethal scout');
+  const finishEvents = [];
+  for (let step = 0; step < 40; step += 1) {
+    const scoutView = latest.payload.stateView;
+    if (scoutView?.status === 'finished') {
+      return { terminal: latest, finishEvents, steps: step };
+    }
+    assert.strictEqual(scoutView?.status, 'active', `prod live ranked real-card lethal should stay active before terminal: ${JSON.stringify(scoutView)}`);
+    const currentSeat = scoutView.currentSeat === 'B' ? 'B' : 'A';
+    const actor = participantsBySeat[currentSeat];
+    assert(actor, `prod live ranked current seat should have participant token: ${currentSeat}`);
+    const actorRead = latest.payload.seatId === currentSeat
+      ? latest
+      : await readLiveMatchForSeat(matchId, actor, `prod live ranked lethal actor ${currentSeat} read`);
+    const view = actorRead.payload.stateView;
+    const card = pickLiveDamageCard(view);
+    const stateVersion = view.stateVersion;
+    const intent = card
+      ? {
+          intentId: `prod-live-ranked-lethal-${currentSeat}-${step}-${RUN_ID}`,
+          intentType: 'play_card',
+          stateVersion,
+          payload: {
+            cardInstanceId: card.cardInstanceId,
+            targetSeat: card.targetSeat || view.opponent?.seatId || (currentSeat === 'A' ? 'B' : 'A')
+          }
+        }
+      : {
+          intentId: `prod-live-ranked-handoff-${currentSeat}-${step}-${RUN_ID}`,
+          intentType: 'end_turn',
+          stateVersion,
+          payload: {}
+        };
+    const action = await submitLiveIntent(matchId, actor.sessionToken, intent);
+    requireOk(`prod live ranked real ${intent.intentType} ${currentSeat}`, action);
+    assert.strictEqual(action.payload.result, 'accepted', `prod live ranked real ${intent.intentType} should be accepted: ${JSON.stringify(action.payload)}`);
+    if (Array.isArray(action.payload.events)) finishEvents.push(...action.payload.events);
+    if (action.payload.stateView?.status === 'finished') {
+      const review = action.payload.stateView?.postMatchReview;
+      assert.strictEqual(review?.finishReason, 'lethal', `prod live ranked real card lethal should finish authoritative match: ${JSON.stringify(review)}`);
+      assert.strictEqual(review?.winnerSeat, currentSeat, `prod live ranked lethal winner should be the real card actor: ${JSON.stringify(review)}`);
+      assert(
+        Array.isArray(action.payload.events)
+          && action.payload.events.some(event => event.eventType === 'match_finished' && getPublicEventData(event).finishReason === 'lethal'),
+        `prod live ranked lethal terminal action should include lethal match_finished event: ${JSON.stringify(action.payload.events)}`
+      );
+      assert(
+        !finishEvents.some(event => event.eventType === 'player_surrendered'),
+        `prod live ranked lethal should not use surrender shortcut: ${JSON.stringify(finishEvents)}`
+      );
+      return { terminal: action, finishEvents, steps: step + 1 };
+    }
+    latest = action;
+  }
+  throw new Error(`prod live ranked real-card lethal did not finish within action budget: ${JSON.stringify(latest.payload?.stateView)}`);
+}
+
+async function assertRankedActiveRecoverySmoke({ matchId, participantsBySeat }) {
+  const heartbeatsBySeat = {};
+  for (const [seatId, participant] of Object.entries(participantsBySeat)) {
+    if (seatId !== 'A' && seatId !== 'B') continue;
+    const current = await request('/api/pvp/live/matches/current', { token: participant.sessionToken });
+    requireOk(`prod live ranked current recovery ${seatId}`, current);
+    assert.strictEqual(current.payload.matchId, matchId, `prod live ranked active current match should recover same ranked match: ${JSON.stringify(current.payload)}`);
+    assert.strictEqual(current.payload.seatId, seatId, `prod live ranked active current match should preserve viewer seat: ${JSON.stringify(current.payload)}`);
+    assert.strictEqual(current.payload.stateView?.mode, 'ranked', `prod live ranked active current match should stay ranked: ${JSON.stringify(current.payload)}`);
+    assert.strictEqual(current.payload.stateView?.status, 'active', `prod live ranked active current match should stay active: ${JSON.stringify(current.payload)}`);
+    assert.strictEqual(current.payload.stateView?.postMatchReview, null, `prod live ranked current recovery should keep terminal review hidden before grace: ${JSON.stringify(current.payload.stateView?.postMatchReview)}`);
+    assert.strictEqual(current.payload.stateView?.turnTimer?.reportVersion, 'pvp-live-turn-timer-v1', `prod live ranked active current match should preserve turn timer: ${JSON.stringify(current.payload.stateView?.turnTimer)}`);
+    assert.strictEqual(current.payload.stateView?.connectionReport?.reportVersion, 'pvp-live-connection-v1', `prod live ranked active current match should expose connection report: ${JSON.stringify(current.payload.stateView?.connectionReport)}`);
+    assert.strictEqual(current.payload.stateView?.connectionReport?.viewer?.seatId, seatId, `prod live ranked active current match should scope connection viewer seat: ${JSON.stringify(current.payload.stateView?.connectionReport)}`);
+
+    const heartbeat = await submitLiveHeartbeat(matchId, participant, `prod live ranked heartbeat recovery ${seatId}`);
+    assert.strictEqual(heartbeat.payload.matchId, matchId, `prod live ranked heartbeat recovery should recover same match: ${JSON.stringify(heartbeat.payload)}`);
+    assert.strictEqual(heartbeat.payload.seatId, seatId, `prod live ranked heartbeat recovery should preserve viewer seat: ${JSON.stringify(heartbeat.payload)}`);
+    assert.strictEqual(heartbeat.payload.stateView?.mode, 'ranked', `prod live ranked heartbeat recovery should stay ranked: ${JSON.stringify(heartbeat.payload)}`);
+    assert.strictEqual(heartbeat.payload.stateView?.status, 'active', `prod live ranked heartbeat recovery should keep active ranked match: ${JSON.stringify(heartbeat.payload)}`);
+    assert.strictEqual(heartbeat.payload.stateView?.postMatchReview, null, `prod live ranked heartbeat recovery should keep terminal review hidden: ${JSON.stringify(heartbeat.payload.stateView?.postMatchReview)}`);
+    assert.strictEqual(heartbeat.payload.stateView?.connectionReport?.viewer?.status, 'online', `prod live ranked heartbeat recovery should mark viewer online: ${JSON.stringify(heartbeat.payload.stateView?.connectionReport)}`);
+    assert.strictEqual(heartbeat.payload.stateView?.connectionTempoReport?.sourceVisibility, 'server_authoritative_connection_state', `prod live ranked heartbeat recovery should keep authoritative tempo source: ${JSON.stringify(heartbeat.payload.stateView?.connectionTempoReport)}`);
+    heartbeatsBySeat[seatId] = heartbeat;
+  }
+
+  const baseline = heartbeatsBySeat.A || heartbeatsBySeat.B;
+  const baselineView = baseline && baseline.payload && baseline.payload.stateView;
+  const observerSeatId = baselineView?.currentSeat === 'B' ? 'B' : 'A';
+  const silentSeatId = observerSeatId === 'A' ? 'B' : 'A';
+  const observer = participantsBySeat[observerSeatId];
+  const silent = participantsBySeat[silentSeatId];
+  assert(observer && silent, `prod live ranked reconnect grace recovery needs both seat participants: ${JSON.stringify(Object.keys(participantsBySeat))}`);
+
+  const observerBaseline = await request('/api/pvp/live/matches/current', { token: observer.sessionToken });
+  requireOk(`prod live ranked reconnect grace baseline ${observerSeatId}`, observerBaseline);
+  assert.strictEqual(observerBaseline.payload.stateView?.currentSeat, observerSeatId, `prod live ranked reconnect grace baseline should use current actor as observer: ${JSON.stringify(observerBaseline.payload.stateView)}`);
+  const baselineDeadlineAt = Math.max(0, Math.floor(Number(observerBaseline.payload.stateView?.turnTimer?.deadlineAt) || 0));
+  const turnTimeoutMs = Math.max(0, Math.floor(Number(observerBaseline.payload.stateView?.turnTimer?.timeoutMs) || 0));
+  const heartbeatStaleMs = Math.max(1000, Math.floor(Number(observerBaseline.payload.stateView?.connectionReport?.heartbeatStaleMs) || 15000));
+  const reconnectGraceMs = Math.max(1000, Math.floor(Number(observerBaseline.payload.stateView?.connectionReport?.graceMs) || 30000));
+  const graceProbeMs = Math.min(1000, Math.max(250, Math.floor(reconnectGraceMs / 2)));
+  const waitMs = heartbeatStaleMs + graceProbeMs;
+  assert(turnTimeoutMs > waitMs + 5000, `prod live ranked reconnect grace probe should fit inside active turn timer: ${JSON.stringify({ turnTimeoutMs, waitMs, heartbeatStaleMs, reconnectGraceMs })}`);
+
+  const observerKeepaliveDelayMs = Math.max(100, Math.floor(heartbeatStaleMs * 0.75));
+  await sleep(observerKeepaliveDelayMs);
+  const observerKeepalive = await submitLiveHeartbeat(matchId, observer, `prod live ranked reconnect grace observer keepalive ${observerSeatId}`);
+  assert.strictEqual(observerKeepalive.payload.stateView?.status, 'active', `prod live ranked reconnect grace observer keepalive should keep active match: ${JSON.stringify(observerKeepalive.payload)}`);
+  await sleep(Math.max(0, waitMs - observerKeepaliveDelayMs));
+
+  const graceCurrent = await request('/api/pvp/live/matches/current', { token: observer.sessionToken });
+  requireOk(`prod live ranked reconnect grace current recovery ${observerSeatId}`, graceCurrent);
+  assert.strictEqual(graceCurrent.payload.matchId, matchId, `prod live ranked reconnect grace current recovery should keep same match: ${JSON.stringify(graceCurrent.payload)}`);
+  assert.strictEqual(graceCurrent.payload.stateView?.status, 'active', `prod live ranked silent opponent should enter reconnect grace through current match recovery: ${JSON.stringify(graceCurrent.payload.stateView)}`);
+  assert.strictEqual(graceCurrent.payload.stateView?.postMatchReview, null, `prod live ranked reconnect grace current recovery should keep terminal review hidden: ${JSON.stringify(graceCurrent.payload.stateView?.postMatchReview)}`);
+  assert.strictEqual(graceCurrent.payload.stateView?.turnTimer?.deadlineAt, baselineDeadlineAt, `prod live ranked reconnect grace should preserve active turn deadline: ${JSON.stringify({ before: observerBaseline.payload.stateView?.turnTimer, after: graceCurrent.payload.stateView?.turnTimer })}`);
+  assert.strictEqual(graceCurrent.payload.stateView?.connectionReport?.viewer?.status, 'online', `prod live ranked reconnect grace observer should remain online: ${JSON.stringify(graceCurrent.payload.stateView?.connectionReport)}`);
+  assert.strictEqual(graceCurrent.payload.stateView?.connectionReport?.opponent?.seatId, silentSeatId, `prod live ranked reconnect grace should identify silent opponent seat: ${JSON.stringify(graceCurrent.payload.stateView?.connectionReport)}`);
+  assert.strictEqual(graceCurrent.payload.stateView?.connectionReport?.opponent?.status, 'grace', `prod live ranked silent opponent should enter reconnect grace through current match recovery: ${JSON.stringify(graceCurrent.payload.stateView?.connectionReport)}`);
+  assert(graceCurrent.payload.stateView?.connectionReport?.opponent?.remainingGraceMs > 0, `prod live ranked reconnect grace should expose remaining grace window: ${JSON.stringify(graceCurrent.payload.stateView?.connectionReport)}`);
+  assert.strictEqual(graceCurrent.payload.stateView?.connectionTempoReport?.tempoState, 'opponent_non_turn_grace', `prod live ranked reconnect grace should preserve actionable opponent grace tempo: ${JSON.stringify(graceCurrent.payload.stateView?.connectionTempoReport)}`);
+  assert.strictEqual(graceCurrent.payload.stateView?.connectionTempoReport?.canSubmitIntent, true, `prod live ranked reconnect grace observer should keep current action authority: ${JSON.stringify(graceCurrent.payload.stateView?.connectionTempoReport)}`);
+  assert.strictEqual(hasLiveTerminalEvent(graceCurrent.payload.stateView), false, `prod live ranked reconnect grace recovery should not emit terminal events: ${JSON.stringify(graceCurrent.payload.stateView?.recentEvents)}`);
+
+  const silentHeartbeat = await submitLiveHeartbeat(matchId, silent, `prod live ranked reconnect grace silent recovery ${silentSeatId}`);
+  assert.strictEqual(silentHeartbeat.payload.matchId, matchId, `prod live ranked reconnect grace heartbeat should recover same match: ${JSON.stringify(silentHeartbeat.payload)}`);
+  assert.strictEqual(silentHeartbeat.payload.stateView?.status, 'active', `prod live ranked heartbeat recovery should keep active ranked match: ${JSON.stringify(silentHeartbeat.payload)}`);
+  assert.strictEqual(silentHeartbeat.payload.stateView?.postMatchReview, null, `prod live ranked heartbeat recovery should keep terminal review hidden: ${JSON.stringify(silentHeartbeat.payload.stateView?.postMatchReview)}`);
+  assert.strictEqual(silentHeartbeat.payload.stateView?.turnTimer?.deadlineAt, baselineDeadlineAt, `prod live ranked heartbeat recovery should preserve active turn deadline: ${JSON.stringify(silentHeartbeat.payload.stateView?.turnTimer)}`);
+  assert.strictEqual(silentHeartbeat.payload.stateView?.connectionReport?.viewer?.status, 'online', `prod live ranked heartbeat recovery should mark viewer online: ${JSON.stringify(silentHeartbeat.payload.stateView?.connectionReport)}`);
+  assert.strictEqual(hasLiveTerminalEvent(silentHeartbeat.payload.stateView), false, `prod live ranked reconnect grace recovery should not emit terminal events: ${JSON.stringify(silentHeartbeat.payload.stateView?.recentEvents)}`);
+
+  const observerAfterRecovery = await request('/api/pvp/live/matches/current', { token: observer.sessionToken });
+  requireOk(`prod live ranked reconnect grace observer after recovery ${observerSeatId}`, observerAfterRecovery);
+  assert.strictEqual(observerAfterRecovery.payload.stateView?.status, 'active', `prod live ranked observer after reconnect should stay active: ${JSON.stringify(observerAfterRecovery.payload.stateView)}`);
+  assert.strictEqual(observerAfterRecovery.payload.stateView?.connectionReport?.opponent?.status, 'online', `prod live ranked heartbeat recovery should return opponent online for observer: ${JSON.stringify(observerAfterRecovery.payload.stateView?.connectionReport)}`);
+  assert.strictEqual(observerAfterRecovery.payload.stateView?.postMatchReview, null, `prod live ranked observer after reconnect should keep terminal review hidden: ${JSON.stringify(observerAfterRecovery.payload.stateView?.postMatchReview)}`);
+}
+
+async function assertLivePvpInviteSmoke({ host, guest, hostName, guestName }) {
+  const hostRankBefore = await request('/api/pvp/rank', { token: host.sessionToken });
+  requireOk('prod live invite host rank before', hostRankBefore);
+  const guestRankBefore = await request('/api/pvp/rank', { token: guest.sessionToken });
+  requireOk('prod live invite guest rank before', guestRankBefore);
+
+  const invite = await request('/api/pvp/live/invites', {
+    method: 'POST',
+    token: host.sessionToken,
+    body: {
+      displayName: hostName,
+      targetUsername: guestName
+    }
+  });
+  requireOk('prod live invite create', invite);
+  assert.strictEqual(invite.payload.status, 'waiting_invite', `prod live invite should create no-ranked invite: ${JSON.stringify(invite.payload)}`);
+  assert.strictEqual(invite.payload.inviteReport?.rankedImpact, 'none', `prod live invite should create no-ranked invite: ${JSON.stringify(invite.payload)}`);
+  assert(invite.payload.inviteCode, `prod live invite should return invite code: ${JSON.stringify(invite.payload)}`);
+  const inviteCode = invite.payload.inviteCode;
+
+  const currentInvite = await request('/api/pvp/live/invites/current', { token: host.sessionToken });
+  requireOk('prod live invite current host', currentInvite);
+  assert.strictEqual(currentInvite.payload.inviteCode, inviteCode, `prod live invite current host should recover invite: ${JSON.stringify(currentInvite.payload)}`);
+
+  const inbox = await request('/api/pvp/live/invites/inbox', { token: guest.sessionToken });
+  requireOk('prod live invite inbox', inbox);
+  assert(
+    Array.isArray(inbox.payload.invites) && inbox.payload.invites.some(item => item.inviteCode === inviteCode),
+    `prod live invite target inbox should list invite: ${JSON.stringify(inbox.payload)}`
+  );
+
+  const joined = await request(`/api/pvp/live/invites/${encodeURIComponent(inviteCode)}/join`, {
+    method: 'POST',
+    token: guest.sessionToken,
+    body: { displayName: guestName }
+  });
+  requireOk('prod live invite join', joined);
+  assert.strictEqual(joined.payload.status, 'matched', `prod live invite join should create friendly setup: ${JSON.stringify(joined.payload)}`);
+  assert.strictEqual(joined.payload.stateView?.mode, 'friendly', `prod live invite join should create friendly setup: ${JSON.stringify(joined.payload)}`);
+  assert.strictEqual(joined.payload.stateView?.status, 'setup', `prod live invite join should create friendly setup: ${JSON.stringify(joined.payload)}`);
+  assert.strictEqual(joined.payload.inviteReport?.rankedImpact, 'none', `prod live invite join should keep no-ranked invite report: ${JSON.stringify(joined.payload)}`);
+  assert(
+    joined.payload.stateView?.matchQuality?.safeguards?.includes('friendly_no_ranked_impact'),
+    `prod live invite join should create no-ranked friendly setup: ${JSON.stringify(joined.payload)}`
+  );
+  const matchId = joined.payload.matchId;
+
+  const hostCurrent = await request('/api/pvp/live/matches/current', { token: host.sessionToken });
+  requireOk('prod live invite host current match', hostCurrent);
+  assert.strictEqual(hostCurrent.payload.matchId, matchId, `prod live invite host current match should recover same match: ${JSON.stringify(hostCurrent.payload)}`);
+  assert.strictEqual(hostCurrent.payload.stateView?.mode, 'friendly', `prod live invite host current match should stay friendly: ${JSON.stringify(hostCurrent.payload)}`);
+
+  const readyHost = await submitLiveIntent(matchId, host.sessionToken, {
+    intentId: `prod-live-invite-ready-host-${RUN_ID}`,
+    intentType: 'ready',
+    stateVersion: hostCurrent.payload.stateView.stateVersion,
+    payload: {}
+  });
+  requireOk('prod live invite host ready', readyHost);
+  assert.strictEqual(readyHost.payload.result, 'accepted', `prod live invite host ready should be accepted: ${JSON.stringify(readyHost.payload)}`);
+
+  const readyGuest = await submitLiveIntent(matchId, guest.sessionToken, {
+    intentId: `prod-live-invite-ready-guest-${RUN_ID}`,
+    intentType: 'ready',
+    stateVersion: readyHost.payload.stateView.stateVersion,
+    payload: {}
+  });
+  requireOk('prod live invite guest ready', readyGuest);
+  assert.strictEqual(readyGuest.payload.result, 'accepted', `prod live invite guest ready should be accepted: ${JSON.stringify(readyGuest.payload)}`);
+  assert.strictEqual(readyGuest.payload.stateView?.status, 'active', `prod live invite both ready should enter active: ${JSON.stringify(readyGuest.payload)}`);
+  assert.strictEqual(readyGuest.payload.stateView?.mode, 'friendly', `prod live invite both ready should stay friendly: ${JSON.stringify(readyGuest.payload)}`);
+
+  const surrender = await submitLiveIntent(matchId, guest.sessionToken, {
+    intentId: `prod-live-invite-surrender-guest-${RUN_ID}`,
+    intentType: 'surrender',
+    stateVersion: readyGuest.payload.stateView.stateVersion,
+    payload: {}
+  });
+  requireOk('prod live invite surrender', surrender);
+  assert.strictEqual(surrender.payload.result, 'accepted', `prod live invite surrender should be accepted: ${JSON.stringify(surrender.payload)}`);
+  assert.strictEqual(surrender.payload.stateView?.status, 'finished', `prod live invite surrender should finish friendly match: ${JSON.stringify(surrender.payload)}`);
+  assert.strictEqual(surrender.payload.stateView?.mode, 'friendly', `prod live invite surrender should finish friendly match: ${JSON.stringify(surrender.payload)}`);
+  assert(
+    !surrender.payload.stateView?.postMatchReview?.settlementReport,
+    `prod live invite smoke should not expose settlement report: ${JSON.stringify(surrender.payload.stateView?.postMatchReview)}`
+  );
+
+  const replay = await request(`/api/pvp/live/matches/${encodeURIComponent(matchId)}/replay`, { token: host.sessionToken });
+  requireOk('prod live invite replay', replay);
+  assert.strictEqual(replay.payload.replay?.publicSummary?.status, 'finished', `prod live invite replay should expose finished public replay: ${JSON.stringify(replay.payload)}`);
+  assert.strictEqual(replay.payload.replay?.visibilityLayer, 'replay_self', `prod live invite replay should expose finished public replay: ${JSON.stringify(replay.payload)}`);
+  assert(
+    Array.isArray(replay.payload.replay?.events) && replay.payload.replay.events.some(event => event.eventType === 'match_finished'),
+    `prod live invite replay should include match_finished public event: ${JSON.stringify(replay.payload)}`
+  );
+
+  const hostRankAfter = await request('/api/pvp/rank', { token: host.sessionToken });
+  requireOk('prod live invite host rank after', hostRankAfter);
+  const guestRankAfter = await request('/api/pvp/rank', { token: guest.sessionToken });
+  requireOk('prod live invite guest rank after', guestRankAfter);
+  assertRankAndWalletUnchanged('host', hostRankBefore, hostRankAfter);
+  assertRankAndWalletUnchanged('guest', guestRankBefore, guestRankAfter);
+}
+
+async function assertLivePvpRankedQueueSmoke({ playerA, playerB, playerC, playerAName, playerBName, playerCName }) {
+  const rankBeforeA = await request('/api/pvp/rank', { token: playerA.sessionToken });
+  requireOk('prod live ranked player A rank before', rankBeforeA);
+  const rankBeforeC = await request('/api/pvp/rank', { token: playerC.sessionToken });
+  requireOk('prod live ranked player C rank before', rankBeforeC);
+
+  const joinA = await request('/api/pvp/live/queue/join', {
+    method: 'POST',
+    token: playerA.sessionToken,
+    body: {
+      displayName: playerAName,
+      loadout: makeLivePvpLoadout('sword', ['pvp_burst', 'pvp_strike', 'pvp_guard', 'pvp_strike']),
+      wideMatchConsent: true
+    }
+  });
+  requireOk('prod live ranked queue join A', joinA);
+  assert.strictEqual(joinA.payload.status, 'waiting', `prod live ranked first queue user should wait: ${JSON.stringify(joinA.payload)}`);
+  assert.strictEqual(joinA.payload.waitingReport?.wideMatchConsent?.viewerAccepted, true, `prod live ranked first queue user should visibly accept protected matching: ${JSON.stringify(joinA.payload)}`);
+  const queueTicket = joinA.payload.queueTicket;
+  assert(queueTicket, `prod live ranked first queue user should receive queue ticket: ${JSON.stringify(joinA.payload)}`);
+
+  await sleep(1050);
+
+  const joinBWaiting = await request('/api/pvp/live/queue/join', {
+    method: 'POST',
+    token: playerB.sessionToken,
+    body: {
+      displayName: playerBName,
+      loadout: makeLivePvpLoadout('shield', ['pvp_guard', 'pvp_strike', 'pvp_burst', 'pvp_guard']),
+      wideMatchConsent: true
+    }
+  });
+  requireOk('prod live ranked queue join B protected wait', joinBWaiting);
+  assert.strictEqual(joinBWaiting.payload.status, 'waiting', `prod live ranked second low-sample user should wait for third-player protection: ${JSON.stringify(joinBWaiting.payload)}`);
+  assert.strictEqual(joinBWaiting.payload.waitingReport?.requiresPoolSize, 3, `prod live ranked low-sample protection should require a third player: ${JSON.stringify(joinBWaiting.payload)}`);
+  const queueTicketB = joinBWaiting.payload.queueTicket;
+  assert(queueTicketB, `prod live ranked second queue user should receive queue ticket: ${JSON.stringify(joinBWaiting.payload)}`);
+
+  await sleep(1050);
+
+  const joinC = await request('/api/pvp/live/queue/join', {
+    method: 'POST',
+    token: playerC.sessionToken,
+    body: {
+      displayName: playerCName,
+      loadout: makeLivePvpLoadout('curse', ['pvp_strike', 'pvp_guard', 'pvp_burst', 'pvp_guard']),
+      wideMatchConsent: true
+    }
+  });
+  requireOk('prod live ranked queue join C', joinC);
+  assert.strictEqual(joinC.payload.status, 'matched', `prod live ranked should match through public queue: ${JSON.stringify(joinC.payload)}`);
+  assert.strictEqual(joinC.payload.stateView?.mode, 'ranked', `prod live ranked public queue match should use ranked mode: ${JSON.stringify(joinC.payload)}`);
+  assert.strictEqual(joinC.payload.stateView?.status, 'setup', `prod live ranked public queue match should start in setup: ${JSON.stringify(joinC.payload)}`);
+  assert.strictEqual(joinC.payload.stateView?.postMatchReview, null, `prod live ranked setup should not expose terminal review: ${JSON.stringify(joinC.payload.stateView)}`);
+  assert(
+    joinC.payload.stateView?.matchQuality?.expansionStage === 'low_sample_pairing'
+      && joinC.payload.stateView?.matchQuality?.safeguards?.includes('low_sample_protection'),
+    `prod live ranked third-player match should preserve low-sample pairing safeguard: ${JSON.stringify(joinC.payload.stateView?.matchQuality)}`
+  );
+  const matchId = joinC.payload.matchId;
+  assert(matchId, `prod live ranked match should return match id: ${JSON.stringify(joinC.payload)}`);
+
+  const pollA = await request(`/api/pvp/live/queue/status/${encodeURIComponent(queueTicket)}`, { token: playerA.sessionToken });
+  requireOk('prod live ranked queue status A', pollA);
+  assert.strictEqual(pollA.payload.status, 'matched', `prod live ranked waiting player should recover matched queue status: ${JSON.stringify(pollA.payload)}`);
+  assert.strictEqual(pollA.payload.matchId, matchId, `prod live ranked queue status should recover same match: ${JSON.stringify(pollA.payload)}`);
+
+  const cancelB = await request('/api/pvp/live/queue/cancel', {
+    method: 'POST',
+    token: playerB.sessionToken,
+    body: { queueTicket: queueTicketB }
+  });
+  requireOk('prod live ranked cancel unused low-sample queue user', cancelB);
+
+  const ready = await readyLiveMatch({
+    matchId,
+    tokenA: playerA.sessionToken,
+    tokenB: playerC.sessionToken,
+    stateVersionA: pollA.payload.stateView.stateVersion,
+    prefix: 'prod-live-ranked'
+  });
+  assert.strictEqual(ready.payload.stateView?.mode, 'ranked', `prod live ranked both ready should enter active ranked mode: ${JSON.stringify(ready.payload)}`);
+
+  const playerASeat = String(pollA.payload.seatId || pollA.payload.stateView?.self?.seatId || '');
+  const playerCSeat = String(joinC.payload.seatId || joinC.payload.stateView?.self?.seatId || '');
+  const participantsBySeat = {
+    [playerASeat]: {
+      sessionToken: playerA.sessionToken,
+      rankBefore: rankBeforeA,
+      label: 'A'
+    },
+    [playerCSeat]: {
+      sessionToken: playerC.sessionToken,
+      rankBefore: rankBeforeC,
+      label: 'C'
+    }
+  };
+  await assertRankedActiveRecoverySmoke({ matchId, participantsBySeat });
+  const lethalFinish = await finishRankedMatchWithRealLethal({ matchId, participantsBySeat });
+  const terminalReview = lethalFinish.terminal.payload.stateView?.postMatchReview;
+  assert.strictEqual(lethalFinish.terminal.payload.stateView?.status, 'finished', `prod live ranked real card lethal should finish authoritative match: ${JSON.stringify(lethalFinish.terminal.payload)}`);
+  assert.strictEqual(lethalFinish.terminal.payload.stateView?.mode, 'ranked', `prod live ranked lethal should stay ranked: ${JSON.stringify(lethalFinish.terminal.payload)}`);
+  assert.strictEqual(terminalReview?.finishReason, 'lethal', `prod live ranked terminal review should be lethal: ${JSON.stringify(terminalReview)}`);
+  const winnerSeat = String(terminalReview?.winnerSeat || '');
+  const loserSeat = String(terminalReview?.loserSeat || '');
+  assert(participantsBySeat[winnerSeat] && participantsBySeat[loserSeat], `prod live ranked lethal should identify both seats: ${JSON.stringify(terminalReview)}`);
+
+  const loserState = await request(`/api/pvp/live/matches/${encodeURIComponent(matchId)}`, { token: participantsBySeat[loserSeat].sessionToken });
+  requireOk('prod live ranked loser match read', loserState);
+  const loserSettlement = loserState.payload.stateView?.postMatchReview?.settlementReport;
+  assert.strictEqual(loserState.payload.stateView?.postMatchReview?.finishReason, 'lethal', `prod live ranked loser review should stay lethal: ${JSON.stringify(loserState.payload.stateView?.postMatchReview)}`);
+  assert.strictEqual(loserSettlement?.reportVersion, 'pvp-live-settlement-report-v1', `prod live ranked loser should expose settlement report: ${JSON.stringify(loserState.payload.stateView?.postMatchReview)}`);
+  assert.strictEqual(loserSettlement?.result, 'loss', `prod live ranked loser settlement should be scoped to loser: ${JSON.stringify(loserSettlement)}`);
+  assert.strictEqual(loserSettlement?.sourceVisibility, 'server_authoritative_settlement', `prod live ranked settlement should expose server source: ${JSON.stringify(loserSettlement)}`);
+  assert.strictEqual(loserSettlement?.formalResultPolicy, 'ranked_authoritative', `prod live ranked settlement should be formal authoritative: ${JSON.stringify(loserSettlement)}`);
+  assertRankedLethalSettlementReasons(loserSettlement, 'prod live ranked lethal settlement');
+  assert.strictEqual(loserSettlement?.seasonHonorReport?.reportVersion, 'pvp-live-season-honor-v1', `prod live ranked settlement should expose season honor: ${JSON.stringify(loserSettlement)}`);
+  assert.strictEqual(loserSettlement?.seasonHonorReport?.cosmeticReward?.rewardImpact, 'cosmetic_only', `prod live ranked season honor should remain cosmetic only: ${JSON.stringify(loserSettlement)}`);
+  assert.strictEqual(loserSettlement?.seasonHonorReport?.powerImpact, 'none', `prod live ranked season honor should not grant power: ${JSON.stringify(loserSettlement)}`);
+
+  const winnerState = await request(`/api/pvp/live/matches/${encodeURIComponent(matchId)}`, { token: participantsBySeat[winnerSeat].sessionToken });
+  requireOk('prod live ranked winner match read', winnerState);
+  const winnerSettlement = winnerState.payload.stateView?.postMatchReview?.settlementReport;
+  assert.strictEqual(winnerState.payload.stateView?.status, 'finished', `prod live ranked winner should read finished match: ${JSON.stringify(winnerState.payload)}`);
+  assert.strictEqual(winnerState.payload.stateView?.postMatchReview?.finishReason, 'lethal', `prod live ranked winner review should stay lethal: ${JSON.stringify(winnerState.payload.stateView?.postMatchReview)}`);
+  assert.strictEqual(winnerSettlement?.result, 'win', `prod live ranked winner should see win settlement: ${JSON.stringify(winnerSettlement)}`);
+  assert.strictEqual(winnerSettlement?.formalResultPolicy, 'ranked_authoritative', `prod live ranked winner settlement should be formal authoritative: ${JSON.stringify(winnerSettlement)}`);
+  assertRankedLethalSettlementReasons(winnerSettlement, 'prod live ranked lethal winner settlement');
+
+  const rankAfterA = await request('/api/pvp/rank', { token: playerA.sessionToken });
+  requireOk('prod live ranked player A rank after', rankAfterA);
+  const rankAfterC = await request('/api/pvp/rank', { token: playerC.sessionToken });
+  requireOk('prod live ranked player C rank after', rankAfterC);
+  const ranksBySeat = {
+    [playerASeat]: { before: rankBeforeA, after: rankAfterA },
+    [playerCSeat]: { before: rankBeforeC, after: rankAfterC }
+  };
+  const winnerRank = ranksBySeat[winnerSeat];
+  const loserRank = ranksBySeat[loserSeat];
+  assert.strictEqual(winnerRank.after.payload.rank.wins, winnerRank.before.payload.rank.wins + 1, `prod live ranked should add winner rank win: ${JSON.stringify({ before: winnerRank.before.payload, after: winnerRank.after.payload })}`);
+  assert.strictEqual(winnerRank.after.payload.rank.losses, winnerRank.before.payload.rank.losses, `prod live ranked winner should not gain loss: ${JSON.stringify({ before: winnerRank.before.payload, after: winnerRank.after.payload })}`);
+  assert.strictEqual(loserRank.after.payload.rank.wins, loserRank.before.payload.rank.wins, `prod live ranked loser should not gain win: ${JSON.stringify({ before: loserRank.before.payload, after: loserRank.after.payload })}`);
+  assert.strictEqual(loserRank.after.payload.rank.losses, loserRank.before.payload.rank.losses + 1, `prod live ranked should add loser rank loss: ${JSON.stringify({ before: loserRank.before.payload, after: loserRank.after.payload })}`);
+  assert(winnerRank.after.payload.rank.score > winnerRank.before.payload.rank.score, `prod live ranked winner score should increase: ${JSON.stringify({ before: winnerRank.before.payload.rank, after: winnerRank.after.payload.rank })}`);
+  assert(loserRank.after.payload.rank.score < loserRank.before.payload.rank.score, `prod live ranked loser score should decrease: ${JSON.stringify({ before: loserRank.before.payload.rank, after: loserRank.after.payload.rank })}`);
+  assert(winnerRank.after.payload.wallet.coins > winnerRank.before.payload.wallet.coins, `prod live ranked winner wallet should gain live reward: ${JSON.stringify({ before: winnerRank.before.payload.wallet, after: winnerRank.after.payload.wallet })}`);
+  assert(loserRank.after.payload.wallet.coins > loserRank.before.payload.wallet.coins, `prod live ranked loser wallet should gain participation reward: ${JSON.stringify({ before: loserRank.before.payload.wallet, after: loserRank.after.payload.wallet })}`);
+  assert.strictEqual(winnerRank.after.payload.wallet.totalMatches, winnerRank.before.payload.wallet.totalMatches + 1, `prod live ranked winner wallet should add one match: ${JSON.stringify({ before: winnerRank.before.payload.wallet, after: winnerRank.after.payload.wallet })}`);
+  assert.strictEqual(loserRank.after.payload.wallet.totalMatches, loserRank.before.payload.wallet.totalMatches + 1, `prod live ranked loser wallet should add one match: ${JSON.stringify({ before: loserRank.before.payload.wallet, after: loserRank.after.payload.wallet })}`);
+  assert(
+    Array.isArray(winnerRank.after.payload.economy?.matchHistory)
+      && winnerRank.after.payload.economy.matchHistory.some(item => item && item.source === 'live_pvp' && item.matchId === matchId && item.didWin === true),
+    `prod live ranked should append winner live match history: ${JSON.stringify(winnerRank.after.payload.economy?.matchHistory)}`
+  );
+  assert(
+    Array.isArray(loserRank.after.payload.economy?.matchHistory)
+      && loserRank.after.payload.economy.matchHistory.some(item => item && item.source === 'live_pvp' && item.matchId === matchId && item.didWin === false),
+    `prod live ranked should append loser live match history: ${JSON.stringify(loserRank.after.payload.economy?.matchHistory)}`
+  );
+
+  const replay = await request(`/api/pvp/live/matches/${encodeURIComponent(matchId)}/replay`, { token: participantsBySeat[winnerSeat].sessionToken });
+  requireOk('prod live ranked replay', replay);
+  assert.strictEqual(replay.payload.replay?.publicSummary?.status, 'finished', `prod live ranked replay should expose finished public replay: ${JSON.stringify(replay.payload)}`);
+  assert.strictEqual(replay.payload.replay?.publicSummary?.finishReason, 'lethal', `prod live ranked replay should record lethal finish reason: ${JSON.stringify(replay.payload)}`);
+  assert(
+    Array.isArray(replay.payload.replay?.events) && replay.payload.replay.events.some(event => event.eventType === 'match_finished'),
+    `prod live ranked replay should include match_finished public event: ${JSON.stringify(replay.payload)}`
+  );
+  assert(
+    Array.isArray(replay.payload.replay?.events) && !replay.payload.replay.events.some(event => event.eventType === 'player_surrendered'),
+    `prod live ranked replay should not contain surrender shortcut: ${JSON.stringify(replay.payload)}`
+  );
+}
+
 async function main() {
   console.log(`[prod-smoke] Base URL: ${BASE_URL}`);
 
@@ -250,6 +812,28 @@ async function main() {
 
   const opponentPvpRank = await request('/api/pvp/rank', { token: opponent.sessionToken });
   requireOk('opponent PVP rank read', opponentPvpRank);
+
+  await assertLivePvpInviteSmoke({
+    host: user,
+    guest: opponent,
+    hostName: username,
+    guestName: opponentName
+  });
+
+  const rankedAName = `smoke_ranked_a_${RUN_ID}`;
+  const rankedBName = `smoke_ranked_b_${RUN_ID}`;
+  const rankedCName = `smoke_ranked_c_${RUN_ID}`;
+  const rankedA = await register(rankedAName);
+  const rankedB = await register(rankedBName);
+  const rankedC = await register(rankedCName);
+  await assertLivePvpRankedQueueSmoke({
+    playerA: rankedA,
+    playerB: rankedB,
+    playerC: rankedC,
+    playerAName: rankedAName,
+    playerBName: rankedBName,
+    playerCName: rankedCName
+  });
 
   const pvpLeaderboard = await request('/api/pvp/leaderboard?limit=20', { token: user.sessionToken });
   requireOk('PVP leaderboard read', pvpLeaderboard);

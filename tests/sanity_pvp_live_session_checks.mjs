@@ -1,0 +1,2682 @@
+import assert from 'node:assert/strict';
+import { createPvpLiveSession } from '../js/services/pvp-live-session.js';
+
+function createMemoryStorage(initialEntries = []) {
+  const data = new Map(initialEntries.map(([key, value]) => [String(key), String(value)]));
+  return {
+    setItem(key, value) {
+      data.set(String(key), String(value));
+    },
+    getItem(key) {
+      return data.get(String(key)) || '';
+    },
+    removeItem(key) {
+      data.delete(String(key));
+    },
+    values() {
+      return Array.from(data.values());
+    }
+  };
+}
+
+function makeRankedOpponentProfile() {
+  return {
+    reportVersion: 'pvp-live-ranked-opponent-profile-v1',
+    sourceVisibility: 'ranked_public_boundary',
+    usesHiddenInformation: false,
+    rankedImpact: 'none',
+    alias: '对手',
+    archetypeLabel: '流派待观察',
+    divisionBucket: 'unrated_mvp',
+    revealPolicy: 'no_precombat_build_reveal',
+    boundaryLine: '排位只展示公开状态，不展示对手斗法谱、hash 或身份槽。'
+  };
+}
+
+const calls = [];
+const liveService = {
+  joinQueue: async (options) => {
+    calls.push({ method: 'joinQueue', options });
+    return { success: true, status: 'waiting', queueTicket: 'pvplq-session' };
+  },
+  cancelQueue: async (queueTicket) => {
+    calls.push({ method: 'cancelQueue', queueTicket });
+    return { success: true, status: 'cancelled', queueTicket };
+  },
+  getQueueStatus: async (queueTicket) => {
+    calls.push({ method: 'getQueueStatus', queueTicket });
+    return {
+      success: true,
+      status: 'matched',
+      matchId: 'pvplm-session',
+      seatId: 'A',
+      stateView: {
+        matchId: 'pvplm-session',
+        status: 'setup',
+        stateVersion: 1,
+        currentSeat: 'A',
+        setup: { readyDeadlineAt: Date.now() + 45000, mulliganLimit: 2 },
+        self: { seatId: 'A', hand: [{ instanceId: 'A-strike-1' }] },
+        opponent: { seatId: 'B', handCount: 3, ready: false, publicProfile: makeRankedOpponentProfile() }
+      }
+    };
+  },
+  getMatch: async (matchId) => {
+    calls.push({ method: 'getMatch', matchId });
+    return {
+      success: true,
+      matchId,
+      seatId: 'A',
+      stateView: {
+        matchId,
+        status: 'active',
+        stateVersion: 2,
+        currentSeat: 'A',
+        self: { seatId: 'A', hand: [] },
+        opponent: { seatId: 'B', handCount: 3 }
+      }
+    };
+  },
+  getCurrentMatch: async () => {
+    calls.push({ method: 'getCurrentMatch' });
+    return {
+      success: true,
+      matchId: 'pvplm-current',
+      seatId: 'B',
+      stateView: {
+        matchId: 'pvplm-current',
+        status: 'active',
+        stateVersion: 5,
+        currentSeat: 'B',
+        self: { seatId: 'B', hand: [{ instanceId: 'B-strike-1' }] },
+        opponent: { seatId: 'A', handCount: 2 }
+      }
+    };
+  },
+  submitIntent: async (matchId, intent) => {
+    calls.push({ method: 'submitIntent', matchId, intent });
+    if (intent && intent.intentId === 'session-stale-1') {
+      return {
+        success: true,
+        result: 'sync_required',
+        reason: 'stale_state',
+        events: [{ eventType: 'sync_required' }],
+        stateView: {
+          matchId,
+          status: 'active',
+          stateVersion: 8,
+          currentSeat: 'B',
+          self: { seatId: 'A', hand: [] },
+          opponent: { seatId: 'B', handCount: 2 }
+        }
+      };
+    }
+    const rejectionReasons = {
+      'session-not-current-1': 'not_current_turn',
+      'session-not-enough-energy-1': 'not_enough_energy',
+      'session-card-gone-1': 'card_not_in_hand'
+    };
+    if (intent && rejectionReasons[intent.intentId]) {
+      return {
+        success: true,
+        result: 'rejected',
+        reason: rejectionReasons[intent.intentId],
+        events: [{ eventType: 'intent_rejected', reason: rejectionReasons[intent.intentId] }],
+        stateView: {
+          matchId,
+          status: 'active',
+          stateVersion: 8,
+          currentSeat: 'B',
+          self: { seatId: 'A', hand: [] },
+          opponent: { seatId: 'B', handCount: 2 }
+        }
+      };
+    }
+    const isSurrender = intent && intent.intentType === 'surrender';
+    const isSetupIntent = intent && (intent.intentType === 'ready' || intent.intentType === 'mulligan');
+    const nextVersion = isSurrender ? 9 : isSetupIntent ? 3 : 7;
+    return {
+      success: true,
+      result: 'accepted',
+      events: [{ eventType: isSurrender ? 'player_surrendered' : isSetupIntent ? `${intent.intentType}_accepted` : 'card_played' }],
+      stateView: {
+        matchId,
+        status: isSurrender ? 'finished' : isSetupIntent ? 'setup' : 'active',
+        stateVersion: nextVersion,
+        currentSeat: 'B',
+        self: { seatId: 'A', hand: [] },
+        opponent: { seatId: 'B', handCount: 3 }
+      }
+    };
+  },
+  heartbeat: async (matchId) => {
+    calls.push({ method: 'heartbeat', matchId });
+    return {
+      success: true,
+      matchId,
+      seatId: 'A',
+      stateView: {
+        matchId,
+        status: 'active',
+        stateVersion: 6,
+        currentSeat: 'A',
+        turnTimer: {
+          startedAt: 1782022000000,
+          deadlineAt: 1782022060000,
+          durationMs: 60000
+        },
+        connectionReport: {
+          reportVersion: 'pvp-live-connection-v1',
+          connectionHealth: 'opponent_grace',
+          viewer: { seatId: 'A', status: 'online' },
+          opponent: { seatId: 'B', status: 'grace', remainingGraceMs: 12000 },
+          heartbeatIntervalMs: 5000,
+          graceMs: 30000
+        },
+        connectionTempoReport: {
+          reportVersion: 'pvp-live-connection-tempo-v1',
+          tempoState: 'opponent_action_grace',
+          actionBoundary: 'opponent_turn',
+          canSubmitIntent: false,
+          shouldWaitForAuthority: true
+        },
+        recentEvents: [{ eventType: 'player_reconnected', sequence: 6 }],
+        postMatchReview: null,
+        self: { seatId: 'A', hand: [] },
+        opponent: { seatId: 'B', handCount: 3 }
+      }
+    };
+  },
+  getReplay: async (matchId, options) => {
+    calls.push({ method: 'getReplay', matchId, options });
+    return {
+      success: true,
+      replay: {
+        reportVersion: 'pvp-live-replay-v1',
+        visibilityLayer: options && options.visibility || 'replay_self',
+        matchRef: 'abcd1234abcd1234',
+        hiddenScan: { forbiddenTokenCount: 0 }
+      }
+    };
+  },
+  createReplayShare: async (matchId, options) => {
+    calls.push({ method: 'createReplayShare', matchId, options });
+    return {
+      success: true,
+      share: {
+        reportVersion: 'pvp-live-replay-share-v1',
+        shareToken: 'pvplrs-session-share-123456789012345',
+        apiPath: '/api/pvp/live/replay-shares/pvplrs-session-share-123456789012345',
+        sharePath: '/?pvpReplayShare=pvplrs-session-share-123456789012345',
+        shareUrl: 'https://080305.xyz/?pvpReplayShare=pvplrs-session-share-123456789012345',
+        visibilityLayer: 'replay_public',
+        sourceVisibility: 'replay_public',
+        rankedImpact: 'none',
+        rewardImpact: 'none'
+      }
+    };
+  },
+  revokeReplayShare: async (matchId) => {
+    calls.push({ method: 'revokeReplayShare', matchId });
+    return {
+      success: true,
+      share: {
+        reportVersion: 'pvp-live-replay-share-v1',
+        shareToken: 'pvplrs-session-share-123456789012345',
+        apiPath: '/api/pvp/live/replay-shares/pvplrs-session-share-123456789012345',
+        sharePath: '/?pvpReplayShare=pvplrs-session-share-123456789012345',
+        shareUrl: 'https://080305.xyz/?pvpReplayShare=pvplrs-session-share-123456789012345',
+        visibilityLayer: 'replay_public',
+        sourceVisibility: 'replay_public',
+        rankedImpact: 'none',
+        rewardImpact: 'none',
+        revoked: true
+      }
+    };
+  },
+  submitReport: async (matchId, report) => {
+    calls.push({ method: 'submitReport', matchId, report });
+    return {
+      success: true,
+      report: {
+        reportVersion: 'pvp-live-dispute-report-receipt-v1',
+        reportId: 'pvplr-session-1',
+        status: 'reported',
+        reason: report.reason || 'fairness_review',
+        sourceVisibility: 'audit_safe_public_state',
+        usesHiddenInformation: false,
+        rankedImpact: 'none',
+        nextStepLine: '异常反馈已提交；复核不会立即改写本局结算。',
+        evidencePackage: {
+          reportVersion: 'pvp-live-dispute-evidence-v1',
+          sourceVisibility: 'audit_safe_public_state',
+          usesHiddenInformation: false,
+          rankedImpact: 'none',
+          matchId,
+          reporterSeat: 'B',
+          eventCount: 2,
+          riskTags: ['player_reported', 'fairness_review_requested']
+        }
+      }
+    };
+  },
+  avoidOpponent: async (matchId, request) => {
+    calls.push({ method: 'avoidOpponent', matchId, request });
+    return {
+      success: true,
+      report: {
+        reportVersion: 'pvp-live-avoid-opponent-receipt-v1',
+        status: 'active',
+        reason: request.reason || 'post_match_avoid',
+        sourceVisibility: 'account_preference',
+        usesHiddenInformation: false,
+        rankedImpact: 'none',
+        formalResultPolicy: 'no_result_change',
+        safeguard: 'player_avoid_opponent',
+        nextStepLine: '已记录：后续匹配会优先避开此对手；这不会改写本局结算。',
+        boundary: '避开对手只影响后续匹配优先级，不保证永久不匹配，不影响积分、奖励或隐藏信息。'
+      }
+    };
+  },
+  createInvite: async (options) => {
+    calls.push({ method: 'createInvite', options });
+    return {
+      success: true,
+      status: 'waiting_invite',
+      inviteCode: 'LIVE1234',
+      inviteReport: {
+        reportVersion: 'pvp-live-invite-v1',
+        inviteCode: 'LIVE1234',
+        status: 'waiting',
+        rankedImpact: 'none',
+        safeguards: ['invite_only_match', 'friendly_no_ranked_impact']
+      }
+    };
+  },
+  joinInvite: async (inviteCode, options) => {
+    calls.push({ method: 'joinInvite', inviteCode, options });
+    return {
+      success: true,
+      status: 'matched',
+      matchId: 'pvplm-invite-session',
+      seatId: 'B',
+      inviteReport: {
+        reportVersion: 'pvp-live-invite-v1',
+        inviteCode,
+        status: 'matched',
+        rankedImpact: 'none'
+      },
+      stateView: {
+        matchId: 'pvplm-invite-session',
+        mode: 'friendly',
+        status: 'setup',
+        stateVersion: 1,
+        matchQuality: {
+          reportVersion: 'pvp-live-match-quality-v1',
+          expansionStage: 'friend_invite',
+          safeguards: ['invite_only_match', 'friendly_no_ranked_impact']
+        },
+        self: { seatId: 'B', hand: [] },
+        opponent: { seatId: 'A', handCount: 3 }
+      }
+    };
+  },
+  cancelInvite: async (inviteCode) => {
+    calls.push({ method: 'cancelInvite', inviteCode });
+    return {
+      success: true,
+      status: 'cancelled',
+      inviteCode,
+      inviteReport: {
+        reportVersion: 'pvp-live-invite-v1',
+        inviteCode,
+        status: 'cancelled',
+        rankedImpact: 'none'
+      }
+    };
+  },
+  getCurrentInvite: async () => {
+    calls.push({ method: 'getCurrentInvite' });
+    return {
+      success: true,
+      status: 'waiting_invite',
+      inviteCode: 'LIVE1234',
+      inviteReport: {
+        reportVersion: 'pvp-live-invite-v1',
+        inviteCode: 'LIVE1234',
+        status: 'waiting',
+        rankedImpact: 'none',
+        safeguards: ['invite_only_match', 'friendly_no_ranked_impact']
+      }
+    };
+  },
+  getInviteInbox: async () => {
+    calls.push({ method: 'getInviteInbox' });
+    return {
+      success: true,
+      status: 'invite_inbox',
+      invites: [
+        {
+          inviteCode: 'TDIN42',
+          inviteReport: {
+            reportVersion: 'pvp-live-invite-v1',
+            inviteCode: 'TDIN42',
+            host: { displayName: '甲' },
+            target: { displayName: '辛' },
+            rankedImpact: 'none',
+            safeguards: ['invite_only_match', 'targeted_invite_only', 'friendly_no_ranked_impact']
+          }
+        }
+      ]
+    };
+  },
+  reportMatchResult: async () => {
+    throw new Error('live session must not call legacy result reporting');
+  },
+  findOpponent: async () => {
+    throw new Error('live session must not call legacy opponent matching');
+  }
+};
+
+const session = createPvpLiveSession({ liveService });
+assert.equal(session.getState().phase, 'idle', 'new live session should start idle');
+assert.equal(typeof session.reportResult, 'undefined', 'live session should not expose client-reported result API');
+assert.equal(typeof session.requestRematch, 'function', 'live session should expose friendly rematch request API');
+assert.equal(typeof session.pollRematch, 'function', 'live session should expose friendly rematch polling API');
+assert.equal(typeof session.cancelRematch, 'function', 'live session should expose friendly rematch cancel API');
+assert.equal(typeof session.heartbeat, 'function', 'live session should expose heartbeat API');
+assert.equal(typeof session.getReplay, 'function', 'live session should expose replay API');
+assert.equal(typeof session.createReplayShare, 'function', 'live session should expose public replay share API');
+assert.equal(typeof session.revokeReplayShare, 'function', 'live session should expose public replay share revoke API');
+assert.equal(typeof session.createInvite, 'function', 'live session should expose private invite creation API');
+assert.equal(typeof session.joinInvite, 'function', 'live session should expose private invite join API');
+assert.equal(typeof session.cancelInvite, 'function', 'live session should expose private invite cancel API');
+assert.equal(typeof session.pollInvite, 'function', 'live session should expose private invite polling API');
+assert.equal(typeof session.resumeCurrentInvite, 'function', 'live session should expose private invite resume API');
+assert.equal(typeof session.refreshInviteInbox, 'function', 'live session should expose targeted private invite inbox refresh API');
+assert.equal(typeof session.submitReport, 'function', 'live session should expose audit-safe dispute report API');
+
+const instantMatchedSession = createPvpLiveSession({
+  liveService: {
+    joinQueue: async () => ({
+      success: true,
+      status: 'matched',
+      queueTicket: 'pvplq-instant-matched',
+      matchId: 'pvplm-instant-matched',
+      seatId: 'A',
+      stateView: {
+        matchId: 'pvplm-instant-matched',
+        status: 'setup',
+        stateVersion: 1,
+        currentSeat: 'A',
+        self: { seatId: 'A', hand: [{ instanceId: 'A-strike-1' }] },
+        opponent: { seatId: 'B', handCount: 3, publicProfile: makeRankedOpponentProfile() }
+      }
+    })
+  }
+});
+const instantMatched = await instantMatchedSession.joinQueue({ displayName: '甲' });
+assert.equal(instantMatched.phase, 'setup', 'immediate matched queue join should enter setup phase');
+assert.equal(instantMatched.queueTicket, '', 'immediate matched queue join should clear service queue ticket from matched state');
+assert.equal(instantMatched.waitingReport, null, 'immediate matched queue join should not keep a waiting report');
+
+const recoveredSession = createPvpLiveSession({ liveService });
+const recovered = await recoveredSession.resumeCurrentMatch();
+assert.equal(recovered.phase, 'active', 'resumeCurrentMatch should enter active when server has current match');
+assert.equal(recovered.matchId, 'pvplm-current', 'resumeCurrentMatch should retain current match id');
+assert.equal(recovered.seatId, 'B', 'resumeCurrentMatch should retain current seat');
+assert.equal(recovered.stateView.stateVersion, 5, 'resumeCurrentMatch should store authoritative state view');
+assert.equal(calls.at(-1).method, 'getCurrentMatch', 'resumeCurrentMatch should call live current match service');
+
+const setupRecoveryCalls = [];
+const setupRecoverySession = createPvpLiveSession({
+  liveService: {
+    getCurrentMatch: async () => {
+      setupRecoveryCalls.push({ method: 'getCurrentMatch' });
+      return {
+        success: true,
+        matchId: 'pvplm-current-setup-recovery',
+        seatId: 'B',
+        stateView: {
+          matchId: 'pvplm-current-setup-recovery',
+          status: 'setup',
+          stateVersion: 2,
+          currentSeat: 'B',
+          setup: {
+            readyDeadlineAt: 1782025060000,
+            mulliganLimit: 2
+          },
+          turnTimer: {
+            phase: 'setup',
+            startedAt: 1782025000000,
+            deadlineAt: 1782025060000,
+            durationMs: 60000
+          },
+          connectionReport: {
+            reportVersion: 'pvp-live-connection-v1',
+            connectionHealth: 'healthy',
+            viewer: { seatId: 'B', status: 'online' },
+            opponent: { seatId: 'A', status: 'online' },
+            heartbeatIntervalMs: 5000,
+            graceMs: 30000
+          },
+          self: { seatId: 'B', ready: false, mulliganUsed: false, hand: [{ instanceId: 'B-strike-1' }] },
+          opponent: { seatId: 'A', ready: true, handCount: 3, publicProfile: makeRankedOpponentProfile() },
+          postMatchReview: null
+        }
+      };
+    },
+    getCurrentInvite: async () => {
+      setupRecoveryCalls.push({ method: 'getCurrentInvite' });
+      return { success: false };
+    },
+    getInviteInbox: async () => {
+      setupRecoveryCalls.push({ method: 'getInviteInbox' });
+      return { success: true, invites: [] };
+    }
+  },
+  now: () => 1782025000000
+});
+const setupRecovery = await setupRecoverySession.resumeCurrentMatch();
+assert.equal(setupRecovery.phase, 'setup', 'setup current-match recovery should stay in setup after page refresh');
+assert.equal(setupRecovery.matchId, 'pvplm-current-setup-recovery', 'setup current-match recovery should retain match id');
+assert.equal(setupRecovery.seatId, 'B', 'setup current-match recovery should retain viewer seat');
+assert.equal(setupRecovery.stateView.setup.readyDeadlineAt, 1782025060000, 'setup current-match recovery should preserve setup ready deadline');
+assert.equal(setupRecovery.stateView.turnTimer.deadlineAt, 1782025060000, 'setup current-match recovery should preserve setup countdown deadline');
+assert.equal(setupRecovery.stateView.connectionReport.connectionHealth, 'healthy', 'setup current-match recovery should preserve connection report');
+assert.equal(setupRecovery.stateView.self.ready, false, 'setup current-match recovery should preserve viewer ready state');
+assert.equal(setupRecovery.stateView.opponent.ready, true, 'setup current-match recovery should preserve opponent ready state');
+assert.equal(setupRecovery.stateView.postMatchReview, null, 'setup current-match recovery should not surface terminal review');
+assert.deepEqual(setupRecoveryCalls, [{ method: 'getCurrentMatch' }], 'setup current-match recovery should not fall through to invite or inbox recovery');
+
+const currentRecoveryCalls = [];
+const currentRecoverySession = createPvpLiveSession({
+  liveService: {
+    getCurrentMatch: async () => {
+      currentRecoveryCalls.push({ method: 'getCurrentMatch' });
+      return {
+        success: true,
+        matchId: 'pvplm-current-reconnect-grace',
+        seatId: 'A',
+        stateView: {
+          matchId: 'pvplm-current-reconnect-grace',
+          status: 'active',
+          stateVersion: 13,
+          currentSeat: 'A',
+          turnTimer: {
+            startedAt: 1782025000000,
+            deadlineAt: 1782025060000,
+            durationMs: 60000
+          },
+          connectionReport: {
+            reportVersion: 'pvp-live-connection-v1',
+            connectionHealth: 'viewer_grace',
+            viewer: { seatId: 'A', status: 'grace', remainingGraceMs: 11000 },
+            opponent: { seatId: 'B', status: 'online' },
+            heartbeatIntervalMs: 5000,
+            graceMs: 30000
+          },
+          connectionTempoReport: {
+            reportVersion: 'pvp-live-connection-tempo-v1',
+            tempoState: 'viewer_reconnect_grace',
+            actionBoundary: 'recover_connection',
+            canSubmitIntent: false,
+            shouldWaitForAuthority: true
+          },
+          recentEvents: [
+            { eventType: 'connection_timeout', sequence: 20 },
+            { eventType: 'match_finished', sequence: 21 }
+          ],
+          postMatchReview: {
+            reportVersion: 'pvp-live-post-match-review-v1',
+            finishReason: 'connection_timeout',
+            result: 'loss'
+          },
+          self: { seatId: 'A', hand: [] },
+          opponent: { seatId: 'B', handCount: 3 }
+        }
+      };
+    }
+  },
+  now: () => 1782025000000
+});
+const currentRecovery = await currentRecoverySession.resumeCurrentMatch();
+assert.equal(currentRecovery.phase, 'active', 'current-match reconnect recovery should stay active after page refresh');
+assert.equal(currentRecovery.stateView.currentSeat, 'A', 'current-match reconnect recovery should preserve the acting seat');
+assert.equal(currentRecovery.stateView.turnTimer.startedAt, 1782025000000, 'current-match reconnect recovery should preserve active turn timer start');
+assert.equal(currentRecovery.stateView.turnTimer.deadlineAt, 1782025060000, 'current-match reconnect recovery should preserve active turn deadline');
+assert.equal(currentRecovery.stateView.connectionTempoReport.tempoState, 'viewer_reconnect_grace', 'current-match reconnect recovery should keep reconnect grace tempo');
+assert.equal(currentRecovery.stateView.connectionTempoReport.canSubmitIntent, false, 'current-match reconnect recovery should keep stale submits blocked');
+assert.equal(currentRecovery.stateView.postMatchReview, null, 'active current-match recovery should not surface stale terminal review');
+assert.ok(!currentRecovery.stateView.recentEvents.some(event => ['connection_timeout', 'turn_timeout', 'match_finished'].includes(event.eventType)), 'active current-match recovery should scrub stale terminal stateView events');
+assert.ok(!currentRecovery.lastEvents.some(event => ['connection_timeout', 'turn_timeout', 'match_finished'].includes(event.eventType)), 'active current-match recovery should not publish stale terminal events');
+assert.deepEqual(currentRecoveryCalls, [{ method: 'getCurrentMatch' }], 'current-match reconnect recovery should only read the current match service');
+
+const softTimeoutRecoverySession = createPvpLiveSession({
+  liveService: {
+    getCurrentMatch: async () => ({
+      success: true,
+      matchId: 'pvplm-soft-timeout-current',
+      seatId: 'A',
+      stateView: {
+        matchId: 'pvplm-soft-timeout-current',
+        status: 'active',
+        stateVersion: 14,
+        currentSeat: 'B',
+        turnTimer: {
+          startedAt: 1782025100000,
+          deadlineAt: 1782025160000,
+          durationMs: 60000
+        },
+        recentEvents: [
+          {
+            eventType: 'turn_timeout',
+            sequence: 30,
+            publicData: {
+              seatId: 'A',
+              timeoutMs: 60000,
+              elapsedMs: 64000,
+              finishReason: 'soft_timeout_automation'
+            }
+          },
+          {
+            eventType: 'automation_action',
+            sequence: 31,
+            publicData: {
+              seatId: 'A',
+              automationType: 'end_turn'
+            }
+          }
+        ],
+        postMatchReview: null,
+        self: { seatId: 'A', hand: [] },
+        opponent: { seatId: 'B', handCount: 3 }
+      }
+    })
+  },
+  now: () => 1782025100000
+});
+const softTimeoutRecovery = await softTimeoutRecoverySession.resumeCurrentMatch();
+assert.ok(softTimeoutRecovery.stateView.recentEvents.some(event => event.eventType === 'turn_timeout' && event.publicData?.finishReason === 'soft_timeout_automation'), 'active current-match recovery should preserve soft timeout automation evidence');
+assert.ok(softTimeoutRecovery.lastEvents.some(event => event.eventType === 'turn_timeout' && event.publicData?.finishReason === 'soft_timeout_automation'), 'active current-match recovery should publish soft timeout automation evidence');
+
+const replayState = await recoveredSession.getReplay({ visibility: 'replay_public' });
+assert.equal(replayState.lastReplay?.visibilityLayer, 'replay_public', 'getReplay should store returned public replay payload');
+assert.equal(replayState.lastReplayMatchId, 'pvplm-current', 'getReplay should bind stored replay payload to the current match id');
+assert.equal(replayState.lastError, null, 'successful getReplay should clear replay errors');
+assert.equal(calls.at(-1).method, 'getReplay', 'getReplay should call live service replay bridge');
+assert.deepEqual(calls.at(-1).options, { visibility: 'replay_public' }, 'getReplay should forward replay visibility options');
+
+const replayShareState = await recoveredSession.createReplayShare({ ttlDays: 30 });
+assert.equal(replayShareState.lastReplayShare?.reportVersion, 'pvp-live-replay-share-v1', 'createReplayShare should store returned public share receipt');
+assert.equal(replayShareState.lastReplayShare?.visibilityLayer, 'replay_public', 'createReplayShare should keep the public replay visibility boundary');
+assert.equal(replayShareState.lastReplayShare?.rankedImpact, 'none', 'createReplayShare should not affect ranked state');
+assert.equal(replayShareState.lastReplayShareMatchId, 'pvplm-current', 'createReplayShare should bind share receipt to the current match id');
+assert.equal(replayShareState.lastError?.reason, 'replay_share_created', 'createReplayShare should publish a readable share-created state');
+assert.equal(calls.at(-1).method, 'createReplayShare', 'createReplayShare should call live service share bridge');
+assert.equal(calls.at(-1).matchId, 'pvplm-current', 'createReplayShare should bind share creation to the current match');
+assert.deepEqual(calls.at(-1).options, { ttlDays: 30 }, 'createReplayShare should forward share ttl options');
+
+const replayShareRevokedState = await recoveredSession.revokeReplayShare();
+assert.equal(replayShareRevokedState.lastReplayShare?.revoked, true, 'revokeReplayShare should store the revoked public share receipt');
+assert.equal(replayShareRevokedState.lastReplayShare?.rankedImpact, 'none', 'revokeReplayShare should not affect ranked state');
+assert.equal(replayShareRevokedState.lastReplayShareMatchId, 'pvplm-current', 'revokeReplayShare should bind revoked share receipt to the current match id');
+assert.equal(replayShareRevokedState.lastError?.reason, 'replay_share_revoked', 'revokeReplayShare should publish a readable revoked state');
+assert.equal(calls.at(-1).method, 'revokeReplayShare', 'revokeReplayShare should call live service revoke bridge');
+assert.equal(calls.at(-1).matchId, 'pvplm-current', 'revokeReplayShare should bind share revoke to the current match');
+
+const reportState = await recoveredSession.submitReport({ reason: 'fairness_review', message: '请复核公开事件。' });
+assert.equal(reportState.lastDisputeReport?.reportVersion, 'pvp-live-dispute-report-receipt-v1', 'submitReport should store the dispute receipt');
+assert.equal(reportState.lastDisputeReport?.rankedImpact, 'none', 'dispute receipt should not change ranked state');
+assert.equal(reportState.lastDisputeReport?.evidencePackage?.usesHiddenInformation, false, 'dispute receipt should preserve hidden-information boundary');
+assert.equal(reportState.lastError?.reason, 'report_issue_submitted', 'submitReport should publish a readable submitted state');
+assert.equal(calls.at(-1).method, 'submitReport', 'submitReport should call live service report bridge');
+assert.equal(calls.at(-1).matchId, 'pvplm-current', 'submitReport should bind the report to the current match');
+assert.deepEqual(calls.at(-1).report, { reason: 'fairness_review', message: '请复核公开事件。' }, 'submitReport should forward the player report payload');
+
+const avoidOpponentState = await recoveredSession.avoidOpponent({ reason: 'post_match_avoid', message: '之后优先避开这个对手' });
+assert.equal(avoidOpponentState.lastAvoidOpponentReport?.reportVersion, 'pvp-live-avoid-opponent-receipt-v1', 'avoidOpponent should store the social safety receipt');
+assert.equal(avoidOpponentState.lastAvoidOpponentReport?.rankedImpact, 'none', 'avoid-opponent receipt should not change ranked state');
+assert.equal(avoidOpponentState.lastAvoidOpponentReport?.usesHiddenInformation, false, 'avoid-opponent receipt should preserve hidden-information boundary');
+assert.equal(avoidOpponentState.lastAvoidOpponentReport?.safeguard, 'player_avoid_opponent', 'avoid-opponent receipt should expose the future matchmaking safeguard');
+assert.equal(avoidOpponentState.lastError?.reason, 'avoid_opponent_saved', 'avoidOpponent should publish a readable saved state');
+assert.equal(calls.at(-1).method, 'avoidOpponent', 'avoidOpponent should call live service bridge');
+assert.equal(calls.at(-1).matchId, 'pvplm-current', 'avoidOpponent should bind the request to the current match');
+assert.deepEqual(calls.at(-1).request, { reason: 'post_match_avoid', message: '之后优先避开这个对手' }, 'avoidOpponent should forward the player safety request');
+
+const replayClearedByQueue = await recoveredSession.joinQueue({ displayName: '乙' });
+assert.equal(replayClearedByQueue.lastReplay, null, 'joining a new queue should clear the previous match replay payload');
+assert.equal(replayClearedByQueue.lastReplayMatchId, '', 'joining a new queue should clear the previous replay match binding');
+assert.equal(replayClearedByQueue.lastReplayShare, null, 'joining a new queue should clear the previous replay share receipt');
+assert.equal(replayClearedByQueue.lastReplayShareMatchId, '', 'joining a new queue should clear the previous replay share binding');
+assert.equal(replayClearedByQueue.lastDisputeReport, null, 'joining a new queue should clear the previous dispute report receipt');
+assert.equal(replayClearedByQueue.lastAvoidOpponentReport, null, 'joining a new queue should clear the previous avoid-opponent receipt');
+
+const recoveredInviteSession = createPvpLiveSession({ liveService });
+const recoveredInvite = await recoveredInviteSession.resumeCurrentInvite();
+assert.equal(recoveredInvite.phase, 'waiting_invite', 'resumeCurrentInvite should recover pending private invite');
+assert.equal(recoveredInvite.inviteCode, 'LIVE1234', 'resumeCurrentInvite should retain pending invite code');
+assert.equal(recoveredInvite.inviteReport?.status, 'waiting', 'resumeCurrentInvite should retain waiting invite report');
+assert.equal(calls.at(-1).method, 'getCurrentInvite', 'resumeCurrentInvite should call live current invite service');
+
+const inboxSession = createPvpLiveSession({ liveService });
+const inviteInbox = await inboxSession.refreshInviteInbox();
+assert.equal(inviteInbox.phase, 'idle', 'refreshInviteInbox should keep idle phase when only notifications are present');
+assert.equal(inviteInbox.inviteInbox.length, 1, 'refreshInviteInbox should store targeted private invite notifications');
+assert.equal(inviteInbox.inviteInbox[0].inviteCode, 'TDIN42', 'refreshInviteInbox should retain inbox invite code');
+assert.equal(inviteInbox.inviteInbox[0].inviteReport?.target?.displayName, '辛', 'refreshInviteInbox should retain target display name');
+assert.equal(inviteInbox.lastError, null, 'refreshInviteInbox should not surface an idle inbox as an error');
+assert.equal(calls.at(-1).method, 'getInviteInbox', 'refreshInviteInbox should call live service invite inbox');
+
+let flakyInboxShouldFail = true;
+const flakyInboxSession = createPvpLiveSession({
+  liveService: {
+    getInviteInbox: async () => {
+      if (flakyInboxShouldFail) {
+        flakyInboxShouldFail = false;
+        return {
+          success: true,
+          status: 'invite_inbox',
+          invites: [
+            {
+              inviteCode: 'TDKEEP',
+              inviteReport: {
+                reportVersion: 'pvp-live-invite-v1',
+                inviteCode: 'TDKEEP',
+                host: { displayName: '甲' },
+                target: { displayName: '辛' },
+                rankedImpact: 'none'
+              }
+            }
+          ]
+        };
+      }
+      return {
+        success: false,
+        reason: 'network_timeout',
+        message: '邀请收件箱暂时不可用'
+      };
+    }
+  }
+});
+const stableInbox = await flakyInboxSession.refreshInviteInbox();
+assert.equal(stableInbox.inviteInbox.length, 1, 'first refreshInviteInbox should seed existing inbox notifications');
+const failedInbox = await flakyInboxSession.refreshInviteInbox();
+assert.equal(failedInbox.inviteInbox.length, 1, 'failed refreshInviteInbox should keep previous invite notifications instead of showing empty');
+assert.equal(failedInbox.lastError?.reason, 'invite_inbox_failed', 'failed refreshInviteInbox should expose stable inbox failure reason');
+
+const recoveredInboxSession = createPvpLiveSession({
+  liveService: {
+    getInviteInbox: async () => ({
+      success: true,
+      status: 'invite_inbox',
+      invites: [
+        {
+          inviteCode: 'TDRECOVER',
+          inviteReport: {
+            reportVersion: 'pvp-live-invite-v1',
+            inviteCode: 'TDRECOVER',
+            host: { displayName: '甲' },
+            target: { displayName: '辛' },
+            rankedImpact: 'none'
+          }
+        }
+      ]
+    })
+  }
+});
+recoveredInboxSession.getState();
+await recoveredInboxSession.joinInvite('', {});
+assert.equal(recoveredInboxSession.getState().lastError?.reason, 'missing_invite_code', 'test should seed a stale live error before inbox refresh');
+const recoveredInbox = await recoveredInboxSession.refreshInviteInbox();
+assert.equal(recoveredInbox.inviteInbox.length, 1, 'successful refreshInviteInbox should store recovered inbox notification');
+assert.equal(recoveredInbox.lastError, null, 'successful refreshInviteInbox should clear stale idle inbox errors');
+
+const waiting = await session.joinQueue({ displayName: '甲', wideMatchConsent: true });
+assert.equal(waiting.phase, 'waiting', 'waiting queue join should enter waiting phase');
+assert.equal(waiting.queueTicket, 'pvplq-session', 'waiting queue join should retain queue ticket');
+assert.equal(calls.at(-1).method, 'joinQueue', 'joinQueue should call live service joinQueue');
+assert.equal(calls.at(-1).options.wideMatchConsent, true, 'joinQueue should preserve explicit wide match consent for the live service');
+
+const cancelled = await session.cancelQueue();
+assert.equal(cancelled.phase, 'idle', 'cancel queue should return session to idle');
+assert.equal(cancelled.queueTicket, '', 'cancel queue should clear queue ticket');
+assert.equal(cancelled.lastError?.reason, 'queue_cancelled', 'cancel queue should expose a readable cancellation hint');
+assert.match(cancelled.lastError?.message || '', /已退出|取消/, 'cancel queue should tell the player they left the queue');
+assert.equal(calls.at(-1).method, 'cancelQueue', 'cancelQueue should call live service cancelQueue');
+
+const cancelCooldownSession = createPvpLiveSession({
+  liveService: {
+    joinQueue: async () => ({
+      success: true,
+      status: 'waiting',
+      queueTicket: 'pvplq-cancel-cooldown-session'
+    }),
+    cancelQueue: async (queueTicket) => ({
+      success: true,
+      status: 'cancelled',
+      queueTicket,
+      reason: 'queue_cooldown',
+      message: '频繁取消冷却触发真人排位短暂冷却；可先进入问道练习，不写正式积分。',
+      matchmakingGuard: {
+        reportVersion: 'pvp-live-matchmaking-guard-v1',
+        status: 'blocked',
+        cooldownSource: 'queue_cancel_abuse',
+        sourceLabel: '频繁取消冷却',
+        retryAt: Date.now() + 60000,
+        cooldownRemainingMs: 60000,
+        rankedImpact: 'none',
+        actions: [
+          { id: 'retry_queue_later', label: '稍后重试', detail: '冷却结束后再进入正式排位。' },
+          { id: 'practice', label: '问道练习', detail: '练习不写正式积分。' },
+        ],
+      },
+    })
+  }
+});
+await cancelCooldownSession.joinQueue({ displayName: '甲' });
+const cancelledIntoCooldown = await cancelCooldownSession.cancelQueue();
+assert.equal(cancelledIntoCooldown.phase, 'idle', 'cancel-triggered cooldown should return session to idle');
+assert.equal(cancelledIntoCooldown.queueTicket, '', 'cancel-triggered cooldown should clear queue ticket');
+assert.equal(cancelledIntoCooldown.lastError?.reason, 'queue_cooldown', 'cancel-triggered cooldown should preserve stable cooldown reason');
+assert.equal(cancelledIntoCooldown.lastError?.matchmakingGuard?.reportVersion, 'pvp-live-matchmaking-guard-v1', 'cancel-triggered cooldown should retain structured matchmaking guard');
+assert.equal(cancelledIntoCooldown.lastError?.matchmakingGuard?.cooldownSource, 'queue_cancel_abuse', 'cancel-triggered cooldown should retain cooldown source');
+assert.ok(cancelledIntoCooldown.lastError?.matchmakingGuard?.actions?.some(action => action.id === 'practice' && /不写正式积分/.test(action.detail)), 'cancel-triggered cooldown should retain no-score practice action');
+
+await session.joinQueue({ displayName: '甲' });
+
+const matched = await session.pollQueue();
+assert.equal(matched.phase, 'setup', 'matched queue poll should enter setup phase before battle starts');
+assert.equal(matched.queueTicket, '', 'matched queue poll should clear stale queue ticket from waiting state');
+assert.equal(matched.waitingReport, null, 'matched queue poll should clear stale waiting report from waiting state');
+assert.equal(matched.lastError, null, 'matched queue poll should clear stale queue errors from waiting state');
+assert.equal(matched.matchId, 'pvplm-session', 'matched queue poll should retain match id');
+assert.equal(matched.seatId, 'A', 'matched queue poll should retain seat id');
+assert.ok(!Array.isArray(matched.stateView.opponent.hand), 'live session state must not expose opponent hand');
+assert.equal(matched.stateView.opponent.publicProfile?.reportVersion, 'pvp-live-ranked-opponent-profile-v1', 'live session should retain ranked opponent public profile');
+assert.equal(matched.stateView.opponent.publicProfile?.usesHiddenInformation, false, 'live session ranked opponent profile must not use hidden information');
+assert.ok(!Object.prototype.hasOwnProperty.call(matched.stateView.opponent, 'userId'), 'live session ranked opponent must not expose user id');
+assert.ok(!Object.prototype.hasOwnProperty.call(matched.stateView.opponent, 'displayName'), 'live session ranked opponent must not expose raw display name');
+assert.ok(!Object.prototype.hasOwnProperty.call(matched.stateView.opponent, 'loadoutHash'), 'live session ranked opponent must not expose loadout hash');
+assert.ok(!Object.prototype.hasOwnProperty.call(matched.stateView.opponent, 'loadoutSummary'), 'live session ranked opponent must not expose loadout summary');
+assert.ok(!Object.prototype.hasOwnProperty.call(matched.stateView.opponent, 'loadoutSnapshot'), 'live session ranked opponent must not expose loadout snapshot');
+
+const mulligan = await session.mulligan({ cardInstanceIds: ['A-strike-1'], intentId: 'session-mulligan-1' });
+assert.equal(mulligan.phase, 'setup', 'mulligan should keep session in setup phase');
+assert.equal(calls.at(-1).intent.intentType, 'mulligan', 'mulligan should submit mulligan intent');
+assert.deepEqual(calls.at(-1).intent.payload, { cardInstanceIds: ['A-strike-1'] }, 'mulligan should forward selected card ids');
+
+const ready = await session.ready({ intentId: 'session-ready-1' });
+assert.equal(ready.phase, 'setup', 'single ready should keep session in setup until opponent is ready');
+assert.equal(calls.at(-1).intent.intentType, 'ready', 'ready should submit ready intent');
+
+const refreshed = await session.refreshMatch();
+assert.equal(refreshed.phase, 'active', 'refreshing an active match should enter active phase');
+assert.equal(refreshed.stateView.stateVersion, 2, 'refresh should store latest state view');
+
+const heartbeat = await session.heartbeat();
+assert.equal(heartbeat.phase, 'active', 'heartbeat should keep active match phase');
+assert.equal(heartbeat.stateView.connectionReport.reportVersion, 'pvp-live-connection-v1', 'heartbeat should store authoritative connection report');
+assert.equal(heartbeat.stateView.connectionReport.heartbeatIntervalMs, 5000, 'heartbeat should retain authoritative heartbeat interval for scene scheduling');
+assert.equal(heartbeat.stateView.connectionReport.opponent.status, 'grace', 'heartbeat should preserve opponent grace status for UI');
+assert.equal(heartbeat.stateView.turnTimer.startedAt, 1782022000000, 'heartbeat should preserve active reconnect grace turn timer start');
+assert.equal(heartbeat.stateView.turnTimer.deadlineAt, 1782022060000, 'heartbeat should preserve active reconnect grace turn deadline');
+assert.equal(heartbeat.stateView.connectionTempoReport.tempoState, 'opponent_action_grace', 'heartbeat should preserve active reconnect grace tempo state');
+assert.equal(heartbeat.stateView.postMatchReview, null, 'heartbeat should not surface terminal review during active reconnect grace');
+assert.ok(!heartbeat.stateView.recentEvents.some(event => ['connection_timeout', 'turn_timeout', 'match_finished'].includes(event.eventType)), 'heartbeat should not surface terminal events during active reconnect grace');
+assert.equal(calls.at(-1).method, 'heartbeat', 'heartbeat should call live service heartbeat');
+
+const submitted = await session.submitIntent({
+  intentId: 'session-intent-1',
+  intentType: 'play_card',
+  payload: { cardInstanceId: 'A-strike-1', targetSeat: 'B' }
+});
+assert.equal(submitted.phase, 'active', 'accepted intent should keep session active');
+assert.equal(submitted.stateView.stateVersion, 7, 'accepted intent should update state view');
+assert.deepEqual(submitted.lastEvents, [{ eventType: 'card_played' }], 'accepted intent should store last public events');
+assert.deepEqual(calls.at(-1).intent, {
+  intentId: 'session-intent-1',
+  intentType: 'play_card',
+  stateVersion: 6,
+  payload: { cardInstanceId: 'A-strike-1', targetSeat: 'B' }
+}, 'session should inject latest heartbeat-refreshed stateVersion into live intent');
+
+const syncRequired = await session.submitIntent({
+  intentId: 'session-stale-1',
+  intentType: 'play_card',
+  stateVersion: 1,
+  payload: { cardInstanceId: 'A-stale-1', targetSeat: 'B' }
+});
+assert.equal(syncRequired.phase, 'sync_required', 'sync_required should move session into sync_required phase');
+assert.equal(syncRequired.lastError.reason, 'stale_state', 'sync_required should keep authoritative reject reason');
+assert.match(syncRequired.lastError.message, /权威状态|刷新/, 'sync_required should tell the player to resync authoritative state');
+assert.deepEqual(syncRequired.lastEvents, [{ eventType: 'sync_required' }], 'sync_required should keep sync events');
+assert.equal(syncRequired.stateView.stateVersion, 8, 'sync_required should retain latest authoritative state view');
+
+const rejectionSession = createPvpLiveSession({ liveService });
+await rejectionSession.resumeCurrentMatch();
+
+const notCurrentRejected = await rejectionSession.submitIntent({
+  intentId: 'session-not-current-1',
+  intentType: 'play_card',
+  stateVersion: 8,
+  payload: { cardInstanceId: 'A-stale-turn-1', targetSeat: 'B' }
+});
+assert.equal(notCurrentRejected.phase, 'active', 'not-current rejection should keep the match active');
+assert.equal(notCurrentRejected.lastError.reason, 'not_current_turn', 'not-current rejection should keep stable reason for diagnostics');
+assert.match(notCurrentRejected.lastError.message, /还没轮到你|等待对手/, 'not-current rejection should explain that the player is waiting for opponent action');
+assert.doesNotMatch(notCurrentRejected.lastError.message, /not_current_turn/, 'not-current player copy should not expose raw protocol reason');
+
+const notEnoughEnergyRejected = await rejectionSession.submitIntent({
+  intentId: 'session-not-enough-energy-1',
+  intentType: 'play_card',
+  stateVersion: 8,
+  payload: { cardInstanceId: 'A-expensive-1', targetSeat: 'B' }
+});
+assert.equal(notEnoughEnergyRejected.lastError.reason, 'not_enough_energy', 'energy rejection should keep stable reason for diagnostics');
+assert.match(notEnoughEnergyRejected.lastError.message, /灵力不足|结束回合/, 'energy rejection should suggest a lower-cost action or ending the turn');
+assert.doesNotMatch(notEnoughEnergyRejected.lastError.message, /not_enough_energy/, 'energy rejection player copy should not expose raw protocol reason');
+
+const missingCardRejected = await rejectionSession.submitIntent({
+  intentId: 'session-card-gone-1',
+  intentType: 'play_card',
+  stateVersion: 8,
+  payload: { cardInstanceId: 'A-card-gone-1', targetSeat: 'B' }
+});
+assert.equal(missingCardRejected.lastError.reason, 'card_not_in_hand', 'missing-card rejection should keep stable reason for diagnostics');
+assert.match(missingCardRejected.lastError.message, /不在手牌|刷新/, 'missing-card rejection should tell the player to refresh the authoritative hand');
+assert.doesNotMatch(missingCardRejected.lastError.message, /card_not_in_hand/, 'missing-card player copy should not expose raw protocol reason');
+
+const surrendered = await session.surrender({ intentId: 'session-surrender-1' });
+assert.equal(surrendered.phase, 'finished', 'surrender should move session into finished phase');
+assert.equal(calls.at(-1).method, 'submitIntent', 'surrender should submit a live intent');
+assert.equal(calls.at(-1).intent.intentType, 'surrender', 'surrender should use surrender intent type');
+assert.equal(calls.at(-1).intent.stateVersion, 8, 'surrender should use latest state version');
+
+const noTicketSession = createPvpLiveSession({ liveService });
+const noTicket = await noTicketSession.pollQueue();
+assert.equal(noTicket.phase, 'idle', 'poll without queue ticket should not leave idle phase');
+assert.equal(noTicket.lastError.reason, 'missing_queue_ticket', 'poll without queue ticket should expose missing ticket reason');
+
+const expiredSession = createPvpLiveSession({
+  liveService: {
+    joinQueue: async () => ({ success: true, status: 'waiting', queueTicket: 'pvplq-expired' }),
+    getQueueStatus: async () => ({
+      success: false,
+      error: { code: 404 },
+      message: '实时论道队列票据不存在'
+    })
+  }
+});
+await expiredSession.joinQueue({ displayName: '甲' });
+const expiredTicket = await expiredSession.pollQueue();
+assert.equal(expiredTicket.phase, 'idle', 'expired queue ticket should leave waiting phase');
+assert.equal(expiredTicket.queueTicket, '', 'expired queue ticket should clear queue ticket');
+assert.equal(expiredTicket.lastError.reason, 'queue_ticket_expired', 'expired queue ticket should expose terminal reason');
+
+const longWaitSession = createPvpLiveSession({
+  liveService: {
+    joinQueue: async () => ({ success: true, status: 'waiting', queueTicket: 'pvplq-long-wait' }),
+    getQueueStatus: async () => ({
+      success: true,
+      status: 'waiting',
+      queueTicket: 'pvplq-long-wait',
+      waitingReport: {
+        reportVersion: 'pvp-live-waiting-report-v1',
+        waitMs: 121000,
+        longWaitThresholdMs: 120000,
+        longWait: true,
+        message: '当前真人较少，可继续等待、进入问道练习或取消匹配；不会自动切残影。',
+        safeguards: ['real_player_only', 'no_ghost_fallback', 'no_score_change'],
+        actions: [
+          { id: 'continue_waiting', label: '继续等待', detail: '继续等待真人，不自动切残影。' },
+          { id: 'practice', label: '问道练习', detail: '练习不写正式积分。' },
+          { id: 'cancel_queue', label: '取消匹配', detail: '取消本次排队，不影响正式积分。' }
+        ]
+      }
+    })
+  }
+});
+await longWaitSession.joinQueue({ displayName: '甲' });
+const longWait = await longWaitSession.pollQueue();
+assert.equal(longWait.phase, 'waiting', 'long wait queue poll should keep waiting phase');
+assert.equal(longWait.waitingReport.reportVersion, 'pvp-live-waiting-report-v1', 'session should retain long wait report version');
+assert.equal(longWait.waitingReport.longWait, true, 'session should retain long wait branch flag');
+assert.ok(longWait.waitingReport.actions.some(action => action.id === 'practice' && /不写正式积分/.test(action.detail)), 'session should retain no-score practice option');
+assert.ok(longWait.waitingReport.safeguards.includes('no_ghost_fallback'), 'session should retain no ghost fallback safeguard');
+
+const inviteSession = createPvpLiveSession({
+  liveService: {
+    createInvite: async (options) => ({
+      success: true,
+      status: 'waiting_invite',
+      inviteCode: 'INVITE42',
+      inviteReport: {
+        reportVersion: 'pvp-live-invite-v1',
+        inviteCode: 'INVITE42',
+        status: 'waiting',
+        rankedImpact: 'none',
+        safeguards: ['invite_only_match', 'friendly_no_ranked_impact']
+      },
+      loadoutHash: 'invite-host-loadout'
+    }),
+    getCurrentMatch: async () => ({
+      success: true,
+      matchId: 'pvplm-invite-accepted',
+      seatId: 'A',
+      stateView: {
+        matchId: 'pvplm-invite-accepted',
+        mode: 'friendly',
+        status: 'setup',
+        stateVersion: 1,
+        matchQuality: {
+          reportVersion: 'pvp-live-match-quality-v1',
+          expansionStage: 'friend_invite',
+          safeguards: ['invite_only_match', 'friendly_no_ranked_impact']
+        },
+        self: { seatId: 'A', hand: [] },
+        opponent: { seatId: 'B', handCount: 3 }
+      }
+    })
+  }
+});
+const inviteWaiting = await inviteSession.createInvite({ displayName: '甲', loadout: { identitySlot: 'sword' } });
+assert.equal(inviteWaiting.phase, 'waiting_invite', 'private invite creation should enter waiting invite phase');
+assert.equal(inviteWaiting.inviteCode, 'INVITE42', 'private invite creation should retain invite code');
+assert.equal(inviteWaiting.inviteReport?.rankedImpact, 'none', 'private invite creation should retain no-ranked-impact report');
+assert.ok(inviteWaiting.inviteReport?.safeguards?.includes('invite_only_match'), 'private invite creation should retain invite-only safeguard');
+const inviteRecovered = await inviteSession.pollInvite();
+assert.equal(inviteRecovered.phase, 'setup', 'private invite polling should enter accepted invite setup');
+assert.equal(inviteRecovered.matchId, 'pvplm-invite-accepted', 'private invite polling should switch to accepted match id');
+assert.equal(inviteRecovered.stateView.mode, 'friendly', 'private invite polling should retain friendly no-score mode');
+assert.equal(inviteRecovered.inviteCode, '', 'accepted private invite should clear waiting invite code');
+assert.equal(inviteRecovered.inviteReport, null, 'accepted private invite should clear waiting invite report');
+
+const inviteCurrentMatchSession = createPvpLiveSession({
+  liveService: {
+    createInvite: async () => ({
+      success: true,
+      status: 'waiting_invite',
+      inviteCode: 'INVITE43',
+      inviteReport: {
+        reportVersion: 'pvp-live-invite-v1',
+        inviteCode: 'INVITE43',
+        status: 'waiting',
+        rankedImpact: 'none',
+        safeguards: ['invite_only_match', 'friendly_no_ranked_impact']
+      }
+    }),
+    getCurrentMatch: async () => ({
+      success: true,
+      matchId: 'pvplm-ranked-current',
+      seatId: 'A',
+      stateView: {
+        matchId: 'pvplm-ranked-current',
+        mode: 'ranked',
+        status: 'active',
+        stateVersion: 7,
+        currentSeat: 'A',
+        self: { seatId: 'A', hand: [] },
+        opponent: { seatId: 'B', handCount: 2 }
+      }
+    })
+  }
+});
+await inviteCurrentMatchSession.createInvite({ displayName: '甲' });
+const inviteCurrentRecovered = await inviteCurrentMatchSession.pollInvite();
+assert.equal(inviteCurrentRecovered.phase, 'active', 'private invite polling should recover non-invite current match instead of staying stuck');
+assert.equal(inviteCurrentRecovered.matchId, 'pvplm-ranked-current', 'private invite polling should keep recovered current match id');
+assert.equal(inviteCurrentRecovered.inviteCode, '', 'recovering a non-invite current match should clear waiting invite code');
+assert.equal(inviteCurrentRecovered.inviteReport, null, 'recovering a non-invite current match should clear invite waiting report');
+assert.equal(inviteCurrentRecovered.lastError?.reason, 'invite_recovered_current_match', 'recovered current match should expose stable invite recovery reason');
+
+const inviteExpiredSession = createPvpLiveSession({
+  liveService: {
+    createInvite: async () => ({
+      success: true,
+      status: 'waiting_invite',
+      inviteCode: 'INVITE44',
+      inviteReport: {
+        reportVersion: 'pvp-live-invite-v1',
+        inviteCode: 'INVITE44',
+        status: 'waiting',
+        rankedImpact: 'none'
+      }
+    }),
+    getCurrentMatch: async () => ({ success: false, reason: 'no_current_match', message: '当前没有进行中的实时论道' }),
+    getCurrentInvite: async () => ({ success: false, reason: 'invite_expired', message: '好友约战邀请码已过期' })
+  }
+});
+await inviteExpiredSession.createInvite({ displayName: '甲' });
+const inviteExpired = await inviteExpiredSession.pollInvite();
+assert.equal(inviteExpired.phase, 'idle', 'expired host private invite polling should leave waiting invite phase');
+assert.equal(inviteExpired.inviteCode, '', 'expired host private invite polling should clear invite code');
+assert.equal(inviteExpired.inviteReport, null, 'expired host private invite polling should clear invite report');
+assert.equal(inviteExpired.lastError?.reason, 'invite_expired', 'expired host private invite polling should expose stable expiry reason');
+
+const inviteCancelSession = createPvpLiveSession({ liveService });
+await inviteCancelSession.createInvite({ displayName: '甲', loadout: { identitySlot: 'sword' } });
+const inviteCancelled = await inviteCancelSession.cancelInvite('LIVE1234');
+assert.equal(inviteCancelled.phase, 'idle', 'private invite cancel should return session to idle');
+assert.equal(inviteCancelled.inviteCode, '', 'private invite cancel should clear invite code');
+assert.equal(inviteCancelled.inviteReport, null, 'private invite cancel should clear invite report');
+assert.equal(inviteCancelled.lastError?.reason, 'invite_cancelled', 'private invite cancel should expose stable cancelled reason');
+assert.equal(calls.at(-1).method, 'cancelInvite', 'cancelInvite should call live service cancelInvite');
+assert.equal(calls.at(-1).inviteCode, 'LIVE1234', 'cancelInvite should forward invite code');
+
+const inviteJoinSession = createPvpLiveSession({ liveService });
+await inviteJoinSession.refreshInviteInbox();
+const inviteJoined = await inviteJoinSession.joinInvite('LIVE1234', { displayName: '乙', loadout: { identitySlot: 'shield' } });
+assert.equal(inviteJoined.phase, 'setup', 'joining a private invite should enter matched setup');
+assert.equal(inviteJoined.matchId, 'pvplm-invite-session', 'joining a private invite should store match id');
+assert.equal(inviteJoined.stateView.mode, 'friendly', 'joining a private invite should stay friendly');
+assert.equal(inviteJoined.inviteInbox.length, 0, 'joining a private invite should clear invite inbox notifications');
+assert.equal(calls.at(-1).method, 'joinInvite', 'joinInvite should call live service joinInvite');
+assert.equal(calls.at(-1).inviteCode, 'LIVE1234', 'joinInvite should forward invite code');
+
+const staleInviteSession = createPvpLiveSession({
+  liveService: {
+    getInviteInbox: async () => ({
+      success: true,
+      status: 'invite_inbox',
+      invites: [
+        {
+          inviteCode: 'STALE42',
+          inviteReport: {
+            reportVersion: 'pvp-live-invite-v1',
+            inviteCode: 'STALE42',
+            host: { displayName: '甲' },
+            target: { displayName: '乙' },
+            rankedImpact: 'none'
+          }
+        }
+      ]
+    }),
+    joinInvite: async () => ({
+      success: false,
+      reason: 'invite_not_found',
+      message: '好友约战已取消或失效'
+    })
+  }
+});
+await staleInviteSession.refreshInviteInbox();
+assert.equal(staleInviteSession.getState().inviteInbox.length, 1, 'stale private invite setup should begin with one inbox invite');
+const staleInviteJoined = await staleInviteSession.joinInvite('STALE42', { displayName: '乙', loadout: { identitySlot: 'shield' } });
+assert.equal(staleInviteJoined.phase, 'idle', 'clicking a cancelled private invite should keep recipient idle');
+assert.equal(staleInviteJoined.inviteInbox.length, 0, 'clicking a cancelled private invite should remove the stale inbox item');
+assert.equal(staleInviteJoined.inviteCode, '', 'clicking a cancelled private invite should not create a local invite code');
+assert.equal(staleInviteJoined.matchId, '', 'clicking a cancelled private invite should not create a match id');
+assert.equal(staleInviteJoined.lastError?.reason, 'invite_not_found', 'clicking a cancelled private invite should expose stable stale invite reason');
+
+const noCurrentSession = createPvpLiveSession({
+  liveService: {
+    getCurrentMatch: async () => ({ success: false, reason: 'no_current_match', message: '当前没有进行中的实时论道' })
+  }
+});
+const noCurrent = await noCurrentSession.resumeCurrentMatch();
+assert.equal(noCurrent.phase, 'idle', 'resumeCurrentMatch should stay idle when server has no current match');
+assert.equal(noCurrent.lastError, null, 'no current match should not show as an error');
+
+const waitingRematchCalls = [];
+let waitingRematchAccepted = false;
+const waitingRematchSession = createPvpLiveSession({
+  liveService: {
+    getCurrentMatch: async () => ({
+      success: true,
+      matchId: waitingRematchAccepted ? 'pvplm-rematch-friendly' : 'pvplm-rematch-source',
+      seatId: waitingRematchAccepted ? 'B' : 'A',
+      stateView: waitingRematchAccepted
+        ? {
+          matchId: 'pvplm-rematch-friendly',
+          mode: 'friendly',
+          status: 'setup',
+          stateVersion: 1,
+          friendlySeries: {
+            reportVersion: 'pvp-live-friendly-series-v1',
+            sourceMatchId: 'pvplm-rematch-source',
+            seriesId: 'pvpls-session-wait',
+            targetWins: 2,
+            maxRounds: 3,
+            roundIndex: 2,
+            roundLabel: 'Bo3 第 2 局 · 换边再战',
+            seriesStatus: 'ongoing',
+            scoreBySourceSeat: { A: 1, B: 0 },
+            canRequestNextRound: false,
+            rankedImpact: 'none'
+          },
+          self: { seatId: 'B', hand: [] },
+          opponent: { seatId: 'A', handCount: 3 }
+        }
+        : {
+          matchId: 'pvplm-rematch-source',
+          status: 'finished',
+          postMatchReview: {
+            reportVersion: 'pvp-live-post-match-review-v1',
+            result: 'win',
+            finishReason: 'surrender'
+          },
+          self: { seatId: 'A', hand: [] },
+          opponent: { seatId: 'B', handCount: 0 }
+        }
+    }),
+    requestRematch: async (matchId, options) => {
+      waitingRematchCalls.push({ method: 'requestRematch', matchId, options });
+      return {
+        success: true,
+        status: 'waiting_rematch',
+        friendlySeries: {
+          reportVersion: 'pvp-live-friendly-series-v1',
+          sourceMatchId: matchId,
+          seriesId: 'pvpls-session-wait',
+          targetWins: 2,
+          maxRounds: 3,
+          roundIndex: 2,
+          roundLabel: 'Bo3 第 2 局 · 换边再战',
+          seriesStatus: 'ongoing',
+          scoreBySourceSeat: { A: 1, B: 0 },
+          canRequestNextRound: false,
+          rankedImpact: 'none'
+        }
+      };
+    }
+  }
+});
+await waitingRematchSession.resumeCurrentMatch();
+const waitingRematch = await waitingRematchSession.requestRematch({ displayName: '甲', loadout: { identitySlot: 'sword' } });
+assert.equal(waitingRematch.phase, 'waiting_rematch', 'waiting friendly rematch should enter a polling phase instead of freezing as finished');
+assert.equal(waitingRematch.matchId, 'pvplm-rematch-source', 'waiting friendly rematch should keep source match id');
+assert.equal(waitingRematch.stateView.postMatchReview?.reportVersion, 'pvp-live-post-match-review-v1', 'waiting friendly rematch should keep finished review payload visible');
+assert.equal(waitingRematch.rematchReport?.rankedImpact, 'none', 'waiting friendly rematch should retain no ranked impact report');
+assert.deepEqual(waitingRematch.rematchReport?.scoreBySourceSeat, { A: 1, B: 0 }, 'waiting friendly rematch should retain Bo3 score report');
+assert.equal(waitingRematch.lastError.reason, 'waiting_rematch', 'waiting friendly rematch should show opponent confirmation state');
+assert.deepEqual(waitingRematchCalls.map(call => call.method), ['requestRematch'], 'waiting friendly rematch should call requestRematch once');
+waitingRematchAccepted = true;
+const recoveredRematch = await waitingRematchSession.pollRematch();
+assert.equal(recoveredRematch.phase, 'setup', 'waiting friendly rematch should poll current match and enter accepted friendly setup');
+assert.equal(recoveredRematch.matchId, 'pvplm-rematch-friendly', 'waiting friendly rematch should switch to the accepted friendly match id');
+assert.equal(recoveredRematch.stateView.mode, 'friendly', 'waiting friendly rematch recovery should retain friendly mode');
+assert.equal(recoveredRematch.rematchReport?.sourceMatchId, 'pvplm-rematch-source', 'waiting friendly rematch recovery should retain source match link');
+assert.equal(recoveredRematch.rematchReport?.roundIndex, 2, 'waiting friendly rematch recovery should retain Bo3 round index');
+assert.deepEqual(recoveredRematch.rematchReport?.scoreBySourceSeat, { A: 1, B: 0 }, 'waiting friendly rematch recovery should retain Bo3 score');
+assert.equal(recoveredRematch.lastError, null, 'accepted friendly rematch recovery should clear waiting hint');
+
+let unrelatedPollStarted = false;
+const unrelatedFriendlySession = createPvpLiveSession({
+  liveService: {
+    getCurrentMatch: async () => ({
+      success: true,
+      matchId: unrelatedPollStarted ? 'pvplm-unrelated-friendly' : 'pvplm-rematch-source-guard',
+      seatId: 'A',
+      stateView: unrelatedPollStarted
+        ? {
+          matchId: 'pvplm-unrelated-friendly',
+          mode: 'friendly',
+          status: 'setup',
+          friendlySeries: {
+            reportVersion: 'pvp-live-friendly-series-v1',
+            sourceMatchId: 'pvplm-other-source',
+            seriesId: 'pvpls-other-series',
+            rankedImpact: 'none'
+          },
+          self: { seatId: 'A', hand: [] },
+          opponent: { seatId: 'B', handCount: 3 }
+        }
+        : {
+          matchId: 'pvplm-rematch-source-guard',
+          status: 'finished',
+          postMatchReview: {
+            reportVersion: 'pvp-live-post-match-review-v1',
+            result: 'win',
+            finishReason: 'surrender'
+          },
+          self: { seatId: 'A', hand: [] },
+          opponent: { seatId: 'B', handCount: 0 }
+        }
+    }),
+    requestRematch: async (matchId) => ({
+      success: true,
+      status: 'waiting_rematch',
+      friendlySeries: {
+        reportVersion: 'pvp-live-friendly-series-v1',
+        sourceMatchId: matchId,
+        seriesId: 'pvpls-session-expected',
+        rankedImpact: 'none'
+      }
+    })
+  }
+});
+await unrelatedFriendlySession.resumeCurrentMatch();
+const unrelatedWait = await unrelatedFriendlySession.requestRematch({ displayName: '甲' });
+unrelatedPollStarted = true;
+const unrelatedPoll = await unrelatedFriendlySession.pollRematch();
+assert.equal(unrelatedWait.phase, 'waiting_rematch', 'unrelated friendly setup guard should start from waiting rematch');
+assert.equal(unrelatedPoll.phase, 'waiting_rematch', 'waiting friendly rematch should ignore unrelated friendly current matches');
+assert.equal(unrelatedPoll.matchId, 'pvplm-rematch-source-guard', 'unrelated friendly rematch guard should keep the original source match anchor');
+assert.equal(unrelatedPoll.rematchReport?.seriesId, 'pvpls-session-expected', 'unrelated friendly rematch guard should keep expected series id');
+
+const cancelledRematchCalls = [];
+const cancelledRematchSession = createPvpLiveSession({
+  liveService: {
+    getCurrentMatch: async () => ({
+      success: true,
+      matchId: 'pvplm-rematch-cancel-source',
+      seatId: 'A',
+      stateView: {
+        matchId: 'pvplm-rematch-cancel-source',
+        status: 'finished',
+        postMatchReview: {
+          reportVersion: 'pvp-live-post-match-review-v1',
+          result: 'win',
+          finishReason: 'surrender'
+        },
+        self: { seatId: 'A', hand: [] },
+        opponent: { seatId: 'B', handCount: 0 }
+      }
+    }),
+    requestRematch: async (matchId) => {
+      cancelledRematchCalls.push({ method: 'requestRematch', matchId });
+      return {
+        success: true,
+        status: 'waiting_rematch',
+        friendlySeries: {
+          reportVersion: 'pvp-live-friendly-series-v1',
+          sourceMatchId: matchId,
+          seriesId: 'pvpls-session-cancel',
+          status: 'waiting_rematch',
+          rankedImpact: 'none'
+        }
+      };
+    },
+    cancelRematch: async (matchId) => {
+      cancelledRematchCalls.push({ method: 'cancelRematch', matchId });
+      return {
+        success: true,
+        status: 'cancelled',
+        reason: 'rematch_cancelled',
+        message: '已取消低压力再战等待；本局复盘保留，不写正式积分。',
+        friendlySeries: {
+          reportVersion: 'pvp-live-friendly-series-v1',
+          sourceMatchId: matchId,
+          seriesId: 'pvpls-session-cancel',
+          status: 'cancelled',
+          rankedImpact: 'none'
+        }
+      };
+    }
+  }
+});
+await cancelledRematchSession.resumeCurrentMatch();
+await cancelledRematchSession.requestRematch({ displayName: '甲' });
+const cancelledRematch = await cancelledRematchSession.cancelRematch();
+assert.equal(cancelledRematch.phase, 'finished', 'cancelled friendly rematch should return to the finished review phase');
+assert.equal(cancelledRematch.matchId, 'pvplm-rematch-cancel-source', 'cancelled friendly rematch should keep source match id');
+assert.equal(cancelledRematch.rematchReport?.status, 'cancelled', 'cancelled friendly rematch should keep cancelled series report');
+assert.equal(cancelledRematch.lastError.reason, 'rematch_cancelled', 'cancelled friendly rematch should expose stable cancellation reason');
+assert.deepEqual(cancelledRematchCalls.map(call => call.method), ['requestRematch', 'cancelRematch'], 'cancelled friendly rematch should call request then cancel only');
+
+const expiredRematchSession = createPvpLiveSession({
+  liveService: {
+    getCurrentMatch: async () => expiredRematchSession.getState().phase === 'waiting_rematch'
+      ? ({
+        success: false,
+        code: '404',
+        reason: 'no_current_match',
+        message: '当前没有进行中的实时论道'
+      })
+      : ({
+        success: true,
+        matchId: 'pvplm-rematch-expired-source',
+        seatId: 'A',
+        stateView: {
+          matchId: 'pvplm-rematch-expired-source',
+          status: 'finished',
+          postMatchReview: {
+            reportVersion: 'pvp-live-post-match-review-v1',
+            result: 'win',
+            finishReason: 'surrender'
+          }
+        }
+      }),
+    requestRematch: async (matchId) => ({
+      success: true,
+      status: 'waiting_rematch',
+      friendlySeries: {
+        reportVersion: 'pvp-live-friendly-series-v1',
+        sourceMatchId: matchId,
+        seriesId: 'pvpls-session-expired',
+        status: 'waiting_rematch',
+        rankedImpact: 'none'
+      }
+    }),
+    getRematchStatus: async (matchId) => ({
+      success: false,
+      code: '404',
+      reason: 'rematch_expired',
+      message: '低压力再战等待已过期，可回到复盘后重新发起。',
+      friendlySeries: {
+        reportVersion: 'pvp-live-friendly-series-v1',
+        sourceMatchId: matchId,
+        seriesId: 'pvpls-session-expired',
+        status: 'expired',
+        rankedImpact: 'none'
+      }
+    })
+  }
+});
+await expiredRematchSession.resumeCurrentMatch();
+await expiredRematchSession.requestRematch({ displayName: '甲' });
+const expiredRematch = await expiredRematchSession.pollRematch();
+assert.equal(expiredRematch.phase, 'finished', 'expired friendly rematch should return to finished review instead of waiting forever');
+assert.equal(expiredRematch.rematchReport?.status, 'expired', 'expired friendly rematch should keep expired series report');
+assert.equal(expiredRematch.lastError.reason, 'rematch_expired', 'expired friendly rematch should expose stable expiry reason');
+
+const matchedRematchSession = createPvpLiveSession({
+  liveService: {
+    getCurrentMatch: async () => ({
+      success: true,
+      matchId: 'pvplm-rematch-source-2',
+      seatId: 'B',
+      stateView: {
+        matchId: 'pvplm-rematch-source-2',
+        status: 'finished',
+        postMatchReview: {
+          reportVersion: 'pvp-live-post-match-review-v1',
+          result: 'loss',
+          finishReason: 'surrender'
+        },
+        self: { seatId: 'B', hand: [] },
+        opponent: { seatId: 'A', handCount: 0 }
+      }
+    }),
+    requestRematch: async () => ({
+      success: true,
+      status: 'matched',
+      matchId: 'pvplm-friendly-session',
+      seatId: 'A',
+      stateView: {
+        matchId: 'pvplm-friendly-session',
+        mode: 'friendly',
+        status: 'setup',
+        stateVersion: 1,
+        friendlySeries: {
+          reportVersion: 'pvp-live-friendly-series-v1',
+          sourceMatchId: 'pvplm-rematch-source-2',
+          seriesId: 'pvpls-session-match',
+          targetWins: 2,
+          maxRounds: 3,
+          roundIndex: 3,
+          roundLabel: 'Bo3 决胜局 · 换边再战',
+          seriesStatus: 'ongoing',
+          scoreBySourceSeat: { A: 1, B: 1 },
+          canRequestNextRound: false,
+          rankedImpact: 'none'
+        },
+        self: { seatId: 'A', hand: [] },
+        opponent: { seatId: 'B', handCount: 3 }
+      }
+    })
+  }
+});
+await matchedRematchSession.resumeCurrentMatch();
+const matchedRematch = await matchedRematchSession.requestRematch({ displayName: '乙' });
+assert.equal(matchedRematch.phase, 'setup', 'matched friendly rematch should enter setup phase');
+assert.equal(matchedRematch.matchId, 'pvplm-friendly-session', 'matched friendly rematch should switch to new match id');
+assert.equal(matchedRematch.stateView.mode, 'friendly', 'matched friendly rematch should retain friendly mode view');
+assert.equal(matchedRematch.rematchReport?.rankedImpact, 'none', 'matched friendly rematch should retain no ranked impact report');
+assert.equal(matchedRematch.rematchReport?.roundIndex, 3, 'matched friendly rematch should retain Bo3 decider round index');
+assert.deepEqual(matchedRematch.rematchReport?.scoreBySourceSeat, { A: 1, B: 1 }, 'matched friendly rematch should retain Bo3 tied score');
+
+const failedRequeueStorage = createMemoryStorage();
+const failedRequeueSession = createPvpLiveSession({
+  storage: failedRequeueStorage,
+  liveService: {
+    getCurrentMatch: async () => ({
+      success: true,
+      matchId: 'pvplm-finished-stale',
+      seatId: 'A',
+      stateView: {
+        matchId: 'pvplm-finished-stale',
+        status: 'finished',
+        stateVersion: 9,
+        currentSeat: 'A',
+        postMatchReview: {
+          reportVersion: 'pvp-live-post-match-review-v1',
+          result: 'loss',
+          finishReason: 'surrender'
+        },
+        self: { seatId: 'A', hand: [] },
+        opponent: { seatId: 'B', handCount: 0 }
+      }
+    }),
+    joinQueue: async () => ({
+      success: false,
+      reason: 'queue_join_failed',
+      message: '实时论道入队失败'
+    })
+  }
+});
+const finishedBeforeFailedRequeue = await failedRequeueSession.resumeCurrentMatch();
+assert.equal(finishedBeforeFailedRequeue.phase, 'finished', 'finished current match should enter finished phase before requeue');
+assert.ok(finishedBeforeFailedRequeue.stateView.postMatchReview, 'finished current match should retain post-match review before requeue');
+assert.ok(failedRequeueStorage.values().includes('pvplm-finished-stale'), 'finished current match should persist terminal review anchor before queue again');
+const failedRequeue = await failedRequeueSession.joinQueue({ displayName: '甲' });
+assert.equal(failedRequeue.phase, 'idle', 'failed queue again after finished should return to clean idle phase');
+assert.equal(failedRequeue.matchId, '', 'failed queue again after finished should clear stale match id');
+assert.equal(failedRequeue.stateView, null, 'failed queue again after finished should clear stale post-match state view');
+assert.equal(failedRequeue.lastError.reason, 'queue_join_failed', 'failed queue again should preserve join failure reason');
+assert.ok(failedRequeueStorage.values().includes('pvplm-finished-stale'), 'failed queue again should preserve terminal recovery anchor for refresh retry');
+
+const blockedConnectionSession = createPvpLiveSession({
+  liveService: {
+    joinQueue: async () => ({
+      success: false,
+      reason: 'connection_health_failed',
+      message: '当前连接不适合进入正式真人排位，请重试检测或先进入问道练习。',
+      connectionHealth: {
+        reportVersion: 'pvp-live-queue-connection-health-v1',
+        status: 'blocked',
+        sampleTag: 'client_preflight',
+        reasons: ['missed_heartbeat', 'high_rtt'],
+        actions: [
+          { id: 'retry_connection_check', label: '重试检测' },
+          { id: 'practice', label: '问道练习', detail: '练习不写正式积分。' },
+        ],
+      },
+    })
+  }
+});
+const blockedConnection = await blockedConnectionSession.joinQueue({ displayName: '甲' });
+assert.equal(blockedConnection.phase, 'idle', 'connection health block should leave session in idle phase');
+assert.equal(blockedConnection.lastError.reason, 'connection_health_failed', 'connection health block should preserve stable reason');
+assert.equal(blockedConnection.lastError.connectionHealth?.status, 'blocked', 'connection health block should retain structured health report');
+assert.ok(blockedConnection.lastError.connectionHealth?.actions?.some(action => action.id === 'practice' && /不写正式积分/.test(action.detail)), 'connection health block should retain no-score practice action');
+
+const queueCooldownSession = createPvpLiveSession({
+  liveService: {
+    joinQueue: async () => ({
+      success: false,
+      reason: 'queue_cooldown',
+      message: '排队取消过于频繁，正式真人排位短暂冷却中。',
+      matchmakingGuard: {
+        reportVersion: 'pvp-live-matchmaking-guard-v1',
+        status: 'blocked',
+        cooldownSource: 'queue_cancel_abuse',
+        sourceLabel: '频繁取消冷却',
+        retryAt: Date.now() + 60000,
+        cooldownRemainingMs: 60000,
+        rankedImpact: 'none',
+        actions: [
+          { id: 'retry_queue_later', label: '稍后重试', detail: '冷却结束后再进入正式排位。' },
+          { id: 'practice', label: '问道练习', detail: '练习不写正式积分。' },
+        ],
+      },
+    })
+  }
+});
+const blockedQueueCooldown = await queueCooldownSession.joinQueue({ displayName: '甲' });
+assert.equal(blockedQueueCooldown.phase, 'idle', 'queue cooldown block should leave session in idle phase');
+assert.equal(blockedQueueCooldown.lastError.reason, 'queue_cooldown', 'queue cooldown block should preserve stable reason');
+assert.equal(blockedQueueCooldown.lastError.matchmakingGuard?.reportVersion, 'pvp-live-matchmaking-guard-v1', 'queue cooldown block should retain structured matchmaking guard report');
+assert.equal(blockedQueueCooldown.lastError.matchmakingGuard?.cooldownSource, 'queue_cancel_abuse', 'queue cooldown block should retain cooldown source');
+assert.ok(blockedQueueCooldown.lastError.matchmakingGuard?.actions?.some(action => action.id === 'practice' && /不写正式积分/.test(action.detail)), 'queue cooldown block should retain no-score practice action');
+
+const successfulRequeueStorage = createMemoryStorage([
+  ['theDefierPvpLiveLastTerminalMatchV1', 'pvplm-finished-stale']
+]);
+const successfulRequeueSession = createPvpLiveSession({
+  storage: successfulRequeueStorage,
+  liveService: {
+    joinQueue: async () => ({
+      success: true,
+      status: 'waiting',
+      queueTicket: 'pvplq-after-review'
+    })
+  }
+});
+const successfulRequeue = await successfulRequeueSession.joinQueue({ displayName: '甲' });
+assert.equal(successfulRequeue.phase, 'waiting', 'successful queue again should enter waiting phase');
+assert.ok(!successfulRequeueStorage.values().includes('pvplm-finished-stale'), 'successful queue again should clear old terminal recovery anchor');
+
+let resolveLateReplay;
+const lateReplaySession = createPvpLiveSession({
+  liveService: {
+    getCurrentMatch: async () => ({
+      success: true,
+      matchId: 'pvplm-late-replay-a',
+      seatId: 'A',
+      stateView: {
+        matchId: 'pvplm-late-replay-a',
+        status: 'finished',
+        stateVersion: 9,
+        self: { seatId: 'A', hand: [] },
+        opponent: { seatId: 'B', handCount: 3 }
+      }
+    }),
+    getReplay: async () => new Promise(resolve => {
+      resolveLateReplay = resolve;
+    }),
+    joinQueue: async () => ({
+      success: true,
+      status: 'waiting',
+      queueTicket: 'pvplq-late-replay-b'
+    })
+  }
+});
+await lateReplaySession.resumeCurrentMatch();
+const lateReplayPromise = lateReplaySession.getReplay({ visibility: 'replay_self' });
+const waitingAfterLateReplayRequest = await lateReplaySession.joinQueue({ displayName: '甲' });
+assert.equal(waitingAfterLateReplayRequest.phase, 'waiting', 'late replay race setup should move the session to a new queue');
+resolveLateReplay({
+  success: true,
+  replay: {
+    reportVersion: 'pvp-live-replay-v1',
+    visibilityLayer: 'replay_self',
+    publicSummary: { status: 'finished', finishReason: 'lethal' },
+    hiddenScan: { forbiddenTokenCount: 0 }
+  }
+});
+const afterLateReplay = await lateReplayPromise;
+assert.equal(afterLateReplay.phase, 'waiting', 'late replay response should not roll the session back from the new queue');
+assert.equal(afterLateReplay.lastReplay, null, 'late replay response from an old match should not publish stale replay data');
+assert.equal(afterLateReplay.lastReplayMatchId, '', 'late replay response from an old match should keep replay match binding clear');
+
+const invalidatedSession = createPvpLiveSession({
+  liveService: {
+    getCurrentMatch: async () => ({
+      success: true,
+      matchId: 'pvplm-invalidated',
+      seatId: 'A',
+      stateView: {
+        matchId: 'pvplm-invalidated',
+        status: 'invalidated',
+        phase: 'invalidated',
+        stateVersion: 7,
+        currentSeat: 'A',
+        self: { seatId: 'A', hand: [] },
+        opponent: { seatId: 'B', handCount: 3 },
+        recentEvents: [{ eventType: 'match_invalidated', payload: { reason: 'ready_timeout' } }]
+      }
+    })
+  }
+});
+const invalidated = await invalidatedSession.resumeCurrentMatch();
+assert.equal(invalidated.phase, 'invalidated', 'invalidated current match should enter invalidated phase instead of active');
+assert.equal(invalidated.lastEvents[0].eventType, 'match_invalidated', 'invalidated session should retain invalidation event');
+
+const terminalCalls = [];
+let terminalCurrentAvailable = true;
+const terminalStorage = createMemoryStorage();
+const terminalResumeService = {
+  getCurrentMatch: async () => {
+    terminalCalls.push({ method: 'getCurrentMatch' });
+    if (!terminalCurrentAvailable) {
+      return { success: false, reason: 'no_current_match', message: '当前没有进行中的实时论道' };
+    }
+    return {
+      success: true,
+      matchId: 'pvplm-terminal-review',
+      seatId: 'A',
+      stateView: {
+        matchId: 'pvplm-terminal-review',
+        status: 'active',
+        stateVersion: 10,
+        currentSeat: 'A',
+        self: { seatId: 'A', hand: [] },
+        opponent: { seatId: 'B', handCount: 1 }
+      }
+    };
+  },
+  getMatch: async (matchId) => {
+    terminalCalls.push({ method: 'getMatch', matchId });
+    return {
+      success: true,
+      matchId,
+      seatId: 'A',
+      stateView: {
+        matchId,
+        status: 'finished',
+        stateVersion: 11,
+        currentSeat: 'A',
+        postMatchReview: {
+          reportVersion: 'pvp-live-post-match-review-v1',
+          result: 'loss',
+          finishReason: 'surrender',
+          evidence: [{ eventType: 'battle_started', sequence: 3, actingSeat: 'A' }],
+          nextActions: [{ id: 'review_events', label: '查看权威事件' }]
+        },
+        recentEvents: [{ eventType: 'match_finished', sequence: 6, actingSeat: 'A' }],
+        self: { seatId: 'A', hand: [] },
+        opponent: { seatId: 'B', handCount: 0 }
+      }
+    };
+  },
+  submitIntent: async (matchId, intent) => {
+    terminalCalls.push({ method: 'submitIntent', matchId, intent });
+    terminalCurrentAvailable = false;
+    return {
+      success: true,
+      result: 'accepted',
+      events: [{ eventType: 'player_surrendered' }, { eventType: 'match_finished' }],
+      stateView: {
+        matchId,
+        status: 'finished',
+        stateVersion: 11,
+        currentSeat: 'A',
+        postMatchReview: {
+          reportVersion: 'pvp-live-post-match-review-v1',
+          result: 'loss',
+          finishReason: 'surrender',
+          evidence: [{ eventType: 'battle_started', sequence: 3, actingSeat: 'A' }],
+          nextActions: [{ id: 'review_events', label: '查看权威事件' }]
+        },
+        self: { seatId: 'A', hand: [] },
+        opponent: { seatId: 'B', handCount: 0 }
+      }
+    };
+  }
+};
+const terminalWriter = createPvpLiveSession({ liveService: terminalResumeService, storage: terminalStorage });
+await terminalWriter.resumeCurrentMatch();
+const terminalFinished = await terminalWriter.surrender({ intentId: 'session-terminal-review-1' });
+assert.equal(terminalFinished.phase, 'finished', 'finished terminal match should enter finished before page refresh');
+assert.ok(terminalStorage.values().includes('pvplm-terminal-review'), 'finished terminal match should persist last reviewable match id for refresh recovery');
+const terminalReader = createPvpLiveSession({ liveService: terminalResumeService, storage: terminalStorage });
+const restoredTerminal = await terminalReader.resumeCurrentMatch();
+assert.equal(restoredTerminal.phase, 'finished', 'resumeCurrentMatch should restore finished terminal review from stored match id when current match is gone');
+assert.equal(restoredTerminal.matchId, 'pvplm-terminal-review', 'restored terminal review should retain stored match id');
+assert.equal(restoredTerminal.stateView.postMatchReview.reportVersion, 'pvp-live-post-match-review-v1', 'restored terminal review should retain post-match review payload');
+assert.deepEqual(terminalCalls.map(call => call.method), ['getCurrentMatch', 'submitIntent', 'getCurrentMatch', 'getMatch'], 'terminal review refresh should try current match before stored terminal match');
+
+const waitingRematchResumeCalls = [];
+const waitingRematchResumeStorage = createMemoryStorage([
+  ['theDefierPvpLiveLastTerminalMatchV1', 'pvplm-terminal-rematch-source']
+]);
+const waitingRematchResumeSession = createPvpLiveSession({
+  storage: waitingRematchResumeStorage,
+  liveService: {
+    getCurrentMatch: async () => {
+      waitingRematchResumeCalls.push({ method: 'getCurrentMatch' });
+      return { success: false, reason: 'no_current_match', message: '当前没有进行中的实时论道' };
+    },
+    getMatch: async (matchId) => {
+      waitingRematchResumeCalls.push({ method: 'getMatch', matchId });
+      return {
+        success: true,
+        matchId,
+        seatId: 'A',
+        stateView: {
+          matchId,
+          status: 'finished',
+          stateVersion: 21,
+          currentSeat: 'A',
+          postMatchReview: {
+            reportVersion: 'pvp-live-post-match-review-v1',
+            result: 'win',
+            finishReason: 'surrender',
+            evidence: [{ eventType: 'match_finished', sequence: 8, actingSeat: 'B' }],
+            nextActions: [
+              { id: 'review_events', label: '查看权威事件' },
+              { id: 'friendly_rematch', label: '低压力再战' }
+            ]
+          },
+          recentEvents: [{ eventType: 'match_finished', sequence: 8, actingSeat: 'B' }],
+          self: { seatId: 'A', hand: [] },
+          opponent: { seatId: 'B', handCount: 0 }
+        }
+      };
+    },
+    getRematchStatus: async (matchId) => {
+      waitingRematchResumeCalls.push({ method: 'getRematchStatus', matchId });
+      return {
+        success: true,
+        status: 'waiting_rematch',
+        friendlySeries: {
+          reportVersion: 'pvp-live-friendly-series-v1',
+          sourceMatchId: matchId,
+          seriesId: 'pvpls-session-refresh-wait',
+          status: 'waiting_rematch',
+          targetWins: 2,
+          maxRounds: 3,
+          roundIndex: 2,
+          roundLabel: 'Bo3 第 2 局 · 换边再战',
+          seriesStatus: 'ongoing',
+          scoreBySourceSeat: { A: 1, B: 0 },
+          rankedImpact: 'none'
+        }
+      };
+    }
+  }
+});
+const restoredWaitingRematch = await waitingRematchResumeSession.resumeCurrentMatch();
+assert.equal(restoredWaitingRematch.phase, 'waiting_rematch', 'resumeCurrentMatch should restore pending friendly rematch after refreshing from terminal review');
+assert.equal(restoredWaitingRematch.matchId, 'pvplm-terminal-rematch-source', 'restored waiting rematch should retain source match id');
+assert.equal(restoredWaitingRematch.stateView.postMatchReview.reportVersion, 'pvp-live-post-match-review-v1', 'restored waiting rematch should keep terminal review visible');
+assert.equal(restoredWaitingRematch.rematchReport?.status, 'waiting_rematch', 'restored waiting rematch should retain pending series status');
+assert.equal(restoredWaitingRematch.lastError.reason, 'waiting_rematch', 'restored waiting rematch should show opponent confirmation hint');
+assert.deepEqual(waitingRematchResumeCalls.map(call => call.method), ['getCurrentMatch', 'getMatch', 'getRematchStatus'], 'terminal recovery with rematch action should ask pending rematch status before rendering finished');
+
+const transientCurrentCalls = [];
+const transientCurrentStorage = createMemoryStorage([
+  ['theDefierPvpLiveLastTerminalMatchV1', 'pvplm-terminal-review']
+]);
+const transientCurrentSession = createPvpLiveSession({
+  storage: transientCurrentStorage,
+  liveService: {
+    getCurrentMatch: async () => {
+      transientCurrentCalls.push('getCurrentMatch');
+      return { success: false, reason: 'live_service_unavailable', message: '实时论道服务未就绪' };
+    },
+    getMatch: async () => {
+      transientCurrentCalls.push('getMatch');
+      return { success: true };
+    }
+  }
+});
+const transientCurrentState = await transientCurrentSession.resumeCurrentMatch();
+assert.equal(transientCurrentState.phase, 'idle', 'transient current-match failure should not restore stale terminal review');
+assert.deepEqual(transientCurrentCalls, ['getCurrentMatch'], 'terminal fallback should only run after explicit no-current response');
+assert.ok(transientCurrentStorage.values().includes('pvplm-terminal-review'), 'transient current-match failure should keep terminal recovery anchor');
+
+const transientTerminalCalls = [];
+const transientTerminalStorage = createMemoryStorage([
+  ['theDefierPvpLiveLastTerminalMatchV1', 'pvplm-terminal-review']
+]);
+const transientTerminalSession = createPvpLiveSession({
+  storage: transientTerminalStorage,
+  liveService: {
+    getCurrentMatch: async () => {
+      transientTerminalCalls.push('getCurrentMatch');
+      return { success: false, reason: 'no_current_match', message: '当前没有进行中的实时论道' };
+    },
+    getMatch: async (matchId) => {
+      transientTerminalCalls.push(`getMatch:${matchId}`);
+      return { success: false, error: { code: 503 }, message: 'network-timeout' };
+    }
+  }
+});
+const transientTerminalState = await transientTerminalSession.resumeCurrentMatch();
+assert.equal(transientTerminalState.phase, 'idle', 'transient terminal-match failure should not enter fake finished phase');
+assert.deepEqual(transientTerminalCalls, ['getCurrentMatch', 'getMatch:pvplm-terminal-review'], 'explicit no-current should still attempt terminal recovery');
+assert.ok(transientTerminalStorage.values().includes('pvplm-terminal-review'), 'transient terminal-match failure should preserve recovery anchor for retry');
+
+const missingTerminalStorage = createMemoryStorage([
+  ['theDefierPvpLiveLastTerminalMatchV1', 'pvplm-terminal-review']
+]);
+const missingTerminalSession = createPvpLiveSession({
+  storage: missingTerminalStorage,
+  liveService: {
+    getCurrentMatch: async () => ({ success: false, reason: 'no_current_match', message: '当前没有进行中的实时论道' }),
+    getMatch: async () => ({ success: false, error: { code: 404 }, message: '实时论道战局不存在' })
+  }
+});
+await missingTerminalSession.resumeCurrentMatch();
+assert.ok(!missingTerminalStorage.values().includes('pvplm-terminal-review'), 'missing terminal match should clear stale recovery anchor');
+
+const waitingQueueResumeStorage = createMemoryStorage();
+const waitingQueueWriter = createPvpLiveSession({
+  storage: waitingQueueResumeStorage,
+  userScope: () => 'queue-user-A',
+  liveService: {
+    joinQueue: async () => ({
+      success: true,
+      status: 'waiting',
+      queueTicket: 'pvplq-refresh-wait',
+      waitingReport: {
+        reportVersion: 'pvp-live-waiting-report-v1',
+        waitMs: 15000,
+        longWait: false,
+        message: '你已确认接受宽分差，仍需对方也确认才会放行。',
+        safeguards: ['real_player_only', 'no_score_change'],
+        wideMatchConsent: {
+          reportVersion: 'pvp-live-wide-match-consent-v1',
+          viewerAccepted: true,
+          requiresBothPlayers: true,
+          acceptedPlayerCount: 1,
+          candidatePoolSize: 1,
+          matchReady: false,
+          status: 'waiting_for_peer'
+        }
+      }
+    })
+  }
+});
+await waitingQueueWriter.joinQueue({ displayName: '甲', wideMatchConsent: true });
+const waitingQueueResumeCalls = [];
+const waitingQueueReader = createPvpLiveSession({
+  storage: waitingQueueResumeStorage,
+  userScope: () => 'queue-user-A',
+  liveService: {
+    getCurrentMatch: async () => {
+      waitingQueueResumeCalls.push({ method: 'getCurrentMatch' });
+      return { success: false, reason: 'no_current_match', message: '当前没有进行中的实时论道' };
+    },
+    getQueueStatus: async (queueTicket) => {
+      waitingQueueResumeCalls.push({ method: 'getQueueStatus', queueTicket });
+      return {
+        success: true,
+        status: 'waiting',
+        queueTicket,
+        waitingReport: {
+          reportVersion: 'pvp-live-waiting-report-v1',
+          waitMs: 18000,
+          longWait: false,
+          message: '你已确认接受宽分差，仍需对方也确认才会放行。',
+          safeguards: ['real_player_only', 'no_score_change'],
+          wideMatchConsent: {
+            reportVersion: 'pvp-live-wide-match-consent-v1',
+            viewerAccepted: true,
+            requiresBothPlayers: true,
+            acceptedPlayerCount: 1,
+            candidatePoolSize: 1,
+            matchReady: false,
+            status: 'waiting_for_peer'
+          }
+        }
+      };
+    }
+  }
+});
+const restoredWaitingQueue = await waitingQueueReader.resumeCurrentMatch();
+assert.equal(restoredWaitingQueue.phase, 'waiting', 'resumeCurrentMatch should restore stored waiting queue ticket after page refresh');
+assert.equal(restoredWaitingQueue.queueTicket, 'pvplq-refresh-wait', 'restored waiting queue should retain stored queue ticket');
+assert.equal(restoredWaitingQueue.waitingReport?.wideMatchConsent?.viewerAccepted, true, 'restored waiting queue should retain wide-match consent report');
+assert.deepEqual(waitingQueueResumeCalls, [
+  { method: 'getCurrentMatch' },
+  { method: 'getQueueStatus', queueTicket: 'pvplq-refresh-wait' }
+], 'waiting queue recovery should read queue status without rejoining');
+
+const waitingQueueOtherUserCalls = [];
+const waitingQueueOtherUserReader = createPvpLiveSession({
+  storage: waitingQueueResumeStorage,
+  userScope: () => 'queue-user-B',
+  liveService: {
+    getCurrentMatch: async () => {
+      waitingQueueOtherUserCalls.push({ method: 'getCurrentMatch' });
+      return { success: false, reason: 'no_current_match', message: '当前没有进行中的实时论道' };
+    },
+    getQueueStatus: async (queueTicket) => {
+      waitingQueueOtherUserCalls.push({ method: 'getQueueStatus', queueTicket });
+      return {
+        success: true,
+        status: 'waiting',
+        queueTicket,
+        waitingReport: { reportVersion: 'pvp-live-waiting-report-v1' }
+      };
+    }
+  }
+});
+const otherUserWaitingQueue = await waitingQueueOtherUserReader.resumeCurrentMatch();
+assert.equal(otherUserWaitingQueue.phase, 'idle', 'different user should not restore another user waiting queue ticket');
+assert.deepEqual(waitingQueueOtherUserCalls, [
+  { method: 'getCurrentMatch' }
+], 'different user should not poll another user scoped waiting queue ticket');
+
+const scopedTerminalStorage = createMemoryStorage();
+const scopedWriter = createPvpLiveSession({
+  storage: scopedTerminalStorage,
+  userScope: () => 'user-A',
+  liveService: {
+    getCurrentMatch: async () => ({
+      success: true,
+      matchId: 'pvplm-user-a-review',
+      seatId: 'A',
+      stateView: {
+        matchId: 'pvplm-user-a-review',
+        status: 'finished',
+        postMatchReview: {
+          reportVersion: 'pvp-live-post-match-review-v1',
+          result: 'win',
+          finishReason: 'surrender'
+        },
+        self: { seatId: 'A', hand: [] },
+        opponent: { seatId: 'B', handCount: 0 }
+      }
+    })
+  }
+});
+await scopedWriter.resumeCurrentMatch();
+assert.equal(scopedTerminalStorage.getItem('theDefierPvpLiveLastTerminalMatchV1:user-A'), 'pvplm-user-a-review', 'terminal recovery anchor should be scoped to current user');
+assert.equal(scopedTerminalStorage.getItem('theDefierPvpLiveLastTerminalMatchV1'), '', 'scoped terminal recovery should not leave an unscoped legacy anchor');
+
+const scopedUserBCalls = [];
+const scopedUserBReader = createPvpLiveSession({
+  storage: scopedTerminalStorage,
+  userScope: () => 'user-B',
+  liveService: {
+    getCurrentMatch: async () => {
+      scopedUserBCalls.push('getCurrentMatch');
+      return { success: false, reason: 'no_current_match', message: '当前没有进行中的实时论道' };
+    },
+    getMatch: async () => {
+      scopedUserBCalls.push('getMatch');
+      return { success: true };
+    }
+  }
+});
+const scopedUserBState = await scopedUserBReader.resumeCurrentMatch();
+assert.equal(scopedUserBState.phase, 'idle', 'different logged-in user should not restore another user terminal review');
+assert.deepEqual(scopedUserBCalls, ['getCurrentMatch'], 'different logged-in user should not request stored match from another user scope');
+
+const scopedUserACalls = [];
+const scopedUserAReader = createPvpLiveSession({
+  storage: scopedTerminalStorage,
+  userScope: () => 'user-A',
+  liveService: {
+    getCurrentMatch: async () => {
+      scopedUserACalls.push('getCurrentMatch');
+      return { success: false, reason: 'no_current_match', message: '当前没有进行中的实时论道' };
+    },
+    getMatch: async (matchId) => {
+      scopedUserACalls.push(`getMatch:${matchId}`);
+      return {
+        success: true,
+        matchId,
+        seatId: 'A',
+        stateView: {
+          matchId,
+          status: 'finished',
+          postMatchReview: {
+            reportVersion: 'pvp-live-post-match-review-v1',
+            result: 'win',
+            finishReason: 'surrender'
+          },
+          self: { seatId: 'A', hand: [] },
+          opponent: { seatId: 'B', handCount: 0 }
+        }
+      };
+    }
+  }
+});
+const scopedUserAState = await scopedUserAReader.resumeCurrentMatch();
+assert.equal(scopedUserAState.phase, 'finished', 'same logged-in user should restore scoped terminal review');
+assert.deepEqual(scopedUserACalls, ['getCurrentMatch', 'getMatch:pvplm-user-a-review'], 'same logged-in user should use scoped stored terminal match');
+
+const realtimeSentMessages = [];
+let realtimeHandlers = null;
+const realtimeSession = createPvpLiveSession({
+  liveService: {
+    connectRealtime: (handlers) => {
+      realtimeHandlers = handlers;
+      return {
+        send: (payload) => {
+          realtimeSentMessages.push(payload);
+          return true;
+        },
+        close: () => {
+          realtimeSentMessages.push({ type: 'closed' });
+          return true;
+        }
+      };
+    }
+  },
+  now: () => 1781870000000
+});
+assert.equal(typeof realtimeSession.connectRealtime, 'function', 'live session should expose connectRealtime');
+assert.equal(typeof realtimeSession.joinRealtimeMatch, 'function', 'live session should expose joinRealtimeMatch');
+assert.equal(typeof realtimeSession.submitRealtimeIntent, 'function', 'live session should expose submitRealtimeIntent');
+assert.equal(typeof realtimeSession.heartbeatRealtime, 'function', 'live session should expose heartbeatRealtime');
+assert.equal(typeof realtimeSession.resumeRealtime, 'function', 'live session should expose resumeRealtime for hidden-tab recovery');
+assert.equal(typeof realtimeSession.disconnectRealtime, 'function', 'live session should expose disconnectRealtime');
+const realtimeInitial = realtimeSession.connectRealtime();
+assert.equal(realtimeInitial.realtimeStatus, 'connecting', 'connectRealtime should mark realtime connecting');
+assert.ok(realtimeHandlers && typeof realtimeHandlers.onMessage === 'function', 'connectRealtime should register message handler');
+realtimeHandlers.onMessage({
+  type: 'connected',
+  connectionId: 'ws-session-1',
+  connectionReport: { heartbeatIntervalMs: 1200 }
+});
+assert.equal(realtimeSession.getState().realtimeStatus, 'connected', 'connected WS message should mark realtime connected');
+assert.equal(realtimeSession.getState().lastRealtimeConnectionId, 'ws-session-1', 'connected WS message should retain connection id');
+
+realtimeHandlers.onMessage({
+  type: 'state_sync',
+  matchId: 'pvplm-ws-session',
+  seatId: 'A',
+  stateView: {
+    matchId: 'pvplm-ws-session',
+    status: 'active',
+    stateVersion: 8,
+    currentSeat: 'A',
+    recentEvents: [{ eventType: 'battle_started', sequence: 3 }],
+    self: { seatId: 'A', hand: [] },
+    opponent: { seatId: 'B', handCount: 3 }
+  }
+});
+assert.equal(realtimeSession.getState().phase, 'active', 'state_sync WS message should update live phase');
+assert.equal(realtimeSession.getState().matchId, 'pvplm-ws-session', 'state_sync WS message should retain match id');
+assert.equal(realtimeSession.getState().seatId, 'A', 'state_sync WS message should retain seat id');
+assert.equal(realtimeSession.getState().lastRealtimeSyncMatchId, 'pvplm-ws-session', 'state_sync WS message should record synchronized match id');
+assert.equal(realtimeSession.getState().lastRealtimeSyncAt, 1781870000000, 'state_sync WS message should record synchronization time');
+assert.equal(realtimeSession.getState().lastEvents[0].eventType, 'battle_started', 'state_sync WS message should refresh recent public events');
+
+realtimeHandlers.onMessage({
+  type: 'events_replay',
+  matchId: 'pvplm-ws-session',
+  fromRevision: 0,
+  events: [{ eventType: 'player_ready', sequence: 4 }]
+});
+assert.equal(realtimeSession.getState().lastEvents[0].eventType, 'player_ready', 'events_replay WS message should replace last events with missed public events');
+
+realtimeHandlers.onMessage({
+  type: 'presence',
+  matchId: 'pvplm-ws-session',
+  connectionReport: {
+    reportVersion: 'pvp-live-connection-v1',
+    viewer: { seatId: 'A', status: 'online' },
+    opponent: { seatId: 'B', status: 'grace' },
+    heartbeatIntervalMs: 1200
+  },
+  connectionTempoReport: {
+    reportVersion: 'pvp-live-connection-tempo-v1',
+    sourceVisibility: 'server_authoritative_connection_state',
+    usesHiddenInformation: false,
+    rankedImpact: 'none',
+    tempoState: 'opponent_action_grace',
+    severity: 'warning',
+    phase: 'active',
+    currentSeat: 'B',
+    viewerSeat: 'A',
+    opponentSeat: 'B',
+    affectedSeat: 'B',
+    statusLine: '连接：对方重连宽限中',
+    detailLine: '等待服务端权威连接节奏。',
+    actionBoundary: 'wait_for_authoritative_timeout',
+    canSubmitIntent: false,
+    shouldWaitForAuthority: true
+  }
+});
+assert.equal(realtimeSession.getState().stateView.connectionReport.opponent.status, 'grace', 'presence WS message should update connection report');
+assert.equal(realtimeSession.getState().stateView.connectionTempoReport.tempoState, 'opponent_action_grace', 'presence WS message should update authoritative connection tempo report');
+assert.equal(realtimeSession.getState().stateView.connectionTempoReport.sourceVisibility, 'server_authoritative_connection_state', 'presence WS connection tempo should keep authoritative source');
+
+realtimeHandlers.onMessage({
+  type: 'intent_result',
+  matchId: 'pvplm-ws-session',
+  intentId: 'ws-intent-session',
+  result: 'accepted',
+  events: [{ eventType: 'card_played', sequence: 5 }],
+  stateView: {
+    matchId: 'pvplm-ws-session',
+    status: 'active',
+    stateVersion: 9,
+    currentSeat: 'B',
+    self: { seatId: 'A', hand: [] },
+    opponent: { seatId: 'B', handCount: 3 }
+  }
+});
+assert.equal(realtimeSession.getState().stateView.stateVersion, 9, 'intent_result WS message should update state view');
+assert.equal(realtimeSession.getState().lastEvents[0].eventType, 'card_played', 'intent_result WS message should retain public intent events');
+assert.equal(realtimeSession.getState().lastRealtimeIntentResult.intentId, 'ws-intent-session', 'intent_result WS message should expose the acknowledged intent id');
+assert.equal(realtimeSession.getState().lastRealtimeIntentResult.result, 'accepted', 'intent_result WS message should expose the authoritative result');
+assert.equal(realtimeSession.getState().lastRealtimeIntentResult.matchId, 'pvplm-ws-session', 'intent_result WS message should expose the acknowledged match id');
+
+realtimeHandlers.onMessage({
+  type: 'intent_result',
+  matchId: 'pvplm-ws-session',
+  intentId: 'ws-intent-session-duplicate',
+  result: 'duplicate',
+  reason: 'duplicate_action',
+  events: [],
+  stateView: {
+    matchId: 'pvplm-ws-session',
+    status: 'active',
+    stateVersion: 9,
+    currentSeat: 'B',
+    self: { seatId: 'A', hand: [] },
+    opponent: { seatId: 'B', handCount: 3 }
+  }
+});
+assert.equal(realtimeSession.getState().lastRealtimeIntentResult.result, 'duplicate', 'duplicate intent_result WS message should expose the authoritative duplicate result');
+assert.equal(realtimeSession.getState().lastRealtimeIntentResult.reason, 'duplicate_action', 'duplicate intent_result WS message should expose the reducer duplicate reason');
+assert.equal(realtimeSession.getState().lastError, null, 'duplicate intent_result WS message should not surface an idempotent replay as a realtime error');
+
+realtimeHandlers.onMessage({
+  type: 'state_sync',
+  matchId: 'pvplm-ws-session',
+  seatId: 'A',
+  stateView: {
+    matchId: 'pvplm-ws-session',
+    status: 'active',
+    stateVersion: 8,
+    currentSeat: 'A',
+    recentEvents: [{ eventType: 'stale_state_sync', sequence: 4 }],
+    self: { seatId: 'A', hand: [{ instanceId: 'stale-card' }] },
+    opponent: { seatId: 'B', handCount: 3 }
+  }
+});
+assert.equal(realtimeSession.getState().stateView.stateVersion, 9, 'stale state_sync WS message should not downgrade authoritative stateVersion');
+assert.equal(realtimeSession.getState().lastEvents[0].eventType, 'card_played', 'stale state_sync WS message should not downgrade public events');
+
+realtimeHandlers.onMessage({
+  type: 'intent_result',
+  matchId: 'pvplm-ws-session',
+  intentId: 'ws-intent-stale',
+  result: 'accepted',
+  events: [{ eventType: 'stale_intent_result', sequence: 4 }],
+  stateView: {
+    matchId: 'pvplm-ws-session',
+    status: 'active',
+    stateVersion: 7,
+    currentSeat: 'A',
+    self: { seatId: 'A', hand: [{ instanceId: 'stale-card-2' }] },
+    opponent: { seatId: 'B', handCount: 3 }
+  }
+});
+assert.equal(realtimeSession.getState().stateView.stateVersion, 9, 'stale intent_result WS message should not downgrade authoritative stateVersion');
+assert.equal(realtimeSession.getState().lastEvents[0].eventType, 'card_played', 'stale intent_result WS message should not downgrade public events');
+assert.equal(realtimeSession.getState().lastRealtimeIntentResult.intentId, 'ws-intent-stale', 'stale intent_result WS message should still expose the acknowledged intent id for UI locks');
+
+realtimeHandlers.onMessage({
+  type: 'events_replay',
+  matchId: 'pvplm-ws-session',
+  fromRevision: 5,
+  events: []
+});
+assert.equal(realtimeSession.getState().lastEvents[0].eventType, 'card_played', 'empty events_replay should not downgrade the last seen public event revision');
+
+realtimeSession.joinRealtimeMatch('pvplm-ws-session', { lastSeenRevision: 4 });
+realtimeSession.heartbeatRealtime();
+realtimeSession.submitRealtimeIntent({
+  intentId: 'ws-intent-session-2',
+  intentType: 'end_turn',
+  stateVersion: 9,
+  payload: {}
+});
+assert.deepEqual(realtimeSentMessages.slice(0, 3), [
+  { type: 'join_match', matchId: 'pvplm-ws-session', lastSeenRevision: 4 },
+  { type: 'heartbeat', matchId: 'pvplm-ws-session', lastSeenRevision: 5 },
+  {
+    type: 'intent',
+    matchId: 'pvplm-ws-session',
+    intent: {
+      intentId: 'ws-intent-session-2',
+      intentType: 'end_turn',
+      stateVersion: 9,
+      payload: {}
+    }
+  }
+], 'live session realtime helpers should send stable WS message envelopes with last seen event revision');
+realtimeSession.resumeRealtime();
+assert.deepEqual(realtimeSentMessages.slice(3, 5), [
+  { type: 'join_match', matchId: 'pvplm-ws-session', lastSeenRevision: 5 },
+  { type: 'heartbeat', matchId: 'pvplm-ws-session', lastSeenRevision: 5 }
+], 'visibility resume should replay pending join_match and heartbeat immediately with the latest public event revision');
+realtimeSession.disconnectRealtime();
+assert.equal(realtimeSession.getState().realtimeStatus, 'closed', 'disconnectRealtime should mark realtime closed');
+
+const delayedRealtimeSent = [];
+let delayedRealtimeHandlers = null;
+let delayedRealtimeOpen = false;
+const delayedRealtimeSession = createPvpLiveSession({
+  liveService: {
+    connectRealtime: (handlers) => {
+      delayedRealtimeHandlers = handlers;
+      return {
+        send: (payload) => {
+          if (!delayedRealtimeOpen) return false;
+          delayedRealtimeSent.push(payload);
+          return true;
+        },
+        close: () => true
+      };
+    }
+  },
+  now: () => 1781870000000
+});
+delayedRealtimeSession.connectRealtime();
+delayedRealtimeSession.joinRealtimeMatch('pvplm-delayed-open', { lastSeenRevision: 6 });
+assert.equal(delayedRealtimeSent.length, 0, 'joinRealtimeMatch before socket open should not pretend to send');
+delayedRealtimeOpen = true;
+delayedRealtimeHandlers.onOpen();
+assert.deepEqual(delayedRealtimeSent[0], {
+  type: 'join_match',
+  matchId: 'pvplm-delayed-open',
+  lastSeenRevision: 6
+}, 'onOpen should replay pending join_match after the socket becomes writable');
+
+const reconnectSent = [];
+const reconnectHandlers = [];
+const reconnectTimers = [];
+const reconnectOpenConnections = new Set();
+let reconnectClearedTimer = null;
+const reconnectRealtimeSession = createPvpLiveSession({
+  liveService: {
+    connectRealtime: (handlers) => {
+      const connectionIndex = reconnectHandlers.length + 1;
+      const wrappedHandlers = {
+        ...handlers,
+        onOpen: (...args) => {
+          reconnectOpenConnections.add(connectionIndex);
+          return handlers.onOpen(...args);
+        }
+      };
+      reconnectHandlers.push(wrappedHandlers);
+      return {
+        send: (payload) => {
+          if (!reconnectOpenConnections.has(connectionIndex)) return false;
+          reconnectSent.push({
+            connectionIndex,
+            payload
+          });
+          return true;
+        },
+        close: () => true
+      };
+    }
+  },
+  realtimeReconnectDelayMs: 25,
+  timers: {
+    setTimeout: (fn, delayMs) => {
+      const timer = { fn, delayMs };
+      reconnectTimers.push(timer);
+      return timer;
+    },
+    clearTimeout: (timer) => {
+      reconnectClearedTimer = timer;
+    }
+  },
+  now: () => 1781870000000
+});
+reconnectRealtimeSession.connectRealtime();
+reconnectRealtimeSession.joinRealtimeMatch('pvplm-reconnect-fast', { lastSeenRevision: 7 });
+reconnectHandlers[0].onOpen();
+assert.deepEqual(reconnectSent[0], {
+  connectionIndex: 1,
+  payload: { type: 'join_match', matchId: 'pvplm-reconnect-fast', lastSeenRevision: 7 }
+}, 'initial realtime open should send pending join before reconnect testing');
+reconnectHandlers[0].onClose();
+assert.equal(reconnectRealtimeSession.getState().realtimeStatus, 'reconnecting', 'unexpected WS close should mark realtime reconnecting');
+assert.equal(reconnectTimers[0]?.delayMs, 25, 'unexpected WS close should schedule a short reconnect delay');
+reconnectRealtimeSession.resumeRealtime();
+assert.equal(reconnectHandlers.length, 2, 'reconnect timer should create a fresh realtime connection');
+reconnectHandlers[1].onOpen();
+assert.deepEqual(reconnectSent[1], {
+  connectionIndex: 2,
+  payload: { type: 'join_match', matchId: 'pvplm-reconnect-fast', lastSeenRevision: 7 }
+}, 'reconnected realtime socket should replay pending join_match without waiting for heartbeat');
+assert.deepEqual(reconnectSent[2], {
+  connectionIndex: 2,
+  payload: { type: 'heartbeat', matchId: 'pvplm-reconnect-fast', lastSeenRevision: 7 }
+}, 'visibility resume should send heartbeat_realtime with the pending join high-water mark as soon as the reconnected socket opens');
+reconnectRealtimeSession.disconnectRealtime();
+assert.equal(reconnectClearedTimer, reconnectTimers[0], 'visibility resume should clear the delayed reconnect timer instead of waiting for the next interval');
+reconnectHandlers[1].onClose();
+assert.equal(reconnectTimers.length, 1, 'manual disconnect should not schedule another reconnect');
+
+const staleHttpSession = createPvpLiveSession({
+  liveService: {
+    joinQueue: async () => ({
+      success: true,
+      status: 'matched',
+      matchId: 'pvplm-stale-http',
+      seatId: 'A',
+      stateView: {
+        matchId: 'pvplm-stale-http',
+        status: 'active',
+        stateVersion: 9,
+        currentSeat: 'B',
+        turnTimer: {
+          startedAt: 1781870000000,
+          deadlineAt: 1781870060000,
+          durationMs: 60000
+        },
+        recentEvents: [{ eventType: 'fresh_http_anchor', sequence: 9 }],
+        postMatchReview: null,
+        self: { seatId: 'A', hand: [] },
+        opponent: { seatId: 'B', handCount: 2 }
+      }
+    }),
+    getMatch: async (matchId) => ({
+      success: true,
+      matchId,
+      seatId: 'A',
+      stateView: {
+        matchId,
+        status: 'active',
+        stateVersion: 8,
+        currentSeat: 'A',
+        recentEvents: [{ eventType: 'stale_http_refresh', sequence: 8 }],
+        self: { seatId: 'A', hand: [{ instanceId: 'old-refresh-card' }] },
+        opponent: { seatId: 'B', handCount: 3 }
+      }
+    }),
+    heartbeat: async (matchId) => ({
+      success: true,
+      matchId,
+      seatId: 'A',
+      stateView: {
+        matchId,
+        status: 'active',
+        stateVersion: 7,
+        currentSeat: 'A',
+        turnTimer: {
+          startedAt: 1781869900000,
+          deadlineAt: 1781869960000,
+          durationMs: 60000
+        },
+        recentEvents: [{ eventType: 'connection_timeout', sequence: 7 }],
+        connectionReport: { reportVersion: 'pvp-live-connection-v1', heartbeatIntervalMs: 1000 },
+        postMatchReview: {
+          reportVersion: 'pvp-live-post-match-review-v1',
+          finishReason: 'connection_timeout',
+          result: 'loss'
+        },
+        self: { seatId: 'A', hand: [{ instanceId: 'old-heartbeat-card' }] },
+        opponent: { seatId: 'B', handCount: 3 }
+      }
+    }),
+    submitIntent: async (matchId) => ({
+      success: true,
+      result: 'accepted',
+      events: [{ eventType: 'stale_http_intent', sequence: 6 }],
+      stateView: {
+        matchId,
+        status: 'active',
+        stateVersion: 6,
+        currentSeat: 'A',
+        self: { seatId: 'A', hand: [{ instanceId: 'old-intent-card' }] },
+        opponent: { seatId: 'B', handCount: 3 }
+      }
+    })
+  },
+  now: () => 1781870000000
+});
+await staleHttpSession.joinQueue({ displayName: '单调守卫' });
+assert.equal(staleHttpSession.getState().stateView.stateVersion, 9, 'stale HTTP guard test should start from fresh version 9');
+await staleHttpSession.refreshMatch();
+assert.equal(staleHttpSession.getState().stateView.stateVersion, 9, 'stale HTTP refresh should not downgrade authoritative stateVersion');
+assert.equal(staleHttpSession.getState().lastEvents[0].eventType, 'fresh_http_anchor', 'stale HTTP refresh should not downgrade public events');
+await staleHttpSession.heartbeat();
+assert.equal(staleHttpSession.getState().stateView.stateVersion, 9, 'stale HTTP heartbeat should not downgrade authoritative stateVersion');
+assert.equal(staleHttpSession.getState().stateView.turnTimer.deadlineAt, 1781870060000, 'stale HTTP heartbeat should not downgrade active reconnect grace deadline');
+assert.equal(staleHttpSession.getState().stateView.postMatchReview, null, 'stale HTTP heartbeat should not surface stale terminal review');
+assert.ok(!staleHttpSession.getState().stateView.recentEvents.some(event => event.eventType === 'connection_timeout'), 'stale HTTP heartbeat should not surface stale terminal reconnect events');
+await staleHttpSession.submitIntent({
+  intentId: 'stale-http-intent',
+  intentType: 'end_turn',
+  stateVersion: 9,
+  payload: {}
+});
+assert.equal(staleHttpSession.getState().stateView.stateVersion, 9, 'stale HTTP intent result should not downgrade authoritative stateVersion');
+assert.equal(staleHttpSession.getState().lastEvents[0].eventType, 'fresh_http_anchor', 'stale HTTP intent result should not downgrade public events');
+
+const sameVersionRecoverySession = createPvpLiveSession({
+  liveService: {
+    joinQueue: async () => ({
+      success: true,
+      status: 'matched',
+      matchId: 'pvplm-same-version-recovery',
+      seatId: 'A',
+      stateView: {
+        matchId: 'pvplm-same-version-recovery',
+        status: 'active',
+        stateVersion: 11,
+        currentSeat: 'A',
+        turnTimer: {
+          startedAt: 1782023000000,
+          deadlineAt: 1782023060000,
+          durationMs: 60000
+        },
+        recentEvents: [{ eventType: 'active_recovery_anchor', sequence: 11 }],
+        connectionReport: {
+          reportVersion: 'pvp-live-connection-v1',
+          connectionHealth: 'viewer_grace',
+          viewer: { seatId: 'A', status: 'grace', remainingGraceMs: 9000 },
+          opponent: { seatId: 'B', status: 'online' },
+          heartbeatIntervalMs: 5000,
+          graceMs: 30000
+        },
+        postMatchReview: null,
+        self: { seatId: 'A', hand: [] },
+        opponent: { seatId: 'B', handCount: 2 }
+      }
+    }),
+    getMatch: async (matchId) => ({
+      success: true,
+      matchId,
+      seatId: 'A',
+      stateView: {
+        matchId,
+        status: 'active',
+        stateVersion: 11,
+        currentSeat: 'A',
+        turnTimer: {
+          startedAt: 1782023000000,
+          deadlineAt: 1782023060000,
+          durationMs: 60000
+        },
+        recentEvents: [{ eventType: 'active_recovery_anchor', sequence: 11 }],
+        connectionReport: {
+          reportVersion: 'pvp-live-connection-v1',
+          connectionHealth: 'viewer_grace',
+          viewer: { seatId: 'A', status: 'grace', remainingGraceMs: 9000 },
+          opponent: { seatId: 'B', status: 'online' },
+          heartbeatIntervalMs: 5000,
+          graceMs: 30000
+        },
+        postMatchReview: null,
+        self: { seatId: 'A', hand: [] },
+        opponent: { seatId: 'B', handCount: 2 }
+      }
+    }),
+    heartbeat: async (matchId) => ({
+      success: true,
+      matchId,
+      seatId: 'A',
+      stateView: {
+        matchId,
+        status: 'active',
+        stateVersion: 11,
+        currentSeat: 'A',
+        turnTimer: {
+          startedAt: 1782022900000,
+          deadlineAt: 1782022960000,
+          durationMs: 60000
+        },
+        recentEvents: [{ eventType: 'connection_timeout', sequence: 12 }],
+        connectionReport: {
+          reportVersion: 'pvp-live-connection-v1',
+          connectionHealth: 'healthy',
+          viewer: { seatId: 'A', status: 'online' },
+          opponent: { seatId: 'B', status: 'online' },
+          heartbeatIntervalMs: 5000,
+          graceMs: 30000
+        },
+        postMatchReview: {
+          reportVersion: 'pvp-live-post-match-review-v1',
+          finishReason: 'connection_timeout',
+          result: 'loss'
+        },
+        self: { seatId: 'A', hand: [] },
+        opponent: { seatId: 'B', handCount: 2 }
+      }
+    })
+  },
+  now: () => 1782023000000
+});
+await sameVersionRecoverySession.joinQueue({ displayName: '同版本恢复守卫' });
+await sameVersionRecoverySession.refreshMatch();
+const sameVersionHeartbeat = await sameVersionRecoverySession.heartbeat();
+assert.equal(sameVersionHeartbeat.phase, 'active', 'same-version reconnect heartbeat should keep active phase');
+assert.equal(sameVersionHeartbeat.stateView.connectionReport.viewer.status, 'online', 'same-version reconnect heartbeat should still accept recovered online presence');
+assert.equal(sameVersionHeartbeat.stateView.turnTimer.deadlineAt, 1782023060000, 'same-version reconnect heartbeat should not regress active turn deadline');
+assert.equal(sameVersionHeartbeat.stateView.postMatchReview, null, 'same-version reconnect heartbeat should not surface stale terminal review');
+assert.equal(sameVersionHeartbeat.lastEvents[0].eventType, 'active_recovery_anchor', 'same-version reconnect heartbeat should not replace active public events with stale terminal events');
+assert.ok(!sameVersionHeartbeat.stateView.recentEvents.some(event => ['connection_timeout', 'turn_timeout', 'match_finished'].includes(event.eventType)), 'same-version reconnect heartbeat should not surface stale terminal reconnect events');
+
+const sameVersionTerminalStorage = createMemoryStorage();
+const sameVersionTerminalSession = createPvpLiveSession({
+  storage: sameVersionTerminalStorage,
+  liveService: {
+    joinQueue: async () => ({
+      success: true,
+      status: 'matched',
+      matchId: 'pvplm-same-version-terminal',
+      seatId: 'A',
+      stateView: {
+        matchId: 'pvplm-same-version-terminal',
+        status: 'active',
+        stateVersion: 15,
+        currentSeat: 'A',
+        turnTimer: {
+          startedAt: 1782023100000,
+          deadlineAt: 1782023160000,
+          durationMs: 60000
+        },
+        recentEvents: [{ eventType: 'active_terminal_anchor', sequence: 15 }],
+        self: { seatId: 'A', hand: [] },
+        opponent: { seatId: 'B', handCount: 2 }
+      }
+    }),
+    getMatch: async (matchId) => ({
+      success: true,
+      matchId,
+      seatId: 'A',
+      stateView: {
+        matchId,
+        status: 'active',
+        stateVersion: 15,
+        currentSeat: 'A',
+        turnTimer: {
+          startedAt: 1782023100000,
+          deadlineAt: 1782023160000,
+          durationMs: 60000
+        },
+        recentEvents: [{ eventType: 'active_terminal_anchor', sequence: 15 }],
+        self: { seatId: 'A', hand: [] },
+        opponent: { seatId: 'B', handCount: 2 }
+      }
+    }),
+    heartbeat: async (matchId) => ({
+      success: true,
+      matchId,
+      seatId: 'A',
+      stateView: {
+        matchId,
+        status: 'finished',
+        stateVersion: 15,
+        currentSeat: 'A',
+        recentEvents: [{ eventType: 'match_finished', sequence: 16 }],
+        postMatchReview: {
+          reportVersion: 'pvp-live-post-match-review-v1',
+          matchId,
+          finishReason: 'lethal',
+          result: 'win'
+        },
+        self: { seatId: 'A', hand: [] },
+        opponent: { seatId: 'B', handCount: 0 }
+      }
+    })
+  },
+  now: () => 1782023100000
+});
+await sameVersionTerminalSession.joinQueue({ displayName: '同版本终局守卫' });
+await sameVersionTerminalSession.refreshMatch();
+const sameVersionTerminal = await sameVersionTerminalSession.heartbeat();
+assert.equal(sameVersionTerminal.phase, 'finished', 'same-version authoritative terminal heartbeat should still enter finished phase');
+assert.equal(sameVersionTerminal.stateView.postMatchReview.finishReason, 'lethal', 'same-version authoritative terminal heartbeat should retain post-match review');
+assert.equal(sameVersionTerminal.lastEvents[0].eventType, 'match_finished', 'same-version authoritative terminal heartbeat should retain terminal public events');
+assert.ok(sameVersionTerminalStorage.values().includes('pvplm-same-version-terminal'), 'same-version authoritative terminal heartbeat should persist terminal recovery anchor');
+
+const recoveryStorage = createMemoryStorage();
+const recoverySession = createPvpLiveSession({
+  storage: recoveryStorage,
+  userScope: 'low-sample-user',
+  now: () => 1781871000000
+});
+const firstBadReview = {
+  reportVersion: 'pvp-live-post-match-review-v1',
+  result: 'loss',
+  matchId: 'pvplm-recovery-001',
+  finishReason: 'lethal',
+  experienceReport: {
+    reportVersion: 'pvp-live-experience-report-v1',
+    nonGameRisk: 'watch',
+    nonGameRiskReasons: ['short_public_decision_window', 'missing_public_second_seat_window'],
+    effectiveActionReport: {
+      reportVersion: 'pvp-live-effective-action-report-v1',
+      secondSeatState: 'missing_window'
+    }
+  },
+  nextActions: [
+    { id: 'practice', label: '问道练习' },
+    { id: 'queue_again', label: '继续真人排位' }
+  ]
+};
+const firstRecoveryGoal = recoverySession.syncSeasonGoalFromReview({
+  seasonId: 's1-genesis',
+  matchId: 'pvplm-recovery-001',
+  review: firstBadReview
+});
+assert.equal(firstRecoveryGoal.badExperienceStreak, 1, 'first low-agency loss should start the bad-experience streak');
+assert.equal(firstRecoveryGoal.recoveryState, 'observing', 'first low-agency loss should stay in observing recovery state');
+assert.equal(firstRecoveryGoal.recommendedMode, 'practice', 'first low-agency loss should still recommend practice from public review');
+
+const duplicateRecoveryGoal = recoverySession.syncSeasonGoalFromReview({
+  seasonId: 's1-genesis',
+  matchId: 'pvplm-recovery-001',
+  review: firstBadReview
+});
+assert.equal(duplicateRecoveryGoal.badExperienceStreak, 1, 'same terminal review should not double-count the bad-experience streak');
+const missingMatchRecoveryGoal = recoverySession.syncSeasonGoalFromReview({
+  seasonId: 's1-missing-match',
+  review: {
+    ...firstBadReview,
+    matchId: ''
+  }
+});
+assert.equal(missingMatchRecoveryGoal.badExperienceStreak, 0, 'review without a match id should not mutate local bad-experience streak during render');
+assert.equal(missingMatchRecoveryGoal.recoveryState, 'stable', 'review without a match id should remain a read-only season goal snapshot');
+const dismissedRecoveryGoal = recoverySession.dismissSeasonGoal('s1-genesis');
+assert.equal(dismissedRecoveryGoal.dismissedUntilSeason, 's1-genesis', 'manual dismiss should still hide the current season goal before a stronger trigger appears');
+
+const secondRecoveryGoal = recoverySession.syncSeasonGoalFromReview({
+  seasonId: 's1-genesis',
+  matchId: 'pvplm-recovery-002',
+  review: {
+    ...firstBadReview,
+    matchId: 'pvplm-recovery-002',
+    experienceReport: {
+      ...firstBadReview.experienceReport,
+      nonGameRiskReasons: ['second_seat_window_without_public_positive_change']
+    }
+  }
+});
+assert.equal(secondRecoveryGoal.badExperienceStreak, 2, 'second consecutive low-agency loss should retain the streak count');
+assert.equal(secondRecoveryGoal.recoveryState, 'practice_recommended', 'second consecutive low-agency loss should open the recovery diversion');
+assert.equal(secondRecoveryGoal.recoveryReason, 'consecutive_low_agency_losses', 'recovery diversion should expose a structured reason');
+assert.equal(secondRecoveryGoal.recommendedMode, 'practice', 'recovery diversion should prefer practice over default queue again');
+assert.equal(secondRecoveryGoal.dismissedUntilSeason, '', 'new consecutive bad-experience trigger should reactivate a previously dismissed season goal');
+assert.equal(secondRecoveryGoal.dismissedForMatchId, '', 'new consecutive bad-experience trigger should not inherit the previous match dismissal');
+assert.ok(secondRecoveryGoal.recoveryActions.includes('practice'), 'recovery diversion should preserve a no-score practice action');
+assert.ok(secondRecoveryGoal.recoveryActions.includes('queue_again'), 'recovery diversion should keep manual real-queue agency instead of auto-queueing');
+assert.ok(/连续/.test(secondRecoveryGoal.recoveryLine || '') && /练习/.test(secondRecoveryGoal.recoveryLine || ''), 'recovery diversion should explain why practice comes first');
+assert.ok(!/rating|elo|reward|hand|deck|payload/i.test(JSON.stringify(secondRecoveryGoal)), 'local recovery goal must not leak hidden data or imply ranked compensation');
+
+const recoveredGoal = recoverySession.syncSeasonGoalFromReview({
+  seasonId: 's1-genesis',
+  matchId: 'pvplm-recovery-003',
+  review: {
+    reportVersion: 'pvp-live-post-match-review-v1',
+    result: 'win',
+    matchId: 'pvplm-recovery-003',
+    finishReason: 'lethal',
+    experienceReport: {
+      reportVersion: 'pvp-live-experience-report-v1',
+      nonGameRisk: 'low',
+      nonGameRiskReasons: ['public_events_show_readable_windows'],
+      effectiveActionReport: {
+        reportVersion: 'pvp-live-effective-action-report-v1',
+        secondSeatState: 'confirmed'
+      }
+    },
+    nextActions: [{ id: 'queue_again', label: '继续真人排位' }]
+  }
+});
+assert.equal(recoveredGoal.badExperienceStreak, 0, 'readable win should clear the bad-experience streak');
+assert.equal(recoveredGoal.recoveryState, 'stable', 'readable win should return the local recovery state to stable');
+assert.equal(recoveredGoal.recommendedMode, 'queue_again', 'stable readable win can recommend queue again');
+
+assert.ok(!calls.some(call => call.method === 'reportMatchResult' || call.method === 'findOpponent'), 'live session should not use legacy PVP paths');
+
+console.log('sanity_pvp_live_session_checks passed');

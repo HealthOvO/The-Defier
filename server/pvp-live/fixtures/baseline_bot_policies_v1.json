@@ -1,0 +1,94 @@
+{
+  "contractVersion": "pvp-live-balance-artifacts-v1",
+  "kind": "baseline_bot_policies",
+  "ruleVersion": "pvp-live-v1",
+  "contentPackVersion": "pvp-live-v1-content-pack",
+  "policies": [
+    {
+      "id": "aggro_pressure",
+      "label": "快攻压迫策略",
+      "priority": [
+        "play_lethal_if_legal",
+        "spend_energy_on_best_damage",
+        "play_visible_setup",
+        "play_defense_if_energy_left",
+        "end_turn"
+      ]
+    },
+    {
+      "id": "tempo_mark",
+      "label": "节奏破绽策略",
+      "priority": [
+        "play_visible_setup",
+        "play_payoff_after_setup",
+        "spend_energy_on_best_damage",
+        "play_defense_if_energy_left",
+        "end_turn"
+      ]
+    },
+    {
+      "id": "shield_counter",
+      "label": "守势反击策略",
+      "priority": [
+        "prevent_death",
+        "play_defense_if_energy_left",
+        "play_lethal_if_legal",
+        "spend_energy_on_best_damage",
+        "end_turn"
+      ]
+    },
+    {
+      "id": "soft_control",
+      "label": "软控消耗策略",
+      "priority": [
+        "play_visible_setup",
+        "prevent_death",
+        "play_defense_if_energy_left",
+        "spend_energy_on_best_damage",
+        "end_turn"
+      ]
+    },
+    {
+      "id": "low_hp_counter",
+      "label": "低血反击策略",
+      "priority": [
+        "prevent_death",
+        "play_lethal_if_legal",
+        "spend_energy_on_best_damage",
+        "play_defense_if_energy_left",
+        "end_turn"
+      ]
+    },
+    {
+      "id": "vulnerable_combo",
+      "label": "易伤组合策略",
+      "priority": [
+        "play_visible_setup",
+        "play_payoff_after_setup",
+        "play_lethal_if_legal",
+        "spend_energy_on_best_damage",
+        "end_turn"
+      ]
+    },
+    {
+      "id": "draw_midrange",
+      "label": "过牌中速策略",
+      "priority": [
+        "play_defense_if_energy_left",
+        "spend_energy_on_best_damage",
+        "play_visible_setup",
+        "end_turn"
+      ]
+    },
+    {
+      "id": "healing_attrition",
+      "label": "回复消耗策略",
+      "priority": [
+        "prevent_death",
+        "play_defense_if_energy_left",
+        "spend_energy_on_best_damage",
+        "end_turn"
+      ]
+    }
+  ]
+}

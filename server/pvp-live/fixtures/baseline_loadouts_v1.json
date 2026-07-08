@@ -1,0 +1,768 @@
+{
+  "contractVersion": "pvp-live-balance-artifacts-v1",
+  "kind": "baseline_loadouts",
+  "ruleVersion": "pvp-live-v1",
+  "contentPackVersion": "pvp-live-v1-content-pack",
+  "loadouts": [
+    {
+      "id": "aggro_pressure",
+      "label": "快攻压迫",
+      "identitySlot": "pvp_fate_starter_aggro",
+      "botPolicyId": "aggro_pressure",
+      "expectedProfile": {
+        "speed": "fast",
+        "burst": "medium",
+        "defense": "low",
+        "attrition": "low",
+        "control": "low"
+      },
+      "deck": [
+        {
+          "id": "doubleStrike",
+          "upgraded": false
+        },
+        {
+          "id": "doubleStrike",
+          "upgraded": false
+        },
+        {
+          "id": "battleCry",
+          "upgraded": false
+        },
+        {
+          "id": "battleCry",
+          "upgraded": false
+        },
+        {
+          "id": "bloodlettingSlash",
+          "upgraded": false
+        },
+        {
+          "id": "bloodlettingSlash",
+          "upgraded": false
+        },
+        {
+          "id": "forkedNeedle",
+          "upgraded": false
+        },
+        {
+          "id": "forkedNeedle",
+          "upgraded": false
+        },
+        {
+          "id": "defend",
+          "upgraded": false
+        },
+        {
+          "id": "defend",
+          "upgraded": false
+        },
+        {
+          "id": "surgeStep",
+          "upgraded": false
+        },
+        {
+          "id": "surgeStep",
+          "upgraded": false
+        },
+        {
+          "id": "innerPeace",
+          "upgraded": false
+        },
+        {
+          "id": "innerPeace",
+          "upgraded": false
+        },
+        {
+          "id": "tacticalExpose",
+          "upgraded": false
+        },
+        {
+          "id": "tacticalExpose",
+          "upgraded": false
+        },
+        {
+          "id": "counterStance",
+          "upgraded": false
+        },
+        {
+          "id": "counterStance",
+          "upgraded": false
+        },
+        {
+          "id": "pvp_burst",
+          "upgraded": false
+        },
+        {
+          "id": "quickSlash",
+          "upgraded": false
+        }
+      ]
+    },
+    {
+      "id": "tempo_mark",
+      "label": "节奏破绽",
+      "identitySlot": "pvp_fate_starter_tempo",
+      "botPolicyId": "tempo_mark",
+      "expectedProfile": {
+        "speed": "medium",
+        "burst": "medium",
+        "defense": "medium",
+        "attrition": "low",
+        "control": "medium"
+      },
+      "deck": [
+        {
+          "id": "punctureMark",
+          "upgraded": false
+        },
+        {
+          "id": "punctureMark",
+          "upgraded": false
+        },
+        {
+          "id": "exposedCircuit",
+          "upgraded": false
+        },
+        {
+          "id": "exposedCircuit",
+          "upgraded": false
+        },
+        {
+          "id": "forkedNeedle",
+          "upgraded": false
+        },
+        {
+          "id": "forkedNeedle",
+          "upgraded": false
+        },
+        {
+          "id": "pvp_strike",
+          "upgraded": false
+        },
+        {
+          "id": "pvp_strike",
+          "upgraded": false
+        },
+        {
+          "id": "heavyStrike",
+          "upgraded": false
+        },
+        {
+          "id": "heavyStrike",
+          "upgraded": false
+        },
+        {
+          "id": "thunderLattice",
+          "upgraded": false
+        },
+        {
+          "id": "thunderLattice",
+          "upgraded": false
+        },
+        {
+          "id": "tacticalExpose",
+          "upgraded": false
+        },
+        {
+          "id": "tacticalExpose",
+          "upgraded": false
+        },
+        {
+          "id": "stormWard",
+          "upgraded": false
+        },
+        {
+          "id": "stormWard",
+          "upgraded": false
+        },
+        {
+          "id": "surgeStep",
+          "upgraded": false
+        },
+        {
+          "id": "surgeStep",
+          "upgraded": false
+        },
+        {
+          "id": "pvp_guard",
+          "upgraded": false
+        },
+        {
+          "id": "pvp_guard",
+          "upgraded": false
+        }
+      ]
+    },
+    {
+      "id": "shield_counter",
+      "label": "守势反击",
+      "identitySlot": "pvp_fate_starter_shield",
+      "botPolicyId": "shield_counter",
+      "expectedProfile": {
+        "speed": "slow",
+        "burst": "low",
+        "defense": "high",
+        "attrition": "medium",
+        "control": "low"
+      },
+      "deck": [
+        {
+          "id": "shieldBash",
+          "upgraded": false
+        },
+        {
+          "id": "shieldBash",
+          "upgraded": false
+        },
+        {
+          "id": "quickSlash",
+          "upgraded": false
+        },
+        {
+          "id": "quickSlash",
+          "upgraded": false
+        },
+        {
+          "id": "doubleStrike",
+          "upgraded": false
+        },
+        {
+          "id": "doubleStrike",
+          "upgraded": false
+        },
+        {
+          "id": "pvp_strike",
+          "upgraded": false
+        },
+        {
+          "id": "pvp_strike",
+          "upgraded": false
+        },
+        {
+          "id": "battleCry",
+          "upgraded": false
+        },
+        {
+          "id": "battleCry",
+          "upgraded": false
+        },
+        {
+          "id": "pvp_guard",
+          "upgraded": false
+        },
+        {
+          "id": "pvp_guard",
+          "upgraded": false
+        },
+        {
+          "id": "defend",
+          "upgraded": false
+        },
+        {
+          "id": "defend",
+          "upgraded": false
+        },
+        {
+          "id": "ironWill",
+          "upgraded": false
+        },
+        {
+          "id": "ironWill",
+          "upgraded": false
+        },
+        {
+          "id": "counterStance",
+          "upgraded": false
+        },
+        {
+          "id": "counterStance",
+          "upgraded": false
+        },
+        {
+          "id": "innerPeace",
+          "upgraded": false
+        },
+        {
+          "id": "innerPeace",
+          "upgraded": false
+        }
+      ]
+    },
+    {
+      "id": "soft_control",
+      "label": "软控消耗",
+      "identitySlot": "pvp_fate_starter_control",
+      "botPolicyId": "soft_control",
+      "expectedProfile": {
+        "speed": "medium",
+        "burst": "low",
+        "defense": "medium",
+        "attrition": "medium",
+        "control": "high"
+      },
+      "deck": [
+        {
+          "id": "shieldBash",
+          "upgraded": false
+        },
+        {
+          "id": "shieldBash",
+          "upgraded": false
+        },
+        {
+          "id": "pvp_strike",
+          "upgraded": false
+        },
+        {
+          "id": "pvp_strike",
+          "upgraded": false
+        },
+        {
+          "id": "bloodlettingSlash",
+          "upgraded": false
+        },
+        {
+          "id": "bloodlettingSlash",
+          "upgraded": false
+        },
+        {
+          "id": "battleCry",
+          "upgraded": false
+        },
+        {
+          "id": "battleCry",
+          "upgraded": false
+        },
+        {
+          "id": "exposedCircuit",
+          "upgraded": false
+        },
+        {
+          "id": "exposedCircuit",
+          "upgraded": false
+        },
+        {
+          "id": "tacticalExpose",
+          "upgraded": false
+        },
+        {
+          "id": "tacticalExpose",
+          "upgraded": false
+        },
+        {
+          "id": "pvp_guard",
+          "upgraded": false
+        },
+        {
+          "id": "pvp_guard",
+          "upgraded": false
+        },
+        {
+          "id": "stormWard",
+          "upgraded": false
+        },
+        {
+          "id": "stormWard",
+          "upgraded": false
+        },
+        {
+          "id": "counterStance",
+          "upgraded": false
+        },
+        {
+          "id": "counterStance",
+          "upgraded": false
+        },
+        {
+          "id": "defend",
+          "upgraded": false
+        },
+        {
+          "id": "defend",
+          "upgraded": false
+        }
+      ]
+    },
+    {
+      "id": "low_hp_counter",
+      "label": "低血反击",
+      "identitySlot": "pvp_fate_starter_counter",
+      "botPolicyId": "low_hp_counter",
+      "expectedProfile": {
+        "speed": "medium",
+        "burst": "high",
+        "defense": "medium",
+        "attrition": "medium",
+        "control": "low"
+      },
+      "deck": [
+        {
+          "id": "transfuseStrike",
+          "upgraded": false
+        },
+        {
+          "id": "transfuseStrike",
+          "upgraded": false
+        },
+        {
+          "id": "bloodlettingSlash",
+          "upgraded": false
+        },
+        {
+          "id": "bloodlettingSlash",
+          "upgraded": false
+        },
+        {
+          "id": "quickSlash",
+          "upgraded": false
+        },
+        {
+          "id": "quickSlash",
+          "upgraded": false
+        },
+        {
+          "id": "pvp_strike",
+          "upgraded": false
+        },
+        {
+          "id": "pvp_strike",
+          "upgraded": false
+        },
+        {
+          "id": "exposedCircuit",
+          "upgraded": false
+        },
+        {
+          "id": "exposedCircuit",
+          "upgraded": false
+        },
+        {
+          "id": "mendThread",
+          "upgraded": false
+        },
+        {
+          "id": "mendThread",
+          "upgraded": false
+        },
+        {
+          "id": "wardingHerb",
+          "upgraded": false
+        },
+        {
+          "id": "wardingHerb",
+          "upgraded": false
+        },
+        {
+          "id": "innerPeace",
+          "upgraded": false
+        },
+        {
+          "id": "innerPeace",
+          "upgraded": false
+        },
+        {
+          "id": "pvp_guard",
+          "upgraded": false
+        },
+        {
+          "id": "pvp_guard",
+          "upgraded": false
+        },
+        {
+          "id": "counterStance",
+          "upgraded": false
+        },
+        {
+          "id": "counterStance",
+          "upgraded": false
+        }
+      ]
+    },
+    {
+      "id": "vulnerable_combo",
+      "label": "易伤组合",
+      "identitySlot": "pvp_fate_starter_combo",
+      "botPolicyId": "vulnerable_combo",
+      "expectedProfile": {
+        "speed": "medium",
+        "burst": "high",
+        "defense": "low",
+        "attrition": "low",
+        "control": "medium"
+      },
+      "deck": [
+        {
+          "id": "exposedCircuit",
+          "upgraded": false
+        },
+        {
+          "id": "exposedCircuit",
+          "upgraded": false
+        },
+        {
+          "id": "battleCry",
+          "upgraded": false
+        },
+        {
+          "id": "battleCry",
+          "upgraded": false
+        },
+        {
+          "id": "pvp_strike",
+          "upgraded": false
+        },
+        {
+          "id": "pvp_strike",
+          "upgraded": false
+        },
+        {
+          "id": "transfuseStrike",
+          "upgraded": false
+        },
+        {
+          "id": "transfuseStrike",
+          "upgraded": false
+        },
+        {
+          "id": "doubleStrike",
+          "upgraded": false
+        },
+        {
+          "id": "doubleStrike",
+          "upgraded": false
+        },
+        {
+          "id": "tacticalExpose",
+          "upgraded": false
+        },
+        {
+          "id": "tacticalExpose",
+          "upgraded": false
+        },
+        {
+          "id": "thunderLattice",
+          "upgraded": false
+        },
+        {
+          "id": "thunderLattice",
+          "upgraded": false
+        },
+        {
+          "id": "stormWard",
+          "upgraded": false
+        },
+        {
+          "id": "stormWard",
+          "upgraded": false
+        },
+        {
+          "id": "defend",
+          "upgraded": false
+        },
+        {
+          "id": "defend",
+          "upgraded": false
+        },
+        {
+          "id": "wardingHerb",
+          "upgraded": false
+        },
+        {
+          "id": "wardingHerb",
+          "upgraded": false
+        }
+      ]
+    },
+    {
+      "id": "draw_midrange",
+      "label": "过牌中速",
+      "identitySlot": "pvp_fate_starter_midrange",
+      "botPolicyId": "draw_midrange",
+      "expectedProfile": {
+        "speed": "medium",
+        "burst": "medium",
+        "defense": "medium",
+        "attrition": "medium",
+        "control": "low"
+      },
+      "deck": [
+        {
+          "id": "surgeStep",
+          "upgraded": false
+        },
+        {
+          "id": "surgeStep",
+          "upgraded": false
+        },
+        {
+          "id": "forkedNeedle",
+          "upgraded": false
+        },
+        {
+          "id": "forkedNeedle",
+          "upgraded": false
+        },
+        {
+          "id": "shieldBash",
+          "upgraded": false
+        },
+        {
+          "id": "shieldBash",
+          "upgraded": false
+        },
+        {
+          "id": "pvp_strike",
+          "upgraded": false
+        },
+        {
+          "id": "pvp_strike",
+          "upgraded": false
+        },
+        {
+          "id": "doubleStrike",
+          "upgraded": false
+        },
+        {
+          "id": "doubleStrike",
+          "upgraded": false
+        },
+        {
+          "id": "exposedCircuit",
+          "upgraded": false
+        },
+        {
+          "id": "exposedCircuit",
+          "upgraded": false
+        },
+        {
+          "id": "thunderLattice",
+          "upgraded": false
+        },
+        {
+          "id": "thunderLattice",
+          "upgraded": false
+        },
+        {
+          "id": "innerPeace",
+          "upgraded": false
+        },
+        {
+          "id": "innerPeace",
+          "upgraded": false
+        },
+        {
+          "id": "defend",
+          "upgraded": false
+        },
+        {
+          "id": "defend",
+          "upgraded": false
+        },
+        {
+          "id": "counterStance",
+          "upgraded": false
+        },
+        {
+          "id": "counterStance",
+          "upgraded": false
+        }
+      ]
+    },
+    {
+      "id": "healing_attrition",
+      "label": "回复消耗",
+      "identitySlot": "pvp_fate_starter_healing",
+      "botPolicyId": "healing_attrition",
+      "expectedProfile": {
+        "speed": "slow",
+        "burst": "low",
+        "defense": "high",
+        "attrition": "high",
+        "control": "low"
+      },
+      "deck": [
+        {
+          "id": "transfuseStrike",
+          "upgraded": false
+        },
+        {
+          "id": "transfuseStrike",
+          "upgraded": false
+        },
+        {
+          "id": "shieldBash",
+          "upgraded": false
+        },
+        {
+          "id": "shieldBash",
+          "upgraded": false
+        },
+        {
+          "id": "doubleStrike",
+          "upgraded": false
+        },
+        {
+          "id": "doubleStrike",
+          "upgraded": false
+        },
+        {
+          "id": "battleCry",
+          "upgraded": false
+        },
+        {
+          "id": "battleCry",
+          "upgraded": false
+        },
+        {
+          "id": "punctureMark",
+          "upgraded": false
+        },
+        {
+          "id": "punctureMark",
+          "upgraded": false
+        },
+        {
+          "id": "mendThread",
+          "upgraded": false
+        },
+        {
+          "id": "mendThread",
+          "upgraded": false
+        },
+        {
+          "id": "wardingHerb",
+          "upgraded": false
+        },
+        {
+          "id": "wardingHerb",
+          "upgraded": false
+        },
+        {
+          "id": "ironWill",
+          "upgraded": false
+        },
+        {
+          "id": "ironWill",
+          "upgraded": false
+        },
+        {
+          "id": "surgeStep",
+          "upgraded": false
+        },
+        {
+          "id": "surgeStep",
+          "upgraded": false
+        },
+        {
+          "id": "defend",
+          "upgraded": false
+        },
+        {
+          "id": "defend",
+          "upgraded": false
+        }
+      ]
+    }
+  ]
+}

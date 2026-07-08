@@ -60,6 +60,22 @@ async function safeScreenshot(page, outPath) {
     const unlockCount = document.querySelectorAll('#sanctum-unlock-feed .unlock-feed-item').length;
     const summaryText = (document.getElementById('sanctum-summary')?.textContent || '').replace(/\s+/g, ' ').trim();
     const progressText = (document.getElementById('sanctum-progress')?.textContent || '').replace(/\s+/g, ' ').trim();
+    const honorSummary = document.querySelector('#sanctum-summary [data-season-honor-showcase="true"]');
+    const honorCard = document.querySelector('#sanctum-summary [data-season-honor-showcase-card="true"]');
+    const honorCta = document.querySelector('#sanctum-summary [data-season-honor-showcase-cta="true"]');
+    const honorChip = document.querySelector('#sanctum-summary [data-season-honor-showcase-chip="unlocked"]');
+    if (honorCard && typeof honorCard.scrollIntoView === 'function') {
+      honorCard.scrollIntoView({ block: 'center', inline: 'nearest' });
+    }
+    const honorText = (honorCard?.textContent || honorSummary?.textContent || '').replace(/\s+/g, ' ').trim();
+    const honorRect = honorCard?.getBoundingClientRect();
+    const honorFitsViewport = !honorRect || (
+      honorRect.left >= -2 &&
+      honorRect.right <= window.innerWidth + 2 &&
+      honorRect.top >= -2 &&
+      honorRect.bottom <= window.innerHeight + 2 &&
+      honorRect.width > 120
+    );
 
     return {
       ok:
@@ -68,13 +84,32 @@ async function safeScreenshot(page, outPath) {
         goalCount >= 2 &&
         unlockCount >= 1 &&
         /洞府/.test(summaryText) &&
-        /主线|图鉴|Boss|周挑战/.test(progressText),
+        /主线|图鉴|Boss|周挑战/.test(progressText) &&
+        honorSummary?.dataset.seasonHonorShowcaseReport === 'pvp-live-season-honor-showcase-v1' &&
+        honorSummary?.dataset.seasonHonorShowcaseImpact === 'cosmetic_only' &&
+        honorSummary?.dataset.seasonHonorShowcasePower === 'none' &&
+        honorSummary?.dataset.seasonHonorShowcaseVisibility === 'self_only_ranked_economy' &&
+        honorCard?.dataset.seasonHonorShowcaseVisibility === 'self_only_ranked_economy' &&
+        !!honorCard &&
+        !!honorChip &&
+        !!honorCta &&
+        /赛季荣誉|正式论道/.test(honorText) &&
+        /仅本人洞府只读可见，不进入公开回放或审计回放/.test(honorText) &&
+        /不授予卡牌、属性、资源、起手、匹配或战斗效果/.test(honorText) &&
+        honorFitsViewport,
       roomCount,
       researchCount,
       goalCount,
       unlockCount,
       summaryText,
-      progressText
+      progressText,
+      honorText,
+      honorReport: honorSummary?.dataset.seasonHonorShowcaseReport || '',
+      honorImpact: honorSummary?.dataset.seasonHonorShowcaseImpact || '',
+      honorPower: honorSummary?.dataset.seasonHonorShowcasePower || '',
+      honorVisibility: honorSummary?.dataset.seasonHonorShowcaseVisibility || '',
+      honorCtaText: (honorCta?.textContent || '').replace(/\s+/g, ' ').trim(),
+      honorFitsViewport
     };
   });
 

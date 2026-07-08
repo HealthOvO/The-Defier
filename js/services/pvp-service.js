@@ -36,6 +36,196 @@ export const PVPService = {
       '天穹榜': 1.2
     }
   },
+  seasonHonorRewardTrack: [
+    { targetGames: 1, rewardId: 's1_genesis_honor_mark_1', rewardType: 'cosmetic_badge', rewardName: '开天见证徽记' },
+    { targetGames: 3, rewardId: 's1_genesis_honor_frame_3', rewardType: 'cosmetic_frame', rewardName: '三战问道边框' },
+    { targetGames: 5, rewardId: 's1_genesis_honor_title_5', rewardType: 'cosmetic_title', rewardName: '称号·真人论道新锋' },
+    { targetGames: 10, rewardId: 's1_genesis_honor_aura_10', rewardType: 'cosmetic_aura', rewardName: '开天十战辉光' },
+    { targetGames: 20, rewardId: 's1_genesis_honor_banner_20', rewardType: 'cosmetic_banner', rewardName: '二十战荣誉旗' },
+    { targetGames: 50, rewardId: 's1_genesis_honor_legend_50', rewardType: 'cosmetic_title', rewardName: '称号·开天不坠' }
+  ],
+  live: {
+    getClient() {
+      if (typeof PVPService === 'undefined' || !PVPService || typeof PVPService.getBackendPvpClient !== 'function') return null;
+      const client = PVPService.getBackendPvpClient();
+      if (!client || typeof client.ensureReady !== 'function') return null;
+      try {
+        if (!client.ensureReady()) return null;
+      } catch (error) {
+        return null;
+      }
+      return client;
+    },
+    async joinQueue(options = {}) {
+      const client = this.getClient();
+      if (!client || typeof client.joinLivePvpQueue !== 'function') {
+        return { success: false, message: '实时论道服务未就绪' };
+      }
+      return await client.joinLivePvpQueue(options);
+    },
+    async measureConnectionHealth() {
+      const client = this.getClient();
+      if (!client || typeof client.measureLivePvpConnectionHealth !== 'function') {
+        return {
+          reportVersion: 'pvp-live-queue-connection-health-v1',
+          status: 'pass',
+          sampleTag: 'local_fallback',
+          sampleWindowMs: 0,
+          missedHeartbeatCount: 0,
+          reconnectCount: 0,
+          rttP95Ms: 0
+        };
+      }
+      return await client.measureLivePvpConnectionHealth();
+    },
+    async cancelQueue(queueTicket = '') {
+      const client = this.getClient();
+      if (!client || typeof client.cancelLivePvpQueue !== 'function') {
+        return { success: false, message: '实时论道服务未就绪' };
+      }
+      return await client.cancelLivePvpQueue(queueTicket);
+    },
+    async getQueueStatus(queueTicket = '') {
+      const client = this.getClient();
+      if (!client || typeof client.getLivePvpQueueStatus !== 'function') {
+        return { success: false, message: '实时论道服务未就绪' };
+      }
+      return await client.getLivePvpQueueStatus(queueTicket);
+    },
+    async createInvite(options = {}) {
+      const client = this.getClient();
+      if (!client || typeof client.createLivePvpInvite !== 'function') {
+        return { success: false, message: '实时论道服务未就绪' };
+      }
+      return await client.createLivePvpInvite(options);
+    },
+    async joinInvite(inviteCode = '', options = {}) {
+      const client = this.getClient();
+      if (!client || typeof client.joinLivePvpInvite !== 'function') {
+        return { success: false, message: '实时论道服务未就绪' };
+      }
+      return await client.joinLivePvpInvite(inviteCode, options);
+    },
+    async cancelInvite(inviteCode = '') {
+      const client = this.getClient();
+      if (!client || typeof client.cancelLivePvpInvite !== 'function') {
+        return { success: false, message: '实时论道服务未就绪' };
+      }
+      return await client.cancelLivePvpInvite(inviteCode);
+    },
+    async getCurrentInvite() {
+      const client = this.getClient();
+      if (!client || typeof client.getCurrentLivePvpInvite !== 'function') {
+        return { success: false, message: '实时论道服务未就绪' };
+      }
+      return await client.getCurrentLivePvpInvite();
+    },
+    async getInviteInbox() {
+      const client = this.getClient();
+      if (!client || typeof client.getLivePvpInviteInbox !== 'function') {
+        return { success: false, message: '实时论道服务未就绪' };
+      }
+      return await client.getLivePvpInviteInbox();
+    },
+    async getMatch(matchId = '') {
+      const client = this.getClient();
+      if (!client || typeof client.getLivePvpMatch !== 'function') {
+        return { success: false, message: '实时论道服务未就绪' };
+      }
+      return await client.getLivePvpMatch(matchId);
+    },
+    async getCurrentMatch() {
+      const client = this.getClient();
+      if (!client || typeof client.getCurrentLivePvpMatch !== 'function') {
+        return { success: false, message: '实时论道服务未就绪' };
+      }
+      return await client.getCurrentLivePvpMatch();
+    },
+    async getReplay(matchId = '', options = {}) {
+      const client = this.getClient();
+      if (!client || typeof client.getLivePvpReplay !== 'function') {
+        return { success: false, message: '实时论道服务未就绪' };
+      }
+      return await client.getLivePvpReplay(matchId, options);
+    },
+    async createReplayShare(matchId = '', options = {}) {
+      const client = this.getClient();
+      if (!client || typeof client.createLivePvpReplayShare !== 'function') {
+        return { success: false, message: '实时论道战报分享服务未就绪' };
+      }
+      return await client.createLivePvpReplayShare(matchId, options);
+    },
+    async getReplayShare(shareToken = '') {
+      const client = this.getClient();
+      if (!client || typeof client.getLivePvpReplayShare !== 'function') {
+        return { success: false, message: '公开战报分享服务未就绪' };
+      }
+      return await client.getLivePvpReplayShare(shareToken);
+    },
+    async revokeReplayShare(matchId = '') {
+      const client = this.getClient();
+      if (!client || typeof client.revokeLivePvpReplayShare !== 'function') {
+        return { success: false, message: '实时论道战报分享撤销服务未就绪' };
+      }
+      return await client.revokeLivePvpReplayShare(matchId);
+    },
+    async requestRematch(matchId = '', options = {}) {
+      const client = this.getClient();
+      if (!client || typeof client.requestLivePvpRematch !== 'function') {
+        return { success: false, message: '实时论道服务未就绪' };
+      }
+      return await client.requestLivePvpRematch(matchId, options);
+    },
+    async getRematchStatus(matchId = '') {
+      const client = this.getClient();
+      if (!client || typeof client.getLivePvpRematchStatus !== 'function') {
+        return { success: false, message: '实时论道服务未就绪' };
+      }
+      return await client.getLivePvpRematchStatus(matchId);
+    },
+    async cancelRematch(matchId = '') {
+      const client = this.getClient();
+      if (!client || typeof client.cancelLivePvpRematch !== 'function') {
+        return { success: false, message: '实时论道服务未就绪' };
+      }
+      return await client.cancelLivePvpRematch(matchId);
+    },
+    async heartbeat(matchId = '') {
+      const client = this.getClient();
+      if (!client || typeof client.heartbeatLivePvpMatch !== 'function') {
+        return { success: false, message: '实时论道服务未就绪' };
+      }
+      return await client.heartbeatLivePvpMatch(matchId);
+    },
+    async submitIntent(matchId = '', intent = {}) {
+      const client = this.getClient();
+      if (!client || typeof client.submitLivePvpIntent !== 'function') {
+        return { success: false, message: '实时论道服务未就绪' };
+      }
+      return await client.submitLivePvpIntent(matchId, intent);
+    },
+    async submitReport(matchId = '', report = {}) {
+      const client = this.getClient();
+      if (!client || typeof client.submitLivePvpReport !== 'function') {
+        return { success: false, message: '实时论道服务未就绪' };
+      }
+      return await client.submitLivePvpReport(matchId, report);
+    },
+    async avoidOpponent(matchId = '', request = {}) {
+      const client = this.getClient();
+      if (!client || typeof client.submitLivePvpAvoidOpponent !== 'function') {
+        return { success: false, message: '实时论道服务未就绪' };
+      }
+      return await client.submitLivePvpAvoidOpponent(matchId, request);
+    },
+    connectRealtime(handlers = {}) {
+      const client = this.getClient();
+      if (!client || typeof client.connectLivePvpWebSocket !== 'function') {
+        return null;
+      }
+      return client.connectLivePvpWebSocket(handlers);
+    }
+  },
   init(context = {}) {
     this.context = {
       ...this.context,
@@ -763,6 +953,7 @@ export const PVPService = {
       bestWinStreak: 0,
       purchases: {},
       ownedItems: {},
+      seasonHonorCollection: this.normalizeSeasonHonorCollection(null),
       equippedSkinId: null,
       equippedTitleId: null,
       transactionLog: [],
@@ -787,6 +978,7 @@ export const PVPService = {
         if (src.ownedItems[key]) ownedItems[key] = true;
       });
     }
+    const seasonHonorCollection = this.normalizeSeasonHonorCollection(src.seasonHonorCollection);
     const transactionLog = Array.isArray(src.transactionLog) ? src.transactionLog.filter(it => it && typeof it === 'object').slice(-40).map(it => ({
       type: it.type || 'misc',
       itemId: it.itemId || null,
@@ -812,12 +1004,170 @@ export const PVPService = {
       bestWinStreak: Math.max(0, Math.floor(Number(src.bestWinStreak) || 0)),
       purchases,
       ownedItems,
+      seasonHonorCollection,
       equippedSkinId,
       equippedTitleId,
       transactionLog,
       matchHistory,
       lastRewardAt: Math.max(0, Math.floor(Number(src.lastRewardAt) || 0)),
       lastPurchaseAt: Math.max(0, Math.floor(Number(src.lastPurchaseAt) || 0))
+    };
+  },
+  normalizeSeasonHonorCollection(raw) {
+    const src = raw && typeof raw === 'object' ? raw : {};
+    const unlockedRewards = {};
+    if (src.unlockedRewards && typeof src.unlockedRewards === 'object') {
+      Object.keys(src.unlockedRewards).forEach(key => {
+        const entry = src.unlockedRewards[key];
+        if (!entry || typeof entry !== 'object') return;
+        const rewardId = String(entry.rewardId || key || '').trim();
+        if (!rewardId) return;
+        unlockedRewards[rewardId] = {
+          rewardId,
+          rewardType: String(entry.rewardType || 'cosmetic_badge'),
+          rewardName: String(entry.rewardName || '赛季荣誉外观'),
+          targetGames: Math.max(1, Math.floor(Number(entry.targetGames) || 1)),
+          source: 'live_ranked',
+          rewardImpact: 'cosmetic_only',
+          powerImpact: 'none',
+          unlockedAt: Math.max(0, Math.floor(Number(entry.unlockedAt) || 0))
+        };
+      });
+    }
+    const rewardIds = Object.keys(unlockedRewards);
+    const lastUnlockedRewardId = rewardIds.includes(src.lastUnlockedRewardId) ? String(src.lastUnlockedRewardId) : rewardIds[rewardIds.length - 1] || null;
+    return {
+      reportVersion: 'pvp-live-season-honor-collection-v1',
+      seasonId: String(src.seasonId || 's1-genesis'),
+      source: 'live_ranked',
+      rewardImpact: 'cosmetic_only',
+      powerImpact: 'none',
+      unlockedRewards,
+      totalUnlocked: rewardIds.length,
+      lastUnlockedRewardId,
+      boundary: '赛季荣誉收藏只保存外观成就，不授予卡牌、属性、资源、起手、匹配或战斗效果。'
+    };
+  },
+  getSeasonHonorRewardTrack() {
+    const source = Array.isArray(this.seasonHonorRewardTrack) ? this.seasonHonorRewardTrack : [];
+    return source.map((entry) => {
+      const rewardId = String(entry && entry.rewardId || '').trim();
+      const targetGames = Math.max(1, Math.floor(Number(entry && entry.targetGames) || 1));
+      if (!rewardId) return null;
+      return {
+        targetGames,
+        rewardId,
+        rewardType: String(entry.rewardType || 'cosmetic_badge'),
+        rewardName: String(entry.rewardName || '赛季荣誉外观'),
+        rewardImpact: 'cosmetic_only',
+        powerImpact: 'none'
+      };
+    }).filter(Boolean).sort((a, b) => a.targetGames - b.targetGames || a.rewardId.localeCompare(b.rewardId));
+  },
+  normalizeSeasonHonorRewardEntry(entry = null, fallback = null) {
+    const src = entry && typeof entry === 'object' ? entry : {};
+    const fallbackSrc = fallback && typeof fallback === 'object' ? fallback : {};
+    const rewardId = String(src.rewardId || fallbackSrc.rewardId || '').trim();
+    if (!rewardId) return null;
+    return {
+      rewardId,
+      rewardType: String(src.rewardType || fallbackSrc.rewardType || 'cosmetic_badge'),
+      rewardName: String(src.rewardName || fallbackSrc.rewardName || '赛季荣誉外观'),
+      targetGames: Math.max(1, Math.floor(Number(src.targetGames || fallbackSrc.targetGames) || 1)),
+      source: 'live_ranked',
+      rewardImpact: 'cosmetic_only',
+      powerImpact: 'none',
+      unlockedAt: Math.max(0, Math.floor(Number(src.unlockedAt) || 0))
+    };
+  },
+  getSeasonHonorShowcase(options = {}) {
+    const opts = options && typeof options === 'object' ? options : {};
+    const economy = opts.economyState ? this.normalizeEconomyState(opts.economyState) : this.loadEconomyState();
+    const rankSource = opts.rankData && typeof opts.rankData === 'object' ? opts.rankData : this.currentRankData || this.loadLocalRank();
+    const rankWins = Math.max(0, Math.floor(Number(rankSource && rankSource.wins) || 0));
+    const rankLosses = Math.max(0, Math.floor(Number(rankSource && rankSource.losses) || 0));
+    const economyWins = Math.max(0, Math.floor(Number(economy.wins) || 0));
+    const economyLosses = Math.max(0, Math.floor(Number(economy.losses) || 0));
+    const rankPlayed = rankWins + rankLosses;
+    const economyPlayed = Math.max(economyWins + economyLosses, Math.max(0, Math.floor(Number(economy.totalMatches) || 0)));
+    const gamesPlayed = rankPlayed > 0 ? rankPlayed : economyPlayed;
+    const wins = rankPlayed > 0 ? rankWins : economyWins;
+    const losses = rankPlayed > 0 ? rankLosses : economyLosses;
+    const seasonMeta = this.getCurrentSeasonMeta();
+    const currentSeasonId = String(seasonMeta && seasonMeta.id || 's1-genesis');
+    const track = this.getSeasonHonorRewardTrack();
+    const collection = this.normalizeSeasonHonorCollection(economy.seasonHonorCollection);
+    const collectionSeasonId = String(collection.seasonId || currentSeasonId);
+    const collectionSeasonMatched = collectionSeasonId === currentSeasonId;
+    const effectiveCollection = collectionSeasonMatched ? collection : {
+      ...collection,
+      seasonId: currentSeasonId,
+      unlockedRewards: {},
+      totalUnlocked: 0,
+      lastUnlockedRewardId: null
+    };
+    const collectionRewards = Object.keys(effectiveCollection.unlockedRewards || {}).map((rewardId) => {
+      const trackEntry = track.find(entry => entry.rewardId === rewardId) || null;
+      return this.normalizeSeasonHonorRewardEntry(effectiveCollection.unlockedRewards[rewardId], trackEntry);
+    }).filter(Boolean).sort((a, b) => a.targetGames - b.targetGames || a.rewardId.localeCompare(b.rewardId));
+    const lastRewardId = String(effectiveCollection.lastUnlockedRewardId || '').trim();
+    const latestReward = (lastRewardId ? collectionRewards.find(entry => entry.rewardId === lastRewardId) : null) || collectionRewards[collectionRewards.length - 1] || null;
+    const latestTrackReward = latestReward ? track.find(entry => entry.rewardId === latestReward.rewardId) || null : null;
+    const nextTrackReward = track.find(entry => entry.targetGames > gamesPlayed) || null;
+    const completedTrackReward = !nextTrackReward && track.length > 0 ? track[track.length - 1] : null;
+    const nextReward = nextTrackReward ? {
+      ...nextTrackReward,
+      remainingGames: Math.max(0, nextTrackReward.targetGames - gamesPlayed),
+      progressText: `本季 ${gamesPlayed}/${nextTrackReward.targetGames} 场`,
+      label: `下一档 ${nextTrackReward.targetGames} 场：${nextTrackReward.rewardName}`
+    } : completedTrackReward ? {
+      ...completedTrackReward,
+      remainingGames: 0,
+      progressText: `本季 ${gamesPlayed}/${completedTrackReward.targetGames} 场`,
+      label: `已达成最高档：${completedTrackReward.rewardName}`
+    } : null;
+    const currentTarget = latestTrackReward || track.slice().reverse().find(entry => gamesPlayed >= entry.targetGames) || null;
+    const totalUnlocked = collectionRewards.length;
+    const totalRewards = track.length;
+    const visibilityLine = '仅本人洞府只读可见，不进入公开回放或审计回放。';
+    const boundary = '赛季荣誉陈列只展示正式论道外观收藏，不授予卡牌、属性、资源、起手、匹配或战斗效果。';
+    return {
+      reportVersion: 'pvp-live-season-honor-showcase-v1',
+      seasonId: currentSeasonId,
+      seasonName: seasonMeta.name || '开天赛季',
+      source: 'live_ranked',
+      sourceVisibility: 'self_only_ranked_economy',
+      rewardImpact: 'cosmetic_only',
+      powerImpact: 'none',
+      collectionSeasonMatched,
+      gamesPlayed,
+      wins,
+      losses,
+      totalUnlocked,
+      totalRewards,
+      latestReward: latestReward ? {
+        ...latestReward,
+        collectionState: 'owned',
+        label: `${latestReward.targetGames} 场 · ${latestReward.rewardName}`
+      } : null,
+      currentTarget: currentTarget ? {
+        ...currentTarget,
+        reached: gamesPlayed >= currentTarget.targetGames
+      } : null,
+      nextReward,
+      unlockedRewards: collectionRewards.map(entry => ({
+        ...entry,
+        collectionState: 'owned',
+        label: `${entry.targetGames} 场 · ${entry.rewardName}`
+      })),
+      summaryLine: totalUnlocked > 0 ? `本季已入库 ${totalUnlocked}/${totalRewards} 项赛季荣誉` : '本季荣誉陈列尚未点亮，完成正式论道后会自动入库。',
+      progressLine: nextReward && nextReward.remainingGames > 0 ? `本季正式论道 ${gamesPlayed} 场，距 ${nextReward.targetGames} 场荣誉还差 ${nextReward.remainingGames} 场。` : `本季正式论道 ${gamesPlayed} 场，当前荣誉目标已达成。`,
+      recordLine: `胜 ${wins} / 负 ${losses}`,
+      visibilityLine,
+      boundary,
+      ctaLabel: '继续正式论道',
+      ctaAction: 'screen',
+      ctaScreenId: 'pvp-screen'
     };
   },
   loadEconomyState() {

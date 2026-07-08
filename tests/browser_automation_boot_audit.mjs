@@ -28,13 +28,28 @@ async function safeScreenshot(page, outPath) {
 }
 
 async function runScenario(browser, scenario) {
-  const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+  const page = await browser.newPage({ viewport: scenario.viewport || { width: 1440, height: 900 } });
   page.on('console', (msg) => {
     if (msg.type() === 'error') recordConsoleError(msg.text(), scenario.id);
   });
   page.on('pageerror', (err) => {
     recordConsoleError(String(err), scenario.id);
   });
+  if (scenario.mockReplayShare) {
+    await page.addInitScript(() => {
+      localStorage.setItem('theDefierServerConfig', JSON.stringify({
+        baseUrl: window.location.origin,
+        pvpPathPrefix: '/api/pvp'
+      }));
+    });
+    await page.route('**/api/pvp/live/replay-shares/**', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(scenario.mockReplayShare)
+      });
+    });
+  }
 
   await page.goto(`${baseUrl}${scenario.query}`, { waitUntil: 'domcontentloaded' });
   await page.waitForTimeout(1200);
@@ -56,7 +71,45 @@ async function runScenario(browser, scenario) {
     selectedCardCount: document.querySelectorAll('#run-path-selection .run-path-card.selected').length,
     selectedPathName: document.querySelector('#run-path-selection .run-path-card.selected .run-destiny-name')?.textContent?.trim() || '',
     pvpTitle: document.querySelector('#pvp-ranking-brief .pvp-risk-title')?.textContent?.replace(/\s+/g, ' ').trim() || '',
-    pvpHint: document.getElementById('pvp-challenge-intent')?.textContent?.replace(/\s+/g, ' ').trim() || ''
+    pvpHint: document.getElementById('pvp-challenge-intent')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+    pvpLiveTabActive: !!document.querySelector('[data-pvp-tab="live"]')?.classList.contains('active'),
+    pvpRankingTabActive: !!document.querySelector('[data-pvp-tab="ranking"]')?.classList.contains('active'),
+    pvpLivePaneActive: !!document.getElementById('tab-live')?.classList.contains('active'),
+    pvpRankingPaneActive: !!document.getElementById('tab-ranking')?.classList.contains('active'),
+    authModalActive: !!document.getElementById('auth-modal')?.classList.contains('active'),
+    saveSlotsModalActive: !!document.getElementById('save-slots-modal')?.classList.contains('active'),
+    publicReplayViewerVisible: (() => {
+      const viewer = document.querySelector('[data-live-replay-share-viewer]');
+      if (!viewer) return false;
+      const rect = viewer.getBoundingClientRect();
+      return rect.width > 0 && rect.height > 0;
+    })(),
+    publicReplayViewerText: document.querySelector('[data-live-replay-share-viewer]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+    publicReplayViewerStatus: document.querySelector('[data-live-replay-share-viewer]')?.getAttribute('data-live-replay-share-viewer-status') || '',
+    publicReplayViewerMetrics: (() => {
+      const viewer = document.querySelector('[data-live-replay-share-viewer]');
+      const highlightList = document.querySelector('[data-live-replay-share-highlight-list]');
+      const viewerRect = viewer?.getBoundingClientRect();
+      const highlightRect = highlightList?.getBoundingClientRect();
+      const overflows = (rect, element) => !!(rect && element && (
+        rect.left < -1
+        || rect.right > window.innerWidth + 1
+        || element.scrollWidth > Math.ceil(rect.width) + 1
+      ));
+      return {
+        viewportWidth: window.innerWidth,
+        documentOverflowsX: document.documentElement.scrollWidth > window.innerWidth + 1,
+        viewerOverflowsX: overflows(viewerRect, viewer),
+        highlightVisible: !!(highlightRect && highlightRect.width > 0 && highlightRect.height > 0),
+        highlightOverflowsX: overflows(highlightRect, highlightList)
+      };
+    })(),
+    pvpLiveJoinVisible: (() => {
+      const button = document.querySelector('[data-live-action="join-queue"]');
+      if (!button) return false;
+      const rect = button.getBoundingClientRect();
+      return rect.width > 0 && rect.height > 0;
+    })()
   }));
 
   const pass = scenario.assert({ payload, probe });
@@ -107,16 +160,92 @@ const scenarios = [
   {
     id: 'guest-pvp',
     query: '?autotest=guest-pvp',
-    name: 'automation boot can land on pvp ranking with focus brief visible',
+    name: 'automation boot lands on live ranked pvp by default',
     assert: ({ payload, probe }) => (
       probe.screen === 'pvp-screen'
       && probe.guestMode
       && payload?.mode === 'pvp-screen'
-      && payload?.pvp?.activeTab === 'ranking'
-      && !!payload?.pvp?.rankingFocus?.rank?.user?.username
-      && !!payload?.pvp?.rankingFocus?.duelBrief?.targetName
-      && /焦点对手/.test(probe.pvpTitle)
-      && /已锁定|可锁定|约战/.test(probe.pvpHint)
+      && payload?.pvp?.activeTab === 'live'
+      && probe.pvpLiveTabActive
+      && probe.pvpLivePaneActive
+      && !probe.pvpRankingTabActive
+      && !probe.pvpRankingPaneActive
+      && probe.pvpLiveJoinVisible
+    )
+  },
+  {
+    id: 'public-replay-share-viewer',
+    query: '?autotest=guest-map&pvpReplayShare=pvplrs-browser_public_viewer_token_1234567890',
+    viewport: { width: 390, height: 844 },
+    name: 'public replay share mobile viewer keeps key moments readable before auth or automation boot',
+    mockReplayShare: {
+      success: true,
+      share: {
+        reportVersion: 'pvp-live-replay-share-v1',
+        shareToken: 'pvplrs-browser_public_viewer_token_1234567890',
+        apiPath: '/api/pvp/live/replay-shares/pvplrs-browser_public_viewer_token_1234567890',
+        sharePath: '/?pvpReplayShare=pvplrs-browser_public_viewer_token_1234567890',
+        shareUrl: 'https://080305.xyz/?pvpReplayShare=pvplrs-browser_public_viewer_token_1234567890',
+        visibilityLayer: 'replay_public',
+        sourceVisibility: 'replay_public',
+        matchRef: 'b0c0ffee1234abcd',
+        rankedImpact: 'none',
+        rewardImpact: 'none',
+        boundary: '公开战报分享只暴露 replay_public 脱敏回放。'
+      },
+      replay: {
+        reportVersion: 'pvp-live-replay-v1',
+        visibilityLayer: 'replay_public',
+        matchId: 'pvpm-browser-raw-should-not-render',
+        publicSummary: {
+          status: 'finished',
+          winnerSeat: 'A',
+          loserSeat: 'B',
+          finishReason: 'lethal'
+        },
+        eventCount: 4,
+        events: [
+          { sequence: 1, eventType: 'battle_started', actingSeat: 'A', publicData: { firstSeat: 'A' } },
+          { sequence: 2, eventType: 'opening_protection_triggered', actingSeat: 'A', publicData: { protectedSeat: 'B', minimumHp: 1, preventedDamage: 8 } },
+          { sequence: 3, eventType: 'damage_applied', actingSeat: 'B', publicData: { targetSeat: 'A', hpDamage: 8, targetHp: 12 } },
+          { sequence: 4, eventType: 'match_finished', actingSeat: 'A', publicData: { reason: 'lethal', winnerSeat: 'A', loserSeat: 'B' } }
+        ],
+        hiddenScan: { forbiddenTokenCount: 0, forbiddenKeyCount: 0, forbiddenStringCount: 0 },
+        postMatchReview: { summary: 'SHOULD_NOT_RENDER_POST_MATCH_REVIEW' },
+        settlementReport: { summaryLine: 'SHOULD_NOT_RENDER_SETTLEMENT' },
+        seasonHonorReport: { summaryLine: 'SHOULD_NOT_RENDER_SEASON_HONOR' }
+      }
+    },
+    assert: ({ payload, probe }) => (
+      probe.screen === 'pvp-screen'
+      && !probe.guestMode
+      && !probe.authModalActive
+      && !probe.saveSlotsModalActive
+      && probe.pvpLiveTabActive
+      && probe.pvpLivePaneActive
+      && probe.publicReplayViewerVisible
+      && probe.publicReplayViewerStatus === 'ready'
+      && /b0c0ffee1234abcd/.test(probe.publicReplayViewerText)
+      && /replay_public/.test(probe.publicReplayViewerText)
+      && /伤害终结/.test(probe.publicReplayViewerText)
+      && /关键节点/.test(probe.publicReplayViewerText)
+      && /开局/.test(probe.publicReplayViewerText)
+      && /反打窗口/.test(probe.publicReplayViewerText)
+      && /终局/.test(probe.publicReplayViewerText)
+      && !/battle_started|opening_protection_triggered|match_finished/.test(probe.publicReplayViewerText)
+      && probe.publicReplayViewerMetrics?.viewportWidth === 390
+      && probe.publicReplayViewerMetrics?.highlightVisible
+      && !probe.publicReplayViewerMetrics?.viewerOverflowsX
+      && !probe.publicReplayViewerMetrics?.highlightOverflowsX
+      && !probe.publicReplayViewerMetrics?.documentOverflowsX
+      && !/pvpm-browser-raw-should-not-render|SHOULD_NOT_RENDER|postMatchReview|settlementReport|seasonHonorReport/.test(probe.publicReplayViewerText)
+      && payload?.mode === 'pvp-screen'
+      && payload?.pvp?.activeTab === 'live'
+      && payload?.pvp?.live === null
+      && payload?.pvp?.replayShareViewer?.status === 'ready'
+      && payload?.pvp?.replayShareViewer?.matchRef === 'b0c0ffee1234abcd'
+      && payload?.pvp?.replayShareViewer?.visibilityLayer === 'replay_public'
+      && payload?.pvp?.replayShareViewer?.publicSummary?.finishReason === 'lethal'
     )
   }
 ];

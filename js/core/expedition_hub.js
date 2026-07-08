@@ -1,6 +1,7 @@
 import { EXPEDITION_BRANCH_REGIONS, EXPEDITION_FACTION_PROFILES, EXPEDITION_NEMESIS_PROFILES, EXPEDITION_BOUNTY_TEMPLATES, EXPEDITION_CHAPTER_ENDINGS } from "../data/expedition_systems.js";
 import { GameMap } from "./map.js";
 import { Utils } from "./utils.js";
+import { registerHubController } from "../runtime/hub-registry.js";
 const ExpeditionHubModule = (() => {
 const expeditionHubMethods = Object.create(null);
   const ACTIVE_EXPEDITION_STATE_KEY = 'theDefierActiveExpeditionStateV1';
@@ -6051,6 +6052,9 @@ function attachExpeditionHubController(game) {
     game.getSelectedObservatoryExpeditionGuide = (...args) => game.getFallbackObservatoryExpeditionGuide(...args);
   }
   return game.expeditionHub;
+}
+if (typeof registerHubController === 'function') {
+  registerHubController('expedition', attachExpeditionHubController);
 }
 const expeditionHubGlobal = typeof window !== 'undefined' ? window : typeof global !== 'undefined' ? global : typeof globalThis !== 'undefined' ? globalThis : null;
 if (expeditionHubGlobal) {
