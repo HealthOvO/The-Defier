@@ -1,0 +1,21 @@
+.gitignore
+  s_bae69f1b7fab46::t_eec3aa47529e08 3
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.5",
+  "base_commit_sha": "1091d190ab24ff60e3fce15eb6addff1e411eac2",
+  "prompts": {},
+  "sessions": {
+    "s_bae69f1b7fab46": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ed4f6-e7ac-73e0-a29e-119f3eddb407",
+        "model": "unknown"
+      },
+      "human_author": "AI Agent <bot@example.com>"
+    }
+  },
+  "attestation_metadata": {},
+  "remote_transcripts": {}
+}
