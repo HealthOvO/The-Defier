@@ -388,6 +388,67 @@ async function safeElementScreenshot(page, selector, outputPath) {
         { id: 'avoid_opponent', auditActionId: 'avoid_opponent', label: '避开此对手' },
       ],
     }) : null;
+    window.__makeLivePvpAuditWatchLossReview = () => {
+      const review = makePostMatchReview('finished');
+      if (!review) return null;
+      return {
+        ...review,
+        summary: '公开窗口偏短，先复盘关键回合，再决定是否进入问道练习。',
+        experienceReport: {
+          ...review.experienceReport,
+          nonGameRisk: 'watch',
+          nonGameRiskReasons: ['short_public_decision_window'],
+          agencyLabel: '行动窗口偏短',
+          decisionWindowCount: 1,
+          seatWindowSummary: {
+            firstSeat: 'A',
+            secondSeat: 'B',
+            secondSeatWindowObserved: false,
+            terminalBeforeSecondSeatWindow: true,
+          },
+          effectiveActionReport: null,
+          safeguardSummary: {
+            ...review.experienceReport.safeguardSummary,
+            effectiveAction: '',
+          },
+          summary: '公开窗口偏短，下一局先练低费响应。',
+          recommendedAction: 'practice',
+          fairnessChecks: [
+            { id: 'setup_ready_required', label: '双方确认开战', passed: true, detail: '公开事件显示双方准备后才开战。', linkedEvidence: [
+              { eventType: 'player_ready', sequence: 3, actingSeat: 'A', publicData: { seatId: 'A' } },
+              { eventType: 'player_ready', sequence: 4, actingSeat: 'B', publicData: { seatId: 'B' } },
+              { eventType: 'battle_started', sequence: 5, actingSeat: 'B', publicData: { firstSeat: 'A' } },
+            ] },
+            { id: 'decision_windows', label: '公开决策窗口', passed: false, detail: '公开窗口偏短，下一局优先看是否存在过早终结。', linkedEvidence: [
+              { eventType: 'battle_started', sequence: 5, actingSeat: 'B', publicData: { firstSeat: 'A' } },
+              { eventType: 'match_finished', sequence: 10, actingSeat: 'A', publicData: { winnerSeat: 'B', loserSeat: 'A', finishReason: 'surrender' } },
+            ] },
+            { id: 'opening_protection', label: '开局护体', passed: true, detail: '未行动方不会被开局直接终结。', linkedEvidence: [
+              { eventType: 'battle_started', sequence: 5, actingSeat: 'B', publicData: { firstSeat: 'A' } },
+            ] },
+          ],
+        },
+        fairnessReceipt: {
+          ...review.fairnessReceipt,
+          receiptState: 'watch',
+          riskState: 'watch',
+          agencyLabel: '行动窗口偏短',
+          windowVerdict: '行动窗口：公开窗口偏短，先复盘关键回合再练习。',
+          effectiveActionVerdict: '有效行动：公开事件未证明后手获得过有效行动窗口。',
+          nextStepLine: '下一步：先复盘关键回合，再用问道练习复刻公开窗口。',
+          evidenceSummary: [
+            { id: 'decision_windows', label: '公开决策窗口', passed: false, evidenceSequences: [5, 10] },
+            { id: 'opening_protection', label: '开局护体', passed: true, evidenceSequences: [5] },
+          ],
+        },
+        loadoutRecommendation: null,
+        nextActions: [
+          { id: 'review_key_turns', auditActionId: 'key_turn_replay', label: '关键回合复盘', detail: '先定位公开关键回合。' },
+          { id: 'practice', auditActionId: 'practice_topic', label: '问道练习', detail: '复刻公开窗口，不写正式积分。' },
+          { id: 'queue_again', auditActionId: 'queue_again', label: '继续真人排位', detail: '带着本局结论重新入队。' },
+        ],
+      };
+    };
     const makeTurnTimer = (status, currentSeat, viewerSeat = 'A') => {
       if (status !== 'setup' && status !== 'active') return null;
       const lowTimerMode = status === 'active' && String(window.__livePvpAuditTurnTimerMode || '') === 'low';
@@ -5474,6 +5535,55 @@ async function safeElementScreenshot(page, selector, outputPath) {
     JSON.stringify(recommendationPracticePresetProbe),
   );
 
+  const watchLossNextStepSetupProbe = await page.evaluate(() => {
+    const scene = window.PVPScene;
+    const session = scene?.getLiveSession?.();
+    const originalGetState = session?.getState?.bind(session);
+    const state = originalGetState?.();
+    const review = window.__makeLivePvpAuditWatchLossReview?.();
+    if (!scene || !state || !state.stateView || !review) {
+      return { ok: false, reason: 'missing_watch_loss_fixture_or_state' };
+    }
+    if (!session.__livePvpAuditOriginalGetStateForWatchLoss) {
+      session.__livePvpAuditOriginalGetStateForWatchLoss = originalGetState;
+    }
+    const watchState = {
+      ...state,
+      phase: 'finished',
+      queueTicket: '',
+      lastError: null,
+      stateView: {
+        ...state.stateView,
+        status: 'finished',
+        postMatchReview: review,
+        recentEvents: Array.isArray(review.evidence) ? review.evidence.slice(-12) : [],
+      },
+      lastEvents: Array.isArray(review.evidence) ? review.evidence.slice(-8) : [],
+    };
+    session.getState = () => JSON.parse(JSON.stringify(watchState));
+    scene.liveReviewFocus = '';
+    scene.liveInlineHint = '';
+    scene.renderLivePanel();
+    const guide = document.querySelector('[data-live-post-review-next-step]');
+    const primary = guide?.querySelector('[data-live-post-review-next-step-rank="primary"]');
+    return {
+      ok: true,
+      primary: primary?.getAttribute('data-live-post-review-next-step-action') || '',
+      secondary: guide?.querySelector('[data-live-post-review-next-step-rank="secondary"]')?.getAttribute('data-live-post-review-next-step-action') || '',
+      text: guide?.textContent?.replace(/\s+/g, ' ').trim() || '',
+      phase: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-phase') || '',
+    };
+  });
+  add(
+    'live UI browser audit stages watch-loss next-step fixture before focused recovery checks',
+    watchLossNextStepSetupProbe.ok === true
+      && watchLossNextStepSetupProbe.phase === 'finished'
+      && watchLossNextStepSetupProbe.primary === 'review_key_turns'
+      && watchLossNextStepSetupProbe.secondary === 'practice'
+      && /先复盘关键回合|问道练习/.test(watchLossNextStepSetupProbe.text),
+    JSON.stringify(watchLossNextStepSetupProbe),
+  );
+
   const visiblePracticePlanClicked = await page.evaluate(() => {
     const step = document.querySelector('[data-live-practice-plan-key-turn]');
     if (!step) return false;
@@ -5653,6 +5763,14 @@ async function safeElementScreenshot(page, selector, outputPath) {
       && !/findOpponent|reportMatchResult|GhostEnemy|startPVPBattle|didWin|matchTicket/.test(JSON.stringify(postReviewPracticeProbe.calls)),
     JSON.stringify(postReviewPracticeProbe),
   );
+
+  await page.evaluate(() => {
+    const session = window.PVPScene?.getLiveSession?.();
+    if (session?.__livePvpAuditOriginalGetStateForWatchLoss) {
+      session.getState = session.__livePvpAuditOriginalGetStateForWatchLoss;
+      delete session.__livePvpAuditOriginalGetStateForWatchLoss;
+    }
+  });
 
   const unsafePracticePlanProbe = await page.evaluate(() => {
     const safeReplay = {
