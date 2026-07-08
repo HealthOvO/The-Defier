@@ -1,0 +1,31 @@
+server/db/database.js
+  s_bae69f1b7fab46::t_5af795e1209864 396-417
+server/pvp-live/live-ops-events.js
+  s_bae69f1b7fab46::t_7ede3ea8157112 1-78
+server/pvp-live/live-persistence.js
+  s_bae69f1b7fab46::t_4fbb6c92b1219a 2,1090-1092
+server/pvp-live/live-settlement.js
+  s_bae69f1b7fab46::t_78a920308c3662 4,360,463,580-583
+server/pvp-live/live-store.js
+  s_bae69f1b7fab46::t_a7585c862e2c50 2230-2306,3782-3792,3824-3836,3864-3874
+server/services/platform/schema-status.js
+  s_bae69f1b7fab46::t_0d4f3834979cdb 18
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.5",
+  "base_commit_sha": "95f257cf83d15150c748567d1ac0db0d35aabdf0",
+  "prompts": {},
+  "sessions": {
+    "s_bae69f1b7fab46": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ed4f6-e7ac-73e0-a29e-119f3eddb407",
+        "model": "unknown"
+      },
+      "human_author": "AI Agent <bot@example.com>"
+    }
+  },
+  "attestation_metadata": {},
+  "remote_transcripts": {}
+}
