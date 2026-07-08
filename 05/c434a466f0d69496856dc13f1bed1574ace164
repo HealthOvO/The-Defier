@@ -1,0 +1,37 @@
+docs/production_deploy.md
+  s_bae69f1b7fab46::t_c0c87267b91a13 96
+js/scenes/pvp-scene.js
+  s_bae69f1b7fab46::t_711c9f30f46f18 518-532,1325-1371,5813,5822,5824,5826,5831,5835,5840,5842-5843,6685-6686,6688,6690,6724-6725,6727,6729,6742-6743,6745,6747,6757-6758,6760,6762,6777,6779,6781,6783
+tests/browser_auth_ui_cloud_smoke.mjs
+  s_bae69f1b7fab46::t_4bdbda7038e7ed 20-21,30-53,61,323-340,400,446,488,523,539,692,711,743,828,834,869,980,982-983,1061,1063,1142,1159,1284,1304-1308
+tests/browser_backend_client_smoke.mjs
+  s_bae69f1b7fab46::t_2c354fa881d29d 16,23-46,54,117,149,661,925
+tests/browser_pvp_live_real_backend_smoke.mjs
+  s_bae69f1b7fab46::t_ec659e8ab05911 25-27,40-63,91,241-263,347-365,1452-1459,1485,1599,1623,1679-1686,1714,3254,3370,5133,5441-5442,5445,5451-5453,5510,5569-5570
+tests/run_browser_release_checks.sh
+  s_bae69f1b7fab46::t_afaa6d0531f3de 30-32
+tests/sanity_pvp_live_ui_contract_checks.cjs
+  s_bae69f1b7fab46::t_676149c88349dd 546-548
+tests/sanity_pvp_live_ui_runtime_checks.mjs
+  s_bae69f1b7fab46::t_2b43b7bd9d856c 915-952
+tests/sanity_release_gate_coverage_checks.cjs
+  s_bae69f1b7fab46::t_ea35984427d664 15,468,482-499,3168-3170
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.5",
+  "base_commit_sha": "05c434a466f0d69496856dc13f1bed1574ace164",
+  "prompts": {},
+  "sessions": {
+    "s_bae69f1b7fab46": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ed4f6-e7ac-73e0-a29e-119f3eddb407",
+        "model": "unknown"
+      },
+      "human_author": "AI Agent <bot@example.com>"
+    }
+  },
+  "attestation_metadata": {},
+  "remote_transcripts": {}
+}
