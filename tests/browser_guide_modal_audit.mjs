@@ -138,7 +138,7 @@ async function safeScreenshot(page, outPath) {
         activeTab.textContent.trim() === '更新' &&
         text.includes('V10 真 PVP') &&
         text.includes('当前版本重点') &&
-        !text.includes('V9.2') &&
+        !/v9\.2/i.test(text) &&
         missingAnchors.length === 0,
       activeTab: activeTab?.textContent?.trim() || '',
       textSample: text.slice(0, 240),

@@ -1205,6 +1205,19 @@ export function createPvpLiveSession({
     }
     clearStoredWaitingQueueTicket();
     clearStoredTerminalMatchId();
+    if (result.status === 'matched') {
+      const stateView = result.stateView || null;
+      return publish({
+        phase: normalizePhaseFromView(stateView, 'matched'),
+        queueTicket: '',
+        matchId: result.matchId || '',
+        seatId: result.seatId || '',
+        stateView,
+        waitingReport: null,
+        rematchReport: null,
+        lastError: null
+      });
+    }
     const matchmakingGuard = result && result.matchmakingGuard && typeof result.matchmakingGuard === 'object'
       ? result.matchmakingGuard
       : null;

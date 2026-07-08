@@ -1,5 +1,24 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-07-08: V10-S94 live PVP review feedback hardening
+  - 本轮完成
+    - `saveMatch()` 对同版本 active 连接快照写入追加 `connection_heartbeat` WS state signal，避免多进程实例因 heartbeat-only 持久化没有 durable signal 而继续使用过期连接时间线。
+    - `cancelQueue()` 对 pending matched result、queue handoff 和 active match 统一返回 matched payload；前端 `pvp-live-session` 在取消队列收到 matched 时直接进入权威对局，避免“匹配成功瞬间点取消”误报 404 或卡在等待态。
+    - filtered browser release gate 不再跳过结构化 summary：`run_browser_release_checks.sh` 会把实际选择的 audit modules 传给 `summarize_browser_release_reports.cjs`，按 shard 校验 missing / duplicate / unexpected report。
+    - 首页与系统页清理 lowercase `v9.2` 当前版本文案，intro sync 与 guide audit 均改为大小写不敏感拦截 `v9.2`。
+    - live WebSocket 不再把 session token 放进 URL query；客户端改用 `Sec-WebSocket-Protocol` 的 `defier-auth.<base64url-token>`，服务端从 protocol header 解码校验，并阻止无 token 时创建未鉴权 socket。
+    - 同步修正旧 S6A WS 进度说明，避免后续继续按 `/ws?token=` 口径理解当前实现。
+  - 已验证
+    - 语法检查：`node --check server/pvp-live/live-persistence.js && node --check server/pvp-live/live-store.js && node --check server/pvp-live/live-ws.js && node --check js/services/backend-client.js && node --check js/services/pvp-live-session.js && node --check tests/sanity_pvp_live_ws_checks.cjs && node --check tests/summarize_browser_release_reports.cjs && bash -n tests/run_browser_release_checks.sh`
+    - 定向回归：`node tests/sanity_pvp_live_persistence_checks.cjs`、`node tests/sanity_pvp_live_route_checks.cjs`、`node tests/sanity_pvp_live_session_checks.mjs`、`node tests/sanity_pvp_live_client_checks.mjs`、`node tests/sanity_pvp_live_ws_checks.cjs`、`node tests/sanity_pvp_live_cross_process_ws_fanout_checks.cjs`
+    - 文案与 release marker：`node tests/sanity_intro_progress_sync_checks.cjs`、`node tests/sanity_release_gate_coverage_checks.cjs`
+    - filtered summary smoke：`EXPECTED_RELEASE_MODULES=pvp-live node tests/summarize_browser_release_reports.cjs <tmp> http://127.0.0.1:4173`
+    - 完整 Node 门禁：`PVP_LIVE_WS_FANOUT_MESSAGE_TIMEOUT_MS=60000 npm run test:node`
+    - 本地生产构建：`npm run build:pages`
+    - 本地 filtered browser release gate：`AUDIT_FILTER=guide bash tests/run_browser_release_checks.sh http://127.0.0.1:4173 output/release-browser-audits-local-20260708-review-fix-guide`
+  - 当前结论
+    - 本轮只修 review feedback 发现的本地代码、测试和发布门禁；未执行线上部署、远端同步、systemd/Nginx 操作或生产 smoke，不能把 `https://080305.xyz/` 视为已更新。
+
 - 2026-07-08: V10-S93 live PVP reconnect recovery and local release closure
   - 本轮完成
     - `PVPScene` 的真人 PVP 提交链路从“连接节奏异常时直接阻止”改为“先恢复权威连接，再决定是否阻止”：`viewer_reconnect_grace` / `viewer_refresh_required` 会触发 realtime resume、HTTP heartbeat fallback 和 `refreshMatch()`，再允许 `submitLiveIntent`、出牌、换牌确认、ready、结束回合与认输继续提交。
@@ -2975,7 +2994,7 @@ Original prompt: 进入全自动审查与修复模式，按顺序审查并修复
 
 - 2026-06-19: V10-S6A 真 PVP WebSocket 权威同步最小闭环
   - 本轮完成
-    - 新增 `server/pvp-live/live-ws.js`，后端在 `/api/pvp/live/ws?token=<sessionToken>` 挂载单进程 WebSocket 入口：连接时校验 JWT，返回 `connected + pvp-live-ws-v1`，`join_match` 返回 seat-scoped `state_sync` 并补发公开 `events_replay`，`heartbeat` 返回 `presence` 并广播最新 StateView，`intent` 返回 `intent_result` 后向双方推送权威状态。
+    - 新增 `server/pvp-live/live-ws.js`，后端在 `/api/pvp/live/ws` 挂载单进程 WebSocket 入口，并通过 `Sec-WebSocket-Protocol` 中的 `defier-auth.<base64url-token>` 校验 JWT：连接时返回 `connected + pvp-live-ws-v1`，`join_match` 返回 seat-scoped `state_sync` 并补发公开 `events_replay`，`heartbeat` 返回 `presence` 并广播最新 StateView，`intent` 返回 `intent_result` 后向双方推送权威状态。
     - WS 补发只走公开事件白名单，`makeEventReplay()` 不输出手牌、牌库顺序、实例 id、原始 payload 或 RNG；事件源优先读取 `pvp_live_match_events`，缺表记录时才回退 `match.state.events`。
     - `js/services/backend-client.js` / `js/services/pvp-service.js` 新增 live WebSocket URL 与 `connectRealtime()` 桥；`js/services/pvp-live-session.js` 新增 realtime 状态、连接、join、heartbeat、intent 和 disconnect helper；`js/scenes/pvp-scene.js` 在 live heartbeat 生命周期内启动 WS、按最新公开事件 revision 请求 missed-event 补发，并在停止 heartbeat 时关闭实时连接。
     - `tests/sanity_pvp_live_ws_checks.cjs` 覆盖双人真实后端 + WS：connected、seat-scoped `state_sync`、`events_replay` 脱敏、heartbeat presence、accepted intent_result 和对手 state_sync 广播；前端 client / service / session / UI contract 测试同步锁住桥接行为。

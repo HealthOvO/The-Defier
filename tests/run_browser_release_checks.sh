@@ -120,6 +120,7 @@ run_audit() {
 }
 
 SELECTED_AUDIT_COUNT=0
+SELECTED_AUDIT_MODULES=""
 
 run_selected_audit() {
   local name="$1"
@@ -127,6 +128,11 @@ run_selected_audit() {
 
   if should_run_audit "$name"; then
     SELECTED_AUDIT_COUNT=$((SELECTED_AUDIT_COUNT + 1))
+    if [ -z "$SELECTED_AUDIT_MODULES" ]; then
+      SELECTED_AUDIT_MODULES="$name"
+    else
+      SELECTED_AUDIT_MODULES="$SELECTED_AUDIT_MODULES,$name"
+    fi
     run_audit "$name" "$@"
   else
     echo "[release-checks] SKIP $name"
@@ -168,10 +174,6 @@ if [ -n "$AUDIT_FILTER" ] && [ "$SELECTED_AUDIT_COUNT" -eq 0 ]; then
   exit 2
 fi
 
-if [ -z "$AUDIT_FILTER" ]; then
-  run_audit summarize node tests/summarize_browser_release_reports.cjs "$OUTPUT_ROOT" "$BASE_URL"
-else
-  echo "[release-checks] Skipping aggregate summary for filtered run."
-fi
+EXPECTED_RELEASE_MODULES="${EXPECTED_RELEASE_MODULES:-$SELECTED_AUDIT_MODULES}" run_audit summarize node tests/summarize_browser_release_reports.cjs "$OUTPUT_ROOT" "$BASE_URL"
 
 echo "[release-checks] All browser release audits passed."

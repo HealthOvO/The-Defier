@@ -746,17 +746,42 @@ export const BackendClient = {
   },
   getLivePvpWebSocketUrl() {
     const config = this.getServerConfig();
+    if (!config || !config.baseUrl) return '';
+    const wsBaseUrl = String(config.baseUrl).replace(/^http:/, 'ws:').replace(/^https:/, 'wss:').replace(/\/+$/, '');
+    return `${wsBaseUrl}${this.getLivePvpPathPrefix()}/ws`;
+  },
+  encodeLivePvpWebSocketToken(token) {
+    const value = String(token || '');
+    if (!value) return '';
+    try {
+      if (typeof TextEncoder !== 'undefined' && typeof btoa === 'function') {
+        const bytes = new TextEncoder().encode(value);
+        let binary = '';
+        bytes.forEach(byte => {
+          binary += String.fromCharCode(byte);
+        });
+        return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+      }
+      if (typeof Buffer !== 'undefined') {
+        return Buffer.from(value, 'utf8').toString('base64url');
+      }
+    } catch (error) {
+      console.warn('[BackendClient] Failed to encode live PVP WS token', error);
+    }
+    return '';
+  },
+  getLivePvpWebSocketProtocols() {
     const session = this.loadServerSession();
     const token = session && session.token ? String(session.token) : '';
-    if (!config || !config.baseUrl || !token) return '';
-    const wsBaseUrl = String(config.baseUrl).replace(/^http:/, 'ws:').replace(/^https:/, 'wss:').replace(/\/+$/, '');
-    return `${wsBaseUrl}${this.getLivePvpPathPrefix()}/ws?token=${encodeURIComponent(token)}`;
+    const encodedToken = this.encodeLivePvpWebSocketToken(token);
+    return encodedToken ? ['defier-live-v1', `defier-auth.${encodedToken}`] : [];
   },
   connectLivePvpWebSocket(handlers = {}) {
     const url = this.getLivePvpWebSocketUrl();
+    const protocols = this.getLivePvpWebSocketProtocols();
     const SocketCtor = typeof WebSocket !== 'undefined' ? WebSocket : null;
-    if (!url || !SocketCtor) return null;
-    const socket = new SocketCtor(url);
+    if (!url || !SocketCtor || protocols.length === 0) return null;
+    const socket = new SocketCtor(url, protocols);
     if (typeof handlers.onOpen === 'function') {
       socket.addEventListener('open', handlers.onOpen);
     }

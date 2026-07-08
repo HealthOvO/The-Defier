@@ -470,7 +470,7 @@ export class SystemView {
             </div>
 
             <div style="text-align: center; margin-top: auto; font-size: 0.8rem; color: rgba(255,255,255,0.2); padding-top: 10px;">
-                v9.2 当前版本 | Breaking Fate since 2024
+                V10 真 PVP 当前版本 | Breaking Fate since 2024
             </div>
         </div>
         `;

@@ -42,7 +42,18 @@ const EXPECTED_RELEASE_MODULES = [
   'pvp-mobile-result',
   'challenge-mobile-flow',
 ];
-const EXPECTED_RELEASE_MODULE_SET = new Set(EXPECTED_RELEASE_MODULES);
+function parseExpectedReleaseModules(value) {
+  return String(value || '')
+    .split(',')
+    .map(item => item.trim())
+    .filter(Boolean);
+}
+
+const expectedReleaseModulesFromEnv = parseExpectedReleaseModules(process.env.EXPECTED_RELEASE_MODULES);
+const activeExpectedReleaseModules = expectedReleaseModulesFromEnv.length
+  ? expectedReleaseModulesFromEnv
+  : EXPECTED_RELEASE_MODULES;
+const EXPECTED_RELEASE_MODULE_SET = new Set(activeExpectedReleaseModules);
 
 function walk(dir) {
   if (!fs.existsSync(dir)) return [];
@@ -98,7 +109,7 @@ const reportFiles = walk(root)
   .sort();
 
 const reports = reportFiles.map(readReport);
-const screenshotCount = EXPECTED_RELEASE_MODULES
+const screenshotCount = activeExpectedReleaseModules
   .map(module => path.join(root, module))
   .filter(moduleDir => fs.existsSync(moduleDir) && fs.statSync(moduleDir).isDirectory())
   .flatMap(moduleDir => walk(moduleDir))
@@ -108,7 +119,7 @@ const moduleCounts = reports.reduce((counts, report) => {
   counts[report.module] = (counts[report.module] || 0) + 1;
   return counts;
 }, {});
-const missingModules = EXPECTED_RELEASE_MODULES.filter(module => !moduleCounts[module]);
+const missingModules = activeExpectedReleaseModules.filter(module => !moduleCounts[module]);
 const unknownModules = reports
   .map(report => report.module)
   .filter(module => !EXPECTED_RELEASE_MODULE_SET.has(module));
@@ -156,7 +167,7 @@ const summary = {
   generatedAt: new Date().toISOString(),
   baseUrl,
   outputRoot: root,
-  expectedReportCount: EXPECTED_RELEASE_MODULES.length,
+  expectedReportCount: activeExpectedReleaseModules.length,
   reportCount: reports.length,
   totalFindings: reports.reduce((sum, report) => sum + report.totalFindings, 0),
   failedFindings: reports.reduce((sum, report) => sum + report.failedFindings, 0),

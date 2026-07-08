@@ -1873,6 +1873,21 @@ async function readyBoth({ matchId, tokenA, tokenB, stateVersionA, prefix }) {
     Number(liveWsSignalSummary?.max_state_version || 0) >= stateVersionAfterIntent,
     'SQLite live WS signal table should include the latest persisted state version',
   );
+  const heartbeatSignalSummary = await dbGet(
+    `SELECT COUNT(*) AS signal_count, MAX(state_version) AS max_state_version
+     FROM pvp_live_state_signals
+     WHERE match_id = ? AND signal_type = 'state_sync' AND reason = 'connection_heartbeat'`,
+    [matchId],
+  );
+  assert.ok(
+    Number(heartbeatSignalSummary?.signal_count || 0) >= 1,
+    'heartbeat-only connection saves should append durable state_sync signals for other WS processes',
+  );
+  assert.equal(
+    Number(heartbeatSignalSummary?.max_state_version || 0),
+    stateVersionAfterIntent,
+    'heartbeat-only connection signals should preserve the current state version without bumping battle state',
+  );
   const signalPersistence = makeLivePvpPersistenceForTest();
   const latestSignalId = await signalPersistence.getLiveWsLatestSignalId();
   const loadedSignals = await signalPersistence.loadLiveWsSignalsSince(0);

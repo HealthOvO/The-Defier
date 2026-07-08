@@ -154,9 +154,14 @@ async function registerUser(baseUrl, prefix) {
   };
 }
 
-function openSocket(url) {
+function makeWsProtocols(token) {
+  const encodedToken = Buffer.from(String(token || ''), 'utf8').toString('base64url');
+  return encodedToken ? ['defier-live-v1', `defier-auth.${encodedToken}`] : ['defier-live-v1'];
+}
+
+function openSocket(url, token) {
   return new Promise((resolve, reject) => {
-    const ws = new WebSocket(url);
+    const ws = new WebSocket(url, makeWsProtocols(token));
     const timer = setTimeout(() => reject(new Error('ws open timeout')), 5000);
     ws.addEventListener('open', () => {
       clearTimeout(timer);
@@ -323,8 +328,8 @@ async function pollMatchedQueueStatus(baseUrl, queueTicket, token) {
     const statusA = await pollMatchedQueueStatus(baseUrlA, joinA.payload.queueTicket, userA.token);
     assert.equal(statusA.payload.matchId, matchId, 'shared DEFIER_DB_PATH should let two backend processes observe the same live match');
 
-    socketA = await openSocket(`${wsBaseUrlA}/api/pvp/live/ws?token=${encodeURIComponent(userA.token)}`);
-    socketB = await openSocket(`${wsBaseUrlB}/api/pvp/live/ws?token=${encodeURIComponent(userB.token)}`);
+    socketA = await openSocket(`${wsBaseUrlA}/api/pvp/live/ws`, userA.token);
+    socketB = await openSocket(`${wsBaseUrlB}/api/pvp/live/ws`, userB.token);
     await waitForMessage(socketA, message => message.type === 'connected', 'cross-process WS fanout connected A');
     await waitForMessage(socketB, message => message.type === 'connected', 'cross-process WS fanout connected B');
 
@@ -448,7 +453,7 @@ async function pollMatchedQueueStatus(baseUrl, queueTicket, token) {
       'cross-process duplicate replay should write one durable duplicate_action signal',
     );
 
-    socketBDuplicateOnA = await openSocket(`${wsBaseUrlA}/api/pvp/live/ws?token=${encodeURIComponent(userB.token)}`);
+    socketBDuplicateOnA = await openSocket(`${wsBaseUrlA}/api/pvp/live/ws`, userB.token);
     await waitForMessage(socketBDuplicateOnA, message => message.type === 'connected', 'cross-process duplicate second socket connected B-on-A');
     sendJson(socketBDuplicateOnA, { type: 'join_match', matchId, lastSeenRevision: lastSeenBeforeTerminal });
     await waitForMessage(

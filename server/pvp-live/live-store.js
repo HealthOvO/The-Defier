@@ -2096,19 +2096,62 @@ class LivePvpStore {
     async cancelQueue(userId, queueTicket) {
         const ticket = String(queueTicket || '').trim();
         if (!ticket) return null;
+        const pendingResult = this.pendingQueueResults.get(ticket);
+        if (pendingResult) {
+            if (pendingResult.userId !== userId) return null;
+            const cachedMatch = this.matches.get(pendingResult.matchId);
+            const seatId = cachedMatch && cachedMatch.seatsByUserId ? cachedMatch.seatsByUserId[userId] : '';
+            let matchedAccess = cachedMatch && seatId
+                ? { match: cachedMatch, seatId, stateView: this.projectMatchStateView(cachedMatch, seatId) }
+                : await this.rehydrateAuthoritativeMatchForUser(userId, pendingResult.matchId);
+            if (!matchedAccess || !matchedAccess.match || !matchedAccess.seatId) {
+                this.pendingQueueResults.delete(ticket);
+                return null;
+            }
+            await this.sweepMatchTimeout(matchedAccess.match);
+            if (this.isTerminalStatus(matchedAccess.match.state && matchedAccess.match.state.status)) {
+                await this.releaseIfTerminal(matchedAccess.match);
+                this.pendingQueueResults.delete(ticket);
+                return null;
+            }
+            this.queueTickets.delete(ticket);
+            this.waitingQueue = this.waitingQueue.filter(entry => entry.queueTicket !== ticket);
+            await this.deleteQueueEntry(ticket);
+            this.pendingQueueResults.delete(ticket);
+            this.consumedQueueTickets.add(ticket);
+            return {
+                status: 'matched',
+                matchId: matchedAccess.match.matchId,
+                seatId: matchedAccess.seatId,
+                stateView: this.projectMatchStateView(matchedAccess.match, matchedAccess.seatId)
+            };
+        }
         const localQueueEntry = this.queueTickets.get(ticket);
         const queueEntry = localQueueEntry
             || await this.hydrateWaitingQueueEntryByTicket(ticket);
-        if (!queueEntry || queueEntry.player.userId !== userId) return null;
 
         const handoff = await this.loadQueueHandoff(ticket, userId);
+        if (!queueEntry && !handoff) return null;
+        if (queueEntry && queueEntry.player.userId !== userId && !handoff) return null;
+
         const activeMatch = await this.getActiveMatchForUser(userId);
         const hasActiveMatch = activeMatch && activeMatch.match && !this.isTerminalStatus(activeMatch.match.state && activeMatch.match.state.status);
+        const handoffMatch = !hasActiveMatch && handoff && handoff.matchId
+            ? await this.rehydrateAuthoritativeMatchForUser(userId, handoff.matchId)
+            : null;
+        const matchedAccess = hasActiveMatch ? activeMatch : handoffMatch;
         if ((handoff && handoff.matchId) || hasActiveMatch) {
             this.queueTickets.delete(ticket);
             this.waitingQueue = this.waitingQueue.filter(entry => entry.queueTicket !== ticket);
             await this.deleteQueueEntry(ticket);
-            return null;
+            if (!matchedAccess || !matchedAccess.match || this.isTerminalStatus(matchedAccess.match.state && matchedAccess.match.state.status)) return null;
+            this.consumedQueueTickets.add(ticket);
+            return {
+                status: 'matched',
+                matchId: matchedAccess.match.matchId,
+                seatId: matchedAccess.seatId,
+                stateView: matchedAccess.stateView
+            };
         }
 
         this.queueTickets.delete(ticket);

@@ -941,6 +941,11 @@ function makeSqliteLivePvpPersistence() {
             const now = Math.max(0, Math.floor(Number(match.updatedAt) || Date.now()));
             const createdAt = Math.max(0, Math.floor(Number(match.createdAt) || now));
             const finishedAt = status === 'finished' || status === 'invalidated' ? now : 0;
+            const sameVersionActiveConnectionSave = status === 'active'
+                && persistedStateVersion !== null
+                && stateVersion === persistedStateVersion
+                && persistedState
+                && persistedState.stateJson === serializedState;
             const connectionAssignmentSql = forceConnectionSnapshot
                 ? 'excluded.connection_json'
                 : `CASE
@@ -1019,12 +1024,13 @@ function makeSqliteLivePvpPersistence() {
             const shouldAppendLiveWsSignal = persistedStateVersion === null
                 || stateVersion > persistedStateVersion
                 || status === 'finished'
-                || status === 'invalidated';
+                || status === 'invalidated'
+                || sameVersionActiveConnectionSave;
             const liveWsSignal = shouldAppendLiveWsSignal
                 ? await appendLiveWsSignalRow({
                     matchId: match.matchId,
                     stateVersion,
-                    reason: 'match_saved',
+                    reason: sameVersionActiveConnectionSave ? 'connection_heartbeat' : 'match_saved',
                     sourceInstanceId: liveWsSourceInstanceId
                 })
                 : null;

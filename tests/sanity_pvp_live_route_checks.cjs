@@ -1172,7 +1172,18 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
             token: tokenA,
             body: { queueTicket: joinA.payload.queueTicket }
         });
-        assert.equal(cancelMatchedTicket.status, 404, 'matched queue ticket should not be cancellable as a waiting ticket');
+        assert.equal(cancelMatchedTicket.status, 200, 'matched queue cancel race should return the matched game instead of a false missing-ticket error');
+        assert.equal(cancelMatchedTicket.payload.status, 'matched', 'matched queue cancel race should transition into the existing live match');
+        assert.equal(cancelMatchedTicket.payload.matchId, joinB.payload.matchId, 'matched queue cancel race should return the authoritative match id');
+        assert.equal(cancelMatchedTicket.payload.seatId, 'A', 'matched queue cancel race should return the owner seat');
+        assert.equal(cancelMatchedTicket.payload.stateView.status, 'setup', 'matched queue cancel race should expose setup state');
+        assertTurnTimer(cancelMatchedTicket.payload.stateView.turnTimer, 'setup', 'matched queue cancel race');
+        assertConnectionReport(cancelMatchedTicket.payload.stateView.connectionReport, 'matched queue cancel race');
+        assertConnectionTempoReport(cancelMatchedTicket.payload.stateView.connectionTempoReport, 'stable', 'matched queue cancel race');
+        assert.equal(cancelMatchedTicket.payload.stateView.connectionTempoReport.canSubmitIntent, true, 'matched queue cancel race tempo should allow setup intents');
+        assert.equal(cancelMatchedTicket.payload.stateView.connectionReport.viewer.status, 'online', 'matched queue cancel race should treat viewer as online');
+        assert.equal(cancelMatchedTicket.payload.stateView.self.loadoutHash, joinA.payload.loadoutHash, 'matched queue cancel race should expose own locked loadout hash');
+        assertRankedOpponentConcealed(cancelMatchedTicket.payload.stateView.opponent, 'matched queue cancel race opponent view');
         const matchedCancelGuard = await pvpLiveRoutes.__livePvpStore.loadMatchmakingGuard('live-user-a');
         assert.ok(
             !matchedCancelGuard || Math.max(0, Number(matchedCancelGuard.cancelCount) || 0) === 0,
@@ -1187,18 +1198,7 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
         const pollA = await request(baseUrl, `/api/pvp/live/queue/status/${joinA.payload.queueTicket}`, {
             token: tokenA
         });
-        assert.equal(pollA.status, 200, 'first player should poll queue status');
-        assert.equal(pollA.payload.status, 'matched', 'first player should receive matched status');
-        assert.equal(pollA.payload.matchId, joinB.payload.matchId, 'both seats should receive same match id');
-        assert.equal(pollA.payload.seatId, 'A', 'first player should receive A seat');
-        assert.equal(pollA.payload.stateView.status, 'setup', 'first player matched status should begin in setup');
-        assertTurnTimer(pollA.payload.stateView.turnTimer, 'setup', 'first player setup poll');
-        assertConnectionReport(pollA.payload.stateView.connectionReport, 'first player setup poll');
-        assertConnectionTempoReport(pollA.payload.stateView.connectionTempoReport, 'stable', 'first player setup poll');
-        assert.equal(pollA.payload.stateView.connectionTempoReport.canSubmitIntent, true, 'first player setup poll tempo should allow setup intents');
-        assert.equal(pollA.payload.stateView.connectionReport.viewer.status, 'online', 'first player setup poll should treat viewer as online');
-        assert.equal(pollA.payload.stateView.self.loadoutHash, joinA.payload.loadoutHash, 'first player matched status should expose own locked loadout hash');
-        assertRankedOpponentConcealed(pollA.payload.stateView.opponent, 'first player ranked status opponent view');
+        assert.equal(pollA.status, 404, 'matched queue cancel race should consume the queue ticket after returning the match');
 
         const heartbeatA = await heartbeat(baseUrl, tokenA, joinB.payload.matchId);
         assert.equal(heartbeatA.status, 200, 'heartbeat route should accept a participant heartbeat');

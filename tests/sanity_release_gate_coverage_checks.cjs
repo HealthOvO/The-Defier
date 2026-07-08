@@ -480,6 +480,17 @@ const browserAutomationBootAudit = read('tests/browser_automation_boot_audit.mjs
 });
 
 [
+  'SELECTED_AUDIT_MODULES',
+  'EXPECTED_RELEASE_MODULES',
+  'run_audit summarize node tests/summarize_browser_release_reports.cjs "$OUTPUT_ROOT" "$BASE_URL"',
+].forEach((needle) => {
+  assert.ok(
+    browserReleaseScript.includes(needle),
+    `filtered browser release gate should still run structural summary marker: ${needle}`,
+  );
+});
+
+[
   ['browser_backend_client_smoke.mjs', backendClientSmoke],
   ['browser_auth_ui_cloud_smoke.mjs', browserAuthUiCloudSmoke],
   ['browser_pvp_live_real_backend_smoke.mjs', browserPvpLiveRealSmoke],
@@ -511,10 +522,36 @@ const browserAutomationBootAudit = read('tests/browser_automation_boot_audit.mjs
   "'pvp-live'",
   "'pvp-live-real'",
   "'pvp-live-mobile-real'",
+  'process.env.EXPECTED_RELEASE_MODULES',
 ].forEach((needle) => {
   assert.ok(
     browserReleaseSummary.includes(needle),
     `browser release summary should expect live PVP audit module: ${needle}`,
+  );
+});
+
+[
+  'getTokenFromProtocolHeader',
+  'sec-websocket-protocol',
+  'defier-auth.',
+].forEach((needle) => {
+  assert.ok(
+    pvpLiveWsSource.includes(needle),
+    `live PVP WS server should authenticate without URL bearer token marker: ${needle}`,
+  );
+});
+assert.ok(
+  !backendClientSource.includes('/ws?token='),
+  'BackendClient live WS URL should not embed bearer tokens in the URL',
+);
+[
+  'getLivePvpWebSocketProtocols',
+  'defier-auth.',
+  'new SocketCtor(url, protocols)',
+].forEach((needle) => {
+  assert.ok(
+    backendClientSource.includes(needle),
+    `BackendClient live WS should use subprotocol auth marker: ${needle}`,
   );
 });
 
@@ -2103,7 +2140,8 @@ assert.ok(
   'normal lethal should expose post-match review version',
   'normal lethal loser should receive a loss review',
   'another user should not cancel an owner queue ticket',
-  'matched queue ticket should not be cancellable as a waiting ticket',
+  'matched queue cancel race should return the matched game instead of a false missing-ticket error',
+  'matched queue cancel race should transition into the existing live match',
   'matched queue ticket should be consumed after first successful matched poll',
   'finished match should clear unpolled matched queue ticket',
   'setup disconnect after grace should invalidate instead of awarding a win',
@@ -2464,6 +2502,7 @@ assert.ok(
   'AND state_version = ?',
   'AND reason = ?',
   'INSERT INTO pvp_live_state_signals',
+  'connection_heartbeat',
   'liveWsSignalAppended: !!liveWsSignal',
   'async appendLiveWsSignal(signal = {})',
   'async getLiveWsLatestSignalId()',
@@ -2861,8 +2900,12 @@ assert.ok(
   'BackendClient should expose heartbeatLivePvpMatch',
   'BackendClient should expose submitLivePvpAvoidOpponent',
   'BackendClient should expose getLivePvpWebSocketUrl',
+  'BackendClient should expose getLivePvpWebSocketProtocols',
   'BackendClient should expose connectLivePvpWebSocket',
-  'live WebSocket URL should reuse server base URL, live path, and encoded session token',
+  'live WebSocket URL should not put bearer tokens in the upgrade URL',
+  'live WebSocket protocols should carry an encoded auth token outside the URL',
+  'live WebSocket protocols should not advertise an unauthenticated socket',
+  'live WebSocket should not connect without an auth token',
   'live private invite creation should clone loadout before sending',
   'live targeted private invite should forward trimmed target username',
   'live invite inbox should use inbox endpoint',

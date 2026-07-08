@@ -98,10 +98,29 @@ function makeEventReplay(events, lastSeenRevision) {
         .filter(Boolean);
 }
 
+function decodeBase64Url(value) {
+    const input = String(value || '').trim();
+    if (!input) return '';
+    try {
+        const padded = input.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - input.length % 4) % 4);
+        return Buffer.from(padded, 'base64').toString('utf8');
+    } catch (error) {
+        return '';
+    }
+}
+
+function getTokenFromProtocolHeader(protocolHeader) {
+    const header = Array.isArray(protocolHeader) ? protocolHeader.join(',') : String(protocolHeader || '');
+    const protocols = header.split(',').map(protocol => protocol.trim()).filter(Boolean);
+    const authProtocol = protocols.find(protocol => protocol.startsWith('defier-auth.'));
+    if (!authProtocol) return '';
+    return decodeBase64Url(authProtocol.slice('defier-auth.'.length));
+}
+
 function getTokenFromRequest(request, path) {
     const url = new URL(request.url || '', 'http://127.0.0.1');
     if (url.pathname !== path) return null;
-    return String(url.searchParams.get('token') || '').trim();
+    return getTokenFromProtocolHeader(request.headers && request.headers['sec-websocket-protocol']);
 }
 
 function makeConnectedReport(livePvpStore) {

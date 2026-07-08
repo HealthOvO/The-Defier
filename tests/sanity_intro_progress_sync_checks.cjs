@@ -22,10 +22,12 @@ function assert(condition, message) {
 (function run() {
   const root = path.resolve(__dirname, '..');
   const introPath = path.join(root, 'game-intro.html');
+  const indexPath = path.join(root, 'index.html');
   const progressPath = path.join(root, 'progress.md');
   const systemViewPath = path.join(root, 'js/views/SystemView.js');
 
   const intro = fs.readFileSync(introPath, 'utf8');
+  const index = fs.readFileSync(indexPath, 'utf8');
   const progress = fs.readFileSync(progressPath, 'utf8');
   const systemView = fs.readFileSync(systemViewPath, 'utf8');
 
@@ -100,8 +102,9 @@ function assert(condition, message) {
   const progressVersionCount = (progress.match(/V10 真 PVP/g) || []).length;
   assert(introVersionCount >= 2, `expected intro to mention V10 真 PVP at least twice, got ${introVersionCount}`);
   assert(progressVersionCount >= 1, `expected progress to mention V10 真 PVP at least once, got ${progressVersionCount}`);
-  assert(!intro.includes('V9.2'), 'intro should not keep stale V9.2 current-version copy');
-  assert(!systemView.includes('V9.2'), 'SystemView guide should not keep stale V9.2 current-version copy');
+  assert(!/v9\.2/i.test(intro), 'intro should not keep stale v9.2 current-version copy');
+  assert(!/v9\.2/i.test(index), 'index should not keep stale v9.2 current-version copy');
+  assert(!/v9\.2/i.test(systemView), 'SystemView guide should not keep stale v9.2 current-version copy');
   assert(!systemView.includes('镜像演武'), 'SystemView current guide should use 镜像练习 instead of stale 镜像演武 copy');
 
   console.log(`Intro/progress/SystemView sync checks passed (${sharedAnchors.length} shared anchors).`);

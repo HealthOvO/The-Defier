@@ -56,6 +56,7 @@ assert.equal(typeof BackendClient.heartbeatLivePvpMatch, 'function', 'BackendCli
 assert.equal(typeof BackendClient.submitLivePvpIntent, 'function', 'BackendClient should expose submitLivePvpIntent');
 assert.equal(typeof BackendClient.submitLivePvpAvoidOpponent, 'function', 'BackendClient should expose submitLivePvpAvoidOpponent');
 assert.equal(typeof BackendClient.getLivePvpWebSocketUrl, 'function', 'BackendClient should expose getLivePvpWebSocketUrl');
+assert.equal(typeof BackendClient.getLivePvpWebSocketProtocols, 'function', 'BackendClient should expose getLivePvpWebSocketProtocols');
 assert.equal(typeof BackendClient.connectLivePvpWebSocket, 'function', 'BackendClient should expose connectLivePvpWebSocket');
 
 const liveLoadout = {
@@ -69,9 +70,35 @@ BackendClient.loadServerSession = () => ({
 });
 assert.equal(
   BackendClient.getLivePvpWebSocketUrl(),
-  'ws://127.0.0.1:9000/api/pvp/live/ws?token=token%20ws%2B%2F%3D',
-  'live WebSocket URL should reuse server base URL, live path, and encoded session token',
+  'ws://127.0.0.1:9000/api/pvp/live/ws',
+  'live WebSocket URL should not put bearer tokens in the upgrade URL',
 );
+assert.ok(
+  BackendClient.getLivePvpWebSocketProtocols().some(protocol => /^defier-auth\.[A-Za-z0-9_-]+$/.test(protocol)),
+  'live WebSocket protocols should carry an encoded auth token outside the URL',
+);
+BackendClient.loadServerSession = () => null;
+const originalWebSocket = globalThis.WebSocket;
+let constructedUnauthedSocket = false;
+globalThis.WebSocket = function FakeWebSocket() {
+  constructedUnauthedSocket = true;
+};
+assert.deepEqual(
+  BackendClient.getLivePvpWebSocketProtocols(),
+  [],
+  'live WebSocket protocols should not advertise an unauthenticated socket',
+);
+assert.equal(
+  BackendClient.connectLivePvpWebSocket(),
+  null,
+  'live WebSocket should not connect without an auth token',
+);
+assert.equal(constructedUnauthedSocket, false, 'live WebSocket should not construct an unauthenticated socket');
+globalThis.WebSocket = originalWebSocket;
+BackendClient.loadServerSession = () => ({
+  token: 'token ws+/=',
+  user: { objectId: 'live-user-a', username: '甲' }
+});
 const join = await BackendClient.joinLivePvpQueue({ displayName: '甲', loadout: liveLoadout });
 assert.equal(join.success, true, 'live queue join should forward success payload');
 assert.equal(calls.at(-1).path, '/api/pvp/live/queue/join', 'live queue join should use live queue endpoint');

@@ -102,9 +102,14 @@ function assertPublicArrayEventReplay() {
   assert.equal(JSON.stringify(replay).includes('innerPeace'), false, 'WS public replay should strip hidden heal source card ids');
 }
 
-function openSocket(url) {
+function makeWsProtocols(token) {
+  const encodedToken = Buffer.from(String(token || ''), 'utf8').toString('base64url');
+  return encodedToken ? ['defier-live-v1', `defier-auth.${encodedToken}`] : ['defier-live-v1'];
+}
+
+function openSocket(url, token) {
   return new Promise((resolve, reject) => {
-    const ws = new WebSocket(url);
+    const ws = new WebSocket(url, makeWsProtocols(token));
     const timer = setTimeout(() => reject(new Error('ws open timeout')), 5000);
     ws.addEventListener('open', () => {
       clearTimeout(timer);
@@ -330,8 +335,8 @@ async function runSyncRequiredBroadcastCheck() {
   let socketA = null;
   let socketB = null;
   try {
-    socketA = await openSocket(`${wsBaseUrl}/api/pvp/live/ws?token=${encodeURIComponent(tokenA)}`);
-    socketB = await openSocket(`${wsBaseUrl}/api/pvp/live/ws?token=${encodeURIComponent(tokenB)}`);
+    socketA = await openSocket(`${wsBaseUrl}/api/pvp/live/ws`, tokenA);
+    socketB = await openSocket(`${wsBaseUrl}/api/pvp/live/ws`, tokenB);
     await waitForMessage(socketA, message => message.type === 'connected', 'sync_required connected A');
     await waitForMessage(socketB, message => message.type === 'connected', 'sync_required connected B');
 
@@ -496,7 +501,7 @@ async function runHeartbeatEventsReplayCheck() {
   const tokenB = generateToken({ id: 'ws-heartbeat-b', username: 'ws-heartbeat-b' });
   let socketB = null;
   try {
-    socketB = await openSocket(`${wsBaseUrl}/api/pvp/live/ws?token=${encodeURIComponent(tokenB)}`);
+    socketB = await openSocket(`${wsBaseUrl}/api/pvp/live/ws`, tokenB);
     await waitForMessage(socketB, message => message.type === 'connected', 'heartbeat replay connected B');
 
     sendJson(socketB, { type: 'heartbeat', matchId: fakeMatchId });
@@ -592,8 +597,8 @@ async function runCrossProcessHeartbeatStateCatchupCheck() {
   let socketA = null;
   let socketB = null;
   try {
-    socketA = await openSocket(`${wsBaseUrlA}/api/pvp/live/ws?token=${encodeURIComponent(tokenA)}`);
-    socketB = await openSocket(`${wsBaseUrlB}/api/pvp/live/ws?token=${encodeURIComponent(tokenB)}`);
+    socketA = await openSocket(`${wsBaseUrlA}/api/pvp/live/ws`, tokenA);
+    socketB = await openSocket(`${wsBaseUrlB}/api/pvp/live/ws`, tokenB);
     await waitForMessage(socketA, message => message.type === 'connected', 'cross-process connected A');
     await waitForMessage(socketB, message => message.type === 'connected', 'cross-process connected B');
 
@@ -687,7 +692,7 @@ async function runJoinRaceSignalFanoutCheck() {
   const tokenB = generateToken({ id: 'ws-join-race-b', username: 'ws-join-race-b' });
   let socketB = null;
   try {
-    socketB = await openSocket(`${wsBaseUrl}/api/pvp/live/ws?token=${encodeURIComponent(tokenB)}`);
+    socketB = await openSocket(`${wsBaseUrl}/api/pvp/live/ws`, tokenB);
     await waitForMessage(socketB, message => message.type === 'connected', 'join race connected B');
 
     sendJson(socketB, { type: 'join_match', matchId: fakeMatchId, lastSeenRevision: 0 });
@@ -792,8 +797,8 @@ async function runCrossProcessPassiveStateFanoutCheck() {
   let socketA = null;
   let socketB = null;
   try {
-    socketA = await openSocket(`${wsBaseUrlA}/api/pvp/live/ws?token=${encodeURIComponent(tokenA)}`);
-    socketB = await openSocket(`${wsBaseUrlB}/api/pvp/live/ws?token=${encodeURIComponent(tokenB)}`);
+    socketA = await openSocket(`${wsBaseUrlA}/api/pvp/live/ws`, tokenA);
+    socketB = await openSocket(`${wsBaseUrlB}/api/pvp/live/ws`, tokenB);
     await waitForMessage(socketA, message => message.type === 'connected', 'passive cross-process connected A');
     await waitForMessage(socketB, message => message.type === 'connected', 'passive cross-process connected B');
 
@@ -883,12 +888,12 @@ async function runCrossProcessPassiveStateFanoutCheck() {
     assert.equal(joinB.payload.status, 'matched', 'second WS test player should match');
     const matchId = joinB.payload.matchId;
 
-    socketA = await openSocket(`${wsBaseUrl}/api/pvp/live/ws?token=${encodeURIComponent(tokenA)}`);
+    socketA = await openSocket(`${wsBaseUrl}/api/pvp/live/ws`, tokenA);
     const connectedA = await waitForMessage(socketA, message => message.type === 'connected', 'connected A');
     assert.ok(/^ws-/.test(connectedA.connectionId || ''), 'WS connected should expose stable connection id');
     assert.ok(connectedA.connectionReport?.heartbeatIntervalMs >= 1000, 'WS connected should expose authoritative heartbeat interval');
 
-    socketB = await openSocket(`${wsBaseUrl}/api/pvp/live/ws?token=${encodeURIComponent(tokenB)}`);
+    socketB = await openSocket(`${wsBaseUrl}/api/pvp/live/ws`, tokenB);
     await waitForMessage(socketB, message => message.type === 'connected', 'connected B');
 
     sendJson(socketA, { type: 'join_match', matchId, lastSeenRevision: 0 });

@@ -783,6 +783,38 @@ assert.equal(cancelledIntoCooldown.lastError?.matchmakingGuard?.reportVersion, '
 assert.equal(cancelledIntoCooldown.lastError?.matchmakingGuard?.cooldownSource, 'queue_cancel_abuse', 'cancel-triggered cooldown should retain cooldown source');
 assert.ok(cancelledIntoCooldown.lastError?.matchmakingGuard?.actions?.some(action => action.id === 'practice' && /不写正式积分/.test(action.detail)), 'cancel-triggered cooldown should retain no-score practice action');
 
+const cancelMatchedRaceSession = createPvpLiveSession({
+  liveService: {
+    joinQueue: async () => ({
+      success: true,
+      status: 'waiting',
+      queueTicket: 'pvplq-cancel-race-session'
+    }),
+    cancelQueue: async () => ({
+      success: true,
+      status: 'matched',
+      matchId: 'pvplm-cancel-race-session',
+      seatId: 'A',
+      stateView: {
+        matchId: 'pvplm-cancel-race-session',
+        status: 'setup',
+        stateVersion: 1,
+        currentSeat: 'A',
+        setup: { readyDeadlineAt: Date.now() + 45000, mulliganLimit: 2 },
+        self: { seatId: 'A', hand: [{ instanceId: 'A-strike-1' }] },
+        opponent: { seatId: 'B', handCount: 3, ready: false, publicProfile: makeRankedOpponentProfile() }
+      }
+    })
+  }
+});
+await cancelMatchedRaceSession.joinQueue({ displayName: '甲' });
+const cancelRaceMatched = await cancelMatchedRaceSession.cancelQueue();
+assert.equal(cancelRaceMatched.phase, 'setup', 'cancel queue matched race should enter setup instead of idle/error');
+assert.equal(cancelRaceMatched.queueTicket, '', 'cancel queue matched race should clear stale queue ticket');
+assert.equal(cancelRaceMatched.matchId, 'pvplm-cancel-race-session', 'cancel queue matched race should retain authoritative match id');
+assert.equal(cancelRaceMatched.seatId, 'A', 'cancel queue matched race should retain authoritative seat id');
+assert.equal(cancelRaceMatched.lastError, null, 'cancel queue matched race should not surface a cancellation error');
+
 await session.joinQueue({ displayName: '甲' });
 
 const matched = await session.pollQueue();
