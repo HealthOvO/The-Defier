@@ -1,0 +1,53 @@
+server/app.js
+  s_bae69f1b7fab46::t_8c25be0511c480 3,9-10,24,35-84
+server/pvp-live/live-persistence.js
+  s_bae69f1b7fab46::t_c9752f70301cc5 237-239
+server/pvp-live/live-store.js
+  s_bae69f1b7fab46::t_d6da6c5bae1928 528-570,2590,2604,3041-3089,3143,3884-3885,3889,4069
+server/services/platform/request-context.js
+  s_bae69f1b7fab46::t_3a5502ecad234c 1-50
+server/services/platform/runtime-info.js
+  s_6e1bb04ed16c74::t_1a9918d171f0be 1-83
+server/services/platform/schema-status.js
+  s_bae69f1b7fab46::t_44f6c9490e2e00 1-85
+tests/backend_platform_checks.cjs
+  s_bae69f1b7fab46::t_cf941f460042ce 1-153
+tests/run_node_checks.sh
+  s_869fd9109b7dbe::t_1e9266c9c662b6 13
+tests/sanity_pvp_live_persistence_checks.cjs
+  s_bae69f1b7fab46::t_ef2e60ddcb01f5 412-460,483
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.5",
+  "base_commit_sha": "d38e91f2d931b78dc1f82016b73a3d9c0f82af9a",
+  "prompts": {},
+  "sessions": {
+    "s_6e1bb04ed16c74": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f42c3-f213-7031-b288-429ef6768bd9",
+        "model": "unknown"
+      },
+      "human_author": "AI Agent <bot@example.com>"
+    },
+    "s_869fd9109b7dbe": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f42c3-f194-7482-9a8c-95c10cb9624b",
+        "model": "unknown"
+      },
+      "human_author": "AI Agent <bot@example.com>"
+    },
+    "s_bae69f1b7fab46": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ed4f6-e7ac-73e0-a29e-119f3eddb407",
+        "model": "unknown"
+      },
+      "human_author": "AI Agent <bot@example.com>"
+    }
+  },
+  "attestation_metadata": {},
+  "remote_transcripts": {}
+}
