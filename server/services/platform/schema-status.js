@@ -15,6 +15,7 @@ const CURRENT_MIGRATION_CHECKSUM = crypto
         'pvp_ranks',
         'pvp_live_matches',
         'pvp_live_state_signals',
+        'pvp_live_ops_events',
         'pvp_live_match_settlements',
         'pvp_live_replay_shares'
     ].join('|'))

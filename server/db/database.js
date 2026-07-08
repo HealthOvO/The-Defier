@@ -393,6 +393,28 @@ const initDb = () => {
             db.run(`CREATE INDEX IF NOT EXISTS idx_pvp_live_dispute_reports_user ON pvp_live_dispute_reports(reporter_user_id, created_at)`, (err) => {
                 if (err) fail(err);
             });
+            db.run(`CREATE TABLE IF NOT EXISTS pvp_live_ops_events (
+                event_id TEXT PRIMARY KEY,
+                event_type TEXT NOT NULL,
+                subject_user_id TEXT NOT NULL DEFAULT '',
+                match_id TEXT NOT NULL DEFAULT '',
+                severity TEXT NOT NULL DEFAULT 'info',
+                reason TEXT NOT NULL DEFAULT '',
+                source TEXT NOT NULL DEFAULT 'pvp_live',
+                evidence_json TEXT NOT NULL DEFAULT '{}',
+                created_at INTEGER NOT NULL
+            )`, (err) => {
+                if (err) fail(err);
+            });
+            db.run(`CREATE INDEX IF NOT EXISTS idx_pvp_live_ops_events_subject ON pvp_live_ops_events(subject_user_id, created_at)`, (err) => {
+                if (err) fail(err);
+            });
+            db.run(`CREATE INDEX IF NOT EXISTS idx_pvp_live_ops_events_match ON pvp_live_ops_events(match_id, created_at)`, (err) => {
+                if (err) fail(err);
+            });
+            db.run(`CREATE INDEX IF NOT EXISTS idx_pvp_live_ops_events_type ON pvp_live_ops_events(event_type, severity, created_at)`, (err) => {
+                if (err) fail(err);
+            });
             db.run(`CREATE TABLE IF NOT EXISTS pvp_live_match_settlements (
                 match_id TEXT PRIMARY KEY,
                 winner_user_id TEXT NOT NULL,

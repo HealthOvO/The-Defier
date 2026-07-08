@@ -1,6 +1,7 @@
 const { db } = require('../db/database');
 
 const SEASON_ID = 's1-genesis';
+const SEASON_NAME = '开天赛季';
 const SEASON_HONOR_COLLECTION_VERSION = 'pvp-live-season-honor-collection-v1';
 const SEASON_HONOR_REWARD_TRACK = [
     { targetGames: 1, rewardId: 's1_genesis_honor_mark_1', rewardType: 'cosmetic_badge', rewardName: '开天见证徽记' },
@@ -356,7 +357,7 @@ function buildParticipantSummary({ user, rankRow, opponentUser, opponentRankRow,
     return {
         source: 'live_pvp',
         seasonId: SEASON_ID,
-        seasonName: '开天赛季',
+        seasonName: SEASON_NAME,
         matchId: match.matchId,
         opponentRankId: makeRankId(opponentUser.id),
         opponentUserId: opponentUser.id,
@@ -459,7 +460,7 @@ async function settleParticipant({ user, opponentUser, rankRow, opponentRankRow,
         losses,
         rankedGames: wins + losses,
         seasonId: SEASON_ID,
-        seasonName: '开天赛季',
+        seasonName: SEASON_NAME,
         seasonHonorClaim: honorCollectionGrant.claim
     };
 }
@@ -576,5 +577,9 @@ function makeSqliteLivePvpSettlement() {
 }
 
 module.exports = {
+    SEASON_ID,
+    SEASON_NAME,
+    SEASON_HONOR_REWARD_TRACK,
+    normalizeSeasonHonorCollection,
     makeSqliteLivePvpSettlement
 };

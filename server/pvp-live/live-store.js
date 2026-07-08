@@ -2227,6 +2227,83 @@ class LivePvpStore {
         return saveResult;
     }
 
+    async appendOpsEvent(event = {}) {
+        if (!this.persistence || typeof this.persistence.appendOpsEvent !== 'function') return null;
+        try {
+            return await this.persistence.appendOpsEvent({
+                ...event,
+                createdAt: Math.max(0, Math.floor(Number(event.createdAt) || this.now()))
+            });
+        } catch (error) {
+            console.warn('[PVP Live] ops event append failed:', error);
+            return null;
+        }
+    }
+
+    async recordConnectionTimeoutOpsEvents(match, {
+        reason = 'connection_timeout',
+        phase = '',
+        resolution = '',
+        disconnectedSeats = [],
+        loserSeat = '',
+        winnerSeat = '',
+        elapsedMs = 0,
+        source = 'live_store_timeout_sweep'
+    } = {}) {
+        if (!match || !match.matchId || !match.state) return [];
+        const seatIds = Array.from(new Set((Array.isArray(disconnectedSeats) ? disconnectedSeats : [])
+            .concat(loserSeat ? [loserSeat] : [])
+            .map(seatId => String(seatId || '').trim())
+            .filter(seatId => seatId === 'A' || seatId === 'B')));
+        if (seatIds.length === 0) return [];
+        const safeReason = String(reason || 'connection_timeout')
+            .trim()
+            .toLowerCase()
+            .replace(/[^a-z0-9_-]/g, '_')
+            .replace(/_+/g, '_')
+            .replace(/^_+|_+$/g, '')
+            .slice(0, 64) || 'connection_timeout';
+        const matchId = String(match.matchId || '');
+        const commonEvidence = {
+            reportVersion: 'pvp-live-connection-timeout-ops-v1',
+            phase: String(phase || match.state.phase || match.state.status || ''),
+            status: String(match.state.status || ''),
+            resolution: String(resolution || ''),
+            disconnectedSeats: seatIds,
+            loserSeat: String(loserSeat || ''),
+            winnerSeat: String(winnerSeat || ''),
+            currentSeat: String(match.state.currentSeat || ''),
+            stateVersion: Math.max(0, Math.floor(Number(match.state.stateVersion) || 0)),
+            eventSeq: Math.max(0, Math.floor(Number(match.state.eventSeq) || 0)),
+            elapsedMs: Math.max(0, Math.floor(Number(elapsedMs) || 0)),
+            heartbeatStaleMs: this.heartbeatStaleMs,
+            reconnectGraceMs: this.reconnectGraceMs,
+            rankedImpact: resolution === 'match_invalidated' ? 'none' : 'settlement_rule',
+            usesHiddenInformation: false
+        };
+        const results = [];
+        for (const seatId of seatIds) {
+            const subjectUserId = this.getSourceSeatUserId(match, seatId);
+            if (!subjectUserId) continue;
+            const result = await this.appendOpsEvent({
+                eventId: `pvploe:${matchId}:connection_timeout:${safeReason}:${seatId}`,
+                eventType: 'connection_timeout',
+                subjectUserId,
+                matchId,
+                severity: 'warning',
+                reason: safeReason,
+                source,
+                evidence: {
+                    ...commonEvidence,
+                    seatId
+                },
+                createdAt: match.updatedAt || this.now()
+            });
+            if (result) results.push(result);
+        }
+        return results;
+    }
+
     isStaleStateSaveResult(saveResult) {
         return !!(
             saveResult
@@ -3702,7 +3779,17 @@ class LivePvpStore {
         match.state.events.push(timeoutEvent, invalidatedEvent);
         match.state.stateVersion += 1;
         match.updatedAt = this.now();
-        return this.completeInvalidatedMatch(match);
+        const completion = await this.completeInvalidatedMatch(match);
+        if (completion && completion.completed) {
+            await this.recordConnectionTimeoutOpsEvents(match, {
+                reason: 'setup_connection_timeout',
+                phase: 'setup',
+                resolution: 'match_invalidated',
+                disconnectedSeats: timeoutSeatIds,
+                elapsedMs: maxElapsedMs
+            });
+        }
+        return completion;
     }
 
     async finishMatchByConnectionTimeout(match) {
@@ -3734,7 +3821,19 @@ class LivePvpStore {
         match.state.events.push(timeoutEvent, finishedEvent);
         match.state.stateVersion += 1;
         match.updatedAt = this.now();
-        return this.completeFinishedMatch(match);
+        const completion = await this.completeFinishedMatch(match);
+        if (completion && completion.completed) {
+            await this.recordConnectionTimeoutOpsEvents(match, {
+                reason: 'active_turn_connection_timeout',
+                phase: 'active',
+                resolution: 'connection_timeout',
+                disconnectedSeats: [loserSeat],
+                loserSeat,
+                winnerSeat,
+                elapsedMs: loserReport.elapsedMs
+            });
+        }
+        return completion;
     }
 
     async invalidateActiveByDoubleConnectionTimeout(match) {
@@ -3762,7 +3861,17 @@ class LivePvpStore {
         match.state.events.push(timeoutEvent, invalidatedEvent);
         match.state.stateVersion += 1;
         match.updatedAt = this.now();
-        return this.completeInvalidatedMatch(match);
+        const completion = await this.completeInvalidatedMatch(match);
+        if (completion && completion.completed) {
+            await this.recordConnectionTimeoutOpsEvents(match, {
+                reason: 'double_connection_timeout',
+                phase: 'active',
+                resolution: 'match_invalidated',
+                disconnectedSeats: timeoutSeatIds,
+                elapsedMs: maxElapsedMs
+            });
+        }
+        return completion;
     }
 
     async invalidateSetupByReadyTimeout(match) {

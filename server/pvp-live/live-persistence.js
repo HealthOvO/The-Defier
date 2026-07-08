@@ -1,4 +1,5 @@
 const { db } = require('../db/database');
+const { recordPvpLiveOpsEvent } = require('./live-ops-events');
 
 function dbGet(sql, params = []) {
     return new Promise((resolve, reject) => {
@@ -1085,6 +1086,9 @@ function makeSqliteLivePvpPersistence() {
         },
         async appendLiveWsSignal(signal = {}) {
             return appendLiveWsSignalRow(signal);
+        },
+        async appendOpsEvent(event = {}) {
+            return recordPvpLiveOpsEvent(db, event);
         },
         async getLiveWsLatestSignalId() {
             const row = await dbGet('SELECT COALESCE(MAX(signal_id), 0) AS signal_id FROM pvp_live_state_signals');

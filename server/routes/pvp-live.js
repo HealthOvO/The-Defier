@@ -3,6 +3,8 @@ const crypto = require('crypto');
 const { authenticate } = require('../middleware/auth');
 const { db } = require('../db/database');
 const { createLivePvpStore } = require('../pvp-live/live-store');
+const { buildLivePvpSeasonStatus } = require('../pvp-live/live-season');
+const { recordPvpLiveOpsEvent } = require('../pvp-live/live-ops-events');
 const { buildMatchReplay, normalizeReplayVisibility } = require('../pvp-live/replay');
 const { sanitizePublicEvent } = require('../pvp-live/engine/state-view');
 const { RULE_VERSION } = require('../pvp-live/engine/rules');
@@ -21,6 +23,7 @@ const livePvpStore = createLivePvpStore({
     ratingProvider: makeDefaultRatingProvider()
 });
 let userDirectory = makeDefaultUserDirectory();
+let opsEventRecorder = (event) => recordPvpLiveOpsEvent(db, event);
 
 function asyncHandler(fn) {
     return (req, res) => {
@@ -45,6 +48,16 @@ function dbRun(sql, params = []) {
             else resolve(this);
         });
     });
+}
+
+async function appendPvpLiveOpsEvent(event) {
+    if (typeof opsEventRecorder !== 'function') return null;
+    try {
+        return await opsEventRecorder(event);
+    } catch (error) {
+        console.warn('[PVP Live] Ops event append failed:', error);
+        return null;
+    }
 }
 
 const REPLAY_SHARE_DEFAULT_TTL_MS = 30 * 24 * 60 * 60 * 1000;
@@ -463,6 +476,10 @@ router.get('/matches/current', authenticate, asyncHandler(async (req, res) => {
     });
 }));
 
+router.get('/season', authenticate, asyncHandler(async (req, res) => {
+    res.json(await buildLivePvpSeasonStatus(db, req.user.id));
+}));
+
 router.get('/matches/:matchId', authenticate, asyncHandler(async (req, res) => {
     const matchAccess = await livePvpStore.getMatchForUser(req.user.id, req.params.matchId);
     if (!matchAccess) {
@@ -642,6 +659,16 @@ router.post('/matches/:matchId/reports', authenticate, asyncHandler(async (req, 
             now
         ]
     );
+    await appendPvpLiveOpsEvent({
+        eventType: 'dispute_reported',
+        subjectUserId: req.user.id,
+        matchId: matchAccess.match.matchId,
+        severity: 'review',
+        reason: report.reason,
+        source: 'player_report',
+        evidence: report.evidencePackage,
+        createdAt: now
+    });
     res.json({
         success: true,
         report
@@ -699,6 +726,21 @@ router.post('/matches/:matchId/avoid-opponent', authenticate, asyncHandler(async
                 now
             ]
         );
+        await appendPvpLiveOpsEvent({
+            eventType: 'avoid_opponent',
+            subjectUserId: req.user.id,
+            matchId: report.sourceMatchId || matchAccess.match.matchId,
+            severity: 'info',
+            reason: report.reason || 'post_match_avoid',
+            source: 'player_preference',
+            evidence: {
+                avoidedUserId,
+                pairKey,
+                expiresAt: report.expiresAt || now,
+                safeguard: report.safeguard || 'player_avoid_opponent'
+            },
+            createdAt: now
+        });
     }
     res.json({
         success: true,
@@ -776,11 +818,16 @@ router.__attachPersistence = (persistence) => {
 router.__attachSettlement = (settlement) => {
     livePvpStore.setSettlement(settlement);
 };
-router.__attachServices = ({ persistence, settlement, ratingProvider, userDirectory: nextUserDirectory } = {}) => {
+router.__attachServices = ({ persistence, settlement, ratingProvider, userDirectory: nextUserDirectory, opsEventRecorder: nextOpsEventRecorder } = {}) => {
     if (persistence !== undefined) livePvpStore.setPersistence(persistence);
     if (settlement !== undefined) livePvpStore.setSettlement(settlement);
     if (ratingProvider !== undefined) livePvpStore.setRatingProvider(ratingProvider);
     if (nextUserDirectory !== undefined) userDirectory = nextUserDirectory || makeDefaultUserDirectory();
+    if (nextOpsEventRecorder !== undefined) {
+        opsEventRecorder = typeof nextOpsEventRecorder === 'function'
+            ? nextOpsEventRecorder
+            : (event) => recordPvpLiveOpsEvent(db, event);
+    }
 };
 
 module.exports = router;
