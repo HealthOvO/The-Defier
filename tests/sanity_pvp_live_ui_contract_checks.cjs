@@ -543,7 +543,9 @@ assert.ok(scene.includes('eventRevision <= pendingEventRevision'), 'PVPScene sho
 assert.ok(submitLiveIntentBody.includes('上一动作正在等待权威回执，请稍候。'), 'submitLiveIntent should surface a pending-action hint instead of sending duplicate live intents');
 assert.ok(scene.includes('getLiveConnectionSubmitBlock'), 'PVPScene should derive live input locks from authoritative connection tempo');
 assert.ok(scene.includes('blockLiveConnectionSubmit'), 'PVPScene should expose a shared connection tempo submit guard');
-assert.ok(submitLiveIntentBody.includes('this.blockLiveConnectionSubmit(state)'), 'submitLiveIntent should block stale inputs before realtime or HTTP submit');
+assert.ok(scene.includes('recoverLiveConnectionSubmitBlock'), 'PVPScene should try to recover viewer reconnect grace before blocking live inputs');
+assert.ok(scene.includes('ensureLiveConnectionReadyForSubmit'), 'PVPScene should share live connection recovery before action submits');
+assert.ok(submitLiveIntentBody.includes('await this.ensureLiveConnectionReadyForSubmit(state)'), 'submitLiveIntent should recover or block stale inputs before realtime or HTTP submit');
 assert.ok(scene.includes('const connectionSubmitBlocked = !!this.getLiveConnectionSubmitBlock(state)'), 'live controls should share authoritative connection tempo input lock');
 assert.ok(scene.includes('const intentLocked = this.isLiveIntentInFlight(state)'), 'live hand rendering should disable card clicks while a realtime intent is pending');
 assert.ok(scene.includes('button.disabled = connectionSubmitBlocked || socialIntentLocked || !this.canSendLiveEmote(phase)'), 'live emote buttons should be disabled by authoritative connection tempo or social realtime intent locks');

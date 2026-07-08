@@ -17,6 +17,8 @@ const username = `ui_cloud_${runId}`;
 const password = `pwd_${runId}`;
 const marker = `ui-cloud-marker-${runId}`;
 const dbPath = process.env.BROWSER_AUTH_UI_SMOKE_DB_PATH || path.join(os.tmpdir(), `the-defier-browser-auth-ui-${process.pid}.sqlite`);
+const navigationTimeoutMs = Math.max(30000, Math.floor(Number(process.env.BROWSER_AUTH_UI_SMOKE_NAVIGATION_TIMEOUT_MS) || 60000));
+const uiWaitTimeoutMs = Math.max(12000, Math.floor(Number(process.env.BROWSER_AUTH_UI_SMOKE_WAIT_TIMEOUT_MS) || 60000));
 
 fs.mkdirSync(outDir, { recursive: true });
 
@@ -25,6 +27,30 @@ const consoleErrors = [];
 const AUTH_UI_CLOUD_FINDING = 'real auth UI register/login syncs global progress, loads cloud slot, and writes save back to cloud';
 const SAVE_CONFLICT_FINDING = 'real save conflict modal keeps local/cloud choices consistent with backend state';
 
+function usesHttpsAppWithLoopbackApi(targetApiUrl = apiUrl) {
+  try {
+    const app = new URL(appUrl);
+    const api = new URL(targetApiUrl);
+    return app.protocol === 'https:'
+      && api.protocol === 'http:'
+      && ['127.0.0.1', 'localhost', '::1'].includes(api.hostname);
+  } catch {
+    return false;
+  }
+}
+
+function chromiumLaunchArgsForLocalApi(extraArgs = []) {
+  const args = [...extraArgs];
+  if (usesHttpsAppWithLoopbackApi()) {
+    args.push(
+      '--disable-web-security',
+      '--allow-running-insecure-content',
+      '--disable-features=BlockInsecurePrivateNetworkRequests,PrivateNetworkAccessSendPreflights,PrivateNetworkAccessRespectPreflightResults',
+    );
+  }
+  return args;
+}
+
 function add(name, pass, detail = '') {
   findings.push({ name, pass, detail });
 }
@@ -32,6 +58,7 @@ function add(name, pass, detail = '') {
 function recordConsoleError(text) {
   const message = String(text || '');
   if (/ERR_CONNECTION_(CLOSED|RESET)/.test(message)) return;
+  if (/ERR_NETWORK_CHANGED/.test(message)) return;
   if (/Failed to load resource: net::ERR_FILE_NOT_FOUND/.test(message)) return;
   consoleErrors.push(message);
 }
@@ -293,12 +320,24 @@ async function configurePage(page) {
 }
 
 async function waitForGame(page) {
-  await page.goto(appUrl, { waitUntil: 'domcontentloaded' });
-  await page.waitForFunction(
-    () => !!window.game && !!document.getElementById('login-btn'),
-    null,
-    { timeout: 12000 }
-  );
+  const attempts = Math.max(1, Math.floor(Number(process.env.BROWSER_AUTH_UI_SMOKE_BOOT_ATTEMPTS) || 3));
+  let lastError = null;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      await page.goto(appUrl, { waitUntil: 'domcontentloaded', timeout: navigationTimeoutMs });
+      await page.waitForFunction(
+        () => !!window.game && !!document.getElementById('login-btn'),
+        null,
+        { timeout: uiWaitTimeoutMs }
+      );
+      return;
+    } catch (error) {
+      lastError = error;
+      if (attempt >= attempts) break;
+      await page.waitForTimeout(1000);
+    }
+  }
+  throw new Error(`auth UI game bootstrap timed out after ${attempts} attempt(s): ${lastError?.message || 'unknown'}`);
 }
 
 async function runConflictDecisionProbe(browser, token, serverSession, choice, slotIndex) {
@@ -358,7 +397,7 @@ async function runConflictDecisionProbe(browser, token, serverSession, choice, s
       window.game.currentSaveSlot = slotIndex;
       await window.game.checkForCloudSave();
     }, { localPayload, slotIndex });
-    await conflictPage.waitForSelector('#save-conflict-modal.active', { timeout: 12000 });
+    await conflictPage.waitForSelector('#save-conflict-modal.active', { timeout: uiWaitTimeoutMs });
     const before = await conflictPage.evaluate(({ cloudPayload, localPayload, slotIndex }) => {
       const modal = document.getElementById('save-conflict-modal');
       const localInfo = document.getElementById('local-save-info')?.textContent?.replace(/\s+/g, ' ').trim() || '';
@@ -404,7 +443,7 @@ async function runConflictDecisionProbe(browser, token, serverSession, choice, s
         await conflictPage.waitForFunction(
           () => window.__lastConflictResolveResult?.settled === true,
           null,
-          { timeout: 12000 }
+          { timeout: uiWaitTimeoutMs }
         );
         const cloudRow = await waitForCloudSlotMarker(token, slotIndex, cloudPayload.marker);
         const after = await conflictPage.evaluate(({ localPayload, cloudPayload, slotIndex }) => {
@@ -446,7 +485,7 @@ async function runConflictDecisionProbe(browser, token, serverSession, choice, s
       await conflictPage.waitForFunction(
         () => !document.getElementById('save-conflict-modal')?.classList.contains('active'),
         null,
-        { timeout: 12000 }
+        { timeout: uiWaitTimeoutMs }
       );
       const cloudRow = await waitForCloudSlotMarker(token, slotIndex, localPayload.marker);
       const after = await conflictPage.evaluate(({ localPayload, slotIndex }) => {
@@ -481,7 +520,7 @@ async function runConflictDecisionProbe(browser, token, serverSession, choice, s
       };
     }
 
-    const navPromise = conflictPage.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 12000 })
+    const navPromise = conflictPage.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: navigationTimeoutMs })
       .then(() => true)
       .catch(() => false);
     await conflictPage.click('#save-conflict-modal [onclick="game.resolveSaveConflict(\'cloud\')"]');
@@ -497,7 +536,7 @@ async function runConflictDecisionProbe(browser, token, serverSession, choice, s
         }
       },
       cloudPayload.marker,
-      { timeout: 12000 }
+      { timeout: uiWaitTimeoutMs }
     );
     const cloudRow = await waitForCloudSlotMarker(token, slotIndex, cloudPayload.marker);
     const after = await conflictPage.evaluate(({ cloudPayload, slotIndex }) => {
@@ -650,7 +689,7 @@ async function runCleanCloudRestoreProbe(browser, serverSession, expectedGold, o
       return window.game.openSaveSlotsWithSync();
     });
     const loadSelector = '#save-slots-modal [data-system-action="select-slot"][data-slot-index="0"][data-slot-mode="load"]';
-    await restorePage.waitForSelector(loadSelector, { timeout: 12000 });
+    await restorePage.waitForSelector(loadSelector, { timeout: uiWaitTimeoutMs });
     const before = await restorePage.evaluate(({ expectedGold, expectedDeckLength, expectedCardId }) => {
       const modal = document.getElementById('save-slots-modal');
       const loadButton = modal?.querySelector('[data-system-action="select-slot"][data-slot-index="0"][data-slot-mode="load"]');
@@ -669,7 +708,7 @@ async function runCleanCloudRestoreProbe(browser, serverSession, expectedGold, o
     }, { expectedGold, expectedDeckLength, expectedCardId });
     await safeAuditScreenshot(restorePage, path.join(outDir, 'clean-cloud-restore-slots.png'));
 
-    const navPromise = restorePage.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 12000 })
+    const navPromise = restorePage.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: navigationTimeoutMs })
       .then(() => true)
       .catch(() => false);
     await restorePage.click(loadSelector);
@@ -701,7 +740,7 @@ async function runCleanCloudRestoreProbe(browser, serverSession, expectedGold, o
         }
       },
       { expectedGold, expectedDeckLength, expectedCardId },
-      { timeout: 12000 }
+      { timeout: uiWaitTimeoutMs }
     );
     const after = await restorePage.evaluate(({ expectedGold, expectedDeckLength, expectedCardId }) => {
       const raw = localStorage.getItem('theDefierSave');
@@ -786,13 +825,13 @@ async function runRewardCloudRestoreProbe(page, browser, token, serverSession, e
     };
   }, expectedGold);
 
-  await page.waitForSelector('#reward-screen.active #reward-cards .reward-card', { timeout: 12000 });
+  await page.waitForSelector('#reward-screen.active #reward-cards .reward-card', { timeout: uiWaitTimeoutMs });
   await safeAuditScreenshot(page, path.join(outDir, 'reward-cloud-before-select.png'));
   await page.click('#reward-screen.active #reward-cards .reward-card');
   await page.waitForFunction(
     () => !!window.game?.rewardCardSelected && !document.getElementById('continue-reward-btn')?.disabled,
     null,
-    { timeout: 12000 }
+    { timeout: uiWaitTimeoutMs }
   );
   const selected = await page.evaluate((beforeDeckLength) => {
     const deck = Array.isArray(window.game?.player?.deck) ? window.game.player.deck : [];
@@ -827,7 +866,7 @@ async function runRewardCloudRestoreProbe(page, browser, token, serverSession, e
       }
     },
     selected.deckLength,
-    { timeout: 12000 }
+    { timeout: uiWaitTimeoutMs }
   );
   const localAfterContinue = await page.evaluate(({ expectedDeckLength, addedCardId }) => {
     const raw = localStorage.getItem('theDefierSave');
@@ -938,10 +977,10 @@ async function runSmoke(page, browser) {
   await page.waitForFunction(
     () => document.getElementById('auth-message')?.textContent?.includes('注册成功'),
     null,
-    { timeout: 12000 }
+    { timeout: uiWaitTimeoutMs }
   );
-  await page.waitForSelector('#save-slots-modal.active', { timeout: 12000 });
-  await page.waitForSelector('#save-slots-modal [data-system-action="select-slot"][data-slot-index="0"][data-slot-mode="load"]', { timeout: 12000 });
+  await page.waitForSelector('#save-slots-modal.active', { timeout: uiWaitTimeoutMs });
+  await page.waitForSelector('#save-slots-modal [data-system-action="select-slot"][data-slot-index="0"][data-slot-mode="load"]', { timeout: uiWaitTimeoutMs });
   await safeAuditScreenshot(page, path.join(outDir, 'registered-cloud-slots.png'));
 
   const session = await page.evaluate(() => {
@@ -1019,9 +1058,9 @@ async function runSmoke(page, browser) {
     await loginPage.waitForFunction(
       () => document.getElementById('auth-message')?.textContent?.includes('登录成功'),
       null,
-      { timeout: 12000 }
+      { timeout: uiWaitTimeoutMs }
     );
-    await loginPage.waitForSelector('#save-slots-modal.active', { timeout: 12000 });
+    await loginPage.waitForSelector('#save-slots-modal.active', { timeout: uiWaitTimeoutMs });
     globalProbe = await loginPage.evaluate(({ cloudAchievementId, localAchievementId, cloudCardBackId, localCardBackId, cloudUnlockId, localUnlockId }) => {
       const system = window.game?.achievementSystem;
       const unlocked = JSON.parse(localStorage.getItem('theDefierAchievements') || '[]');
@@ -1100,7 +1139,7 @@ async function runSmoke(page, browser) {
     await safeAuditScreenshot(loginPage, path.join(outDir, 'login-cloud-slots.png'));
 
     await Promise.all([
-      loginPage.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 12000 }),
+      loginPage.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: navigationTimeoutMs }),
       loginPage.click(loadSelector),
     ]);
     await loginPage.waitForFunction(
@@ -1117,7 +1156,7 @@ async function runSmoke(page, browser) {
         }
       },
       marker,
-      { timeout: 12000 }
+      { timeout: uiWaitTimeoutMs }
     );
     loadProbe = await loginPage.evaluate((marker) => {
       const raw = localStorage.getItem('theDefierSave');
@@ -1242,6 +1281,7 @@ function writeReport() {
   const report = {
     url: appUrl,
     apiUrl,
+    localLoopbackApiFromHttpsApp: usesHttpsAppWithLoopbackApi(),
     generatedAt: new Date().toISOString(),
     summary: {
       total: findings.length,
@@ -1261,7 +1301,11 @@ try {
   apiUrl = `http://127.0.0.1:${port}`;
   server = startBackend();
   await waitForHealth(server);
-  browser = await chromium.launch({ headless: true });
+  browser = await chromium.launch({
+    headless: true,
+    executablePath: process.env.PLAYWRIGHT_EXECUTABLE_PATH || undefined,
+    args: chromiumLaunchArgsForLocalApi(),
+  });
   const page = await browser.newPage();
   page.on('console', msg => {
     if (msg.type() === 'error') recordConsoleError(msg.text());

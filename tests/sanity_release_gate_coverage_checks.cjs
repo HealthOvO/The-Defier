@@ -12,6 +12,7 @@ const browserReleaseScript = read('tests/run_browser_release_checks.sh');
 const browserReleaseSummary = read('tests/summarize_browser_release_reports.cjs');
 const backendSecurityChecks = read('tests/backend_security_checks.cjs');
 const backendClientSmoke = read('tests/browser_backend_client_smoke.mjs');
+const browserAuthUiCloudSmoke = read('tests/browser_auth_ui_cloud_smoke.mjs');
 const backendClientSource = read('js/services/backend-client.js');
 const browserAudit = read('tests/browser_audit.mjs');
 const browserPvpAudit = read('tests/browser_pvp_audit.mjs');
@@ -464,6 +465,7 @@ const browserAutomationBootAudit = read('tests/browser_automation_boot_audit.mjs
   'node tests/browser_pvp_live_audit.mjs "$BASE_URL" "$OUTPUT_ROOT/pvp-live"',
   'node tests/browser_pvp_live_real_backend_smoke.mjs "$BASE_URL" "$OUTPUT_ROOT/pvp-live-real"',
   'env BROWSER_PVP_LIVE_REAL_VIEWPORT=mobile BROWSER_PVP_LIVE_REAL_REQUIRE_MOBILE=1 node tests/browser_pvp_live_real_backend_smoke.mjs "$BASE_URL" "$OUTPUT_ROOT/pvp-live-mobile-real"',
+  'PVP_LIVE_REAL_AUDIT_TIMEOUT_SECONDS',
   'node tests/browser_pvp_mobile_audit.mjs "$BASE_URL" "$OUTPUT_ROOT/pvp-mobile"',
   'node tests/browser_pvp_mobile_result_audit.mjs "$BASE_URL" "$OUTPUT_ROOT/pvp-mobile-result"',
   'node tests/browser_chapter_flow_audit.mjs "$BASE_URL" "$OUTPUT_ROOT/chapter-flow"',
@@ -475,6 +477,24 @@ const browserAutomationBootAudit = read('tests/browser_automation_boot_audit.mjs
     browserReleaseScript.includes(needle),
     `browser release gate should run required audit script: ${needle}`,
   );
+});
+
+[
+  ['browser_backend_client_smoke.mjs', backendClientSmoke],
+  ['browser_auth_ui_cloud_smoke.mjs', browserAuthUiCloudSmoke],
+  ['browser_pvp_live_real_backend_smoke.mjs', browserPvpLiveRealSmoke],
+].forEach(([label, source]) => {
+  [
+    'localLoopbackApiFromHttpsApp',
+    'usesHttpsAppWithLoopbackApi',
+    '--disable-web-security',
+    'PrivateNetworkAccessSendPreflights',
+  ].forEach((needle) => {
+    assert.ok(
+      source.includes(needle),
+      `${label} should support production-domain browser audits against a local loopback API: ${needle}`,
+    );
+  });
 });
 
 [
@@ -3145,7 +3165,9 @@ assert.ok(
   'submitLiveIntent should surface a pending-action hint instead of sending duplicate live intents',
   'PVPScene should derive live input locks from authoritative connection tempo',
   'PVPScene should expose a shared connection tempo submit guard',
-  'submitLiveIntent should block stale inputs before realtime or HTTP submit',
+  'PVPScene should try to recover viewer reconnect grace before blocking live inputs',
+  'PVPScene should share live connection recovery before action submits',
+  'submitLiveIntent should recover or block stale inputs before realtime or HTTP submit',
   'live controls should share authoritative connection tempo input lock',
   'live hand rendering should disable card clicks while a realtime intent is pending',
   'live emote buttons should be disabled by authoritative connection tempo or social realtime intent locks',

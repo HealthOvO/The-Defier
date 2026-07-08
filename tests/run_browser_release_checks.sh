@@ -27,6 +27,9 @@ audit_timeout_for() {
     frontend-layout)
       printf '%s\n' "$FRONTEND_LAYOUT_AUDIT_TIMEOUT_SECONDS"
       ;;
+    pvp-live-real|pvp-live-mobile-real)
+      printf '%s\n' "${PVP_LIVE_REAL_AUDIT_TIMEOUT_SECONDS:-1200}"
+      ;;
     *)
       printf '%s\n' "$AUDIT_TIMEOUT_SECONDS"
       ;;

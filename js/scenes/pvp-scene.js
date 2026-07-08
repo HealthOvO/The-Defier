@@ -515,7 +515,21 @@ export const PVPScene = {
     const session = this.getLiveSession();
     const state = session && typeof session.getState === 'function' ? session.getState() : null;
     if (!state || !state.matchId || !this.shouldLiveHeartbeat(state.phase)) return;
-    await this.sendLiveHeartbeat({ resumeRealtime: true });
+    const heartbeatResult = await this.sendLiveHeartbeat({ resumeRealtime: true });
+    if (heartbeatResult && heartbeatResult.transport !== 'http' && typeof session.heartbeat === 'function') {
+      try {
+        await session.heartbeat();
+      } catch (error) {
+        console.warn('[PVP Live] foreground recovery heartbeat failed', error);
+      }
+    }
+    if (typeof session.refreshMatch === 'function') {
+      try {
+        await session.refreshMatch();
+      } catch (error) {
+        console.warn('[PVP Live] foreground recovery refresh failed', error);
+      }
+    }
     const win = typeof window !== 'undefined' ? window : null;
     const schedule = win && typeof win.setTimeout === 'function' ? win.setTimeout.bind(win) : setTimeout;
     schedule(() => {
@@ -1307,6 +1321,53 @@ export const PVPScene = {
     this.clearLiveOpeningActionConfirm();
     this.clearLiveSurrenderConfirm();
     return true;
+  },
+  canRecoverLiveConnectionSubmitBlock(block = null) {
+    if (!block) return false;
+    const tempoState = String(block.tempoState || '');
+    const actionBoundary = String(block.actionBoundary || '');
+    return actionBoundary === 'recover_connection'
+      || tempoState === 'viewer_reconnect_grace'
+      || tempoState === 'viewer_refresh_required';
+  },
+  async recoverLiveConnectionSubmitBlock(state = null) {
+    const block = this.getLiveConnectionSubmitBlock(state);
+    if (!this.canRecoverLiveConnectionSubmitBlock(block)) return false;
+    const session = this.getLiveSession();
+    const sourceState = state || (session && typeof session.getState === 'function' ? session.getState() : null);
+    if (!session || !sourceState || !sourceState.matchId || !this.shouldLiveHeartbeat(sourceState.phase)) return false;
+    this.liveInlineHint = '正在恢复权威连接...';
+    let heartbeatResult = null;
+    try {
+      heartbeatResult = await this.sendLiveHeartbeat({ resumeRealtime: true });
+    } catch (error) {
+      console.warn('[PVP Live] connection recovery heartbeat failed', error);
+    }
+    let nextState = typeof session.getState === 'function' ? session.getState() : null;
+    if (heartbeatResult && heartbeatResult.transport !== 'http' && this.getLiveConnectionSubmitBlock(nextState) && typeof session.heartbeat === 'function') {
+      try {
+        await session.heartbeat();
+      } catch (error) {
+        console.warn('[PVP Live] connection recovery HTTP heartbeat failed', error);
+      }
+    }
+    await new Promise(resolve => setTimeout(resolve, 120));
+    try {
+      if (typeof session.refreshMatch === 'function') {
+        await session.refreshMatch();
+      }
+    } catch (error) {
+      console.warn('[PVP Live] connection recovery refresh failed', error);
+    }
+    nextState = typeof session.getState === 'function' ? session.getState() : null;
+    return !this.getLiveConnectionSubmitBlock(nextState);
+  },
+  async ensureLiveConnectionReadyForSubmit(state = null) {
+    if (!this.getLiveConnectionSubmitBlock(state)) return true;
+    if (await this.recoverLiveConnectionSubmitBlock(state)) return true;
+    const session = this.getLiveSession();
+    const nextState = session && typeof session.getState === 'function' ? session.getState() : state;
+    return !this.blockLiveConnectionSubmit(nextState);
   },
   getLiveRealtimeReport(state) {
     const report = state && state.realtimeReport && typeof state.realtimeReport === 'object' ? state.realtimeReport : null;
@@ -5749,7 +5810,7 @@ export const PVPScene = {
     const state = session.getState();
     if (!state || !state.matchId || !this.shouldLiveHeartbeat(state.phase)) {
       this.stopLiveHeartbeat();
-      return;
+      return { transport: 'stopped', state };
     }
     const usedRealtimeResume = !!(resumeRealtime && typeof session.resumeRealtime === 'function');
     const resumeQueued = this.startLiveRealtime(state, { resume: resumeRealtime });
@@ -5758,24 +5819,28 @@ export const PVPScene = {
       : state.realtimeStatus === 'connected'
         && typeof session.heartbeatRealtime === 'function'
         && session.heartbeatRealtime(state.matchId);
+    let transport = realtimeSent ? 'realtime' : 'none';
     if (!realtimeSent) {
-      if (typeof session.heartbeat !== 'function') return;
+      if (typeof session.heartbeat !== 'function') return { transport, state: session.getState() };
       await session.heartbeat();
+      transport = 'http';
     }
     const next = session.getState();
     if (!this.shouldLiveHeartbeat(next.phase)) {
       this.stopLiveHeartbeat();
-      return;
+      return { transport, state: next };
     }
     this.startLiveHeartbeat({ sendImmediately: false });
     this.renderLivePanel();
+    return { transport, state: session.getState() };
   },
   async submitLiveIntent(intent = {}) {
     this.liveInlineHint = '';
     const session = this.getLiveSession();
-    const state = session.getState();
+    let state = session.getState();
     if (!state || !state.matchId) return state;
-    if (this.blockLiveConnectionSubmit(state)) return state;
+    if (!(await this.ensureLiveConnectionReadyForSubmit(state))) return session.getState();
+    state = session.getState();
     if (String(intent.intentType || '') !== 'surrender') {
       this.clearLiveSurrenderConfirm();
     }
@@ -6617,11 +6682,12 @@ export const PVPScene = {
   async submitLiveCard(cardInstanceId) {
     const session = this.getLiveSession();
     if (!cardInstanceId) return;
-    const state = session.getState();
-    if (this.blockLiveConnectionSubmit(state)) {
+    let state = session.getState();
+    if (!(await this.ensureLiveConnectionReadyForSubmit(state))) {
       this.renderLivePanel();
-      return state;
+      return session.getState();
     }
+    state = session.getState();
     const view = state && state.stateView ? state.stateView : null;
     const targetSeat = view && view.opponent && view.opponent.seatId
       ? view.opponent.seatId
@@ -6655,11 +6721,12 @@ export const PVPScene = {
   },
   async confirmLiveMulligan() {
     const session = this.getLiveSession();
-    const state = session && typeof session.getState === 'function' ? session.getState() : null;
-    if (this.blockLiveConnectionSubmit(state)) {
+    let state = session && typeof session.getState === 'function' ? session.getState() : null;
+    if (!(await this.ensureLiveConnectionReadyForSubmit(state))) {
       this.renderLivePanel();
-      return state;
+      return session.getState();
     }
+    state = session.getState();
     await this.submitLiveIntent({
       intentId: this.makeLiveIntentId('mulligan'),
       intentType: 'mulligan',
@@ -6672,11 +6739,12 @@ export const PVPScene = {
   },
   async readyLiveMatch() {
     const session = this.getLiveSession();
-    const state = session && typeof session.getState === 'function' ? session.getState() : null;
-    if (this.blockLiveConnectionSubmit(state)) {
+    let state = session && typeof session.getState === 'function' ? session.getState() : null;
+    if (!(await this.ensureLiveConnectionReadyForSubmit(state))) {
       this.renderLivePanel();
-      return state;
+      return session.getState();
     }
+    state = session.getState();
     await this.submitLiveIntent({
       intentId: this.makeLiveIntentId('ready'),
       intentType: 'ready',
@@ -6686,11 +6754,12 @@ export const PVPScene = {
   },
   async endLiveTurn() {
     const session = this.getLiveSession();
-    const state = session && typeof session.getState === 'function' ? session.getState() : null;
-    if (this.blockLiveConnectionSubmit(state)) {
+    let state = session && typeof session.getState === 'function' ? session.getState() : null;
+    if (!(await this.ensureLiveConnectionReadyForSubmit(state))) {
       this.renderLivePanel();
-      return state;
+      return session.getState();
     }
+    state = session.getState();
     if (this.isLiveOpeningActionConfirmRequired(state, 'end_turn', {}) && !this.isLiveOpeningActionConfirmArmed(state, 'end_turn', {})) {
       this.armLiveOpeningActionConfirm(state, 'end_turn', {}, this.formatLiveOpeningActionConfirmMessage(state, 'end_turn', {}));
       this.renderLivePanel();
@@ -6705,12 +6774,13 @@ export const PVPScene = {
   },
   async surrenderLiveMatch() {
     const session = this.getLiveSession();
-    const state = session && typeof session.getState === 'function' ? session.getState() : null;
+    let state = session && typeof session.getState === 'function' ? session.getState() : null;
     if (!state || !state.matchId || !(state.phase === 'active' || state.phase === 'sync_required')) return state;
-    if (this.blockLiveConnectionSubmit(state)) {
+    if (!(await this.ensureLiveConnectionReadyForSubmit(state))) {
       this.renderLivePanel();
-      return state;
+      return session.getState();
     }
+    state = session.getState();
     if (!this.isLiveSurrenderConfirmArmed(state)) {
       this.armLiveSurrenderConfirm(state, '再次点击确认认输；本局会立刻结束，对手获胜，正式结果只按当前对局模式的服务端规则处理。');
       this.renderLivePanel();

@@ -93,7 +93,7 @@ ssh cloud119 'set -e; systemctl is-active the-defier-backend; nginx -t'
 - `npm run test:prod:read -- cloud119 https://080305.xyz` 只做只读巡检：公网首页/API health、后端服务 active、`nginx -t`、远端静态/后端文件时间戳，以及是否包含当前后端迁移/完整性校验关键字。该命令不读取密钥、不创建 smoke 用户、不写生产数据。
 - `npm run test:prod:env -- cloud119` 返回 `NODE_ENV=production`、`JWT_SECRET length >= 32`、`DEFIER_HMAC_SECRET length >= 32`、`DEFIER_INTEGRITY_REQUIRED enabled`，且不打印密钥值。
 - `CONFIRM_PROD=1 npm run test:prod:api -- https://080305.xyz` 覆盖注册、登录、坏 JWT 必须 401、存档、全局数据、残影上传和残影拉取；同时验证未签名写入会被拒绝、非法/未来时间戳不会锁死记录，旧时间/同时间写入不会覆盖新记录。该命令会创建 `smoke_*` 测试用户，并写入测试存档、全局数据和残影。
-- `BASE_URL=https://080305.xyz npm run test:browser:release -- https://080305.xyz output/release-browser-audits-prod` 在正式域名下跑浏览器 release 审计并把截图/报告写到本地 `output/release-browser-audits-prod/`；其中 `backend-client` smoke 会使用脚本启动的本地临时 API，不写生产后端，生产写入只由上面的 `CONFIRM_PROD=1` API smoke 覆盖。
+- `BASE_URL=https://080305.xyz npm run test:browser:release -- https://080305.xyz output/release-browser-audits-prod` 在正式域名下跑浏览器 release 审计并把截图/报告写到本地 `output/release-browser-audits-prod/`；其中 `backend-client`、`auth-ui-cloud` 和 `pvp-live-real` 类 smoke 会使用脚本启动的本地临时 API，不写生产后端，生产写入只由上面的 `CONFIRM_PROD=1` API smoke 覆盖。
 - `systemctl is-active the-defier-backend` 返回 `active`。
 - `nginx -t` 返回配置通过。
 

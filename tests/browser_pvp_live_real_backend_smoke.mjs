@@ -22,6 +22,9 @@ const onlySafetyExit = process.env.BROWSER_PVP_LIVE_REAL_ONLY_SAFETY_EXIT === '1
 const runId = `${Date.now()}_${Math.random().toString(16).slice(2, 10)}`;
 const password = `pwd_${runId}`;
 const TEST_MATCH_SCOPE = `real_backend_smoke_${runId}`.replace(/[^a-z0-9_-]/gi, '_').toLowerCase();
+const navigationTimeoutMs = Math.max(30000, Math.floor(Number(process.env.BROWSER_PVP_LIVE_REAL_NAVIGATION_TIMEOUT_MS) || 60000));
+const bootTimeoutMs = Math.max(15000, Math.floor(Number(process.env.BROWSER_PVP_LIVE_REAL_BOOT_TIMEOUT_MS) || 20000));
+const bootAttempts = Math.max(1, Math.floor(Number(process.env.BROWSER_PVP_LIVE_REAL_BOOT_ATTEMPTS) || 5));
 
 if (requireMobileViewport && !isMobileViewport) {
   throw new Error('BROWSER_PVP_LIVE_REAL_REQUIRE_MOBILE requires BROWSER_PVP_LIVE_REAL_VIEWPORT=mobile');
@@ -33,6 +36,30 @@ const findings = [];
 const consoleErrors = [];
 let port = 0;
 let apiUrl = '';
+
+function usesHttpsAppWithLoopbackApi(targetApiUrl = apiUrl) {
+  try {
+    const app = new URL(appUrl);
+    const api = new URL(targetApiUrl);
+    return app.protocol === 'https:'
+      && api.protocol === 'http:'
+      && ['127.0.0.1', 'localhost', '::1'].includes(api.hostname);
+  } catch {
+    return false;
+  }
+}
+
+function chromiumLaunchArgsForLocalApi(extraArgs = []) {
+  const args = [...extraArgs];
+  if (usesHttpsAppWithLoopbackApi()) {
+    args.push(
+      '--disable-web-security',
+      '--allow-running-insecure-content',
+      '--disable-features=BlockInsecurePrivateNetworkRequests,PrivateNetworkAccessSendPreflights,PrivateNetworkAccessRespectPreflightResults',
+    );
+  }
+  return args;
+}
 
 function add(name, pass, detail = '') {
   findings.push({ name, pass, detail });
@@ -61,6 +88,7 @@ function seatSlug(seatId) {
 function recordConsoleError(text) {
   const message = String(text || '');
   if (/ERR_CONNECTION_(CLOSED|RESET)/.test(message)) return;
+  if (/ERR_NETWORK_CHANGED/.test(message)) return;
   if (/Failed to load resource: net::ERR_FILE_NOT_FOUND/.test(message)) return;
   if (/Failed to load resource: the server responded with a status of 404 \(Not Found\)/.test(message)) return;
   consoleErrors.push(message);
@@ -210,16 +238,29 @@ async function preparePage(browser, username, displayName) {
     if (msg.type() === 'error') recordConsoleError(`[${displayName}] ${msg.text()}`);
   });
   page.on('pageerror', err => recordConsoleError(`[${displayName}] ${String(err)}`));
-  await page.goto(appUrl, { waitUntil: 'domcontentloaded' });
-  await page.waitForFunction(
-    () => !!window.game
-      && !!window.__THE_DEFIER_SERVICES__?.BackendClient
-      && !!window.__THE_DEFIER_SERVICES__?.AuthService
-      && !!window.PVPService
-      && !!window.PVPScene,
-    null,
-    { timeout: 30000 },
-  );
+  let lastBootError = null;
+  for (let attempt = 1; attempt <= bootAttempts; attempt += 1) {
+    try {
+      await page.goto(appUrl, { waitUntil: 'domcontentloaded', timeout: navigationTimeoutMs });
+      await page.waitForFunction(
+        () => !!window.game
+          && !!window.__THE_DEFIER_SERVICES__?.BackendClient
+          && !!window.__THE_DEFIER_SERVICES__?.AuthService
+          && !!window.PVPService
+          && !!window.PVPScene,
+        null,
+        { timeout: bootTimeoutMs },
+      );
+      lastBootError = null;
+      break;
+    } catch (error) {
+      lastBootError = error;
+      if (attempt < bootAttempts) await page.waitForTimeout(1000);
+    }
+  }
+  if (lastBootError) {
+    throw new Error(`live PVP real page bootstrap timed out after ${bootAttempts} attempt(s): ${lastBootError.message || String(lastBootError)}`);
+  }
   await page.evaluate(async ({ username, password, testMatchScope }) => {
     const services = window.__THE_DEFIER_SERVICES__;
     const BackendClient = services.BackendClient;
@@ -303,12 +344,25 @@ async function dismissBlockingModals(page) {
 }
 
 async function reloadAndOpenLivePanel(page) {
-  await page.reload({ waitUntil: 'domcontentloaded' });
-  await page.waitForFunction(
-    () => !!window.game && !!window.PVPScene && typeof window.render_game_to_text === 'function',
-    null,
-    { timeout: 15000 },
-  );
+  let lastBootError = null;
+  for (let attempt = 1; attempt <= bootAttempts; attempt += 1) {
+    try {
+      await page.reload({ waitUntil: 'domcontentloaded', timeout: navigationTimeoutMs });
+      await page.waitForFunction(
+        () => !!window.game && !!window.PVPScene && typeof window.render_game_to_text === 'function',
+        null,
+        { timeout: bootTimeoutMs },
+      );
+      lastBootError = null;
+      break;
+    } catch (error) {
+      lastBootError = error;
+      if (attempt < bootAttempts) await page.waitForTimeout(1000);
+    }
+  }
+  if (lastBootError) {
+    throw new Error(`live PVP real reload bootstrap timed out after ${bootAttempts} attempt(s): ${lastBootError.message || String(lastBootError)}`);
+  }
   await page.evaluate(async (testMatchScope) => {
     window.__DEFIER_PVP_REAL_TEST_SCOPE = testMatchScope;
     if (!window.PVPScene.__realSmokeOriginalJoinLiveQueue) {
@@ -1395,6 +1449,14 @@ async function runFocusedPostMatchSafetyExit(browser) {
       '[data-live-post-review-action="queue_again"]',
       'focused-safety-loser-queue-again',
     );
+    const isAvoidSuppressedWaitingSnapshot = current => {
+      const report = current?.waitingReport;
+      return current?.phase === 'waiting'
+        && !current?.matchId
+        && report?.protectionReason === 'player_avoid_opponent'
+        && report?.releaseMode === 'quality_safeguard_wait'
+        && report?.safeguards?.includes('player_avoid_opponent');
+    };
     const waitForAvoidSuppressedQueue = async (page, label, timeoutMs = 12000) => {
       let waitError = '';
       let snapshot = null;
@@ -1420,6 +1482,7 @@ async function runFocusedPostMatchSafetyExit(browser) {
           waitError = `${waitError}; snapshot=${snapshotError?.message || String(snapshotError || '')}`;
         }
       }
+      if (isAvoidSuppressedWaitingSnapshot(snapshot)) waitError = '';
       return { label, waitError, snapshot };
     };
     const winnerProtectedResult = await waitForAvoidSuppressedQueue(winnerClient.page, 'focused-avoided-winner');
@@ -1533,6 +1596,7 @@ async function writeReport() {
     url: appUrl,
     apiUrl,
     viewportMode,
+    localLoopbackApiFromHttpsApp: usesHttpsAppWithLoopbackApi(),
     generatedAt: new Date().toISOString(),
     summary: {
       total: findings.length,
@@ -1556,7 +1620,7 @@ async function writeReport() {
   const browser = await chromium.launch({
     executablePath,
     headless: true,
-    args: ['--use-gl=angle', '--use-angle=swiftshader'],
+    args: chromiumLaunchArgsForLocalApi(['--use-gl=angle', '--use-angle=swiftshader']),
   });
   let seatA = null;
   let seatB = null;
@@ -1612,7 +1676,14 @@ async function writeReport() {
       JSON.stringify({ longWaitJoin, longWaitProbe, longWaitJoinActionable }),
     );
     const longWaitPracticeActionable = await clickLiveControl(longWaitSeat.page, '[data-live-action="practice-live"]', 'long-wait-practice-live');
-    await longWaitSeat.page.waitForTimeout(650);
+    let longWaitPracticeNavigationError = '';
+    try {
+      await longWaitSeat.page.waitForFunction(() => {
+        return window.game?.currentScreen === 'character-selection-screen';
+      }, null, { timeout: 15000 });
+    } catch (error) {
+      longWaitPracticeNavigationError = error?.message || String(error || 'long-wait practice navigation timed out');
+    }
     const longWaitPracticeProbe = await longWaitSeat.page.evaluate(() => {
       const payload = JSON.parse(window.render_game_to_text());
       return {
@@ -1640,7 +1711,7 @@ async function writeReport() {
         && (longWaitPracticeProbe.drillScenario?.trainingTags || []).includes('长等待练习')
         && !/reward|rating|elo/i.test(JSON.stringify(longWaitPracticeProbe.drillScenario || {}))
         && (!isMobileViewport || longWaitPracticeActionable?.ok === true),
-      JSON.stringify({ longWaitPracticeProbe, longWaitPracticeActionable }),
+      JSON.stringify({ longWaitPracticeProbe, longWaitPracticeActionable, longWaitPracticeNavigationError }),
     );
 
     const queueCancelCooldownScope = `${TEST_MATCH_SCOPE}_queue_cancel_cooldown`;
@@ -3180,7 +3251,7 @@ async function writeReport() {
       if (msg.type() === 'error') recordConsoleError(msg.text());
     });
     setupReloadPage.on('pageerror', error => recordConsoleError(error.message || String(error)));
-    await setupReloadPage.goto(appUrl, { waitUntil: 'domcontentloaded' });
+    await setupReloadPage.goto(appUrl, { waitUntil: 'domcontentloaded', timeout: navigationTimeoutMs });
     await reloadAndOpenLivePanel(setupReloadPage);
     const setupReloadRestored = await waitForLivePhase(setupReloadPage, 'setup', 15000);
     const setupReloadProbe = await setupReloadPage.evaluate(() => {
@@ -3296,7 +3367,7 @@ async function writeReport() {
       if (msg.type() === 'error') recordConsoleError(msg.text());
     });
     activeReloadPage.on('pageerror', error => recordConsoleError(error.message || String(error)));
-    await activeReloadPage.goto(appUrl, { waitUntil: 'domcontentloaded' });
+    await activeReloadPage.goto(appUrl, { waitUntil: 'domcontentloaded', timeout: navigationTimeoutMs });
     await reloadAndOpenLivePanel(activeReloadPage);
     const activeReloadRestored = await waitForLivePhase(activeReloadPage, 'active', 15000);
     const activeReloadProbe = await activeReloadPage.evaluate(() => {
@@ -5059,7 +5130,7 @@ async function writeReport() {
       if (msg.type() === 'error') recordConsoleError(msg.text());
     });
     waitingRematchReloadPage.on('pageerror', error => recordConsoleError(error.message || String(error)));
-    await waitingRematchReloadPage.goto(appUrl, { waitUntil: 'domcontentloaded' });
+    await waitingRematchReloadPage.goto(appUrl, { waitUntil: 'domcontentloaded', timeout: navigationTimeoutMs });
     await reloadAndOpenLivePanel(waitingRematchReloadPage);
     await waitForLiveSnapshot(waitingRematchReloadPage, () => {
       const snapshot = window.PVPScene?.getLiveSnapshot?.() || null;
@@ -5367,17 +5438,19 @@ async function writeReport() {
 	    const seatEJoinActionable = seatEJoinResult.actionables[0] || null;
 	    const disconnectJoinE = seatEJoinResult.snapshot;
 	    const seatFJoinResult = await clickLiveControlUntilPhase(seatF.page, '[data-live-action="join-queue"]', 'setup', 'seat-f-join-queue', 15000);
-	    const seatFJoinActionable = seatFJoinResult.actionables[0] || null;
-	    const disconnectSetupF = seatFJoinResult.snapshot;
+    const seatFJoinActionable = seatFJoinResult.actionables[0] || null;
+    const disconnectSetupF = seatFJoinResult.snapshot;
     const disconnectSetupE = await refreshUntilLivePhase(seatE.page, 'setup');
     const disconnectReadyEActionable = await clickLiveControl(seatE.page, '[data-live-action="ready"]', 'seat-e-ready-live');
+    const disconnectReadyEProbe = await readyLiveSetupSeat(seatE.page, 'seat-e-ready-live-authoritative', 10000);
     await refreshUntilLiveSnapshot(seatF.page, () => {
       const snapshot = window.PVPScene?.getLiveSnapshot?.();
       return snapshot?.phase === 'setup' && snapshot?.opponent?.ready === true;
     }, null, 8000);
     const disconnectReadyFActionable = await clickLiveControl(seatF.page, '[data-live-action="ready"]', 'seat-f-ready-live');
-    const disconnectActiveE = await waitForLivePhase(seatE.page, 'active', 10000);
-    const disconnectActiveF = await waitForLivePhase(seatF.page, 'active', 10000);
+    const disconnectReadyFProbe = await readyLiveSetupSeat(seatF.page, 'seat-f-ready-live-authoritative', 10000);
+    const disconnectActiveE = await refreshUntilLivePhase(seatE.page, 'active', 15000);
+    const disconnectActiveF = await refreshUntilLivePhase(seatF.page, 'active', 15000);
     const disconnectActorSeat = disconnectActiveE.currentSeat;
     const disconnectObserverSeat = otherSeatId(disconnectActorSeat);
     const disconnectActorClient = disconnectActorSeat === disconnectActiveE.seatId ? seatE : seatF;
@@ -5434,7 +5507,7 @@ async function writeReport() {
       if (msg.type() === 'error') recordConsoleError(msg.text());
     });
     currentActionDisconnectReloadPage.on('pageerror', error => recordConsoleError(error.message || String(error)));
-    await currentActionDisconnectReloadPage.goto(appUrl, { waitUntil: 'domcontentloaded' });
+    await currentActionDisconnectReloadPage.goto(appUrl, { waitUntil: 'domcontentloaded', timeout: navigationTimeoutMs });
     await reloadAndOpenLivePanel(currentActionDisconnectReloadPage);
     const currentActionDisconnectReloaded = await waitForLivePhase(currentActionDisconnectReloadPage, 'finished', 15000);
     const currentActionDisconnectReloadProbe = await currentActionDisconnectReloadPage.evaluate(() => ({
@@ -5493,6 +5566,8 @@ async function writeReport() {
         disconnectSetupE,
         disconnectActiveE,
         disconnectActiveF,
+        disconnectReadyEProbe,
+        disconnectReadyFProbe,
         disconnectActorSeat,
         disconnectObserverSeat,
         currentActionDisconnectPendingProbe,

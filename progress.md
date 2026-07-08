@@ -1,5 +1,24 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-07-08: V10-S93 live PVP reconnect recovery and local release closure
+  - 本轮完成
+    - `PVPScene` 的真人 PVP 提交链路从“连接节奏异常时直接阻止”改为“先恢复权威连接，再决定是否阻止”：`viewer_reconnect_grace` / `viewer_refresh_required` 会触发 realtime resume、HTTP heartbeat fallback 和 `refreshMatch()`，再允许 `submitLiveIntent`、出牌、换牌确认、ready、结束回合与认输继续提交。
+    - `handleLiveForegroundResume()` 同步补 HTTP heartbeat 与权威刷新，避免移动端或后台恢复后页面看似在线、但服务端仍要求刷新时，玩家只能看到灰按钮或需要手动刷新。
+    - `tests/sanity_pvp_live_ui_contract_checks.cjs`、`tests/sanity_pvp_live_ui_runtime_checks.mjs` 和 `tests/sanity_release_gate_coverage_checks.cjs` 锁住新合同：真人 PVP 操作必须共用 `ensureLiveConnectionReadyForSubmit()`，并在 `viewer_reconnect_grace` 下自动恢复后再提交。
+    - `tests/browser_pvp_live_real_backend_smoke.mjs` 修正真实后端长链 smoke 的两个误判：avoid-opponent 等待态允许以刷新后的权威 snapshot 判定；断线/超时段改为用双方 ready 探针和 active 相位轮询，减少把正确产品状态误判为测试失败。
+    - 线上巡检阶段发现 `cloud119` 存在外部 `education-fee-backend` compose 项目反复占用 `9000` 并覆盖 `/www/wwwroot` 的冲突；根据用户最新要求，本轮已停止所有线上部署、远端同步、systemd / Nginx 操作和生产 smoke，不把正式域名状态作为完成依据。
+  - 已验证
+    - 目标合同：`node tests/sanity_pvp_live_ui_contract_checks.cjs`
+    - 目标运行时：`node tests/sanity_pvp_live_ui_runtime_checks.mjs`
+    - 发布覆盖：`node tests/sanity_release_gate_coverage_checks.cjs`
+    - 完整 Node 门禁：`PVP_LIVE_WS_FANOUT_MESSAGE_TIMEOUT_MS=60000 npm run test:node`
+    - 本地生产构建：`npm run build:pages`
+    - 桌面+移动真实后端成对 release gate：`AUDIT_FILTER='pvp-live-real,pvp-live-mobile-real' BASE_URL=http://127.0.0.1:4173 npm run test:browser:release -- http://127.0.0.1:4173 output/release-browser-audits-local-20260708-pvp-pair-final` ✅，桌面 `2026-07-08T03:50:24.475Z` 92/92 findings、0 failed、0 console error；移动 `2026-07-08T03:52:17.801Z` 93/93 findings、0 failed、0 console error。
+  - 线上状态
+    - 本轮不执行线上部署、远端验证或生产 smoke；此前远端观察全部不作为完成依据。后续若恢复线上发布，必须重新按部署文档从备份、同步、服务检查和生产 smoke 开始。
+  - 当前结论
+    - V10 真人 PVP 的桌面/移动本地真实后端 release gate 与 Node 门禁已收口。该切片不改变卡牌数值、伤害公式、匹配规则、正式积分算法或奖励边界；它修复的是弱网络/移动恢复时的操作可达性。正式线上部署已按用户要求停止，当前不能宣称 `https://080305.xyz/` 线上完成。
+
 - 2026-07-07: V10-S92 live PVP desktop/mobile real-backend release gate closure
   - 本轮完成
     - `tests/browser_pvp_live_real_backend_smoke.mjs` 将真实后端 smoke 的关键等待从“一次点击后固定等待”收紧为状态驱动：收件箱约战加入、排队取消冷却、断线超时入队、卡牌确认/提交、赛后关键回合动作、友谊再战 ready 和 safety-exit 连接恢复都改为真实点击后等待服务端权威相位或 stateVersion。

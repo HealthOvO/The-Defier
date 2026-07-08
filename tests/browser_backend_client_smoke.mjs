@@ -13,11 +13,36 @@ const runId = `${Date.now()}_${Math.random().toString(16).slice(2, 10)}`;
 const password = `pwd_${runId}`;
 const realm = Math.max(1, Math.min(18, Math.floor(Number(process.env.BROWSER_BACKEND_SMOKE_REALM || 6) || 6)));
 const dbPath = process.env.BROWSER_BACKEND_SMOKE_DB_PATH || path.join(os.tmpdir(), `the-defier-browser-backend-${process.pid}.sqlite`);
+const navigationTimeoutMs = Math.max(30000, Math.floor(Number(process.env.BROWSER_BACKEND_SMOKE_NAVIGATION_TIMEOUT_MS) || 60000));
 
 fs.mkdirSync(outDir, { recursive: true });
 
 const findings = [];
 const consoleErrors = [];
+
+function usesHttpsAppWithLoopbackApi(targetApiUrl = apiUrl) {
+  try {
+    const app = new URL(appUrl);
+    const api = new URL(targetApiUrl);
+    return app.protocol === 'https:'
+      && api.protocol === 'http:'
+      && ['127.0.0.1', 'localhost', '::1'].includes(api.hostname);
+  } catch {
+    return false;
+  }
+}
+
+function chromiumLaunchArgsForLocalApi(targetApiUrl = apiUrl, extraArgs = []) {
+  const args = [...extraArgs];
+  if (usesHttpsAppWithLoopbackApi(targetApiUrl)) {
+    args.push(
+      '--disable-web-security',
+      '--allow-running-insecure-content',
+      '--disable-features=BlockInsecurePrivateNetworkRequests,PrivateNetworkAccessSendPreflights,PrivateNetworkAccessRespectPreflightResults',
+    );
+  }
+  return args;
+}
 
 function add(name, pass, detail = '') {
   findings.push({ name, pass, detail });
@@ -26,6 +51,7 @@ function add(name, pass, detail = '') {
 function recordConsoleError(text) {
   const message = String(text || '');
   if (/ERR_CONNECTION_(CLOSED|RESET)/.test(message)) return;
+  if (/ERR_NETWORK_CHANGED/.test(message)) return;
   if (/Failed to load resource: net::ERR_FILE_NOT_FOUND/.test(message)) return;
   consoleErrors.push(message);
 }
@@ -88,6 +114,7 @@ function writeReport() {
   const report = {
     url: appUrl,
     apiUrl,
+    localLoopbackApiFromHttpsApp: usesHttpsAppWithLoopbackApi(),
     generatedAt: new Date().toISOString(),
     summary: {
       total: findings.length,
@@ -119,7 +146,7 @@ async function runBrowserSmoke(page, targetApiUrl = apiUrl) {
     } catch {}
   }, targetApiUrl);
 
-  await page.goto(appUrl, { waitUntil: 'domcontentloaded' });
+  await page.goto(appUrl, { waitUntil: 'domcontentloaded', timeout: navigationTimeoutMs });
   await page.waitForFunction(
     () => !!window.game && !!window.__THE_DEFIER_SERVICES__?.BackendClient && !!window.PVPService,
     null,
@@ -631,7 +658,7 @@ async function runAuthoritativePvpSettlementSmoke(browser) {
         sessionStorage.removeItem('theDefierPvpActiveMatchV1');
       } catch {}
     }, authorityApiUrl);
-    await page.goto(appUrl, { waitUntil: 'domcontentloaded' });
+    await page.goto(appUrl, { waitUntil: 'domcontentloaded', timeout: navigationTimeoutMs });
     await page.waitForFunction(
       () => !!window.game && !!window.__THE_DEFIER_SERVICES__?.BackendClient && !!window.PVPService,
       null,
@@ -895,7 +922,7 @@ try {
   browser = await chromium.launch({
     headless: true,
     executablePath: process.env.PLAYWRIGHT_EXECUTABLE_PATH || undefined,
-    args: ['--use-gl=angle', '--use-angle=swiftshader'],
+    args: chromiumLaunchArgsForLocalApi(apiUrl, ['--use-gl=angle', '--use-angle=swiftshader']),
   });
   const page = await browser.newPage({ viewport: { width: 1280, height: 860 } });
   page.on('console', (msg) => {

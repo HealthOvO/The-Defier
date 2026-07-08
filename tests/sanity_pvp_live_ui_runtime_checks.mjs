@@ -912,6 +912,44 @@ assert.equal(blockedActiveButtons.get('end-turn').disabled, true, 'viewer reconn
 assert.equal(blockedActiveButtons.get('surrender').disabled, true, 'viewer reconnect grace should disable stale active surrender submits');
 assert.equal(blockedActiveButtons.get('refresh-match').disabled, false, 'viewer reconnect grace should keep authoritative refresh enabled');
 
+const recoveredViewerState = {
+  ...viewerReconnectBlockedState,
+  stateView: {
+    ...viewerReconnectBlockedView,
+    connectionTempoReport: null,
+    self: { seatId: 'A', ready: true, mulliganUsed: true },
+    opponent: { seatId: 'B', ready: true, handCount: 3 }
+  }
+};
+let autoRecoveryState = viewerReconnectBlockedState;
+let autoRecoveryResumeCalls = 0;
+let autoRecoveryRefreshCalls = 0;
+const previousRenderLivePanelForAutoRecovery = PVPScene.renderLivePanel;
+PVPScene.renderLivePanel = () => {};
+PVPScene.stopLiveHeartbeat();
+PVPScene.getLiveSession = () => ({
+  getState: () => autoRecoveryState,
+  connectRealtime() { return true; },
+  joinRealtimeMatch() { return true; },
+  resumeRealtime(matchId) {
+    assert.equal(matchId, viewerReconnectBlockedView.matchId, 'viewer reconnect recovery should resume the current match');
+    autoRecoveryResumeCalls += 1;
+    return true;
+  },
+  async refreshMatch() {
+    autoRecoveryRefreshCalls += 1;
+    autoRecoveryState = recoveredViewerState;
+    return autoRecoveryState;
+  }
+});
+const autoRecovered = await PVPScene.ensureLiveConnectionReadyForSubmit(autoRecoveryState);
+assert.equal(autoRecovered, true, 'viewer reconnect grace should auto-recover before live action submit');
+assert.equal(autoRecoveryResumeCalls > 0, true, 'viewer reconnect recovery should resume realtime before allowing submit');
+assert.equal(autoRecoveryRefreshCalls, 1, 'viewer reconnect recovery should refresh authoritative match state once');
+assert.equal(PVPScene.getLiveConnectionSubmitBlock(autoRecoveryState), null, 'recovered viewer state should no longer block live submit');
+PVPScene.stopLiveHeartbeat();
+PVPScene.renderLivePanel = previousRenderLivePanelForAutoRecovery;
+
 const viewerReconnectBlockedSetupState = {
   ...viewerReconnectBlockedState,
   phase: 'setup',
