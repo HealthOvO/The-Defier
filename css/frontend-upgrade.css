@@ -10,6 +10,10 @@
     z-index: 2;
 }
 
+#main-menu .menu-oracle-strip {
+    margin-top: 44px;
+}
+
 .frontend-upgrade-hero {
     position: absolute;
     inset: 0;
@@ -143,6 +147,13 @@
         flex-basis: 96px;
         width: 96px;
         height: 96px;
+    }
+
+    #main-menu .util-btn {
+        width: 44px;
+        min-width: 44px;
+        height: 44px;
+        min-height: 44px;
     }
 
     .challenge-btn,

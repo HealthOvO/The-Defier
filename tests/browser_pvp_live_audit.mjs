@@ -1624,11 +1624,150 @@ async function safeElementScreenshot(page, selector, outputPath) {
       && /真人排位/.test(defaultEntryProbe.boundaryText)
       && /问道练习/.test(defaultEntryProbe.boundaryText)
       && /好友约战/.test(defaultEntryProbe.boundaryText)
-      && /镜像演武/.test(defaultEntryProbe.boundaryText)
+      && /镜像练习/.test(defaultEntryProbe.boundaryText)
       && /不是真人排位/.test(defaultEntryProbe.boundaryText)
       && defaultEntryProbe.joinVisible,
     JSON.stringify(defaultEntryProbe),
   );
+
+  await page.setViewportSize({ width: 1180, height: 760 });
+  await page.evaluate(() => window.game?.showScreen?.('pvp-screen'));
+  await page.waitForTimeout(250);
+  const mediumEntryProbe = await page.evaluate(() => {
+    const rectObj = (el) => {
+      if (!el) return null;
+      const rect = el.getBoundingClientRect();
+      return {
+        left: Math.round(rect.left),
+        right: Math.round(rect.right),
+        top: Math.round(rect.top),
+        bottom: Math.round(rect.bottom),
+        width: Math.round(rect.width),
+        height: Math.round(rect.height),
+      };
+    };
+    const overlaps = (a, b, margin = 0) => !!a && !!b && !(
+      a.right <= b.left + margin ||
+      b.right <= a.left + margin ||
+      a.bottom <= b.top + margin ||
+      b.bottom <= a.top + margin
+    );
+    const selectorFor = (el) => {
+      if (!el) return '';
+      if (el.id) return `#${el.id}`;
+      const classes = Array.from(el.classList || []).slice(0, 3).join('.');
+      return `${el.tagName.toLowerCase()}${classes ? `.${classes}` : ''}`;
+    };
+    const centerHit = (el) => {
+      const rect = rectObj(el);
+      if (!rect) return { ok: false, rect, hit: '' };
+      const x = Math.round(rect.left + rect.width / 2);
+      const y = Math.round(rect.top + rect.height / 2);
+      const hit = document.elementFromPoint(x, y);
+      return {
+        ok: !!hit && (hit === el || el.contains(hit) || hit.contains(el)),
+        rect,
+        hit: selectorFor(hit),
+      };
+    };
+    const statusCard = document.querySelector('.pvp-live-status-card');
+    const riskHeading = statusCard?.querySelector('.pvp-risk-heading');
+    const statusChip = statusCard?.querySelector('.pvp-risk-dri');
+    const boundary = statusCard?.querySelector('[data-live-mode-boundary]');
+    const actions = Array.from(document.querySelectorAll('.pvp-live-footer [data-live-action]:not([hidden])'));
+    return {
+      viewportWidth: window.innerWidth,
+      scrollWidth: document.documentElement.scrollWidth,
+      statusCard: rectObj(statusCard),
+      riskHeading: rectObj(riskHeading),
+      statusChip: rectObj(statusChip),
+      headingChipOverlap: overlaps(rectObj(riskHeading), rectObj(statusChip), 4),
+      boundaryText: boundary?.textContent || '',
+      boundaryRect: rectObj(boundary),
+      boundaryScrollWidth: boundary?.scrollWidth || 0,
+      boundaryClientWidth: boundary?.clientWidth || 0,
+      boundaryWhiteSpace: boundary ? getComputedStyle(boundary).whiteSpace : '',
+      actionCount: actions.length,
+      actionLabels: actions.map((button) => (button.textContent || '').replace(/\s+/g, ' ').trim()),
+    };
+  });
+  await page.evaluate(() => {
+    document.querySelector('.pvp-live-footer')?.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'auto' });
+  }).catch(() => {});
+  await page.waitForTimeout(100);
+  const mediumActionProbe = await page.evaluate(() => {
+    const rectObj = (el) => {
+      if (!el) return null;
+      const rect = el.getBoundingClientRect();
+      return {
+        left: Math.round(rect.left),
+        right: Math.round(rect.right),
+        top: Math.round(rect.top),
+        bottom: Math.round(rect.bottom),
+        width: Math.round(rect.width),
+        height: Math.round(rect.height),
+      };
+    };
+    const overlaps = (a, b, margin = 0) => !!a && !!b && !(
+      a.right <= b.left + margin ||
+      b.right <= a.left + margin ||
+      a.bottom <= b.top + margin ||
+      b.bottom <= a.top + margin
+    );
+    const selectorFor = (el) => {
+      if (!el) return '';
+      if (el.id) return `#${el.id}`;
+      const classes = Array.from(el.classList || []).slice(0, 3).join('.');
+      return `${el.tagName.toLowerCase()}${classes ? `.${classes}` : ''}`;
+    };
+    const centerHit = (el) => {
+      const rect = rectObj(el);
+      if (!rect) return { ok: false, rect, hit: '' };
+      const x = Math.round(rect.left + rect.width / 2);
+      const y = Math.round(rect.top + rect.height / 2);
+      const inViewport = x >= 0 && y >= 0 && x <= window.innerWidth && y <= window.innerHeight;
+      const hit = inViewport ? document.elementFromPoint(x, y) : null;
+      return {
+        ok: !!hit && (hit === el || el.contains(hit) || hit.contains(el)),
+        rect,
+        hit: selectorFor(hit),
+      };
+    };
+    const actionProbes = Array.from(document.querySelectorAll('.pvp-live-footer [data-live-action]:not([hidden])')).map((button) => ({
+      action: button.getAttribute('data-live-action') || '',
+      label: (button.textContent || '').replace(/\s+/g, ' ').trim(),
+      hit: centerHit(button),
+    }));
+    const actionRects = actionProbes.map((probe) => probe.hit.rect).filter(Boolean);
+    const actionOverlapCount = actionRects.reduce((count, rect, index) => {
+      return count + actionRects.slice(index + 1).filter((other) => overlaps(rect, other, -2)).length;
+    }, 0);
+    return {
+      viewportWidth: window.innerWidth,
+      scrollY: Math.round(window.scrollY),
+      actionProbes,
+      actionOverlapCount,
+    };
+  });
+  add(
+    'pvp live medium-width header and actions stay readable and touchable',
+    mediumEntryProbe.statusCard?.left >= 0
+      && mediumEntryProbe.statusCard?.right <= mediumEntryProbe.viewportWidth + 2
+      && mediumEntryProbe.scrollWidth <= mediumEntryProbe.viewportWidth + 2
+      && mediumEntryProbe.headingChipOverlap === false
+      && /镜像练习/.test(mediumEntryProbe.boundaryText)
+      && mediumEntryProbe.boundaryScrollWidth <= mediumEntryProbe.boundaryClientWidth + 2
+      && mediumEntryProbe.boundaryWhiteSpace !== 'nowrap'
+      && mediumEntryProbe.actionCount >= 3
+      && mediumActionProbe.actionOverlapCount === 0
+      && mediumActionProbe.actionProbes.length >= 3
+      && mediumActionProbe.actionProbes.every((probe) => probe.hit.ok && probe.hit.rect?.width >= 44 && probe.hit.rect?.height >= 40),
+    JSON.stringify({ header: mediumEntryProbe, actions: mediumActionProbe }),
+  );
+  await safeElementScreenshot(page, '[data-live-pvp-root]', path.join(outDir, 'pvp-live-panel-medium.png'));
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.evaluate(() => window.game?.showScreen?.('pvp-screen'));
+  await page.waitForTimeout(150);
 
   await page.click('[data-pvp-tab="live"]', { timeout: 5000, force: true });
   await page.waitForSelector('[data-live-loadout-preset="sword"]', { timeout: 5000 });
@@ -7092,7 +7231,7 @@ async function safeElementScreenshot(page, selector, outputPath) {
       && /真人排位/.test(mobileDefaultEntryProbe.boundaryText)
       && /问道练习/.test(mobileDefaultEntryProbe.boundaryText)
       && /好友约战/.test(mobileDefaultEntryProbe.boundaryText)
-      && /镜像演武/.test(mobileDefaultEntryProbe.boundaryText)
+      && /镜像练习/.test(mobileDefaultEntryProbe.boundaryText)
       && /不是真人排位/.test(mobileDefaultEntryProbe.boundaryText)
       && mobileDefaultEntryProbe.joinVisible,
     JSON.stringify(mobileDefaultEntryProbe),

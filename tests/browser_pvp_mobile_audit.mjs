@@ -128,6 +128,31 @@ function rectObj(el) {
   });
   add('pvp mobile ranking view stacks nav above content without overflow', !!rankingProbe?.ok, JSON.stringify(rankingProbe || null));
 
+  const rankingCopyProbe = await page.evaluate(() => {
+    const payload = JSON.parse(window.render_game_to_text());
+    const text = [
+      document.querySelector('#pvp-ranking-brief .pvp-risk-kicker')?.textContent || '',
+      document.querySelector('#pvp-ranking-brief .pvp-risk-title')?.textContent || '',
+      document.getElementById('pvp-challenge-intent')?.textContent || '',
+      document.querySelector('#tab-ranking [data-pvp-legacy-practice]')?.textContent || '',
+      payload.pvp?.rankingFocus?.duelBrief?.modeLabel || '',
+    ].join(' ');
+    return {
+      text,
+      intent: document.getElementById('pvp-challenge-intent')?.textContent || '',
+      buttonText: document.querySelector('#tab-ranking [data-pvp-legacy-practice]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+      modeLabel: payload.pvp?.rankingFocus?.duelBrief?.modeLabel || '',
+    };
+  });
+  add(
+    'pvp mobile ranking runtime copy uses mirror practice wording',
+    /镜像练习|锁定练习|榜位直约/.test(rankingCopyProbe.text)
+      && !/镜像演武/.test(rankingCopyProbe.text)
+      && rankingCopyProbe.intent.length > 0
+      && rankingCopyProbe.buttonText.length > 0,
+    JSON.stringify(rankingCopyProbe)
+  );
+
   const dangerBriefProbe = await page.evaluate(() => {
     const toRect = (el) => {
       if (!el) return null;

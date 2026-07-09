@@ -48,6 +48,12 @@ function collectCharacterSelectionProbe() {
     const wrapper = card.querySelector('.char-avatar-wrapper');
     const image = card.querySelector('.char-avatar-img');
     if (!header || !wrapper || !image) return { id: card.dataset.id, ok: false, reason: 'missing_portrait_nodes' };
+    const fallback = image.nextElementSibling;
+    const fallbackReady =
+      image.getAttribute('data-fallback-emoji') === 'true' &&
+      !!fallback &&
+      fallback.classList.contains('char-avatar-emoji') &&
+      fallback.textContent.trim().length > 0;
     const headerRect = header.getBoundingClientRect();
     const wrapperRect = wrapper.getBoundingClientRect();
     const visibleTop = Math.max(headerRect.top, wrapperRect.top);
@@ -65,13 +71,16 @@ function collectCharacterSelectionProbe() {
         visibleRatio >= 0.88 &&
         image.complete &&
         image.naturalWidth >= 256 &&
-        image.naturalHeight >= 256,
+        image.naturalHeight >= 256 &&
+        fallbackReady,
       headerHeight: Math.round(headerRect.height),
       wrapperWidth: Math.round(wrapperRect.width),
       wrapperHeight: Math.round(wrapperRect.height),
       visibleRatio: Number(visibleRatio.toFixed(2)),
       naturalWidth: image.naturalWidth,
       naturalHeight: image.naturalHeight,
+      fallbackReady,
+      fallbackText: fallback?.textContent?.trim() || '',
     };
   });
   const portraitsOk = portraitProbes.every((probe) => probe.ok);
@@ -92,6 +101,104 @@ function collectCharacterSelectionProbe() {
       width: Math.round(rect.width),
       height: Math.round(rect.height),
     }
+  };
+}
+
+function collectMainMenuProbe(options = {}) {
+  const requireFullFit = options.requireFullFit !== false;
+  const shell = document.querySelector('#main-menu .menu-content');
+  const cards = document.querySelectorAll('#main-menu .menu-oracle-card');
+  const utilities = document.querySelectorAll('#main-menu .util-btn-wrapper');
+  if (!shell || cards.length < 3 || utilities.length < 6) return { ok: false, reason: 'missing_main_menu_nodes' };
+  const rect = shell.getBoundingClientRect();
+  const rectObj = (target) => {
+    if (!target) return null;
+    const targetRect = target.getBoundingClientRect();
+    return {
+      left: Math.round(targetRect.left),
+      top: Math.round(targetRect.top),
+      right: Math.round(targetRect.right),
+      bottom: Math.round(targetRect.bottom),
+      width: Math.round(targetRect.width),
+      height: Math.round(targetRect.height),
+    };
+  };
+  const overlaps = (a, b, margin = 0) => {
+    if (!a || !b) return false;
+    return !(
+      a.right <= b.left + margin ||
+      b.right <= a.left + margin ||
+      a.bottom <= b.top + margin ||
+      b.bottom <= a.top + margin
+    );
+  };
+  const centerHit = (target) => {
+    if (!target) return { ok: false, reason: 'missing_target' };
+    const targetRect = target.getBoundingClientRect();
+    const x = Math.round(targetRect.left + targetRect.width / 2);
+    const y = Math.round(targetRect.top + targetRect.height / 2);
+    const inViewport = x >= 0 && y >= 0 && x <= window.innerWidth && y <= window.innerHeight;
+    const hit = inViewport ? document.elementFromPoint(x, y) : null;
+    return {
+      ok: !!hit && (hit === target || target.contains(hit)),
+      hitTag: hit ? hit.tagName : '',
+      hitClass: hit ? hit.className : '',
+    };
+  };
+  const oracleStrip = document.querySelector('#main-menu .menu-oracle-strip');
+  const oracleRect = rectObj(oracleStrip);
+  const utilityProbes = Array.from(utilities).map((wrapper) => {
+    const button = wrapper.querySelector('.util-btn');
+    const label = wrapper.querySelector('.util-label');
+    const expectedName = (label?.textContent || '').trim();
+    const ariaLabel = (button?.getAttribute('aria-label') || '').trim();
+    const title = (button?.getAttribute('title') || '').trim();
+    const buttonRect = rectObj(button);
+    const labelRect = rectObj(label);
+    const labelVisible = !!labelRect && labelRect.width > 0 && labelRect.height > 0;
+    const hit = centerHit(button);
+    return {
+      expectedName,
+      ariaLabel,
+      title,
+      buttonRect,
+      labelRect,
+      labelVisible,
+      hit,
+      ok:
+        !!expectedName &&
+        ariaLabel === expectedName &&
+        title === expectedName &&
+        !!buttonRect &&
+        buttonRect.width >= 44 &&
+        buttonRect.height >= 44 &&
+        buttonRect.left >= 0 &&
+        buttonRect.right <= window.innerWidth + 2 &&
+        hit.ok &&
+        (!labelVisible || !overlaps(labelRect, oracleRect, -2)),
+    };
+  });
+  const utilitiesOk = utilityProbes.length >= 7 && utilityProbes.every((probe) => probe.ok);
+  return {
+    ok:
+      rect.left >= (requireFullFit ? 12 : 0) &&
+      rect.right <= window.innerWidth + (requireFullFit ? -12 : 2) &&
+      rect.top >= (requireFullFit ? 8 : -2) &&
+      (!requireFullFit || rect.bottom <= window.innerHeight - 8) &&
+      document.documentElement.scrollWidth <= window.innerWidth + 2 &&
+      utilitiesOk,
+    rect: {
+      left: Math.round(rect.left),
+      top: Math.round(rect.top),
+      right: Math.round(rect.right),
+      bottom: Math.round(rect.bottom),
+      width: Math.round(rect.width),
+      height: Math.round(rect.height),
+    },
+    cards: cards.length,
+    utilities: utilities.length,
+    utilityProbes,
+    oracleRect,
   };
 }
 
@@ -123,38 +230,46 @@ function collectCharacterSelectionProbe() {
   });
 
   await boot(page);
-  const mainMenuProbe = await page.evaluate(() => {
-    const shell = document.querySelector('#main-menu .menu-content');
-    const cards = document.querySelectorAll('#main-menu .menu-oracle-card');
-    const utilities = document.querySelectorAll('#main-menu .util-btn-wrapper');
-    if (!shell || cards.length < 3 || utilities.length < 6) return { ok: false, reason: 'missing_main_menu_nodes' };
-    const rect = shell.getBoundingClientRect();
-    return {
-      ok:
-        rect.left >= 12 &&
-        rect.right <= window.innerWidth - 12 &&
-        rect.top >= 8 &&
-        rect.bottom <= window.innerHeight - 8 &&
-        document.documentElement.scrollWidth <= window.innerWidth + 2,
-      rect: {
-        left: Math.round(rect.left),
-        top: Math.round(rect.top),
-        right: Math.round(rect.right),
-        bottom: Math.round(rect.bottom),
-        width: Math.round(rect.width),
-        height: Math.round(rect.height),
-      },
-      cards: cards.length,
-      utilities: utilities.length,
-    };
-  });
-  add('main menu shell stays centered and keeps overview cards visible', !!mainMenuProbe?.ok, JSON.stringify(mainMenuProbe || null));
+  const mainMenuProbe = await page.evaluate(collectMainMenuProbe);
+  add('main menu shell stays centered, keeps overview cards visible, and utility buttons are reachable', !!mainMenuProbe?.ok, JSON.stringify(mainMenuProbe || null));
   await captureScreenshot(page, '01-main-menu.png');
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await boot(page);
+  const mobileMainMenuProbe = await page.evaluate(collectMainMenuProbe, { requireFullFit: false });
+  add('main menu mobile utility buttons stay reachable without horizontal overflow', !!mobileMainMenuProbe?.ok, JSON.stringify(mobileMainMenuProbe || null));
+  await captureScreenshot(page, '01b-main-menu-mobile.png');
+  await page.setViewportSize({ width: 1440, height: 960 });
 
   await showCharacterSelectionWithLoadedPortraits(page);
   const characterProbe = await page.evaluate(collectCharacterSelectionProbe);
   add('character selection fits inside a single readable shell', !!characterProbe?.ok, JSON.stringify(characterProbe || null));
   await captureScreenshot(page, '02-character-selection.png');
+  const characterFallbackProbe = await page.evaluate(() => {
+    const image = document.querySelector('.character-card[data-id="yanHan"] .char-avatar-img');
+    const fallback = image?.nextElementSibling || null;
+    if (!image || !fallback) return { ok: false, reason: 'missing_yanhan_fallback_nodes' };
+    image.dispatchEvent(new Event('error', { bubbles: true }));
+    const imageStyle = getComputedStyle(image);
+    const fallbackStyle = getComputedStyle(fallback);
+    const fallbackRect = fallback.getBoundingClientRect();
+    return {
+      ok:
+        imageStyle.display === 'none' &&
+        fallbackStyle.display !== 'none' &&
+        fallbackRect.width >= 44 &&
+        fallbackRect.height >= 44 &&
+        fallback.textContent.trim() === '📘',
+      imageDisplay: imageStyle.display,
+      fallbackDisplay: fallbackStyle.display,
+      fallbackText: fallback.textContent.trim(),
+      fallbackRect: {
+        width: Math.round(fallbackRect.width),
+        height: Math.round(fallbackRect.height),
+      },
+    };
+  });
+  add('character portrait image error reveals emoji fallback at runtime', !!characterFallbackProbe?.ok, JSON.stringify(characterFallbackProbe || null));
 
   await page.setViewportSize({ width: 390, height: 844 });
   await showCharacterSelectionWithLoadedPortraits(page);
@@ -335,6 +450,42 @@ function collectCharacterSelectionProbe() {
     const rect = shell.getBoundingClientRect();
     const panelRect = activePanel.getBoundingClientRect();
     const railRect = tabRail.getBoundingClientRect();
+    const rectObj = (el) => {
+      if (!el) return null;
+      const itemRect = el.getBoundingClientRect();
+      return {
+        left: Math.round(itemRect.left),
+        top: Math.round(itemRect.top),
+        right: Math.round(itemRect.right),
+        bottom: Math.round(itemRect.bottom),
+        width: Math.round(itemRect.width),
+        height: Math.round(itemRect.height),
+      };
+    };
+    const selectorFor = (el) => {
+      if (!el) return '';
+      if (el.id) return `#${el.id}`;
+      const classes = Array.from(el.classList || []).slice(0, 3).join('.');
+      return `${el.tagName.toLowerCase()}${classes ? `.${classes}` : ''}`;
+    };
+    const tabProbes = tabs.map((tab) => {
+      const tabRect = rectObj(tab);
+      const point = tabRect ? {
+        x: Math.round(tabRect.left + tabRect.width / 2),
+        y: Math.round(tabRect.top + tabRect.height / 2),
+      } : null;
+      const hit = point && point.x >= 0 && point.y >= 0 && point.x <= window.innerWidth && point.y <= window.innerHeight
+        ? document.elementFromPoint(point.x, point.y)
+        : null;
+      return {
+        section: tab.dataset.collectionTab || '',
+        text: (tab.textContent || '').replace(/\s+/g, ' ').trim(),
+        rect: tabRect,
+        hit: selectorFor(hit),
+        hitOk: !!hit && (hit === tab || tab.contains(hit) || hit.contains(tab)),
+        textFits: tab.scrollWidth <= tab.clientWidth + 2,
+      };
+    });
     return {
       ok:
         rect.left >= 0 &&
@@ -345,7 +496,9 @@ function collectCharacterSelectionProbe() {
         railRect.right <= window.innerWidth + 2 &&
         activeTab.dataset.collectionTab === targetTab.dataset.collectionTab &&
         activePanel.dataset.collectionPanel === targetTab.dataset.collectionTab &&
-        document.documentElement.scrollWidth <= window.innerWidth + 2,
+        document.documentElement.scrollWidth <= window.innerWidth + 2 &&
+        tabProbes.length >= 8 &&
+        tabProbes.every((probe) => probe.hitOk && probe.textFits && probe.rect?.height >= 44),
       activeSection: activeTab.dataset.collectionTab,
       targetSection: targetTab.dataset.collectionTab,
       shellRect: {
@@ -374,6 +527,7 @@ function collectCharacterSelectionProbe() {
       },
       railScrollWidth: Math.round(tabRail.scrollWidth),
       railClientWidth: Math.round(tabRail.clientWidth),
+      tabProbes,
     };
   });
   add(
@@ -605,6 +759,9 @@ function collectCharacterSelectionProbe() {
   };
   fs.writeFileSync(path.join(outDir, 'report.json'), JSON.stringify(report, null, 2));
   console.log(JSON.stringify(report, null, 2));
+  if (findings.some((finding) => !finding.pass) || consoleErrors.length > 0) {
+    process.exitCode = 1;
+  }
 
   await browser.close();
 })().catch((error) => {

@@ -79,43 +79,43 @@
 
             <div class="menu-utilities">
                 <div class="util-btn-wrapper">
-                    <button class="util-btn" onclick="game.showPlayerInfo()">
+                    <button class="util-btn" onclick="game.showPlayerInfo()" aria-label="角色信息" title="角色信息">
                         <span class="btn-icon">🧙</span>
                     </button>
                     <span class="util-label">角色信息</span>
                 </div>
                 <div class="util-btn-wrapper">
-                    <button class="util-btn" onclick="game.showCollection()">
+                    <button class="util-btn" onclick="game.showCollection()" aria-label="法则图鉴" title="法则图鉴">
                         <span class="btn-icon">📚</span>
                     </button>
                     <span class="util-label">法则图鉴</span>
                 </div>
                 <div class="util-btn-wrapper">
-                    <button class="util-btn" onclick="game.showChallengeHub('daily')">
+                    <button class="util-btn" onclick="game.showChallengeHub('daily')" aria-label="挑战观察站" title="挑战观察站">
                         <span class="btn-icon">🔭</span>
                     </button>
                     <span class="util-label">挑战观察站</span>
                 </div>
                 <div class="util-btn-wrapper">
-                    <button class="util-btn" onclick="game.showAchievements()">
+                    <button class="util-btn" onclick="game.showAchievements()" aria-label="成就殿堂" title="成就殿堂">
                         <span class="btn-icon">🏆</span>
                     </button>
                     <span class="util-label">成就殿堂</span>
                 </div>
                 <div class="util-btn-wrapper">
-                    <button class="util-btn" onclick="game.showLegacyScreen()">
+                    <button class="util-btn" onclick="game.showLegacyScreen()" aria-label="传承殿" title="传承殿">
                         <span class="btn-icon">🕯️</span>
                     </button>
                     <span class="util-label">传承殿</span>
                 </div>
                 <div class="util-btn-wrapper">
-                    <button class="util-btn" onclick="game.showTreasureCompendium()">
+                    <button class="util-btn" onclick="game.showTreasureCompendium()" aria-label="法宝图鉴" title="法宝图鉴">
                         <span class="btn-icon">🎒</span>
                     </button>
                     <span class="util-label">法宝图鉴</span>
                 </div>
                 <div class="util-btn-wrapper">
-                    <button class="util-btn" onclick="game.showGameIntro()">
+                    <button class="util-btn" onclick="game.showGameIntro()" aria-label="游戏指南" title="游戏指南">
                         <span class="btn-icon">📖</span>
                     </button>
                     <span class="util-label">游戏指南</span>
@@ -142,7 +142,7 @@
                 <button class="menu-btn small cheat-btn" onclick="game.cheat()"
                     style="display: none; width: auto; padding: 5px 15px;">🛠️ 作弊</button>
             </div>
-            <div class="version-info">V10 前端焕新 · 真 PVP 玩家指南更新 · 主菜单场景图 · 角色立绘 · 移动端适配 · 命途任务 · 章节考试 · DRI读题 · 洞府议程 · 挑战观察站 · PVP复盘</div>
+            <div class="version-info">V10 真 PVP · 前端焕新 · 玩家指南更新 · 主菜单场景图 · 角色立绘 · 移动端适配 · 命途任务 · 章节考试 · DRI读题 · 洞府议程 · 挑战观察站 · PVP复盘</div>
         </div>
     </div>
 
@@ -204,8 +204,8 @@
                 <!-- Ranking Tab -->
                 <div id="tab-ranking" class="pvp-tab-pane pvp-legacy-ranking-pane">
                     <div id="pvp-ranking-brief" class="pvp-risk-brief" data-risk-tier="none">
-                        <div class="pvp-risk-kicker">镜像演武 · 练习入口</div>
-                        <div class="pvp-risk-title">选择一名榜单残影，查看读题建议并进行镜像演武</div>
+                        <div class="pvp-risk-kicker">镜像练习 · 天道榜入口</div>
+                        <div class="pvp-risk-title">选择一名榜单残影，查看读题建议并进行镜像练习</div>
                         <div class="pvp-risk-footnote">此处保留榜单推演、残影档案与焦点约战单，用于练习和复盘；不是真人排位，赛季胜负以“实时论道”为准。</div>
                     </div>
                     <div class="ranking-scroll-area" id="ranking-list">
@@ -217,10 +217,10 @@
                     </div>
 
                     <div class="pvp-nav-footer">
-                        <div class="challenge-intent-line" id="pvp-challenge-intent">镜像演武不是真人排位；未锁定焦点目标时，将自动按榜位推演对手。</div>
+                        <div class="challenge-intent-line" id="pvp-challenge-intent">镜像练习不是真人排位；未锁定焦点目标时，将自动按榜位推演对手。</div>
                         <button class="challenge-btn pulse" data-pvp-legacy-practice onclick="PVPScene.findMatch()">
                             <span class="btn-glow"></span>
-                            <span class="text">🧪 镜像演武</span>
+                            <span class="text">🧪 镜像练习</span>
                         </button>
                     </div>
                 </div>
@@ -259,7 +259,7 @@
                             </div>
                         </div>
                         <div class="pvp-live-quality" data-live-match-quality>匹配质量：等待真人</div>
-                        <div class="pvp-live-mode-boundary" data-live-mode-boundary>真人排位：入队后由服务端写正式结果；问道练习：不写分；好友约战：邀请码真人局，不写正式积分；镜像演武：天道榜练习，不是真人排位。</div>
+                        <div class="pvp-live-mode-boundary" data-live-mode-boundary>真人排位：入队后由服务端写正式结果；问道练习：不写分；好友约战：邀请码真人局，不写正式积分；镜像练习：天道榜练习，不是真人排位。</div>
                         <div class="pvp-live-turn-timer" data-live-turn-timer>倒计时：--</div>
                         <div class="pvp-live-timeout-forecast" data-live-timeout-forecast data-live-timeout-forecast-state="idle" data-live-timeout-forecast-source="" data-live-timeout-forecast-hidden="" data-live-timeout-forecast-impact="" data-live-timeout-forecast-automation-count="0" data-live-timeout-forecast-advisory-only="true" hidden>超时预告：等待行动窗口</div>
                         <div class="pvp-live-connection-status" data-live-connection-status>连接：等待心跳</div>

@@ -37,12 +37,16 @@ function resolveAvatar(char) {
     return char.image || char.portrait || (char.avatar && char.avatar.includes('/') ? char.avatar : null);
 }
 
+function isAssetPath(value) {
+    return typeof value === 'string' && (value.includes('/') || /\.[a-z0-9]{2,5}($|\?)/i.test(value));
+}
+
 // 3. Test Cases
 const testCases = [
     { id: 'linFeng', expectedType: 'image', desc: 'Lin Feng should have an image' },
     { id: 'xiangYe', expectedType: 'image', desc: 'Xiang Ye should have an image' },
     { id: 'wuYu', expectedType: 'image', desc: 'Wu Yu should have a portrait (handled as image)' },
-    { id: 'yanHan', expectedType: 'image', desc: 'Yan Han should have an avatar path (handled as image)' }
+    { id: 'yanHan', expectedType: 'image', desc: 'Yan Han should have an image path and a display-safe avatar glyph' }
 ];
 
 let errors = [];
@@ -61,6 +65,10 @@ testCases.forEach(test => {
 
     const resolvedPath = resolveAvatar(char);
     const hasImage = !!resolvedPath;
+    if (isAssetPath(char.avatar)) {
+        console.error(`   ❌ FAILED: avatar should be a display glyph, not an asset path: ${char.avatar}`);
+        errors.push(`${test.id}: avatar should not be an asset path.`);
+    }
 
     // Check if file actually exists if we found a path
     let fileExists = false;

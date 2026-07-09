@@ -4,6 +4,18 @@ export class CharacterSelectView {
   constructor(gameInstance) {
     this.game = gameInstance;
   }
+  isAvatarAssetPath(value) {
+    return typeof value === 'string' && (value.includes('/') || /\.[a-z0-9]{2,5}($|\?)/i.test(value));
+  }
+  resolveCharacterPortrait(char = {}) {
+    const candidates = [char.image, char.portrait, char.avatar];
+    const imagePath = candidates.find(value => this.isAvatarAssetPath(value)) || '';
+    const fallbackText = char.fallbackAvatar || (!this.isAvatarAssetPath(char.avatar) ? char.avatar : '') || '✦';
+    return {
+      imagePath,
+      fallbackText
+    };
+  }
   bindCharacterSelectionEvents(container) {
     if (!container || container.dataset.selectionBound === 'true') return;
     container.addEventListener('click', event => {
@@ -240,17 +252,13 @@ export class CharacterSelectView {
         card.className = `character-card ${locked ? 'locked' : ''}`;
         card.dataset.id = charId;
 
-        // Image handling
+        const portrait = this.resolveCharacterPortrait(char);
         let avatarHtml = '';
-        if (char.image) {
-          avatarHtml = `<img src="${escapeAttr(char.image)}" class="char-avatar-img" alt="${escapeAttr(char.name)}" data-fallback-emoji="true">
-                                  <span class="char-avatar-emoji" style="display:none">${escapeHtml(char.avatar || '')}</span>`;
-        } else if (char.portrait) {
-          avatarHtml = `<img src="${escapeAttr(char.portrait)}" class="char-avatar-img" alt="${escapeAttr(char.name)}">`;
-        } else if (char.avatar && (char.avatar.includes('/') || char.avatar.includes('.'))) {
-          avatarHtml = `<img src="${escapeAttr(char.avatar)}" class="char-avatar-img" alt="${escapeAttr(char.name)}">`;
+        if (portrait.imagePath) {
+          avatarHtml = `<img src="${escapeAttr(portrait.imagePath)}" class="char-avatar-img" alt="${escapeAttr(char.name)}" data-fallback-emoji="true">
+                                  <span class="char-avatar-emoji" style="display:none">${escapeHtml(portrait.fallbackText)}</span>`;
         } else {
-          avatarHtml = `<span class="char-avatar-emoji">${escapeHtml(char.avatar)}</span>`;
+          avatarHtml = `<span class="char-avatar-emoji">${escapeHtml(portrait.fallbackText)}</span>`;
         }
         card.innerHTML = `
                     <div class="selected-mark">✔</div>

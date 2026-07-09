@@ -100,7 +100,7 @@ export const PVPScene = {
     btn.classList.toggle('is-matching', !!isBusy);
     if (isBusy) {
       if (text) {
-        text.textContent = '⏳ 镜像演武匹配中...';
+        text.textContent = '⏳ 镜像练习匹配中...';
       }
       const hint = document.getElementById('pvp-challenge-intent');
       if (hint) {
@@ -228,13 +228,13 @@ export const PVPScene = {
     const hint = document.getElementById('pvp-challenge-intent');
     const duelBrief = this.rankingFocusData && this.rankingFocusData.duelBrief ? this.rankingFocusData.duelBrief : null;
     if (text) {
-      text.textContent = duelBrief ? '🧪 锁定镜像' : '🧪 镜像演武';
+      text.textContent = duelBrief ? '🧪 锁定练习' : '🧪 镜像练习';
     }
     if (btn) {
-      btn.title = duelBrief ? `${duelBrief.targetName}｜${duelBrief.engagementLabel}｜${duelBrief.modeLabel}｜不是真人排位` : '镜像演武，不是真人排位';
+      btn.title = duelBrief ? `${duelBrief.targetName}｜${duelBrief.engagementLabel}｜${duelBrief.modeLabel}｜不是真人排位` : '镜像练习，不是真人排位';
     }
     if (hint) {
-      hint.textContent = duelBrief ? `已锁定镜像：${duelBrief.targetName} ｜ ${duelBrief.engagementLabel} ｜ ${duelBrief.modeLabel} ｜ 不是真人排位` : '镜像演武不是真人排位；未锁定焦点目标时，将自动按榜位推演对手。';
+      hint.textContent = duelBrief ? `已锁定练习：${duelBrief.targetName} ｜ ${duelBrief.engagementLabel} ｜ ${duelBrief.modeLabel} ｜ 不是真人排位` : '镜像练习不是真人排位；未锁定焦点目标时，将自动按榜位推演对手。';
     }
   },
   setRankingFocus(rank, dangerProfile = null) {
@@ -404,7 +404,7 @@ export const PVPScene = {
                 <div class="pvp-duel-slip">
                     <div class="pvp-duel-slip-kicker">焦点约战单</div>
                     <div class="pvp-duel-slip-head">
-                        <div class="pvp-duel-slip-title">${this.escapeHtml(duelBrief.engagementLabel || '练手')} · ${this.escapeHtml(duelBrief.modeLabel || '镜像演武')}</div>
+                        <div class="pvp-duel-slip-title">${this.escapeHtml(duelBrief.engagementLabel || '练手')} · ${this.escapeHtml(duelBrief.modeLabel || '镜像练习')}</div>
                         <div class="pvp-duel-slip-chip">${this.escapeHtml(duelBrief.chipText || `DRI ${profile.index || 0} · ${profile.tierLabel || '可控'}`)}</div>
                     </div>
                     <div class="pvp-duel-slip-tags">
@@ -6969,7 +6969,7 @@ export const PVPScene = {
           });
         }
         if (result.opponent && result.opponent.rank && result.opponent.rank.isLocal) {
-          Utils.showBattleLog(preferredRank ? "已按焦点目标切入镜像演武" : "已进入离线演武匹配");
+          Utils.showBattleLog(preferredRank ? "已按焦点目标切入镜像练习" : "已进入离线练习匹配");
         } else if (result.opponent && result.opponent.matchIntent) {
           Utils.showBattleLog(`已锁定：${result.opponent.matchIntent.targetName} · ${result.opponent.matchIntent.modeLabel}`);
         }

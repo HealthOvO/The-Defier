@@ -1476,8 +1476,8 @@ export const PVPService = {
       engagementLine = `榜位更高、胜场收益更厚，适合带着止损与收束一口气往上冲；关键仍是先答稳 ${dangerProfile.dominantAxisLabel}。`;
     }
     const modeId = hasTargetedOnline ? 'targeted-online' : 'practice-mirror';
-    const modeLabel = hasTargetedOnline ? '榜位直约' : '镜像演武';
-    const modeLine = hasTargetedOnline ? dangerProfile.confidence === 'resolved' ? '将优先锁定该榜位已解析的防守残影。' : '将优先锁定该榜位；若对手未留残影，则自动回退为镜像演武。' : '将按当前焦点目标生成同榜位镜像，不会跳去随机陌生对手。';
+    const modeLabel = hasTargetedOnline ? '榜位直约' : '镜像练习';
+    const modeLine = hasTargetedOnline ? dangerProfile.confidence === 'resolved' ? '将优先锁定该榜位已解析的防守残影。' : '将优先锁定该榜位；若对手未留残影，则自动回退为镜像练习。' : '将按当前焦点目标生成同榜位练习局，不会跳去随机陌生对手。';
     const formatSigned = value => {
       const num = Math.trunc(Number(value) || 0);
       return num >= 0 ? `+${num}` : `${num}`;
@@ -1792,10 +1792,10 @@ export const PVPService = {
     });
     const archetypeLabel = dangerProfile.opponent && dangerProfile.opponent.archetypeLabel ? String(dangerProfile.opponent.archetypeLabel) : '均衡试探';
     const sourceLabel = dangerProfile.confidenceLabel || '榜单推演';
-    const sourceLine = dangerProfile.confidence === 'resolved' ? '已按当前残影快照锁定对手结构，可直接按这份档案安排首拍与资源预留。' : duelBrief.modeId === 'targeted-online' ? '当前先按榜位与套路推演；若对方未留残影，系统会自动回退为同榜位镜像演武。' : '当前以榜位、境界与套路估算对手结构，适合先做备战与收益判断。';
+    const sourceLine = dangerProfile.confidence === 'resolved' ? '已按当前残影快照锁定对手结构，可直接按这份档案安排首拍与资源预留。' : duelBrief.modeId === 'targeted-online' ? '当前先按榜位与套路推演；若对方未留残影，系统会自动回退为同榜位镜像练习。' : '当前以榜位、境界与套路估算对手结构，适合先做备战与收益判断。';
     const formationLabel = guardianFormation ? '护山阵已启' : '未见护山阵';
     const formationLine = guardianFormation ? '对手更偏守阵续压，建议额外预留破阵、净化或跨轮收束。' : '当前更适合把资源放在先手压制与速断收头。';
-    const routeValue = `${duelBrief.engagementLabel || '练手'} · ${duelBrief.modeLabel || '镜像演武'}`;
+    const routeValue = `${duelBrief.engagementLabel || '练手'} · ${duelBrief.modeLabel || '镜像练习'}`;
     const formatSigned = value => {
       const num = Math.trunc(Number(value) || 0);
       return num >= 0 ? `+${num}` : `${num}`;

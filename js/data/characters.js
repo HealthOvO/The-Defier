@@ -78,7 +78,8 @@ export const CHARACTERS = {
     id: 'yanHan',
     name: '严寒',
     title: '命环学者',
-    avatar: 'assets/images/characters/yan_han.webp',
+    avatar: '📘',
+    image: 'assets/images/characters/yan_han.webp',
     description: '潜心研究命环的学者，掌握着早已失传的古老知识，试图用智慧解开命运的谜题。',
     stats: {
       maxHp: 70,

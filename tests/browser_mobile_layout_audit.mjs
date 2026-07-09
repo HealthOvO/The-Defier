@@ -414,6 +414,29 @@ function add(name, pass, detail = '') {
     const initialPanelRect = rectObj(panels);
     const firstCardRect = rectObj(cards[0]);
     const headerRect = rectObj(document.querySelector('#map-screen .map-v3-header'));
+    const textReadabilityProbes = cards.slice(0, 4).flatMap((card) => {
+      return Array.from(card.querySelectorAll('.expedition-card-title, .expedition-card-note, p, li')).slice(0, 6).map((node) => {
+        const style = getComputedStyle(node);
+        const fontSize = parseFloat(style.fontSize) || 0;
+        const lineHeightRaw = parseFloat(style.lineHeight);
+        const lineHeight = Number.isFinite(lineHeightRaw) ? lineHeightRaw : fontSize * 1.2;
+        const nodeRect = rectObj(node);
+        return {
+          selector: selectorFor(node),
+          text: (node.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 64),
+          fontSize: Number(fontSize.toFixed(1)),
+          lineHeight: Number(lineHeight.toFixed(1)),
+          lineHeightRatio: fontSize > 0 ? Number((lineHeight / fontSize).toFixed(2)) : 0,
+          rect: nodeRect,
+          ok:
+            fontSize >= (node.classList.contains('expedition-card-title') ? 15 : 12) &&
+            lineHeight / Math.max(fontSize, 1) >= 1.25 &&
+            !!nodeRect &&
+            nodeRect.width >= 120 &&
+            nodeRect.height >= 15,
+        };
+      });
+    });
     const initialVisibleCards = cards.map((card) => ({
       selector: selectorFor(card),
       text: (card.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 80),
@@ -442,6 +465,11 @@ function add(name, pass, detail = '') {
 
     const branchReach = visibilityAfterScroll(branchButtons);
     const bountyReach = visibilityAfterScroll(bountyButtons);
+    const actionSizeProbes = [...branchButtons, ...bountyButtons].filter(isVisible).map((button) => ({
+      text: (button.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 48),
+      rect: rectObj(button),
+      ok: !!rectObj(button) && rectObj(button).height >= 40 && rectObj(button).width >= 96,
+    }));
     const viewportWidth = window.innerWidth;
     const scrolledPanelRect = rectObj(panels);
     const initialPanelInViewport = !!initialPanelRect
@@ -471,6 +499,8 @@ function add(name, pass, detail = '') {
       bountyButtonCount: bountyButtons.length,
       branchReach,
       bountyReach,
+      textReadabilityProbes,
+      actionSizeProbes,
       ok:
         isVisible(panels) &&
         initialPanelInViewport &&
@@ -485,6 +515,10 @@ function add(name, pass, detail = '') {
         bountyButtons.length >= 1 &&
         branchReach.reachable &&
         bountyReach.reachable &&
+        textReadabilityProbes.length >= 8 &&
+        textReadabilityProbes.every((probe) => probe.ok) &&
+        actionSizeProbes.length >= 2 &&
+        actionSizeProbes.every((probe) => probe.ok) &&
         (panels?.scrollWidth || 0) <= viewportWidth + 8 &&
         (root?.scrollWidth || 0) <= viewportWidth + 8
     };
