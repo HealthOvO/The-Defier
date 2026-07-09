@@ -45,6 +45,8 @@ export const PVPScene = {
   liveSocialMuted: false,
   liveSocialPreferencesLoaded: false,
   liveInlineHint: '',
+  livePostReviewConfirmAction: '',
+  livePostReviewConfirmMatchId: '',
   liveReplayShareViewer: null,
   liveReviewFocus: '',
   liveLoadoutReviewFocused: false,
@@ -4222,9 +4224,17 @@ export const PVPScene = {
       updatedAt: Math.max(0, Math.floor(Number(stored && stored.updatedAt) || 0))
     };
   },
-  renderLiveSeasonGoalCard(view) {
+  renderLiveSeasonGoalCard(view, phaseOverride = '') {
     const goal = this.getLiveSeasonGoalCard(view);
     if (!goal || goal.dismissState !== 'active') return '';
+    const session = this.getLiveSession();
+    const state = session && typeof session.getState === 'function' ? session.getState() : null;
+    const phase = phaseOverride || (state && state.phase ? state.phase : 'idle');
+    const actionLocked = this.isLivePostReviewActionDisabled(goal.recommendedMode, phase);
+    const actionState = actionLocked ? 'waiting_rematch_locked' : 'ready';
+    const actionTitle = actionLocked
+      ? '已发起低压力再战，当前先保留复盘目标，不能切换到其他入口。'
+      : goal.actionLabel;
     return `
       <div
         class="pvp-live-season-goal"
@@ -4233,6 +4243,7 @@ export const PVPScene = {
         data-live-season-goal-dismiss-state="${this.escapeHtml(goal.dismissState)}"
         data-live-season-goal-source="${this.escapeHtml(goal.sourceVisibility)}"
         data-live-season-goal-hidden="${goal.usesHiddenInformation ? 'true' : 'false'}"
+        data-live-season-goal-action-state="${this.escapeHtml(actionState)}"
       >
         <div class="pvp-live-season-goal-head">
           <span>${this.escapeHtml(goal.title)}</span>
@@ -4245,7 +4256,10 @@ export const PVPScene = {
           <button
             type="button"
             data-live-season-goal-action="${this.escapeHtml(goal.recommendedMode)}"
+            data-live-season-goal-action-state="${this.escapeHtml(actionState)}"
             onclick="PVPScene.handleLivePostReviewAction('${this.escapeHtml(goal.recommendedMode)}')"
+            title="${this.escapeHtml(actionTitle)}"
+            ${actionLocked ? 'disabled aria-disabled="true"' : ''}
           >${this.escapeHtml(goal.actionLabel)}</button>
           <button
             type="button"
@@ -4283,6 +4297,34 @@ export const PVPScene = {
   isLivePostReviewActionDisabled(actionId, phase = 'idle') {
     if (phase !== 'waiting_rematch') return false;
     return ['friendly_rematch', 'adjust_loadout', 'practice', 'queue_again'].includes(String(actionId || ''));
+  },
+  requiresLivePostReviewConfirmation(actionId) {
+    return ['report_issue', 'avoid_opponent'].includes(String(actionId || ''));
+  },
+  getLivePostReviewConfirmationCopy(actionId) {
+    const id = String(actionId || '');
+    if (id === 'avoid_opponent') {
+      return {
+        label: '确认避开此对手',
+        hint: '再次点击确认避开此对手；这只影响后续匹配优先级，不改写本局结算、积分或奖励。'
+      };
+    }
+    return {
+      label: '确认提交异常反馈',
+      hint: '再次点击确认提交异常反馈；复核不会立即改写本局结算、积分或奖励。'
+    };
+  },
+  getLivePostReviewActionRenderState(actionId, label = '', matchId = '') {
+    const id = String(actionId || '');
+    const safeMatchId = String(matchId || '');
+    const pending = this.requiresLivePostReviewConfirmation(id)
+      && this.livePostReviewConfirmAction === id
+      && this.livePostReviewConfirmMatchId === safeMatchId;
+    const copy = pending ? this.getLivePostReviewConfirmationCopy(id) : null;
+    return {
+      confirmState: pending ? 'pending' : 'none',
+      label: copy ? copy.label : String(label || '')
+    };
   },
   applyLivePostReviewLoadoutRecommendation() {
     const session = this.getLiveSession();
@@ -4361,6 +4403,30 @@ export const PVPScene = {
       }
     }
     return false;
+  },
+  async copyLiveReplayShareReceipt() {
+    const session = this.getLiveSession();
+    const state = session && typeof session.getState === 'function' ? session.getState() : null;
+    const share = state && state.lastReplayShare && typeof state.lastReplayShare === 'object' ? state.lastReplayShare : null;
+    const shareLink = String(share && (share.shareUrl || share.sharePath) || '').trim();
+    const root = document.querySelector('[data-live-pvp-root]');
+    const setHint = (message) => {
+      this.liveInlineHint = message;
+      const hint = root ? root.querySelector('[data-live-last-error]') : null;
+      if (hint) hint.textContent = message;
+      if (typeof Utils !== 'undefined' && Utils && typeof Utils.showBattleLog === 'function') {
+        Utils.showBattleLog(message);
+      }
+    };
+    if (!shareLink) {
+      setHint('当前没有可复制的脱敏战报链接。');
+      return false;
+    }
+    const copied = await this.copyLiveReplayShareLink(shareLink);
+    setHint(copied
+      ? '脱敏战报链接已复制；公开链接只包含 replay_public，不暴露隐藏手牌、牌库、本人结算或赛季荣誉。'
+      : `无法自动复制；可以点击“打开公开战报”或手动复制链接：${shareLink}`);
+    return copied;
   },
   async revokeLiveReplayShare() {
     const session = this.getLiveSession();
@@ -4745,13 +4811,20 @@ export const PVPScene = {
         <div class="pvp-live-dispute-receipt-line">${this.escapeHtml(shareUrl)}</div>
         <div class="pvp-live-dispute-receipt-evidence">只包含 replay_public · 不含原始战局 ID · 不改分不派奖励</div>
         <div class="pvp-live-dispute-receipt-boundary">${this.escapeHtml(receipt.boundary || '公开战报分享只暴露脱敏回放，不读取隐藏手牌、牌库、随机种子或本人结算。')}</div>
-        ${revoked ? '' : '<button class="challenge-btn secondary" type="button" data-live-replay-share-revoke onclick="PVPScene.revokeLiveReplayShare()">撤销分享</button>'}
+        ${revoked ? '' : `
+          <div class="pvp-live-replay-share-actions">
+            <button class="challenge-btn secondary" type="button" data-live-replay-share-copy onclick="PVPScene.copyLiveReplayShareReceipt()">复制链接</button>
+            <a class="challenge-btn secondary" data-live-replay-share-open href="${this.escapeHtml(shareUrl)}" target="_blank" rel="noopener noreferrer">打开公开战报</a>
+            <button class="challenge-btn secondary" type="button" data-live-replay-share-revoke onclick="PVPScene.revokeLiveReplayShare()">撤销分享</button>
+          </div>
+        `}
       </div>
     `;
   },
   renderLivePostMatchReview(view, phase = 'idle') {
     const review = this.getLivePostMatchReview(view);
     if (!review) return '';
+    const matchId = String(view && view.matchId || review.matchId || '');
     const resultLabel = review.result === 'win' ? '胜局' : review.result === 'loss' ? '败局' : '终局';
     const finishLabel = this.formatLiveFinishReasonLabel(review.finishReason);
     return `
@@ -4780,19 +4853,23 @@ export const PVPScene = {
 	      ${this.renderLiveKeyTurnReplay(review)}
 	      ${this.renderLivePostReviewNextStepGuide(review, phase)}
 	      ${this.renderLivePostReviewPracticePlan(review)}
-	      ${this.renderLiveSeasonGoalCard(view)}
+	      ${this.renderLiveSeasonGoalCard(view, phase)}
       ${this.renderLiveLoadoutRecommendation(review, phase)}
       <div class="pvp-live-review-actions">
-        ${review.nextActions.map(action => `
+        ${review.nextActions.map(action => {
+          const actionState = this.getLivePostReviewActionRenderState(action.id, action.label, matchId);
+          return `
           <button
             type="button"
             data-live-post-review-action="${this.escapeHtml(action.id)}"
+            data-live-post-review-confirm="${this.escapeHtml(actionState.confirmState)}"
             data-live-post-review-audit-action="${this.escapeHtml(action.auditActionId || action.id)}"
             onclick="PVPScene.handleLivePostReviewAction('${this.escapeHtml(action.id)}')"
             title="${this.escapeHtml(action.detail || action.label)}"
             ${this.isLivePostReviewActionDisabled(action.id, phase) ? 'disabled' : ''}
-          >${this.escapeHtml(action.label)}</button>
-        `).join('')}
+          >${this.escapeHtml(actionState.label)}</button>
+        `;
+        }).join('')}
       </div>
       ${this.renderLiveReplayShareReceipt()}
       ${this.renderLiveDisputeReportReceipt()}
@@ -6465,11 +6542,26 @@ export const PVPScene = {
         Utils.showBattleLog(message);
       }
     };
-    const currentPhase = this.getLiveSession().getState()?.phase || '';
+    const currentState = this.getLiveSession().getState() || {};
+    const currentPhase = currentState.phase || '';
+    const currentMatchId = String(currentState.matchId || currentState.stateView && currentState.stateView.matchId || '');
     if (this.isLivePostReviewActionDisabled(id, currentPhase)) {
       setHint('已发起低压力再战，等待本局对手确认；当前先保留复盘，不再改走其他入口。');
       this.renderLivePanel();
       return;
+    }
+    if (this.requiresLivePostReviewConfirmation(id)
+      && (this.livePostReviewConfirmAction !== id || this.livePostReviewConfirmMatchId !== currentMatchId)) {
+      this.livePostReviewConfirmAction = id;
+      this.livePostReviewConfirmMatchId = currentMatchId;
+      const copy = this.getLivePostReviewConfirmationCopy(id);
+      setHint(copy.hint);
+      this.renderLivePanel();
+      return;
+    }
+    if (!this.requiresLivePostReviewConfirmation(id)) {
+      this.livePostReviewConfirmAction = '';
+      this.livePostReviewConfirmMatchId = '';
     }
     this.recordLiveSeasonGoalAction(id);
     if (id === 'queue_again') {
@@ -6585,6 +6677,8 @@ export const PVPScene = {
       return;
     }
     if (id === 'report_issue') {
+      this.livePostReviewConfirmAction = '';
+      this.livePostReviewConfirmMatchId = '';
       const session = this.getLiveSession();
       if (!session || typeof session.submitReport !== 'function') {
         setHint('实时论道异常反馈服务未就绪。');
@@ -6611,6 +6705,8 @@ export const PVPScene = {
       return;
     }
     if (id === 'avoid_opponent') {
+      this.livePostReviewConfirmAction = '';
+      this.livePostReviewConfirmMatchId = '';
       const session = this.getLiveSession();
       if (!session || typeof session.avoidOpponent !== 'function') {
         setHint('实时论道避开对手服务未就绪。');

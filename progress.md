@@ -1,5 +1,23 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-07-09: V10 真 PVP · 实时后端闭环玩家面同步
+  - 本轮完成
+    - 当前版本口径从“前端焕新”推进为“实时后端闭环”：真人实时论道、服务端权威对局、PVP 结算回执、分享脱敏战报、低压力再战、举报异常、避开此对手和赛季荣誉收藏都归入同一条玩家可读成长链。
+    - 玩家指南继续保留三周一章、章程回执直达、查看章节档案、章节演练、设为今日天机章节演练、设为七日劫数章节演练、设为众生试炼章节演练、三赛道、七日劫数、众生试炼、裂隙回响线等入口口径，但把内部实现字段改写成章末评语、章目标、章内压强、战役史卷、多周回看、诸界会审和会审裁记。
+    - 当前 PVP 口径继续明确：正式真人入口是实时论道，镜像练习不是真人排位；正式胜负、积分和赛季记录只以实时论道为准。
+    - 赛后 `举报异常` 与 `避开此对手` 改为二次确认后提交，避免误触直接写入 dispute / avoid 偏好；等待低压力再战时，赛季目标卡会同步显示 locked/disabled 状态，不再出现“看起来能点、实际被拦”的割裂。
+    - 脱敏战报 receipt 新增持续可见的复制链接和打开公开战报入口，即使自动复制失败，玩家仍能继续使用分享链接；撤销入口仍保留。
+    - browser release summary 增加 `BROWSER_RELEASE_RUN_ID` 新鲜度约束，并用可执行 stale/fresh fixture 锁住旧 `report.json` 拒绝路径；filtered shard 不会误吃同目录旧报告。
+  - 已验证
+    - 红绿目标：`node tests/sanity_pvp_live_ui_runtime_checks.mjs`、`node tests/sanity_release_gate_coverage_checks.cjs`、`node tests/sanity_intro_progress_sync_checks.cjs`
+    - 静态合同：`node tests/sanity_pvp_live_ui_contract_checks.cjs`、`node --check js/scenes/pvp-scene.js`、`node --check tests/browser_guide_modal_audit.mjs`、`node --check tests/browser_pvp_live_audit.mjs`、`node --check tests/browser_pvp_live_real_backend_smoke.mjs`、`node --check tests/summarize_browser_release_reports.cjs`、`bash -n tests/run_browser_release_checks.sh`
+    - 本地构建：`npm run build:pages`
+    - 本地 Node 门禁：`PVP_LIVE_WS_FANOUT_MESSAGE_TIMEOUT_MS=60000 npm run test:node`
+    - 本地 browser release shard：`AUDIT_FILTER=guide,pvp-live npm run test:browser:release -- http://127.0.0.1:4173 output/release-browser-audits-local-20260709-guide-pvp-live-final`，summary 2/2 report、guide 通过、pvp-live 144/144 findings、0 failed、run id `release-1783572686-77539`
+    - 本地真实后端聚焦 smoke：`BROWSER_PVP_LIVE_REAL_ONLY_SAFETY_EXIT=1 node tests/browser_pvp_live_real_backend_smoke.mjs http://127.0.0.1:4173 output/browser-pvp-live-real-focused-20260709-confirm-rerun`，3/3 findings、0 failed、0 console error
+  - 当前结论
+    - 这条记录用于 backend platform、赛季荣誉账本、异常反馈与回避链路合入后的玩家面同步；不代表线上部署，后续仍按“不部署线上”的当前约束只做本地验证、合并和推送。
+
 - 2026-07-08: V10-S94 live PVP review feedback hardening
   - 本轮完成
     - `saveMatch()` 对同版本 active 连接快照写入追加 `connection_heartbeat` WS state signal，避免多进程实例因 heartbeat-only 持久化没有 durable signal 而继续使用过期连接时间线。

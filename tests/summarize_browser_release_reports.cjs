@@ -10,6 +10,7 @@ if (!outputRoot) {
 }
 
 const root = path.resolve(outputRoot);
+const requiredReleaseRunId = String(process.env.BROWSER_RELEASE_RUN_ID || '').trim();
 
 const EXPECTED_RELEASE_MODULES = [
   'core',
@@ -78,16 +79,23 @@ function readReport(filePath) {
         : [];
     const relativePath = path.relative(root, filePath);
     const moduleName = path.dirname(relativePath).replace(/\\/g, '/');
+    const releaseRunId = String(report.releaseRunId || '').trim();
+    const stale = !!requiredReleaseRunId && releaseRunId !== requiredReleaseRunId;
     return {
-      ok: true,
+      ok: !stale,
       module: moduleName === '.' ? 'root' : moduleName,
       path: relativePath,
       url: report.url || report.baseUrl || summary.url || baseUrl || '',
       generatedAt: report.generatedAt || report.timestamp || stat.mtime.toISOString(),
+      releaseRunId,
       totalFindings: findings.length || Number(summary.total || 0),
-      failedFindings: failedFindings.length || Number(summary.failed || 0),
+      failedFindings: failedFindings.length || Number(summary.failed || 0) || (stale ? 1 : 0),
       consoleErrors: consoleErrors.length,
-      failureNames: failedFindings.map(item => item.name || `${item.viewport || ''}:${item.scenario || ''}`.replace(/^:/, ''))
+      parseError: stale ? `stale release report: expected ${requiredReleaseRunId || '(none)'}, got ${releaseRunId || '(missing)'}` : '',
+      failureNames: [
+        ...failedFindings.map(item => item.name || `${item.viewport || ''}:${item.scenario || ''}`.replace(/^:/, '')),
+        ...(stale ? ['stale-release-report'] : [])
+      ]
     };
   } catch (error) {
     return {
@@ -167,6 +175,7 @@ const summary = {
   generatedAt: new Date().toISOString(),
   baseUrl,
   outputRoot: root,
+  releaseRunId: requiredReleaseRunId,
   expectedReportCount: activeExpectedReleaseModules.length,
   reportCount: reports.length,
   totalFindings: reports.reduce((sum, report) => sum + report.totalFindings, 0),
@@ -183,6 +192,7 @@ const summary = {
 const aggregate = {
   url: baseUrl,
   generatedAt: summary.generatedAt,
+  releaseRunId: requiredReleaseRunId,
   summary,
   reports
 };

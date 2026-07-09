@@ -7,11 +7,14 @@ cd "$ROOT_DIR"
 BASE_URL="${1:-${BASE_URL:-http://127.0.0.1:4173}}"
 OUTPUT_ROOT="${2:-output/release-browser-audits}"
 AUDIT_FILTER="${AUDIT_FILTER:-${BROWSER_AUDIT_FILTER:-}}"
+BROWSER_RELEASE_RUN_ID="${BROWSER_RELEASE_RUN_ID:-release-$(date +%s)-$$}"
+export BROWSER_RELEASE_RUN_ID
 
 mkdir -p "$OUTPUT_ROOT"
 
 echo "[release-checks] Using base URL: $BASE_URL"
 echo "[release-checks] Writing reports under: $OUTPUT_ROOT"
+echo "[release-checks] Run id: $BROWSER_RELEASE_RUN_ID"
 if [ -n "$AUDIT_FILTER" ]; then
   echo "[release-checks] Audit filter: $AUDIT_FILTER"
 fi
@@ -114,6 +117,20 @@ run_audit() {
   if [ "$status" -ne 0 ]; then
     echo "[release-checks] Last log lines for $name:" >&2
     tail -n "${AUDIT_FAILURE_LOG_LINES:-120}" "$log_path" | cut -c "1-${AUDIT_FAILURE_LOG_CHARS:-2000}" >&2
+  fi
+
+  if [ "$status" -eq 0 ] && [ "$name" != "summarize" ]; then
+    local report_path="$OUTPUT_ROOT/$name/report.json"
+    if [ -f "$report_path" ]; then
+      node - "$report_path" "$BROWSER_RELEASE_RUN_ID" <<'NODE'
+const fs = require('fs');
+const reportPath = process.argv[2];
+const releaseRunId = process.argv[3] || '';
+const report = JSON.parse(fs.readFileSync(reportPath, 'utf8'));
+report.releaseRunId = releaseRunId;
+fs.writeFileSync(reportPath, JSON.stringify(report, null, 2));
+NODE
+    fi
   fi
 
   return "$status"

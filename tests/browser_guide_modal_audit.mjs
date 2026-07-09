@@ -22,7 +22,17 @@ const introPageText = (() => {
   }
 })();
 
-const introProgressSyncAnchors = ['三周一章', 'feedbackLine', 'objective', 'pressureWindow'].filter(
+const introProgressSyncAnchors = [
+  'V10 真 PVP · 实时后端闭环',
+  '三周一章',
+  '章末评语',
+  '章目标',
+  '章内压强',
+  '分享脱敏战报',
+  '低压力再战',
+  '举报异常',
+  '避开此对手',
+].filter(
   (anchor) => progressText.includes(anchor) && introPageText.includes(anchor)
 );
 
@@ -136,9 +146,11 @@ async function safeScreenshot(page, outPath) {
         !!activePanel &&
         !!activeTab &&
         activeTab.textContent.trim() === '更新' &&
-        text.includes('V10 真 PVP · 前端焕新') &&
+        text.includes('V10 真 PVP · 实时后端闭环') &&
         text.includes('当前版本重点') &&
         !/v9\.2/i.test(text) &&
+        !/feedbackLine|pressureWindow/.test(text) &&
+        !/\bobjective\b/.test(text) &&
         missingAnchors.length === 0,
       activeTab: activeTab?.textContent?.trim() || '',
       textSample: text.slice(0, 240),

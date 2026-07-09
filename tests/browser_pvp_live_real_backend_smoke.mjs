@@ -1349,13 +1349,23 @@ async function runFocusedPostMatchSafetyExit(browser) {
     const reportIssueActionable = await clickLiveControl(
       loserClient.page,
       '[data-live-post-review-action="report_issue"]',
-      'focused-safety-report-issue',
+      'focused-safety-report-issue-confirm',
+    );
+    const reportIssueSubmitActionable = await clickLiveControl(
+      loserClient.page,
+      '[data-live-post-review-action="report_issue"][data-live-post-review-confirm="pending"]',
+      'focused-safety-report-issue-submit',
     );
     await loserClient.page.waitForSelector('[data-live-dispute-report]', { timeout: 8000 });
     const avoidOpponentActionable = await clickLiveControl(
       loserClient.page,
       '[data-live-post-review-action="avoid_opponent"]',
-      'focused-safety-avoid-opponent',
+      'focused-safety-avoid-opponent-confirm',
+    );
+    const avoidOpponentSubmitActionable = await clickLiveControl(
+      loserClient.page,
+      '[data-live-post-review-action="avoid_opponent"][data-live-post-review-confirm="pending"]',
+      'focused-safety-avoid-opponent-submit',
     );
     await loserClient.page.waitForSelector('[data-live-avoid-opponent]', { timeout: 8000 });
     const postSafetyExitProbe = await loserClient.page.evaluate(() => {
@@ -1418,7 +1428,9 @@ async function runFocusedPostMatchSafetyExit(browser) {
         && postSafetyExitProbe.settlementReport?.reportVersion === 'pvp-live-settlement-report-v1'
         && postSafetyExitProbe.fairnessReceipt?.reportVersion === 'pvp-live-fairness-receipt-v1'
         && (!isMobileViewport || reportIssueActionable?.ok === true)
+        && (!isMobileViewport || reportIssueSubmitActionable?.ok === true)
         && (!isMobileViewport || avoidOpponentActionable?.ok === true)
+        && (!isMobileViewport || avoidOpponentSubmitActionable?.ok === true)
         && !/payload|hand|deck|cardId|instanceId|loadoutSnapshot|reward":|rating|elo|token/i.test(`${postSafetyExitProbe.disputeText} ${postSafetyExitProbe.avoidText} ${JSON.stringify(postSafetyExitProbe.disputeReceipt || {})} ${JSON.stringify(postSafetyExitProbe.avoidReceipt || {})}`),
       JSON.stringify({
         focusedScope,
@@ -1434,7 +1446,9 @@ async function runFocusedPostMatchSafetyExit(browser) {
         winnerFinished,
         postSafetyExitProbe,
         reportIssueActionable,
+        reportIssueSubmitActionable,
         avoidOpponentActionable,
+        avoidOpponentSubmitActionable,
       }),
     );
 
@@ -4850,9 +4864,11 @@ async function writeReport() {
       JSON.stringify({ winnerSeat, loserSeat, finishedWinner, finishedLoser, postMatchProbe, postMatchParity }),
     );
 
-    const reportIssueActionable = await clickLiveControl(loserClient.page, '[data-live-post-review-action="report_issue"]', `${seatSlug(loserSeat)}-report-issue`);
+    const reportIssueActionable = await clickLiveControl(loserClient.page, '[data-live-post-review-action="report_issue"]', `${seatSlug(loserSeat)}-report-issue-confirm`);
+    const reportIssueSubmitActionable = await clickLiveControl(loserClient.page, '[data-live-post-review-action="report_issue"][data-live-post-review-confirm="pending"]', `${seatSlug(loserSeat)}-report-issue-submit`);
     await loserClient.page.waitForSelector('[data-live-dispute-report]', { timeout: 8000 });
-    const avoidOpponentActionable = await clickLiveControl(loserClient.page, '[data-live-post-review-action="avoid_opponent"]', `${seatSlug(loserSeat)}-avoid-opponent`);
+    const avoidOpponentActionable = await clickLiveControl(loserClient.page, '[data-live-post-review-action="avoid_opponent"]', `${seatSlug(loserSeat)}-avoid-opponent-confirm`);
+    const avoidOpponentSubmitActionable = await clickLiveControl(loserClient.page, '[data-live-post-review-action="avoid_opponent"][data-live-post-review-confirm="pending"]', `${seatSlug(loserSeat)}-avoid-opponent-submit`);
     await loserClient.page.waitForSelector('[data-live-avoid-opponent]', { timeout: 8000 });
     const postSafetyExitProbe = await loserClient.page.evaluate(() => {
       const snapshot = window.PVPScene.getLiveSnapshot() || null;
@@ -4901,7 +4917,7 @@ async function writeReport() {
         && postSafetyExitProbe.settlementReport?.reportVersion === 'pvp-live-settlement-report-v1'
         && postSafetyExitProbe.fairnessReceipt?.reportVersion === 'pvp-live-fairness-receipt-v1'
         && !/payload|hand|deck|cardId|instanceId|loadoutSnapshot|reward":|rating|elo|token/i.test(`${postSafetyExitProbe.disputeText} ${JSON.stringify(postSafetyExitProbe.disputeReceipt || {})}`),
-      JSON.stringify({ postSafetyExitProbe, reportIssueActionable }),
+      JSON.stringify({ postSafetyExitProbe, reportIssueActionable, reportIssueSubmitActionable }),
     );
     add(
       'real browser post-match avoid-opponent returns no-score future-match receipt',
@@ -4920,9 +4936,11 @@ async function writeReport() {
         && postSafetyExitProbe.avoidReceipt?.safeguard === 'player_avoid_opponent'
         && postSafetyExitProbe.textAvoidReceipt?.safeguard === 'player_avoid_opponent'
         && (!isMobileViewport || reportIssueActionable?.ok === true)
+        && (!isMobileViewport || reportIssueSubmitActionable?.ok === true)
         && (!isMobileViewport || avoidOpponentActionable?.ok === true)
+        && (!isMobileViewport || avoidOpponentSubmitActionable?.ok === true)
         && !/payload|hand|deck|cardId|instanceId|loadoutSnapshot|reward":|rating|elo|token/i.test(`${postSafetyExitProbe.avoidText} ${JSON.stringify(postSafetyExitProbe.avoidReceipt || {})}`),
-      JSON.stringify({ postSafetyExitProbe, reportIssueActionable, avoidOpponentActionable }),
+      JSON.stringify({ postSafetyExitProbe, reportIssueActionable, reportIssueSubmitActionable, avoidOpponentActionable, avoidOpponentSubmitActionable }),
     );
 
     const postActionProbe = await loserClient.page.evaluate(async () => {
