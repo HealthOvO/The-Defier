@@ -327,7 +327,7 @@ function parseJson(raw, fallback = null) {
     }
 }
 
-const LIVE_OPS_FORBIDDEN_AUDIT_KEYS = /hand|deck|deckOrder|cardId|instanceId|cardInstanceId|cardInstanceIds|loadoutSnapshot|randomSeed|rngSeed|payload|state_json|event_json|stateJson|eventJson/i;
+const LIVE_OPS_FORBIDDEN_AUDIT_KEYS = /hand|deck|deckOrder|cardId|instanceId|cardInstanceId|cardInstanceIds|loadoutSnapshot|randomSeed|rngSeed|payload|state_json|event_json|stateJson|eventJson|pairKey|avoidedUserId|shareToken|share_token/i;
 
 function sanitizeLiveOpsAuditValue(value, depth = 0) {
     if (value === null || value === undefined) return value;
@@ -607,9 +607,116 @@ function getLiveOpsWindowMs(value) {
     return Math.max(60 * 1000, Math.min(90 * 24 * 60 * 60 * 1000, windowMs));
 }
 
+function getLiveOpsRetentionWindowMs(value) {
+    const windowMs = Math.floor(Number(value));
+    const defaultWindowMs = 30 * 24 * 60 * 60 * 1000;
+    if (!Number.isFinite(windowMs) || windowMs <= 0) return defaultWindowMs;
+    return Math.max(24 * 60 * 60 * 1000, Math.min(365 * 24 * 60 * 60 * 1000, windowMs));
+}
+
 function incrementCount(target, key) {
     const safeKey = String(key || 'unknown').slice(0, 64) || 'unknown';
     target[safeKey] = (target[safeKey] || 0) + 1;
+}
+
+function getLiveOpsTrendBucketMs(windowMs) {
+    const span = Math.max(60 * 1000, Math.floor(Number(windowMs) || 0));
+    return Math.max(60 * 60 * 1000, Math.min(24 * 60 * 60 * 1000, Math.floor(span / 6) || 60 * 60 * 1000));
+}
+
+function getLiveOpsTrendBucketStart(timestamp, bucketMs, since) {
+    const safeTimestamp = Math.max(0, Math.floor(Number(timestamp) || 0));
+    const safeBucketMs = Math.max(60 * 1000, Math.floor(Number(bucketMs) || 60 * 60 * 1000));
+    const safeSince = Math.max(0, Math.floor(Number(since) || 0));
+    if (safeTimestamp <= safeSince) return safeSince;
+    return safeSince + Math.floor((safeTimestamp - safeSince) / safeBucketMs) * safeBucketMs;
+}
+
+function makeLiveOpsTrendBuckets({ matchRows, disputeRows, opsRows, avoidRows, windowMs, now }) {
+    const since = Math.max(0, now - windowMs);
+    const bucketMs = getLiveOpsTrendBucketMs(windowMs);
+    const byStart = new Map();
+    const getBucket = (timestamp) => {
+        const bucketStart = getLiveOpsTrendBucketStart(timestamp, bucketMs, since);
+        if (!byStart.has(bucketStart)) {
+            byStart.set(bucketStart, {
+                bucketStart,
+                bucketEnd: Math.min(now, bucketStart + bucketMs),
+                matchCount: 0,
+                finishedMatches: 0,
+                invalidatedMatches: 0,
+                activeOrSetupMatches: 0,
+                firstSeatStarted: 0,
+                firstSeatWon: 0,
+                disputeCount: 0,
+                reviewOpsEvents: 0,
+                avoidanceCount: 0,
+                qualityTags: {},
+                connectionHealth: {}
+            });
+        }
+        return byStart.get(bucketStart);
+    };
+    matchRows.forEach(row => {
+        const state = parseJson(row && row.state_json, {}) || {};
+        const timestamp = Math.max(
+            Math.floor(Number(row && row.finished_at) || 0),
+            Math.floor(Number(row && row.updated_at) || 0),
+            Math.floor(Number(row && row.created_at) || 0)
+        );
+        const bucket = getBucket(timestamp);
+        bucket.matchCount += 1;
+        const status = String(row && row.status || state.status || '');
+        if (status === 'finished') bucket.finishedMatches += 1;
+        else if (status === 'invalidated') bucket.invalidatedMatches += 1;
+        else bucket.activeOrSetupMatches += 1;
+        const quality = state.matchQuality && typeof state.matchQuality === 'object' ? state.matchQuality : {};
+        if (quality.tag) incrementCount(bucket.qualityTags, quality.tag);
+        if (quality.connectionHealth) incrementCount(bucket.connectionHealth, quality.connectionHealth);
+        const firstSeat = String(state && state.openerAssignment && state.openerAssignment.firstSeat || '');
+        const winnerSeat = String(getEventPayload(getMatchFinishedEvent(state)).winnerSeat || '');
+        if ((firstSeat === 'A' || firstSeat === 'B') && status === 'finished') {
+            bucket.firstSeatStarted += 1;
+            if (winnerSeat === firstSeat) bucket.firstSeatWon += 1;
+        }
+    });
+    disputeRows.forEach(row => {
+        getBucket(Math.max(Number(row && row.updated_at) || 0, Number(row && row.created_at) || 0)).disputeCount += 1;
+    });
+    opsRows.forEach(row => {
+        const bucket = getBucket(row && row.created_at);
+        if (String(row && row.severity || '') === 'review') bucket.reviewOpsEvents += 1;
+    });
+    avoidRows.forEach(row => {
+        getBucket(Math.max(Number(row && row.updated_at) || 0, Number(row && row.avoided_at) || 0)).avoidanceCount += 1;
+    });
+    const trendBuckets = Array.from(byStart.values())
+        .sort((left, right) => left.bucketStart - right.bucketStart)
+        .map(bucket => ({
+            ...bucket,
+            firstSeatWinRate: bucket.firstSeatStarted > 0
+                ? Number((bucket.firstSeatWon / bucket.firstSeatStarted).toFixed(4))
+                : 0
+        }));
+    const anomalyBuckets = trendBuckets
+        .map(bucket => {
+            const flags = [];
+            if (bucket.matchCount >= 4 && bucket.disputeCount / bucket.matchCount >= 0.5) flags.push('high_dispute_rate');
+            if (bucket.reviewOpsEvents >= 3) flags.push('review_event_spike');
+            if (bucket.firstSeatStarted >= 4 && (bucket.firstSeatWinRate >= 0.75 || bucket.firstSeatWinRate <= 0.25)) {
+                flags.push('first_seat_winrate_skew');
+            }
+            return flags.length ? {
+                bucketStart: bucket.bucketStart,
+                bucketEnd: bucket.bucketEnd,
+                flags,
+                matchCount: bucket.matchCount,
+                disputeCount: bucket.disputeCount,
+                reviewOpsEvents: bucket.reviewOpsEvents
+            } : null;
+        })
+        .filter(Boolean);
+    return { trendBuckets, anomalyBuckets };
 }
 
 function makeLiveOpsFairnessMetrics({ matchRows, disputeRows, opsRows, avoidRows, windowMs, now }) {
@@ -654,6 +761,7 @@ function makeLiveOpsFairnessMetrics({ matchRows, disputeRows, opsRows, avoidRows
         incrementCount(opsByType, row && row.event_type);
         if (String(row && row.severity || '') === 'review') reviewEvents += 1;
     });
+    const trend = makeLiveOpsTrendBuckets({ matchRows, disputeRows, opsRows, avoidRows, windowMs, now });
     return {
         success: true,
         reportVersion: 'pvp-live-ops-fairness-metrics-v1',
@@ -693,7 +801,108 @@ function makeLiveOpsFairnessMetrics({ matchRows, disputeRows, opsRows, avoidRows
             activePreferences: avoidRows.filter(row => Math.max(0, Math.floor(Number(row && row.avoid_until) || 0)) > now).length,
             recentPreferences: avoidRows.length
         },
+        trendBuckets: trend.trendBuckets,
+        anomalyBuckets: trend.anomalyBuckets,
         boundary: '运营公平性指标只统计聚合状态、公开质量桶、争议风险标签和事件数量，不暴露隐藏手牌、牌库、随机种子、完整斗法谱或精确评分。'
+    };
+}
+
+function makeLiveOpsTimelineItem({ type, createdAt, title, source, data = {} } = {}) {
+    return {
+        type: String(type || 'ops_event').slice(0, 48),
+        createdAt: Math.max(0, Math.floor(Number(createdAt) || 0)),
+        title: String(title || '').slice(0, 80),
+        source: String(source || '').slice(0, 48),
+        data: sanitizeLiveOpsAuditValue(data) || {}
+    };
+}
+
+function makeLiveOpsReplayShareTimelineSummary(row) {
+    const revokedAt = Math.max(0, Math.floor(Number(row && row.revoked_at) || 0));
+    return {
+        creatorSeat: row && row.creator_seat === 'B' ? 'B' : 'A',
+        visibilityLayer: String(row && row.visibility_layer || 'replay_public'),
+        sourceVisibility: String(row && row.source_visibility || 'replay_public'),
+        status: revokedAt > 0 ? 'revoked' : String(row && row.status || 'active'),
+        shareAvailable: Boolean(row && row.share_token),
+        createdAt: Math.max(0, Math.floor(Number(row && row.created_at) || 0)),
+        expiresAt: Math.max(0, Math.floor(Number(row && row.expires_at) || 0)),
+        revokedAt
+    };
+}
+
+function makeLiveOpsSettlementTimelineSummary(row) {
+    if (!row) return null;
+    return {
+        finishReason: String(row.finish_reason || ''),
+        winnerSeat: String(row.winner_seat || ''),
+        loserSeat: String(row.loser_seat || ''),
+        createdAt: Math.max(0, Math.floor(Number(row.created_at) || 0)),
+        rankedImpact: 'settlement_recorded',
+        rewardImpact: 'settlement_recorded'
+    };
+}
+
+function makeLiveOpsPlayerRiskLedger({ userId, disputeRows, opsRows, avoiderRows, avoidedRows, windowMs, now }) {
+    const disputesByStatus = {};
+    const disputesByReason = {};
+    const disputeRiskTags = {};
+    disputeRows.forEach(row => {
+        incrementCount(disputesByStatus, sanitizeDisputeStatus(row && row.status) || 'reported');
+        incrementCount(disputesByReason, sanitizeDisputeReason(row && row.reason));
+        const evidence = parseJson(row && row.evidence_json, {}) || {};
+        if (Array.isArray(evidence.riskTags)) {
+            evidence.riskTags.forEach(tag => incrementCount(disputeRiskTags, tag));
+        }
+    });
+    const opsByType = {};
+    const opsBySeverity = {};
+    opsRows.forEach(row => {
+        incrementCount(opsByType, row && row.event_type);
+        incrementCount(opsBySeverity, row && row.severity);
+    });
+    const activeAsAvoider = avoiderRows
+        .filter(row => Math.max(0, Math.floor(Number(row && row.avoid_until) || 0)) > now)
+        .length;
+    const activeAsAvoided = avoidedRows
+        .filter(row => Math.max(0, Math.floor(Number(row && row.avoid_until) || 0)) > now)
+        .length;
+    const riskFlags = [];
+    if (disputeRows.length >= 3) riskFlags.push('repeated_disputes');
+    if (activeAsAvoider >= 3) riskFlags.push('frequent_avoidance');
+    if ((opsBySeverity.review || 0) >= 2) riskFlags.push('review_attention');
+    if ((disputeRiskTags.connection_review_requested || 0) > 0) riskFlags.push('connection_review_requested');
+    if ((disputeRiskTags.fairness_review_requested || 0) > 0) riskFlags.push('fairness_review_requested');
+    return {
+        success: true,
+        reportVersion: 'pvp-live-ops-player-risk-ledger-v1',
+        sourceVisibility: 'ops_aggregate_public_safety_metrics',
+        usesHiddenInformation: false,
+        rankedImpact: 'none',
+        rewardImpact: 'none',
+        userId: String(userId || ''),
+        generatedAt: now,
+        windowMs,
+        since: Math.max(0, now - windowMs),
+        disputes: {
+            totalReports: disputeRows.length,
+            byStatus: disputesByStatus,
+            byReason: disputesByReason,
+            riskTags: disputeRiskTags
+        },
+        opsEvents: {
+            totalEvents: opsRows.length,
+            byType: opsByType,
+            bySeverity: opsBySeverity
+        },
+        avoidance: {
+            asAvoider: avoiderRows.length,
+            asAvoided: avoidedRows.length,
+            activeAsAvoider,
+            activeAsAvoided
+        },
+        riskFlags,
+        boundary: '玩家风险账本只汇总争议、运营事件和回避偏好数量，不输出隐藏牌面、随机种子、精确评分或完整斗法谱。'
     };
 }
 
@@ -1090,6 +1299,259 @@ router.get('/ops/dispute-reports', asyncHandler(async (req, res) => {
             ? Math.max(0, Math.floor(Number(reports[reports.length - 1].updated_at) || 0))
             : 0
     });
+}));
+
+router.get('/ops/dispute-reports/:reportId/timeline', asyncHandler(async (req, res) => {
+    if (!verifyLiveOpsToken(req, res)) return;
+    const reportId = String(req.params.reportId || '').trim();
+    const reportRow = reportId ? await dbGet(
+        `SELECT *
+         FROM pvp_live_dispute_reports
+         WHERE report_id = ?
+         LIMIT 1`,
+        [reportId]
+    ) : null;
+    if (!reportRow) {
+        return res.status(404).json({
+            success: false,
+            reason: 'dispute_report_not_found',
+            message: '争议反馈不存在'
+        });
+    }
+    const matchId = String(reportRow.match_id || '');
+    const [
+        signalRows,
+        opsRows,
+        replayShareRows,
+        settlementRow
+    ] = await Promise.all([
+        dbAll(
+            `SELECT signal_id, signal_type, state_version, reason, source_instance_id, created_at
+             FROM pvp_live_state_signals
+             WHERE match_id = ?
+             ORDER BY signal_id ASC
+             LIMIT 80`,
+            [matchId]
+        ),
+        dbAll(
+            `SELECT event_id, event_type, subject_user_id, match_id, severity, reason, source, evidence_json, created_at
+             FROM pvp_live_ops_events
+             WHERE match_id = ?
+             ORDER BY created_at ASC, event_id ASC
+             LIMIT 80`,
+            [matchId]
+        ),
+        dbAll(
+            `SELECT share_token, creator_user_id, creator_seat, visibility_layer, source_visibility, match_ref, replay_hash, status, created_at, expires_at, revoked_at
+             FROM pvp_live_replay_shares
+             WHERE match_id = ?
+             ORDER BY created_at ASC, share_token ASC
+             LIMIT 20`,
+            [matchId]
+        ),
+        dbGet(
+            `SELECT *
+             FROM pvp_live_match_settlements
+             WHERE match_id = ?
+             LIMIT 1`,
+            [matchId]
+        )
+    ]);
+    const timeline = [
+        makeLiveOpsTimelineItem({
+            type: 'dispute_reported',
+            createdAt: reportRow.created_at,
+            title: 'dispute reported',
+            source: 'dispute_report',
+            data: makeDisputeStatusReceipt(reportRow, { includeEvidence: true })
+        }),
+        ...signalRows.map(row => makeLiveOpsTimelineItem({
+            type: 'state_signal',
+            createdAt: row.created_at,
+            title: row.reason || row.signal_type,
+            source: 'state_signal',
+            data: sanitizeLiveOpsSignal(row)
+        })),
+        ...opsRows.map(row => makeLiveOpsTimelineItem({
+            type: 'ops_event',
+            createdAt: row.created_at,
+            title: row.event_type,
+            source: row.source,
+            data: sanitizeLiveOpsEvent(row)
+        })),
+        ...replayShareRows.map(row => makeLiveOpsTimelineItem({
+            type: 'replay_share',
+            createdAt: row.created_at,
+            title: row.status,
+            source: 'replay_share',
+            data: makeLiveOpsReplayShareTimelineSummary(row)
+        })),
+        settlementRow ? makeLiveOpsTimelineItem({
+            type: 'settlement',
+            createdAt: settlementRow.created_at,
+            title: settlementRow.finish_reason,
+            source: 'settlement',
+            data: makeLiveOpsSettlementTimelineSummary(settlementRow)
+        }) : null
+    ].filter(Boolean).sort((left, right) => left.createdAt - right.createdAt);
+    res.json({
+        success: true,
+        reportVersion: 'pvp-live-ops-dispute-timeline-v1',
+        sourceVisibility: 'ops_audit_safe_dispute_timeline',
+        usesHiddenInformation: false,
+        rankedImpact: 'none',
+        rewardImpact: 'none',
+        report: makeDisputeStatusReceipt(reportRow, { includeEvidence: true }),
+        matchId,
+        timeline,
+        boundary: '运营时间线只串联公开事件、脱敏证据、同步信号和处理状态，不暴露隐藏手牌、牌库、随机种子或完整斗法谱。'
+    });
+}));
+
+router.post('/ops/retention/sweep', asyncHandler(async (req, res) => {
+    if (!verifyLiveOpsToken(req, res)) return;
+    const olderThanMs = getLiveOpsRetentionWindowMs(
+        req.query && req.query.olderThanMs || req.body && req.body.olderThanMs
+    );
+    const now = Date.now();
+    const cutoff = Math.max(0, now - olderThanMs);
+    const dryRun = !(req.body && req.body.dryRun === false);
+    const [stateSignalsPreview, expiredReplaySharesPreview] = await Promise.all([
+        dbGet(
+            `SELECT COUNT(*) AS count
+             FROM pvp_live_state_signals
+             WHERE created_at < ?`,
+            [cutoff]
+        ),
+        dbGet(
+            `SELECT COUNT(*) AS count
+             FROM pvp_live_replay_shares
+             WHERE (expires_at > 0 AND expires_at < ?)
+                OR (revoked_at > 0 AND revoked_at < ?)`,
+            [cutoff, cutoff]
+        )
+    ]);
+    const preview = {
+        stateSignals: Math.max(0, Math.floor(Number(stateSignalsPreview && stateSignalsPreview.count) || 0)),
+        expiredReplayShares: Math.max(0, Math.floor(Number(expiredReplaySharesPreview && expiredReplaySharesPreview.count) || 0))
+    };
+    const deleted = {
+        stateSignals: 0,
+        expiredReplayShares: 0
+    };
+    if (!dryRun) {
+        const deleteSignals = await dbRun(
+            `DELETE FROM pvp_live_state_signals
+             WHERE created_at < ?`,
+            [cutoff]
+        );
+        const deleteReplayShares = await dbRun(
+            `DELETE FROM pvp_live_replay_shares
+             WHERE (expires_at > 0 AND expires_at < ?)
+                OR (revoked_at > 0 AND revoked_at < ?)`,
+            [cutoff, cutoff]
+        );
+        deleted.stateSignals = Math.max(0, Math.floor(Number(deleteSignals && deleteSignals.changes) || 0));
+        deleted.expiredReplayShares = Math.max(0, Math.floor(Number(deleteReplayShares && deleteReplayShares.changes) || 0));
+        await appendPvpLiveOpsEvent({
+            eventType: 'retention_sweep',
+            severity: 'info',
+            reason: 'ops_retention_sweep',
+            source: 'live_ops_retention',
+            evidence: {
+                reportVersion: 'pvp-live-ops-retention-sweep-v1',
+                olderThanMs,
+                cutoff,
+                dryRun,
+                preview,
+                deleted,
+                preservedTables: ['pvp_live_matches', 'pvp_live_match_events', 'pvp_live_dispute_reports', 'pvp_live_ops_events', 'pvp_live_match_settlements'],
+                rankedImpact: 'none',
+                rewardImpact: 'none',
+                usesHiddenInformation: false
+            },
+            createdAt: now
+        });
+    }
+    res.json({
+        success: true,
+        reportVersion: 'pvp-live-ops-retention-sweep-v1',
+        sourceVisibility: 'ops_retention_ephemeral_cleanup',
+        usesHiddenInformation: false,
+        rankedImpact: 'none',
+        rewardImpact: 'none',
+        dryRun,
+        generatedAt: now,
+        olderThanMs,
+        cutoff,
+        preview,
+        deleted,
+        preserved: ['pvp_live_matches', 'pvp_live_match_events', 'pvp_live_dispute_reports', 'pvp_live_ops_events', 'pvp_live_match_settlements'],
+        boundary: '生命周期清理只删除过期同步信号和过期/撤销战报分享，不删除正式对局、争议、结算或运营审计事件。'
+    });
+}));
+
+router.get('/ops/players/:userId/risk-ledger', asyncHandler(async (req, res) => {
+    if (!verifyLiveOpsToken(req, res)) return;
+    const userId = String(req.params.userId || '').trim().slice(0, 96);
+    if (!userId) {
+        return res.status(400).json({
+            success: false,
+            reason: 'invalid_live_ops_user',
+            message: '缺少玩家标识'
+        });
+    }
+    const windowMs = getLiveOpsWindowMs(req.query && req.query.windowMs);
+    const now = Date.now();
+    const since = Math.max(0, now - windowMs);
+    const [
+        disputeRows,
+        opsRows,
+        avoiderRows,
+        avoidedRows
+    ] = await Promise.all([
+        dbAll(
+            `SELECT status, reason, evidence_json, created_at, updated_at
+             FROM pvp_live_dispute_reports
+             WHERE reporter_user_id = ? AND (created_at >= ? OR updated_at >= ?)
+             ORDER BY updated_at DESC, report_id DESC
+             LIMIT 500`,
+            [userId, since, since]
+        ),
+        dbAll(
+            `SELECT event_type, severity, reason, created_at
+             FROM pvp_live_ops_events
+             WHERE subject_user_id = ? AND created_at >= ?
+             ORDER BY created_at DESC, event_id DESC
+             LIMIT 500`,
+            [userId, since]
+        ),
+        dbAll(
+            `SELECT reason, avoided_at, avoid_until, updated_at
+             FROM pvp_live_avoid_opponents
+             WHERE avoider_user_id = ? AND (avoided_at >= ? OR updated_at >= ? OR avoid_until >= ?)
+             ORDER BY updated_at DESC
+             LIMIT 500`,
+            [userId, since, since, now]
+        ),
+        dbAll(
+            `SELECT reason, avoided_at, avoid_until, updated_at
+             FROM pvp_live_avoid_opponents
+             WHERE avoided_user_id = ? AND (avoided_at >= ? OR updated_at >= ? OR avoid_until >= ?)
+             ORDER BY updated_at DESC
+             LIMIT 500`,
+            [userId, since, since, now]
+        )
+    ]);
+    res.json(makeLiveOpsPlayerRiskLedger({
+        userId,
+        disputeRows,
+        opsRows,
+        avoiderRows,
+        avoidedRows,
+        windowMs,
+        now
+    }));
 }));
 
 router.get('/ops/matches/:matchId/trace', asyncHandler(async (req, res) => {

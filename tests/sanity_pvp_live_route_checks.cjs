@@ -2829,9 +2829,32 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
             assert.ok(opsMatchTrace.payload.disputeReports?.some(report => report.reportId === disputeReport.payload.report.reportId), 'live ops match trace should include related dispute reports');
             assert.ok(opsMatchTrace.payload.opsEvents?.some(event => event.eventType === 'dispute_reported'), 'live ops match trace should include related ops events');
             assert.equal(opsMatchTrace.payload.boundary, '运营追踪只汇总公开状态、脱敏事件、争议状态和同步信号，不暴露隐藏手牌、牌库、随机种子或完整斗法谱。', 'live ops match trace should describe its redaction boundary');
-            const forbiddenOpsAuditPattern = /hand|deck|deckOrder|cardId|instanceId|cardInstanceId|cardInstanceIds|loadoutSnapshot|randomSeed|rngSeed|payload|state_json|event_json|stateJson|eventJson/i;
+            const forbiddenOpsAuditPattern = /hand|deck|deckOrder|cardId|instanceId|cardInstanceId|cardInstanceIds|loadoutSnapshot|randomSeed|rngSeed|payload|state_json|event_json|stateJson|eventJson|pairKey|avoidedUserId|shareToken|share_token/i;
             assert.doesNotMatch(JSON.stringify(opsMatchTrace.payload), forbiddenOpsAuditPattern, 'live ops match trace must not leak hidden cards, decks, loadouts, seeds, payloads, or raw state/event JSON');
             assert.equal(JSON.stringify(opsMatchTrace.payload).includes(hiddenOpsSourceInstanceId), false, 'live ops match trace must not leak raw runtime signal source ids');
+            const opsDisputeTimeline = await request(baseUrl, `/api/pvp/live/ops/dispute-reports/${disputeReport.payload.report.reportId}/timeline`, {
+                headers: { 'x-defier-live-ops-token': liveOpsToken }
+            });
+            assert.equal(opsDisputeTimeline.status, 200, 'live ops dispute timeline should require and accept the live ops token');
+            assert.equal(opsDisputeTimeline.payload.reportVersion, 'pvp-live-ops-dispute-timeline-v1', 'live ops dispute timeline should expose a stable contract');
+            assert.equal(opsDisputeTimeline.payload.report?.reportId, disputeReport.payload.report.reportId, 'live ops dispute timeline should include the target report');
+            assert.ok(Array.isArray(opsDisputeTimeline.payload.timeline), 'live ops dispute timeline should include ordered entries');
+            assert.ok(opsDisputeTimeline.payload.timeline.some(item => item.type === 'dispute_reported'), 'live ops dispute timeline should include dispute creation');
+            assert.ok(opsDisputeTimeline.payload.timeline.some(item => item.type === 'state_signal'), 'live ops dispute timeline should include sync signals');
+            assert.ok(opsDisputeTimeline.payload.timeline.some(item => item.type === 'ops_event'), 'live ops dispute timeline should include related ops events');
+            assert.doesNotMatch(JSON.stringify(opsDisputeTimeline.payload), forbiddenOpsAuditPattern, 'live ops dispute timeline must not leak hidden cards, decks, loadouts, seeds, payloads, or raw state/event JSON');
+            const opsPlayerRiskLedger = await request(baseUrl, '/api/pvp/live/ops/players/live-user-a/risk-ledger?windowMs=86400000', {
+                headers: { 'x-defier-live-ops-token': liveOpsToken }
+            });
+            assert.equal(opsPlayerRiskLedger.status, 200, 'live ops player risk ledger should require and accept the live ops token');
+            assert.equal(opsPlayerRiskLedger.payload.reportVersion, 'pvp-live-ops-player-risk-ledger-v1', 'live ops player risk ledger should expose a stable contract');
+            assert.equal(opsPlayerRiskLedger.payload.userId, 'live-user-a', 'live ops player risk ledger should return the requested user');
+            assert.ok(opsPlayerRiskLedger.payload.disputes?.totalReports >= 1, 'live ops player risk ledger should count reporter disputes');
+            assert.ok(opsPlayerRiskLedger.payload.opsEvents?.totalEvents >= 1, 'live ops player risk ledger should count related ops events');
+            assert.ok(opsPlayerRiskLedger.payload.avoidance?.asAvoider >= 0, 'live ops player risk ledger should count avoider rows');
+            assert.ok(Array.isArray(opsPlayerRiskLedger.payload.riskFlags), 'live ops player risk ledger should expose bounded risk flags');
+            assert.equal(opsPlayerRiskLedger.payload.usesHiddenInformation, false, 'live ops player risk ledger should not use hidden information');
+            assert.doesNotMatch(JSON.stringify(opsPlayerRiskLedger.payload), forbiddenOpsAuditPattern, 'live ops player risk ledger must not leak hidden cards, decks, loadouts, seeds, payloads, or raw state/event JSON');
             const opsFairnessMetrics = await request(baseUrl, '/api/pvp/live/ops/metrics/fairness?windowMs=86400000', {
                 headers: { 'x-defier-live-ops-token': liveOpsToken }
             });
@@ -2844,6 +2867,11 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
             assert.equal(opsFairnessMetrics.payload.sourceVisibility, 'ops_aggregate_public_safety_metrics', 'live ops fairness metrics should identify aggregate source visibility');
             assert.equal(opsFairnessMetrics.payload.usesHiddenInformation, false, 'live ops fairness metrics should not use hidden information');
             assert.equal(opsFairnessMetrics.payload.rankedImpact, 'none', 'live ops fairness metrics should not mutate ranked state');
+            assert.ok(Array.isArray(opsFairnessMetrics.payload.trendBuckets), 'live ops fairness metrics should include trend buckets');
+            assert.ok(opsFairnessMetrics.payload.trendBuckets.some(bucket => bucket.matchCount >= 1), 'live ops fairness trend should count match buckets');
+            assert.ok(Array.isArray(opsFairnessMetrics.payload.anomalyBuckets), 'live ops fairness metrics should include bounded anomaly buckets');
+            assert.doesNotMatch(JSON.stringify(opsFairnessMetrics.payload.trendBuckets), /exactRating|elo|hand|deck|randomSeed/i, 'live ops fairness trend buckets must stay aggregate-only');
+            assert.doesNotMatch(JSON.stringify(opsFairnessMetrics.payload.anomalyBuckets), /matchId|userId|exactRating|elo|hand|deck|randomSeed/i, 'live ops fairness anomaly buckets must stay aggregate-only');
             assert.doesNotMatch(JSON.stringify(opsFairnessMetrics.payload), /hand|deck|deckOrder|cardId|instanceId|cardInstanceId|cardInstanceIds|loadoutSnapshot|randomSeed|rngSeed|payload|state_json|event_json|stateJson|eventJson|exactRating|elo/i, 'live ops fairness metrics must not leak hidden cards, decks, loadouts, seeds, payloads, raw state/event JSON, or exact rating data');
             const staleOpsMemoryMatchId = 'ops-stale-window-memory-match';
             pvpLiveRoutes.__livePvpStore.matches.set(staleOpsMemoryMatchId, {
@@ -2865,6 +2893,69 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
             pvpLiveRoutes.__livePvpStore.matches.delete(staleOpsMemoryMatchId);
             assert.equal(opsFairnessAfterStaleMemory.status, 200, 'live ops fairness metrics should handle stale in-memory matches');
             assert.equal(opsFairnessAfterStaleMemory.payload.matchSummary?.totalMatches, opsFairnessMetrics.payload.matchSummary.totalMatches, 'live ops fairness metrics should ignore in-memory matches outside the requested window');
+            const oldRetentionTimestamp = Date.now() - 45 * 24 * 60 * 60 * 1000;
+            const recentRetentionTimestamp = Date.now();
+            await dbRun(
+                `INSERT INTO pvp_live_state_signals
+                    (match_id, signal_type, state_version, reason, source_instance_id, created_at)
+                 VALUES (?, 'state_sync', 1, 'retention_probe_old', '', ?)`,
+                [joinRound14ScoreB.payload.matchId, oldRetentionTimestamp]
+            );
+            await dbRun(
+                `INSERT INTO pvp_live_state_signals
+                    (match_id, signal_type, state_version, reason, source_instance_id, created_at)
+                 VALUES (?, 'state_sync', 2, 'retention_probe_recent', '', ?)`,
+                [joinRound14ScoreB.payload.matchId, recentRetentionTimestamp]
+            );
+            await dbRun(
+                `INSERT OR REPLACE INTO pvp_live_replay_shares
+                    (share_token, match_id, creator_user_id, creator_seat, visibility_layer, source_visibility, match_ref, replay_hash, status, created_at, expires_at, revoked_at, updated_at)
+                 VALUES (?, ?, ?, 'A', 'replay_public', 'replay_public', 'retention-ref', 'retention-hash', 'active', ?, ?, 0, ?)`,
+                ['retention-expired-share', joinRound14ScoreB.payload.matchId, 'live-user-a', oldRetentionTimestamp, oldRetentionTimestamp, oldRetentionTimestamp]
+            );
+            const retentionPreservedBefore = {
+                matches: Number((await dbGet('SELECT COUNT(*) AS count FROM pvp_live_matches WHERE match_id = ?', [joinRound14ScoreB.payload.matchId]))?.count || 0),
+                matchEvents: Number((await dbGet('SELECT COUNT(*) AS count FROM pvp_live_match_events WHERE match_id = ?', [joinRound14ScoreB.payload.matchId]))?.count || 0),
+                disputes: Number((await dbGet('SELECT COUNT(*) AS count FROM pvp_live_dispute_reports WHERE report_id = ?', [disputeReport.payload.report.reportId]))?.count || 0),
+                opsEvents: Number((await dbGet('SELECT COUNT(*) AS count FROM pvp_live_ops_events WHERE match_id = ?', [joinRound14ScoreB.payload.matchId]))?.count || 0),
+                settlements: Number((await dbGet('SELECT COUNT(*) AS count FROM pvp_live_match_settlements WHERE match_id = ?', [joinRound14ScoreB.payload.matchId]))?.count || 0)
+            };
+            const opsRetentionPreview = await request(baseUrl, '/api/pvp/live/ops/retention/sweep?olderThanMs=2592000000', {
+                method: 'POST',
+                headers: { 'x-defier-live-ops-token': liveOpsToken },
+                body: { dryRun: true }
+            });
+            assert.equal(opsRetentionPreview.status, 200, 'live ops retention preview should accept ops token');
+            assert.equal(opsRetentionPreview.payload.reportVersion, 'pvp-live-ops-retention-sweep-v1', 'live ops retention sweep should expose a stable contract');
+            assert.equal(opsRetentionPreview.payload.dryRun, true, 'live ops retention preview should not apply deletes');
+            assert.ok(opsRetentionPreview.payload.preview?.stateSignals >= 1, 'live ops retention preview should count old state signals');
+            assert.ok(opsRetentionPreview.payload.preview?.expiredReplayShares >= 1, 'live ops retention preview should count expired replay shares');
+            const opsRetentionApply = await request(baseUrl, '/api/pvp/live/ops/retention/sweep?olderThanMs=2592000000', {
+                method: 'POST',
+                headers: { 'x-defier-live-ops-token': liveOpsToken },
+                body: { dryRun: false }
+            });
+            assert.equal(opsRetentionApply.status, 200, 'live ops retention apply should accept ops token');
+            assert.equal(opsRetentionApply.payload.dryRun, false, 'live ops retention apply should mark delete mode');
+            assert.ok(opsRetentionApply.payload.deleted?.stateSignals >= 1, 'live ops retention apply should delete old state signals');
+            assert.ok(opsRetentionApply.payload.deleted?.expiredReplayShares >= 1, 'live ops retention apply should delete expired replay shares');
+            const recentSignalStillThere = await dbGet("SELECT signal_id FROM pvp_live_state_signals WHERE reason = 'retention_probe_recent' LIMIT 1");
+            assert.ok(recentSignalStillThere, 'live ops retention sweep should preserve recent state signals');
+            const expiredReplayShareGone = await dbGet("SELECT share_token FROM pvp_live_replay_shares WHERE share_token = 'retention-expired-share' LIMIT 1");
+            assert.equal(expiredReplayShareGone, null, 'live ops retention sweep should remove expired replay shares beyond retention');
+            const disputeStillThere = await dbGet(
+                'SELECT report_id FROM pvp_live_dispute_reports WHERE report_id = ? LIMIT 1',
+                [disputeReport.payload.report.reportId]
+            );
+            assert.ok(disputeStillThere, 'live ops retention sweep should preserve dispute reports');
+            const retentionPreservedAfter = {
+                matches: Number((await dbGet('SELECT COUNT(*) AS count FROM pvp_live_matches WHERE match_id = ?', [joinRound14ScoreB.payload.matchId]))?.count || 0),
+                matchEvents: Number((await dbGet('SELECT COUNT(*) AS count FROM pvp_live_match_events WHERE match_id = ?', [joinRound14ScoreB.payload.matchId]))?.count || 0),
+                disputes: Number((await dbGet('SELECT COUNT(*) AS count FROM pvp_live_dispute_reports WHERE report_id = ?', [disputeReport.payload.report.reportId]))?.count || 0),
+                opsEvents: Number((await dbGet('SELECT COUNT(*) AS count FROM pvp_live_ops_events WHERE match_id = ?', [joinRound14ScoreB.payload.matchId]))?.count || 0),
+                settlements: Number((await dbGet('SELECT COUNT(*) AS count FROM pvp_live_match_settlements WHERE match_id = ?', [joinRound14ScoreB.payload.matchId]))?.count || 0)
+            };
+            assert.deepEqual(retentionPreservedAfter, retentionPreservedBefore, 'live ops retention sweep should preserve matches, match events, disputes, match-scoped ops audit, and settlements');
             const bearerOnlyOpsReview = await request(baseUrl, `/api/pvp/live/ops/dispute-reports/${disputeReport.payload.report.reportId}/status`, {
                 method: 'POST',
                 token: tokenA,
