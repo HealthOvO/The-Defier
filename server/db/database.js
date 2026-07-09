@@ -538,6 +538,130 @@ const initDb = () => {
                     fail(err);
                     return;
                 }
+            });
+
+            // Cross-mode account progression. Client-observed activity is kept
+            // separate from server-authoritative settlements through trust_tier.
+            db.run(`CREATE TABLE IF NOT EXISTS progression_events (
+                user_id TEXT NOT NULL,
+                event_id TEXT NOT NULL,
+                event_type TEXT NOT NULL,
+                activity_mode TEXT NOT NULL,
+                source_kind TEXT NOT NULL,
+                trust_tier TEXT NOT NULL,
+                source_ref TEXT NOT NULL,
+                battle_wins INTEGER NOT NULL DEFAULT 0,
+                boss_wins INTEGER NOT NULL DEFAULT 0,
+                activity_completions INTEGER NOT NULL DEFAULT 0,
+                pvp_matches INTEGER NOT NULL DEFAULT 0,
+                pvp_wins INTEGER NOT NULL DEFAULT 0,
+                proof_json TEXT NOT NULL DEFAULT '{}',
+                occurred_at INTEGER NOT NULL,
+                received_at INTEGER NOT NULL,
+                PRIMARY KEY(user_id, event_id),
+                UNIQUE(user_id, event_type, source_ref),
+                FOREIGN KEY(user_id) REFERENCES users(id)
+            )`, (err) => {
+                if (err) fail(err);
+            });
+            db.run(`ALTER TABLE progression_events ADD COLUMN occurred_at INTEGER NOT NULL DEFAULT 0`, (err) => {
+                if (err && !/duplicate column/i.test(String(err.message || ''))) {
+                    fail(err);
+                }
+            });
+            db.run(`UPDATE progression_events SET occurred_at = received_at WHERE occurred_at <= 0`, (err) => {
+                if (err) fail(err);
+            });
+            db.run(`CREATE INDEX IF NOT EXISTS idx_progression_events_user_received ON progression_events(user_id, received_at DESC)`, (err) => {
+                if (err) fail(err);
+            });
+            db.run(`CREATE INDEX IF NOT EXISTS idx_progression_events_user_occurred ON progression_events(user_id, occurred_at DESC, event_id)`, (err) => {
+                if (err) fail(err);
+            });
+            db.run(`CREATE INDEX IF NOT EXISTS idx_progression_events_type_received ON progression_events(event_type, activity_mode, received_at)`, (err) => {
+                if (err) fail(err);
+            });
+            db.run(`CREATE INDEX IF NOT EXISTS idx_progression_events_type_occurred ON progression_events(event_type, activity_mode, occurred_at)`, (err) => {
+                if (err) fail(err);
+            });
+            db.run(`CREATE INDEX IF NOT EXISTS idx_progression_events_trust_received ON progression_events(trust_tier, received_at)`, (err) => {
+                if (err) fail(err);
+            });
+            db.run(`CREATE TABLE IF NOT EXISTS progression_objective_progress (
+                user_id TEXT NOT NULL,
+                cycle_type TEXT NOT NULL,
+                cycle_id TEXT NOT NULL,
+                objective_id TEXT NOT NULL,
+                current_value INTEGER NOT NULL DEFAULT 0,
+                target_value INTEGER NOT NULL,
+                completed_at INTEGER NOT NULL DEFAULT 0,
+                updated_at INTEGER NOT NULL,
+                PRIMARY KEY(user_id, cycle_id, objective_id),
+                FOREIGN KEY(user_id) REFERENCES users(id)
+            )`, (err) => {
+                if (err) fail(err);
+            });
+            db.run(`CREATE INDEX IF NOT EXISTS idx_progression_objectives_cycle ON progression_objective_progress(cycle_type, cycle_id, objective_id, completed_at)`, (err) => {
+                if (err) fail(err);
+            });
+            db.run(`CREATE TABLE IF NOT EXISTS progression_reward_claims (
+                claim_id TEXT PRIMARY KEY,
+                user_id TEXT NOT NULL,
+                cycle_type TEXT NOT NULL,
+                cycle_id TEXT NOT NULL,
+                objective_id TEXT NOT NULL,
+                reward_type TEXT NOT NULL,
+                currency TEXT NOT NULL,
+                amount INTEGER NOT NULL,
+                reward_impact TEXT NOT NULL DEFAULT 'cosmetic_only',
+                trust_requirement TEXT NOT NULL DEFAULT 'client_observed',
+                claim_payload_json TEXT NOT NULL DEFAULT '{}',
+                claimed_at INTEGER NOT NULL,
+                UNIQUE(user_id, cycle_id, objective_id),
+                FOREIGN KEY(user_id) REFERENCES users(id)
+            )`, (err) => {
+                if (err) fail(err);
+            });
+            db.run(`CREATE INDEX IF NOT EXISTS idx_progression_claims_user_claimed ON progression_reward_claims(user_id, claimed_at DESC)`, (err) => {
+                if (err) fail(err);
+            });
+            db.run(`CREATE TABLE IF NOT EXISTS progression_economy_balances (
+                user_id TEXT NOT NULL,
+                currency TEXT NOT NULL,
+                balance INTEGER NOT NULL DEFAULT 0,
+                lifetime_earned INTEGER NOT NULL DEFAULT 0,
+                lifetime_spent INTEGER NOT NULL DEFAULT 0,
+                updated_at INTEGER NOT NULL,
+                PRIMARY KEY(user_id, currency),
+                FOREIGN KEY(user_id) REFERENCES users(id)
+            )`, (err) => {
+                if (err) fail(err);
+            });
+            db.run(`CREATE TABLE IF NOT EXISTS progression_economy_ledger (
+                entry_id TEXT PRIMARY KEY,
+                user_id TEXT NOT NULL,
+                currency TEXT NOT NULL,
+                delta INTEGER NOT NULL,
+                balance_after INTEGER NOT NULL,
+                reason TEXT NOT NULL,
+                source_type TEXT NOT NULL,
+                source_id TEXT NOT NULL,
+                reward_impact TEXT NOT NULL DEFAULT 'cosmetic_only',
+                metadata_json TEXT NOT NULL DEFAULT '{}',
+                created_at INTEGER NOT NULL,
+                UNIQUE(user_id, source_type, source_id, currency),
+                FOREIGN KEY(user_id) REFERENCES users(id)
+            )`, (err) => {
+                if (err) fail(err);
+            });
+            db.run(`CREATE INDEX IF NOT EXISTS idx_progression_ledger_user_created ON progression_economy_ledger(user_id, created_at DESC, entry_id)`, (err) => {
+                if (err) fail(err);
+            });
+            db.run(`CREATE INDEX IF NOT EXISTS idx_progression_ledger_source ON progression_economy_ledger(source_type, source_id, created_at)`, (err) => {
+                if (err) {
+                    fail(err);
+                    return;
+                }
                 recordCurrentSchemaMigration(db, (migrationErr) => {
                     if (migrationErr) fail(migrationErr);
                     else done();
@@ -549,6 +673,7 @@ const initDb = () => {
 
 module.exports = {
     db,
+    dbPath,
     getSchemaStatus: () => getSchemaStatus(db),
     initDb
 };

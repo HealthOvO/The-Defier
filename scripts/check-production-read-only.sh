@@ -63,7 +63,9 @@ stat -c '[prod-read] %n|%s|%y' \
   "$REMOTE_BACKEND_DIR/app.js" \
   "$REMOTE_BACKEND_DIR/routes/saves.js" \
   "$REMOTE_BACKEND_DIR/routes/pvp.js" \
-  "$REMOTE_BACKEND_DIR/routes/ghosts.js"
+  "$REMOTE_BACKEND_DIR/routes/ghosts.js" \
+  "$REMOTE_BACKEND_DIR/routes/progression.js" \
+  "$REMOTE_BACKEND_DIR/progression/service.js"
 
 require_backend_marker() {
   local file="$1"
@@ -81,6 +83,10 @@ require_backend_marker "$REMOTE_BACKEND_DIR/routes/pvp.js" "isClientReportedSett
 require_backend_marker "$REMOTE_BACKEND_DIR/routes/pvp.js" "verifyRequestIntegrity" "PVP request integrity checks"
 require_backend_marker "$REMOTE_BACKEND_DIR/routes/ghosts.js" "POST /api/ghosts/current" "Ghost upload route"
 require_backend_marker "$REMOTE_BACKEND_DIR/routes/ghosts.js" "verifyRequestIntegrity" "Ghost request integrity checks"
+require_backend_marker "$REMOTE_BACKEND_DIR/routes/progression.js" "POST /api/progression/events" "Progression signed event route"
+require_backend_marker "$REMOTE_BACKEND_DIR/routes/progression.js" "x-defier-ops-token" "Progression ops token boundary"
+require_backend_marker "$REMOTE_BACKEND_DIR/progression/service.js" "server_authoritative" "Progression authority boundary"
+require_backend_marker "$REMOTE_BACKEND_DIR/progression/service.js" "cosmetic_only" "Progression non-power reward boundary"
 
 if grep -R -q global_updated_at "$REMOTE_BACKEND_DIR"; then
   echo "[prod-read] Backend contains global_updated_at migration"

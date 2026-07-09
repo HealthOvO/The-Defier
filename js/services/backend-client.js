@@ -49,7 +49,8 @@ export const BackendClient = {
       savePathPrefix: typeof config.savePathPrefix === 'string' ? config.savePathPrefix.trim() : '/api/saves',
       userPathPrefix: typeof config.userPathPrefix === 'string' ? config.userPathPrefix.trim() : '/api/user',
       ghostPathPrefix: typeof config.ghostPathPrefix === 'string' ? config.ghostPathPrefix.trim() : '/api/ghosts',
-      pvpPathPrefix: typeof config.pvpPathPrefix === 'string' ? config.pvpPathPrefix.trim() : '/api/pvp'
+      pvpPathPrefix: typeof config.pvpPathPrefix === 'string' ? config.pvpPathPrefix.trim() : '/api/pvp',
+      progressionPathPrefix: typeof config.progressionPathPrefix === 'string' ? config.progressionPathPrefix.trim() : '/api/progression'
     };
   },
   cloneData(data) {
@@ -97,12 +98,15 @@ export const BackendClient = {
     const signature = await cryptoObj.subtle.sign('HMAC', key, encoder.encode(message));
     return this.bytesToHex(new Uint8Array(signature));
   },
-  async createSessionIntegrityFields(data) {
+  async createSessionIntegrityFields(data, options = {}) {
     const session = this.loadServerSession();
-    if (!session || !session.token) return {};
+    const sessionToken = typeof options.sessionToken === 'string' && options.sessionToken
+      ? options.sessionToken
+      : session && session.token;
+    if (!sessionToken) return {};
     const dataStr = typeof data === 'string' ? data : JSON.stringify(data);
     const salt = this.createIntegritySalt();
-    const signature = await this.signSessionPayload(dataStr, salt, session.token);
+    const signature = await this.signSessionPayload(dataStr, salt, sessionToken);
     if (!signature) return {};
     return {
       salt,
@@ -222,7 +226,8 @@ export const BackendClient = {
   async requestServer(path, {
     method = 'GET',
     data,
-    auth = true
+    auth = true,
+    authToken = ''
   } = {}) {
     const config = this.getServerConfig();
     if (!config) throw this.createError('服务器地址配置缺失');
@@ -230,8 +235,9 @@ export const BackendClient = {
       'Content-Type': 'application/json'
     };
     const session = this.loadServerSession();
-    if (auth && session && session.token) {
-      headers.Authorization = `Bearer ${session.token}`;
+    const requestAuthToken = typeof authToken === 'string' && authToken ? authToken : session && session.token;
+    if (auth && requestAuthToken) {
+      headers.Authorization = `Bearer ${requestAuthToken}`;
     }
     const response = await this.withRetry(() => this.runWithTimeout(async () => {
       const res = await fetch(`${config.baseUrl}${path}`, {
@@ -734,6 +740,179 @@ export const BackendClient = {
         success: false,
         error,
         message: error.message || 'PVP 结算失败'
+      };
+    }
+  },
+  getProgressionPathPrefix() {
+    const config = this.getServerConfig();
+    const base = config && typeof config.progressionPathPrefix === 'string' && config.progressionPathPrefix.trim()
+      ? config.progressionPathPrefix.trim().replace(/\/+$/, '')
+      : '/api/progression';
+    return base;
+  },
+  async getProgressionStatus() {
+    const user = this.getCurrentUser();
+    if (!user) return {
+      success: false,
+      message: '未登录'
+    };
+    try {
+      const result = await this.requestServer(`${this.getProgressionPathPrefix()}/status`, {
+        method: 'GET'
+      });
+      return result && typeof result === 'object' ? result : {
+        success: false,
+        message: '长期进度状态返回异常'
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error,
+        reason: error && error.reason || undefined,
+        message: error.message || '长期进度状态读取失败'
+      };
+    }
+  },
+  async submitProgressionEvents(events = [], options = {}) {
+    const user = this.getCurrentUser();
+    if (!user) return {
+      success: false,
+      message: '未登录'
+    };
+    const batch = Array.isArray(events) ? this.cloneData(events) : [];
+    if (batch.length === 0) return {
+      success: false,
+      message: '长期进度事件批次不能为空'
+    };
+    if (batch.length > 20) return {
+      success: false,
+      message: '长期进度事件批次超过上限'
+    };
+    try {
+      const expectedUserId = String(options && options.expectedUserId || '').trim();
+      const currentUserId = String(user && (user.objectId || user.id || user.userId) || '').trim();
+      const capturedSession = this.loadServerSession();
+      const capturedSessionUserId = String(capturedSession && capturedSession.user && (capturedSession.user.objectId || capturedSession.user.id || capturedSession.user.userId) || '').trim();
+      if (expectedUserId && (currentUserId !== expectedUserId || !capturedSession || !capturedSession.token || capturedSessionUserId !== expectedUserId)) {
+        return {
+          success: false,
+          reason: 'progression_account_changed',
+          message: '登录账号已变化，长期进度队列将保留到原账号下次登录'
+        };
+      }
+      const signedPayload = { events: batch };
+      const capturedToken = capturedSession && capturedSession.token || '';
+      const integrity = await this.createSessionIntegrityFields(signedPayload, {
+        sessionToken: capturedToken
+      });
+      const result = await this.requestServer(`${this.getProgressionPathPrefix()}/events`, {
+        method: 'POST',
+        authToken: capturedToken,
+        data: {
+          ...signedPayload,
+          ...integrity
+        }
+      });
+      return result && typeof result === 'object' ? result : {
+        success: false,
+        message: '长期进度事件上报返回异常'
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error,
+        reason: error && error.reason || undefined,
+        message: error.message || '长期进度事件上报失败'
+      };
+    }
+  },
+  async claimProgressionReward(objectiveId = '', cycleId = '') {
+    const user = this.getCurrentUser();
+    if (!user) return {
+      success: false,
+      message: '未登录'
+    };
+    const safeObjectiveId = String(objectiveId || '').trim();
+    const safeCycleId = String(cycleId || '').trim();
+    if (!safeObjectiveId) return {
+      success: false,
+      message: '长期进度目标缺失'
+    };
+    if (!safeCycleId) return {
+      success: false,
+      message: '长期进度周期缺失'
+    };
+    try {
+      const expectedUserId = String(user && (user.objectId || user.id || user.userId) || '').trim();
+      const capturedSession = this.loadServerSession();
+      const capturedSessionUserId = String(capturedSession && capturedSession.user && (capturedSession.user.objectId || capturedSession.user.id || capturedSession.user.userId) || '').trim();
+      const capturedToken = capturedSession && capturedSession.token || '';
+      if (!expectedUserId || !capturedToken || capturedSessionUserId !== expectedUserId) {
+        return {
+          success: false,
+          reason: 'progression_account_changed',
+          message: '登录账号已变化，请刷新长期进度后重试'
+        };
+      }
+      const signedPayload = {
+        objectiveId: safeObjectiveId,
+        cycleId: safeCycleId
+      };
+      const integrity = await this.createSessionIntegrityFields(signedPayload, {
+        sessionToken: capturedToken
+      });
+      const result = await this.requestServer(`${this.getProgressionPathPrefix()}/rewards/${encodeURIComponent(safeObjectiveId)}/claim`, {
+        method: 'POST',
+        authToken: capturedToken,
+        data: {
+          ...signedPayload,
+          ...integrity
+        }
+      });
+      return result && typeof result === 'object' ? result : {
+        success: false,
+        message: '长期进度奖励领取返回异常'
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error,
+        reason: error && error.reason || undefined,
+        message: error.message || '长期进度奖励领取失败'
+      };
+    }
+  },
+  async getProgressionLedger(options = {}) {
+    const user = this.getCurrentUser();
+    if (!user) return {
+      success: false,
+      message: '未登录'
+    };
+    const safeLimit = options && Object.prototype.hasOwnProperty.call(options, 'limit')
+      ? Math.max(1, Math.min(50, Math.floor(Number(options.limit) || 20)))
+      : null;
+    const rawCursor = options && Object.prototype.hasOwnProperty.call(options, 'cursor')
+      ? String(options.cursor || '').trim()
+      : '';
+    const safeCursor = /^\d+:[A-Za-z0-9._:-]{8,128}$/.test(rawCursor) ? rawCursor : '';
+    const query = new URLSearchParams();
+    if (safeLimit !== null) query.set('limit', String(safeLimit));
+    if (safeCursor) query.set('cursor', safeCursor);
+    const suffix = query.toString() ? `?${query.toString()}` : '';
+    try {
+      const result = await this.requestServer(`${this.getProgressionPathPrefix()}/ledger${suffix}`, {
+        method: 'GET'
+      });
+      return result && typeof result === 'object' ? result : {
+        success: false,
+        message: '长期进度账本返回异常'
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error,
+        reason: error && error.reason || undefined,
+        message: error.message || '长期进度账本读取失败'
       };
     }
   },

@@ -105,12 +105,16 @@ async function main() {
     assert.strictEqual(version.payload?.gitSha, 'platform-test-sha', '/api/version should prefer deployment git sha env');
     assert.match(version.payload?.packageLockDigest || '', /^[a-f0-9]{16,64}$/, '/api/version should expose root lockfile digest');
     assert.match(version.payload?.serverPackageLockDigest || '', /^[a-f0-9]{16,64}$/, '/api/version should expose server lockfile digest');
-    assert.strictEqual(version.payload?.schema?.version, 1, '/api/version should expose schema version');
-    assert.strictEqual(version.payload?.schema?.currentMigrationId, '0001_startup_schema', '/api/version should expose current migration id');
+    assert.strictEqual(version.payload?.schema?.version, 2, '/api/version should expose schema version');
+    assert.strictEqual(version.payload?.schema?.currentMigrationId, '0002_progression_platform', '/api/version should expose current migration id');
     assert.ok(Array.isArray(version.payload?.schema?.appliedMigrations), '/api/version should expose applied migration list');
     assert.ok(
       version.payload.schema.appliedMigrations.some(item => item.id === '0001_startup_schema' && Number(item.appliedAt) > 0),
       '/api/version should include applied startup schema migration'
+    );
+    assert.ok(
+      version.payload.schema.appliedMigrations.some(item => item.id === '0002_progression_platform' && Number(item.appliedAt) > 0),
+      '/api/version should include applied progression schema migration'
     );
     const rootVersion = await request('/version');
     assert.strictEqual(rootVersion.status, 200, `/version should return 200: ${JSON.stringify(rootVersion.payload)}`);
@@ -123,7 +127,7 @@ async function main() {
     assert.strictEqual(health.payload?.status, 'ok', '/api/health should keep status=ok');
     assert.strictEqual(health.payload?.message, 'The Defier Backend is running', '/api/health should preserve existing health message');
     assert.strictEqual(health.payload?.checks?.database, 'ok', '/api/health should report database status');
-    assert.strictEqual(health.payload?.schema?.currentMigrationId, '0001_startup_schema', '/api/health should expose current schema migration');
+    assert.strictEqual(health.payload?.schema?.currentMigrationId, '0002_progression_platform', '/api/health should expose current schema migration');
     assert.strictEqual(health.payload?.version?.gitSha, 'platform-test-sha', '/api/health should include runtime version summary');
     const healthJson = JSON.stringify(health.payload);
     assert(!healthJson.includes(JWT_SECRET), '/api/health must not leak JWT secret');
@@ -136,6 +140,11 @@ async function main() {
     assert(Number(migration?.applied_at) > 0, 'schema_migrations should record applied timestamp');
     const migrationCount = await dbGet('SELECT COUNT(*) AS count FROM schema_migrations WHERE id = ?', ['0001_startup_schema']);
     assert.strictEqual(Number(migrationCount?.count), 1, 'schema_migrations should keep one row per migration id');
+    const progressionMigration = await dbGet('SELECT id, version, checksum, applied_at FROM schema_migrations WHERE id = ?', ['0002_progression_platform']);
+    assert.strictEqual(progressionMigration?.id, '0002_progression_platform', 'schema_migrations should record progression migration');
+    assert.strictEqual(Number(progressionMigration?.version), 2, 'progression migration should record schema version 2');
+    assert.match(progressionMigration?.checksum || '', /^[a-f0-9]{16,64}$/, 'progression migration should record stable checksum');
+    assert(Number(progressionMigration?.applied_at) > 0, 'progression migration should record applied timestamp');
 
     console.log('Backend platform checks passed.');
   } catch (error) {

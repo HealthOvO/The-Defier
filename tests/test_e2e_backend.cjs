@@ -260,6 +260,7 @@ const ctx = vm.createContext({
     fetch: mockFetch,
     crypto: nodeCrypto.webcrypto,
     TextEncoder,
+    URLSearchParams,
     setTimeout,
     clearTimeout
 });
@@ -324,6 +325,31 @@ const runE2E = async () => {
     const globalGetRes = await AuthService.getGlobalData();
     console.log('7. 读取全局数据:', globalGetRes.success && globalGetRes.data?.achievements?.firstWin ? '成功' : '失败');
     assertStep(globalGetRes.success && globalGetRes.data?.achievements?.firstWin === true, '读取全局数据失败', JSON.stringify(globalGetRes));
+
+    const progressionInitial = await BackendClient.getProgressionStatus();
+    assertStep(progressionInitial.success && progressionInitial.reportVersion === 'account-progression-status-v1', '读取长期进度失败', JSON.stringify(progressionInitial));
+    const progressionRunId = `e2e-run-${Date.now()}`;
+    const progressionEvents = [0, 1, 2].map(index => ({
+        eventId: `e2e-progression-event-${Date.now()}-${index}`,
+        eventType: 'battle_won',
+        mode: index === 1 ? 'challenge' : index === 2 ? 'expedition' : 'pve',
+        sourceRef: `${progressionRunId}-node-${index}`,
+        proof: {
+            nodeType: index === 0 ? 'boss' : 'enemy',
+            realm: 3,
+            runId: progressionRunId
+        }
+    }));
+    const progressionSubmit = await BackendClient.submitProgressionEvents(progressionEvents);
+    assertStep(progressionSubmit.success && progressionSubmit.accepted?.length === 3, '提交长期进度事件失败', JSON.stringify(progressionSubmit));
+    const progressionStatus = await BackendClient.getProgressionStatus();
+    const dailyBattleObjective = progressionStatus.objectives?.find(entry => entry.objectiveId === 'daily_battle_wins');
+    assertStep(dailyBattleObjective?.claimable === true && dailyBattleObjective.current === 3, '长期进度目标未按事件推进', JSON.stringify(progressionStatus));
+    const progressionClaim = await BackendClient.claimProgressionReward(dailyBattleObjective.objectiveId, dailyBattleObjective.cycleId);
+    assertStep(progressionClaim.success && progressionClaim.alreadyClaimed === false && progressionClaim.balance?.balance > 0, '领取长期进度奖励失败', JSON.stringify(progressionClaim));
+    const progressionLedger = await BackendClient.getProgressionLedger({ limit: 10 });
+    assertStep(progressionLedger.success && progressionLedger.entries?.length === 1, '读取长期进度流水失败', JSON.stringify(progressionLedger));
+    console.log('8. 长期进度事件/领奖/流水: 成功');
 
     const auditRealm = 10000 + Math.floor(Date.now() % 1000000);
     const ghostRes = await AuthService.uploadGhostData({ characterId: 'Hero', currentHp: 500, maxHp: 1000, deck: [{ id: 'audit_strike' }] }, auditRealm);

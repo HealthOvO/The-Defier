@@ -1,5 +1,6 @@
 import { CHALLENGE_RULES } from "../data/challenge_rules.js";
 import { PVPService } from "../services/pvp-service.js";
+import { ProgressionService } from "../services/progression-service.js";
 import { GameMap } from "./map.js";
 import { Utils } from "./utils.js";
 import { CHARACTERS } from "../data/index.js";
@@ -3760,6 +3761,20 @@ const challengeHubMethods = Object.create(null);
         icon: run.icon || '🜂',
         note: `本轮得分 ${run.finalScore}，可回观星台领取对应奖励。`
       });
+    }
+    if (!run.replayOnly && !run.practiceOnly && options.completed && typeof ProgressionService !== 'undefined' && ProgressionService && typeof ProgressionService.recordActivityCompleted === 'function') {
+      ProgressionService.recordActivityCompleted({
+        mode: 'challenge',
+        proof: {
+          challengeMode: ['daily', 'weekly'].includes(String(run.mode || '')) ? String(run.mode) : undefined,
+          rotationKey: String(run.rotationKey || ''),
+          ruleId: String(run.ruleId || ''),
+          realm: clampInt(run.goalRealm, 1, 999)
+        }
+      });
+      if (typeof ProgressionService.flush === 'function') {
+        Promise.resolve().then(() => ProgressionService.flush()).catch(() => {});
+      }
     }
     if (typeof Utils !== 'undefined' && Utils && typeof Utils.showBattleLog === 'function') {
       Utils.showBattleLog(run.practiceOnly

@@ -1,5 +1,6 @@
 import { PVPService } from "./pvp-service.js";
 import { BackendClient } from "./backend-client.js";
+import { ProgressionService } from "./progression-service.js";
 /**
  * The Defier - Bmob Auth Service
  */
@@ -76,6 +77,9 @@ export const AuthService = {
         this.resetCloudSaveState();
       }
       this.currentUser = nextUser;
+      if (typeof ProgressionService !== 'undefined' && ProgressionService && typeof ProgressionService.flush === 'function') {
+        Promise.resolve().then(() => ProgressionService.flush()).catch(() => {});
+      }
     }
     return response;
   },
@@ -94,13 +98,20 @@ export const AuthService = {
         this.resetCloudSaveState();
       }
       this.currentUser = nextUser;
+      if (typeof ProgressionService !== 'undefined' && ProgressionService && typeof ProgressionService.flush === 'function') {
+        Promise.resolve().then(() => ProgressionService.flush()).catch(() => {});
+      }
     }
     return response;
   },
   logout() {
+    const previousUserId = this.getUserIdentity(this.currentUser);
     if (!this.isInitialized || typeof BackendClient === 'undefined') {
       this.currentUser = null;
       this.resetCloudSaveState();
+      if (previousUserId && typeof ProgressionService !== 'undefined' && ProgressionService && typeof ProgressionService.resetActiveFlushState === 'function') {
+        ProgressionService.resetActiveFlushState(previousUserId);
+      }
       if (typeof window !== 'undefined' && typeof PVPService !== 'undefined' && PVPService && typeof PVPService.clearActiveMatch === 'function') {
         PVPService.clearActiveMatch();
       }
@@ -109,6 +120,9 @@ export const AuthService = {
     BackendClient.logout();
     this.currentUser = null;
     this.resetCloudSaveState();
+    if (previousUserId && typeof ProgressionService !== 'undefined' && ProgressionService && typeof ProgressionService.resetActiveFlushState === 'function') {
+      ProgressionService.resetActiveFlushState(previousUserId);
+    }
     if (typeof window !== 'undefined' && typeof PVPService !== 'undefined' && PVPService && typeof PVPService.clearActiveMatch === 'function') {
       PVPService.clearActiveMatch();
     }

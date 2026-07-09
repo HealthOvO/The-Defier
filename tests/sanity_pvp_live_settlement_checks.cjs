@@ -164,6 +164,39 @@ async function assertRound14ScoreSettlementWritesRankedHistory() {
   assert.equal(loserRank.losses, 1, 'round14 score loser should receive rank loss');
   assert.ok(winnerRank.score > 1000, 'round14 score winner rating should increase');
   assert.ok(loserRank.score < 1000, 'round14 score loser rating should decrease');
+  const progressionRows = await new Promise((resolve, reject) => {
+    const database = new sqlite3.Database(DB_PATH);
+    database.all(
+      `SELECT user_id, event_type, activity_mode, trust_tier, source_ref, activity_completions, pvp_matches, pvp_wins
+       FROM progression_events
+       WHERE source_ref = ?
+       ORDER BY user_id ASC`,
+      [match.matchId],
+      (error, rows) => {
+        database.close();
+        if (error) reject(error);
+        else resolve(rows || []);
+      },
+    );
+  });
+  assert.equal(progressionRows.length, 2, 'ranked live settlement should append one trusted progression event per player');
+  assert.ok(progressionRows.every(row => row.event_type === 'pvp_match_completed'), 'trusted progression event should use PVP completion type');
+  assert.ok(progressionRows.every(row => row.activity_mode === 'pvp_live'), 'trusted progression event should use live PVP mode');
+  assert.ok(progressionRows.every(row => row.trust_tier === 'server_authoritative'), 'live settlement progression should be server authoritative');
+  assert.ok(progressionRows.every(row => row.activity_completions === 1 && row.pvp_matches === 1), 'live settlement should advance completion and match metrics');
+  assert.deepEqual(progressionRows.map(row => row.pvp_wins).sort(), [0, 1], 'only the live winner should advance the trusted win metric');
+  const replayResult = await settlement.settleMatch(match);
+  assert.equal(replayResult.alreadySettled, true, 'direct settlement replay should use the existing settlement gate');
+  const progressionCountAfterReplay = await dbGet(
+    'SELECT COUNT(*) AS count FROM progression_events WHERE source_ref = ?',
+    [match.matchId],
+  );
+  assert.equal(progressionCountAfterReplay.count, 2, 'trusted progression bridge should be idempotent on settlement replay');
+  const { getStatus } = require('../server/progression/service');
+  const winnerProgression = await getStatus('score-user-a');
+  const trustedWeekly = winnerProgression.objectives.find(entry => entry.objectiveId === 'weekly_live_pvp_matches');
+  assert.equal(trustedWeekly.current, 1, 'live settlement should project into the trusted weekly PVP objective');
+  assert.equal(trustedWeekly.trustRequirement, 'server_authoritative', 'weekly live objective should preserve authoritative trust requirement');
 }
 
 function startServer() {

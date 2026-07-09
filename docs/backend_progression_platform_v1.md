@@ -1,0 +1,108 @@
+# 全游戏长期进度平台 V1
+
+## 目标
+
+V1 将 PVE、挑战、远征和 live PVP 的活动收据汇入独立的账号进度域，提供：
+
+- UTC 日/周周期目标与终身里程碑；
+- 幂等奖励领取；
+- append-only 经济流水和余额投影；
+- 不暴露用户明细的运营总览；
+- 明确的事件信任等级，避免把客户端自述误当成权威结算。
+
+该平台不替代现有云存档、挑战面板、赛季盘或 PVP 经济，也不改变战斗数值。V1 奖励货币 `renown` 仅允许未来用于外观和账号展示，不得兑换战力、PVP 积分或现有 PVP 钱包资产。
+
+## 信任模型
+
+| 信任等级 | 当前来源 | 可用于 | 不可用于 |
+| --- | --- | --- | --- |
+| `server_authoritative` | live PVP 正式结算事务 | 正式任务进度、运营统计、荣誉奖励 | 推断隐藏手牌或客户端私有状态 |
+| `client_observed` | 已登录客户端的 PVE、挑战、远征收据 | 有日上限的非竞争荣誉进度、玩法采用率 | 战力、排名、PVP 积分、正式胜负认定 |
+
+浏览器用 session token 生成的 HMAC 只能证明请求与当前登录态一致，不能证明客户端报告的战斗结果真实。服务端仅接受最多回溯 24 小时、最多超前 30 秒的 `occurredAt`，未来时间会收敛到服务端接收时间；周期归属和日上限使用校验后的发生时间，接收时间单独保留用于审计。
+
+## 事件契约
+
+客户端入口为 `POST /api/progression/events`，每批最多 20 条，签名原文为 `JSON.stringify({ events })`。
+
+| eventType | mode | 服务端派生指标 | 说明 |
+| --- | --- | --- | --- |
+| `battle_won` | `pve/challenge/expedition` | `battle_wins=1`；Boss 时 `boss_wins=1` | `client_observed`，每日每模式最多 20 条 |
+| `activity_completed` | `pve/challenge/expedition` | `activity_completions=1` | `client_observed`，每日每模式最多 10 条 |
+| `pvp_match_completed` | `pvp_live` | `activity_completions=1`、`pvp_matches=1`、胜者 `pvp_wins=1` | 只能由 live PVP 结算事务写入 |
+
+事件以 `(user_id, event_id)` 和 `(user_id, event_type, source_ref)` 双重去重。客户端提交 `pvp_match_completed` 会被标记为 `server_only_event`，不会落库。
+
+`proof_json` 只保存服务端白名单字段：节点类型、境界、run id、挑战轮转/规则标识、远征章节和 `realm_clear` 原因。客户端提交的奖励数值、任意扩展字段和私密标识不会持久化。
+
+## 周期目标
+
+周期以 UTC 为准。日周期从 00:00 开始，周周期从周一 00:00 开始。超过回溯窗口或未来偏差窗口的客户端事件会被拒绝，不能通过延迟上报把旧事件计入新周期。
+
+V1 目标包括：
+
+- 每日：3 场战斗、1 次活动收官、2 种玩法参与；
+- 每周：5 次活动收官、3 次 Boss 胜利、3 种玩法参与；
+- live PVP 权威周目标：3 场正式真人对局；
+- 终身：首次收官、10 次收官、参与 3 种玩法。
+
+每个目标在 API 中携带 `trustRequirement`。客户端观察目标与服务端权威目标不会混淆。
+
+## API
+
+### 玩家接口
+
+- `GET /api/progression/status`
+  - 通过只读 SQLite 快照返回当前周期、目标进度、信任要求、领取状态、余额和脱敏近期事件，不创建零进度投影或争用写锁。
+- `POST /api/progression/events`
+  - 批量写入客户端观察事件；返回 `accepted/duplicates/rejected`，支持安全重试。
+- `POST /api/progression/rewards/:objectiveId/claim`
+  - body 为 `{ objectiveId, cycleId, salt, signature, signatureMode }`，签名同时绑定目标和周期；同一账号、周期和目标只记一次奖励。
+- `GET /api/progression/ledger?limit=20&cursor=...`
+  - 返回当前账号的荣誉流水，不返回 user id；`cursor` 是由 `created_at` 和 `entry_id` 组成的复合游标，同毫秒流水不会漏页。
+
+所有玩家接口都要求 JWT。两个 POST 接口即使全局完整性校验处于可选模式，也仍强制要求 session/HMAC 签名。
+
+### 运营接口
+
+- `GET /api/progression/ops/overview`
+- 请求头：`x-defier-ops-token`
+- 服务端私密环境变量：`DEFIER_OPS_TOKEN`
+
+未配置或未提供 token 时返回 404，错误 token 返回 403。响应只包含固定枚举聚合：玩法分布、信任等级分布、目标完成人数、领取数和荣誉余额，不包含 user id、event id、source ref 或 proof。
+
+## 持久化与迁移
+
+Schema 版本为 `2`，当前迁移为 `0002_progression_platform`。新数据库会按顺序记录：
+
+1. `0001_startup_schema`
+2. `0002_progression_platform`
+
+新增表：
+
+- `progression_events`
+- `progression_objective_progress`
+- `progression_reward_claims`
+- `progression_economy_balances`
+- `progression_economy_ledger`
+
+迁移只做 additive 的建表、加列、索引和 `occurred_at` 审计字段回填，不解释或重写旧 `game_saves/global_data` blob。旧存档未来若需要 backfill，必须标为 `legacy_blob_import`，默认不得直接发奖。
+
+## 原子性与恢复
+
+- 玩家领奖使用独立 SQLite 连接和 `BEGIN IMMEDIATE`；claim、余额和 ledger 在同一事务提交。
+- 并发双击或双设备领取时，一个请求创建正式 claim，其他请求返回 `alreadyClaimed=true`，余额只增加一次。
+- live PVP 的两条权威进度事件与正式积分/奖励结算在同一事务写入。
+- 旧结算记录被重新读取时，会以 `INSERT OR IGNORE` 补齐缺失的权威进度事件，且不会重复推进。
+- 目标投影可从 append-only 事件重算；状态查询使用只读快照，运营总览直接基于事件统计，不依赖玩家是否打开过进度页面。
+
+## 下一阶段
+
+V1 不声称 PVE 已经服务端权威。后续优先级为：
+
+1. 为挑战和远征增加服务端签发的 run ticket、内容版本和结算 nonce；
+2. 将可确定的地图/规则生成移到共享确定性模块；
+3. 服务端复算最小结算单后，把对应事件从 `client_observed` 升级为 `server_verified`；
+4. 只有完成复算的事件才能进入竞争性奖励或排行榜。
+
+本版本只完成本地开发、测试、合并和推送，不包含线上部署或生产环境变量变更。

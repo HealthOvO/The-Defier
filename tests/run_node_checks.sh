@@ -16,6 +16,10 @@ node tests/sanity_mobile_interaction_system_checks.cjs
 node tests/sanity_release_gate_coverage_checks.cjs
 node tests/backend_security_checks.cjs
 node tests/backend_platform_checks.cjs
+node tests/sanity_progression_platform_checks.cjs
+node tests/sanity_progression_time_boundary_checks.cjs
+node tests/sanity_progression_client_checks.mjs
+node tests/sanity_progression_bridge_checks.cjs
 node tests/sanity_balance_checks.cjs
 node tests/sanity_expansion_system_checks.cjs
 node tests/sanity_event_flow_checks.cjs

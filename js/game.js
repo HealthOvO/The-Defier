@@ -12,6 +12,7 @@ import { RewardView } from "./views/RewardView.js";
 import { EventView } from "./views/EventView.js";
 import { AuthService } from "./services/authService.js";
 import { BackendClient } from "./services/backend-client.js";
+import { ProgressionService } from "./services/progression-service.js";
 import { RUN_DESTINIES } from "./data/run_destinies.js";
 import { RUN_VOWS } from "./data/run_vows.js";
 import { Utils } from "./core/utils.js";
@@ -5404,6 +5405,39 @@ export class Game {
     const enemyList = Array.isArray(enemies) ? enemies.filter(Boolean) : [enemies].filter(Boolean);
     const isBossBattle = enemyList.some(enemy => !!enemy && !!enemy.isBoss);
     const battleNodeType = this.currentBattleNode && typeof this.currentBattleNode.type === 'string' ? this.currentBattleNode.type : '';
+    const challengeRun = this.activeChallengeRun && typeof this.activeChallengeRun === 'object' ? this.activeChallengeRun : null;
+    const progressionEligible = !this.player?.isReplay && !challengeRun?.replayOnly && !challengeRun?.practiceOnly;
+    if (progressionEligible && typeof ProgressionService !== 'undefined' && ProgressionService && typeof ProgressionService.recordBattleWin === 'function') {
+      const progressionMode = challengeRun
+        ? 'challenge'
+        : this.expeditionState
+          ? 'expedition'
+          : 'pve';
+      const nodeType = isBossBattle || battleNodeType === 'boss'
+        ? 'boss'
+        : ['enemy', 'elite', 'trial', 'ghost_duel'].includes(battleNodeType)
+          ? battleNodeType
+          : 'enemy';
+      ProgressionService.recordBattleWin({
+        mode: progressionMode,
+        proof: {
+          nodeType,
+          realm: Math.max(1, Math.floor(Number(this.player?.realm) || 1))
+        }
+      });
+      if (progressionMode === 'pve' && nodeType === 'boss' && typeof ProgressionService.recordActivityCompleted === 'function') {
+        ProgressionService.recordActivityCompleted({
+          mode: 'pve',
+          proof: {
+            nodeType: 'boss',
+            realm: Math.max(1, Math.floor(Number(this.player?.realm) || 1))
+          }
+        });
+      }
+      if (typeof ProgressionService.flush === 'function') {
+        Promise.resolve().then(() => ProgressionService.flush()).catch(() => {});
+      }
+    }
     const endlessMods = this.isEndlessActive() ? this.getEndlessModifiers() : null;
     this.player.enemiesDefeated += enemyList.length;
     if (typeof this.handleRunPathProgress === 'function') {

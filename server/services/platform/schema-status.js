@@ -1,28 +1,53 @@
 const crypto = require('crypto');
 
-const SCHEMA_VERSION = 1;
-const CURRENT_MIGRATION_ID = '0001_startup_schema';
-const CURRENT_MIGRATION_DESCRIPTION = 'Initial additive startup schema';
-const CURRENT_MIGRATION_CHECKSUM = crypto
-    .createHash('sha256')
-    .update([
-        'the-defier-backend',
-        CURRENT_MIGRATION_ID,
-        String(SCHEMA_VERSION),
-        'users',
-        'game_saves',
-        'game_ghosts',
-        'pvp_ranks',
-        'pvp_live_matches',
-        'pvp_live_state_signals',
-        'pvp_live_ops_events',
-        'pvp_live_dispute_reports',
-        'pvp_live_match_settlements',
-        'pvp_live_replay_shares',
-        'pvp_season_reward_claims',
-        'pvp_season_honor_archives'
-    ].join('|'))
-    .digest('hex');
+const makeMigration = ({ id, version, description, resources }) => ({
+    id,
+    version,
+    description,
+    checksum: crypto
+        .createHash('sha256')
+        .update(['the-defier-backend', id, String(version), ...resources].join('|'))
+        .digest('hex')
+});
+
+const SCHEMA_MIGRATIONS = [
+    makeMigration({
+        id: '0001_startup_schema',
+        version: 1,
+        description: 'Initial additive startup schema',
+        resources: [
+            'users',
+            'game_saves',
+            'game_ghosts',
+            'pvp_ranks',
+            'pvp_live_matches',
+            'pvp_live_state_signals',
+            'pvp_live_ops_events',
+            'pvp_live_dispute_reports',
+            'pvp_live_match_settlements',
+            'pvp_live_replay_shares',
+            'pvp_season_reward_claims',
+            'pvp_season_honor_archives'
+        ]
+    }),
+    makeMigration({
+        id: '0002_progression_platform',
+        version: 2,
+        description: 'Cross-mode account progression and economy ledger',
+        resources: [
+            'progression_events',
+            'progression_objective_progress',
+            'progression_reward_claims',
+            'progression_economy_balances',
+            'progression_economy_ledger'
+        ]
+    })
+];
+const CURRENT_MIGRATION = SCHEMA_MIGRATIONS[SCHEMA_MIGRATIONS.length - 1];
+const SCHEMA_VERSION = CURRENT_MIGRATION.version;
+const CURRENT_MIGRATION_ID = CURRENT_MIGRATION.id;
+const CURRENT_MIGRATION_DESCRIPTION = CURRENT_MIGRATION.description;
+const CURRENT_MIGRATION_CHECKSUM = CURRENT_MIGRATION.checksum;
 
 const createSchemaMigrationsTableSql = () => `CREATE TABLE IF NOT EXISTS schema_migrations (
     id TEXT PRIMARY KEY,
@@ -33,23 +58,25 @@ const createSchemaMigrationsTableSql = () => `CREATE TABLE IF NOT EXISTS schema_
 )`;
 
 const recordCurrentSchemaMigration = (db, callback) => {
-    const appliedAt = Date.now();
-    db.run(
-        `INSERT INTO schema_migrations (id, version, checksum, description, applied_at)
-         VALUES (?, ?, ?, ?, ?)
-         ON CONFLICT(id) DO UPDATE SET
-            version = excluded.version,
-            checksum = excluded.checksum,
-            description = excluded.description`,
-        [
-            CURRENT_MIGRATION_ID,
-            SCHEMA_VERSION,
-            CURRENT_MIGRATION_CHECKSUM,
-            CURRENT_MIGRATION_DESCRIPTION,
-            appliedAt
-        ],
-        callback
-    );
+    let index = 0;
+    const recordNext = (previousError) => {
+        if (previousError || index >= SCHEMA_MIGRATIONS.length) {
+            callback(previousError || null);
+            return;
+        }
+        const migration = SCHEMA_MIGRATIONS[index++];
+        db.run(
+            `INSERT INTO schema_migrations (id, version, checksum, description, applied_at)
+             VALUES (?, ?, ?, ?, ?)
+             ON CONFLICT(id) DO UPDATE SET
+                version = excluded.version,
+                checksum = excluded.checksum,
+                description = excluded.description`,
+            [migration.id, migration.version, migration.checksum, migration.description, Date.now()],
+            recordNext
+        );
+    };
+    recordNext();
 };
 
 const queryAppliedMigrations = (db) => new Promise((resolve, reject) => {
@@ -83,6 +110,7 @@ module.exports = {
     SCHEMA_VERSION,
     CURRENT_MIGRATION_ID,
     CURRENT_MIGRATION_CHECKSUM,
+    SCHEMA_MIGRATIONS,
     createSchemaMigrationsTableSql,
     getSchemaStatus,
     recordCurrentSchemaMigration

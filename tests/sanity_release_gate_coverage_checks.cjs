@@ -82,6 +82,15 @@ const pvpCss = read('css/pvp.css');
 const pvpLiveUiContractChecks = read('tests/sanity_pvp_live_ui_contract_checks.cjs');
 const pvpLiveUiRuntimeChecks = read('tests/sanity_pvp_live_ui_runtime_checks.mjs');
 const runNodeChecks = read('tests/run_node_checks.sh');
+const progressionRoute = read('server/routes/progression.js');
+const progressionService = read('server/progression/service.js');
+const progressionCatalog = read('server/progression/catalog.js');
+const progressionClient = read('js/services/progression-service.js');
+const progressionPlatformChecks = read('tests/sanity_progression_platform_checks.cjs');
+const progressionTimeBoundaryChecks = read('tests/sanity_progression_time_boundary_checks.cjs');
+const progressionClientChecks = read('tests/sanity_progression_client_checks.mjs');
+const progressionBridgeChecks = read('tests/sanity_progression_bridge_checks.cjs');
+const progressionDocumentation = read('docs/backend_progression_platform_v1.md');
 const shopManager = read('js/managers/ShopManager.js');
 const coreUtils = read('js/core/utils.js');
 const gameSource = read('js/game.js');
@@ -106,10 +115,120 @@ const waitingReportSource = pvpLiveStore.slice(
   'POST /api/ghosts/current',
   'require_backend_marker "$REMOTE_BACKEND_DIR/routes/pvp.js" "verifyRequestIntegrity"',
   'require_backend_marker "$REMOTE_BACKEND_DIR/routes/ghosts.js" "verifyRequestIntegrity"',
+  'routes/progression.js',
+  'progression/service.js',
+  'POST /api/progression/events',
+  'x-defier-ops-token',
+  'server_authoritative',
+  'cosmetic_only',
 ].forEach((needle) => {
   assert.ok(
     prodReadScript.includes(needle),
     `production read-only check should cover backend marker: ${needle}`,
+  );
+});
+
+[
+  "router.get('/status'",
+  "router.post('/events'",
+  "router.post('/rewards/:objectiveId/claim'",
+  "router.get('/ledger'",
+  "router.get('/ops/overview'",
+  'objective_id_mismatch',
+  'verifyRequestIntegrity',
+  'x-defier-ops-token',
+].forEach((needle) => {
+  assert.ok(progressionRoute.includes(needle), `progression route should pin API/security marker: ${needle}`);
+});
+
+[
+  'BEGIN IMMEDIATE',
+  'client_observed',
+  'server_authoritative',
+  'daily_event_limit',
+  'recordTrustedPvpSettlement',
+  'account-progression-ops-overview-v1',
+  'cosmetic_only',
+].forEach((needle) => {
+  assert.ok(progressionService.includes(needle), `progression service should pin authority/idempotency marker: ${needle}`);
+});
+
+[
+  'account-progression-v1',
+  'weekly_live_pvp_matches',
+  "rewardImpact: REWARD_IMPACT",
+  "spendPolicy: 'cosmetic_only'",
+].forEach((needle) => {
+  assert.ok(progressionCatalog.includes(needle), `progression catalog should pin non-power objective marker: ${needle}`);
+});
+
+[
+  'MAX_BATCH_SIZE: 20',
+  'progression_account_changed',
+  'expectedUserId',
+  'sanitizeProof',
+  'recordBattleWin',
+  'recordActivityCompleted',
+].forEach((needle) => {
+  assert.ok(progressionClient.includes(needle) || backendClientSource.includes(needle), `progression client should pin queue/account marker: ${needle}`);
+});
+
+[
+  'concurrentClaims',
+  'server_only_event',
+  'daily_event_limit',
+  'objective_id_mismatch',
+  'must-not-persist',
+  'progress should survive restart',
+  'same-timestamp ledger pagination',
+  'status reads must not create zero-progress projection rows',
+].forEach((needle) => {
+  assert.ok(progressionPlatformChecks.includes(needle), `progression platform test should pin backend risk marker: ${needle}`);
+});
+
+[
+  'account-bound progression submit should reject a changed account',
+  'network failure should preserve queued events',
+  'flush should serialize concurrent submissions',
+  'local progression proof should use the same whitelist as the server',
+  'session churn must not switch the Bearer token after signing',
+  'same-account relogin must not duplicate submissions',
+].forEach((needle) => {
+  assert.ok(progressionClientChecks.includes(needle), `progression client test should pin queue risk marker: ${needle}`);
+});
+
+[
+  'events before UTC midnight must not roll into the new daily cycle',
+  'event_timestamp_out_of_window',
+  'status reads must not mutate active-account projections',
+].forEach((needle) => {
+  assert.ok(progressionTimeBoundaryChecks.includes(needle), `progression time test should pin boundary marker: ${needle}`);
+});
+
+[
+  'ProgressionService.recordBattleWin',
+  'ProgressionService.recordActivityCompleted',
+  'server_authoritative',
+  'client_observed',
+  '不包含线上部署',
+].forEach((needle) => {
+  assert.ok(
+    progressionBridgeChecks.includes(needle) || progressionDocumentation.includes(needle),
+    `progression bridge/docs should pin integration boundary: ${needle}`,
+  );
+});
+
+[
+  '0002_progression_platform',
+  'progression_events',
+  'progression_objective_progress',
+  'progression_reward_claims',
+  'progression_economy_balances',
+  'progression_economy_ledger',
+].forEach((needle) => {
+  assert.ok(
+    schemaStatusSource.includes(needle) || pvpLiveDatabase.includes(needle),
+    `progression schema should pin migration/table marker: ${needle}`,
   );
 });
 
@@ -666,6 +785,9 @@ assert.ok(
 [
   'node tests/sanity_frontend_upgrade_asset_checks.cjs',
   'node tests/backend_platform_checks.cjs',
+  'node tests/sanity_progression_platform_checks.cjs',
+  'node tests/sanity_progression_client_checks.mjs',
+  'node tests/sanity_progression_bridge_checks.cjs',
   'node tests/sanity_event_flow_checks.cjs',
   'node tests/sanity_event_bias_distribution_checks.cjs',
   'node tests/sanity_engineering_event_surface_checks.cjs',

@@ -19,6 +19,7 @@
 
 ## 运行与安全资料
 
+- `backend_progression_platform_v1.md`: 已实现的全游戏长期进度后端契约，包含跨玩法事件信任边界、周期目标、幂等奖励、荣誉账本、运营总览、迁移与下一阶段服务端权威化路径。
 - `production_deploy.md`: 正式线上部署、备份、Nginx 与生产验证流程。
 - `backend_migration_guide.md`: 后端迁移、API 与本地/生产切换说明。
 - `code_review_hmac_fix_report_2026-05-15.md`: HMAC 安全边界修复记录。

@@ -14,6 +14,7 @@ const savesRoutes = require('./routes/saves');
 const ghostsRoutes = require('./routes/ghosts');
 const pvpRoutes = require('./routes/pvp');
 const pvpLiveRoutes = require('./routes/pvp-live');
+const progressionRoutes = require('./routes/progression');
 
 const app = express();
 const PORT = process.env.PORT || 9000;
@@ -31,6 +32,7 @@ app.use('/api/user', savesRoutes);
 app.use('/api/ghosts', ghostsRoutes);
 app.use('/api/pvp/live', pvpLiveRoutes);
 app.use('/api/pvp', pvpRoutes);
+app.use('/api/progression', progressionRoutes);
 
 const getHealthPayload = async () => {
     const schemaStatus = await getSchemaStatus();
@@ -109,6 +111,7 @@ const startServer = async () => {
             console.log(`- GET/POST /api/pvp/live/*`);
             console.log(`- WS /api/pvp/live/ws`);
             console.log(`- GET/POST /api/pvp/*`);
+            console.log(`- GET/POST /api/progression/*`);
         });
         attachLivePvpWebSocket(server, { livePvpStore: pvpLiveRoutes.__livePvpStore });
     } catch (err) {

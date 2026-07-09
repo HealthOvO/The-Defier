@@ -4,6 +4,7 @@ const {
     recordSeasonRewardClaims,
     recordSeasonRewardClaimsFromCollection
 } = require('./season-claims');
+const { makeTrustedPvpProgressionEvent } = require('../progression/service');
 
 const SEASON_ID = 's1-genesis';
 const SEASON_NAME = '开天赛季';
@@ -427,6 +428,49 @@ function getSeat(state, seatId) {
     return state && state.seats && state.seats[seatId] ? state.seats[seatId] : null;
 }
 
+async function recordTrustedProgressionEvent(input, now) {
+    const event = makeTrustedPvpProgressionEvent(input);
+    if (!event) return false;
+    const result = await dbRun(
+        `INSERT OR IGNORE INTO progression_events
+            (user_id, event_id, event_type, activity_mode, source_kind, trust_tier, source_ref,
+             battle_wins, boss_wins, activity_completions, pvp_matches, pvp_wins, proof_json, occurred_at, received_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+            input.userId,
+            event.eventId,
+            event.eventType,
+            event.mode,
+            event.sourceKind,
+            event.trustTier,
+            event.sourceRef,
+            event.battleWins,
+            event.bossWins,
+            event.activityCompletions,
+            event.pvpMatches,
+            event.pvpWins,
+            JSON.stringify(event.proof || {}),
+            now,
+            now
+        ]
+    );
+    return result.changes > 0;
+}
+
+async function recordTrustedProgressionSettlement({ matchId, finishReason, winner, loser, now }) {
+    const entries = [
+        winner && { userId: winner.userId, didWin: true },
+        loser && { userId: loser.userId, didWin: false }
+    ].filter(entry => entry && entry.userId);
+    for (const entry of entries) {
+        await recordTrustedProgressionEvent({
+            ...entry,
+            matchId,
+            finishReason
+        }, now);
+    }
+}
+
 function buildParticipantSummary({ user, rankRow, opponentUser, opponentRankRow, didWin, match, finishReason, calc, coinsAwarded, now }) {
     const opponentScore = Math.max(0, Math.floor(Number(opponentRankRow.score) || 1000));
     return {
@@ -595,6 +639,15 @@ function makeSqliteLivePvpSettlement() {
                     } catch (error) {
                         payload = null;
                     }
+                    const existingWinner = payload && payload.winner || { userId: existing.winner_user_id };
+                    const existingLoser = payload && payload.loser || { userId: existing.loser_user_id };
+                    await recordTrustedProgressionSettlement({
+                        matchId: match.matchId,
+                        finishReason: existing.finish_reason || finishReason,
+                        winner: existingWinner,
+                        loser: existingLoser,
+                        now: Math.max(0, Math.floor(Number(existing.created_at) || Date.now()))
+                    });
                     return {
                         settled: true,
                         alreadySettled: true,
@@ -659,6 +712,13 @@ function makeSqliteLivePvpSettlement() {
                         now
                     ]
                 );
+                await recordTrustedProgressionSettlement({
+                    matchId: match.matchId,
+                    finishReason,
+                    winner: winnerResult,
+                    loser: loserResult,
+                    now
+                });
                 return { settled: true, matchId: match.matchId, ...payload };
             });
         }

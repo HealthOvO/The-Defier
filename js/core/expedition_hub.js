@@ -1,6 +1,7 @@
 import { EXPEDITION_BRANCH_REGIONS, EXPEDITION_FACTION_PROFILES, EXPEDITION_NEMESIS_PROFILES, EXPEDITION_BOUNTY_TEMPLATES, EXPEDITION_CHAPTER_ENDINGS } from "../data/expedition_systems.js";
 import { GameMap } from "./map.js";
 import { Utils } from "./utils.js";
+import { ProgressionService } from "../services/progression-service.js";
 import { registerHubController } from "../runtime/hub-registry.js";
 const ExpeditionHubModule = (() => {
 const expeditionHubMethods = Object.create(null);
@@ -3930,6 +3931,18 @@ const expeditionHubMethods = Object.create(null);
         icon: slate.endingIcon || '🧭',
         note: `命盘评分 ${slate.score} · ${slate.branchName}`
       });
+    }
+    if (reason === 'realm_clear' && typeof ProgressionService !== 'undefined' && ProgressionService && typeof ProgressionService.recordActivityCompleted === 'function') {
+      ProgressionService.recordActivityCompleted({
+        mode: 'expedition',
+        proof: {
+          chapterIndex: clampInt(state.chapterIndex, 1, 999),
+          reason: 'realm_clear'
+        }
+      });
+      if (typeof ProgressionService.flush === 'function') {
+        Promise.resolve().then(() => ProgressionService.flush()).catch(() => {});
+      }
     }
     return slate;
   };
