@@ -393,10 +393,10 @@ export class SystemView {
     // Tab 4: Updates
     const updatesContent = `
             <div class="intro-section">
-                <h3>🌌 当前版本重点（V10 真 PVP · 前端焕新）</h3>
+                <h3>🌌 当前版本重点（V10 真 PVP · 实时后端闭环）</h3>
                 <p class="intro-text">
-                    V10 真 PVP · 前端焕新这一版的目标是把真人论道、公平回执、赛后学习和长期复盘打通成一条玩家能读懂的成长链。
-                    当前版本不只是新增功能，而是让奖励页、地图、远征、洞府、构筑快照、挑战观察站与实时论道使用同一套读题语言。
+                    V10 真 PVP · 实时后端闭环这一版的目标是把真人论道、公平回执、赛后学习、赛季荣誉收藏和长期复盘打通成一条玩家能读懂的成长链。
+                    当前版本不只是新增功能，而是让奖励页、地图、远征、洞府、构筑快照、挑战观察站与实时论道使用同一套读题语言，并让分享脱敏战报、低压力再战、举报异常和避开此对手都有明确边界。
                 </p>
             </div>
 
@@ -406,7 +406,7 @@ export class SystemView {
                     <li><strong>命途任务</strong>：每局有阶段目标、阶段奖励和中盘裂变，帮助你判断该继续强化、转修还是献祭换收益。</li>
                     <li><strong>章节考试</strong>：章节天象、地脉、生态模板、Boss 传闻和 DRI 风险统一提示“这一章在考什么”。</li>
                     <li><strong>赛季天道盘</strong>：训练线、远征线、验算线会整合精选命盘、章节归卷、洞府承诺、无尽轮回与 PVP 天道榜。</li>
-                    <li><strong>三周一章</strong>：feedbackLine、objective、pressureWindow 分别对应章末回响、章目标板和章势压强；它们只解释当前章势，不会新增第二任务源。</li>
+                    <li><strong>三周一章</strong>：章末评语、章目标和章内压强分别解释复盘口径、当前章目标和章内节奏；它们只解释当前章势，不会新增第二任务源。</li>
                     <li><strong>挑战观察站</strong>：固定命盘会沉淀成观星样本，支持复刻重点、失手剖面、训练标签、样本排序和常用训练视角。</li>
                     <li><strong>洞府议程</strong>：归卷书架、命盘研究、章中处置、锁线契约和残卷回收形成长期承诺循环。</li>
                     <li><strong>无尽轮回 DRI</strong>：赛季词条、季签、崩盘账本与偏执层会统一折算成主轴、对策和预留建议。</li>
@@ -470,7 +470,7 @@ export class SystemView {
             </div>
 
             <div style="text-align: center; margin-top: auto; font-size: 0.8rem; color: rgba(255,255,255,0.2); padding-top: 10px;">
-                V10 真 PVP · 前端焕新 当前版本 | Breaking Fate since 2024
+                V10 真 PVP · 实时后端闭环 当前版本 | Breaking Fate since 2024
             </div>
         </div>
         `;

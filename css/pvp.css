@@ -2232,6 +2232,15 @@
     outline: none;
 }
 
+.pvp-live-season-goal-actions button:disabled,
+.pvp-live-season-goal-actions button[aria-disabled="true"] {
+    cursor: not-allowed;
+    color: rgba(244, 232, 207, 0.42);
+    border-color: rgba(244, 232, 207, 0.12);
+    background: rgba(255, 255, 255, 0.025);
+    transform: none;
+}
+
 .pvp-live-loadout-recommendation {
     margin-top: 8px;
     padding: 8px;
@@ -2340,6 +2349,26 @@
 .pvp-live-dispute-receipt-evidence,
 .pvp-live-dispute-receipt-boundary {
     color: rgba(228, 211, 177, 0.66);
+}
+
+.pvp-live-replay-share-actions {
+    margin-top: 8px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 7px;
+}
+
+.pvp-live-replay-share-actions .challenge-btn {
+    width: auto;
+    min-width: 0;
+    height: auto;
+    min-height: 30px;
+    padding: 6px 10px;
+    clip-path: none;
+    border-radius: 8px;
+    font-size: 0.72rem;
+    letter-spacing: 0;
+    text-decoration: none;
 }
 
 .pvp-live-settlement-report {

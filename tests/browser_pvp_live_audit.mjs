@@ -380,6 +380,7 @@ async function safeElementScreenshot(page, selector, outputPath) {
       nextActions: [
         { id: 'review_events', auditActionId: 'review_events', label: '查看权威事件' },
         { id: 'review_key_turns', auditActionId: 'key_turn_replay', label: '关键回合复盘' },
+        { id: 'share_replay', auditActionId: 'public_replay_share', label: '分享脱敏战报' },
         { id: 'friendly_rematch', auditActionId: 'friendly_rematch', label: '低压力再战' },
         { id: 'adjust_loadout', auditActionId: 'apply_loadout_recommendation', label: '调整斗法谱' },
         { id: 'practice', auditActionId: 'practice_topic', label: '问道练习' },
@@ -1398,6 +1399,42 @@ async function safeElementScreenshot(page, selector, outputPath) {
             ],
             eventCount: 3,
             hiddenScan: { forbiddenTokenCount: 0, forbiddenKeyCount: 0, forbiddenStringCount: 0 },
+          },
+        };
+      },
+      createReplayShare: async (matchId, options = {}) => {
+        push({ method: 'createReplayShare', matchId, options });
+        return {
+          success: true,
+          share: {
+            reportVersion: 'pvp-live-replay-share-v1',
+            shareToken: 'pvplrs-browser-live-share-123456789012',
+            sharePath: '/?pvpReplayShare=pvplrs-browser-live-share-123456789012',
+            shareUrl: 'http://127.0.0.1:4173/?pvpReplayShare=pvplrs-browser-live-share-123456789012',
+            visibilityLayer: 'replay_public',
+            rankedImpact: 'none',
+            rewardImpact: 'none',
+            expiresAt: Date.now() + 30 * 86400000,
+            revoked: false,
+            boundary: '公开战报分享只暴露 replay_public 脱敏回放，不读取隐藏手牌、牌库、随机种子或本人结算。'
+          },
+        };
+      },
+      revokeReplayShare: async (matchId) => {
+        push({ method: 'revokeReplayShare', matchId });
+        return {
+          success: true,
+          share: {
+            reportVersion: 'pvp-live-replay-share-v1',
+            shareToken: 'pvplrs-browser-live-share-123456789012',
+            sharePath: '/?pvpReplayShare=pvplrs-browser-live-share-123456789012',
+            shareUrl: 'http://127.0.0.1:4173/?pvpReplayShare=pvplrs-browser-live-share-123456789012',
+            visibilityLayer: 'replay_public',
+            rankedImpact: 'none',
+            rewardImpact: 'none',
+            expiresAt: Date.now() + 30 * 86400000,
+            revoked: true,
+            boundary: '公开战报分享只暴露 replay_public 脱敏回放，不读取隐藏手牌、牌库、随机种子或本人结算。'
           },
         };
       },
@@ -5302,8 +5339,185 @@ async function safeElementScreenshot(page, selector, outputPath) {
     JSON.stringify(keyTurnStepperProbe),
   );
 
+  await page.evaluate(() => {
+    window.__livePvpAuditReplayCopyCalls = [];
+    window.__livePvpAuditOriginalCopyReplayShareLink = window.PVPScene.copyLiveReplayShareLink;
+    window.PVPScene.copyLiveReplayShareLink = async (shareLink = '') => {
+      window.__livePvpAuditReplayCopyCalls.push(String(shareLink || ''));
+      return true;
+    };
+  });
+  const replayShareCallStart = await page.evaluate(() => window.__livePvpAuditCalls.length);
+  await page.click('[data-live-post-review-action="share_replay"]', { timeout: 5000, force: true });
+  await page.waitForTimeout(100);
+  const replayShareCreatedProbe = await page.evaluate(callStart => ({
+    phase: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-phase') || '',
+    hint: document.querySelector('[data-live-last-error]')?.textContent || '',
+    receiptText: document.querySelector('[data-live-replay-share]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+    revoked: document.querySelector('[data-live-replay-share]')?.getAttribute('data-live-replay-share-revoked') || '',
+    visibility: document.querySelector('[data-live-replay-share]')?.getAttribute('data-live-replay-share-visibility') || '',
+    impact: document.querySelector('[data-live-replay-share]')?.getAttribute('data-live-replay-share-ranked-impact') || '',
+    copyButton: !!document.querySelector('[data-live-replay-share-copy]'),
+    openHref: document.querySelector('[data-live-replay-share-open]')?.getAttribute('href') || '',
+    openTarget: document.querySelector('[data-live-replay-share-open]')?.getAttribute('target') || '',
+    openRel: document.querySelector('[data-live-replay-share-open]')?.getAttribute('rel') || '',
+    revokeButton: !!document.querySelector('[data-live-replay-share-revoke]'),
+    copyCalls: window.__livePvpAuditReplayCopyCalls.slice(),
+    calls: window.__livePvpAuditCalls.slice(callStart),
+  }), replayShareCallStart);
+  add(
+    'live UI post-match share_replay exposes persistent copy and public-open controls',
+    replayShareCreatedProbe.phase === 'finished'
+      && replayShareCreatedProbe.revoked === 'false'
+      && replayShareCreatedProbe.visibility === 'replay_public'
+      && replayShareCreatedProbe.impact === 'none'
+      && replayShareCreatedProbe.copyButton === true
+      && /pvpReplayShare=pvplrs-browser-live-share/.test(replayShareCreatedProbe.openHref)
+      && replayShareCreatedProbe.openTarget === '_blank'
+      && /noopener/.test(replayShareCreatedProbe.openRel)
+      && /noreferrer/.test(replayShareCreatedProbe.openRel)
+      && replayShareCreatedProbe.revokeButton === true
+      && replayShareCreatedProbe.copyCalls.some(link => /pvpReplayShare=pvplrs-browser-live-share/.test(link))
+      && replayShareCreatedProbe.calls.some(call => call.method === 'createReplayShare' && call.options?.ttlDays === 30)
+      && /只包含 replay_public|不含原始战局 ID|不改分不派奖励/.test(replayShareCreatedProbe.receiptText)
+      && !/payload|hand|deck|cardId|instanceId|loadoutSnapshot|randomSeed|settlementReport|seasonHonorReport/i.test(replayShareCreatedProbe.receiptText),
+    JSON.stringify(replayShareCreatedProbe),
+  );
+  const replayShareCopyCallCount = await page.evaluate(() => window.__livePvpAuditReplayCopyCalls.length);
+  await page.click('[data-live-replay-share-copy]', { timeout: 5000, force: true });
+  await page.waitForTimeout(100);
+  const replayShareCopyProbe = await page.evaluate(copyCallStart => ({
+    hint: document.querySelector('[data-live-last-error]')?.textContent || '',
+    copyCalls: window.__livePvpAuditReplayCopyCalls.slice(copyCallStart),
+  }), replayShareCopyCallCount);
+  add(
+    'live UI replay-share receipt copy button remains usable after auto-copy',
+    /链接已复制/.test(replayShareCopyProbe.hint)
+      && replayShareCopyProbe.copyCalls.length === 1
+      && /pvpReplayShare=pvplrs-browser-live-share/.test(replayShareCopyProbe.copyCalls[0] || ''),
+    JSON.stringify(replayShareCopyProbe),
+  );
+  await page.click('[data-live-replay-share-revoke]', { timeout: 5000, force: true });
+  await page.waitForTimeout(100);
+  const replayShareRevokeProbe = await page.evaluate(callStart => {
+    if (window.__livePvpAuditOriginalCopyReplayShareLink) {
+      window.PVPScene.copyLiveReplayShareLink = window.__livePvpAuditOriginalCopyReplayShareLink;
+      delete window.__livePvpAuditOriginalCopyReplayShareLink;
+    }
+    return {
+      hint: document.querySelector('[data-live-last-error]')?.textContent || '',
+      revoked: document.querySelector('[data-live-replay-share]')?.getAttribute('data-live-replay-share-revoked') || '',
+      copyButton: !!document.querySelector('[data-live-replay-share-copy]'),
+      openButton: !!document.querySelector('[data-live-replay-share-open]'),
+      revokeButton: !!document.querySelector('[data-live-replay-share-revoke]'),
+      calls: window.__livePvpAuditCalls.slice(callStart),
+    };
+  }, replayShareCallStart);
+  add(
+    'live UI replay-share receipt revoke hides active sharing controls',
+    /已撤销/.test(replayShareRevokeProbe.hint)
+      && replayShareRevokeProbe.revoked === 'true'
+      && replayShareRevokeProbe.copyButton === false
+      && replayShareRevokeProbe.openButton === false
+      && replayShareRevokeProbe.revokeButton === false
+      && replayShareRevokeProbe.calls.some(call => call.method === 'revokeReplayShare'),
+    JSON.stringify(replayShareRevokeProbe),
+  );
+
   const disputeReportCallStart = await page.evaluate(() => window.__livePvpAuditCalls.length);
   await page.click('[data-live-post-review-action="report_issue"]', { timeout: 5000, force: true });
+  await page.waitForTimeout(100);
+  const disputeConfirmProbe = await page.evaluate(callStart => ({
+    hint: document.querySelector('[data-live-last-error]')?.textContent || '',
+    confirmState: document.querySelector('[data-live-post-review-action="report_issue"]')?.getAttribute('data-live-post-review-confirm') || '',
+    actionText: document.querySelector('[data-live-post-review-action="report_issue"]')?.textContent || '',
+    calls: window.__livePvpAuditCalls.slice(callStart),
+  }), disputeReportCallStart);
+  add(
+    'live UI post-match report_issue requires confirmation before submitting',
+    /再次点击|确认/.test(disputeConfirmProbe.hint)
+      && disputeConfirmProbe.confirmState === 'pending'
+      && /确认提交异常反馈/.test(disputeConfirmProbe.actionText)
+      && disputeConfirmProbe.calls.length === 0,
+    JSON.stringify(disputeConfirmProbe),
+  );
+  const reportCarryoverProbe = await page.evaluate(callStart => {
+    const scene = window.PVPScene;
+    const originalSession = scene.getLiveSession();
+    const originalState = originalSession.getState();
+    const nextView = JSON.parse(JSON.stringify(
+      originalState.stateView || window.__makeLivePvpAuditStateView?.(8, 'B', 'finished') || {}
+    ));
+    nextView.matchId = 'pvplm-browser-live-next';
+    if (nextView.postMatchReview && typeof nextView.postMatchReview === 'object') {
+      nextView.postMatchReview.matchId = 'pvplm-browser-live-next';
+    }
+    const nextState = {
+      ...originalState,
+      phase: 'finished',
+      matchId: 'pvplm-browser-live-next',
+      stateView: nextView,
+      lastReplayShare: null,
+      lastReplayShareMatchId: '',
+      lastDisputeReport: null,
+      lastAvoidOpponentReport: null,
+      lastError: null,
+    };
+    window.__livePvpAuditOriginalLiveSessionForConfirmCarryover = originalSession;
+    scene.liveSession = new Proxy(originalSession, {
+      get(target, prop) {
+        if (prop === 'getState') return () => JSON.parse(JSON.stringify(nextState));
+        return target[prop];
+      }
+    });
+    scene.renderLivePanel();
+    const beforeClick = {
+      matchId: scene.getLiveSession().getState().matchId || '',
+      hint: document.querySelector('[data-live-last-error]')?.textContent || '',
+      confirmState: document.querySelector('[data-live-post-review-action="report_issue"]')?.getAttribute('data-live-post-review-confirm') || '',
+      actionText: document.querySelector('[data-live-post-review-action="report_issue"]')?.textContent || '',
+      calls: window.__livePvpAuditCalls.slice(callStart),
+    };
+    document.querySelector('[data-live-post-review-action="report_issue"]')?.click();
+    const afterClick = {
+      hint: document.querySelector('[data-live-last-error]')?.textContent || '',
+      confirmState: document.querySelector('[data-live-post-review-action="report_issue"]')?.getAttribute('data-live-post-review-confirm') || '',
+      actionText: document.querySelector('[data-live-post-review-action="report_issue"]')?.textContent || '',
+      calls: window.__livePvpAuditCalls.slice(callStart),
+    };
+    scene.liveSession = window.__livePvpAuditOriginalLiveSessionForConfirmCarryover;
+    delete window.__livePvpAuditOriginalLiveSessionForConfirmCarryover;
+    scene.renderLivePanel();
+    return { beforeClick, afterClick };
+  }, disputeReportCallStart);
+  add(
+    'live UI post-match report_issue confirmation is bound to the current match id',
+    reportCarryoverProbe.beforeClick.matchId === 'pvplm-browser-live-next'
+      && reportCarryoverProbe.beforeClick.confirmState === 'none'
+      && !/确认提交异常反馈/.test(reportCarryoverProbe.beforeClick.actionText)
+      && /再次点击|确认/.test(reportCarryoverProbe.afterClick.hint)
+      && reportCarryoverProbe.afterClick.confirmState === 'pending'
+      && /确认提交异常反馈/.test(reportCarryoverProbe.afterClick.actionText)
+      && reportCarryoverProbe.afterClick.calls.length === 0,
+    JSON.stringify(reportCarryoverProbe),
+  );
+  await page.click('[data-live-post-review-action="report_issue"]', { timeout: 5000, force: true });
+  await page.waitForTimeout(100);
+  const disputeRearmProbe = await page.evaluate(callStart => ({
+    hint: document.querySelector('[data-live-last-error]')?.textContent || '',
+    confirmState: document.querySelector('[data-live-post-review-action="report_issue"]')?.getAttribute('data-live-post-review-confirm') || '',
+    actionText: document.querySelector('[data-live-post-review-action="report_issue"]')?.textContent || '',
+    calls: window.__livePvpAuditCalls.slice(callStart),
+  }), disputeReportCallStart);
+  add(
+    'live UI restored match report_issue requires a fresh confirmation after match switch',
+    /再次点击|确认/.test(disputeRearmProbe.hint)
+      && disputeRearmProbe.confirmState === 'pending'
+      && /确认提交异常反馈/.test(disputeRearmProbe.actionText)
+      && disputeRearmProbe.calls.length === 0,
+    JSON.stringify(disputeRearmProbe),
+  );
+  await page.click('[data-live-post-review-action="report_issue"][data-live-post-review-confirm="pending"]', { timeout: 5000, force: true });
   await page.waitForTimeout(100);
   const disputeReportProbe = await page.evaluate(callStart => ({
     phase: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-phase') || '',
@@ -5335,6 +5549,22 @@ async function safeElementScreenshot(page, selector, outputPath) {
 
   const avoidOpponentCallStart = await page.evaluate(() => window.__livePvpAuditCalls.length);
   await page.click('[data-live-post-review-action="avoid_opponent"]', { timeout: 5000, force: true });
+  await page.waitForTimeout(100);
+  const avoidOpponentConfirmProbe = await page.evaluate(callStart => ({
+    hint: document.querySelector('[data-live-last-error]')?.textContent || '',
+    confirmState: document.querySelector('[data-live-post-review-action="avoid_opponent"]')?.getAttribute('data-live-post-review-confirm') || '',
+    actionText: document.querySelector('[data-live-post-review-action="avoid_opponent"]')?.textContent || '',
+    calls: window.__livePvpAuditCalls.slice(callStart),
+  }), avoidOpponentCallStart);
+  add(
+    'live UI post-match avoid_opponent requires confirmation before submitting',
+    /再次点击|确认/.test(avoidOpponentConfirmProbe.hint)
+      && avoidOpponentConfirmProbe.confirmState === 'pending'
+      && /确认避开此对手/.test(avoidOpponentConfirmProbe.actionText)
+      && avoidOpponentConfirmProbe.calls.length === 0,
+    JSON.stringify(avoidOpponentConfirmProbe),
+  );
+  await page.click('[data-live-post-review-action="avoid_opponent"][data-live-post-review-confirm="pending"]', { timeout: 5000, force: true });
   await page.waitForTimeout(100);
   const avoidOpponentProbe = await page.evaluate(callStart => ({
     phase: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-phase') || '',

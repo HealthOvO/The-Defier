@@ -1,5 +1,7 @@
 const assert = require('node:assert');
+const childProcess = require('node:child_process');
 const fs = require('node:fs');
+const os = require('node:os');
 const path = require('node:path');
 
 const root = path.resolve(__dirname, '..');
@@ -489,6 +491,7 @@ const browserAutomationBootAudit = read('tests/browser_automation_boot_audit.mjs
 [
   'SELECTED_AUDIT_MODULES',
   'EXPECTED_RELEASE_MODULES',
+  'BROWSER_RELEASE_RUN_ID',
   'run_audit summarize node tests/summarize_browser_release_reports.cjs "$OUTPUT_ROOT" "$BASE_URL"',
 ].forEach((needle) => {
   assert.ok(
@@ -530,12 +533,73 @@ const browserAutomationBootAudit = read('tests/browser_automation_boot_audit.mjs
   "'pvp-live-real'",
   "'pvp-live-mobile-real'",
   'process.env.EXPECTED_RELEASE_MODULES',
+  'process.env.BROWSER_RELEASE_RUN_ID',
+  'stale release report',
 ].forEach((needle) => {
   assert.ok(
     browserReleaseSummary.includes(needle),
     `browser release summary should expect live PVP audit module: ${needle}`,
   );
 });
+
+const releaseSummaryFixtureRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'defier-release-summary-'));
+try {
+  const fixtureReportDir = path.join(releaseSummaryFixtureRoot, 'core');
+  const fixtureReportPath = path.join(fixtureReportDir, 'report.json');
+  const writeFixtureReport = (releaseRunId) => {
+    fs.mkdirSync(fixtureReportDir, { recursive: true });
+    fs.writeFileSync(
+      fixtureReportPath,
+      JSON.stringify({
+        url: 'http://127.0.0.1:4173',
+        generatedAt: '2026-07-09T00:00:00.000Z',
+        releaseRunId,
+        findings: [],
+        consoleErrors: [],
+      }, null, 2),
+    );
+  };
+  const runSummaryFixture = (releaseRunId) => childProcess.spawnSync(
+    process.execPath,
+    [
+      'tests/summarize_browser_release_reports.cjs',
+      releaseSummaryFixtureRoot,
+      'http://127.0.0.1:4173',
+    ],
+    {
+      cwd: root,
+      env: {
+        ...process.env,
+        EXPECTED_RELEASE_MODULES: 'core',
+        BROWSER_RELEASE_RUN_ID: releaseRunId,
+      },
+      encoding: 'utf8',
+    },
+  );
+
+  writeFixtureReport('old-release-run');
+  const staleSummary = runSummaryFixture('current-release-run');
+  assert.notStrictEqual(
+    staleSummary.status,
+    0,
+    'browser release summary should reject stale report.json files from a previous run id',
+  );
+  assert.match(
+    `${staleSummary.stdout || ''}\n${staleSummary.stderr || ''}`,
+    /stale release report/,
+    'browser release summary stale-run failure should identify the report freshness problem',
+  );
+
+  writeFixtureReport('current-release-run');
+  const freshSummary = runSummaryFixture('current-release-run');
+  assert.strictEqual(
+    freshSummary.status,
+    0,
+    `browser release summary should accept current-run report.json fixtures: ${freshSummary.stderr || freshSummary.stdout}`,
+  );
+} finally {
+  fs.rmSync(releaseSummaryFixtureRoot, { recursive: true, force: true });
+}
 
 [
   'getTokenFromProtocolHeader',

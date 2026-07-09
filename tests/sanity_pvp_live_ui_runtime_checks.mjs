@@ -3770,6 +3770,28 @@ assert.match(acceptedLowRiskLossNextStepMarkup, /data-live-post-review-next-step
 assert.doesNotMatch(acceptedLowRiskLossNextStepMarkup, /data-live-post-review-next-step-action="review_key_turns"[\s\S]*data-live-post-review-next-step-rank="primary"/, 'accepted low-risk loss next-step guide should not make review the primary CTA');
 assert.match(acceptedLowRiskLossNextStepMarkup, /data-live-season-goal-mode="adjust_loadout"/, 'accepted low-risk loss season goal should match the loadout-adjustment next-step');
 assert.match(acceptedLowRiskLossNextStepMarkup, /本赛季下一局目标：先改一个弱点/, 'accepted low-risk loss season goal should not keep the generic loss practice copy');
+const waitingRematchSeasonGoalMarkup = PVPScene.renderLivePostMatchReview({
+  ...visiblePracticePlanReview,
+  postMatchReview: {
+    ...visiblePracticePlanReview.postMatchReview,
+    result: 'loss',
+    loadoutRecommendation: {
+      reportVersion: 'pvp-live-loadout-recommendation-v1',
+      sourceVisibility: 'public_events_and_public_content',
+      usesHiddenInformation: false,
+      rankedImpact: 'none',
+      recommendedPresetId: 'shield',
+      recommendedPresetLabel: '守势斗法谱',
+      reasonLine: '本局公开压力窗口足够，下一局先补防守窗口。'
+    },
+    nextActions: [
+      { id: 'adjust_loadout', auditActionId: 'apply_loadout_recommendation', label: '调整斗法谱', detail: '按公开推荐改谱。' },
+      { id: 'practice', auditActionId: 'practice_topic', label: '问道练习', detail: '复刻公开窗口，不写正式积分。' }
+    ]
+  }
+}, 'waiting_rematch');
+assert.match(waitingRematchSeasonGoalMarkup, /data-live-season-goal-action="(?:adjust_loadout|practice|queue_again|friendly_rematch)"[\s\S]*disabled/, 'waiting rematch season goal CTA should render disabled when the action is blocked');
+assert.match(waitingRematchSeasonGoalMarkup, /data-live-season-goal-action-state="waiting_rematch_locked"/, 'waiting rematch season goal should expose the locked action state');
 const acceptedLowRiskLossPracticeFallbackMarkup = PVPScene.renderLivePostMatchReview({
   ...visiblePracticePlanReview,
   postMatchReview: {
@@ -4023,6 +4045,8 @@ assert.match(PVPScene.liveInlineHint, /脱敏战报链接已复制/, 'share_repl
 const shareReceiptHtml = PVPScene.renderLiveReplayShareReceipt();
 assert.match(shareReceiptHtml, /data-live-replay-share/, 'public replay share receipt should render after creation');
 assert.match(shareReceiptHtml, /data-live-replay-share-revoke/, 'public replay share receipt should expose a revoke control');
+assert.match(shareReceiptHtml, /data-live-replay-share-copy/, 'public replay share receipt should expose a persistent copy control');
+assert.match(shareReceiptHtml, /data-live-replay-share-open/, 'public replay share receipt should expose a persistent open control');
 assert.match(shareReceiptHtml, /不含原始战局 ID/, 'public replay share receipt should explain raw match id boundary');
 await PVPScene.revokeLiveReplayShare();
 assert.equal(replayShareCalls.at(-1).method, 'revokeReplayShare', 'replay share revoke control should call session revoke API');
@@ -4209,6 +4233,30 @@ PVPScene.getLiveSession = () => ({
     return reportReviewState;
   }
 });
+PVPScene.livePostReviewConfirmAction = '';
+await PVPScene.handleLivePostReviewAction('report_issue');
+assert.deepEqual(disputeCalls, [], 'first report_issue tap should only arm confirmation and not submit');
+assert.match(PVPScene.liveInlineHint, /再次点击|确认/, 'first report_issue tap should explain the confirmation step');
+const reportConfirmMarkup = PVPScene.renderLivePostMatchReview(reportReviewState.stateView, 'finished');
+assert.match(reportConfirmMarkup, /data-live-post-review-action="report_issue"[\s\S]*data-live-post-review-confirm="pending"/, 'report_issue confirmation should render a pending marker');
+assert.match(reportConfirmMarkup, /确认提交异常反馈/, 'report_issue confirmation should change the CTA label');
+const originalReportReviewState = reportReviewState;
+reportReviewState = {
+  ...reportReviewState,
+  matchId: 'pvpm-ui-runtime-report-issue-next',
+  stateView: {
+    ...reportReviewState.stateView,
+    matchId: 'pvpm-ui-runtime-report-issue-next'
+  }
+};
+await PVPScene.handleLivePostReviewAction('report_issue');
+assert.deepEqual(disputeCalls, [], 'pending report_issue confirmation should not submit on a different match');
+assert.match(PVPScene.liveInlineHint, /再次点击|确认/, 'different match report_issue should require its own confirmation');
+reportReviewState = originalReportReviewState;
+PVPScene.livePostReviewConfirmAction = '';
+PVPScene.livePostReviewConfirmMatchId = '';
+await PVPScene.handleLivePostReviewAction('report_issue');
+assert.deepEqual(disputeCalls, [], 'restored match report_issue should re-arm confirmation before submit');
 await PVPScene.handleLivePostReviewAction('report_issue');
 const disputeSnapshot = PVPScene.getLiveSnapshot();
 assert.deepEqual(disputeCalls.map(call => call.reason), ['fairness_review'], 'report_issue action should submit a fairness dispute report');
@@ -4220,6 +4268,12 @@ assert.match(PVPScene.liveInlineHint, /不会立即改写本局结算/, 'report_
 assert.match(PVPScene.renderLiveDisputeReportReceipt(), /data-live-dispute-report/, 'dispute receipt should render a stable DOM marker');
 assert.doesNotMatch(PVPScene.renderLiveDisputeReportReceipt(), /hand|deck|cardId|instanceId|loadoutSnapshot/i, 'dispute receipt UI should not render hidden card or loadout tokens');
 
+await PVPScene.handleLivePostReviewAction('avoid_opponent');
+assert.deepEqual(avoidOpponentCalls, [], 'first avoid_opponent tap should only arm confirmation and not submit');
+assert.match(PVPScene.liveInlineHint, /再次点击|确认/, 'first avoid_opponent tap should explain the confirmation step');
+const avoidConfirmMarkup = PVPScene.renderLivePostMatchReview(reportReviewState.stateView, 'finished');
+assert.match(avoidConfirmMarkup, /data-live-post-review-action="avoid_opponent"[\s\S]*data-live-post-review-confirm="pending"/, 'avoid_opponent confirmation should render a pending marker');
+assert.match(avoidConfirmMarkup, /确认避开此对手/, 'avoid_opponent confirmation should change the CTA label');
 await PVPScene.handleLivePostReviewAction('avoid_opponent');
 const avoidOpponentSnapshot = PVPScene.getLiveSnapshot();
 assert.deepEqual(avoidOpponentCalls.map(call => call.reason), ['post_match_avoid'], 'avoid_opponent action should submit a post-match avoid preference');
