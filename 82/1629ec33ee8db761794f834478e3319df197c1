@@ -1,0 +1,75 @@
+docs/README.md
+  s_bae69f1b7fab46::t_e0ba8a298c8f75 22
+js/core/challenge_hub.js
+  s_bae69f1b7fab46::t_c4007da2a6300d 3,3765-3778
+js/core/expedition_hub.js
+  s_bae69f1b7fab46::t_9b4ae47acd2379 4,3935-3946
+js/game.js
+  s_bae69f1b7fab46::t_ca5745ddf85348 15,5408-5440
+js/services/authService.js
+  s_80efd2bbbe2c68::t_4fc2d650168239 3,80-82,101-103,108,112-114,123-125
+js/services/backend-client.js
+  s_bae69f1b7fab46::t_93a3881df2518d 52-53,101,103-106,109,229-230,238-240,746-918
+js/services/progression-service.js
+  s_bae69f1b7fab46::t_7df2ec73bfad3b 1-350
+scripts/check-production-read-only.sh
+  s_bae69f1b7fab46::t_c2f588aa420e77 66-68,86-89
+server/app.js
+  s_bae69f1b7fab46::t_5f22044cb0ad92 17,35,114
+server/db/database.js
+  s_bae69f1b7fab46::t_9197defceafb4b 541-664,676
+server/progression/catalog.js
+  s_bae69f1b7fab46::t_cb2279d9cc10f6 1-163
+server/progression/service.js
+  s_bae69f1b7fab46::t_d413b2120a4867 1-872
+server/pvp-live/live-settlement.js
+  s_bae69f1b7fab46::t_cd90389e408df6 7,431-473,642-650,715-721
+server/routes/progression.js
+  s_80efd2bbbe2c68::t_47a60bb3a43262 1-114
+server/services/platform/schema-status.js
+  s_bae69f1b7fab46::t_32f5d2e3b7e33c 3-50,61-79,113
+tests/backend_platform_checks.cjs
+  s_bae69f1b7fab46::t_94364879e3ca21 108-109,115-118,130,143-147
+tests/run_node_checks.sh
+  s_bae69f1b7fab46::t_407bef6d930ee4 19-22
+tests/sanity_progression_bridge_checks.cjs
+  s_bae69f1b7fab46::t_ab276811c94799 1-93
+tests/sanity_progression_client_checks.mjs
+  s_bae69f1b7fab46::t_97196fb5543c55 1-465
+tests/sanity_progression_platform_checks.cjs
+  s_bae69f1b7fab46::t_675c208c685fa6 1-492
+tests/sanity_progression_time_boundary_checks.cjs
+  s_bae69f1b7fab46::t_d2d2f7f6692326 1-118
+tests/sanity_pvp_live_settlement_checks.cjs
+  s_bae69f1b7fab46::t_67f08fddd852ab 167-199
+tests/sanity_release_gate_coverage_checks.cjs
+  s_bae69f1b7fab46::t_42c6c0a36f6486 85-93,118-123,131-234,788-790
+tests/test_e2e_backend.cjs
+  s_bae69f1b7fab46::t_73364906e5c3b1 263,329-353
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.5",
+  "base_commit_sha": "821629ec33ee8db761794f834478e3319df197c1",
+  "prompts": {},
+  "sessions": {
+    "s_80efd2bbbe2c68": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f48dc-23e9-79c0-a150-9b472c9fa8c8",
+        "model": "unknown"
+      },
+      "human_author": "AI Agent <bot@example.com>"
+    },
+    "s_bae69f1b7fab46": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ed4f6-e7ac-73e0-a29e-119f3eddb407",
+        "model": "unknown"
+      },
+      "human_author": "AI Agent <bot@example.com>"
+    }
+  },
+  "attestation_metadata": {},
+  "remote_transcripts": {}
+}
