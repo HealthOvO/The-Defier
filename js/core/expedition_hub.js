@@ -4348,7 +4348,7 @@ const expeditionHubMethods = Object.create(null);
                     ${observatoryRoutePact ? `<span class="expedition-chip">${escapeHtml(`路线合卷 ${observatoryRoutePact.progress}/${observatoryRoutePact.target}${observatoryRoutePact.completed ? ' · 已合卷' : ''}`)}</span>` : ''}
                 </div>
             </section>
-            <section class="expedition-panel-card">
+            <section class="expedition-panel-card expedition-branch-card">
                 <div class="expedition-card-kicker">支线区域</div>
                 <div class="expedition-card-title">选择本章路线</div>
                 <div class="expedition-choice-list">
@@ -4379,7 +4379,7 @@ const expeditionHubMethods = Object.create(null);
     }).join('')}
                 </div>
             </section>
-            <section class="expedition-panel-card">
+            <section class="expedition-panel-card expedition-bounty-card">
                 <div class="expedition-card-kicker">章节悬赏</div>
                 <div class="expedition-card-title">承接 1-2 条</div>
                 <div class="expedition-choice-list">

@@ -381,10 +381,19 @@ function recordConsoleError(text) {
         && centerX <= window.innerWidth
         && centerY >= 0
         && centerY <= window.innerHeight;
+      const safeBottomLimit = Math.min(
+        window.innerHeight,
+        Math.round((window.visualViewport?.height || window.innerHeight) - 12)
+      );
+      const safeAreaOk = !!afterRect
+        && afterRect.top >= 0
+        && afterRect.bottom <= safeBottomLimit
+        && afterRect.left >= 0
+        && afterRect.right <= window.innerWidth;
       const hit = centerInsideViewport ? document.elementFromPoint(centerX, centerY) : null;
       const hitMatches = !!hit && (hit === button || button.contains(hit));
       return {
-        ok: !!afterRect && centerInsideViewport && hitMatches,
+        ok: !!afterRect && centerInsideViewport && safeAreaOk && hitMatches,
         selector,
         text: (button.textContent || '').replace(/\s+/g, ' ').trim(),
         dataset: { ...button.dataset },
@@ -394,6 +403,8 @@ function recordConsoleError(text) {
         afterScrollY: Math.round(window.scrollY || 0),
         center: centerInsideViewport ? { x: centerX, y: centerY } : null,
         centerInsideViewport,
+        safeBottomLimit,
+        safeAreaOk,
         hitMatches,
         hitTag: hit?.tagName || null,
         hitText: hit ? (hit.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 80) : '',

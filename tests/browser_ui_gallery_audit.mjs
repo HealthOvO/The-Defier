@@ -84,15 +84,20 @@ function collectCharacterSelectionProbe() {
     };
   });
   const portraitsOk = portraitProbes.every((probe) => probe.ok);
+  const footer = document.querySelector('#character-selection-screen .character-selection-footer');
+  const footerRect = footer?.getBoundingClientRect() || null;
+  const footerClearanceOk = !footerRect || footerRect.top >= rect.bottom - 2;
   return {
     ok:
       rect.left >= 8 &&
       rect.right <= window.innerWidth - 8 &&
       rect.bottom <= window.innerHeight - 8 &&
       document.documentElement.scrollWidth <= window.innerWidth + 2 &&
-      portraitsOk,
+      portraitsOk &&
+      footerClearanceOk,
     cardCount: cards.length,
     portraitProbes,
+    footerClearanceOk,
     rect: {
       left: Math.round(rect.left),
       top: Math.round(rect.top),
@@ -100,7 +105,15 @@ function collectCharacterSelectionProbe() {
       bottom: Math.round(rect.bottom),
       width: Math.round(rect.width),
       height: Math.round(rect.height),
-    }
+    },
+    footerRect: footerRect ? {
+      left: Math.round(footerRect.left),
+      top: Math.round(footerRect.top),
+      right: Math.round(footerRect.right),
+      bottom: Math.round(footerRect.bottom),
+      width: Math.round(footerRect.width),
+      height: Math.round(footerRect.height),
+    } : null,
   };
 }
 
@@ -147,6 +160,48 @@ function collectMainMenuProbe(options = {}) {
   };
   const oracleStrip = document.querySelector('#main-menu .menu-oracle-strip');
   const oracleRect = rectObj(oracleStrip);
+  const hero = document.querySelector('#main-menu .frontend-upgrade-hero');
+  const logo = document.querySelector('#main-menu .logo-img');
+  const heroRect = rectObj(hero);
+  const logoRect = rectObj(logo);
+  const visualAssetProbe = {
+    hero: {
+      complete: !!hero?.complete,
+      naturalWidth: hero?.naturalWidth || 0,
+      naturalHeight: hero?.naturalHeight || 0,
+      src: hero?.currentSrc || hero?.src || '',
+      rect: heroRect,
+      alt: hero?.getAttribute('alt') || '',
+      ariaHidden: hero?.getAttribute('aria-hidden') || '',
+      ok:
+        !!hero &&
+        hero.complete &&
+        hero.naturalWidth >= 1200 &&
+        hero.naturalHeight >= 700 &&
+        !!heroRect &&
+        heroRect.width >= rect.width - 4 &&
+        heroRect.height >= rect.height - 4 &&
+        hero.getAttribute('aria-hidden') === 'true',
+    },
+    logo: {
+      complete: !!logo?.complete,
+      naturalWidth: logo?.naturalWidth || 0,
+      naturalHeight: logo?.naturalHeight || 0,
+      src: logo?.currentSrc || logo?.src || '',
+      rect: logoRect,
+      alt: logo?.getAttribute('alt') || '',
+      ok:
+        !!logo &&
+        logo.complete &&
+        logo.naturalWidth >= 256 &&
+        logo.naturalHeight >= 256 &&
+        !!logoRect &&
+        logoRect.width >= 64 &&
+        logoRect.height >= 64 &&
+        (logo.getAttribute('alt') || '').trim().length > 0,
+    },
+  };
+  const visualAssetsOk = visualAssetProbe.hero.ok && visualAssetProbe.logo.ok;
   const utilityProbes = Array.from(utilities).map((wrapper) => {
     const button = wrapper.querySelector('.util-btn');
     const label = wrapper.querySelector('.util-label');
@@ -186,6 +241,7 @@ function collectMainMenuProbe(options = {}) {
       rect.top >= (requireFullFit ? 8 : -2) &&
       (!requireFullFit || rect.bottom <= window.innerHeight - 8) &&
       document.documentElement.scrollWidth <= window.innerWidth + 2 &&
+      visualAssetsOk &&
       utilitiesOk,
     rect: {
       left: Math.round(rect.left),
@@ -197,8 +253,304 @@ function collectMainMenuProbe(options = {}) {
     },
     cards: cards.length,
     utilities: utilities.length,
+    visualAssetProbe,
     utilityProbes,
     oracleRect,
+  };
+}
+
+function collectDesignSystemProbe(options = {}) {
+  const rootStyle = getComputedStyle(document.documentElement);
+  const fdTokenChecks = [
+    '--fd-space-1',
+    '--fd-space-2',
+    '--fd-space-3',
+    '--fd-space-4',
+    '--fd-radius-panel',
+    '--fd-radius-control',
+    '--fd-hit-target',
+    '--fd-surface-panel',
+    '--fd-surface-panel-strong',
+    '--fd-border-muted',
+    '--fd-border-strong',
+    '--fd-text-muted',
+    '--fd-accent-gold',
+    '--fd-accent-blue',
+    '--fd-mobile-edge',
+    '--fd-safe-bottom',
+    '--fd-mobile-action-gap',
+    '--fd-sticky-action-offset',
+  ].map((token) => ({
+    token,
+    value: rootStyle.getPropertyValue(token).trim(),
+    ok: rootStyle.getPropertyValue(token).trim().length > 0,
+  }));
+
+  const sample = document.createElement('div');
+  sample.style.cssText = 'position:fixed;left:-9999px;top:-9999px;display:grid;gap:8px;';
+  sample.innerHTML = `
+    <section class="fd-surface"><div class="fd-panel">panel</div></section>
+    <button class="fd-button fd-button-primary">primary</button>
+    <button class="fd-tab">tab</button>
+    <span class="fd-chip">chip</span>
+    <div class="fd-action-bar"><button class="fd-control">control</button></div>
+    <div class="fd-scroll-area" style="width:120px;height:40px;"><div style="height:120px;">scroll</div></div>
+    <div class="fd-safe-scroll" style="width:120px;height:40px;overflow:auto;"><div style="height:160px;">safe scroll</div></div>
+    <div class="fd-safe-action-bar"><button class="fd-control">safe</button></div>
+    <div class="fd-touch-grid"><button>touch</button><button>tap</button></div>
+    <div class="fd-mobile-stack"><span>stack</span></div>
+  `;
+  document.body.appendChild(sample);
+  const primitiveTargets = [
+    ['surface', sample.querySelector('.fd-surface')],
+    ['panel', sample.querySelector('.fd-panel')],
+    ['button', sample.querySelector('.fd-button')],
+    ['tab', sample.querySelector('.fd-tab')],
+    ['chip', sample.querySelector('.fd-chip')],
+    ['control', sample.querySelector('.fd-control')],
+    ['scroll', sample.querySelector('.fd-scroll-area')],
+    ['actionBar', sample.querySelector('.fd-action-bar')],
+    ['safeScroll', sample.querySelector('.fd-safe-scroll')],
+    ['safeActionBar', sample.querySelector('.fd-safe-action-bar')],
+    ['touchGrid', sample.querySelector('.fd-touch-grid')],
+    ['touchButton', sample.querySelector('.fd-touch-grid button')],
+    ['mobileStack', sample.querySelector('.fd-mobile-stack')],
+  ];
+  const fdPrimitiveChecks = primitiveTargets.map(([name, node]) => {
+    const style = node ? getComputedStyle(node) : null;
+    const rect = node?.getBoundingClientRect() || null;
+    const roundedPrimitive = ['surface', 'panel', 'button', 'tab', 'chip', 'control'].includes(name);
+    const minTouchSize = Math.max(parseFloat(style?.minHeight || '0'), rect?.height || 0);
+    return {
+      name,
+      ok:
+        !!style &&
+        (!roundedPrimitive || name === 'chip' || parseFloat(style.borderRadius) >= 10) &&
+        (name !== 'button' || parseFloat(style.minHeight) >= 44) &&
+        (name !== 'scroll' || style.overflowY === 'auto') &&
+        (name !== 'actionBar' || style.display === 'flex') &&
+        (name !== 'safeScroll' || (style.overflowY === 'auto' && parseFloat(style.scrollPaddingBottom || '0') >= 44)) &&
+        (name !== 'safeActionBar' || (style.display === 'flex' && parseFloat(style.paddingBottom || '0') >= 12)) &&
+        (name !== 'touchGrid' || style.display === 'grid') &&
+        (name !== 'touchButton' || minTouchSize >= 44) &&
+        (name !== 'mobileStack' || style.display === 'grid'),
+      borderRadius: style?.borderRadius || '',
+      minHeight: style?.minHeight || '',
+      display: style?.display || '',
+      overflowY: style?.overflowY || '',
+      paddingBottom: style?.paddingBottom || '',
+      scrollPaddingBottom: style?.scrollPaddingBottom || '',
+      rectHeight: rect?.height || 0,
+    };
+  });
+  const fdMobileInteractionChecks = fdPrimitiveChecks.filter((check) =>
+    ['safeScroll', 'safeActionBar', 'touchGrid', 'touchButton'].includes(check.name)
+  );
+  sample.remove();
+
+  const defaultSurfaceTargets = [
+    ['characterSelection', '.character-selection-container', 'surface'],
+    ['mapScreen', '#map-screen .map-screen-v3', 'surface'],
+    ['rewardShell', '.reward-shell', 'surface'],
+    ['pvpLiveStatus', '#pvp-screen .pvp-live-status-card', 'surface'],
+    ['pvpLiveSeat', '#pvp-screen .pvp-live-seat-panel', 'surface'],
+    ['collectionTab', '.collection-tab-btn', 'control'],
+  ];
+  const surfaceTargets = Array.isArray(options.surfaceTargets) && options.surfaceTargets.length
+    ? options.surfaceTargets
+    : defaultSurfaceTargets;
+  const activeScreenId = options.activeScreenId || '';
+  const requireViewportFit = options.requireViewportFit !== false;
+  const rectObj = (rect) => rect ? {
+    left: Math.round(rect.left),
+    top: Math.round(rect.top),
+    right: Math.round(rect.right),
+    bottom: Math.round(rect.bottom),
+    width: Math.round(rect.width),
+    height: Math.round(rect.height),
+  } : null;
+  const fdSurfaceChecks = surfaceTargets.map((target) => {
+    const [name, selector, kind = 'surface'] = Array.isArray(target)
+      ? target
+      : [target.name, target.selector, target.kind || 'surface'];
+    const node = document.querySelector(selector);
+    const style = node ? getComputedStyle(node) : null;
+    const screen = node?.closest('.screen') || null;
+    const rect = node?.getBoundingClientRect() || null;
+    const activeOk = !activeScreenId || (screen?.id === activeScreenId && screen.classList.contains('active'));
+    const visibleOk =
+      !!style &&
+      style.display !== 'none' &&
+      style.visibility !== 'hidden' &&
+      rect.width > 0 &&
+      rect.height > 0;
+    const viewportOk =
+      !requireViewportFit ||
+      (rect.left >= -1 && rect.right <= window.innerWidth + 1 && rect.width <= window.innerWidth + 1);
+    const surfaceOk =
+      kind === 'control'
+        ? parseFloat(style?.minHeight || '0') >= 44 && parseFloat(style?.borderRadius || '0') >= 10
+        : kind === 'chip'
+            ? parseFloat(style?.borderRadius || '0') >= 20
+            : kind === 'actionBar'
+              ? ['flex', 'grid'].includes(style?.display || '') && parseFloat(style?.columnGap || style?.gap || '0') >= 8
+            : parseFloat(style?.borderRadius || '0') >= 16 && style?.borderTopWidth !== '0px';
+    return {
+      name,
+      selector,
+      kind,
+      ok:
+        !!style &&
+        activeOk &&
+        visibleOk &&
+        viewportOk &&
+        surfaceOk,
+      activeScreenId: screen?.id || '',
+      activeOk,
+      visibleOk,
+      viewportOk,
+      borderRadius: style?.borderRadius || '',
+      borderTopWidth: style?.borderTopWidth || '',
+      minHeight: style?.minHeight || '',
+      display: style?.display || '',
+      columnGap: style?.columnGap || '',
+      rect: rectObj(rect),
+    };
+  });
+
+  return {
+    ok:
+      fdTokenChecks.every((check) => check.ok) &&
+      fdPrimitiveChecks.every((check) => check.ok) &&
+      fdMobileInteractionChecks.every((check) => check.ok) &&
+      fdSurfaceChecks.every((check) => check.ok),
+    fdTokenChecks,
+    fdPrimitiveChecks,
+    fdMobileInteractionChecks,
+    fdSurfaceChecks,
+  };
+}
+
+function collectCoreLoopDesignSystemProbe(options = {}) {
+  const activeScreenId = options.activeScreenId || '';
+  const requireViewportFit = options.requireViewportFit !== false;
+  const rectObj = (rect) => rect ? {
+    left: Math.round(rect.left),
+    top: Math.round(rect.top),
+    right: Math.round(rect.right),
+    bottom: Math.round(rect.bottom),
+    width: Math.round(rect.width),
+    height: Math.round(rect.height),
+  } : null;
+  const isVisible = (style, rect) =>
+    !!style &&
+    style.display !== 'none' &&
+    style.visibility !== 'hidden' &&
+    rect.width > 0 &&
+    rect.height > 0;
+  const activeOkFor = (node) => {
+    const screen = node?.closest('.screen') || null;
+    return !activeScreenId || (screen?.id === activeScreenId && screen.classList.contains('active'));
+  };
+  const viewportOkFor = (rect) =>
+    !requireViewportFit ||
+    (rect.left >= -2 && rect.right <= window.innerWidth + 2 && rect.width <= window.innerWidth + 2);
+  const surfaceTargets = options.surfaceTargets || [];
+  const hitTargets = options.hitTargets || [];
+
+  const expandVisibleTargets = ([name, selector, kind = 'surface']) => {
+    const nodes = Array.from(document.querySelectorAll(selector));
+    if (!nodes.length) return [{ name, selector, kind, node: null, index: -1, reason: 'missing' }];
+    const visibleNodes = nodes.filter((node) => {
+      const rect = node.getBoundingClientRect();
+      return isVisible(getComputedStyle(node), rect);
+    });
+    if (!visibleNodes.length) return [{ name, selector, kind, node: nodes[0], index: 0, reason: 'not_visible' }];
+    return visibleNodes.map((node, index) => ({ name, selector, kind, node, index }));
+  };
+
+  const coreLoopSurfaceChecks = surfaceTargets.flatMap(expandVisibleTargets).map(({ name, selector, kind, node, index, reason }) => {
+    const style = node ? getComputedStyle(node) : null;
+    const rect = node?.getBoundingClientRect() || null;
+    const visibleOk = isVisible(style, rect || {});
+    const activeOk = activeOkFor(node);
+    const viewportOk = rect ? viewportOkFor(rect) : false;
+    const radius = parseFloat(style?.borderRadius || '0');
+    const borderOk = style?.borderTopWidth !== '0px' || kind === 'card';
+    const radiusOk = kind === 'card' ? radius >= 8 : radius >= 12;
+    return {
+      name,
+      selector,
+      kind,
+      index,
+      reason: reason || '',
+      ok: !!node && activeOk && visibleOk && viewportOk && borderOk && radiusOk,
+      activeScreenId: node?.closest('.screen')?.id || '',
+      activeOk,
+      visibleOk,
+      viewportOk,
+      borderTopWidth: style?.borderTopWidth || '',
+      borderRadius: style?.borderRadius || '',
+      backgroundImage: style?.backgroundImage || '',
+      rect: rectObj(rect),
+    };
+  });
+
+  const coreLoopHitTargetChecks = hitTargets.flatMap(expandVisibleTargets).map(({ name, selector, node, index, reason }) => {
+    if (node && options.scrollHitTargetsIntoView) {
+      node.scrollIntoView({ block: 'center', inline: 'center' });
+    }
+    const style = node ? getComputedStyle(node) : null;
+    const rect = node?.getBoundingClientRect() || null;
+    const visibleOk = isVisible(style, rect || {});
+    const activeOk = activeOkFor(node);
+    const viewportOk = rect ? viewportOkFor(rect) : false;
+    const parsedMinHeight = parseFloat(style?.minHeight || '0');
+    const minHeight = Number.isFinite(parsedMinHeight) ? parsedMinHeight : 0;
+    const heightOk = Math.max(minHeight, rect?.height || 0) >= 44;
+    const widthOk = (rect?.width || 0) >= 44;
+    const point = rect ? {
+      x: Math.round(rect.left + Math.min(rect.width - 1, Math.max(1, rect.width / 2))),
+      y: Math.round(rect.top + Math.min(rect.height - 1, Math.max(1, rect.height / 2))),
+    } : null;
+    const hit =
+      point &&
+      point.x >= 0 &&
+      point.y >= 0 &&
+      point.x <= window.innerWidth &&
+      point.y <= window.innerHeight
+        ? document.elementFromPoint(point.x, point.y)
+        : null;
+    const hitOk = !!hit && (hit === node || node.contains(hit) || hit.contains(node));
+    return {
+      name,
+      selector,
+      index,
+      reason: reason || '',
+      ok: !!node && activeOk && visibleOk && viewportOk && heightOk && widthOk && hitOk,
+      activeScreenId: node?.closest('.screen')?.id || '',
+      activeOk,
+      visibleOk,
+      viewportOk,
+      heightOk,
+      widthOk,
+      hitOk,
+      hitTag: hit?.tagName || '',
+      hitClass: hit?.className || '',
+      minHeight: style?.minHeight || '',
+      borderRadius: style?.borderRadius || '',
+      rect: rectObj(rect),
+    };
+  });
+
+  return {
+    ok:
+      coreLoopSurfaceChecks.length > 0 &&
+      coreLoopHitTargetChecks.length > 0 &&
+      coreLoopSurfaceChecks.every((check) => check.ok) &&
+      coreLoopHitTargetChecks.every((check) => check.ok),
+    coreLoopSurfaceChecks,
+    coreLoopHitTargetChecks,
   };
 }
 
@@ -582,23 +934,49 @@ function collectMainMenuProbe(options = {}) {
       encounter: { themeName: '轮段·反制晶格', tierStage: 2, goldBonus: 18, ringExpBonus: 9 },
     };
     game.showRewardScreen(145, true, { stealLaw: lawId, stealChance: 1 }, 32, { insight: 8, karma: 3 });
+    const container = document.querySelector('#reward-screen .reward-container');
     const shell = document.querySelector('.reward-shell');
-    if (!shell) return { ok: false, reason: 'missing_reward_shell' };
-    const rect = shell.getBoundingClientRect();
+    if (!container || !shell) return { ok: false, reason: 'missing_reward_shell' };
+    const containerRect = container.getBoundingClientRect();
+    const shellRect = shell.getBoundingClientRect();
+    const containerStyle = getComputedStyle(container);
+    const shellStyle = getComputedStyle(shell);
+    const containerOwnsScroll = ['auto', 'scroll'].includes(containerStyle.overflowY);
+    const shellAvoidsNestedScroll = !['auto', 'scroll'].includes(shellStyle.overflowY);
     return {
       ok:
-        rect.left >= 8 &&
-        rect.right <= window.innerWidth - 8 &&
-        rect.bottom <= window.innerHeight - 8 &&
+        containerRect.left >= 0 &&
+        containerRect.right <= window.innerWidth + 2 &&
+        containerRect.bottom <= window.innerHeight + 2 &&
+        shellRect.left >= 8 &&
+        shellRect.right <= window.innerWidth - 8 &&
+        containerOwnsScroll &&
+        shellAvoidsNestedScroll &&
         document.documentElement.scrollWidth <= window.innerWidth + 2,
+      containerOwnsScroll,
+      shellAvoidsNestedScroll,
+      containerOverflowY: containerStyle.overflowY,
+      shellOverflowY: shellStyle.overflowY,
+      containerScrollHeight: Math.round(container.scrollHeight),
+      containerClientHeight: Math.round(container.clientHeight),
+      shellScrollHeight: Math.round(shell.scrollHeight),
+      shellClientHeight: Math.round(shell.clientHeight),
       rect: {
-        left: Math.round(rect.left),
-        top: Math.round(rect.top),
-        right: Math.round(rect.right),
-        bottom: Math.round(rect.bottom),
-        width: Math.round(rect.width),
-        height: Math.round(rect.height),
-      }
+        left: Math.round(shellRect.left),
+        top: Math.round(shellRect.top),
+        right: Math.round(shellRect.right),
+        bottom: Math.round(shellRect.bottom),
+        width: Math.round(shellRect.width),
+        height: Math.round(shellRect.height),
+      },
+      containerRect: {
+        left: Math.round(containerRect.left),
+        top: Math.round(containerRect.top),
+        right: Math.round(containerRect.right),
+        bottom: Math.round(containerRect.bottom),
+        width: Math.round(containerRect.width),
+        height: Math.round(containerRect.height),
+      },
     };
   });
   add('reward screen stays inside a unified shell and avoids viewport clipping', !!rewardProbe?.ok, JSON.stringify(rewardProbe || null));
@@ -720,36 +1098,275 @@ function collectMainMenuProbe(options = {}) {
     if (game.battle && typeof game.battle.updateBattleUI === 'function') game.battle.updateBattleUI();
     const command = document.getElementById('battle-command-panel');
     const boss = document.getElementById('boss-act-panel');
-    if (!command || !boss) return { ok: false, reason: 'missing_battle_nodes' };
+    const hand = document.getElementById('hand-cards');
+    const endTurn = document.getElementById('end-turn-btn');
+    const advisor = command?.querySelector('.battle-tactical-advisor') || null;
+    const advisorToggle = command?.querySelector('.battle-advisor-toggle') || null;
+    const spiritButton = command?.querySelector('.battle-advisor-spirit-btn') || null;
+    if (!command || !boss || !hand || !endTurn || !advisorToggle) return { ok: false, reason: 'missing_battle_nodes' };
+    const rectObj = (node) => {
+      if (!node) return null;
+      const rect = node.getBoundingClientRect();
+      return {
+        left: Math.round(rect.left),
+        top: Math.round(rect.top),
+        right: Math.round(rect.right),
+        bottom: Math.round(rect.bottom),
+        width: Math.round(rect.width),
+        height: Math.round(rect.height),
+      };
+    };
+    const overlaps = (a, b, margin = 0) => {
+      if (!a || !b) return false;
+      return !(
+        a.right <= b.left + margin ||
+        b.right <= a.left + margin ||
+        a.bottom <= b.top + margin ||
+        b.bottom <= a.top + margin
+      );
+    };
     const commandRect = command.getBoundingClientRect();
     const bossRect = boss.getBoundingClientRect();
+    const handRect = hand.getBoundingClientRect();
+    const endTurnRect = endTurn.getBoundingClientRect();
+    const advisorRectBefore = advisor?.getBoundingClientRect() || null;
+    const handCardRects = Array.from(hand.querySelectorAll('.card')).slice(0, 5).map(rectObj);
+    const advisorCollapsedInitially = !!advisor && advisor.classList.contains('collapsed');
+    if (typeof advisorToggle.click === 'function') advisorToggle.click();
+    const advisorAfterToggle = command.querySelector('.battle-tactical-advisor');
+    const advisorRectAfter = advisorAfterToggle?.getBoundingClientRect() || null;
+    const advisorCollapsedAfterToggle = !!advisorAfterToggle && advisorAfterToggle.classList.contains('collapsed');
+    const advisorStateChanged = !!advisor && !!advisorAfterToggle && advisorCollapsedAfterToggle !== advisorCollapsedInitially;
+    if (typeof advisorToggle.click === 'function') advisorToggle.click();
+    const spiritRect = spiritButton ? spiritButton.getBoundingClientRect() : null;
+    const commandObj = rectObj(command);
+    const bossObj = rectObj(boss);
+    const handObj = rectObj(hand);
+    const endTurnObj = rectObj(endTurn);
+    const advisorBeforeObj = rectObj(advisor);
+    const advisorAfterObj = rectObj(advisorAfterToggle);
+    const spiritObj = rectObj(spiritButton);
+    const handCardsOk = handCardRects.length >= 2 && handCardRects.every((rect) =>
+      rect &&
+      rect.width >= 96 &&
+      rect.height >= 130 &&
+      rect.left >= -2 &&
+      rect.right <= window.innerWidth + 2 &&
+      rect.bottom <= window.innerHeight + 2
+    );
+    const laneSeparationOk =
+      !overlaps(commandObj, bossObj, 8) &&
+      !overlaps(commandObj, handObj, 8) &&
+      !overlaps(bossObj, handObj, 8) &&
+      !overlaps(endTurnObj, handObj, 6) &&
+      (!spiritObj || (!overlaps(spiritObj, handObj, 6) && !overlaps(spiritObj, endTurnObj, 6)));
     return {
       ok:
         commandRect.left >= 0 &&
         commandRect.right <= window.innerWidth &&
         bossRect.left >= 0 &&
         bossRect.right <= window.innerWidth &&
-        document.documentElement.scrollWidth <= window.innerWidth + 2,
-      commandRect: {
-        left: Math.round(commandRect.left),
-        top: Math.round(commandRect.top),
-        right: Math.round(commandRect.right),
-        bottom: Math.round(commandRect.bottom),
-        width: Math.round(commandRect.width),
-        height: Math.round(commandRect.height),
-      },
-      bossRect: {
-        left: Math.round(bossRect.left),
-        top: Math.round(bossRect.top),
-        right: Math.round(bossRect.right),
-        bottom: Math.round(bossRect.bottom),
-        width: Math.round(bossRect.width),
-        height: Math.round(bossRect.height),
-      }
+        document.documentElement.scrollWidth <= window.innerWidth + 2 &&
+        handCardsOk &&
+        laneSeparationOk &&
+        advisorStateChanged &&
+        advisorRectBefore &&
+        advisorRectAfter &&
+        advisorRectBefore.width <= commandRect.width + 2 &&
+        advisorRectAfter.width <= commandRect.width + 2,
+      commandRect: commandObj,
+      bossRect: bossObj,
+      handRect: handObj,
+      endTurnRect: endTurnObj,
+      advisorBeforeRect: advisorBeforeObj,
+      advisorAfterRect: advisorAfterObj,
+      spiritRect: spiritObj,
+      handCardRects,
+      handCardsOk,
+      laneSeparationOk,
+      advisorCollapsedInitially,
+      advisorCollapsedAfterToggle,
+      advisorStateChanged,
     };
   });
   add('battle screen keeps shared HUD panels inside the viewport', !!battleProbe?.ok, JSON.stringify(battleProbe || null));
+  const battleCoreLoopProbe = await page.evaluate(collectCoreLoopDesignSystemProbe, {
+    activeScreenId: 'battle-screen',
+    surfaceTargets: [
+      ['battleCommandPanel', '#battle-screen #battle-command-panel', 'surface'],
+      ['bossActPanel', '#battle-screen #boss-act-panel', 'surface'],
+      ['handCard', '#battle-screen #hand-cards .card', 'card'],
+    ],
+    hitTargets: [
+      ['battleCommandButton', '#battle-screen .battle-command-btn'],
+      ['battleAdvisorToggle', '#battle-screen .battle-advisor-toggle'],
+      ['endTurnButton', '#battle-screen #end-turn-btn'],
+      ['handCard', '#battle-screen #hand-cards .card'],
+    ],
+  });
+  add(
+    'core play-loop design system primitives are visible on battle HUD',
+    !!battleCoreLoopProbe?.ok,
+    JSON.stringify(battleCoreLoopProbe || null)
+  );
   await captureScreenshot(page, '12-battle-screen.png');
+
+  await showCharacterSelectionWithLoadedPortraits(page);
+  const characterDesignSystemProbe = await page.evaluate(collectDesignSystemProbe, {
+    activeScreenId: 'character-selection-screen',
+    surfaceTargets: [
+      ['characterSelection', '#character-selection-screen .character-selection-container', 'surface'],
+    ],
+  });
+  add(
+    'design system primitives are loaded and adopted on the visible character selection shell',
+    !!characterDesignSystemProbe?.ok,
+    JSON.stringify(characterDesignSystemProbe || null)
+  );
+  add(
+    'mobile interaction primitives keep safe action bars and touch grids measurable',
+    !!characterDesignSystemProbe?.fdMobileInteractionChecks?.every((check) => check.ok),
+    JSON.stringify(characterDesignSystemProbe?.fdMobileInteractionChecks || null)
+  );
+
+  await boot(page);
+  await page.evaluate(() => {
+    if (!window.game) return;
+    game.guestMode = true;
+    game.startNewGame('linFeng');
+    game.startRealm(1, false);
+    game.showScreen('map-screen');
+  });
+  const mapDesignSystemProbe = await page.evaluate(collectDesignSystemProbe, {
+    activeScreenId: 'map-screen',
+    surfaceTargets: [
+      ['mapScreen', '#map-screen .map-screen-v3', 'surface'],
+      ['mapAction', '#map-screen [data-map-action]', 'control'],
+    ],
+  });
+  add(
+    'design system primitives are loaded and adopted on the visible map controls',
+    !!mapDesignSystemProbe?.ok,
+    JSON.stringify(mapDesignSystemProbe || null)
+  );
+  await page.evaluate(() => {
+    const shell = document.querySelector('#map-screen .map-screen-v3');
+    const intelToggle = document.querySelector('#map-screen [data-map-action="toggle-map-intel"]');
+    const toolsToggle = document.querySelector('#map-screen [data-map-action="toggle-map-tools"]');
+    if (shell && !shell.classList.contains('show-map-intel') && typeof intelToggle?.click === 'function') intelToggle.click();
+    if (shell && !shell.classList.contains('show-map-tools') && typeof toolsToggle?.click === 'function') toolsToggle.click();
+  });
+  const mapCoreLoopProbe = await page.evaluate(collectCoreLoopDesignSystemProbe, {
+    activeScreenId: 'map-screen',
+    scrollHitTargetsIntoView: true,
+    surfaceTargets: [
+      ['mapDetailPanels', '#map-screen .map-detail-panels', 'surface'],
+      ['mapFooter', '#map-screen .map-footer', 'surface'],
+      ['mapNode', '#map-screen .map-node-v3', 'card'],
+      ['expeditionPanelCard', '#map-screen .expedition-panel-card', 'surface'],
+    ],
+    hitTargets: [
+      ['mapNode', '#map-screen .map-node-v3'],
+      ['mapHeaderAction', '#map-screen [data-map-action]'],
+      ['mapFooterAction', '#map-screen .map-footer [data-map-action]'],
+    ],
+  });
+  add(
+    'core play-loop design system primitives are visible on map route controls',
+    !!mapCoreLoopProbe?.ok,
+    JSON.stringify(mapCoreLoopProbe || null)
+  );
+
+  await boot(page);
+  await page.evaluate(() => {
+    if (!window.game) return;
+    game.guestMode = true;
+    game.startNewGame('linFeng');
+    game.startRealm(1, false);
+    const lawId = typeof LAWS !== 'undefined' ? Object.keys(LAWS)[0] : null;
+    if (game.player) game.player.getStealBonus = () => 0;
+    game.currentBattleNode = { type: 'elite', id: 990102, completed: false };
+    game.showRewardScreen(120, true, { stealLaw: lawId, stealChance: 1 }, 20, { insight: 5 });
+  });
+  const rewardDesignSystemProbe = await page.evaluate(collectDesignSystemProbe, {
+    activeScreenId: 'reward-screen',
+    surfaceTargets: [
+      ['rewardShell', '#reward-screen .reward-shell', 'surface'],
+      ['rewardAction', '#reward-screen .reward-actions button', 'control'],
+      ['rewardEyebrow', '#reward-screen .reward-section-eyebrow', 'chip'],
+    ],
+  });
+  add(
+    'design system primitives are loaded and adopted on the visible reward controls',
+    !!rewardDesignSystemProbe?.ok,
+    JSON.stringify(rewardDesignSystemProbe || null)
+  );
+  await boot(page);
+  await page.evaluate(() => {
+    if (!window.game || typeof game.finalizeExpeditionChapter !== 'function') return;
+    game.guestMode = true;
+    game.startNewGame('linFeng');
+    game.startRealm(1, false);
+    let state = typeof game.getExpeditionState === 'function' ? game.getExpeditionState() : null;
+    if (!state && typeof game.initializeExpeditionForRealm === 'function') {
+      game.initializeExpeditionForRealm(game.player?.realm || 1, true);
+      state = typeof game.getExpeditionState === 'function' ? game.getExpeditionState() : null;
+    }
+    const nodeType = state?.activeNemesis?.triggerNodeTypes?.[0];
+    if (nodeType && typeof game.applyExpeditionBattleModifiers === 'function' && typeof game.recordExpeditionBattleVictory === 'function') {
+      const enemies = game.applyExpeditionBattleModifiers([
+        { id: 'ui_gallery_core_loop_enemy', name: '校验敌影', hp: 80, maxHp: 80, patterns: [{ type: 'attack', value: 12, intent: '压测' }] }
+      ], { type: nodeType });
+      game.recordExpeditionBattleVictory({ type: nodeType }, enemies);
+    }
+    const slate = game.finalizeExpeditionChapter('realm_clear');
+    if (!slate) return;
+    game.lastRunPathRewardMeta = null;
+    game.showRewardScreen(180, false, null, 36, null);
+  });
+  const rewardCoreLoopProbe = await page.evaluate(collectCoreLoopDesignSystemProbe, {
+    activeScreenId: 'reward-screen',
+    scrollHitTargetsIntoView: true,
+    surfaceTargets: [
+      ['rewardPanel', '#reward-screen .reward-panel', 'surface'],
+      ['rewardExpeditionMeta', '#reward-screen .reward-expedition-meta', 'surface'],
+    ],
+    hitTargets: [
+      ['rewardAction', '#reward-screen .reward-actions button'],
+      ['rewardHandoffAction', '#reward-screen [data-season-board-handoff-cta="true"]'],
+    ],
+  });
+  add(
+    'core play-loop design system primitives are visible on reward handoff controls',
+    !!rewardCoreLoopProbe?.ok,
+    JSON.stringify(rewardCoreLoopProbe || null)
+  );
+
+  await boot(page);
+  await page.evaluate(() => {
+    if (!window.game || typeof window.PVPScene === 'undefined') return;
+    game.showScreen('pvp-screen');
+    if (typeof PVPScene.onShow === 'function') PVPScene.onShow();
+  });
+  const pvpDesignSystemProbe = await page.evaluate(collectDesignSystemProbe, {
+    activeScreenId: 'pvp-screen',
+    surfaceTargets: [
+      ['pvpLiveStatus', '#pvp-screen .pvp-live-status-card', 'surface'],
+      ['pvpLiveSeat', '#pvp-screen .pvp-live-seat-panel', 'surface'],
+      ['pvpLiveEvent', '#pvp-screen .pvp-live-event-panel', 'surface'],
+      ['pvpRuneTab', '#pvp-screen .rune-tab', 'control'],
+      ['pvpLiveActionBar', '#pvp-screen .pvp-live-action-bar', 'actionBar'],
+      ['pvpLiveAction', '#pvp-screen .pvp-live-action-bar .challenge-btn[data-live-action="join-queue"]', 'control'],
+      ['pvpModeBoundary', '#pvp-screen .pvp-live-mode-boundary', 'chip'],
+      ['pvpActionReceipt', '#pvp-screen .pvp-live-action-receipt', 'chip'],
+      ['pvpSeatBadge', '#pvp-screen .pvp-live-seat-badge', 'chip'],
+    ],
+  });
+  add(
+    'design system primitives are loaded and adopted on the visible pvp live controls',
+    !!pvpDesignSystemProbe?.ok,
+    JSON.stringify(pvpDesignSystemProbe || null)
+  );
 
   const report = {
     url,
