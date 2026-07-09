@@ -1,0 +1,25 @@
+server/routes/pvp-live.js
+  s_bae69f1b7fab46::t_c2d8dbba1c73ef 331,623-636,689-690,752-755,767,770,776,825-986,1588-1673
+tests/sanity_pvp_live_route_checks.cjs
+  s_bae69f1b7fab46::t_76d6b27778f116 2800-2802,2805-2814,2871-2928,2947-2977
+tests/sanity_release_gate_coverage_checks.cjs
+  s_bae69f1b7fab46::t_810910cd88db3c 1984,1990-1994,2375-2377,2381-2388
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.5",
+  "base_commit_sha": "13052d7781defab4c2bfb4d1236e4fdd65991da0",
+  "prompts": {},
+  "sessions": {
+    "s_bae69f1b7fab46": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ed4f6-e7ac-73e0-a29e-119f3eddb407",
+        "model": "unknown"
+      },
+      "human_author": "AI Agent <bot@example.com>"
+    }
+  },
+  "attestation_metadata": {},
+  "remote_transcripts": {}
+}
