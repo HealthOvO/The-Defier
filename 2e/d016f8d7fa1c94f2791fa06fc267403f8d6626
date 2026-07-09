@@ -1,0 +1,29 @@
+server/db/database.js
+  s_bae69f1b7fab46::t_d53668fbd0db60 142-188
+server/pvp-live/season-claims.js
+  s_bae69f1b7fab46::t_ffb2dc47ba42e2 1-469
+server/services/platform/schema-status.js
+  s_bae69f1b7fab46::t_0f14412a9a0fe5 21-23
+tests/sanity_pvp_live_route_checks.cjs
+  s_bae69f1b7fab46::t_1ac4ec35c22f26 372-432,437,450,456,473,479-483,485-500
+tests/sanity_pvp_live_settlement_checks.cjs
+  s_bae69f1b7fab46::t_210264dd4767fc 304-314,331-366,447,451,455-499,517-523
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.5",
+  "base_commit_sha": "2ed016f8d7fa1c94f2791fa06fc267403f8d6626",
+  "prompts": {},
+  "sessions": {
+    "s_bae69f1b7fab46": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ed4f6-e7ac-73e0-a29e-119f3eddb407",
+        "model": "unknown"
+      },
+      "human_author": "AI Agent <bot@example.com>"
+    }
+  },
+  "attestation_metadata": {},
+  "remote_transcripts": {}
+}
