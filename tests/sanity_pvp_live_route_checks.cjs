@@ -2797,8 +2797,21 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
             });
             assert.equal(disabledOpsReview.status, 403, 'live ops dispute status endpoint should be disabled without a configured token');
             assert.equal(disabledOpsReview.payload.reason, 'live_ops_disabled', 'disabled live ops endpoint should explain missing server token');
+            const disabledOpsOverview = await request(baseUrl, '/api/pvp/live/ops/overview?windowMs=86400000');
+            assert.equal(disabledOpsOverview.status, 403, 'live ops overview should be disabled without a configured token');
+            assert.equal(disabledOpsOverview.payload.reason, 'live_ops_disabled', 'disabled live ops overview should explain missing server token');
             const liveOpsToken = 'test-live-ops-token-32-characters';
             process.env.DEFIER_LIVE_OPS_TOKEN = liveOpsToken;
+            const bearerOnlyOpsOverview = await request(baseUrl, '/api/pvp/live/ops/overview?windowMs=86400000', {
+                token: tokenA
+            });
+            assert.equal(bearerOnlyOpsOverview.status, 403, 'live ops overview should require the live ops token even with bearer auth');
+            assert.equal(bearerOnlyOpsOverview.payload.reason, 'live_ops_forbidden', 'bearer-only live ops overview should reject missing ops credential');
+            const forbiddenOpsOverview = await request(baseUrl, '/api/pvp/live/ops/overview?windowMs=86400000', {
+                headers: { 'x-defier-live-ops-token': 'wrong-live-ops-token-32-characters' }
+            });
+            assert.equal(forbiddenOpsOverview.status, 403, 'live ops overview should reject invalid ops credentials');
+            assert.equal(forbiddenOpsOverview.payload.reason, 'live_ops_forbidden', 'forbidden live ops overview should explain invalid credential');
             const opsReportList = await request(baseUrl, '/api/pvp/live/ops/dispute-reports?status=reported&limit=5', {
                 headers: { 'x-defier-live-ops-token': liveOpsToken }
             });
@@ -2855,6 +2868,64 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
             assert.ok(Array.isArray(opsPlayerRiskLedger.payload.riskFlags), 'live ops player risk ledger should expose bounded risk flags');
             assert.equal(opsPlayerRiskLedger.payload.usesHiddenInformation, false, 'live ops player risk ledger should not use hidden information');
             assert.doesNotMatch(JSON.stringify(opsPlayerRiskLedger.payload), forbiddenOpsAuditPattern, 'live ops player risk ledger must not leak hidden cards, decks, loadouts, seeds, payloads, or raw state/event JSON');
+            const forbiddenLiveOpsAggregatePattern = /hand|deck|deckOrder|cardId|instanceId|cardInstanceId|cardInstanceIds|loadoutSnapshot|randomSeed|rngSeed|payload|state_json|event_json|stateJson|eventJson|pairKey|avoidedUserId|shareToken|share_token|source_instance_id|sourceInstanceId|reportId|report_id|eventId|event_id|signalId|signal_id|matchId|userId|exactRating|elo|matchRef|replayHash/i;
+            const maliciousAggregateTimestamp = Date.now();
+            await dbRun(
+                `INSERT OR REPLACE INTO pvp_live_dispute_reports
+                    (report_id, match_id, reporter_user_id, reporter_seat, reason, status, message, evidence_json, created_at, updated_at)
+                 VALUES (?, ?, ?, 'A', ?, 'reported', '', ?, ?, ?)`,
+                [
+                    'pvplr-overview-forbidden-key-probe',
+                    joinRound14ScoreB.payload.matchId,
+                    'live-user-a',
+                    'source_instance_id',
+                    JSON.stringify({
+                        reportVersion: 'pvp-live-dispute-evidence-v1',
+                        usesHiddenInformation: false,
+                        riskTags: ['eventId', 'exactRating', 'safe_review_signal']
+                    }),
+                    maliciousAggregateTimestamp,
+                    maliciousAggregateTimestamp
+                ]
+            );
+            await dbRun(
+                `INSERT OR REPLACE INTO pvp_live_ops_events
+                    (event_id, event_type, subject_user_id, match_id, severity, reason, source, evidence_json, created_at)
+                 VALUES (?, ?, '', '', 'review', 'overview_probe', 'route_test', '{}', ?)`,
+                ['pvploe-overview-forbidden-key-probe', 'elo_probe', maliciousAggregateTimestamp]
+            );
+            const overviewWindowDriftTimestamp = Date.now() - 2 * 24 * 60 * 60 * 1000;
+            const overviewWindowDriftUpdatedAt = Date.now();
+            await dbRun(
+                `INSERT OR REPLACE INTO pvp_live_dispute_reports
+                    (report_id, match_id, reporter_user_id, reporter_seat, reason, status, message, evidence_json, created_at, updated_at)
+                 VALUES (?, ?, ?, 'A', 'fairness_review', 'reported', '', ?, ?, ?)`,
+                [
+                    'pvplr-overview-window-drift-probe',
+                    joinRound14ScoreB.payload.matchId,
+                    'live-user-a',
+                    JSON.stringify({
+                        reportVersion: 'pvp-live-dispute-evidence-v1',
+                        usesHiddenInformation: false,
+                        riskTags: ['fairness_review_requested']
+                    }),
+                    overviewWindowDriftTimestamp,
+                    overviewWindowDriftTimestamp
+                ]
+            );
+            await dbRun(
+                `INSERT OR REPLACE INTO pvp_live_avoid_opponents
+                    (avoider_user_id, avoided_user_id, pair_key, source_match_id, reason, message, avoided_at, avoid_until, updated_at)
+                 VALUES (?, ?, ?, '', 'overview_window_drift_probe', '', ?, ?, ?)`,
+                [
+                    'overview-drift-avoider',
+                    'overview-drift-avoided',
+                    'overview-drift-avoider::overview-drift-avoided',
+                    overviewWindowDriftTimestamp,
+                    overviewWindowDriftTimestamp,
+                    overviewWindowDriftUpdatedAt
+                ]
+            );
             const opsFairnessMetrics = await request(baseUrl, '/api/pvp/live/ops/metrics/fairness?windowMs=86400000', {
                 headers: { 'x-defier-live-ops-token': liveOpsToken }
             });
@@ -2873,6 +2944,37 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
             assert.doesNotMatch(JSON.stringify(opsFairnessMetrics.payload.trendBuckets), /exactRating|elo|hand|deck|randomSeed/i, 'live ops fairness trend buckets must stay aggregate-only');
             assert.doesNotMatch(JSON.stringify(opsFairnessMetrics.payload.anomalyBuckets), /matchId|userId|exactRating|elo|hand|deck|randomSeed/i, 'live ops fairness anomaly buckets must stay aggregate-only');
             assert.doesNotMatch(JSON.stringify(opsFairnessMetrics.payload), /hand|deck|deckOrder|cardId|instanceId|cardInstanceId|cardInstanceIds|loadoutSnapshot|randomSeed|rngSeed|payload|state_json|event_json|stateJson|eventJson|exactRating|elo/i, 'live ops fairness metrics must not leak hidden cards, decks, loadouts, seeds, payloads, raw state/event JSON, or exact rating data');
+            assert.doesNotMatch(JSON.stringify(opsFairnessMetrics.payload), forbiddenLiveOpsAggregatePattern, 'live ops fairness metrics must sanitize aggregate bucket keys from player-supplied reasons, tags, and event types');
+            const opsRetentionPreOverview = await request(baseUrl, '/api/pvp/live/ops/retention/sweep?olderThanMs=2592000000', {
+                method: 'POST',
+                headers: { 'x-defier-live-ops-token': liveOpsToken },
+                body: { dryRun: true }
+            });
+            assert.equal(opsRetentionPreOverview.status, 200, 'live ops retention dry-run should be available before overview drift checks');
+            const opsOverview = await request(baseUrl, '/api/pvp/live/ops/overview?windowMs=86400000&olderThanMs=2592000000', {
+                headers: { 'x-defier-live-ops-token': liveOpsToken }
+            });
+            assert.equal(opsOverview.status, 200, 'live ops overview should require and accept the live ops token');
+            assert.equal(opsOverview.payload.reportVersion, 'pvp-live-ops-overview-v1', 'live ops overview should expose a stable report version');
+            assert.equal(opsOverview.payload.sourceVisibility, 'ops_aggregate_public_safety_overview', 'live ops overview should identify aggregate source visibility');
+            assert.equal(opsOverview.payload.usesHiddenInformation, false, 'live ops overview should not use hidden information');
+            assert.equal(opsOverview.payload.rankedImpact, 'none', 'live ops overview should not mutate ranked state');
+            assert.equal(opsOverview.payload.rewardImpact, 'none', 'live ops overview should not mutate rewards');
+            assert.ok(opsOverview.payload.disputeQueue?.openReports >= 1, 'live ops overview should count open disputes');
+            assert.ok(Array.isArray(opsOverview.payload.disputeQueue?.agingBuckets), 'live ops overview should expose dispute aging buckets');
+            assert.ok(opsOverview.payload.fairness?.matchSummary?.finishedMatches >= 1, 'live ops overview should include aggregate match fairness summary');
+            assert.ok(Array.isArray(opsOverview.payload.fairness?.anomalyBuckets), 'live ops overview should include aggregate anomaly buckets');
+            assert.ok(opsOverview.payload.opsLoad?.reviewEvents >= 1, 'live ops overview should count review ops events');
+            assert.ok(opsOverview.payload.retentionPreview?.stateSignals >= 0, 'live ops overview should expose a non-mutating retention preview');
+            assert.ok(Array.isArray(opsOverview.payload.recommendedActions), 'live ops overview should expose bounded recommended action keys');
+            assert.deepEqual(opsOverview.payload.fairness?.matchSummary, opsFairnessMetrics.payload.matchSummary, 'live ops overview should reuse the fairness match summary');
+            assert.deepEqual(opsOverview.payload.fairness?.disputeSummary, opsFairnessMetrics.payload.disputeSummary, 'live ops overview should reuse the fairness dispute summary');
+            assert.deepEqual(opsOverview.payload.fairness?.opsSummary, opsFairnessMetrics.payload.opsSummary, 'live ops overview should reuse the fairness ops summary');
+            assert.deepEqual(opsOverview.payload.fairness?.avoidanceSummary, opsFairnessMetrics.payload.avoidanceSummary, 'live ops overview should reuse the fairness avoidance summary');
+            assert.ok(opsOverview.payload.disputeQueue?.totalReports >= opsFairnessMetrics.payload.disputeSummary.totalReports + 1, 'live ops overview dispute queue should include open backlog outside the fairness window');
+            assert.equal(opsOverview.payload.retentionPreview?.stateSignals, opsRetentionPreOverview.payload.preview?.stateSignals, 'live ops overview should align with retention dry-run state-signal preview');
+            assert.equal(opsOverview.payload.retentionPreview?.expiredReplayShares, opsRetentionPreOverview.payload.preview?.expiredReplayShares, 'live ops overview should align with retention dry-run replay-share preview');
+            assert.doesNotMatch(JSON.stringify(opsOverview.payload), forbiddenLiveOpsAggregatePattern, 'live ops overview must stay aggregate-only and sanitize forbidden bucket keys');
             const staleOpsMemoryMatchId = 'ops-stale-window-memory-match';
             pvpLiveRoutes.__livePvpStore.matches.set(staleOpsMemoryMatchId, {
                 matchId: staleOpsMemoryMatchId,
