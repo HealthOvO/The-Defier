@@ -1,0 +1,33 @@
+docs/superpowers/plans/2026-07-09-pvp-live-ops-platform-s96.md
+  s_bae69f1b7fab46::t_4736ab5a0470ac 1-328
+server/routes/pvp-live.js
+  s_68cd97ba7f6c0f::t_590c8ae9c1775f 330,610-616,622-721,764,804-805,810-908,1304-1556
+tests/sanity_pvp_live_route_checks.cjs
+  s_bae69f1b7fab46::t_aa9d7ce1f842f1 2832,2835-2857,2870-2874,2896-2958
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.5",
+  "base_commit_sha": "ab13afd7a4013d96af2dff2e6b56241b8d89f29f",
+  "prompts": {},
+  "sessions": {
+    "s_68cd97ba7f6c0f": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f474c-a15d-7213-ab5b-04d58ba26259",
+        "model": "unknown"
+      },
+      "human_author": "AI Agent <bot@example.com>"
+    },
+    "s_bae69f1b7fab46": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ed4f6-e7ac-73e0-a29e-119f3eddb407",
+        "model": "unknown"
+      },
+      "human_author": "AI Agent <bot@example.com>"
+    }
+  },
+  "attestation_metadata": {},
+  "remote_transcripts": {}
+}
