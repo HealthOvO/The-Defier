@@ -327,6 +327,376 @@ function parseJson(raw, fallback = null) {
     }
 }
 
+const LIVE_OPS_FORBIDDEN_AUDIT_KEYS = /hand|deck|deckOrder|cardId|instanceId|cardInstanceId|cardInstanceIds|loadoutSnapshot|randomSeed|rngSeed|payload|state_json|event_json|stateJson|eventJson/i;
+
+function sanitizeLiveOpsAuditValue(value, depth = 0) {
+    if (value === null || value === undefined) return value;
+    if (depth > 5) return null;
+    if (Array.isArray(value)) {
+        return value.slice(0, 50)
+            .map(item => sanitizeLiveOpsAuditValue(item, depth + 1))
+            .filter(item => item !== undefined);
+    }
+    if (typeof value === 'object') {
+        return Object.entries(value).reduce((safe, [key, entry]) => {
+            const safeKey = String(key || '');
+            if (!safeKey || LIVE_OPS_FORBIDDEN_AUDIT_KEYS.test(safeKey)) return safe;
+            const safeValue = sanitizeLiveOpsAuditValue(entry, depth + 1);
+            if (safeValue !== undefined) safe[safeKey] = safeValue;
+            return safe;
+        }, {});
+    }
+    if (typeof value === 'string') return value.slice(0, 240);
+    if (typeof value === 'number') return Number.isFinite(value) ? value : 0;
+    if (typeof value === 'boolean') return value;
+    return undefined;
+}
+
+function getMatchFinishedEvent(state = {}) {
+    const events = Array.isArray(state && state.events) ? state.events : [];
+    return events.slice().reverse().find(event => event && event.eventType === 'match_finished') || null;
+}
+
+function getEventPayload(event) {
+    return event && typeof event === 'object' && event.payload && typeof event.payload === 'object'
+        ? event.payload
+        : {};
+}
+
+function sanitizeLiveOpsMatchQuality(state = {}) {
+    const quality = state && state.matchQuality && typeof state.matchQuality === 'object'
+        ? state.matchQuality
+        : {};
+    return {
+        reportVersion: String(quality.reportVersion || 'pvp-live-match-quality-v1'),
+        sourceVisibility: 'ops_match_quality_public_summary',
+        tag: String(quality.tag || ''),
+        expansionStage: String(quality.expansionStage || ''),
+        ratingDeltaBucket: String(quality.ratingDeltaBucket || ''),
+        connectionHealth: String(quality.connectionHealth || ''),
+        wideMatchReason: String(quality.wideMatchReason || ''),
+        candidatePoolSize: Math.max(0, Math.floor(Number(quality.candidatePoolSize) || 0)),
+        safeguards: Array.isArray(quality.safeguards)
+            ? quality.safeguards.map(item => String(item || '')).filter(Boolean).slice(0, 12)
+            : []
+    };
+}
+
+function sanitizeLiveOpsPublicEvent(row) {
+    const publicData = sanitizeLiveOpsAuditValue(parseJson(row && row.public_data_json, {}) || {}) || {};
+    return {
+        eventId: String(row && row.event_id || ''),
+        sequence: Math.max(0, Math.floor(Number(row && row.event_sequence) || 0)),
+        eventType: String(row && row.event_type || ''),
+        actingSeat: String(row && row.acting_seat || ''),
+        visibility: String(row && row.visibility || 'public'),
+        publicData,
+        createdAt: Math.max(0, Math.floor(Number(row && row.created_at) || 0))
+    };
+}
+
+function sanitizeLiveOpsSignal(row) {
+    const hasRuntimeSource = Boolean(String(row && row.source_instance_id || '').trim());
+    return {
+        signalId: Math.max(0, Math.floor(Number(row && row.signal_id) || 0)),
+        signalType: String(row && row.signal_type || 'state_sync'),
+        stateVersion: Math.max(0, Math.floor(Number(row && row.state_version) || 0)),
+        reason: String(row && row.reason || 'match_saved'),
+        source: hasRuntimeSource ? 'redacted_runtime_source' : '',
+        createdAt: Math.max(0, Math.floor(Number(row && row.created_at) || 0))
+    };
+}
+
+function sanitizeLiveOpsEvent(row) {
+    return {
+        eventId: String(row && row.event_id || ''),
+        eventType: String(row && row.event_type || ''),
+        subjectUserId: String(row && row.subject_user_id || ''),
+        matchId: String(row && row.match_id || ''),
+        severity: String(row && row.severity || 'info'),
+        reason: String(row && row.reason || ''),
+        source: String(row && row.source || ''),
+        evidence: sanitizeLiveOpsAuditValue(parseJson(row && row.evidence_json, {}) || {}) || {},
+        createdAt: Math.max(0, Math.floor(Number(row && row.created_at) || 0))
+    };
+}
+
+function sanitizeLiveOpsReplayShare(row) {
+    const revokedAt = Math.max(0, Math.floor(Number(row && row.revoked_at) || 0));
+    return {
+        shareToken: String(row && row.share_token || ''),
+        creatorUserId: String(row && row.creator_user_id || ''),
+        creatorSeat: row && row.creator_seat === 'B' ? 'B' : 'A',
+        visibilityLayer: String(row && row.visibility_layer || 'replay_public'),
+        sourceVisibility: String(row && row.source_visibility || 'replay_public'),
+        matchRef: String(row && row.match_ref || ''),
+        replayHash: String(row && row.replay_hash || ''),
+        status: revokedAt > 0 ? 'revoked' : String(row && row.status || 'active'),
+        createdAt: Math.max(0, Math.floor(Number(row && row.created_at) || 0)),
+        expiresAt: Math.max(0, Math.floor(Number(row && row.expires_at) || 0)),
+        revokedAt
+    };
+}
+
+function getSeatUserIdFromMatch(match, seatId) {
+    const seat = String(seatId || '');
+    if (!match || (seat !== 'A' && seat !== 'B')) return '';
+    if (match.state && match.state.seats && match.state.seats[seat] && match.state.seats[seat].userId) {
+        return String(match.state.seats[seat].userId || '');
+    }
+    if (match.seatsByUserId && typeof match.seatsByUserId === 'object') {
+        return Object.entries(match.seatsByUserId)
+            .find(([, sourceSeat]) => sourceSeat === seat)?.[0] || '';
+    }
+    return '';
+}
+
+function makeLiveOpsMatchRowFromMemory(match) {
+    if (!match || !match.matchId || !match.state) return null;
+    return {
+        match_id: String(match.matchId),
+        status: String(match.state.status || ''),
+        seat_a_user_id: getSeatUserIdFromMatch(match, 'A'),
+        seat_b_user_id: getSeatUserIdFromMatch(match, 'B'),
+        state_version: Math.max(0, Math.floor(Number(match.state.stateVersion) || 0)),
+        state_json: JSON.stringify(match.state || {}),
+        connection_json: JSON.stringify(match.connection || {}),
+        created_at: Math.max(0, Math.floor(Number(match.createdAt) || 0)),
+        updated_at: Math.max(0, Math.floor(Number(match.updatedAt) || Date.now())),
+        finished_at: ['finished', 'invalidated'].includes(String(match.state.status || ''))
+            ? Math.max(0, Math.floor(Number(match.updatedAt) || Date.now()))
+            : 0
+    };
+}
+
+function getLiveOpsMemoryMatch(matchId) {
+    const id = String(matchId || '').trim();
+    if (!id || !livePvpStore || !livePvpStore.matches || typeof livePvpStore.matches.get !== 'function') return null;
+    return livePvpStore.matches.get(id) || null;
+}
+
+function getLiveOpsMemoryMatchRows(limit = 500, since = 0) {
+    const minTimestamp = Math.max(0, Math.floor(Number(since) || 0));
+    if (!livePvpStore || !livePvpStore.matches || typeof livePvpStore.matches.values !== 'function') return [];
+    return Array.from(livePvpStore.matches.values())
+        .map(makeLiveOpsMatchRowFromMemory)
+        .filter(Boolean)
+        .filter(row => {
+            if (minTimestamp <= 0) return true;
+            return Math.max(
+                Math.floor(Number(row.created_at) || 0),
+                Math.floor(Number(row.updated_at) || 0),
+                Math.floor(Number(row.finished_at) || 0)
+            ) >= minTimestamp;
+        })
+        .sort((left, right) => Math.max(0, Number(right.updated_at) || 0) - Math.max(0, Number(left.updated_at) || 0))
+        .slice(0, Math.max(1, Math.min(500, Math.floor(Number(limit) || 500))));
+}
+
+function mergeLiveOpsMatchRows(persistedRows = [], memoryRows = []) {
+    const byId = new Map();
+    [...memoryRows, ...persistedRows].forEach(row => {
+        const id = String(row && row.match_id || '').trim();
+        if (!id) return;
+        byId.set(id, row);
+    });
+    return Array.from(byId.values())
+        .sort((left, right) => Math.max(0, Number(right.updated_at) || 0) - Math.max(0, Number(left.updated_at) || 0));
+}
+
+function makeLiveOpsEventRowsFromMemory(match) {
+    const events = match && match.state && Array.isArray(match.state.events) ? match.state.events : [];
+    return events.map((event, index) => {
+        const safe = sanitizePublicEvent(event || {});
+        const publicData = safe && typeof safe === 'object'
+            ? safe.publicData || safe.payload || {}
+            : {};
+        return {
+            event_id: String(event && event.eventId || `${match.matchId}-memory-event-${index + 1}`),
+            event_sequence: Math.max(0, Math.floor(Number(event && event.sequence) || index + 1)),
+            event_type: String(event && event.eventType || ''),
+            acting_seat: String(event && event.actingSeat || ''),
+            visibility: String(event && event.visibility || 'public'),
+            public_data_json: JSON.stringify(publicData),
+            created_at: Math.max(0, Math.floor(Number(match && match.updatedAt) || Date.now()))
+        };
+    }).filter(row => row.event_type);
+}
+
+function makeLiveOpsSignalRowsFromMemory(match) {
+    if (!match || !match.matchId || !match.state) return [];
+    return [{
+        signal_id: 0,
+        signal_type: 'memory_snapshot',
+        state_version: Math.max(0, Math.floor(Number(match.state.stateVersion) || 0)),
+        reason: 'memory_snapshot',
+        source_instance_id: '',
+        created_at: Math.max(0, Math.floor(Number(match.updatedAt) || Date.now()))
+    }];
+}
+
+function makeLiveOpsMatchTrace({ matchRow, eventRows, signalRows, disputeRows, opsRows, replayShareRows, settlementRow }) {
+    const state = parseJson(matchRow && matchRow.state_json, {}) || {};
+    const finishedEvent = getMatchFinishedEvent(state);
+    const finishedPayload = getEventPayload(finishedEvent);
+    const connection = parseJson(matchRow && matchRow.connection_json, {}) || {};
+    return {
+        success: true,
+        reportVersion: 'pvp-live-ops-match-trace-v1',
+        matchId: String(matchRow && matchRow.match_id || ''),
+        sourceVisibility: 'ops_audit_safe_match_trace',
+        usesHiddenInformation: false,
+        rankedImpact: 'none',
+        rewardImpact: 'none',
+        state: {
+            status: String(matchRow && matchRow.status || state.status || ''),
+            mode: String(state.mode || ''),
+            ruleVersion: String(state.ruleVersion || RULE_VERSION),
+            stateVersion: Math.max(0, Math.floor(Number(matchRow && matchRow.state_version || state.stateVersion) || 0)),
+            roundIndex: Math.max(0, Math.floor(Number(state.roundIndex) || 0)),
+            turnIndex: Math.max(0, Math.floor(Number(state.turnIndex) || 0)),
+            currentSeat: String(state.currentSeat || ''),
+            createdAt: Math.max(0, Math.floor(Number(matchRow && matchRow.created_at) || 0)),
+            updatedAt: Math.max(0, Math.floor(Number(matchRow && matchRow.updated_at) || 0)),
+            finishedAt: Math.max(0, Math.floor(Number(matchRow && matchRow.finished_at) || 0))
+        },
+        participants: {
+            A: { seatId: 'A', userId: String(matchRow && matchRow.seat_a_user_id || '') },
+            B: { seatId: 'B', userId: String(matchRow && matchRow.seat_b_user_id || '') }
+        },
+        postMatch: {
+            winnerSeat: String(finishedPayload.winnerSeat || ''),
+            loserSeat: String(finishedPayload.loserSeat || ''),
+            finishReason: String(finishedPayload.finishReason || ''),
+            scoreA: Math.floor(Number(finishedPayload.scoreA) || 0),
+            scoreB: Math.floor(Number(finishedPayload.scoreB) || 0)
+        },
+        matchQuality: sanitizeLiveOpsMatchQuality(state),
+        connection: {
+            reportVersion: 'pvp-live-ops-connection-summary-v1',
+            seatAStatus: String(connection && connection.seats && connection.seats.A && connection.seats.A.status || ''),
+            seatBStatus: String(connection && connection.seats && connection.seats.B && connection.seats.B.status || ''),
+            lastHeartbeatAtMax: Math.max(
+                0,
+                Math.floor(Number(connection && connection.seats && connection.seats.A && connection.seats.A.lastHeartbeatAt) || 0),
+                Math.floor(Number(connection && connection.seats && connection.seats.B && connection.seats.B.lastHeartbeatAt) || 0)
+            )
+        },
+        settlement: settlementRow ? {
+            finishReason: String(settlementRow.finish_reason || ''),
+            winnerSeat: String(settlementRow.winner_seat || ''),
+            loserSeat: String(settlementRow.loser_seat || ''),
+            winnerUserId: String(settlementRow.winner_user_id || ''),
+            loserUserId: String(settlementRow.loser_user_id || ''),
+            createdAt: Math.max(0, Math.floor(Number(settlementRow.created_at) || 0)),
+            rankedImpact: 'settlement_recorded',
+            rewardImpact: 'settlement_recorded'
+        } : null,
+        publicEvents: eventRows.map(sanitizeLiveOpsPublicEvent),
+        stateSignals: signalRows.map(sanitizeLiveOpsSignal),
+        disputeReports: disputeRows.map(row => makeDisputeStatusReceipt(row, { includeEvidence: true })),
+        opsEvents: opsRows.map(sanitizeLiveOpsEvent),
+        replayShares: replayShareRows.map(sanitizeLiveOpsReplayShare),
+        boundary: '运营追踪只汇总公开状态、脱敏事件、争议状态和同步信号，不暴露隐藏手牌、牌库、随机种子或完整斗法谱。'
+    };
+}
+
+function getLiveOpsWindowMs(value) {
+    const windowMs = Math.floor(Number(value));
+    if (!Number.isFinite(windowMs) || windowMs <= 0) return 24 * 60 * 60 * 1000;
+    return Math.max(60 * 1000, Math.min(90 * 24 * 60 * 60 * 1000, windowMs));
+}
+
+function incrementCount(target, key) {
+    const safeKey = String(key || 'unknown').slice(0, 64) || 'unknown';
+    target[safeKey] = (target[safeKey] || 0) + 1;
+}
+
+function makeLiveOpsFairnessMetrics({ matchRows, disputeRows, opsRows, avoidRows, windowMs, now }) {
+    const qualityTags = {};
+    const expansionStages = {};
+    const ratingDeltaBuckets = {};
+    const connectionHealth = {};
+    let finishedMatches = 0;
+    let invalidatedMatches = 0;
+    let firstSeatStarted = 0;
+    let firstSeatWon = 0;
+    matchRows.forEach(row => {
+        const state = parseJson(row && row.state_json, {}) || {};
+        const status = String(row && row.status || state.status || '');
+        if (status === 'finished') finishedMatches += 1;
+        if (status === 'invalidated') invalidatedMatches += 1;
+        const quality = state.matchQuality && typeof state.matchQuality === 'object' ? state.matchQuality : {};
+        if (quality.tag) incrementCount(qualityTags, quality.tag);
+        if (quality.expansionStage) incrementCount(expansionStages, quality.expansionStage);
+        if (quality.ratingDeltaBucket) incrementCount(ratingDeltaBuckets, quality.ratingDeltaBucket);
+        if (quality.connectionHealth) incrementCount(connectionHealth, quality.connectionHealth);
+        const firstSeat = String(state && state.openerAssignment && state.openerAssignment.firstSeat || '');
+        const finishedEvent = getMatchFinishedEvent(state);
+        const winnerSeat = String(getEventPayload(finishedEvent).winnerSeat || '');
+        if ((firstSeat === 'A' || firstSeat === 'B') && status === 'finished') {
+            firstSeatStarted += 1;
+            if (winnerSeat === firstSeat) firstSeatWon += 1;
+        }
+    });
+    const disputesByStatus = {};
+    const disputeRiskTags = {};
+    disputeRows.forEach(row => {
+        incrementCount(disputesByStatus, sanitizeDisputeStatus(row && row.status) || 'reported');
+        const evidence = parseJson(row && row.evidence_json, {}) || {};
+        if (Array.isArray(evidence.riskTags)) {
+            evidence.riskTags.forEach(tag => incrementCount(disputeRiskTags, tag));
+        }
+    });
+    const opsByType = {};
+    let reviewEvents = 0;
+    opsRows.forEach(row => {
+        incrementCount(opsByType, row && row.event_type);
+        if (String(row && row.severity || '') === 'review') reviewEvents += 1;
+    });
+    return {
+        success: true,
+        reportVersion: 'pvp-live-ops-fairness-metrics-v1',
+        sourceVisibility: 'ops_aggregate_public_safety_metrics',
+        usesHiddenInformation: false,
+        rankedImpact: 'none',
+        rewardImpact: 'none',
+        generatedAt: now,
+        windowMs,
+        since: Math.max(0, now - windowMs),
+        matchSummary: {
+            totalMatches: matchRows.length,
+            finishedMatches,
+            invalidatedMatches,
+            activeOrSetupMatches: matchRows.length - finishedMatches - invalidatedMatches,
+            firstSeatStarted,
+            firstSeatWon,
+            firstSeatWinRate: firstSeatStarted > 0 ? Number((firstSeatWon / firstSeatStarted).toFixed(4)) : 0
+        },
+        matchQualitySummary: {
+            qualityTags,
+            expansionStages,
+            ratingDeltaBuckets,
+            connectionHealth
+        },
+        disputeSummary: {
+            totalReports: disputeRows.length,
+            byStatus: disputesByStatus,
+            riskTags: disputeRiskTags
+        },
+        opsSummary: {
+            totalEvents: opsRows.length,
+            reviewEvents,
+            byType: opsByType
+        },
+        avoidanceSummary: {
+            activePreferences: avoidRows.filter(row => Math.max(0, Math.floor(Number(row && row.avoid_until) || 0)) > now).length,
+            recentPreferences: avoidRows.length
+        },
+        boundary: '运营公平性指标只统计聚合状态、公开质量桶、争议风险标签和事件数量，不暴露隐藏手牌、牌库、随机种子、完整斗法谱或精确评分。'
+    };
+}
+
 function makeDisputeStatusReceipt(row, { includeEvidence = false } = {}) {
     const evidence = parseJson(row && row.evidence_json, {});
     const riskTags = Array.isArray(evidence && evidence.riskTags)
@@ -354,7 +724,7 @@ function makeDisputeStatusReceipt(row, { includeEvidence = false } = {}) {
         boundary: '争议处理只改变反馈工单状态，不直接改写本局胜负、积分、奖励、手牌或牌库。'
     };
     if (includeEvidence) {
-        receipt.evidencePackage = evidence && typeof evidence === 'object' ? evidence : {};
+        receipt.evidencePackage = sanitizeLiveOpsAuditValue(evidence && typeof evidence === 'object' ? evidence : {}) || {};
     }
     return receipt;
 }
@@ -720,6 +1090,149 @@ router.get('/ops/dispute-reports', asyncHandler(async (req, res) => {
             ? Math.max(0, Math.floor(Number(reports[reports.length - 1].updated_at) || 0))
             : 0
     });
+}));
+
+router.get('/ops/matches/:matchId/trace', asyncHandler(async (req, res) => {
+    if (!verifyLiveOpsToken(req, res)) return;
+    const matchId = String(req.params.matchId || '').trim();
+    const persistedMatchRow = matchId ? await dbGet(
+        `SELECT *
+         FROM pvp_live_matches
+         WHERE match_id = ?
+         LIMIT 1`,
+        [matchId]
+    ) : null;
+    const memoryMatch = getLiveOpsMemoryMatch(matchId);
+    const matchRow = persistedMatchRow || makeLiveOpsMatchRowFromMemory(memoryMatch);
+    if (!matchRow) {
+        return res.status(404).json({
+            success: false,
+            reason: 'live_ops_match_trace_not_found',
+            message: '实时论道运营追踪不存在'
+        });
+    }
+    const [
+        eventRows,
+        signalRows,
+        disputeRows,
+        opsRows,
+        replayShareRows,
+        settlementRow
+    ] = await Promise.all([
+        dbAll(
+            `SELECT event_id, event_sequence, event_type, acting_seat, visibility, public_data_json, created_at
+             FROM pvp_live_match_events
+             WHERE match_id = ?
+             ORDER BY event_sequence ASC
+             LIMIT 80`,
+            [matchId]
+        ),
+        dbAll(
+            `SELECT signal_id, signal_type, state_version, reason, source_instance_id, created_at
+             FROM pvp_live_state_signals
+             WHERE match_id = ?
+             ORDER BY signal_id ASC
+             LIMIT 80`,
+            [matchId]
+        ),
+        dbAll(
+            `SELECT *
+             FROM pvp_live_dispute_reports
+             WHERE match_id = ?
+             ORDER BY created_at ASC, report_id ASC
+             LIMIT 50`,
+            [matchId]
+        ),
+        dbAll(
+            `SELECT event_id, event_type, subject_user_id, match_id, severity, reason, source, evidence_json, created_at
+             FROM pvp_live_ops_events
+             WHERE match_id = ?
+             ORDER BY created_at ASC, event_id ASC
+             LIMIT 80`,
+            [matchId]
+        ),
+        dbAll(
+            `SELECT share_token, creator_user_id, creator_seat, visibility_layer, source_visibility, match_ref, replay_hash, status, created_at, expires_at, revoked_at
+             FROM pvp_live_replay_shares
+             WHERE match_id = ?
+             ORDER BY created_at ASC, share_token ASC
+             LIMIT 20`,
+            [matchId]
+        ),
+        dbGet(
+            `SELECT *
+             FROM pvp_live_match_settlements
+             WHERE match_id = ?
+             LIMIT 1`,
+            [matchId]
+        )
+    ]);
+    const effectiveEventRows = eventRows.length ? eventRows : makeLiveOpsEventRowsFromMemory(memoryMatch);
+    const effectiveSignalRows = signalRows.length ? signalRows : makeLiveOpsSignalRowsFromMemory(memoryMatch);
+    res.json(makeLiveOpsMatchTrace({
+        matchRow,
+        eventRows: effectiveEventRows,
+        signalRows: effectiveSignalRows,
+        disputeRows,
+        opsRows,
+        replayShareRows,
+        settlementRow
+    }));
+}));
+
+router.get('/ops/metrics/fairness', asyncHandler(async (req, res) => {
+    if (!verifyLiveOpsToken(req, res)) return;
+    const windowMs = getLiveOpsWindowMs(req.query && req.query.windowMs);
+    const now = Date.now();
+    const since = Math.max(0, now - windowMs);
+    const [
+        persistedMatchRows,
+        disputeRows,
+        opsRows,
+        avoidRows
+    ] = await Promise.all([
+        dbAll(
+            `SELECT match_id, status, state_version, state_json, created_at, updated_at, finished_at
+             FROM pvp_live_matches
+             WHERE created_at >= ? OR updated_at >= ? OR finished_at >= ?
+             ORDER BY updated_at DESC, match_id DESC
+             LIMIT 500`,
+            [since, since, since]
+        ),
+        dbAll(
+            `SELECT status, evidence_json, created_at, updated_at
+             FROM pvp_live_dispute_reports
+             WHERE created_at >= ? OR updated_at >= ?
+             ORDER BY updated_at DESC, report_id DESC
+             LIMIT 500`,
+            [since, since]
+        ),
+        dbAll(
+            `SELECT event_type, severity, created_at
+             FROM pvp_live_ops_events
+             WHERE created_at >= ?
+             ORDER BY created_at DESC, event_id DESC
+             LIMIT 1000`,
+            [since]
+        ),
+        dbAll(
+            `SELECT avoid_until, avoided_at
+             FROM pvp_live_avoid_opponents
+             WHERE avoided_at >= ? OR avoid_until >= ?
+             ORDER BY updated_at DESC
+             LIMIT 500`,
+            [since, now]
+        )
+    ]);
+    const matchRows = mergeLiveOpsMatchRows(persistedMatchRows, getLiveOpsMemoryMatchRows(500, since));
+    res.json(makeLiveOpsFairnessMetrics({
+        matchRows,
+        disputeRows,
+        opsRows,
+        avoidRows,
+        windowMs,
+        now
+    }));
 }));
 
 router.post('/ops/dispute-reports/:reportId/status', asyncHandler(async (req, res) => {

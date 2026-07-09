@@ -2807,6 +2807,64 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
             assert.equal(opsReportList.payload.reports?.[0]?.reportId, disputeReport.payload.report.reportId, 'live ops dispute list should include the reported dispute');
             assert.ok(opsReportList.payload.reports?.[0]?.evidencePackage?.riskTags?.includes('fairness_review_requested'), 'live ops dispute list should include audit-safe evidence');
             assert.doesNotMatch(JSON.stringify(opsReportList.payload), /hand|deck|cardId|instanceId|loadoutSnapshot|randomSeed/i, 'live ops dispute list must not leak hidden cards, decks, loadouts, or seeds');
+            const hiddenOpsSourceInstanceId = 'live-ws-instance-secret-001';
+            await dbRun(
+                `INSERT INTO pvp_live_state_signals
+                    (match_id, signal_type, state_version, reason, source_instance_id, created_at)
+                 VALUES (?, ?, ?, ?, ?, ?)`,
+                [joinRound14ScoreB.payload.matchId, 'state_sync', 999, 'sync_required', hiddenOpsSourceInstanceId, Date.now()]
+            );
+            const opsMatchTrace = await request(baseUrl, `/api/pvp/live/ops/matches/${joinRound14ScoreB.payload.matchId}/trace`, {
+                headers: { 'x-defier-live-ops-token': liveOpsToken }
+            });
+            assert.equal(opsMatchTrace.status, 200, 'live ops match trace should require and accept the live ops token');
+            assert.equal(opsMatchTrace.payload.reportVersion, 'pvp-live-ops-match-trace-v1', 'live ops match trace should expose a stable report version');
+            assert.equal(opsMatchTrace.payload.matchId, joinRound14ScoreB.payload.matchId, 'live ops match trace should return the requested match id');
+            assert.equal(opsMatchTrace.payload.state?.status, 'finished', 'live ops match trace should expose final match status');
+            assert.equal(opsMatchTrace.payload.postMatch?.finishReason, 'round14_score', 'live ops match trace should expose public finish reason');
+            assert.ok(opsMatchTrace.payload.matchQuality?.sourceVisibility, 'live ops match trace should include a sanitized match-quality snapshot');
+            assert.ok(Array.isArray(opsMatchTrace.payload.publicEvents) && opsMatchTrace.payload.publicEvents.length >= 1, 'live ops match trace should include public event refs');
+            assert.ok(Array.isArray(opsMatchTrace.payload.stateSignals) && opsMatchTrace.payload.stateSignals.length >= 1, 'live ops match trace should include durable state sync signals');
+            assert.ok(opsMatchTrace.payload.stateSignals.some(signal => signal.reason === 'sync_required' && signal.source === 'redacted_runtime_source'), 'live ops match trace should redact runtime signal source ids');
+            assert.ok(opsMatchTrace.payload.disputeReports?.some(report => report.reportId === disputeReport.payload.report.reportId), 'live ops match trace should include related dispute reports');
+            assert.ok(opsMatchTrace.payload.opsEvents?.some(event => event.eventType === 'dispute_reported'), 'live ops match trace should include related ops events');
+            assert.equal(opsMatchTrace.payload.boundary, '运营追踪只汇总公开状态、脱敏事件、争议状态和同步信号，不暴露隐藏手牌、牌库、随机种子或完整斗法谱。', 'live ops match trace should describe its redaction boundary');
+            const forbiddenOpsAuditPattern = /hand|deck|deckOrder|cardId|instanceId|cardInstanceId|cardInstanceIds|loadoutSnapshot|randomSeed|rngSeed|payload|state_json|event_json|stateJson|eventJson/i;
+            assert.doesNotMatch(JSON.stringify(opsMatchTrace.payload), forbiddenOpsAuditPattern, 'live ops match trace must not leak hidden cards, decks, loadouts, seeds, payloads, or raw state/event JSON');
+            assert.equal(JSON.stringify(opsMatchTrace.payload).includes(hiddenOpsSourceInstanceId), false, 'live ops match trace must not leak raw runtime signal source ids');
+            const opsFairnessMetrics = await request(baseUrl, '/api/pvp/live/ops/metrics/fairness?windowMs=86400000', {
+                headers: { 'x-defier-live-ops-token': liveOpsToken }
+            });
+            assert.equal(opsFairnessMetrics.status, 200, 'live ops fairness metrics should require and accept the live ops token');
+            assert.equal(opsFairnessMetrics.payload.reportVersion, 'pvp-live-ops-fairness-metrics-v1', 'live ops fairness metrics should expose a stable report version');
+            assert.ok(opsFairnessMetrics.payload.matchSummary?.totalMatches >= 1, 'live ops fairness metrics should count recent live matches');
+            assert.ok(opsFairnessMetrics.payload.matchSummary?.finishedMatches >= 1, 'live ops fairness metrics should count finished matches');
+            assert.ok(opsFairnessMetrics.payload.disputeSummary?.totalReports >= 1, 'live ops fairness metrics should count dispute reports');
+            assert.ok(opsFairnessMetrics.payload.opsSummary?.reviewEvents >= 1, 'live ops fairness metrics should count review-severity ops events');
+            assert.equal(opsFairnessMetrics.payload.sourceVisibility, 'ops_aggregate_public_safety_metrics', 'live ops fairness metrics should identify aggregate source visibility');
+            assert.equal(opsFairnessMetrics.payload.usesHiddenInformation, false, 'live ops fairness metrics should not use hidden information');
+            assert.equal(opsFairnessMetrics.payload.rankedImpact, 'none', 'live ops fairness metrics should not mutate ranked state');
+            assert.doesNotMatch(JSON.stringify(opsFairnessMetrics.payload), /hand|deck|deckOrder|cardId|instanceId|cardInstanceId|cardInstanceIds|loadoutSnapshot|randomSeed|rngSeed|payload|state_json|event_json|stateJson|eventJson|exactRating|elo/i, 'live ops fairness metrics must not leak hidden cards, decks, loadouts, seeds, payloads, raw state/event JSON, or exact rating data');
+            const staleOpsMemoryMatchId = 'ops-stale-window-memory-match';
+            pvpLiveRoutes.__livePvpStore.matches.set(staleOpsMemoryMatchId, {
+                matchId: staleOpsMemoryMatchId,
+                state: {
+                    status: 'finished',
+                    stateVersion: 1,
+                    matchQuality: { tag: 'stale_probe' },
+                    openerAssignment: { firstSeat: 'A' },
+                    events: [{ eventType: 'match_finished', payload: { winnerSeat: 'A' } }]
+                },
+                seatsByUserId: { 'stale-a': 'A', 'stale-b': 'B' },
+                createdAt: Date.now() - 10 * 24 * 60 * 60 * 1000,
+                updatedAt: Date.now() - 10 * 24 * 60 * 60 * 1000
+            });
+            const opsFairnessAfterStaleMemory = await request(baseUrl, '/api/pvp/live/ops/metrics/fairness?windowMs=86400000', {
+                headers: { 'x-defier-live-ops-token': liveOpsToken }
+            });
+            pvpLiveRoutes.__livePvpStore.matches.delete(staleOpsMemoryMatchId);
+            assert.equal(opsFairnessAfterStaleMemory.status, 200, 'live ops fairness metrics should handle stale in-memory matches');
+            assert.equal(opsFairnessAfterStaleMemory.payload.matchSummary?.totalMatches, opsFairnessMetrics.payload.matchSummary.totalMatches, 'live ops fairness metrics should ignore in-memory matches outside the requested window');
             const bearerOnlyOpsReview = await request(baseUrl, `/api/pvp/live/ops/dispute-reports/${disputeReport.payload.report.reportId}/status`, {
                 method: 'POST',
                 token: tokenA,
@@ -2861,7 +2919,7 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
             assert.equal(resolvedOpsReview.payload.report?.rewardImpact, 'none', 'live ops dispute resolution should not directly mutate rewards');
             assert.equal(resolvedOpsReview.payload.report?.usesHiddenInformation, false, 'live ops dispute status receipt should not use hidden information');
             assert.ok(resolvedOpsReview.payload.report?.evidencePackage?.riskTags?.includes('fairness_review_requested'), 'live ops status receipt should preserve audit-safe risk tags');
-            assert.doesNotMatch(JSON.stringify(resolvedOpsReview.payload), /hand|deck|cardId|instanceId|loadoutSnapshot|randomSeed/i, 'live ops dispute status receipt must not leak hidden cards, decks, loadouts, or seeds');
+            assert.doesNotMatch(JSON.stringify(resolvedOpsReview.payload), forbiddenOpsAuditPattern, 'live ops dispute status receipt must not leak hidden cards, decks, loadouts, seeds, payloads, or raw state/event JSON');
             const duplicateResolvedOpsReview = await request(baseUrl, `/api/pvp/live/ops/dispute-reports/${disputeReport.payload.report.reportId}/status`, {
                 method: 'POST',
                 headers: {
