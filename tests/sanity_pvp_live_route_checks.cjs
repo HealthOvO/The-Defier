@@ -4,6 +4,7 @@ const express = require('../server/node_modules/express');
 const pvpLiveRoutes = require('../server/routes/pvp-live');
 const { generateToken } = require('../server/middleware/auth');
 const { RULES } = require('../server/pvp-live/engine/rules');
+const { recordPvpLiveOpsEvent } = require('../server/pvp-live/live-ops-events');
 const { db, initDb } = require('../server/db/database');
 
 function listen(app) {
@@ -17,8 +18,8 @@ function close(server) {
     return new Promise(resolve => server.close(resolve));
 }
 
-async function request(baseUrl, path, { method = 'GET', token, body } = {}) {
-    const headers = { 'Content-Type': 'application/json' };
+async function request(baseUrl, path, { method = 'GET', token, body, headers: extraHeaders = {} } = {}) {
+    const headers = { 'Content-Type': 'application/json', ...extraHeaders };
     if (token) headers.Authorization = `Bearer ${token}`;
     const response = await fetch(`${baseUrl}${path}`, {
         method,
@@ -74,6 +75,14 @@ async function setRouteRank({ userId, username, score = 1000, wins = 6, losses =
           updated_at = excluded.updated_at`,
         [`rank-${userId}`, userId, username, score, wins, losses, division, now, now]
     );
+}
+
+function makeRouteOpsPersistence() {
+    return {
+        async appendOpsEvent(event) {
+            return recordPvpLiveOpsEvent(db, event);
+        }
+    };
 }
 
 async function submitIntent(baseUrl, token, matchId, body) {
@@ -304,7 +313,8 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
 (async () => {
     await initDb();
     pvpLiveRoutes.__livePvpStore.reset();
-    pvpLiveRoutes.__attachServices({ settlement: makeRouteSettlementStub() });
+    const routeOpsPersistence = makeRouteOpsPersistence();
+    pvpLiveRoutes.__attachServices({ settlement: makeRouteSettlementStub(), persistence: routeOpsPersistence });
 
     const app = express();
     app.use(express.json());
@@ -347,6 +357,181 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
 
         const unauthorized = await request(baseUrl, '/api/pvp/live/queue/join', { method: 'POST' });
         assert.equal(unauthorized.status, 401, 'live PVP queue must require auth');
+
+        const seasonStatus = await request(baseUrl, '/api/pvp/live/season', { token: tokenA });
+        assert.equal(seasonStatus.status, 200, 'live season endpoint should expose current season status');
+        assert.equal(seasonStatus.payload.reportVersion, 'pvp-live-season-status-v1', 'live season endpoint should expose stable status version');
+        assert.equal(seasonStatus.payload.config?.seasonId, 's1-genesis', 'live season endpoint should expose current season id');
+        assert.equal(seasonStatus.payload.config?.rewardImpact, 'cosmetic_only', 'live season rewards should stay cosmetic-only');
+        assert.equal(seasonStatus.payload.config?.powerImpact, 'none', 'live season rewards should not change combat power');
+        assert.ok(Array.isArray(seasonStatus.payload.config?.rewardTrack) && seasonStatus.payload.config.rewardTrack.length >= 3, 'live season endpoint should expose reward track');
+        assert.equal(seasonStatus.payload.userProgress?.rankedGames, 0, 'new live season user should start with zero ranked games');
+        assert.equal(seasonStatus.payload.userProgress?.collection?.totalUnlocked, 0, 'new live season user should start with no honor unlocks');
+        assert.doesNotMatch(JSON.stringify(seasonStatus.payload), /JWT_SECRET|DEFIER_HMAC_SECRET|password|hand|deck|randomSeed/i, 'live season endpoint must not leak secrets or hidden match state');
+        const staleSeasonNow = Date.now();
+        const preLedgerCurrentUserId = `live-user-current-pre-ledger-${Date.now()}`;
+        const preLedgerCurrentUsername = `本季旧账_${Date.now()}_${process.pid}`;
+        const preLedgerCurrentToken = generateToken({ id: preLedgerCurrentUserId, username: preLedgerCurrentUsername });
+        await dbRun(
+            `INSERT INTO users (id, username, password_hash, created_at, global_updated_at)
+             VALUES (?, ?, 'pvp-live-current-pre-ledger-test', ?, 0)
+             ON CONFLICT(id) DO UPDATE SET username = excluded.username`,
+            [preLedgerCurrentUserId, preLedgerCurrentUsername, staleSeasonNow]
+        );
+        await dbRun(
+            `INSERT INTO pvp_ranks
+              (id, user_id, user_name, score, wins, losses, realm, division, season_id, created_at, updated_at)
+             VALUES (?, ?, ?, 1100, 2, 1, 1, '潜龙榜', 's1-genesis', ?, ?)
+             ON CONFLICT(user_id) DO UPDATE SET
+              score = excluded.score,
+              wins = excluded.wins,
+              losses = excluded.losses,
+              division = excluded.division,
+              season_id = excluded.season_id,
+              updated_at = excluded.updated_at`,
+            [`rank-${preLedgerCurrentUserId}`, preLedgerCurrentUserId, preLedgerCurrentUsername, staleSeasonNow, staleSeasonNow]
+        );
+        await dbRun(
+            `INSERT INTO pvp_economy (user_id, economy_data, updated_at)
+             VALUES (?, ?, ?)
+             ON CONFLICT(user_id) DO UPDATE SET economy_data = excluded.economy_data, updated_at = excluded.updated_at`,
+            [preLedgerCurrentUserId, JSON.stringify({
+                wins: 2,
+                losses: 1,
+                seasonHonorCollection: {
+                    seasonId: 's1-genesis',
+                    unlockedRewards: {
+                        s1_genesis_honor_mark_1: {
+                            rewardId: 's1_genesis_honor_mark_1',
+                            rewardType: 'cosmetic_badge',
+                            rewardName: '开天见证徽记',
+                            targetGames: 1,
+                            unlockedAt: staleSeasonNow,
+                            rewardImpact: 'cosmetic_only',
+                            powerImpact: 'none'
+                        }
+                    }
+                }
+            }), staleSeasonNow]
+        );
+        const preLedgerCurrentStatus = await request(baseUrl, '/api/pvp/live/season', { token: preLedgerCurrentToken });
+        assert.equal(preLedgerCurrentStatus.status, 200, 'live season endpoint should handle current season economy before durable ledger migration');
+        assert.equal(preLedgerCurrentStatus.payload.userProgress?.collection?.totalUnlocked, 1, 'current season economy fallback should keep visible honor count before ledger migration');
+        assert.equal(preLedgerCurrentStatus.payload.userProgress?.claimLedger?.[0]?.rewardId, 's1_genesis_honor_mark_1', 'current season economy fallback should expose current honor claim before ledger migration');
+        assert.equal(preLedgerCurrentStatus.payload.userProgress?.claimLedger?.[0]?.claimSource, 'economy_snapshot', 'current season economy fallback should identify read-only snapshot source');
+        assert.equal(preLedgerCurrentStatus.payload.userProgress?.claimLedger?.[0]?.powerImpact, 'none', 'current season economy fallback should not grant combat power');
+        const preLedgerCurrentClaimCountAfterRead = await dbGet(
+            `SELECT COUNT(*) AS count
+             FROM pvp_season_reward_claims
+             WHERE user_id = ? AND season_id = ? AND reward_id = ?`,
+            [preLedgerCurrentUserId, 's1-genesis', 's1_genesis_honor_mark_1']
+        );
+        assert.equal(Number(preLedgerCurrentClaimCountAfterRead?.count), 0, 'current season economy fallback should keep live season endpoint read-only');
+        const staleArchiveUserId = `live-user-stale-archive-readonly-${Date.now()}`;
+        const staleArchiveUsername = `旧归档_${Date.now()}_${process.pid}`;
+        const staleArchiveToken = generateToken({ id: staleArchiveUserId, username: staleArchiveUsername });
+        await dbRun(
+            `INSERT INTO users (id, username, password_hash, created_at, global_updated_at)
+             VALUES (?, ?, 'pvp-live-stale-season-test', ?, 0)
+             ON CONFLICT(id) DO UPDATE SET username = excluded.username`,
+            [staleArchiveUserId, staleArchiveUsername, staleSeasonNow]
+        );
+        await dbRun(
+            `INSERT INTO pvp_ranks
+              (id, user_id, user_name, score, wins, losses, realm, division, season_id, created_at, updated_at)
+             VALUES (?, ?, ?, 1888, 99, 1, 1, '旧榜', 's0-legacy', ?, ?)
+             ON CONFLICT(user_id) DO UPDATE SET
+              score = excluded.score,
+              wins = excluded.wins,
+              losses = excluded.losses,
+              division = excluded.division,
+              season_id = excluded.season_id,
+              updated_at = excluded.updated_at`,
+            [`rank-${staleArchiveUserId}`, staleArchiveUserId, staleArchiveUsername, staleSeasonNow, staleSeasonNow]
+        );
+        await dbRun(
+            `INSERT INTO pvp_economy (user_id, economy_data, updated_at)
+             VALUES (?, ?, ?)
+             ON CONFLICT(user_id) DO UPDATE SET economy_data = excluded.economy_data, updated_at = excluded.updated_at`,
+            [staleArchiveUserId, JSON.stringify({
+                wins: 77,
+                losses: 3,
+                seasonHonorCollection: {
+                    seasonId: 's0-legacy',
+                    unlockedRewards: {
+                        s0_legacy_badge: {
+                            rewardId: 's0_legacy_badge',
+                            rewardType: 'cosmetic_badge',
+                            rewardName: '旧赛季徽记',
+                            targetGames: 1,
+                            unlockedAt: staleSeasonNow
+                        }
+                    }
+                }
+            }), staleSeasonNow]
+        );
+        const staleSeasonStatus = await request(baseUrl, '/api/pvp/live/season', { token: staleArchiveToken });
+        assert.equal(staleSeasonStatus.status, 200, 'live season endpoint should handle stale season records');
+        assert.equal(staleSeasonStatus.payload.userProgress?.seasonId, 's1-genesis', 'live season endpoint should pin progress to current season');
+        assert.equal(staleSeasonStatus.payload.userProgress?.score, 1000, 'stale season rank should not leak into current season score');
+        assert.equal(staleSeasonStatus.payload.userProgress?.rankedGames, 0, 'stale season games should not count toward current season progress');
+        assert.equal(staleSeasonStatus.payload.userProgress?.collection?.totalUnlocked, 0, 'stale season collection should not unlock current season rewards');
+        assert.equal(staleSeasonStatus.payload.archive?.reportVersion, 'pvp-live-season-archive-v1', 'live season endpoint should expose stale honor archive summary');
+        assert.equal(staleSeasonStatus.payload.archive?.archivedSeasonCount, 1, 'stale season honor should be archived outside current progress');
+        assert.equal(staleSeasonStatus.payload.archive?.seasons?.[0]?.seasonId, 's0-legacy', 'stale season archive should preserve original season id');
+        assert.equal(staleSeasonStatus.payload.archive?.seasons?.[0]?.totalClaims, 1, 'stale season archive should count legacy honor claims');
+        assert.equal(staleSeasonStatus.payload.archive?.seasons?.[0]?.totalUnlocked, 1, 'stale season archive should count unlocked legacy honors');
+        assert.equal(JSON.stringify(staleSeasonStatus.payload).includes('s0_legacy_badge'), false, 'live season endpoint should not expose stale season reward ids in current status');
+        const archivedStaleClaimCountAfterRead = await dbGet(
+            `SELECT COUNT(*) AS count
+             FROM pvp_season_reward_claims
+             WHERE user_id = ? AND season_id = ? AND reward_id = ?
+             LIMIT 1`,
+            [staleArchiveUserId, 's0-legacy', 's0_legacy_badge']
+        );
+        assert.equal(Number(archivedStaleClaimCountAfterRead?.count), 0, 'live season endpoint should keep stale honor claim migration read-only');
+        const archivedStaleSeasonCountAfterRead = await dbGet(
+            `SELECT COUNT(*) AS count
+             FROM pvp_season_honor_archives
+             WHERE user_id = ? AND season_id = ?
+             LIMIT 1`,
+            [staleArchiveUserId, 's0-legacy']
+        );
+        assert.equal(Number(archivedStaleSeasonCountAfterRead?.count), 0, 'live season endpoint should keep stale season archive migration read-only');
+        const staleNoMarkerUserId = `live-user-stale-no-marker-${Date.now()}`;
+        const staleNoMarkerUsername = `旧无标记_${Date.now()}_${process.pid}`;
+        const staleNoMarkerToken = generateToken({ id: staleNoMarkerUserId, username: staleNoMarkerUsername });
+        await dbRun(
+            `INSERT INTO users (id, username, password_hash, created_at, global_updated_at)
+             VALUES (?, ?, 'pvp-live-stale-no-marker-test', ?, 0)
+             ON CONFLICT(id) DO UPDATE SET username = excluded.username`,
+            [staleNoMarkerUserId, staleNoMarkerUsername, staleSeasonNow]
+        );
+        await dbRun(
+            `INSERT INTO pvp_economy (user_id, economy_data, updated_at)
+             VALUES (?, ?, ?)
+             ON CONFLICT(user_id) DO UPDATE SET economy_data = excluded.economy_data, updated_at = excluded.updated_at`,
+            [staleNoMarkerUserId, JSON.stringify({
+                wins: 44,
+                losses: 6,
+                seasonHonorCollection: {
+                    unlockedRewards: {
+                        legacy_missing_marker_badge: {
+                            rewardId: 'legacy_missing_marker_badge',
+                            rewardType: 'cosmetic_badge',
+                            rewardName: '缺失标记旧徽记',
+                            targetGames: 1,
+                            unlockedAt: staleSeasonNow
+                        }
+                    }
+                }
+            }), staleSeasonNow]
+        );
+        const staleNoMarkerSeasonStatus = await request(baseUrl, '/api/pvp/live/season', { token: staleNoMarkerToken });
+        assert.equal(staleNoMarkerSeasonStatus.status, 200, 'live season endpoint should handle legacy economy rows without season marker');
+        assert.equal(staleNoMarkerSeasonStatus.payload.userProgress?.rankedGames, 0, 'legacy economy rows without season marker should not count as current season games');
+        assert.equal(staleNoMarkerSeasonStatus.payload.userProgress?.collection?.totalUnlocked, 0, 'legacy economy rows without season marker should not unlock current season rewards');
+        assert.equal(JSON.stringify(staleNoMarkerSeasonStatus.payload).includes('legacy_missing_marker_badge'), false, 'live season endpoint should not expose no-marker legacy reward ids in current status');
 
         const illegalFirstJoin = await request(baseUrl, '/api/pvp/live/queue/join', {
             method: 'POST',
@@ -912,7 +1097,7 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
             body: { displayName: '辛', loadout: loadoutB }
         });
         assert.equal(failedDurableJoin.status, 500, 'targeted invite join should fail when match persistence fails');
-        pvpLiveRoutes.__attachServices({ persistence: null });
+        pvpLiveRoutes.__attachServices({ persistence: routeOpsPersistence });
         const stillCurrentDurableInvite = await request(baseUrl, '/api/pvp/live/invites/current', {
             token: tokenG
         });
@@ -2121,6 +2306,21 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
         assert.equal(setupDisconnectStateA.payload.stateView.postMatchReview, null, 'setup connection invalidation should not expose post-match review');
         assert.ok(setupDisconnectStateA.payload.stateView.recentEvents.some(event => event.eventType === 'connection_timeout' && eventPublicData(event).seatId === 'B'), 'setup disconnect should emit public connection_timeout event for stale seat');
         assert.ok(setupDisconnectStateA.payload.stateView.recentEvents.some(event => event.eventType === 'match_invalidated' && eventPublicData(event).reason === 'connection_timeout'), 'setup disconnect should invalidate with connection_timeout reason');
+        const setupDisconnectOpsEvent = await dbGet(
+            `SELECT event_type, subject_user_id, match_id, severity, reason, evidence_json
+             FROM pvp_live_ops_events
+             WHERE match_id = ? AND subject_user_id = ? AND event_type = 'connection_timeout'
+             ORDER BY created_at DESC
+             LIMIT 1`,
+            [joinSetupDisconnectB.payload.matchId, 'live-user-b']
+        );
+        const setupDisconnectOpsEvidence = JSON.parse(setupDisconnectOpsEvent?.evidence_json || '{}');
+        assert.equal(setupDisconnectOpsEvent?.severity, 'warning', 'setup connection timeout should create warning-severity ops event');
+        assert.equal(setupDisconnectOpsEvent?.reason, 'setup_connection_timeout', 'setup connection timeout ops event should keep bounded reason');
+        assert.equal(setupDisconnectOpsEvidence.resolution, 'match_invalidated', 'setup connection timeout ops event should record invalidation resolution');
+        assert.deepStrictEqual(setupDisconnectOpsEvidence.disconnectedSeats, ['B'], 'setup connection timeout ops event should keep stale seat evidence');
+        assert.equal(setupDisconnectOpsEvidence.rankedImpact, 'none', 'setup connection timeout ops event should keep invalidation ranked boundary');
+        assert.equal(setupDisconnectOpsEvidence.usesHiddenInformation, false, 'setup connection timeout ops evidence should be audit-safe');
         const requeueReadySideAfterSetupDisconnect = await request(baseUrl, '/api/pvp/live/queue/join', {
             method: 'POST',
             token: tokenA,
@@ -2302,6 +2502,26 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
         assert.equal(doubleDisconnectStateA.payload.stateView.postMatchReview, null, 'double-disconnect invalidation should not expose post-match review');
         assert.ok(doubleDisconnectStateA.payload.stateView.recentEvents.some(event => event.eventType === 'connection_timeout' && eventPublicData(event).disconnectedSeats?.length === 2), 'double disconnect should emit public connection_timeout event for both seats');
         assert.ok(doubleDisconnectStateA.payload.stateView.recentEvents.some(event => event.eventType === 'match_invalidated' && eventPublicData(event).reason === 'connection_timeout'), 'double disconnect should invalidate with connection_timeout reason');
+        const doubleDisconnectOpsA = await dbGet(
+            `SELECT event_type, subject_user_id, match_id, severity, reason, evidence_json
+             FROM pvp_live_ops_events
+             WHERE match_id = ? AND subject_user_id = ? AND event_type = 'connection_timeout'
+             ORDER BY created_at DESC
+             LIMIT 1`,
+            [joinDoubleDisconnectB.payload.matchId, 'live-user-a']
+        );
+        const doubleDisconnectOpsB = await dbGet(
+            `SELECT event_type, subject_user_id, match_id, severity, reason, evidence_json
+             FROM pvp_live_ops_events
+             WHERE match_id = ? AND subject_user_id = ? AND event_type = 'connection_timeout'
+             ORDER BY created_at DESC
+             LIMIT 1`,
+            [joinDoubleDisconnectB.payload.matchId, 'live-user-b']
+        );
+        assert.equal(doubleDisconnectOpsA?.reason, 'double_connection_timeout', 'double disconnect should create ops event for player A');
+        assert.equal(doubleDisconnectOpsB?.reason, 'double_connection_timeout', 'double disconnect should create ops event for player B');
+        assert.equal(JSON.parse(doubleDisconnectOpsA?.evidence_json || '{}').disconnectedSeats?.length, 2, 'double disconnect player A ops evidence should include both stale seats');
+        assert.equal(JSON.parse(doubleDisconnectOpsB?.evidence_json || '{}').resolution, 'match_invalidated', 'double disconnect player B ops evidence should record invalidation resolution');
         const requeueAfterDoubleDisconnect = await request(baseUrl, '/api/pvp/live/queue/join', {
             method: 'POST',
             token: tokenA,
@@ -2350,6 +2570,22 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
         assert.equal(connectionTimeoutLoser.status, 200, 'connection timeout loser should still read terminal state');
         assert.equal(connectionTimeoutLoser.payload.stateView.postMatchReview?.result, 'loss', 'connection timeout loser should receive a loss review');
         assert.ok(connectionTimeoutLoser.payload.stateView.postMatchReview?.suggestions?.some(line => /重连|连接|网络/.test(line)), 'connection timeout loser review should include reconnect learning suggestions');
+        const connectionTimeoutLoserUserId = disconnectedSeat === 'A' ? 'live-user-a' : 'live-user-b';
+        const activeConnectionOpsEvent = await dbGet(
+            `SELECT event_type, subject_user_id, match_id, severity, reason, evidence_json
+             FROM pvp_live_ops_events
+             WHERE match_id = ? AND subject_user_id = ? AND event_type = 'connection_timeout'
+             ORDER BY created_at DESC
+             LIMIT 1`,
+            [joinConnectionTimeoutB.payload.matchId, connectionTimeoutLoserUserId]
+        );
+        const activeConnectionOpsEvidence = JSON.parse(activeConnectionOpsEvent?.evidence_json || '{}');
+        assert.equal(activeConnectionOpsEvent?.severity, 'warning', 'active connection timeout should create warning-severity ops event');
+        assert.equal(activeConnectionOpsEvent?.reason, 'active_turn_connection_timeout', 'active connection timeout ops event should keep bounded reason');
+        assert.equal(activeConnectionOpsEvidence.resolution, 'connection_timeout', 'active connection timeout ops event should record terminal timeout resolution');
+        assert.equal(activeConnectionOpsEvidence.loserSeat, disconnectedSeat, 'active connection timeout ops event should record losing stale seat');
+        assert.equal(activeConnectionOpsEvidence.winnerSeat, winnerSeat, 'active connection timeout ops event should record non-stale winner seat');
+        assert.equal(activeConnectionOpsEvidence.rankedImpact, 'settlement_rule', 'active connection timeout ops event should record settlement boundary');
 
         pvpLiveRoutes.__livePvpStore.reset();
         const joinTimeoutA = await request(baseUrl, '/api/pvp/live/queue/join', {
@@ -2526,6 +2762,170 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
         assert.equal(persistedDisputeReport?.status, 'reported', 'persisted dispute report should stay in reported status');
         assert.equal(persistedDisputeReport?.reason, 'fairness_review', 'persisted dispute report should store the player reason');
         assert.ok(JSON.parse(persistedDisputeReport?.evidence_json || '{}').riskTags.includes('fairness_review_requested'), 'persisted dispute evidence should keep risk tags');
+        const disputeReportList = await request(baseUrl, '/api/pvp/live/reports/mine?status=reported&limit=5', {
+            token: tokenA
+        });
+        assert.equal(disputeReportList.status, 200, 'mine dispute report list should return the reporter reports');
+        assert.equal(disputeReportList.payload.reportVersion, 'pvp-live-dispute-report-list-v1', 'mine dispute report list should expose a stable list contract');
+        assert.equal(disputeReportList.payload.reports?.[0]?.reportId, disputeReport.payload.report.reportId, 'mine dispute report list should include the created report');
+        assert.equal(disputeReportList.payload.reports?.[0]?.status, 'reported', 'mine dispute report list should expose the current review status');
+        assert.equal(disputeReportList.payload.reports?.[0]?.rankedImpact, 'none', 'dispute report status should not imply ranked mutation');
+        assert.equal(disputeReportList.payload.reports?.[0]?.usesHiddenInformation, false, 'dispute report status should not use hidden information');
+        assert.doesNotMatch(JSON.stringify(disputeReportList.payload), /hand|deck|cardId|instanceId|loadoutSnapshot|randomSeed/i, 'mine dispute report list must not leak hidden cards, decks, loadouts, or seeds');
+        const disputeReportDetail = await request(baseUrl, `/api/pvp/live/reports/${disputeReport.payload.report.reportId}`, {
+            token: tokenA
+        });
+        assert.equal(disputeReportDetail.status, 200, 'reporter should fetch their own dispute report detail');
+        assert.equal(disputeReportDetail.payload.report?.reportId, disputeReport.payload.report.reportId, 'report detail should return the requested report');
+        assert.equal(disputeReportDetail.payload.report?.rankedImpact, 'none', 'report detail should not imply ranked mutation');
+        assert.doesNotMatch(JSON.stringify(disputeReportDetail.payload), /hand|deck|cardId|instanceId|loadoutSnapshot|randomSeed/i, 'report detail must not leak hidden cards, decks, loadouts, or seeds');
+        const opponentReportDetail = await request(baseUrl, `/api/pvp/live/reports/${disputeReport.payload.report.reportId}`, {
+            token: tokenB
+        });
+        assert.equal(opponentReportDetail.status, 404, 'opponent should not fetch another reporter dispute detail');
+        const opponentReportList = await request(baseUrl, '/api/pvp/live/reports/mine?status=reported&limit=5', {
+            token: tokenB
+        });
+        assert.equal(opponentReportList.status, 200, 'opponent should be allowed to query their own report list');
+        assert.equal(opponentReportList.payload.reports?.some(report => report.reportId === disputeReport.payload.report.reportId), false, 'mine dispute report list should not expose another reporter report');
+        const previousLiveOpsToken = process.env.DEFIER_LIVE_OPS_TOKEN;
+        try {
+            delete process.env.DEFIER_LIVE_OPS_TOKEN;
+            const disabledOpsReview = await request(baseUrl, `/api/pvp/live/ops/dispute-reports/${disputeReport.payload.report.reportId}/status`, {
+                method: 'POST',
+                body: { status: 'reviewing' }
+            });
+            assert.equal(disabledOpsReview.status, 403, 'live ops dispute status endpoint should be disabled without a configured token');
+            assert.equal(disabledOpsReview.payload.reason, 'live_ops_disabled', 'disabled live ops endpoint should explain missing server token');
+            const liveOpsToken = 'test-live-ops-token-32-characters';
+            process.env.DEFIER_LIVE_OPS_TOKEN = liveOpsToken;
+            const opsReportList = await request(baseUrl, '/api/pvp/live/ops/dispute-reports?status=reported&limit=5', {
+                headers: { 'x-defier-live-ops-token': liveOpsToken }
+            });
+            assert.equal(opsReportList.status, 200, 'live ops dispute list should require and accept the live ops token');
+            assert.equal(opsReportList.payload.reportVersion, 'pvp-live-dispute-ops-list-v1', 'live ops dispute list should expose a stable ops list contract');
+            assert.equal(opsReportList.payload.reports?.[0]?.reportId, disputeReport.payload.report.reportId, 'live ops dispute list should include the reported dispute');
+            assert.ok(opsReportList.payload.reports?.[0]?.evidencePackage?.riskTags?.includes('fairness_review_requested'), 'live ops dispute list should include audit-safe evidence');
+            assert.doesNotMatch(JSON.stringify(opsReportList.payload), /hand|deck|cardId|instanceId|loadoutSnapshot|randomSeed/i, 'live ops dispute list must not leak hidden cards, decks, loadouts, or seeds');
+            const bearerOnlyOpsReview = await request(baseUrl, `/api/pvp/live/ops/dispute-reports/${disputeReport.payload.report.reportId}/status`, {
+                method: 'POST',
+                token: tokenA,
+                body: { status: 'reviewing' }
+            });
+            assert.equal(bearerOnlyOpsReview.status, 403, 'live ops dispute status endpoint should require the live ops token even with bearer auth');
+            assert.equal(bearerOnlyOpsReview.payload.reason, 'live_ops_forbidden', 'bearer-only live ops endpoint should reject missing ops credential');
+            const forbiddenOpsReview = await request(baseUrl, `/api/pvp/live/ops/dispute-reports/${disputeReport.payload.report.reportId}/status`, {
+                method: 'POST',
+                headers: { 'x-defier-live-ops-token': 'wrong-token' },
+                body: { status: 'reviewing' }
+            });
+            assert.equal(forbiddenOpsReview.status, 403, 'live ops dispute status endpoint should reject invalid token');
+            assert.equal(forbiddenOpsReview.payload.reason, 'live_ops_forbidden', 'forbidden live ops endpoint should explain invalid credential');
+            const invalidOpsReview = await request(baseUrl, `/api/pvp/live/ops/dispute-reports/${disputeReport.payload.report.reportId}/status`, {
+                method: 'POST',
+                headers: { 'x-defier-live-ops-token': liveOpsToken },
+                body: { status: 'reported' }
+            });
+            assert.equal(invalidOpsReview.status, 409, 'live ops dispute status endpoint should reject no-op or backwards status transitions');
+            assert.equal(invalidOpsReview.payload.reason, 'invalid_dispute_status_transition', 'invalid dispute transition should explain bounded lifecycle');
+            const reviewingOpsReview = await request(baseUrl, `/api/pvp/live/ops/dispute-reports/${disputeReport.payload.report.reportId}/status`, {
+                method: 'POST',
+                headers: {
+                    'x-defier-live-ops-token': liveOpsToken,
+                    'x-defier-live-ops-actor': 'live-ops-reviewer'
+                },
+                body: {
+                    status: 'reviewing',
+                    reviewNote: '已进入公开事件复核。'
+                }
+            });
+            assert.equal(reviewingOpsReview.status, 200, 'live ops dispute status update should move the report into reviewing');
+            assert.equal(reviewingOpsReview.payload.report?.status, 'reviewing', 'live ops reviewing update should expose reviewing status');
+            const resolvedOpsReview = await request(baseUrl, `/api/pvp/live/ops/dispute-reports/${disputeReport.payload.report.reportId}/status`, {
+                method: 'POST',
+                headers: {
+                    'x-defier-live-ops-token': liveOpsToken,
+                    'x-defier-live-ops-actor': 'live-ops-reviewer'
+                },
+                body: {
+                    status: 'resolved',
+                    resolution: 'fairness_confirmed',
+                    reviewNote: '公开事件回放与第 14 回合判分一致。'
+                }
+            });
+            assert.equal(resolvedOpsReview.status, 200, 'live ops dispute status update should resolve the report');
+            assert.equal(resolvedOpsReview.payload.report?.reportVersion, 'pvp-live-dispute-status-v1', 'live ops status update should return a stable status receipt');
+            assert.equal(resolvedOpsReview.payload.report?.status, 'resolved', 'live ops status update should expose resolved status');
+            assert.equal(resolvedOpsReview.payload.report?.resolution, 'fairness_confirmed', 'live ops status update should persist bounded resolution');
+            assert.equal(resolvedOpsReview.payload.report?.rankedImpact, 'none', 'live ops dispute resolution should not directly mutate ranked state');
+            assert.equal(resolvedOpsReview.payload.report?.rewardImpact, 'none', 'live ops dispute resolution should not directly mutate rewards');
+            assert.equal(resolvedOpsReview.payload.report?.usesHiddenInformation, false, 'live ops dispute status receipt should not use hidden information');
+            assert.ok(resolvedOpsReview.payload.report?.evidencePackage?.riskTags?.includes('fairness_review_requested'), 'live ops status receipt should preserve audit-safe risk tags');
+            assert.doesNotMatch(JSON.stringify(resolvedOpsReview.payload), /hand|deck|cardId|instanceId|loadoutSnapshot|randomSeed/i, 'live ops dispute status receipt must not leak hidden cards, decks, loadouts, or seeds');
+            const duplicateResolvedOpsReview = await request(baseUrl, `/api/pvp/live/ops/dispute-reports/${disputeReport.payload.report.reportId}/status`, {
+                method: 'POST',
+                headers: {
+                    'x-defier-live-ops-token': liveOpsToken,
+                    'x-defier-live-ops-actor': 'live-ops-reviewer'
+                },
+                body: {
+                    status: 'resolved',
+                    resolution: 'fairness_confirmed',
+                    reviewNote: '公开事件回放与第 14 回合判分一致。'
+                }
+            });
+            assert.equal(duplicateResolvedOpsReview.status, 200, 'live ops duplicate terminal status update should be idempotent');
+            assert.equal(duplicateResolvedOpsReview.payload.report?.status, 'resolved', 'duplicate terminal update should return the current resolved report');
+            assert.equal(duplicateResolvedOpsReview.payload.idempotent, true, 'duplicate terminal update should be marked idempotent');
+            const resolvedDisputeReport = await dbGet(
+                `SELECT status, resolution, reviewer_user_id, review_note, resolved_at
+                 FROM pvp_live_dispute_reports
+                 WHERE report_id = ?
+                 LIMIT 1`,
+                [disputeReport.payload.report.reportId]
+            );
+            assert.equal(resolvedDisputeReport?.status, 'resolved', 'resolved dispute status should persist on the report row');
+            assert.equal(resolvedDisputeReport?.resolution, 'fairness_confirmed', 'resolved dispute should persist resolution');
+            assert.equal(resolvedDisputeReport?.reviewer_user_id, 'live-ops-token:live-ops-reviewer', 'resolved dispute should persist token-scoped reviewer marker from ops header');
+            assert.ok(Number(resolvedDisputeReport?.resolved_at) > 0, 'resolved dispute should persist a resolved timestamp');
+            assert.match(resolvedDisputeReport?.review_note || '', /公开事件回放/, 'resolved dispute should persist review note');
+            const statusChangeOpsEvent = await dbGet(
+                `SELECT event_type, subject_user_id, match_id, severity, reason, evidence_json
+                 FROM pvp_live_ops_events
+                 WHERE match_id = ? AND subject_user_id = ? AND event_type = 'dispute_status_changed'
+                 ORDER BY created_at DESC
+                 LIMIT 1`,
+                [joinRound14ScoreB.payload.matchId, 'live-user-a']
+            );
+            const statusChangeEvidence = JSON.parse(statusChangeOpsEvent?.evidence_json || '{}');
+            assert.equal(statusChangeOpsEvent?.severity, 'info', 'dispute status change should append ops ledger event');
+            assert.equal(statusChangeOpsEvent?.reason, 'resolved', 'dispute status change ops event should use the new status as reason');
+            assert.equal(statusChangeEvidence.previousStatus, 'reviewing', 'dispute status change ops event should persist previous status');
+            assert.equal(statusChangeEvidence.nextStatus, 'resolved', 'dispute status change ops event should persist next status');
+            assert.equal(statusChangeEvidence.rankedImpact, 'none', 'dispute status change ops event should document no ranked impact');
+            const resolvedDisputeReportList = await request(baseUrl, '/api/pvp/live/reports/mine?status=resolved&limit=5', {
+                token: tokenA
+            });
+            assert.equal(resolvedDisputeReportList.payload.reports?.[0]?.status, 'resolved', 'reporter should see the resolved dispute status');
+            assert.equal(resolvedDisputeReportList.payload.reports?.[0]?.resolution, 'fairness_confirmed', 'reporter should see bounded resolution');
+        } finally {
+            if (previousLiveOpsToken === undefined) {
+                delete process.env.DEFIER_LIVE_OPS_TOKEN;
+            } else {
+                process.env.DEFIER_LIVE_OPS_TOKEN = previousLiveOpsToken;
+            }
+        }
+        const disputeOpsEvent = await dbGet(
+            `SELECT event_type, subject_user_id, match_id, severity, reason, evidence_json
+             FROM pvp_live_ops_events
+             WHERE match_id = ? AND subject_user_id = ? AND event_type = 'dispute_reported'
+             ORDER BY created_at DESC
+             LIMIT 1`,
+            [joinRound14ScoreB.payload.matchId, 'live-user-a']
+        );
+        assert.equal(disputeOpsEvent?.severity, 'review', 'dispute report should create review-severity ops event');
+        assert.equal(disputeOpsEvent?.reason, 'fairness_review', 'dispute ops event should keep bounded player reason');
+        assert.ok(JSON.parse(disputeOpsEvent?.evidence_json || '{}').riskTags.includes('fairness_review_requested'), 'dispute ops event should keep audit-safe risk tags');
         const avoidOpponent = await request(baseUrl, `/api/pvp/live/matches/${joinRound14ScoreB.payload.matchId}/avoid-opponent`, {
             method: 'POST',
             token: tokenA,
@@ -2548,6 +2948,57 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
         assert.equal(persistedAvoidOpponent?.avoider_user_id, 'live-user-a', 'avoid-opponent preference should persist avoider user');
         assert.equal(persistedAvoidOpponent?.avoided_user_id, 'live-user-b', 'avoid-opponent preference should persist the opponent user');
         assert.equal(persistedAvoidOpponent?.reason, 'post_match_avoid', 'avoid-opponent preference should persist the bounded reason');
+        const avoidOpsEvent = await dbGet(
+            `SELECT event_type, subject_user_id, match_id, severity, reason, evidence_json
+             FROM pvp_live_ops_events
+             WHERE match_id = ? AND subject_user_id = ? AND event_type = 'avoid_opponent'
+             ORDER BY created_at DESC
+             LIMIT 1`,
+            [joinRound14ScoreB.payload.matchId, 'live-user-a']
+        );
+        assert.equal(avoidOpsEvent?.severity, 'info', 'avoid-opponent should create info-severity ops event');
+        assert.equal(avoidOpsEvent?.reason, 'post_match_avoid', 'avoid-opponent ops event should keep bounded reason');
+        assert.equal(JSON.parse(avoidOpsEvent?.evidence_json || '{}').avoidedUserId, 'live-user-b', 'avoid-opponent ops event should keep avoided user id for operations review');
+        pvpLiveRoutes.__attachServices({
+            opsEventRecorder: async () => {
+                throw new Error('simulated-ops-ledger-failure');
+            }
+        });
+        const disputeWithOpsFailure = await request(baseUrl, `/api/pvp/live/matches/${joinRound14ScoreB.payload.matchId}/reports`, {
+            method: 'POST',
+            token: tokenB,
+            body: {
+                reason: 'ops_ledger_probe',
+                message: '账本故障时主反馈仍应成功。'
+            }
+        });
+        const avoidWithOpsFailure = await request(baseUrl, `/api/pvp/live/matches/${joinRound14ScoreB.payload.matchId}/avoid-opponent`, {
+            method: 'POST',
+            token: tokenB,
+            body: {
+                reason: 'ops_ledger_probe',
+                message: '账本故障时避开对手仍应成功。'
+            }
+        });
+        pvpLiveRoutes.__attachServices({ opsEventRecorder: null });
+        assert.equal(disputeWithOpsFailure.status, 200, 'dispute report should not fail after primary write when ops ledger append fails');
+        assert.equal(avoidWithOpsFailure.status, 200, 'avoid-opponent should not fail after primary write when ops ledger append fails');
+        const persistedDisputeWithOpsFailure = await dbGet(
+            `SELECT status, reason FROM pvp_live_dispute_reports
+             WHERE match_id = ? AND reporter_user_id = ? AND reason = ?
+             ORDER BY created_at DESC
+             LIMIT 1`,
+            [joinRound14ScoreB.payload.matchId, 'live-user-b', 'ops_ledger_probe']
+        );
+        assert.equal(persistedDisputeWithOpsFailure?.status, 'reported', 'dispute report primary row should persist even if ops ledger append fails');
+        const persistedAvoidWithOpsFailure = await dbGet(
+            `SELECT avoider_user_id, avoided_user_id, reason FROM pvp_live_avoid_opponents
+             WHERE source_match_id = ? AND avoider_user_id = ?
+             LIMIT 1`,
+            [joinRound14ScoreB.payload.matchId, 'live-user-b']
+        );
+        assert.equal(persistedAvoidWithOpsFailure?.avoided_user_id, 'live-user-a', 'avoid-opponent primary row should persist even if ops ledger append fails');
+        assert.equal(persistedAvoidWithOpsFailure?.reason, 'ops_ledger_probe', 'avoid-opponent primary row should preserve reason when ops ledger append fails');
         const outsiderDispute = await request(baseUrl, `/api/pvp/live/matches/${joinRound14ScoreB.payload.matchId}/reports`, {
             method: 'POST',
             token: tokenC,

@@ -409,6 +409,137 @@ function activateStoreMatch(match, { stateVersion = 1, now = Date.now() } = {}) 
   return match;
 }
 
+async function assertFairnessTelemetrySignalsUseDurableNonSyncChannel() {
+  const signals = [];
+  const store = createLivePvpStore({
+    persistence: {
+      async appendLiveWsSignal(signal) {
+        signals.push(signal);
+        return { signalId: signals.length, ...signal };
+      },
+    },
+  });
+  const match = activateStoreMatch(makeStoreStaleMatch({
+    matchId: 'pvplm-telemetry-signal',
+    stateVersion: 7,
+    now: 1700000000000,
+  }), { stateVersion: 7, now: 1700000000000 });
+  match.state.matchQuality = {
+    reportVersion: 'pvp-live-match-quality-v1',
+    tag: 'wide_but_accepted',
+    expansionStage: 'accepted_200_399',
+    safeguards: ['explicit_wide_match_consent', 'no_exact_rating_exposure'],
+  };
+
+  await store.recordMatchQualityTelemetry(match, { liveWsSourceInstanceId: 'telemetry-test' });
+  await store.recordFairnessTelemetryFromStateView(match, {
+    stateVersion: 7,
+    connectionTempoReport: {
+      reportVersion: 'pvp-live-connection-tempo-v1',
+      tempoState: 'opponent_action_grace',
+    },
+    postMatchReview: {
+      fairnessReceipt: {
+        receiptState: 'watch',
+      },
+    },
+  }, { liveWsSourceInstanceId: 'telemetry-test' });
+
+  assert.deepEqual(
+    signals.map(signal => signal.reason),
+    ['match_quality_wide_but_accepted', 'connection_opponent_action_grace', 'fairness_receipt_watch'],
+    'fairness telemetry should append match quality, connection, and receipt reasons',
+  );
+  for (const signal of signals) {
+    assert.equal(signal.matchId, match.matchId, 'fairness telemetry should keep match id');
+    assert.equal(signal.signalType, 'fairness_telemetry', 'fairness telemetry should not masquerade as state_sync');
+    assert.equal(signal.stateVersion, 7, 'fairness telemetry should preserve state version without advancing combat state');
+    assert.equal(signal.sourceInstanceId, 'telemetry-test', 'fairness telemetry should keep source instance id');
+  }
+}
+
+async function assertOpsEventPersistenceUsesSqliteLedger() {
+  const persistence = makeLivePvpPersistenceForTest();
+  const directEventId = `pvploe-test-direct-${process.pid}`;
+  const directAppend = await persistence.appendOpsEvent({
+    eventId: directEventId,
+    eventType: 'dispute_reported',
+    subjectUserId: `ops-direct-user-${process.pid}`,
+    matchId: `ops-direct-match-${process.pid}`,
+    severity: 'review',
+    reason: 'fairness_review',
+    source: 'persistence_sanity',
+    evidence: {
+      reportVersion: 'pvp-live-ops-event-test-v1',
+      usesHiddenInformation: false,
+    },
+    createdAt: 1700000000100,
+  });
+  assert.equal(directAppend?.eventId, directEventId, 'SQLite ops event persistence should return the text event id');
+  assert.equal(directAppend?.inserted, true, 'SQLite ops event persistence should report first insert');
+  const directRow = await dbGet(
+    `SELECT event_id, event_type, subject_user_id, match_id, severity, reason, source, evidence_json, created_at
+     FROM pvp_live_ops_events
+     WHERE event_id = ?`,
+    [directEventId],
+  );
+  assert.equal(directRow?.event_type, 'dispute_reported', 'SQLite ops event persistence should append real ledger row');
+  assert.equal(directRow?.severity, 'review', 'SQLite ops event persistence should preserve severity');
+  assert.equal(JSON.parse(directRow?.evidence_json || '{}').usesHiddenInformation, false, 'SQLite ops event persistence should keep audit-safe evidence');
+
+  const store = createLivePvpStore({
+    persistence,
+    now: () => 1700000000500,
+  });
+  const timeoutMatchId = `pvplm-ops-timeout-${process.pid}`;
+  const timeoutMatch = activateStoreMatch(makeStoreStaleMatch({
+    matchId: timeoutMatchId,
+    stateVersion: 6,
+    now: 1700000000000,
+  }), { stateVersion: 6, now: 1700000000000 });
+  timeoutMatch.state.status = 'finished';
+  timeoutMatch.state.currentSeat = 'A';
+  timeoutMatch.updatedAt = 1700000000500;
+  await store.recordConnectionTimeoutOpsEvents(timeoutMatch, {
+    reason: 'active_turn_connection_timeout',
+    phase: 'active',
+    resolution: 'connection_timeout',
+    disconnectedSeats: ['A'],
+    loserSeat: 'A',
+    winnerSeat: 'B',
+    elapsedMs: 46000,
+  });
+  await store.recordConnectionTimeoutOpsEvents(timeoutMatch, {
+    reason: 'active_turn_connection_timeout',
+    phase: 'active',
+    resolution: 'connection_timeout',
+    disconnectedSeats: ['A'],
+    loserSeat: 'A',
+    winnerSeat: 'B',
+    elapsedMs: 47000,
+  });
+  const timeoutRow = await dbGet(
+    `SELECT event_id, event_type, subject_user_id, match_id, severity, reason, evidence_json
+     FROM pvp_live_ops_events
+     WHERE match_id = ? AND event_type = 'connection_timeout'
+     LIMIT 1`,
+    [timeoutMatchId],
+  );
+  const timeoutEvidence = JSON.parse(timeoutRow?.evidence_json || '{}');
+  assert.equal(timeoutRow?.event_id, `pvploe:${timeoutMatchId}:connection_timeout:active_turn_connection_timeout:A`, 'connection timeout ops event should use deterministic ledger id');
+  assert.equal(timeoutRow?.subject_user_id, 'store-stale-a', 'connection timeout ops event persistence should bind stale seat to user id');
+  assert.equal(timeoutRow?.severity, 'warning', 'connection timeout ops event persistence should preserve warning severity');
+  assert.equal(timeoutEvidence.resolution, 'connection_timeout', 'connection timeout ops event persistence should record timeout resolution');
+  assert.equal(timeoutEvidence.usesHiddenInformation, false, 'connection timeout ops event persistence should keep evidence audit-safe');
+  const timeoutCount = await dbGet(
+    `SELECT COUNT(*) AS count
+     FROM pvp_live_ops_events
+     WHERE match_id = ? AND event_type = 'connection_timeout'`,
+    [timeoutMatchId],
+  );
+  assert.equal(Number(timeoutCount?.count || 0), 1, 'connection timeout ops event persistence should dedupe repeated timeout ledger writes');
+}
+
 async function readyBoth({ matchId, tokenA, tokenB, stateVersionA, prefix }) {
   const readyA = await submitIntent(matchId, tokenA, {
     intentId: `${prefix}-ready-a`,
@@ -431,6 +562,8 @@ async function readyBoth({ matchId, tokenA, tokenB, stateVersionA, prefix }) {
 (async () => {
   removeDbFiles();
   await assertLegacyQueueTicketMigrationAddsRankedGames();
+  await assertFairnessTelemetrySignalsUseDurableNonSyncChannel();
+  await assertOpsEventPersistenceUsesSqliteLedger();
   // The second server below reuses the same DB path to prove restart recovery
   // is SQLite-backed, not just in-memory activeMatchByUserId state.
   let skippedEventSaveCount = 0;

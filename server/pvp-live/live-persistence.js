@@ -1,4 +1,5 @@
 const { db } = require('../db/database');
+const { recordPvpLiveOpsEvent } = require('./live-ops-events');
 
 function dbGet(sql, params = []) {
     return new Promise((resolve, reject) => {
@@ -234,7 +235,9 @@ async function appendLiveWsSignalRow({
     const safeReason = String(reason || 'match_saved').trim().slice(0, 64) || 'match_saved';
     const safeSourceInstanceId = String(sourceInstanceId || '').trim().slice(0, 96);
     const safeCreatedAt = Math.max(0, Math.floor(Number(createdAt) || Date.now()));
-    const shouldDedupeSignal = safeReason === 'sync_required' || safeReason === 'duplicate_action';
+    const shouldDedupeSignal = safeSignalType === 'fairness_telemetry'
+        || safeReason === 'sync_required'
+        || safeReason === 'duplicate_action';
     if (shouldDedupeSignal) {
         const result = await dbRun(
             `INSERT INTO pvp_live_state_signals
@@ -1083,6 +1086,9 @@ function makeSqliteLivePvpPersistence() {
         },
         async appendLiveWsSignal(signal = {}) {
             return appendLiveWsSignalRow(signal);
+        },
+        async appendOpsEvent(event = {}) {
+            return recordPvpLiveOpsEvent(db, event);
         },
         async getLiveWsLatestSignalId() {
             const row = await dbGet('SELECT COALESCE(MAX(signal_id), 0) AS signal_id FROM pvp_live_state_signals');

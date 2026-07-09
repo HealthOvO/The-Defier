@@ -301,6 +301,17 @@ function dbGet(sql, params = []) {
   });
 }
 
+function dbRun(sql, params = []) {
+  return new Promise((resolve, reject) => {
+    const db = new sqlite3.Database(DB_PATH);
+    db.run(sql, params, function(err) {
+      db.close();
+      if (err) reject(err);
+      else resolve(this);
+    });
+  });
+}
+
 (async () => {
   removeDbFiles();
   const { initDb } = require('../server/db/database');
@@ -317,6 +328,42 @@ function dbGet(sql, params = []) {
     const initialRankB = await request('/api/pvp/rank', { token: userB.token });
     assert.equal(initialRankA.payload.rank.score, 1000, 'winner should start from default PVP score');
     assert.equal(initialRankB.payload.rank.score, 1000, 'loser should start from default PVP score');
+    const staleSeasonNow = Date.now() - 86400000;
+    await dbRun(
+      `INSERT INTO pvp_economy (user_id, economy_data, updated_at)
+       VALUES (?, ?, ?)
+       ON CONFLICT(user_id) DO UPDATE SET economy_data = excluded.economy_data, updated_at = excluded.updated_at`,
+      [userB.userId, JSON.stringify({
+        version: 1,
+        userId: userB.userId,
+        coins: initialRankB.payload.wallet.coins,
+        totalEarned: initialRankB.payload.wallet.totalEarned,
+        totalSpent: 0,
+        wins: 0,
+        losses: 0,
+        totalMatches: 0,
+        winStreak: 0,
+        lossStreak: 0,
+        bestWinStreak: 0,
+        purchases: {},
+        ownedItems: {},
+        seasonHonorCollection: {
+          reportVersion: 'pvp-live-season-honor-collection-v1',
+          seasonId: 's0-legacy-settlement',
+          unlockedRewards: {
+            s0_settlement_legacy_badge: {
+              rewardId: 's0_settlement_legacy_badge',
+              rewardType: 'cosmetic_badge',
+              rewardName: '旧赛季结算徽记',
+              targetGames: 1,
+              unlockedAt: staleSeasonNow,
+              rewardImpact: 'cosmetic_only',
+              powerImpact: 'none'
+            }
+          }
+        }
+      }), staleSeasonNow]
+    );
 
     const joinA = await request('/api/pvp/live/queue/join', {
       method: 'POST',
@@ -397,12 +444,59 @@ function dbGet(sql, params = []) {
     assert.ok(/不改变生命、伤害、抽牌、灵力、起手或匹配/.test(surrenderB.payload.stateView.postMatchReview?.settlementReport?.seasonHonorReport?.boundary || ''), 'season honor progress should state the non-power boundary');
     assert.ok(/不授予卡牌、属性、资源、起手、匹配或战斗效果/.test(surrenderB.payload.stateView.postMatchReview?.settlementReport?.seasonHonorReport?.cosmeticReward?.boundary || ''), 'season honor reward should state the cosmetic-only non-power boundary');
     assert.equal(rankAfterB.payload.economy?.seasonHonorCollection?.reportVersion, 'pvp-live-season-honor-collection-v1', 'rank economy should persist season honor cosmetic collection');
+    assert.equal(rankAfterB.payload.economy?.seasonHonorCollection?.seasonId, 's1-genesis', 'live settlement should reset stale season honor collection before current reward grant');
     assert.equal(rankAfterB.payload.economy?.seasonHonorCollection?.rewardImpact, 'cosmetic_only', 'season honor collection should stay cosmetic only');
     assert.equal(rankAfterB.payload.economy?.seasonHonorCollection?.powerImpact, 'none', 'season honor collection should not grant combat power');
     assert.equal(rankAfterB.payload.economy?.seasonHonorCollection?.unlockedRewards?.[loserRewardId]?.rewardId, loserRewardId, 'first honor cosmetic should be persisted by reward id');
+    assert.equal(rankAfterB.payload.economy?.seasonHonorCollection?.unlockedRewards?.s0_settlement_legacy_badge, undefined, 'live settlement should not carry stale season honor into current collection');
     assert.equal(rankAfterB.payload.economy?.seasonHonorCollection?.unlockedRewards?.[loserRewardId]?.source, 'live_ranked', 'persisted honor cosmetic should come from live ranked settlement');
     assert.equal(rankAfterB.payload.economy?.seasonHonorCollection?.unlockedRewards?.[loserRewardId]?.powerImpact, 'none', 'persisted honor cosmetic should not grant combat power');
     assert.equal(rankAfterB.payload.economy?.ownedItems?.[loserRewardId], undefined, 'season honor cosmetic collection should not unlock shop-owned battle items');
+    const loserSeasonStatus = await request('/api/pvp/live/season', { token: userB.token });
+    assert.equal(loserSeasonStatus.status, 200, 'live season endpoint should return status after settlement');
+    const loserClaimLedger = loserSeasonStatus.payload.userProgress?.claimLedger || [];
+    assert.equal(loserClaimLedger.length, 1, 'season endpoint should expose one durable claim ledger entry after first ranked settlement');
+    assert.equal(loserClaimLedger[0]?.reportVersion, 'pvp-live-season-claim-ledger-entry-v1', 'claim ledger entry should expose durable ledger entry version');
+    assert.equal(loserClaimLedger[0]?.rewardId, loserRewardId, 'season endpoint claim ledger should include the earned reward id');
+    assert.equal(loserClaimLedger[0]?.seasonId, 's1-genesis', 'claim ledger entry should stay scoped to the current season');
+    assert.equal(loserClaimLedger[0]?.sourceMatchId, joinB.payload.matchId, 'claim ledger entry should trace the source live match');
+    assert.equal(loserClaimLedger[0]?.claimSource, 'live_ranked_settlement', 'claim ledger entry should come from live ranked settlement');
+    assert.equal(loserClaimLedger[0]?.rewardImpact, 'cosmetic_only', 'claim ledger entry should stay cosmetic only');
+    assert.equal(loserClaimLedger[0]?.powerImpact, 'none', 'claim ledger entry should not grant combat power');
+    assert.equal(loserSeasonStatus.payload.userProgress?.collection?.totalUnlocked, 1, 'season endpoint collection count should derive from durable claim ledger');
+    assert.doesNotMatch(JSON.stringify(loserSeasonStatus.payload), /hand|deck|loadoutSnapshot|randomSeed|JWT_SECRET|DEFIER_HMAC_SECRET/i, 'season claim ledger must not leak hidden match state or secrets');
+    const loserClaimRow = await dbGet(
+      `SELECT user_id, season_id, reward_id, reward_type, target_games, claim_source, source_match_id
+       FROM pvp_season_reward_claims
+       WHERE user_id = ? AND season_id = ? AND reward_id = ?
+       LIMIT 1`,
+      [userB.userId, 's1-genesis', loserRewardId],
+    );
+    assert.equal(loserClaimRow?.claim_source, 'live_ranked_settlement', 'live settlement should write a durable season reward claim row');
+    assert.equal(loserClaimRow?.source_match_id, joinB.payload.matchId, 'durable claim row should trace source match id');
+    assert.equal(Number(loserClaimRow?.target_games), 1, 'durable claim row should persist reward target games');
+    const legacyClaimRow = await dbGet(
+      `SELECT user_id, season_id, reward_id, claim_source, source_match_id
+       FROM pvp_season_reward_claims
+       WHERE user_id = ? AND season_id = ? AND reward_id = ?
+       LIMIT 1`,
+      [userB.userId, 's0-legacy-settlement', 's0_settlement_legacy_badge'],
+    );
+    assert.equal(legacyClaimRow?.claim_source, 'legacy_economy_archive', 'live settlement should durably archive stale season honor claims inside settlement transaction');
+    assert.equal(legacyClaimRow?.source_match_id, joinB.payload.matchId, 'live settlement stale archive should trace the settlement match id');
+    const legacyArchiveRow = await dbGet(
+      `SELECT season_id, total_unlocked, last_unlocked_reward_id, archive_source, source_match_id, reward_impact, power_impact
+       FROM pvp_season_honor_archives
+       WHERE user_id = ? AND season_id = ?
+       LIMIT 1`,
+      [userB.userId, 's0-legacy-settlement'],
+    );
+    assert.equal(Number(legacyArchiveRow?.total_unlocked), 1, 'live settlement should persist stale season archive count');
+    assert.equal(legacyArchiveRow?.last_unlocked_reward_id, 's0_settlement_legacy_badge', 'live settlement should persist stale season last honor id');
+    assert.equal(legacyArchiveRow?.archive_source, 'legacy_economy_archive', 'live settlement stale archive should preserve archive source');
+    assert.equal(legacyArchiveRow?.source_match_id, joinB.payload.matchId, 'live settlement stale archive should trace source match id');
+    assert.equal(legacyArchiveRow?.reward_impact, 'cosmetic_only', 'live settlement stale archive should remain cosmetic only');
+    assert.equal(legacyArchiveRow?.power_impact, 'none', 'live settlement stale archive should not grant combat power');
 
     const duplicateSurrender = await submitIntent(joinB.payload.matchId, userB.token, {
         intentId: 'live-settlement-surrender-b-1',
@@ -420,6 +514,13 @@ function dbGet(sql, params = []) {
     assert.equal(rankAfterDuplicateB.payload.wallet.coins, rankAfterB.payload.wallet.coins, 'duplicate live settlement must not pay loser twice');
     assert.equal(Object.keys(rankAfterDuplicateB.payload.economy?.seasonHonorCollection?.unlockedRewards || {}).length, Object.keys(rankAfterB.payload.economy?.seasonHonorCollection?.unlockedRewards || {}).length, 'duplicate live settlement must not unlock honor cosmetics twice');
     assert.equal((rankAfterDuplicateB.payload.economy?.transactionLog || []).filter(entry => entry.type === 'live_season_honor_cosmetic' && entry.itemId === loserRewardId).length, 1, 'duplicate live settlement must not append duplicate honor cosmetic logs');
+    const loserClaimRowCountAfterDuplicate = await dbGet(
+      `SELECT COUNT(*) AS count
+       FROM pvp_season_reward_claims
+       WHERE user_id = ? AND season_id = ? AND reward_id = ?`,
+      [userB.userId, 's1-genesis', loserRewardId],
+    );
+    assert.equal(Number(loserClaimRowCountAfterDuplicate?.count), 1, 'duplicate live settlement must not append duplicate durable claim rows');
 
     const settlementRow = await dbGet(
       'SELECT * FROM pvp_live_match_settlements WHERE match_id = ?',

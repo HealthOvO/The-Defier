@@ -63,6 +63,10 @@ const pvpLiveRoute = read('server/routes/pvp-live.js');
 const pvpLivePersistenceChecks = read('tests/sanity_pvp_live_persistence_checks.cjs');
 const pvpLiveDatabase = read('server/db/database.js');
 const pvpLivePersistence = read('server/pvp-live/live-persistence.js');
+const pvpLiveSeasonSource = read('server/pvp-live/live-season.js');
+const pvpLiveSeasonClaimsSource = read('server/pvp-live/season-claims.js');
+const pvpLiveSettlementSource = read('server/pvp-live/live-settlement.js');
+const schemaStatusSource = read('server/services/platform/schema-status.js');
 const pvpLiveSettlementChecks = read('tests/sanity_pvp_live_settlement_checks.cjs');
 const pvpLiveClientChecks = read('tests/sanity_pvp_live_client_checks.mjs');
 const pvpLiveServiceBridgeChecks = read('tests/sanity_pvp_live_service_bridge_checks.cjs');
@@ -593,6 +597,8 @@ assert.ok(
 });
 
 [
+  'node tests/sanity_frontend_upgrade_asset_checks.cjs',
+  'node tests/backend_platform_checks.cjs',
   'node tests/sanity_event_flow_checks.cjs',
   'node tests/sanity_event_bias_distribution_checks.cjs',
   'node tests/sanity_engineering_event_surface_checks.cjs',
@@ -1826,6 +1832,21 @@ assert.ok(
   'rankedImpact: \'none\'',
   'rewardImpact: \'none\'',
   "visibilityLayer: 'replay_public'",
+  "router.get('/reports/mine'",
+  "router.get('/reports/:reportId'",
+  "router.get('/ops/dispute-reports'",
+  "router.post('/ops/dispute-reports/:reportId/status'",
+  'verifyLiveOpsToken',
+  'x-defier-live-ops-token',
+  'x-defier-live-ops-actor',
+  'live-ops-token:',
+  'pvp-live-dispute-status-v1',
+  'pvp-live-dispute-report-list-v1',
+  'invalid_dispute_status_transition',
+  'dispute_status_conflict',
+  'WHERE report_id = ? AND status = ?',
+  'idempotent: true',
+  'dispute_status_changed',
 ].forEach((needle) => {
   assert.ok(
     pvpLiveRoute.includes(needle),
@@ -2131,6 +2152,10 @@ assert.ok(
   'targeted private invite should reject an unknown target username',
   'targeted private invite should reject targeting self',
   'targeted invite recipient should read private invite inbox',
+  'live season endpoint should expose current season status',
+  'stale season games should not count toward current season progress',
+  'legacy economy rows without season marker should not count as current season games',
+  'live season endpoint should not expose no-marker legacy reward ids in current status',
   'non-target player should not join a targeted private invite even with code',
   'targeted invite recipient should join their private invite',
   'accepted targeted invite should disappear from recipient inbox',
@@ -2150,6 +2175,7 @@ assert.ok(
   'setup disconnect after grace should invalidate instead of awarding a win',
   'setup disconnect should emit public connection_timeout event for stale seat',
   'setup disconnect should invalidate with connection_timeout reason',
+  'setup connection timeout should create warning-severity ops event',
   'live PVP test-only state route should support scoped heartbeat elapsed injection',
   'active non-turn heartbeat elapsed injection should not steal the current action window',
   'active non-turn heartbeat elapsed injection should mark the public opponent disconnected for the actor',
@@ -2179,12 +2205,32 @@ assert.ok(
   'both seats disconnected after grace should invalidate instead of awarding a win',
   'double-disconnect invalidation should not expose post-match review',
   'double disconnect should emit public connection_timeout event for both seats',
+  'double disconnect should create ops event for player A',
   'double-disconnect invalidation should release player without settlement',
   'current actor disconnected after grace should finish the active match',
   'connection timeout should emit public turn_timeout evidence with connection source',
   'connection timeout should finish with connection_timeout reason',
   'connection timeout review should expose connection timeout reason',
   'connection timeout loser review should include reconnect learning suggestions',
+  'active connection timeout should create warning-severity ops event',
+  'mine dispute report list should return the reporter reports',
+  'reporter should fetch their own dispute report detail',
+  'opponent should not fetch another reporter dispute detail',
+  'mine dispute report list should not expose another reporter report',
+  'live ops dispute list should require and accept the live ops token',
+  'live ops dispute list should include audit-safe evidence',
+  'live ops dispute status endpoint should be disabled without a configured token',
+  'live ops dispute status endpoint should require the live ops token even with bearer auth',
+  'live ops dispute status endpoint should reject invalid token',
+  'live ops dispute status endpoint should reject no-op or backwards status transitions',
+  'live ops dispute status update should move the report into reviewing',
+  'live ops dispute status update should resolve the report',
+  'live ops duplicate terminal status update should be idempotent',
+  'resolved dispute should persist token-scoped reviewer marker from ops header',
+  'dispute status change should append ops ledger event',
+  'reporter should see the resolved dispute status',
+  'dispute report should not fail after primary write when ops ledger append fails',
+  'avoid-opponent should not fail after primary write when ops ledger append fails',
   'participant should recover current live match without queue ticket',
   'stale active live match should finish by timeout',
   'timeout finish should emit public timeout event',
@@ -2413,6 +2459,9 @@ assert.ok(
   'SQLite queue pair claim should report both claimed tickets',
   'pvp_live_match_events',
   'pvp_live_invites',
+  'SQLite ops event persistence should append real ledger row',
+  'connection timeout ops event persistence should bind stale seat to user id',
+  'connection timeout ops event persistence should dedupe repeated timeout ledger writes',
   'target_user_id',
   'target_user_name',
   'restarted server should not recover invalidated setup timeout as current live match',
@@ -2445,10 +2494,101 @@ assert.ok(
   'idx_pvp_live_state_signals_match_created',
   'CREATE TABLE IF NOT EXISTS pvp_live_matchmaking_guards',
   'idx_pvp_live_matchmaking_guards_cooldown',
+  'CREATE TABLE IF NOT EXISTS pvp_live_ops_events',
+  'idx_pvp_live_ops_events_subject',
+  'idx_pvp_live_ops_events_match',
+  'idx_pvp_live_ops_events_type',
+  'CREATE TABLE IF NOT EXISTS pvp_live_dispute_reports',
+  "resolution TEXT NOT NULL DEFAULT ''",
+  "reviewer_user_id TEXT NOT NULL DEFAULT ''",
+  "review_note TEXT NOT NULL DEFAULT ''",
+  'resolved_at INTEGER NOT NULL DEFAULT 0',
+  "ALTER TABLE pvp_live_dispute_reports ADD COLUMN resolution TEXT NOT NULL DEFAULT ''",
+  "ALTER TABLE pvp_live_dispute_reports ADD COLUMN reviewer_user_id TEXT NOT NULL DEFAULT ''",
+  "ALTER TABLE pvp_live_dispute_reports ADD COLUMN review_note TEXT NOT NULL DEFAULT ''",
+  'ALTER TABLE pvp_live_dispute_reports ADD COLUMN resolved_at INTEGER NOT NULL DEFAULT 0',
+  'idx_pvp_live_dispute_reports_status',
+  'idx_pvp_live_dispute_reports_user_status',
+  'CREATE TABLE IF NOT EXISTS pvp_season_reward_claims',
+  'UNIQUE(user_id, season_id, reward_id)',
+  'idx_pvp_season_claims_user_season',
+  'idx_pvp_season_claims_season_reward',
+  'CREATE TABLE IF NOT EXISTS pvp_season_honor_archives',
+  'UNIQUE(user_id, season_id)',
+  'idx_pvp_season_archives_user_season',
 ].forEach((needle) => {
   assert.ok(
     pvpLiveDatabase.includes(needle),
     `live PVP database schema should pin append-only event table marker: ${needle}`,
+  );
+});
+
+[
+  "'pvp_season_reward_claims'",
+  "'pvp_season_honor_archives'",
+].forEach((needle) => {
+  assert.ok(
+    schemaStatusSource.includes(needle),
+    `backend schema status checksum should include live PVP season ledger marker: ${needle}`,
+  );
+});
+
+[
+  'recordSeasonRewardClaims(db',
+  'recordSeasonRewardClaimsFromCollection',
+  'recordSeasonHonorArchiveFromCollection',
+  'loadSeasonRewardClaims',
+  'loadSeasonArchiveSummary',
+  'makeClaimLedgerFromCollection',
+  'makeSeasonArchiveEntryFromCollection',
+  'mergeClaimLedgers',
+  'mergeSeasonArchiveSummary',
+  'pvp-live-season-claim-ledger-entry-v1',
+  'pvp-live-season-archive-v1',
+  'pvp-live-season-honor-archive-payload-v1',
+  'legacy_economy_archive',
+  'sourceMatchId',
+  'claimSource',
+  'archiveSource',
+].forEach((needle) => {
+  assert.ok(
+    pvpLiveSeasonClaimsSource.includes(needle),
+    `live PVP season claim/archive service should pin durable ledger marker: ${needle}`,
+  );
+});
+
+[
+  'makeCollectionReportFromClaims',
+  'makeReadOnlyCurrentSeasonClaimLedger',
+  'makeReadOnlyEconomyArchiveEntry',
+  'withLiveSettlementReadGate',
+  'makeClaimLedgerFromCollection',
+  'mergeClaimLedgers',
+  'makeSeasonArchiveEntryFromCollection',
+  'mergeSeasonArchiveSummary',
+  'loadSeasonRewardClaims(db, id, SEASON_ID)',
+  'loadSeasonArchiveSummary(db, id, SEASON_ID)',
+  'economy_snapshot',
+].forEach((needle) => {
+  assert.ok(
+    pvpLiveSeasonSource.includes(needle),
+    `live PVP season endpoint should pin read-only durable ledger marker: ${needle}`,
+  );
+});
+
+[
+  'withLiveSettlementReadGate',
+  'migrateSeasonHonorCollectionForSettlement',
+  'recordSeasonRewardClaimsFromCollection',
+  'recordSeasonHonorArchiveFromCollection',
+  'economy_collection_backfill',
+  'legacy_economy_archive',
+  'normalizeSeasonHonorCollection(null)',
+  'rawSeasonHonorCollection',
+].forEach((needle) => {
+  assert.ok(
+    pvpLiveSettlementSource.includes(needle),
+    `live PVP settlement should pin transaction-scoped season ledger migration marker: ${needle}`,
   );
 });
 
@@ -2500,11 +2640,15 @@ assert.ok(
   'ORDER BY event_sequence ASC',
   'function makeLiveWsSignalFromRow(row)',
   'async function appendLiveWsSignalRow',
-  "safeReason === 'sync_required' || safeReason === 'duplicate_action'",
+  "safeSignalType === 'fairness_telemetry'",
+  "safeReason === 'sync_required'",
+  "safeReason === 'duplicate_action'",
   'WHERE NOT EXISTS',
   'AND state_version = ?',
   'AND reason = ?',
   'INSERT INTO pvp_live_state_signals',
+  'async appendOpsEvent(event = {})',
+  'recordPvpLiveOpsEvent(db, event)',
   'connection_heartbeat',
   'liveWsSignalAppended: !!liveWsSignal',
   'async appendLiveWsSignal(signal = {})',
@@ -2589,6 +2733,9 @@ assert.ok(
   'const opponentClaim = await this.claimQueueEntry(opponentTicket)',
   'if (opponentClaim.claimed)',
   'await this.persistence.saveMatchEvents(match.matchId, match.state.events)',
+  'async appendOpsEvent(event = {})',
+  'async recordConnectionTimeoutOpsEvents(match',
+  'connection_timeout:${safeReason}:${seatId}',
   'normalizeLivePvpTestMatchScope',
   'getMatchTestScope',
   'requestTestScope !== matchTestScope',
@@ -2650,6 +2797,18 @@ assert.ok(
   'loser settlement report should expose season honor progress',
   'season honor progress should match authoritative ranked games',
   'season honor progress should state the non-power boundary',
+  'season endpoint should expose one durable claim ledger entry after first ranked settlement',
+  'claim ledger entry should trace the source live match',
+  'claim ledger entry should come from live ranked settlement',
+  'season endpoint collection count should derive from durable claim ledger',
+  'season claim ledger must not leak hidden match state or secrets',
+  'live settlement should reset stale season honor collection before current reward grant',
+  'live settlement should not carry stale season honor into current collection',
+  'live settlement should durably archive stale season honor claims inside settlement transaction',
+  'live settlement stale archive should trace the settlement match id',
+  'live settlement should persist stale season archive count',
+  'live settlement stale archive should not grant combat power',
+  'duplicate live settlement must not append duplicate durable claim rows',
 ].forEach((needle) => {
   assert.ok(
     pvpLiveSettlementChecks.includes(needle),
@@ -2667,6 +2826,16 @@ assert.ok(
   'ranked surrender season honor should include cosmetic-only reward track',
   'ranked season honor reward should be cosmetic only',
   'ranked season honor reward should expose new collection unlock state',
+  'live season endpoint should handle current season economy before durable ledger migration',
+  'current season economy fallback should keep visible honor count before ledger migration',
+  'current season economy fallback should identify read-only snapshot source',
+  'current season economy fallback should keep live season endpoint read-only',
+  'live season endpoint should expose stale honor archive summary',
+  'stale season honor should be archived outside current progress',
+  'stale season archive should count unlocked legacy honors',
+  'live season endpoint should keep stale honor claim migration read-only',
+  'live season endpoint should keep stale season archive migration read-only',
+  'live season endpoint should not expose stale season reward ids in current status',
   'pvp-live-season-honor-collection-v1',
   'pvp-live-settlement-report-v1',
   'pvp-live-season-honor-v1',

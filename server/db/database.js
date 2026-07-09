@@ -1,12 +1,18 @@
 const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
 const fs = require('fs');
+const {
+    createSchemaMigrationsTableSql,
+    getSchemaStatus,
+    recordCurrentSchemaMigration
+} = require('../services/platform/schema-status');
 
 const dbPath = process.env.DEFIER_DB_PATH
     ? path.resolve(process.env.DEFIER_DB_PATH)
     : path.resolve(__dirname, 'database.sqlite');
 fs.mkdirSync(path.dirname(dbPath), { recursive: true });
 const db = new sqlite3.Database(dbPath);
+db.configure('busyTimeout', Number(process.env.DEFIER_SQLITE_BUSY_TIMEOUT_MS || 5000));
 
 const initDb = () => {
     return new Promise((resolve, reject) => {
@@ -24,6 +30,11 @@ const initDb = () => {
             }
         };
         db.serialize(() => {
+            db.run('PRAGMA journal_mode = WAL');
+            db.run(createSchemaMigrationsTableSql(), (err) => {
+                if (err) fail(err);
+            });
+
             // Users table
             db.run(`CREATE TABLE IF NOT EXISTS users (
                 id TEXT PRIMARY KEY,
@@ -128,6 +139,53 @@ const initDb = () => {
                 updated_at INTEGER NOT NULL,
                 FOREIGN KEY(user_id) REFERENCES users(id)
             )`);
+            db.run(`CREATE TABLE IF NOT EXISTS pvp_season_reward_claims (
+                claim_id TEXT PRIMARY KEY,
+                user_id TEXT NOT NULL,
+                season_id TEXT NOT NULL,
+                reward_id TEXT NOT NULL,
+                reward_type TEXT NOT NULL DEFAULT 'cosmetic_badge',
+                reward_name TEXT NOT NULL DEFAULT '',
+                target_games INTEGER NOT NULL DEFAULT 1,
+                claim_source TEXT NOT NULL DEFAULT 'live_ranked_settlement',
+                source_match_id TEXT NOT NULL DEFAULT '',
+                reward_impact TEXT NOT NULL DEFAULT 'cosmetic_only',
+                power_impact TEXT NOT NULL DEFAULT 'none',
+                claim_payload_json TEXT NOT NULL DEFAULT '{}',
+                claimed_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL,
+                UNIQUE(user_id, season_id, reward_id),
+                FOREIGN KEY(user_id) REFERENCES users(id)
+            )`, (err) => {
+                if (err) fail(err);
+            });
+            db.run(`CREATE INDEX IF NOT EXISTS idx_pvp_season_claims_user_season ON pvp_season_reward_claims(user_id, season_id, claimed_at)`, (err) => {
+                if (err) fail(err);
+            });
+            db.run(`CREATE INDEX IF NOT EXISTS idx_pvp_season_claims_season_reward ON pvp_season_reward_claims(season_id, reward_id, claimed_at)`, (err) => {
+                if (err) fail(err);
+            });
+            db.run(`CREATE TABLE IF NOT EXISTS pvp_season_honor_archives (
+                archive_id TEXT PRIMARY KEY,
+                user_id TEXT NOT NULL,
+                season_id TEXT NOT NULL,
+                total_unlocked INTEGER NOT NULL DEFAULT 0,
+                last_unlocked_reward_id TEXT NOT NULL DEFAULT '',
+                archive_source TEXT NOT NULL DEFAULT 'legacy_economy_archive',
+                source_match_id TEXT NOT NULL DEFAULT '',
+                reward_impact TEXT NOT NULL DEFAULT 'cosmetic_only',
+                power_impact TEXT NOT NULL DEFAULT 'none',
+                collection_payload_json TEXT NOT NULL DEFAULT '{}',
+                archived_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL,
+                UNIQUE(user_id, season_id),
+                FOREIGN KEY(user_id) REFERENCES users(id)
+            )`, (err) => {
+                if (err) fail(err);
+            });
+            db.run(`CREATE INDEX IF NOT EXISTS idx_pvp_season_archives_user_season ON pvp_season_honor_archives(user_id, season_id, archived_at)`, (err) => {
+                if (err) fail(err);
+            });
             db.run(`CREATE TABLE IF NOT EXISTS pvp_match_history (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 ticket_id TEXT UNIQUE NOT NULL,
@@ -368,18 +426,62 @@ const initDb = () => {
                 reason TEXT NOT NULL,
                 status TEXT NOT NULL DEFAULT 'reported',
                 message TEXT NOT NULL DEFAULT '',
+                resolution TEXT NOT NULL DEFAULT '',
+                reviewer_user_id TEXT NOT NULL DEFAULT '',
+                review_note TEXT NOT NULL DEFAULT '',
                 evidence_json TEXT NOT NULL,
                 created_at INTEGER NOT NULL,
+                resolved_at INTEGER NOT NULL DEFAULT 0,
                 updated_at INTEGER NOT NULL,
                 FOREIGN KEY(match_id) REFERENCES pvp_live_matches(match_id),
                 FOREIGN KEY(reporter_user_id) REFERENCES users(id)
             )`, (err) => {
                 if (err) fail(err);
             });
+            [
+                `ALTER TABLE pvp_live_dispute_reports ADD COLUMN resolution TEXT NOT NULL DEFAULT ''`,
+                `ALTER TABLE pvp_live_dispute_reports ADD COLUMN reviewer_user_id TEXT NOT NULL DEFAULT ''`,
+                `ALTER TABLE pvp_live_dispute_reports ADD COLUMN review_note TEXT NOT NULL DEFAULT ''`,
+                `ALTER TABLE pvp_live_dispute_reports ADD COLUMN resolved_at INTEGER NOT NULL DEFAULT 0`
+            ].forEach((statement) => {
+                db.run(statement, (err) => {
+                    if (err && !/duplicate column/i.test(String(err.message || ''))) {
+                        fail(err);
+                    }
+                });
+            });
             db.run(`CREATE INDEX IF NOT EXISTS idx_pvp_live_dispute_reports_match ON pvp_live_dispute_reports(match_id, created_at)`, (err) => {
                 if (err) fail(err);
             });
             db.run(`CREATE INDEX IF NOT EXISTS idx_pvp_live_dispute_reports_user ON pvp_live_dispute_reports(reporter_user_id, created_at)`, (err) => {
+                if (err) fail(err);
+            });
+            db.run(`CREATE INDEX IF NOT EXISTS idx_pvp_live_dispute_reports_status ON pvp_live_dispute_reports(status, updated_at)`, (err) => {
+                if (err) fail(err);
+            });
+            db.run(`CREATE INDEX IF NOT EXISTS idx_pvp_live_dispute_reports_user_status ON pvp_live_dispute_reports(reporter_user_id, status, updated_at)`, (err) => {
+                if (err) fail(err);
+            });
+            db.run(`CREATE TABLE IF NOT EXISTS pvp_live_ops_events (
+                event_id TEXT PRIMARY KEY,
+                event_type TEXT NOT NULL,
+                subject_user_id TEXT NOT NULL DEFAULT '',
+                match_id TEXT NOT NULL DEFAULT '',
+                severity TEXT NOT NULL DEFAULT 'info',
+                reason TEXT NOT NULL DEFAULT '',
+                source TEXT NOT NULL DEFAULT 'pvp_live',
+                evidence_json TEXT NOT NULL DEFAULT '{}',
+                created_at INTEGER NOT NULL
+            )`, (err) => {
+                if (err) fail(err);
+            });
+            db.run(`CREATE INDEX IF NOT EXISTS idx_pvp_live_ops_events_subject ON pvp_live_ops_events(subject_user_id, created_at)`, (err) => {
+                if (err) fail(err);
+            });
+            db.run(`CREATE INDEX IF NOT EXISTS idx_pvp_live_ops_events_match ON pvp_live_ops_events(match_id, created_at)`, (err) => {
+                if (err) fail(err);
+            });
+            db.run(`CREATE INDEX IF NOT EXISTS idx_pvp_live_ops_events_type ON pvp_live_ops_events(event_type, severity, created_at)`, (err) => {
                 if (err) fail(err);
             });
             db.run(`CREATE TABLE IF NOT EXISTS pvp_live_match_settlements (
@@ -432,8 +534,14 @@ const initDb = () => {
                 if (err) fail(err);
             });
             db.run(`CREATE INDEX IF NOT EXISTS idx_pvp_live_replay_shares_expires ON pvp_live_replay_shares(status, expires_at)`, (err) => {
-                if (err) fail(err);
-                else done();
+                if (err) {
+                    fail(err);
+                    return;
+                }
+                recordCurrentSchemaMigration(db, (migrationErr) => {
+                    if (migrationErr) fail(migrationErr);
+                    else done();
+                });
             });
         });
     });
@@ -441,5 +549,6 @@ const initDb = () => {
 
 module.exports = {
     db,
+    getSchemaStatus: () => getSchemaStatus(db),
     initDb
 };

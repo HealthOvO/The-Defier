@@ -525,6 +525,49 @@ function makeMatchQualityReport({
     };
 }
 
+function normalizeTelemetryToken(value, fallback = 'sample') {
+    const token = String(value || fallback)
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9_-]/g, '_')
+        .replace(/_+/g, '_')
+        .replace(/^_+|_+$/g, '')
+        .slice(0, 48);
+    return token || fallback;
+}
+
+function makeFairnessTelemetryReason(prefix, value) {
+    const safePrefix = normalizeTelemetryToken(prefix, 'fairness');
+    const safeValue = normalizeTelemetryToken(value, 'sample');
+    return `${safePrefix}_${safeValue}`.slice(0, 64);
+}
+
+function getMatchTelemetryStateVersion(match, stateView = null) {
+    return Math.max(
+        0,
+        Math.floor(Number(stateView && stateView.stateVersion) || 0),
+        Math.floor(Number(match && match.state && match.state.stateVersion) || 0)
+    );
+}
+
+function collectStateViewFairnessTelemetryReasons(stateView = {}) {
+    const reasons = [];
+    const tempoState = String(stateView.connectionTempoReport && stateView.connectionTempoReport.tempoState || '');
+    if (tempoState && tempoState !== 'stable') {
+        reasons.push(makeFairnessTelemetryReason('connection', tempoState));
+    }
+    const receiptState = String(
+        stateView.postMatchReview
+        && stateView.postMatchReview.fairnessReceipt
+        && stateView.postMatchReview.fairnessReceipt.receiptState
+        || ''
+    );
+    if (receiptState === 'watch' || receiptState === 'accepted') {
+        reasons.push(makeFairnessTelemetryReason('fairness_receipt', receiptState));
+    }
+    return Array.from(new Set(reasons));
+}
+
 function normalizeConnectionHealthSummary(summary) {
     if (!summary || typeof summary !== 'object') return null;
     const status = ['pass', 'risky', 'blocked'].includes(summary.status) ? summary.status : '';
@@ -2184,6 +2227,83 @@ class LivePvpStore {
         return saveResult;
     }
 
+    async appendOpsEvent(event = {}) {
+        if (!this.persistence || typeof this.persistence.appendOpsEvent !== 'function') return null;
+        try {
+            return await this.persistence.appendOpsEvent({
+                ...event,
+                createdAt: Math.max(0, Math.floor(Number(event.createdAt) || this.now()))
+            });
+        } catch (error) {
+            console.warn('[PVP Live] ops event append failed:', error);
+            return null;
+        }
+    }
+
+    async recordConnectionTimeoutOpsEvents(match, {
+        reason = 'connection_timeout',
+        phase = '',
+        resolution = '',
+        disconnectedSeats = [],
+        loserSeat = '',
+        winnerSeat = '',
+        elapsedMs = 0,
+        source = 'live_store_timeout_sweep'
+    } = {}) {
+        if (!match || !match.matchId || !match.state) return [];
+        const seatIds = Array.from(new Set((Array.isArray(disconnectedSeats) ? disconnectedSeats : [])
+            .concat(loserSeat ? [loserSeat] : [])
+            .map(seatId => String(seatId || '').trim())
+            .filter(seatId => seatId === 'A' || seatId === 'B')));
+        if (seatIds.length === 0) return [];
+        const safeReason = String(reason || 'connection_timeout')
+            .trim()
+            .toLowerCase()
+            .replace(/[^a-z0-9_-]/g, '_')
+            .replace(/_+/g, '_')
+            .replace(/^_+|_+$/g, '')
+            .slice(0, 64) || 'connection_timeout';
+        const matchId = String(match.matchId || '');
+        const commonEvidence = {
+            reportVersion: 'pvp-live-connection-timeout-ops-v1',
+            phase: String(phase || match.state.phase || match.state.status || ''),
+            status: String(match.state.status || ''),
+            resolution: String(resolution || ''),
+            disconnectedSeats: seatIds,
+            loserSeat: String(loserSeat || ''),
+            winnerSeat: String(winnerSeat || ''),
+            currentSeat: String(match.state.currentSeat || ''),
+            stateVersion: Math.max(0, Math.floor(Number(match.state.stateVersion) || 0)),
+            eventSeq: Math.max(0, Math.floor(Number(match.state.eventSeq) || 0)),
+            elapsedMs: Math.max(0, Math.floor(Number(elapsedMs) || 0)),
+            heartbeatStaleMs: this.heartbeatStaleMs,
+            reconnectGraceMs: this.reconnectGraceMs,
+            rankedImpact: resolution === 'match_invalidated' ? 'none' : 'settlement_rule',
+            usesHiddenInformation: false
+        };
+        const results = [];
+        for (const seatId of seatIds) {
+            const subjectUserId = this.getSourceSeatUserId(match, seatId);
+            if (!subjectUserId) continue;
+            const result = await this.appendOpsEvent({
+                eventId: `pvploe:${matchId}:connection_timeout:${safeReason}:${seatId}`,
+                eventType: 'connection_timeout',
+                subjectUserId,
+                matchId,
+                severity: 'warning',
+                reason: safeReason,
+                source,
+                evidence: {
+                    ...commonEvidence,
+                    seatId
+                },
+                createdAt: match.updatedAt || this.now()
+            });
+            if (result) results.push(result);
+        }
+        return results;
+    }
+
     isStaleStateSaveResult(saveResult) {
         return !!(
             saveResult
@@ -2544,6 +2664,7 @@ class LivePvpStore {
             return { completed: false, saveResult: initialSaveResult };
         }
         if (match.state.settlementReport && match.state.settlementReport.reportVersion === 'pvp-live-settlement-report-v1') {
+            await this.recordTerminalFairnessTelemetry(match, options);
             await this.releaseMatch(match);
             return { completed: true, saveResult: initialSaveResult };
         }
@@ -2557,6 +2678,7 @@ class LivePvpStore {
                 return { completed: false, saveResult: settlementSaveResult };
             }
         }
+        await this.recordTerminalFairnessTelemetry(match, options);
         await this.releaseMatch(match);
         return { completed: true, saveResult: settlementSaveResult || initialSaveResult };
     }
@@ -2993,6 +3115,55 @@ class LivePvpStore {
         return stateView;
     }
 
+    async appendFairnessTelemetrySignal(match, reason, options = {}) {
+        if (!this.persistence || typeof this.persistence.appendLiveWsSignal !== 'function') return null;
+        const id = String(match && match.matchId || '').trim();
+        const safeReason = String(reason || '').trim().slice(0, 64);
+        if (!id || !safeReason) return null;
+        try {
+            return await this.persistence.appendLiveWsSignal({
+                matchId: id,
+                signalType: 'fairness_telemetry',
+                stateVersion: getMatchTelemetryStateVersion(match, options.stateView),
+                reason: safeReason,
+                sourceInstanceId: String(options.liveWsSourceInstanceId || '').trim().slice(0, 96),
+                createdAt: this.now()
+            });
+        } catch (error) {
+            console.warn('[PVP Live] fairness telemetry signal failed:', error);
+            return null;
+        }
+    }
+
+    async recordMatchQualityTelemetry(match, options = {}) {
+        const quality = match && match.state && match.state.matchQuality;
+        if (!quality || typeof quality !== 'object') return null;
+        const reason = makeFairnessTelemetryReason('match_quality', quality.tag || quality.expansionStage || 'sample');
+        return this.appendFairnessTelemetrySignal(match, reason, options);
+    }
+
+    async recordFairnessTelemetryFromStateView(match, stateView, options = {}) {
+        const reasons = collectStateViewFairnessTelemetryReasons(stateView);
+        if (reasons.length === 0) return [];
+        const results = [];
+        for (const reason of reasons) {
+            const result = await this.appendFairnessTelemetrySignal(match, reason, {
+                ...options,
+                stateView
+            });
+            if (result) results.push(result);
+        }
+        return results;
+    }
+
+    async recordTerminalFairnessTelemetry(match, options = {}) {
+        if (!match || !match.state || !this.isTerminalStatus(match.state.status)) return [];
+        const viewerSeat = Object.values(match.seatsByUserId || {}).find(seatId => seatId === 'A' || seatId === 'B')
+            || match.state.winnerSeat
+            || 'A';
+        return this.recordFairnessTelemetryFromStateView(match, this.projectMatchStateView(match, viewerSeat), options);
+    }
+
     getMatchTestScope(match) {
         return normalizeLivePvpTestMatchScope(
             match && (match.testMatchScope || match.state && match.state.testMatchScope)
@@ -3046,6 +3217,7 @@ class LivePvpStore {
         };
         this.ensureMatchConnection(match);
         await this.saveMatch(match);
+        await this.recordMatchQualityTelemetry(match);
         this.matches.set(matchId, match);
         this.activeMatchByUserId.set(playerA.userId, matchId);
         this.activeMatchByUserId.set(playerB.userId, matchId);
@@ -3607,7 +3779,17 @@ class LivePvpStore {
         match.state.events.push(timeoutEvent, invalidatedEvent);
         match.state.stateVersion += 1;
         match.updatedAt = this.now();
-        return this.completeInvalidatedMatch(match);
+        const completion = await this.completeInvalidatedMatch(match);
+        if (completion && completion.completed) {
+            await this.recordConnectionTimeoutOpsEvents(match, {
+                reason: 'setup_connection_timeout',
+                phase: 'setup',
+                resolution: 'match_invalidated',
+                disconnectedSeats: timeoutSeatIds,
+                elapsedMs: maxElapsedMs
+            });
+        }
+        return completion;
     }
 
     async finishMatchByConnectionTimeout(match) {
@@ -3639,7 +3821,19 @@ class LivePvpStore {
         match.state.events.push(timeoutEvent, finishedEvent);
         match.state.stateVersion += 1;
         match.updatedAt = this.now();
-        return this.completeFinishedMatch(match);
+        const completion = await this.completeFinishedMatch(match);
+        if (completion && completion.completed) {
+            await this.recordConnectionTimeoutOpsEvents(match, {
+                reason: 'active_turn_connection_timeout',
+                phase: 'active',
+                resolution: 'connection_timeout',
+                disconnectedSeats: [loserSeat],
+                loserSeat,
+                winnerSeat,
+                elapsedMs: loserReport.elapsedMs
+            });
+        }
+        return completion;
     }
 
     async invalidateActiveByDoubleConnectionTimeout(match) {
@@ -3667,7 +3861,17 @@ class LivePvpStore {
         match.state.events.push(timeoutEvent, invalidatedEvent);
         match.state.stateVersion += 1;
         match.updatedAt = this.now();
-        return this.completeInvalidatedMatch(match);
+        const completion = await this.completeInvalidatedMatch(match);
+        if (completion && completion.completed) {
+            await this.recordConnectionTimeoutOpsEvents(match, {
+                reason: 'double_connection_timeout',
+                phase: 'active',
+                resolution: 'match_invalidated',
+                disconnectedSeats: timeoutSeatIds,
+                elapsedMs: maxElapsedMs
+            });
+        }
+        return completion;
     }
 
     async invalidateSetupByReadyTimeout(match) {
@@ -3786,10 +3990,12 @@ class LivePvpStore {
         if (this.isStaleStateSaveResult(releaseResult && releaseResult.saveResult)) {
             return this.rehydrateAuthoritativeMatchForUser(userId, match.matchId);
         }
+        const stateView = this.projectMatchStateView(match, seatId);
+        await this.recordFairnessTelemetryFromStateView(match, stateView);
         return {
             match,
             seatId,
-            stateView: this.projectMatchStateView(match, seatId)
+            stateView
         };
     }
 
@@ -3969,6 +4175,7 @@ class LivePvpStore {
             await this.releaseIfTerminal(match);
         }
         reduced.stateView = this.projectMatchStateView(match, seatId);
+        await this.recordFairnessTelemetryFromStateView(match, reduced.stateView, { liveWsSourceInstanceId });
         if (acceptedSaveResult) {
             reduced.saveResult = acceptedSaveResult;
         }

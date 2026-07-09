@@ -1,6 +1,12 @@
 const { db } = require('../db/database');
+const {
+    recordSeasonHonorArchiveFromCollection,
+    recordSeasonRewardClaims,
+    recordSeasonRewardClaimsFromCollection
+} = require('./season-claims');
 
 const SEASON_ID = 's1-genesis';
+const SEASON_NAME = '开天赛季';
 const SEASON_HONOR_COLLECTION_VERSION = 'pvp-live-season-honor-collection-v1';
 const SEASON_HONOR_REWARD_TRACK = [
     { targetGames: 1, rewardId: 's1_genesis_honor_mark_1', rewardType: 'cosmetic_badge', rewardName: '开天见证徽记' },
@@ -53,6 +59,21 @@ async function withTransaction(fn) {
     }
 }
 
+async function withLiveSettlementReadGate(fn) {
+    let releaseQueue;
+    const myTurn = new Promise(resolve => {
+        releaseQueue = resolve;
+    });
+    const previousTurn = transactionTail;
+    transactionTail = previousTurn.catch(() => {}).then(() => myTurn);
+    await previousTurn.catch(() => {});
+    try {
+        return await fn();
+    } finally {
+        releaseQueue();
+    }
+}
+
 function makeRankId(userId) {
     return `pvp-rank-${userId}`;
 }
@@ -74,6 +95,13 @@ function parseJson(raw, fallback = null) {
     } catch (error) {
         return fallback;
     }
+}
+
+function getSeasonHonorRewardCount(collection) {
+    const rewards = collection && collection.unlockedRewards && typeof collection.unlockedRewards === 'object' && !Array.isArray(collection.unlockedRewards)
+        ? collection.unlockedRewards
+        : {};
+    return Object.keys(rewards).length;
 }
 
 function defaultEconomy(userId) {
@@ -271,7 +299,12 @@ async function ensureEconomy(userId) {
     const now = Date.now();
     const existing = await dbGet(`SELECT economy_data FROM pvp_economy WHERE user_id = ?`, [userId]);
     if (existing) {
-        return normalizeEconomy(parseJson(existing.economy_data, {}), userId);
+        const rawEconomy = parseJson(existing.economy_data, {});
+        const normalized = normalizeEconomy(rawEconomy, userId);
+        if (rawEconomy && rawEconomy.seasonHonorCollection && typeof rawEconomy.seasonHonorCollection === 'object' && !Array.isArray(rawEconomy.seasonHonorCollection)) {
+            normalized.rawSeasonHonorCollection = rawEconomy.seasonHonorCollection;
+        }
+        return normalized;
     }
     const economy = defaultEconomy(userId);
     await dbRun(
@@ -279,6 +312,49 @@ async function ensureEconomy(userId) {
         [userId, JSON.stringify(economy), now]
     );
     return economy;
+}
+
+async function migrateSeasonHonorCollectionForSettlement({ userId, economy, matchId, now }) {
+    const rawCollection = economy && economy.rawSeasonHonorCollection && typeof economy.rawSeasonHonorCollection === 'object' && !Array.isArray(economy.rawSeasonHonorCollection)
+        ? economy.rawSeasonHonorCollection
+        : economy && economy.seasonHonorCollection;
+    if (!rawCollection || typeof rawCollection !== 'object' || Array.isArray(rawCollection) || getSeasonHonorRewardCount(rawCollection) === 0) {
+        return economy;
+    }
+    const rawSeasonId = String(rawCollection.seasonId || '').trim();
+    if (rawSeasonId === SEASON_ID) {
+        await recordSeasonRewardClaimsFromCollection(db, {
+            userId,
+            collection: rawCollection,
+            seasonId: SEASON_ID,
+            claimSource: 'economy_collection_backfill',
+            sourceMatchId: '',
+            claimedAt: now
+        });
+        return economy;
+    }
+    const archiveSeasonId = rawSeasonId || 'legacy-unversioned';
+    await recordSeasonRewardClaimsFromCollection(db, {
+        userId,
+        collection: rawCollection,
+        seasonId: archiveSeasonId,
+        claimSource: 'legacy_economy_archive',
+        sourceMatchId: matchId,
+        claimedAt: now
+    });
+    await recordSeasonHonorArchiveFromCollection(db, {
+        userId,
+        collection: rawCollection,
+        seasonId: archiveSeasonId,
+        archiveSource: 'legacy_economy_archive',
+        sourceMatchId: matchId,
+        archivedAt: now
+    });
+    return {
+        ...economy,
+        seasonHonorCollection: normalizeSeasonHonorCollection(null),
+        rawSeasonHonorCollection: null
+    };
 }
 
 async function saveEconomy(userId, economy) {
@@ -356,7 +432,7 @@ function buildParticipantSummary({ user, rankRow, opponentUser, opponentRankRow,
     return {
         source: 'live_pvp',
         seasonId: SEASON_ID,
-        seasonName: '开天赛季',
+        seasonName: SEASON_NAME,
         matchId: match.matchId,
         opponentRankId: makeRankId(opponentUser.id),
         opponentUserId: opponentUser.id,
@@ -386,28 +462,42 @@ async function settleParticipant({ user, opponentUser, rankRow, opponentRankRow,
     );
 
     const economy = await ensureEconomy(user.id);
+    const settlementEconomy = await migrateSeasonHonorCollectionForSettlement({
+        userId: user.id,
+        economy,
+        matchId: match.matchId,
+        now
+    });
     const coinsAwarded = calculateReward({
         didWin,
         opponentRating,
         currentRating,
-        winStreak: economy.winStreak,
-        lossStreak: economy.lossStreak
+        winStreak: settlementEconomy.winStreak,
+        lossStreak: settlementEconomy.lossStreak
     });
     const nextEconomyBase = {
-        ...economy,
-        coins: economy.coins + coinsAwarded,
-        totalEarned: economy.totalEarned + coinsAwarded,
-        wins: economy.wins + (didWin ? 1 : 0),
-        losses: economy.losses + (didWin ? 0 : 1),
-        totalMatches: economy.totalMatches + 1,
-        winStreak: didWin ? economy.winStreak + 1 : 0,
-        lossStreak: didWin ? 0 : economy.lossStreak + 1,
+        ...settlementEconomy,
+        coins: settlementEconomy.coins + coinsAwarded,
+        totalEarned: settlementEconomy.totalEarned + coinsAwarded,
+        wins: settlementEconomy.wins + (didWin ? 1 : 0),
+        losses: settlementEconomy.losses + (didWin ? 0 : 1),
+        totalMatches: settlementEconomy.totalMatches + 1,
+        winStreak: didWin ? settlementEconomy.winStreak + 1 : 0,
+        lossStreak: didWin ? 0 : settlementEconomy.lossStreak + 1,
         lastRewardAt: now
     };
     nextEconomyBase.bestWinStreak = Math.max(nextEconomyBase.bestWinStreak, nextEconomyBase.winStreak);
     const honorCollectionGrant = grantSeasonHonorCollection(nextEconomyBase, {
         gamesPlayed: wins + losses,
         now
+    });
+    await recordSeasonRewardClaims(db, {
+        userId: user.id,
+        seasonId: SEASON_ID,
+        rewards: honorCollectionGrant.newlyUnlocked,
+        claimSource: 'live_ranked_settlement',
+        sourceMatchId: match.matchId,
+        claimedAt: now
     });
 
     const historyEntry = buildParticipantSummary({
@@ -459,7 +549,7 @@ async function settleParticipant({ user, opponentUser, rankRow, opponentRankRow,
         losses,
         rankedGames: wins + losses,
         seasonId: SEASON_ID,
-        seasonName: '开天赛季',
+        seasonName: SEASON_NAME,
         seasonHonorClaim: honorCollectionGrant.claim
     };
 }
@@ -576,5 +666,10 @@ function makeSqliteLivePvpSettlement() {
 }
 
 module.exports = {
-    makeSqliteLivePvpSettlement
+    SEASON_ID,
+    SEASON_NAME,
+    SEASON_HONOR_REWARD_TRACK,
+    normalizeSeasonHonorCollection,
+    makeSqliteLivePvpSettlement,
+    withLiveSettlementReadGate
 };
