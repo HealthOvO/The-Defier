@@ -78,7 +78,8 @@ export const CHARACTERS = {
     id: 'yanHan',
     name: '严寒',
     title: '命环学者',
-    avatar: 'assets/images/characters/yan_han.webp',
+    avatar: '📘',
+    image: 'assets/images/characters/yan_han.webp',
     description: '潜心研究命环的学者，掌握着早已失传的古老知识，试图用智慧解开命运的谜题。',
     stats: {
       maxHp: 70,
@@ -101,6 +102,7 @@ export const CHARACTERS = {
     name: '墨尘',
     title: '星律巡使',
     avatar: '🌠',
+    image: 'assets/images/characters/mo_chen.webp',
     description: '游走于诸天裂隙的巡使，擅长以命环律动叠加战术节奏，越战越强。',
     stats: {
       maxHp: 74,
@@ -122,6 +124,7 @@ export const CHARACTERS = {
     name: '宁玄',
     title: '灵器行者',
     avatar: '🪬',
+    image: 'assets/images/characters/ning_xuan.webp',
     description: '游历诸界的灵器行者，擅长以法宝与命环同频，将攻防节奏压入同一回合。',
     stats: {
       maxHp: 78,

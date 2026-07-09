@@ -85,6 +85,31 @@ async function clickRuneTab(page, label) {
   const rankingRows = await page.evaluate(() => document.querySelectorAll('#ranking-list .jade-slip-row').length);
   add('ranking list renders entries in guest/offline mode', rankingRows > 0, `rows=${rankingRows}`);
 
+  const rankingCopyProbe = await page.evaluate(() => {
+    const payload = JSON.parse(window.render_game_to_text());
+    const text = [
+      document.querySelector('#pvp-ranking-brief .pvp-risk-kicker')?.textContent || '',
+      document.querySelector('#pvp-ranking-brief .pvp-risk-title')?.textContent || '',
+      document.getElementById('pvp-challenge-intent')?.textContent || '',
+      document.querySelector('#tab-ranking [data-pvp-legacy-practice]')?.textContent || '',
+      payload.pvp?.rankingFocus?.duelBrief?.modeLabel || '',
+    ].join(' ');
+    return {
+      text,
+      intent: document.getElementById('pvp-challenge-intent')?.textContent || '',
+      buttonText: document.querySelector('#tab-ranking [data-pvp-legacy-practice]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+      modeLabel: payload.pvp?.rankingFocus?.duelBrief?.modeLabel || '',
+    };
+  });
+  add(
+    'pvp ranking runtime copy uses mirror practice wording',
+    /镜像练习|锁定练习|榜位直约/.test(rankingCopyProbe.text)
+      && !/镜像演武/.test(rankingCopyProbe.text)
+      && rankingCopyProbe.intent.length > 0
+      && rankingCopyProbe.buttonText.length > 0,
+    JSON.stringify(rankingCopyProbe)
+  );
+
   const rankingDangerProbe = await page.evaluate(() => {
     const payload = JSON.parse(window.render_game_to_text());
     const brief = document.getElementById('pvp-ranking-brief');
@@ -162,14 +187,16 @@ async function clickRuneTab(page, label) {
       && focusDuelProbe.duelLines.some((line) => /败场/.test(line) && /道韵/.test(line))
       && focusDuelProbe.duelLines.some((line) => /模式/.test(line))
       && focusDuelProbe.duelLines.some((line) => /建议/.test(line))
-      && /已锁定/.test(focusDuelProbe.challengeIntent),
+      && /已锁定/.test(focusDuelProbe.challengeIntent)
+      && !/镜像演武/.test(focusDuelProbe.challengeIntent),
     JSON.stringify(focusDuelProbe)
   );
   add(
     'render_game_to_text exposes focus duel brief payload',
     !!focusDuelProbe.payload
       && typeof focusDuelProbe.payload.modeLabel === 'string'
-      && /直约|镜像/.test(focusDuelProbe.payload.modeLabel)
+      && /直约|镜像练习/.test(focusDuelProbe.payload.modeLabel)
+      && !/镜像演武/.test(focusDuelProbe.payload.modeLabel)
       && typeof focusDuelProbe.payload.engagementLabel === 'string'
       && /冲榜|练手|避战/.test(focusDuelProbe.payload.engagementLabel)
       && typeof focusDuelProbe.payload.winRewardText === 'string'

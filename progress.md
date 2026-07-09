@@ -255,7 +255,7 @@ Original prompt: 进入全自动审查与修复模式，按顺序审查并修复
     - 新 smoke finding 锁住真实 DOM marker：`data-live-action-survival-target` 等于被打方 seat、`data-live-action-survival-hp-after="1"`、`source="authoritative_public_projection"`、`hidden="false"`、`impact="none"`，文案必须包含“承伤回执 / 剩余 1 血 / 对局继续”。
     - 同一 finding 还要求 `render_game_to_text()` 的 `actionReceiptReport` 与页面中的权威回执一致，并继续禁止 `cardInstanceId / sourceCardId / hand / deck / loadoutSnapshot / reward / rating / elo / token` 等隐藏或经济字段泄漏。
     - `tests/sanity_release_gate_coverage_checks.cjs` 新增真实后端 smoke marker，防止“非致命伤害为什么没有结束本局”的证明退化回泛化 receipt 或 synthetic-only。
-    - `game-intro.html` 与 `js/views/SystemView.js` 清理过期版本标题，把“当前版本重点 / 当前迭代重点”从 V9.2 口径更新为 V10 真 PVP，并把指南里的“镜像演武兜底”收紧为“镜像练习 / 实时论道赛后复盘”；`tests/sanity_intro_progress_sync_checks.cjs` 与 `tests/browser_guide_modal_audit.mjs` 同步改为锁 V10 真 PVP 并阻止当前介绍页继续保留 V9.2 文案。
+    - `game-intro.html` 与 `js/views/SystemView.js` 清理过期版本标题，把“当前版本重点 / 当前迭代重点”从 V9.2 口径更新为 V10 真 PVP · 前端焕新，并把指南里的“镜像演武兜底”收紧为“镜像练习 / 实时论道赛后复盘”；`index.html`、PVP 场景与服务文案统一说明镜像练习不是真人排位；`tests/sanity_intro_progress_sync_checks.cjs` 与 `tests/browser_guide_modal_audit.mjs` 同步改为锁 V10 真 PVP 并阻止当前介绍页继续保留 V9.2 文案。
   - 已验证
     - 红测：`node tests/sanity_release_gate_coverage_checks.cjs` 在真实后端 survival finding 未加入前失败于 `real browser opponent sees public damage survival receipt after accepted card`。
     - 绿测：`node tests/sanity_release_gate_coverage_checks.cjs`

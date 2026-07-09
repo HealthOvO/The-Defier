@@ -16,14 +16,17 @@ const browserAuthUiCloudSmoke = read('tests/browser_auth_ui_cloud_smoke.mjs');
 const backendClientSource = read('js/services/backend-client.js');
 const browserAudit = read('tests/browser_audit.mjs');
 const browserPvpAudit = read('tests/browser_pvp_audit.mjs');
+const browserPvpMobileAudit = read('tests/browser_pvp_mobile_audit.mjs');
 const browserPvpLiveAudit = read('tests/browser_pvp_live_audit.mjs');
 const browserPvpLiveRealSmoke = read('tests/browser_pvp_live_real_backend_smoke.mjs');
 const browserFeatureAudit = read('tests/browser_feature_audit.mjs');
+const browserUiGalleryAudit = read('tests/browser_ui_gallery_audit.mjs');
 const browserMetaAudit = read('tests/browser_meta_screen_audit.mjs');
 const browserDongfuAudit = read('tests/browser_dongfu_audit.mjs');
 const browserEventBranchAudit = read('tests/browser_event_branch_audit.mjs');
 const browserRunPathEventAudit = read('tests/browser_run_path_event_audit.mjs');
 const browserMobileAudit = read('tests/browser_mobile_layout_audit.mjs');
+const verifyAvatars = read('tests/verify_avatars.cjs');
 const browserChallengeAudit = read('tests/browser_challenge_audit.mjs');
 const challengeMobileAudit = read('tests/browser_challenge_mobile_flow_audit.mjs');
 const browserChapterFlowAudit = read('tests/browser_chapter_flow_audit.mjs');
@@ -3743,6 +3746,81 @@ assert.ok(
   assert.ok(
     browserMobileAudit.includes(needle),
     `mobile layout audit should cover trial treasure marker: ${needle}`,
+  );
+});
+
+[
+  'textReadabilityProbes',
+  'actionSizeProbes',
+  'lineHeightRatio',
+  'fontSize >= (node.classList.contains(\'expedition-card-title\') ? 15 : 12)',
+  'mobile expedition panels keep first-screen cards readable and deep actions touchable without horizontal overflow',
+].forEach((needle) => {
+  assert.ok(
+    browserMobileAudit.includes(needle),
+    `mobile layout audit should cover expedition readability marker: ${needle}`,
+  );
+});
+
+[
+  'pvp live medium-width header and actions stay readable and touchable',
+  'pvp-live-panel-medium.png',
+  'mediumActionProbe',
+  'headingChipOverlap',
+  'boundaryWhiteSpace !== \'nowrap\'',
+].forEach((needle) => {
+  assert.ok(
+    browserPvpLiveAudit.includes(needle),
+    `PVP live browser audit should cover medium-width layout marker: ${needle}`,
+  );
+});
+
+[
+  'utilityProbes',
+  'ariaLabel === expectedName',
+  'main menu mobile utility buttons stay reachable without horizontal overflow',
+  '01b-main-menu-mobile.png',
+  'character portrait image error reveals emoji fallback at runtime',
+  'fallbackReady',
+  'tabProbes.every',
+  'collection stays within the mobile viewport while switching sections',
+].forEach((needle) => {
+  assert.ok(
+    browserUiGalleryAudit.includes(needle),
+    `UI gallery audit should cover frontend optimization marker: ${needle}`,
+  );
+});
+
+[
+  'pvp ranking runtime copy uses mirror practice wording',
+  '镜像练习|锁定练习|榜位直约',
+  '!/镜像演武/.test(rankingCopyProbe.text)',
+  '!/镜像演武/.test(focusDuelProbe.challengeIntent)',
+].forEach((needle) => {
+  assert.ok(
+    browserPvpAudit.includes(needle),
+    `browser PVP audit should cover ranking copy marker: ${needle}`,
+  );
+});
+
+[
+  'pvp mobile ranking runtime copy uses mirror practice wording',
+  '镜像练习|锁定练习|榜位直约',
+  '!/镜像演武/.test(rankingCopyProbe.text)',
+].forEach((needle) => {
+  assert.ok(
+    browserPvpMobileAudit.includes(needle),
+    `browser PVP mobile audit should cover ranking copy marker: ${needle}`,
+  );
+});
+
+[
+  'avatar should be a display glyph, not an asset path',
+  'Yan Han should have an image path and a display-safe avatar glyph',
+].forEach((needle) => {
+  assert.ok(
+    verifyAvatars.includes(needle),
+    `avatar verification should cover image/fallback marker: ${needle}`,
   );
 });
 

@@ -136,7 +136,7 @@ async function safeScreenshot(page, outPath) {
         !!activePanel &&
         !!activeTab &&
         activeTab.textContent.trim() === '更新' &&
-        text.includes('V10 真 PVP') &&
+        text.includes('V10 真 PVP · 前端焕新') &&
         text.includes('当前版本重点') &&
         !/v9\.2/i.test(text) &&
         missingAnchors.length === 0,

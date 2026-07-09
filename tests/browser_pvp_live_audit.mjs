@@ -388,6 +388,67 @@ async function safeElementScreenshot(page, selector, outputPath) {
         { id: 'avoid_opponent', auditActionId: 'avoid_opponent', label: '避开此对手' },
       ],
     }) : null;
+    window.__makeLivePvpAuditWatchLossReview = () => {
+      const review = makePostMatchReview('finished');
+      if (!review) return null;
+      return {
+        ...review,
+        summary: '公开窗口偏短，先复盘关键回合，再决定是否进入问道练习。',
+        experienceReport: {
+          ...review.experienceReport,
+          nonGameRisk: 'watch',
+          nonGameRiskReasons: ['short_public_decision_window'],
+          agencyLabel: '行动窗口偏短',
+          decisionWindowCount: 1,
+          seatWindowSummary: {
+            firstSeat: 'A',
+            secondSeat: 'B',
+            secondSeatWindowObserved: false,
+            terminalBeforeSecondSeatWindow: true,
+          },
+          effectiveActionReport: null,
+          safeguardSummary: {
+            ...review.experienceReport.safeguardSummary,
+            effectiveAction: '',
+          },
+          summary: '公开窗口偏短，下一局先练低费响应。',
+          recommendedAction: 'practice',
+          fairnessChecks: [
+            { id: 'setup_ready_required', label: '双方确认开战', passed: true, detail: '公开事件显示双方准备后才开战。', linkedEvidence: [
+              { eventType: 'player_ready', sequence: 3, actingSeat: 'A', publicData: { seatId: 'A' } },
+              { eventType: 'player_ready', sequence: 4, actingSeat: 'B', publicData: { seatId: 'B' } },
+              { eventType: 'battle_started', sequence: 5, actingSeat: 'B', publicData: { firstSeat: 'A' } },
+            ] },
+            { id: 'decision_windows', label: '公开决策窗口', passed: false, detail: '公开窗口偏短，下一局优先看是否存在过早终结。', linkedEvidence: [
+              { eventType: 'battle_started', sequence: 5, actingSeat: 'B', publicData: { firstSeat: 'A' } },
+              { eventType: 'match_finished', sequence: 10, actingSeat: 'A', publicData: { winnerSeat: 'B', loserSeat: 'A', finishReason: 'surrender' } },
+            ] },
+            { id: 'opening_protection', label: '开局护体', passed: true, detail: '未行动方不会被开局直接终结。', linkedEvidence: [
+              { eventType: 'battle_started', sequence: 5, actingSeat: 'B', publicData: { firstSeat: 'A' } },
+            ] },
+          ],
+        },
+        fairnessReceipt: {
+          ...review.fairnessReceipt,
+          receiptState: 'watch',
+          riskState: 'watch',
+          agencyLabel: '行动窗口偏短',
+          windowVerdict: '行动窗口：公开窗口偏短，先复盘关键回合再练习。',
+          effectiveActionVerdict: '有效行动：公开事件未证明后手获得过有效行动窗口。',
+          nextStepLine: '下一步：先复盘关键回合，再用问道练习复刻公开窗口。',
+          evidenceSummary: [
+            { id: 'decision_windows', label: '公开决策窗口', passed: false, evidenceSequences: [5, 10] },
+            { id: 'opening_protection', label: '开局护体', passed: true, evidenceSequences: [5] },
+          ],
+        },
+        loadoutRecommendation: null,
+        nextActions: [
+          { id: 'review_key_turns', auditActionId: 'key_turn_replay', label: '关键回合复盘', detail: '先定位公开关键回合。' },
+          { id: 'practice', auditActionId: 'practice_topic', label: '问道练习', detail: '复刻公开窗口，不写正式积分。' },
+          { id: 'queue_again', auditActionId: 'queue_again', label: '继续真人排位', detail: '带着本局结论重新入队。' },
+        ],
+      };
+    };
     const makeTurnTimer = (status, currentSeat, viewerSeat = 'A') => {
       if (status !== 'setup' && status !== 'active') return null;
       const lowTimerMode = status === 'active' && String(window.__livePvpAuditTurnTimerMode || '') === 'low';
@@ -1563,11 +1624,150 @@ async function safeElementScreenshot(page, selector, outputPath) {
       && /真人排位/.test(defaultEntryProbe.boundaryText)
       && /问道练习/.test(defaultEntryProbe.boundaryText)
       && /好友约战/.test(defaultEntryProbe.boundaryText)
-      && /镜像演武/.test(defaultEntryProbe.boundaryText)
+      && /镜像练习/.test(defaultEntryProbe.boundaryText)
       && /不是真人排位/.test(defaultEntryProbe.boundaryText)
       && defaultEntryProbe.joinVisible,
     JSON.stringify(defaultEntryProbe),
   );
+
+  await page.setViewportSize({ width: 1180, height: 760 });
+  await page.evaluate(() => window.game?.showScreen?.('pvp-screen'));
+  await page.waitForTimeout(250);
+  const mediumEntryProbe = await page.evaluate(() => {
+    const rectObj = (el) => {
+      if (!el) return null;
+      const rect = el.getBoundingClientRect();
+      return {
+        left: Math.round(rect.left),
+        right: Math.round(rect.right),
+        top: Math.round(rect.top),
+        bottom: Math.round(rect.bottom),
+        width: Math.round(rect.width),
+        height: Math.round(rect.height),
+      };
+    };
+    const overlaps = (a, b, margin = 0) => !!a && !!b && !(
+      a.right <= b.left + margin ||
+      b.right <= a.left + margin ||
+      a.bottom <= b.top + margin ||
+      b.bottom <= a.top + margin
+    );
+    const selectorFor = (el) => {
+      if (!el) return '';
+      if (el.id) return `#${el.id}`;
+      const classes = Array.from(el.classList || []).slice(0, 3).join('.');
+      return `${el.tagName.toLowerCase()}${classes ? `.${classes}` : ''}`;
+    };
+    const centerHit = (el) => {
+      const rect = rectObj(el);
+      if (!rect) return { ok: false, rect, hit: '' };
+      const x = Math.round(rect.left + rect.width / 2);
+      const y = Math.round(rect.top + rect.height / 2);
+      const hit = document.elementFromPoint(x, y);
+      return {
+        ok: !!hit && (hit === el || el.contains(hit) || hit.contains(el)),
+        rect,
+        hit: selectorFor(hit),
+      };
+    };
+    const statusCard = document.querySelector('.pvp-live-status-card');
+    const riskHeading = statusCard?.querySelector('.pvp-risk-heading');
+    const statusChip = statusCard?.querySelector('.pvp-risk-dri');
+    const boundary = statusCard?.querySelector('[data-live-mode-boundary]');
+    const actions = Array.from(document.querySelectorAll('.pvp-live-footer [data-live-action]:not([hidden])'));
+    return {
+      viewportWidth: window.innerWidth,
+      scrollWidth: document.documentElement.scrollWidth,
+      statusCard: rectObj(statusCard),
+      riskHeading: rectObj(riskHeading),
+      statusChip: rectObj(statusChip),
+      headingChipOverlap: overlaps(rectObj(riskHeading), rectObj(statusChip), 4),
+      boundaryText: boundary?.textContent || '',
+      boundaryRect: rectObj(boundary),
+      boundaryScrollWidth: boundary?.scrollWidth || 0,
+      boundaryClientWidth: boundary?.clientWidth || 0,
+      boundaryWhiteSpace: boundary ? getComputedStyle(boundary).whiteSpace : '',
+      actionCount: actions.length,
+      actionLabels: actions.map((button) => (button.textContent || '').replace(/\s+/g, ' ').trim()),
+    };
+  });
+  await page.evaluate(() => {
+    document.querySelector('.pvp-live-footer')?.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'auto' });
+  }).catch(() => {});
+  await page.waitForTimeout(100);
+  const mediumActionProbe = await page.evaluate(() => {
+    const rectObj = (el) => {
+      if (!el) return null;
+      const rect = el.getBoundingClientRect();
+      return {
+        left: Math.round(rect.left),
+        right: Math.round(rect.right),
+        top: Math.round(rect.top),
+        bottom: Math.round(rect.bottom),
+        width: Math.round(rect.width),
+        height: Math.round(rect.height),
+      };
+    };
+    const overlaps = (a, b, margin = 0) => !!a && !!b && !(
+      a.right <= b.left + margin ||
+      b.right <= a.left + margin ||
+      a.bottom <= b.top + margin ||
+      b.bottom <= a.top + margin
+    );
+    const selectorFor = (el) => {
+      if (!el) return '';
+      if (el.id) return `#${el.id}`;
+      const classes = Array.from(el.classList || []).slice(0, 3).join('.');
+      return `${el.tagName.toLowerCase()}${classes ? `.${classes}` : ''}`;
+    };
+    const centerHit = (el) => {
+      const rect = rectObj(el);
+      if (!rect) return { ok: false, rect, hit: '' };
+      const x = Math.round(rect.left + rect.width / 2);
+      const y = Math.round(rect.top + rect.height / 2);
+      const inViewport = x >= 0 && y >= 0 && x <= window.innerWidth && y <= window.innerHeight;
+      const hit = inViewport ? document.elementFromPoint(x, y) : null;
+      return {
+        ok: !!hit && (hit === el || el.contains(hit) || hit.contains(el)),
+        rect,
+        hit: selectorFor(hit),
+      };
+    };
+    const actionProbes = Array.from(document.querySelectorAll('.pvp-live-footer [data-live-action]:not([hidden])')).map((button) => ({
+      action: button.getAttribute('data-live-action') || '',
+      label: (button.textContent || '').replace(/\s+/g, ' ').trim(),
+      hit: centerHit(button),
+    }));
+    const actionRects = actionProbes.map((probe) => probe.hit.rect).filter(Boolean);
+    const actionOverlapCount = actionRects.reduce((count, rect, index) => {
+      return count + actionRects.slice(index + 1).filter((other) => overlaps(rect, other, -2)).length;
+    }, 0);
+    return {
+      viewportWidth: window.innerWidth,
+      scrollY: Math.round(window.scrollY),
+      actionProbes,
+      actionOverlapCount,
+    };
+  });
+  add(
+    'pvp live medium-width header and actions stay readable and touchable',
+    mediumEntryProbe.statusCard?.left >= 0
+      && mediumEntryProbe.statusCard?.right <= mediumEntryProbe.viewportWidth + 2
+      && mediumEntryProbe.scrollWidth <= mediumEntryProbe.viewportWidth + 2
+      && mediumEntryProbe.headingChipOverlap === false
+      && /镜像练习/.test(mediumEntryProbe.boundaryText)
+      && mediumEntryProbe.boundaryScrollWidth <= mediumEntryProbe.boundaryClientWidth + 2
+      && mediumEntryProbe.boundaryWhiteSpace !== 'nowrap'
+      && mediumEntryProbe.actionCount >= 3
+      && mediumActionProbe.actionOverlapCount === 0
+      && mediumActionProbe.actionProbes.length >= 3
+      && mediumActionProbe.actionProbes.every((probe) => probe.hit.ok && probe.hit.rect?.width >= 44 && probe.hit.rect?.height >= 40),
+    JSON.stringify({ header: mediumEntryProbe, actions: mediumActionProbe }),
+  );
+  await safeElementScreenshot(page, '[data-live-pvp-root]', path.join(outDir, 'pvp-live-panel-medium.png'));
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.evaluate(() => window.game?.showScreen?.('pvp-screen'));
+  await page.waitForTimeout(150);
 
   await page.click('[data-pvp-tab="live"]', { timeout: 5000, force: true });
   await page.waitForSelector('[data-live-loadout-preset="sword"]', { timeout: 5000 });
@@ -5474,6 +5674,55 @@ async function safeElementScreenshot(page, selector, outputPath) {
     JSON.stringify(recommendationPracticePresetProbe),
   );
 
+  const watchLossNextStepSetupProbe = await page.evaluate(() => {
+    const scene = window.PVPScene;
+    const session = scene?.getLiveSession?.();
+    const originalGetState = session?.getState?.bind(session);
+    const state = originalGetState?.();
+    const review = window.__makeLivePvpAuditWatchLossReview?.();
+    if (!scene || !state || !state.stateView || !review) {
+      return { ok: false, reason: 'missing_watch_loss_fixture_or_state' };
+    }
+    if (!session.__livePvpAuditOriginalGetStateForWatchLoss) {
+      session.__livePvpAuditOriginalGetStateForWatchLoss = originalGetState;
+    }
+    const watchState = {
+      ...state,
+      phase: 'finished',
+      queueTicket: '',
+      lastError: null,
+      stateView: {
+        ...state.stateView,
+        status: 'finished',
+        postMatchReview: review,
+        recentEvents: Array.isArray(review.evidence) ? review.evidence.slice(-12) : [],
+      },
+      lastEvents: Array.isArray(review.evidence) ? review.evidence.slice(-8) : [],
+    };
+    session.getState = () => JSON.parse(JSON.stringify(watchState));
+    scene.liveReviewFocus = '';
+    scene.liveInlineHint = '';
+    scene.renderLivePanel();
+    const guide = document.querySelector('[data-live-post-review-next-step]');
+    const primary = guide?.querySelector('[data-live-post-review-next-step-rank="primary"]');
+    return {
+      ok: true,
+      primary: primary?.getAttribute('data-live-post-review-next-step-action') || '',
+      secondary: guide?.querySelector('[data-live-post-review-next-step-rank="secondary"]')?.getAttribute('data-live-post-review-next-step-action') || '',
+      text: guide?.textContent?.replace(/\s+/g, ' ').trim() || '',
+      phase: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-phase') || '',
+    };
+  });
+  add(
+    'live UI browser audit stages watch-loss next-step fixture before focused recovery checks',
+    watchLossNextStepSetupProbe.ok === true
+      && watchLossNextStepSetupProbe.phase === 'finished'
+      && watchLossNextStepSetupProbe.primary === 'review_key_turns'
+      && watchLossNextStepSetupProbe.secondary === 'practice'
+      && /先复盘关键回合|问道练习/.test(watchLossNextStepSetupProbe.text),
+    JSON.stringify(watchLossNextStepSetupProbe),
+  );
+
   const visiblePracticePlanClicked = await page.evaluate(() => {
     const step = document.querySelector('[data-live-practice-plan-key-turn]');
     if (!step) return false;
@@ -5653,6 +5902,14 @@ async function safeElementScreenshot(page, selector, outputPath) {
       && !/findOpponent|reportMatchResult|GhostEnemy|startPVPBattle|didWin|matchTicket/.test(JSON.stringify(postReviewPracticeProbe.calls)),
     JSON.stringify(postReviewPracticeProbe),
   );
+
+  await page.evaluate(() => {
+    const session = window.PVPScene?.getLiveSession?.();
+    if (session?.__livePvpAuditOriginalGetStateForWatchLoss) {
+      session.getState = session.__livePvpAuditOriginalGetStateForWatchLoss;
+      delete session.__livePvpAuditOriginalGetStateForWatchLoss;
+    }
+  });
 
   const unsafePracticePlanProbe = await page.evaluate(() => {
     const safeReplay = {
@@ -6974,7 +7231,7 @@ async function safeElementScreenshot(page, selector, outputPath) {
       && /真人排位/.test(mobileDefaultEntryProbe.boundaryText)
       && /问道练习/.test(mobileDefaultEntryProbe.boundaryText)
       && /好友约战/.test(mobileDefaultEntryProbe.boundaryText)
-      && /镜像演武/.test(mobileDefaultEntryProbe.boundaryText)
+      && /镜像练习/.test(mobileDefaultEntryProbe.boundaryText)
       && /不是真人排位/.test(mobileDefaultEntryProbe.boundaryText)
       && mobileDefaultEntryProbe.joinVisible,
     JSON.stringify(mobileDefaultEntryProbe),

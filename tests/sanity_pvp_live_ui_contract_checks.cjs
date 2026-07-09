@@ -92,7 +92,7 @@ const liveBrowserAudit = read('tests/browser_pvp_live_audit.mjs');
 
 [
   'PVPScene.findMatch()',
-  '镜像演武',
+  '镜像练习',
   '不是真人排位',
 ].forEach((needle) => {
   assert.ok(html.includes(needle), `legacy ranking practice entry should be clearly demoted: ${needle}`);
@@ -924,7 +924,7 @@ assert.ok(!/\.pvp-live-first-guide\s*\{[\s\S]*?max-height:\s*60px[\s\S]*?overflo
   '真人排位：入队后由服务端写正式结果',
   '问道练习：不写分',
   '好友约战：邀请码真人局',
-  '镜像演武：天道榜练习，不是真人排位',
+  '镜像练习：天道榜练习，不是真人排位',
 ].forEach((needle) => {
   assert.ok(html.includes(needle), `live PVP default entry should explain mode boundary: ${needle}`);
 });

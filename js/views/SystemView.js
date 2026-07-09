@@ -393,9 +393,9 @@ export class SystemView {
     // Tab 4: Updates
     const updatesContent = `
             <div class="intro-section">
-                <h3>🌌 当前版本重点（V10 真 PVP）</h3>
+                <h3>🌌 当前版本重点（V10 真 PVP · 前端焕新）</h3>
                 <p class="intro-text">
-                    V10 真 PVP 的目标是把真人论道、公平回执、赛后学习和长期复盘打通成一条玩家能读懂的成长链。
+                    V10 真 PVP · 前端焕新这一版的目标是把真人论道、公平回执、赛后学习和长期复盘打通成一条玩家能读懂的成长链。
                     当前版本不只是新增功能，而是让奖励页、地图、远征、洞府、构筑快照、挑战观察站与实时论道使用同一套读题语言。
                 </p>
             </div>
@@ -470,7 +470,7 @@ export class SystemView {
             </div>
 
             <div style="text-align: center; margin-top: auto; font-size: 0.8rem; color: rgba(255,255,255,0.2); padding-top: 10px;">
-                V10 真 PVP 当前版本 | Breaking Fate since 2024
+                V10 真 PVP · 前端焕新 当前版本 | Breaking Fate since 2024
             </div>
         </div>
         `;

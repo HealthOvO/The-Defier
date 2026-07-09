@@ -8,6 +8,7 @@ node tests/sanity_auth_config_checks.cjs
 node tests/sanity_backend_hmac_checks.cjs
 node tests/sanity_backend_timestamp_checks.cjs
 node tests/sanity_frontend_cloud_sync_checks.mjs
+node tests/sanity_frontend_upgrade_asset_checks.cjs
 node tests/sanity_release_gate_coverage_checks.cjs
 node tests/backend_security_checks.cjs
 node tests/sanity_balance_checks.cjs
