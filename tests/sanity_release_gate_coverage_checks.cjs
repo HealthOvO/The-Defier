@@ -21,6 +21,9 @@ const browserPvpLiveAudit = read('tests/browser_pvp_live_audit.mjs');
 const browserPvpLiveRealSmoke = read('tests/browser_pvp_live_real_backend_smoke.mjs');
 const browserFeatureAudit = read('tests/browser_feature_audit.mjs');
 const browserUiGalleryAudit = read('tests/browser_ui_gallery_audit.mjs');
+const frontendUpgradeAssetChecks = read('tests/sanity_frontend_upgrade_asset_checks.cjs');
+const frontendDesignSystemChecks = read('tests/sanity_frontend_design_system_checks.cjs');
+const coreLoopDesignSystemChecks = read('tests/sanity_core_loop_design_system_checks.cjs');
 const browserMetaAudit = read('tests/browser_meta_screen_audit.mjs');
 const browserDongfuAudit = read('tests/browser_dongfu_audit.mjs');
 const browserEventBranchAudit = read('tests/browser_event_branch_audit.mjs');
@@ -601,6 +604,10 @@ assert.ok(
   'node tests/sanity_trial_challenge_checks.cjs',
   'node tests/sanity_strategic_node_system_checks.cjs',
   'node tests/sanity_codex_sanctum_checks.cjs',
+  'node tests/sanity_frontend_upgrade_asset_checks.cjs',
+  'node tests/sanity_frontend_design_system_checks.cjs',
+  'node tests/sanity_pvp_trusted_control_surface_checks.cjs',
+  'node tests/sanity_mobile_interaction_system_checks.cjs',
   'node tests/sanity_intro_progress_sync_checks.cjs',
   'node tests/sanity_pvp_service_checks.cjs',
   'node tests/sanity_pvp_legacy_season_isolation_checks.cjs',
@@ -626,6 +633,81 @@ assert.ok(
   assert.ok(
     runNodeChecks.includes(needle),
     `node release checks should include strategic gameplay sanity marker: ${needle}`,
+  );
+});
+
+[
+  'assertWebpAsset',
+  'collectImageRefs',
+  'assertSiteAssetIfPresent',
+  'assets/images/ui/main-menu-hero.webp',
+  'assets/images/logo.webp',
+  'type="image/webp"',
+  'js/data/characters.js',
+  'js/data/enemies.js',
+  'copy_path "assets"',
+  'visualAssetProbe',
+  '.frontend-upgrade-hero',
+  '.logo-img',
+  'naturalWidth >= 1200',
+  'naturalWidth >= 256',
+].forEach((needle) => {
+  assert.ok(
+    frontendUpgradeAssetChecks.includes(needle) || browserUiGalleryAudit.includes(needle),
+    `frontend visual asset coverage should pin marker: ${needle}`,
+  );
+});
+
+[
+  '--fd-space-1',
+  '--fd-radius-panel',
+  '--fd-hit-target',
+  '.fd-surface',
+  '.fd-button-primary',
+  '.character-selection-container',
+  '#map-screen .map-screen-v3',
+  '.reward-shell',
+  '#pvp-screen .pvp-live-status-card',
+  '#pvp-screen .pvp-live-event-panel',
+  '#pvp-screen .pvp-live-action-bar .challenge-btn',
+  '.reward-actions button',
+  '#map-screen [data-map-action]',
+  '#pvp-screen .pvp-live-mode-boundary',
+  '#pvp-screen .pvp-live-action-receipt',
+  '#pvp-screen .pvp-live-seat-badge',
+  '.reward-section-eyebrow',
+  'collectDesignSystemProbe',
+  'fdTokenChecks',
+  'fdSurfaceChecks',
+  'activeScreenId',
+  'requireViewportFit',
+].forEach((needle) => {
+  assert.ok(
+    frontendDesignSystemChecks.includes(needle) || browserUiGalleryAudit.includes(needle),
+    `frontend design-system coverage should pin marker: ${needle}`,
+  );
+});
+
+[
+  'sanity_core_loop_design_system_checks.cjs',
+  '#battle-screen #battle-command-panel',
+  '#battle-screen #boss-act-panel',
+  '#battle-screen .battle-command-btn',
+  '#battle-screen #end-turn-btn',
+  '#map-screen .map-node-v3',
+  '#map-screen .expedition-panel-card',
+  '#map-screen .map-route-chip',
+  '#reward-screen .reward-panel',
+  '#reward-screen [data-season-board-handoff-cta="true"]',
+  'collectCoreLoopDesignSystemProbe',
+  'coreLoopSurfaceChecks',
+  'coreLoopHitTargetChecks',
+].forEach((needle) => {
+  assert.ok(
+    coreLoopDesignSystemChecks.includes(needle) ||
+      browserUiGalleryAudit.includes(needle) ||
+      runNodeChecks.includes(needle),
+    `core-loop design-system coverage should pin marker: ${needle}`,
   );
 });
 

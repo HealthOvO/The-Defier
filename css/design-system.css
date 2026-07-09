@@ -1,4 +1,31 @@
 :root {
+    --fd-space-1: 4px;
+    --fd-space-2: 8px;
+    --fd-space-3: 12px;
+    --fd-space-4: 16px;
+    --fd-space-5: 20px;
+    --fd-space-6: 24px;
+    --fd-radius-panel: 18px;
+    --fd-radius-control: 12px;
+    --fd-radius-chip: 999px;
+    --fd-hit-target: 44px;
+    --fd-mobile-edge: 8px;
+    --fd-safe-bottom: max(var(--fd-space-4), env(safe-area-inset-bottom));
+    --fd-mobile-action-gap: var(--fd-space-2);
+    --fd-sticky-action-offset: max(var(--fd-space-3), env(safe-area-inset-bottom));
+    --fd-surface-panel:
+        radial-gradient(circle at top left, rgba(132, 184, 255, 0.1), transparent 34%),
+        linear-gradient(180deg, rgba(11, 18, 40, 0.92), rgba(5, 9, 22, 0.97));
+    --fd-surface-panel-strong:
+        radial-gradient(circle at top right, rgba(246, 199, 115, 0.12), transparent 34%),
+        linear-gradient(180deg, rgba(14, 24, 52, 0.95), rgba(5, 9, 22, 0.98));
+    --fd-surface-control: linear-gradient(180deg, rgba(18, 30, 60, 0.92), rgba(9, 15, 33, 0.96));
+    --fd-border-muted: rgba(155, 190, 255, 0.22);
+    --fd-border-strong: rgba(190, 221, 255, 0.34);
+    --fd-text-muted: rgba(216, 228, 255, 0.72);
+    --fd-accent-gold: #f1c36a;
+    --fd-accent-blue: #84cfff;
+    --fd-shadow-panel: 0 18px 42px rgba(0, 0, 0, 0.28);
     --hud-compact-breakpoint: 768;
     --ui-shell-max-width: 1320px;
     --ui-shell-wide-width: 1400px;
@@ -46,6 +73,111 @@
     --z-battle-command-panel: 118;
     --z-battle-mission: 119;
     --z-battle-intent: 130;
+}
+
+.fd-surface {
+    border: 1px solid var(--fd-border-muted);
+    border-radius: var(--fd-radius-panel);
+    background: var(--fd-surface-panel);
+    box-shadow: var(--fd-shadow-panel);
+    backdrop-filter: blur(18px);
+}
+
+.fd-panel {
+    border: 1px solid var(--fd-border-muted);
+    border-radius: var(--fd-radius-panel);
+    background: var(--fd-surface-panel-strong);
+    box-shadow: var(--fd-shadow-panel);
+}
+
+.fd-control,
+.fd-button,
+.fd-tab {
+    min-height: var(--fd-hit-target);
+    border: 1px solid var(--fd-border-muted);
+    border-radius: var(--fd-radius-control);
+    background: var(--fd-surface-control);
+    color: inherit;
+}
+
+.fd-button,
+.fd-tab {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--fd-space-2);
+    padding: var(--fd-space-2) var(--fd-space-4);
+    text-align: center;
+}
+
+.fd-button-primary {
+    border-color: rgba(241, 195, 106, 0.48);
+    background:
+        linear-gradient(180deg, rgba(241, 195, 106, 0.18), rgba(116, 72, 24, 0.22)),
+        var(--fd-surface-control);
+}
+
+.fd-chip {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 28px;
+    border: 1px solid var(--fd-border-muted);
+    border-radius: var(--fd-radius-chip);
+    padding: var(--fd-space-1) var(--fd-space-3);
+    color: var(--fd-text-muted);
+    background: rgba(132, 184, 255, 0.08);
+}
+
+.fd-scroll-area {
+    min-height: 0;
+    overflow: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--ui-scrollbar-thumb) var(--ui-scrollbar-track);
+    scrollbar-gutter: stable both-edges;
+}
+
+.fd-action-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--fd-space-3);
+}
+
+.fd-safe-action-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--fd-mobile-action-gap);
+    padding: var(--fd-space-3) var(--fd-space-4) calc(var(--fd-space-3) + env(safe-area-inset-bottom));
+    border-top: 1px solid var(--fd-border-muted);
+    background:
+        linear-gradient(180deg, rgba(2, 5, 12, 0), rgba(2, 5, 12, 0.84) 24%, rgba(2, 5, 12, 0.96));
+    backdrop-filter: blur(14px);
+}
+
+.fd-safe-scroll {
+    scroll-padding:
+        var(--fd-space-4)
+        var(--fd-mobile-edge)
+        calc(var(--fd-hit-target) + var(--fd-safe-bottom) + var(--fd-space-4));
+}
+
+.fd-touch-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 132px), 1fr));
+    gap: var(--fd-mobile-action-gap);
+    align-items: stretch;
+}
+
+.fd-touch-grid > :is(button, a, [role="button"]) {
+    min-width: 0;
+    min-height: var(--fd-hit-target);
+}
+
+.fd-mobile-stack {
+    display: grid;
+    gap: var(--fd-space-3);
 }
 
 body {

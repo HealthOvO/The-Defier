@@ -9,6 +9,10 @@ node tests/sanity_backend_hmac_checks.cjs
 node tests/sanity_backend_timestamp_checks.cjs
 node tests/sanity_frontend_cloud_sync_checks.mjs
 node tests/sanity_frontend_upgrade_asset_checks.cjs
+node tests/sanity_frontend_design_system_checks.cjs
+node tests/sanity_core_loop_design_system_checks.cjs
+node tests/sanity_pvp_trusted_control_surface_checks.cjs
+node tests/sanity_mobile_interaction_system_checks.cjs
 node tests/sanity_release_gate_coverage_checks.cjs
 node tests/backend_security_checks.cjs
 node tests/sanity_balance_checks.cjs

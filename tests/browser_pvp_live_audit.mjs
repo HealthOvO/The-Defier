@@ -1672,25 +1672,59 @@ async function safeElementScreenshot(page, selector, outputPath) {
     };
     const statusCard = document.querySelector('.pvp-live-status-card');
     const riskHeading = statusCard?.querySelector('.pvp-risk-heading');
-    const statusChip = statusCard?.querySelector('.pvp-risk-dri');
-    const boundary = statusCard?.querySelector('[data-live-mode-boundary]');
-    const actions = Array.from(document.querySelectorAll('.pvp-live-footer [data-live-action]:not([hidden])'));
-    return {
-      viewportWidth: window.innerWidth,
-      scrollWidth: document.documentElement.scrollWidth,
-      statusCard: rectObj(statusCard),
-      riskHeading: rectObj(riskHeading),
+	    const statusChip = statusCard?.querySelector('.pvp-risk-dri');
+	    const boundary = statusCard?.querySelector('[data-live-mode-boundary]');
+	    const actions = Array.from(document.querySelectorAll('.pvp-live-footer [data-live-action]:not([hidden])'));
+	    const trustGrid = statusCard?.querySelector('[data-live-trust-grid]');
+	    const trustItems = Array.from(trustGrid?.querySelectorAll('[data-live-trust-item]') || [])
+	      .filter((item) => !item.hidden && getComputedStyle(item).display !== 'none')
+	      .map((item) => ({
+	        item: item.getAttribute('data-live-trust-item') || '',
+	        rect: rectObj(item),
+	        scrollWidth: item.scrollWidth || 0,
+	        clientWidth: item.clientWidth || 0,
+	        whiteSpace: getComputedStyle(item).whiteSpace,
+	      }));
+	    const trustLiveRegions = Object.fromEntries([
+	      ['connection', '[data-live-connection-status]'],
+	      ['realtime', '[data-live-realtime-status]'],
+	      ['action-receipt', '[data-live-action-receipt]'],
+	    ].map(([key, selector]) => {
+	      const node = statusCard?.querySelector(selector);
+	      return [key, {
+	        role: node?.getAttribute('role') || '',
+	        ariaLive: node?.getAttribute('aria-live') || '',
+	      }];
+	    }));
+	    const commandRail = document.querySelector('[data-live-command-rail]');
+	    const commandGroups = Array.from(commandRail?.querySelectorAll('[data-live-command-group]') || []).map((group) => ({
+	      group: group.getAttribute('data-live-command-group') || '',
+	      rect: rectObj(group),
+	      display: getComputedStyle(group).display,
+	      actions: Array.from(group.querySelectorAll('[data-live-action]:not([hidden])')).map((button) => button.getAttribute('data-live-action') || ''),
+	    }));
+	    return {
+	      viewportWidth: window.innerWidth,
+	      scrollWidth: document.documentElement.scrollWidth,
+	      statusCard: rectObj(statusCard),
+	      riskHeading: rectObj(riskHeading),
       statusChip: rectObj(statusChip),
       headingChipOverlap: overlaps(rectObj(riskHeading), rectObj(statusChip), 4),
       boundaryText: boundary?.textContent || '',
       boundaryRect: rectObj(boundary),
       boundaryScrollWidth: boundary?.scrollWidth || 0,
       boundaryClientWidth: boundary?.clientWidth || 0,
-      boundaryWhiteSpace: boundary ? getComputedStyle(boundary).whiteSpace : '',
-      actionCount: actions.length,
-      actionLabels: actions.map((button) => (button.textContent || '').replace(/\s+/g, ' ').trim()),
-    };
-  });
+	      boundaryWhiteSpace: boundary ? getComputedStyle(boundary).whiteSpace : '',
+	      actionCount: actions.length,
+	      actionLabels: actions.map((button) => (button.textContent || '').replace(/\s+/g, ' ').trim()),
+	      trustGrid: rectObj(trustGrid),
+	      trustItems,
+	      trustLiveRegions,
+	      commandRail: rectObj(commandRail),
+	      commandRailDisplay: commandRail ? getComputedStyle(commandRail).display : '',
+	      commandGroups,
+	    };
+	  });
   await page.evaluate(() => {
     document.querySelector('.pvp-live-footer')?.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'auto' });
   }).catch(() => {});
@@ -1758,13 +1792,51 @@ async function safeElementScreenshot(page, selector, outputPath) {
       && /镜像练习/.test(mediumEntryProbe.boundaryText)
       && mediumEntryProbe.boundaryScrollWidth <= mediumEntryProbe.boundaryClientWidth + 2
       && mediumEntryProbe.boundaryWhiteSpace !== 'nowrap'
-      && mediumEntryProbe.actionCount >= 3
-      && mediumActionProbe.actionOverlapCount === 0
-      && mediumActionProbe.actionProbes.length >= 3
-      && mediumActionProbe.actionProbes.every((probe) => probe.hit.ok && probe.hit.rect?.width >= 44 && probe.hit.rect?.height >= 40),
-    JSON.stringify({ header: mediumEntryProbe, actions: mediumActionProbe }),
-  );
-  await safeElementScreenshot(page, '[data-live-pvp-root]', path.join(outDir, 'pvp-live-panel-medium.png'));
+	      && mediumEntryProbe.actionCount >= 3
+	      && mediumActionProbe.actionOverlapCount === 0
+	      && mediumActionProbe.actionProbes.length >= 3
+	      && mediumActionProbe.actionProbes.every((probe) => probe.hit.ok && probe.hit.rect?.width >= 44 && probe.hit.rect?.height >= 40 && probe.hit.rect?.height <= 96),
+	    JSON.stringify({ header: mediumEntryProbe, actions: mediumActionProbe }),
+	  );
+	  add(
+	    'pvp live trusted control surface groups status, receipt, and command rail',
+	    !!mediumEntryProbe.trustGrid
+	      && mediumEntryProbe.trustGrid.left >= 0
+	      && mediumEntryProbe.trustGrid.right <= mediumEntryProbe.viewportWidth + 2
+	      && ['match-quality', 'mode-boundary', 'turn-timer', 'connection', 'realtime', 'fairness', 'action-receipt', 'momentum', 'intent'].every((item) =>
+	        mediumEntryProbe.trustItems.some((probe) => probe.item === item)
+	      )
+	      && mediumEntryProbe.trustItems.every((probe) =>
+	        probe.rect
+	          && probe.rect.left >= -1
+	          && probe.rect.right <= mediumEntryProbe.viewportWidth + 2
+	          && probe.scrollWidth <= probe.clientWidth + 2
+	          && probe.whiteSpace !== 'nowrap'
+	      )
+	      && ['connection', 'realtime', 'action-receipt'].every((key) =>
+	        mediumEntryProbe.trustLiveRegions?.[key]?.role === 'status'
+	          && mediumEntryProbe.trustLiveRegions?.[key]?.ariaLive === 'polite'
+	      )
+	      && !!mediumEntryProbe.commandRail
+	      && mediumEntryProbe.commandRailDisplay === 'grid'
+	      && ['queue', 'turn', 'practice', 'danger'].every((group) =>
+	        mediumEntryProbe.commandGroups.some((probe) => probe.group === group)
+	      )
+	      && mediumEntryProbe.commandGroups.every((probe) =>
+	        probe.rect
+	          && probe.rect.left >= -1
+	          && probe.rect.right <= mediumEntryProbe.viewportWidth + 2
+	          && probe.display === 'flex'
+	          && probe.actions.length >= 1
+	      )
+	      && mediumEntryProbe.commandGroups.some((probe) =>
+	        probe.group === 'danger'
+	          && probe.actions.length === 1
+	          && probe.actions[0] === 'surrender'
+	      ),
+	    JSON.stringify({ header: mediumEntryProbe, actions: mediumActionProbe }),
+	  );
+	  await safeElementScreenshot(page, '[data-live-pvp-root]', path.join(outDir, 'pvp-live-panel-medium.png'));
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.evaluate(() => window.game?.showScreen?.('pvp-screen'));
   await page.waitForTimeout(150);
@@ -7795,7 +7867,7 @@ async function safeElementScreenshot(page, selector, outputPath) {
       && mobileProbe.eventPanel?.left >= -1
       && mobileProbe.eventPanel?.right <= mobileProbe.viewportWidth + 2
       && mobileProbe.tabs.every((rect) => rect && rect.left >= -1 && rect.right <= mobileProbe.viewportWidth + 2)
-      && mobileBottomProbe.buttons.every((rect) => rect && rect.left >= -1 && rect.right <= mobileBottomProbe.viewportWidth + 2 && rect.bottom <= mobileBottomProbe.viewportHeight + 2 && rect.height >= 34),
+      && mobileBottomProbe.buttons.every((rect) => rect && rect.left >= -1 && rect.right <= mobileBottomProbe.viewportWidth + 2 && rect.bottom <= mobileBottomProbe.viewportHeight + 2 && rect.height >= 44),
     JSON.stringify({ top: mobileProbe, bottom: mobileBottomProbe }),
   );
   await mobilePage.evaluate(async () => {

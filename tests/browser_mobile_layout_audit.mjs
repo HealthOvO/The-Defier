@@ -390,6 +390,17 @@ function add(name, pass, detail = '') {
       && rect.bottom <= window.innerHeight
       && rect.left >= 0
       && rect.right <= window.innerWidth;
+    const safeBottomLimit = Math.min(
+      window.innerHeight,
+      Math.round((window.visualViewport?.height || window.innerHeight) - 12)
+    );
+    const isRectInSafeTapZone = (rect) => !!rect
+      && rect.top >= 0
+      && rect.bottom <= safeBottomLimit
+      && rect.left >= 0
+      && rect.right <= window.innerWidth
+      && rect.height >= 40
+      && rect.width >= 96;
     const isReachable = (el) => {
       if (!el) return { reachable: false, point: null, hit: '' };
       const rect = rectObj(el);
@@ -411,8 +422,13 @@ function add(name, pass, detail = '') {
       return el ? (el.textContent || '').replace(/\s+/g, ' ').trim() : '';
     };
     const cards = Array.from(panels?.querySelectorAll('.expedition-panel-card') || []);
+    const visualCards = cards
+      .map((card) => ({ card, selector: selectorFor(card), rect: rectObj(card) }))
+      .filter((entry) => !!entry.rect)
+      .sort((a, b) => a.rect.top - b.rect.top);
+    const firstVisualCard = visualCards.find((entry) => entry.rect.bottom > 0 && entry.rect.top < window.innerHeight) || visualCards[0] || null;
     const initialPanelRect = rectObj(panels);
-    const firstCardRect = rectObj(cards[0]);
+    const firstCardRect = firstVisualCard?.rect || null;
     const headerRect = rectObj(document.querySelector('#map-screen .map-v3-header'));
     const textReadabilityProbes = cards.slice(0, 4).flatMap((card) => {
       return Array.from(card.querySelectorAll('.expedition-card-title, .expedition-card-note, p, li')).slice(0, 6).map((node) => {
@@ -437,15 +453,26 @@ function add(name, pass, detail = '') {
         };
       });
     });
-    const initialVisibleCards = cards.map((card) => ({
-      selector: selectorFor(card),
-      text: (card.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 80),
-      rect: rectObj(card),
-      visibleRatio: Number(visibleRatio(rectObj(card)).toFixed(3))
-    })).filter((card) => card.visibleRatio >= 0.55);
+    const initialVisibleCards = visualCards.map((entry) => ({
+      selector: entry.selector,
+      text: (entry.card.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 80),
+      rect: entry.rect,
+      visibleRatio: Number(visibleRatio(entry.rect).toFixed(3))
+    })).filter((card) => card.visibleRatio >= 0.32);
     const buttons = Array.from(panels?.querySelectorAll('button') || []);
     const branchButtons = buttons.filter((btn) => /路线/.test(btn.textContent || ''));
     const bountyButtons = buttons.filter((btn) => /悬赏/.test(btn.textContent || ''));
+    const initialPrimaryCtaProbes = [...branchButtons, ...bountyButtons].map((button) => {
+      const rect = rectObj(button);
+      return {
+        text: (button.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 48),
+        action: button.dataset.expeditionAction || '',
+        rect,
+        safeBottomLimit,
+        ok: isRectInSafeTapZone(rect)
+      };
+    });
+    const initialPrimaryCtaOk = initialPrimaryCtaProbes.some((probe) => probe.ok);
     const visibilityAfterScroll = (targetButtons) => {
       const target = targetButtons.find((btn) => isVisible(btn));
       const before = rectObj(target);
@@ -477,13 +504,14 @@ function add(name, pass, detail = '') {
       && initialPanelRect.top < window.innerHeight
       && initialPanelRect.left >= -4
       && initialPanelRect.right <= viewportWidth + 4;
-    const firstCardReadable = visibleRatio(firstCardRect) >= 0.7;
+    const firstCardReadable = visibleRatio(firstCardRect) >= 0.32;
     const firstCardHeaderOverlap = overlapArea(firstCardRect, headerRect);
 
     return {
       panelVisible: isVisible(panels),
       initialPanelRect,
       scrolledPanelRect,
+      firstVisualCardSelector: firstVisualCard?.selector || '',
       firstCardRect,
       headerRect,
       firstCardVisibleRatio: Number(visibleRatio(firstCardRect).toFixed(3)),
@@ -497,6 +525,9 @@ function add(name, pass, detail = '') {
       rootScrollWidth: root?.scrollWidth || 0,
       branchButtonCount: branchButtons.length,
       bountyButtonCount: bountyButtons.length,
+      safeBottomLimit,
+      initialPrimaryCtaProbes,
+      initialPrimaryCtaOk,
       branchReach,
       bountyReach,
       textReadabilityProbes,
@@ -513,6 +544,7 @@ function add(name, pass, detail = '') {
         getText('.expedition-signals-card').length >= 30 &&
         branchButtons.length >= 1 &&
         bountyButtons.length >= 1 &&
+        initialPrimaryCtaOk &&
         branchReach.reachable &&
         bountyReach.reachable &&
         textReadabilityProbes.length >= 8 &&

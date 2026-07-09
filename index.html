@@ -6,7 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>The Defier - 逆命者</title>
     <meta name="description" content="一款基于东方仙侠的卡牌Roguelike游戏，逆天改命，盗取法则，成为真正的逆命者！">
-    <link rel="icon" type="image/png" href="assets/images/logo.webp">
+    <link rel="icon" type="image/webp" href="assets/images/logo.webp">
     <link rel="stylesheet" href="css/style.css">
     <link rel="stylesheet" href="css/design-system.css">
     <link rel="stylesheet" href="css/animations.css">
@@ -258,19 +258,21 @@
                                 <span class="value" data-live-current-seat>--</span>
                             </div>
                         </div>
-                        <div class="pvp-live-quality" data-live-match-quality>匹配质量：等待真人</div>
-                        <div class="pvp-live-mode-boundary" data-live-mode-boundary>真人排位：入队后由服务端写正式结果；问道练习：不写分；好友约战：邀请码真人局，不写正式积分；镜像练习：天道榜练习，不是真人排位。</div>
-                        <div class="pvp-live-turn-timer" data-live-turn-timer>倒计时：--</div>
-                        <div class="pvp-live-timeout-forecast" data-live-timeout-forecast data-live-timeout-forecast-state="idle" data-live-timeout-forecast-source="" data-live-timeout-forecast-hidden="" data-live-timeout-forecast-impact="" data-live-timeout-forecast-automation-count="0" data-live-timeout-forecast-advisory-only="true" hidden>超时预告：等待行动窗口</div>
-                        <div class="pvp-live-connection-status" data-live-connection-status>连接：等待心跳</div>
-                        <div class="pvp-live-connection-tempo" data-live-connection-tempo data-live-connection-tempo-state="stable" data-live-connection-tempo-actor="" data-live-connection-tempo-severity="normal" hidden>连接节奏：双方在线，按当前行动窗口继续。</div>
-                        <div class="pvp-live-realtime-status" data-live-realtime-status>传输：等待实时通道</div>
-                        <div class="pvp-live-opening-safeguard" data-live-opening-safeguard>公平保护：等待权威状态</div>
-                        <div class="pvp-live-action-receipt" data-live-action-receipt data-live-action-receipt-source="" data-live-action-receipt-hidden="" data-live-action-receipt-seq="" data-live-action-receipt-type="" data-live-action-receipt-acting="" data-live-action-receipt-next-seat="">行动回执：等待首个权威行动</div>
-                        <div class="pvp-live-duel-momentum" data-live-duel-momentum data-live-duel-momentum-state="idle" data-live-duel-momentum-source="" data-live-duel-momentum-hidden="">局势：等待权威状态</div>
-                        <div class="pvp-live-intent-signal" data-live-intent-signal data-live-intent-signal-state="idle" data-live-intent-signal-source="" data-live-intent-signal-hidden="" data-live-intent-signal-current-seat="">读牌：等待公开意图</div>
-                        <div class="pvp-live-counterplay-guide" data-live-counterplay-guide data-live-counterplay-guide-state="idle" data-live-counterplay-guide-source="" data-live-counterplay-guide-hidden="" data-live-counterplay-guide-impact="" data-live-counterplay-guide-response-cards="0" data-live-counterplay-guide-advisory-only="true" hidden>反制建议：等待公开行动窗口</div>
-                        <div class="pvp-live-action-window-receipt" data-live-action-window-receipt data-live-action-window-receipt-state="idle" data-live-action-window-receipt-source="" data-live-action-window-receipt-hidden="" data-live-action-window-receipt-impact="" data-live-action-window-receipt-response-cards="0" data-live-action-window-receipt-advisory-only="true" hidden>行动窗口回执：等待有效行动窗口</div>
+                        <div class="pvp-live-trust-grid" data-live-trust-grid aria-label="实时论道权威状态">
+                            <div class="pvp-live-quality" data-live-trust-item="match-quality" data-live-match-quality>匹配质量：等待真人</div>
+                            <div class="pvp-live-mode-boundary" data-live-trust-item="mode-boundary" data-live-mode-boundary>真人排位：入队后由服务端写正式结果；问道练习：不写分；好友约战：邀请码真人局，不写正式积分；镜像练习：天道榜练习，不是真人排位。</div>
+                            <div class="pvp-live-turn-timer" data-live-trust-item="turn-timer" data-live-turn-timer>倒计时：--</div>
+                            <div class="pvp-live-timeout-forecast" data-live-trust-item="timeout-forecast" data-live-timeout-forecast data-live-timeout-forecast-state="idle" data-live-timeout-forecast-source="" data-live-timeout-forecast-hidden="" data-live-timeout-forecast-impact="" data-live-timeout-forecast-automation-count="0" data-live-timeout-forecast-advisory-only="true" role="status" aria-live="polite" hidden>超时预告：等待行动窗口</div>
+                            <div class="pvp-live-connection-status" data-live-trust-item="connection" data-live-connection-status role="status" aria-live="polite">连接：等待心跳</div>
+                            <div class="pvp-live-connection-tempo" data-live-trust-item="connection-tempo" data-live-connection-tempo data-live-connection-tempo-state="stable" data-live-connection-tempo-actor="" data-live-connection-tempo-severity="normal" role="status" aria-live="polite" hidden>连接节奏：双方在线，按当前行动窗口继续。</div>
+                            <div class="pvp-live-realtime-status" data-live-trust-item="realtime" data-live-realtime-status role="status" aria-live="polite">传输：等待实时通道</div>
+                            <div class="pvp-live-opening-safeguard" data-live-trust-item="fairness" data-live-opening-safeguard>公平保护：等待权威状态</div>
+                            <div class="pvp-live-action-receipt" data-live-trust-item="action-receipt" data-live-action-receipt data-live-action-receipt-source="" data-live-action-receipt-hidden="" data-live-action-receipt-seq="" data-live-action-receipt-type="" data-live-action-receipt-acting="" data-live-action-receipt-next-seat="" role="status" aria-live="polite">行动回执：等待首个权威行动</div>
+                            <div class="pvp-live-duel-momentum" data-live-trust-item="momentum" data-live-duel-momentum data-live-duel-momentum-state="idle" data-live-duel-momentum-source="" data-live-duel-momentum-hidden="">局势：等待权威状态</div>
+                            <div class="pvp-live-intent-signal" data-live-trust-item="intent" data-live-intent-signal data-live-intent-signal-state="idle" data-live-intent-signal-source="" data-live-intent-signal-hidden="" data-live-intent-signal-current-seat="">读牌：等待公开意图</div>
+                            <div class="pvp-live-counterplay-guide" data-live-trust-item="counterplay" data-live-counterplay-guide data-live-counterplay-guide-state="idle" data-live-counterplay-guide-source="" data-live-counterplay-guide-hidden="" data-live-counterplay-guide-impact="" data-live-counterplay-guide-response-cards="0" data-live-counterplay-guide-advisory-only="true" hidden>反制建议：等待公开行动窗口</div>
+                            <div class="pvp-live-action-window-receipt" data-live-trust-item="action-window-receipt" data-live-action-window-receipt data-live-action-window-receipt-state="idle" data-live-action-window-receipt-source="" data-live-action-window-receipt-hidden="" data-live-action-window-receipt-impact="" data-live-action-window-receipt-response-cards="0" data-live-action-window-receipt-advisory-only="true" role="status" aria-live="polite" hidden>行动窗口回执：等待有效行动窗口</div>
+                        </div>
                         <div class="pvp-live-social-panel" data-live-social-panel>
                             <div class="pvp-live-emote-row">
                                 <button class="pvp-live-emote-button" data-live-emote="respect" onclick="PVPScene.submitLiveEmote('respect')" disabled>抱拳</button>
@@ -337,34 +339,42 @@
                     </div>
                     <div class="pvp-nav-footer pvp-live-footer">
                         <div class="challenge-intent-line" data-live-last-error>实时论道不会自动匹配残影；没有真人时可取消排队。</div>
-                        <div class="pvp-live-action-bar">
-                            <button class="challenge-btn" data-live-action="join-queue" onclick="PVPScene.joinLiveQueue()">
-                                <span class="text">入队</span>
-                            </button>
-                            <button class="challenge-btn secondary" data-live-action="cancel-queue" onclick="PVPScene.cancelLiveQueue()">
-                                <span class="text">取消</span>
-                            </button>
-                            <button class="challenge-btn secondary" data-live-action="cancel-rematch" onclick="PVPScene.cancelLiveRematch()" hidden>
-                                <span class="text">取消再战</span>
-                            </button>
-                            <button class="challenge-btn secondary" data-live-action="practice-live" onclick="PVPScene.openLivePracticeHint()">
-                                <span class="text">问道练习</span>
-                            </button>
-                            <button class="challenge-btn secondary" data-live-action="refresh-match" onclick="PVPScene.refreshLiveMatch()">
-                                <span class="text">刷新</span>
-                            </button>
-                            <button class="challenge-btn secondary" data-live-action="confirm-mulligan" onclick="PVPScene.confirmLiveMulligan()">
-                                <span class="text">确认调息</span>
-                            </button>
-                            <button class="challenge-btn secondary" data-live-action="ready" onclick="PVPScene.readyLiveMatch()">
-                                <span class="text">准备就绪</span>
-                            </button>
-                            <button class="challenge-btn secondary" data-live-action="end-turn" onclick="PVPScene.endLiveTurn()">
-                                <span class="text">结束回合</span>
-                            </button>
-                            <button class="challenge-btn danger" data-live-action="surrender" onclick="PVPScene.surrenderLiveMatch()">
-                                <span class="text">认输</span>
-                            </button>
+                        <div class="pvp-live-action-bar pvp-live-command-rail" data-live-command-rail aria-label="实时论道操作">
+                            <div class="pvp-live-command-group" data-live-command-group="queue" aria-label="排位队列">
+                                <button class="challenge-btn" data-live-action="join-queue" onclick="PVPScene.joinLiveQueue()">
+                                    <span class="text">入队</span>
+                                </button>
+                                <button class="challenge-btn secondary" data-live-action="cancel-queue" onclick="PVPScene.cancelLiveQueue()">
+                                    <span class="text">取消</span>
+                                </button>
+                                <button class="challenge-btn secondary" data-live-action="cancel-rematch" onclick="PVPScene.cancelLiveRematch()" hidden>
+                                    <span class="text">取消再战</span>
+                                </button>
+                            </div>
+                            <div class="pvp-live-command-group" data-live-command-group="turn" aria-label="行动同步">
+                                <button class="challenge-btn secondary" data-live-action="refresh-match" onclick="PVPScene.refreshLiveMatch()">
+                                    <span class="text">刷新</span>
+                                </button>
+                                <button class="challenge-btn secondary" data-live-action="confirm-mulligan" onclick="PVPScene.confirmLiveMulligan()">
+                                    <span class="text">确认调息</span>
+                                </button>
+                                <button class="challenge-btn secondary" data-live-action="ready" onclick="PVPScene.readyLiveMatch()">
+                                    <span class="text">准备就绪</span>
+                                </button>
+                                <button class="challenge-btn secondary" data-live-action="end-turn" onclick="PVPScene.endLiveTurn()">
+                                    <span class="text">结束回合</span>
+                                </button>
+                            </div>
+                            <div class="pvp-live-command-group" data-live-command-group="practice" aria-label="练习入口">
+                                <button class="challenge-btn secondary" data-live-action="practice-live" onclick="PVPScene.openLivePracticeHint()">
+                                    <span class="text">问道练习</span>
+                                </button>
+                            </div>
+                            <div class="pvp-live-command-group" data-live-command-group="danger" aria-label="风险操作">
+                                <button class="challenge-btn danger" data-live-action="surrender" onclick="PVPScene.surrenderLiveMatch()">
+                                    <span class="text">认输</span>
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>
