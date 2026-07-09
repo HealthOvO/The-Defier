@@ -369,11 +369,72 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
         assert.equal(seasonStatus.payload.userProgress?.collection?.totalUnlocked, 0, 'new live season user should start with no honor unlocks');
         assert.doesNotMatch(JSON.stringify(seasonStatus.payload), /JWT_SECRET|DEFIER_HMAC_SECRET|password|hand|deck|randomSeed/i, 'live season endpoint must not leak secrets or hidden match state');
         const staleSeasonNow = Date.now();
+        const preLedgerCurrentUserId = `live-user-current-pre-ledger-${Date.now()}`;
+        const preLedgerCurrentUsername = `本季旧账_${Date.now()}_${process.pid}`;
+        const preLedgerCurrentToken = generateToken({ id: preLedgerCurrentUserId, username: preLedgerCurrentUsername });
+        await dbRun(
+            `INSERT INTO users (id, username, password_hash, created_at, global_updated_at)
+             VALUES (?, ?, 'pvp-live-current-pre-ledger-test', ?, 0)
+             ON CONFLICT(id) DO UPDATE SET username = excluded.username`,
+            [preLedgerCurrentUserId, preLedgerCurrentUsername, staleSeasonNow]
+        );
+        await dbRun(
+            `INSERT INTO pvp_ranks
+              (id, user_id, user_name, score, wins, losses, realm, division, season_id, created_at, updated_at)
+             VALUES (?, ?, ?, 1100, 2, 1, 1, '潜龙榜', 's1-genesis', ?, ?)
+             ON CONFLICT(user_id) DO UPDATE SET
+              score = excluded.score,
+              wins = excluded.wins,
+              losses = excluded.losses,
+              division = excluded.division,
+              season_id = excluded.season_id,
+              updated_at = excluded.updated_at`,
+            [`rank-${preLedgerCurrentUserId}`, preLedgerCurrentUserId, preLedgerCurrentUsername, staleSeasonNow, staleSeasonNow]
+        );
+        await dbRun(
+            `INSERT INTO pvp_economy (user_id, economy_data, updated_at)
+             VALUES (?, ?, ?)
+             ON CONFLICT(user_id) DO UPDATE SET economy_data = excluded.economy_data, updated_at = excluded.updated_at`,
+            [preLedgerCurrentUserId, JSON.stringify({
+                wins: 2,
+                losses: 1,
+                seasonHonorCollection: {
+                    seasonId: 's1-genesis',
+                    unlockedRewards: {
+                        s1_genesis_honor_mark_1: {
+                            rewardId: 's1_genesis_honor_mark_1',
+                            rewardType: 'cosmetic_badge',
+                            rewardName: '开天见证徽记',
+                            targetGames: 1,
+                            unlockedAt: staleSeasonNow,
+                            rewardImpact: 'cosmetic_only',
+                            powerImpact: 'none'
+                        }
+                    }
+                }
+            }), staleSeasonNow]
+        );
+        const preLedgerCurrentStatus = await request(baseUrl, '/api/pvp/live/season', { token: preLedgerCurrentToken });
+        assert.equal(preLedgerCurrentStatus.status, 200, 'live season endpoint should handle current season economy before durable ledger migration');
+        assert.equal(preLedgerCurrentStatus.payload.userProgress?.collection?.totalUnlocked, 1, 'current season economy fallback should keep visible honor count before ledger migration');
+        assert.equal(preLedgerCurrentStatus.payload.userProgress?.claimLedger?.[0]?.rewardId, 's1_genesis_honor_mark_1', 'current season economy fallback should expose current honor claim before ledger migration');
+        assert.equal(preLedgerCurrentStatus.payload.userProgress?.claimLedger?.[0]?.claimSource, 'economy_snapshot', 'current season economy fallback should identify read-only snapshot source');
+        assert.equal(preLedgerCurrentStatus.payload.userProgress?.claimLedger?.[0]?.powerImpact, 'none', 'current season economy fallback should not grant combat power');
+        const preLedgerCurrentClaimCountAfterRead = await dbGet(
+            `SELECT COUNT(*) AS count
+             FROM pvp_season_reward_claims
+             WHERE user_id = ? AND season_id = ? AND reward_id = ?`,
+            [preLedgerCurrentUserId, 's1-genesis', 's1_genesis_honor_mark_1']
+        );
+        assert.equal(Number(preLedgerCurrentClaimCountAfterRead?.count), 0, 'current season economy fallback should keep live season endpoint read-only');
+        const staleArchiveUserId = `live-user-stale-archive-readonly-${Date.now()}`;
+        const staleArchiveUsername = `旧归档_${Date.now()}_${process.pid}`;
+        const staleArchiveToken = generateToken({ id: staleArchiveUserId, username: staleArchiveUsername });
         await dbRun(
             `INSERT INTO users (id, username, password_hash, created_at, global_updated_at)
              VALUES (?, ?, 'pvp-live-stale-season-test', ?, 0)
              ON CONFLICT(id) DO UPDATE SET username = excluded.username`,
-            ['live-user-k', '子', staleSeasonNow]
+            [staleArchiveUserId, staleArchiveUsername, staleSeasonNow]
         );
         await dbRun(
             `INSERT INTO pvp_ranks
@@ -386,13 +447,13 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
               division = excluded.division,
               season_id = excluded.season_id,
               updated_at = excluded.updated_at`,
-            ['rank-live-user-k', 'live-user-k', '子', staleSeasonNow, staleSeasonNow]
+            [`rank-${staleArchiveUserId}`, staleArchiveUserId, staleArchiveUsername, staleSeasonNow, staleSeasonNow]
         );
         await dbRun(
             `INSERT INTO pvp_economy (user_id, economy_data, updated_at)
              VALUES (?, ?, ?)
              ON CONFLICT(user_id) DO UPDATE SET economy_data = excluded.economy_data, updated_at = excluded.updated_at`,
-            ['live-user-k', JSON.stringify({
+            [staleArchiveUserId, JSON.stringify({
                 wins: 77,
                 losses: 3,
                 seasonHonorCollection: {
@@ -409,13 +470,34 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
                 }
             }), staleSeasonNow]
         );
-        const staleSeasonStatus = await request(baseUrl, '/api/pvp/live/season', { token: tokenK });
+        const staleSeasonStatus = await request(baseUrl, '/api/pvp/live/season', { token: staleArchiveToken });
         assert.equal(staleSeasonStatus.status, 200, 'live season endpoint should handle stale season records');
         assert.equal(staleSeasonStatus.payload.userProgress?.seasonId, 's1-genesis', 'live season endpoint should pin progress to current season');
         assert.equal(staleSeasonStatus.payload.userProgress?.score, 1000, 'stale season rank should not leak into current season score');
         assert.equal(staleSeasonStatus.payload.userProgress?.rankedGames, 0, 'stale season games should not count toward current season progress');
         assert.equal(staleSeasonStatus.payload.userProgress?.collection?.totalUnlocked, 0, 'stale season collection should not unlock current season rewards');
+        assert.equal(staleSeasonStatus.payload.archive?.reportVersion, 'pvp-live-season-archive-v1', 'live season endpoint should expose stale honor archive summary');
+        assert.equal(staleSeasonStatus.payload.archive?.archivedSeasonCount, 1, 'stale season honor should be archived outside current progress');
+        assert.equal(staleSeasonStatus.payload.archive?.seasons?.[0]?.seasonId, 's0-legacy', 'stale season archive should preserve original season id');
+        assert.equal(staleSeasonStatus.payload.archive?.seasons?.[0]?.totalClaims, 1, 'stale season archive should count legacy honor claims');
+        assert.equal(staleSeasonStatus.payload.archive?.seasons?.[0]?.totalUnlocked, 1, 'stale season archive should count unlocked legacy honors');
         assert.equal(JSON.stringify(staleSeasonStatus.payload).includes('s0_legacy_badge'), false, 'live season endpoint should not expose stale season reward ids in current status');
+        const archivedStaleClaimCountAfterRead = await dbGet(
+            `SELECT COUNT(*) AS count
+             FROM pvp_season_reward_claims
+             WHERE user_id = ? AND season_id = ? AND reward_id = ?
+             LIMIT 1`,
+            [staleArchiveUserId, 's0-legacy', 's0_legacy_badge']
+        );
+        assert.equal(Number(archivedStaleClaimCountAfterRead?.count), 0, 'live season endpoint should keep stale honor claim migration read-only');
+        const archivedStaleSeasonCountAfterRead = await dbGet(
+            `SELECT COUNT(*) AS count
+             FROM pvp_season_honor_archives
+             WHERE user_id = ? AND season_id = ?
+             LIMIT 1`,
+            [staleArchiveUserId, 's0-legacy']
+        );
+        assert.equal(Number(archivedStaleSeasonCountAfterRead?.count), 0, 'live season endpoint should keep stale season archive migration read-only');
         const staleNoMarkerUserId = `live-user-stale-no-marker-${Date.now()}`;
         const staleNoMarkerUsername = `旧无标记_${Date.now()}_${process.pid}`;
         const staleNoMarkerToken = generateToken({ id: staleNoMarkerUserId, username: staleNoMarkerUsername });

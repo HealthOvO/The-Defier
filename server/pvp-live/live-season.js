@@ -2,8 +2,17 @@ const {
     SEASON_ID,
     SEASON_NAME,
     SEASON_HONOR_REWARD_TRACK,
-    normalizeSeasonHonorCollection
+    withLiveSettlementReadGate
 } = require('./live-settlement');
+const {
+    loadSeasonArchiveSummary,
+    loadSeasonRewardClaims,
+    makeClaimLedgerFromCollection,
+    makeSeasonArchiveEntryFromCollection,
+    makeClaimLedger,
+    mergeClaimLedgers,
+    mergeSeasonArchiveSummary
+} = require('./season-claims');
 
 function dbGet(db, sql, params = []) {
     return new Promise((resolve, reject) => {
@@ -34,27 +43,60 @@ function makeSeasonRewardTrack() {
     }));
 }
 
-function makeClaimLedger(collection) {
-    const rewards = collection && collection.unlockedRewards && typeof collection.unlockedRewards === 'object'
-        ? collection.unlockedRewards
+function makeCollectionReportFromClaims(claimLedger) {
+    const claims = Array.isArray(claimLedger) ? claimLedger : [];
+    const latest = claims.slice().sort((left, right) => {
+        const claimedDelta = Math.max(0, Math.floor(Number(right.claimedAt) || 0)) - Math.max(0, Math.floor(Number(left.claimedAt) || 0));
+        if (claimedDelta !== 0) return claimedDelta;
+        return Math.max(1, Math.floor(Number(right.targetGames) || 1)) - Math.max(1, Math.floor(Number(left.targetGames) || 1));
+    })[0] || null;
+    return {
+        reportVersion: 'pvp-live-season-honor-collection-v1',
+        seasonId: SEASON_ID,
+        totalUnlocked: claims.length,
+        lastUnlockedRewardId: latest ? latest.rewardId : null,
+        rewardImpact: 'cosmetic_only',
+        powerImpact: 'none',
+        boundary: '赛季荣誉收藏只保存外观成就，不授予卡牌、属性、资源、起手、匹配或战斗效果。'
+    };
+}
+
+function getCollectionRewardCount(rawCollection) {
+    const rewards = rawCollection.unlockedRewards && typeof rawCollection.unlockedRewards === 'object' && !Array.isArray(rawCollection.unlockedRewards)
+        ? rawCollection.unlockedRewards
         : {};
-    return Object.keys(rewards)
-        .map(rewardId => rewards[rewardId])
-        .filter(Boolean)
-        .sort((left, right) => (left.targetGames || 0) - (right.targetGames || 0))
-        .map(entry => ({
-            rewardId: String(entry.rewardId || ''),
-            rewardType: String(entry.rewardType || 'cosmetic_badge'),
-            rewardName: String(entry.rewardName || '赛季荣誉外观'),
-            targetGames: Math.max(1, Math.floor(Number(entry.targetGames) || 1)),
-            unlockedAt: Math.max(0, Math.floor(Number(entry.unlockedAt) || 0)),
-            rewardImpact: 'cosmetic_only',
-            powerImpact: 'none'
-        }));
+    return Object.keys(rewards).length;
+}
+
+function makeReadOnlyEconomyArchiveEntry(rawCollection, economyUpdatedAt) {
+    if (!rawCollection || typeof rawCollection !== 'object' || Array.isArray(rawCollection) || getCollectionRewardCount(rawCollection) === 0) return null;
+    const rawSeasonId = String(rawCollection.seasonId || '').trim();
+    const seasonId = rawSeasonId || 'legacy-unversioned';
+    if (seasonId === SEASON_ID) return null;
+    return makeSeasonArchiveEntryFromCollection({
+        collection: rawCollection,
+        seasonId,
+        archiveSource: 'economy_snapshot',
+        archivedAt: Math.max(0, Math.floor(Number(economyUpdatedAt) || Date.now()))
+    });
+}
+
+function makeReadOnlyCurrentSeasonClaimLedger(rawCollection, economyUpdatedAt) {
+    if (!rawCollection || typeof rawCollection !== 'object' || Array.isArray(rawCollection) || getCollectionRewardCount(rawCollection) === 0) return [];
+    const rawSeasonId = String(rawCollection.seasonId || '').trim();
+    if (rawSeasonId !== SEASON_ID) return [];
+    return makeClaimLedgerFromCollection({
+        collection: rawCollection,
+        seasonId: SEASON_ID,
+        claimSource: 'economy_snapshot',
+        sourceMatchId: '',
+        claimedAt: Math.max(0, Math.floor(Number(economyUpdatedAt) || Date.now()))
+    });
 }
 
 async function buildLivePvpSeasonStatus(db, userId) {
     const id = String(userId || '').trim();
+    return withLiveSettlementReadGate(async () => {
     const rankRow = id ? await dbGet(
         db,
         `SELECT score, division, season_id, wins, losses
@@ -65,7 +107,7 @@ async function buildLivePvpSeasonStatus(db, userId) {
     ) : null;
     const economyRow = id ? await dbGet(
         db,
-        `SELECT economy_data
+        `SELECT economy_data, updated_at
          FROM pvp_economy
          WHERE user_id = ?
          LIMIT 1`,
@@ -76,11 +118,7 @@ async function buildLivePvpSeasonStatus(db, userId) {
         ? economy.seasonHonorCollection
         : null;
     const rawCollectionSeasonId = String(rawCollection && rawCollection.seasonId || '');
-    const normalizedCollection = normalizeSeasonHonorCollection(rawCollection);
     const economySeasonIsCurrent = rawCollectionSeasonId === SEASON_ID;
-    const collection = economySeasonIsCurrent
-        ? normalizedCollection
-        : normalizeSeasonHonorCollection(null);
     const rankSeasonId = String(rankRow && rankRow.season_id || '');
     const rankIsCurrentSeason = !!rankRow && (!rankSeasonId || rankSeasonId === SEASON_ID);
     const wins = Math.max(0, Math.floor(Number(rankIsCurrentSeason ? rankRow.wins : economySeasonIsCurrent && economy && economy.wins) || 0));
@@ -88,6 +126,15 @@ async function buildLivePvpSeasonStatus(db, userId) {
     const rankedGames = wins + losses;
     const rewardTrack = makeSeasonRewardTrack();
     const nextReward = rewardTrack.find(reward => reward.targetGames > rankedGames) || rewardTrack[rewardTrack.length - 1] || null;
+    const claimLedger = mergeClaimLedgers(
+        makeClaimLedger(await loadSeasonRewardClaims(db, id, SEASON_ID)),
+        makeReadOnlyCurrentSeasonClaimLedger(rawCollection, economyRow && economyRow.updated_at)
+    );
+    const collection = makeCollectionReportFromClaims(claimLedger);
+    const archive = mergeSeasonArchiveSummary(
+        await loadSeasonArchiveSummary(db, id, SEASON_ID),
+        [makeReadOnlyEconomyArchiveEntry(rawCollection, economyRow && economyRow.updated_at)].filter(Boolean)
+    );
     return {
         reportVersion: 'pvp-live-season-status-v1',
         config: {
@@ -110,20 +157,14 @@ async function buildLivePvpSeasonStatus(db, userId) {
             wins,
             losses,
             rankedGames,
-            collection: {
-                reportVersion: collection.reportVersion,
-                seasonId: collection.seasonId,
-                totalUnlocked: Math.max(0, Math.floor(Number(collection.totalUnlocked) || 0)),
-                lastUnlockedRewardId: collection.lastUnlockedRewardId || null,
-                rewardImpact: 'cosmetic_only',
-                powerImpact: 'none',
-                boundary: collection.boundary
-            },
-            claimLedger: makeClaimLedger(collection),
+            collection,
+            claimLedger,
             nextReward,
             boundary: '赛季进度只来自服务端排位结算和经济收藏记录，不读取隐藏对局信息。'
-        }
+        },
+        archive
     };
+    });
 }
 
 module.exports = {

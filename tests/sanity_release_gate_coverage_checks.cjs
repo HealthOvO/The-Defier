@@ -60,6 +60,10 @@ const pvpLiveRoute = read('server/routes/pvp-live.js');
 const pvpLivePersistenceChecks = read('tests/sanity_pvp_live_persistence_checks.cjs');
 const pvpLiveDatabase = read('server/db/database.js');
 const pvpLivePersistence = read('server/pvp-live/live-persistence.js');
+const pvpLiveSeasonSource = read('server/pvp-live/live-season.js');
+const pvpLiveSeasonClaimsSource = read('server/pvp-live/season-claims.js');
+const pvpLiveSettlementSource = read('server/pvp-live/live-settlement.js');
+const schemaStatusSource = read('server/services/platform/schema-status.js');
 const pvpLiveSettlementChecks = read('tests/sanity_pvp_live_settlement_checks.cjs');
 const pvpLiveClientChecks = read('tests/sanity_pvp_live_client_checks.mjs');
 const pvpLiveServiceBridgeChecks = read('tests/sanity_pvp_live_service_bridge_checks.cjs');
@@ -2500,10 +2504,86 @@ assert.ok(
   'ALTER TABLE pvp_live_dispute_reports ADD COLUMN resolved_at INTEGER NOT NULL DEFAULT 0',
   'idx_pvp_live_dispute_reports_status',
   'idx_pvp_live_dispute_reports_user_status',
+  'CREATE TABLE IF NOT EXISTS pvp_season_reward_claims',
+  'UNIQUE(user_id, season_id, reward_id)',
+  'idx_pvp_season_claims_user_season',
+  'idx_pvp_season_claims_season_reward',
+  'CREATE TABLE IF NOT EXISTS pvp_season_honor_archives',
+  'UNIQUE(user_id, season_id)',
+  'idx_pvp_season_archives_user_season',
 ].forEach((needle) => {
   assert.ok(
     pvpLiveDatabase.includes(needle),
     `live PVP database schema should pin append-only event table marker: ${needle}`,
+  );
+});
+
+[
+  "'pvp_season_reward_claims'",
+  "'pvp_season_honor_archives'",
+].forEach((needle) => {
+  assert.ok(
+    schemaStatusSource.includes(needle),
+    `backend schema status checksum should include live PVP season ledger marker: ${needle}`,
+  );
+});
+
+[
+  'recordSeasonRewardClaims(db',
+  'recordSeasonRewardClaimsFromCollection',
+  'recordSeasonHonorArchiveFromCollection',
+  'loadSeasonRewardClaims',
+  'loadSeasonArchiveSummary',
+  'makeClaimLedgerFromCollection',
+  'makeSeasonArchiveEntryFromCollection',
+  'mergeClaimLedgers',
+  'mergeSeasonArchiveSummary',
+  'pvp-live-season-claim-ledger-entry-v1',
+  'pvp-live-season-archive-v1',
+  'pvp-live-season-honor-archive-payload-v1',
+  'legacy_economy_archive',
+  'sourceMatchId',
+  'claimSource',
+  'archiveSource',
+].forEach((needle) => {
+  assert.ok(
+    pvpLiveSeasonClaimsSource.includes(needle),
+    `live PVP season claim/archive service should pin durable ledger marker: ${needle}`,
+  );
+});
+
+[
+  'makeCollectionReportFromClaims',
+  'makeReadOnlyCurrentSeasonClaimLedger',
+  'makeReadOnlyEconomyArchiveEntry',
+  'withLiveSettlementReadGate',
+  'makeClaimLedgerFromCollection',
+  'mergeClaimLedgers',
+  'makeSeasonArchiveEntryFromCollection',
+  'mergeSeasonArchiveSummary',
+  'loadSeasonRewardClaims(db, id, SEASON_ID)',
+  'loadSeasonArchiveSummary(db, id, SEASON_ID)',
+  'economy_snapshot',
+].forEach((needle) => {
+  assert.ok(
+    pvpLiveSeasonSource.includes(needle),
+    `live PVP season endpoint should pin read-only durable ledger marker: ${needle}`,
+  );
+});
+
+[
+  'withLiveSettlementReadGate',
+  'migrateSeasonHonorCollectionForSettlement',
+  'recordSeasonRewardClaimsFromCollection',
+  'recordSeasonHonorArchiveFromCollection',
+  'economy_collection_backfill',
+  'legacy_economy_archive',
+  'normalizeSeasonHonorCollection(null)',
+  'rawSeasonHonorCollection',
+].forEach((needle) => {
+  assert.ok(
+    pvpLiveSettlementSource.includes(needle),
+    `live PVP settlement should pin transaction-scoped season ledger migration marker: ${needle}`,
   );
 });
 
@@ -2712,6 +2792,18 @@ assert.ok(
   'loser settlement report should expose season honor progress',
   'season honor progress should match authoritative ranked games',
   'season honor progress should state the non-power boundary',
+  'season endpoint should expose one durable claim ledger entry after first ranked settlement',
+  'claim ledger entry should trace the source live match',
+  'claim ledger entry should come from live ranked settlement',
+  'season endpoint collection count should derive from durable claim ledger',
+  'season claim ledger must not leak hidden match state or secrets',
+  'live settlement should reset stale season honor collection before current reward grant',
+  'live settlement should not carry stale season honor into current collection',
+  'live settlement should durably archive stale season honor claims inside settlement transaction',
+  'live settlement stale archive should trace the settlement match id',
+  'live settlement should persist stale season archive count',
+  'live settlement stale archive should not grant combat power',
+  'duplicate live settlement must not append duplicate durable claim rows',
 ].forEach((needle) => {
   assert.ok(
     pvpLiveSettlementChecks.includes(needle),
@@ -2729,6 +2821,16 @@ assert.ok(
   'ranked surrender season honor should include cosmetic-only reward track',
   'ranked season honor reward should be cosmetic only',
   'ranked season honor reward should expose new collection unlock state',
+  'live season endpoint should handle current season economy before durable ledger migration',
+  'current season economy fallback should keep visible honor count before ledger migration',
+  'current season economy fallback should identify read-only snapshot source',
+  'current season economy fallback should keep live season endpoint read-only',
+  'live season endpoint should expose stale honor archive summary',
+  'stale season honor should be archived outside current progress',
+  'stale season archive should count unlocked legacy honors',
+  'live season endpoint should keep stale honor claim migration read-only',
+  'live season endpoint should keep stale season archive migration read-only',
+  'live season endpoint should not expose stale season reward ids in current status',
   'pvp-live-season-honor-collection-v1',
   'pvp-live-settlement-report-v1',
   'pvp-live-season-honor-v1',

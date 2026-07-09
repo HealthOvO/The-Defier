@@ -139,6 +139,53 @@ const initDb = () => {
                 updated_at INTEGER NOT NULL,
                 FOREIGN KEY(user_id) REFERENCES users(id)
             )`);
+            db.run(`CREATE TABLE IF NOT EXISTS pvp_season_reward_claims (
+                claim_id TEXT PRIMARY KEY,
+                user_id TEXT NOT NULL,
+                season_id TEXT NOT NULL,
+                reward_id TEXT NOT NULL,
+                reward_type TEXT NOT NULL DEFAULT 'cosmetic_badge',
+                reward_name TEXT NOT NULL DEFAULT '',
+                target_games INTEGER NOT NULL DEFAULT 1,
+                claim_source TEXT NOT NULL DEFAULT 'live_ranked_settlement',
+                source_match_id TEXT NOT NULL DEFAULT '',
+                reward_impact TEXT NOT NULL DEFAULT 'cosmetic_only',
+                power_impact TEXT NOT NULL DEFAULT 'none',
+                claim_payload_json TEXT NOT NULL DEFAULT '{}',
+                claimed_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL,
+                UNIQUE(user_id, season_id, reward_id),
+                FOREIGN KEY(user_id) REFERENCES users(id)
+            )`, (err) => {
+                if (err) fail(err);
+            });
+            db.run(`CREATE INDEX IF NOT EXISTS idx_pvp_season_claims_user_season ON pvp_season_reward_claims(user_id, season_id, claimed_at)`, (err) => {
+                if (err) fail(err);
+            });
+            db.run(`CREATE INDEX IF NOT EXISTS idx_pvp_season_claims_season_reward ON pvp_season_reward_claims(season_id, reward_id, claimed_at)`, (err) => {
+                if (err) fail(err);
+            });
+            db.run(`CREATE TABLE IF NOT EXISTS pvp_season_honor_archives (
+                archive_id TEXT PRIMARY KEY,
+                user_id TEXT NOT NULL,
+                season_id TEXT NOT NULL,
+                total_unlocked INTEGER NOT NULL DEFAULT 0,
+                last_unlocked_reward_id TEXT NOT NULL DEFAULT '',
+                archive_source TEXT NOT NULL DEFAULT 'legacy_economy_archive',
+                source_match_id TEXT NOT NULL DEFAULT '',
+                reward_impact TEXT NOT NULL DEFAULT 'cosmetic_only',
+                power_impact TEXT NOT NULL DEFAULT 'none',
+                collection_payload_json TEXT NOT NULL DEFAULT '{}',
+                archived_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL,
+                UNIQUE(user_id, season_id),
+                FOREIGN KEY(user_id) REFERENCES users(id)
+            )`, (err) => {
+                if (err) fail(err);
+            });
+            db.run(`CREATE INDEX IF NOT EXISTS idx_pvp_season_archives_user_season ON pvp_season_honor_archives(user_id, season_id, archived_at)`, (err) => {
+                if (err) fail(err);
+            });
             db.run(`CREATE TABLE IF NOT EXISTS pvp_match_history (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 ticket_id TEXT UNIQUE NOT NULL,

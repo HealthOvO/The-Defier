@@ -18,7 +18,9 @@ const CURRENT_MIGRATION_CHECKSUM = crypto
         'pvp_live_ops_events',
         'pvp_live_dispute_reports',
         'pvp_live_match_settlements',
-        'pvp_live_replay_shares'
+        'pvp_live_replay_shares',
+        'pvp_season_reward_claims',
+        'pvp_season_honor_archives'
     ].join('|'))
     .digest('hex');
 
