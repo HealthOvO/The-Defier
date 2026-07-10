@@ -1,0 +1,111 @@
+css/style.css
+  s_bae69f1b7fab46::t_39b408f841e920 9636-9785
+docs/backend_cloud_state_v2.md
+  s_bae69f1b7fab46::t_ea30a4ddcc6f30 1-92
+docs/backend_migration_guide.md
+  s_bae69f1b7fab46::t_37cca9761e3df1 54,73-75,85-86,91-96,102-104,109-114,148-156,167,169-171
+docs/backend_progression_platform_v1.md
+  s_bae69f1b7fab46::t_2c02be5818a79d 79,84,96-100,102
+index.html
+  s_bae69f1b7fab46::t_e12fab9d2cde20 1986-1999
+js/core/achievements.js
+  s_bae69f1b7fab46::t_761252dccde3f9 131,141-149
+js/game.js
+  s_049a677bbe8742::t_e99ff62118e437 108-109,533,576,8634,8728,8753-8759,8928-9022,9045,9055-9063
+js/managers/SaveManager.js
+  s_77c642ce4cb628::t_fe498237d86db0 103-120
+js/services/authService.js
+  s_bae69f1b7fab46::t_78b45d4844058d 92-103,248-256,333-337,340-342,344,351-354,365-366,370,384,386-388,405-412,431,433-435,452-466,480-487,506-520,533-540
+js/services/backend-client.js
+  s_bae69f1b7fab46::t_0698280029dbaf 168-173,198-203,459,567,658,667-669,675,695,751,760-762,767,786
+js/views/SystemView.js
+  s_bae69f1b7fab46::t_f011784e4cc03e 735-738,781-860
+progress.md
+  s_bae69f1b7fab46::t_1ae59f2fe3e718 14016-14035
+server/app.js
+  s_bae69f1b7fab46::t_9c562ce048a51c 24,88-99
+server/cloud-state/bootstrap.js
+  s_bae69f1b7fab46::t_c3b644b60a33f5 94-95,106-128,159,199-216,250-263
+server/cloud-state/common.js
+  s_bae69f1b7fab46::t_2255eb3359d20a 9-11,112,124,170,203,259-261
+server/cloud-state/service.js
+  s_bae69f1b7fab46::t_f5a0fd69b44228 9-11,99,124-125,130-184,502,557,607,644,743,789,799-800,851-855
+server/routes/saves.js
+  s_bae69f1b7fab46::t_44ce727d41f1eb 175,191-192,197,209-210
+server/services/platform/schema-status.js
+  s_bae69f1b7fab46::t_d680bf08b229a3 63-64
+tests/backend_platform_checks.cjs
+  s_938e93b21ba2c9::t_f81e35b1820082 108-109,123-126,138,161-165
+tests/browser_auth_ui_cloud_smoke.mjs
+  s_bae69f1b7fab46::t_92fc6c1ae39199 28-29,64,143-154,359,370,435-450,471,477-478,491-495,497-504,532,599-791,1249,1466,1469,1493,1535,1618-1641,1677-1710,1714
+tests/browser_backend_client_smoke.mjs
+  s_bae69f1b7fab46::t_457856010daf10 289-291,293-295,334-336,345-347,349-351
+tests/browser_pvp_live_audit.mjs
+  s_bae69f1b7fab46::t_f0cc8ee73bbbf0 6490-6504,6507,6509-6512,6530-6533
+tests/run_node_checks.sh
+  s_bae69f1b7fab46::t_31defc989b9c5e 10,12-13
+tests/sanity_cloud_state_ui_checks.cjs
+  s_049a677bbe8742::t_3d8dc029e12197 1-48
+tests/sanity_cloud_state_v2_checks.cjs
+  s_bae69f1b7fab46::t_8e05765351c57e 8,22-23,65-81,113,123,257-277,302,314-321,333-338,466-467,489-490,543-544,587-703,746-749
+tests/sanity_frontend_cloud_state_v2_checks.mjs
+  s_bae69f1b7fab46::t_55dee1f99c9e2e 228-236,462-501,517,520-549,582-596,628,643-657
+tests/sanity_frontend_cloud_sync_checks.mjs
+  s_bae69f1b7fab46::t_75ad0b18e8fd20 79-82,142-163
+tests/sanity_progression_platform_checks.cjs
+  s_938e93b21ba2c9::t_f992b8f0f69051 181-182,185
+tests/sanity_release_gate_coverage_checks.cjs
+  s_bae69f1b7fab46::t_42c986e74cf595 76,240,288-291,302
+tests/sanity_verified_runs_platform_checks.cjs
+  s_896a14cbbb324e::t_2196c794290f31 163-164,167,186,189-190
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "fa51be2958c4b540bf4b685028a29baea37bdc33",
+  "prompts": {},
+  "sessions": {
+    "s_049a677bbe8742": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f4c89-f263-7561-ab87-99c1d26daaa1",
+        "model": "unknown"
+      },
+      "human_author": "AI Agent <bot@example.com>"
+    },
+    "s_77c642ce4cb628": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f4c50-60f2-7c91-a417-09352c99ea9d",
+        "model": "unknown"
+      },
+      "human_author": "AI Agent <bot@example.com>"
+    },
+    "s_896a14cbbb324e": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f4c5c-f98a-7142-8bb7-903fcc119651",
+        "model": "unknown"
+      },
+      "human_author": "AI Agent <bot@example.com>"
+    },
+    "s_938e93b21ba2c9": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f4c5c-f907-70f2-90f5-e90be27e30ff",
+        "model": "unknown"
+      },
+      "human_author": "AI Agent <bot@example.com>"
+    },
+    "s_bae69f1b7fab46": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ed4f6-e7ac-73e0-a29e-119f3eddb407",
+        "model": "unknown"
+      },
+      "human_author": "AI Agent <bot@example.com>"
+    }
+  },
+  "attestation_metadata": {},
+  "remote_transcripts": {}
+}
