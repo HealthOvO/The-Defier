@@ -1,0 +1,33 @@
+js/services/backend-client.js
+  s_1d1e19bc203105::t_cace91645f51bc 753-801,878-993
+server/routes/progression.js
+  s_bae69f1b7fab46::t_b27e5298977c68 12-16,42-49,82-115
+server/services/platform/schema-status.js
+  s_1d1e19bc203105::t_49758ea4ebaf0c 44-53
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.5",
+  "base_commit_sha": "9bcf76e580f4d76f9224780a6129bb2c8db5ec62",
+  "prompts": {},
+  "sessions": {
+    "s_1d1e19bc203105": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f4a99-e1ba-7143-b82a-317510f72331",
+        "model": "unknown"
+      },
+      "human_author": "AI Agent <bot@example.com>"
+    },
+    "s_bae69f1b7fab46": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ed4f6-e7ac-73e0-a29e-119f3eddb407",
+        "model": "unknown"
+      },
+      "human_author": "AI Agent <bot@example.com>"
+    }
+  },
+  "attestation_metadata": {},
+  "remote_transcripts": {}
+}
