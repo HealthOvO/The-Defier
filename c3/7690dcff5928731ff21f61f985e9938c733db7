@@ -1,0 +1,41 @@
+server/cloud-state/bootstrap.js
+  s_bae69f1b7fab46::t_c68d851fefd0c3 1-220
+server/db/database.js
+  s_77c642ce4cb628::t_e99e6ce233d597 9,741-751
+server/services/platform/schema-status.js
+  s_c834ac9eaae143::t_db32fa39d495f5 54-64
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.5",
+  "base_commit_sha": "c37690dcff5928731ff21f61f985e9938c733db7",
+  "prompts": {},
+  "sessions": {
+    "s_77c642ce4cb628": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f4c50-60f2-7c91-a417-09352c99ea9d",
+        "model": "unknown"
+      },
+      "human_author": "AI Agent <bot@example.com>"
+    },
+    "s_bae69f1b7fab46": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ed4f6-e7ac-73e0-a29e-119f3eddb407",
+        "model": "unknown"
+      },
+      "human_author": "AI Agent <bot@example.com>"
+    },
+    "s_c834ac9eaae143": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f4c50-6179-7550-85a4-d41523162652",
+        "model": "unknown"
+      },
+      "human_author": "AI Agent <bot@example.com>"
+    }
+  },
+  "attestation_metadata": {},
+  "remote_transcripts": {}
+}
