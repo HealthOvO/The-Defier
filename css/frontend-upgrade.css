@@ -92,7 +92,64 @@
 }
 
 #map-screen .map-footer {
+    right: 12px;
+    bottom: 24px;
+    max-width: min(360px, calc(100vw - 24px));
+    gap: 6px;
+    padding: 8px 10px;
+    box-sizing: border-box;
     border-radius: var(--fd-radius-chip);
+    transition: none;
+}
+
+#map-screen .map-screen-v3.show-map-tools .map-footer {
+    opacity: 1;
+    transform: translateY(0);
+    pointer-events: auto;
+}
+
+#map-screen .map-footer .menu-btn.small[data-map-action] {
+    min-width: 76px;
+    padding-inline: 12px;
+}
+
+#map-screen .map-core-loop-brief {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 10px;
+    align-items: center;
+}
+
+#map-screen .map-core-loop-chip {
+    display: inline-flex;
+    min-width: 0;
+    align-items: center;
+    gap: 6px;
+    min-height: 28px;
+    padding: 4px 9px;
+    border: 1px solid rgba(155, 190, 255, 0.22);
+    border-radius: 8px;
+    background: rgba(7, 16, 34, 0.62);
+    color: rgba(244, 232, 205, 0.88);
+    font-size: 0.72rem;
+    line-height: 1.2;
+}
+
+#map-screen .map-core-loop-focus {
+    flex: 1 1 260px;
+}
+
+#map-screen .map-core-loop-label {
+    flex: 0 0 auto;
+    color: rgba(245, 202, 107, 0.8);
+}
+
+#map-screen .map-core-loop-value {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .collection-tab-btn {
@@ -314,6 +371,47 @@
     gap: var(--fd-space-4);
 }
 
+#reward-screen .reward-next-step-card {
+    display: grid;
+    gap: 4px;
+    min-height: 78px;
+    padding: 10px 12px;
+    border: 1px solid rgba(245, 202, 107, 0.24);
+    border-radius: var(--fd-radius-card);
+    background:
+        linear-gradient(145deg, rgba(18, 28, 58, 0.82), rgba(8, 15, 34, 0.9)),
+        radial-gradient(circle at 12% 18%, rgba(245, 202, 107, 0.12), transparent 42%);
+    color: rgba(244, 232, 205, 0.86);
+    line-height: 1.35;
+}
+
+#reward-screen .reward-next-step-card strong {
+    color: var(--accent-gold);
+    font-size: 0.95rem;
+    line-height: 1.2;
+}
+
+#reward-screen .reward-next-step-card span {
+    overflow-wrap: anywhere;
+}
+
+#reward-screen .reward-next-step-kicker {
+    color: rgba(155, 190, 255, 0.82);
+    font-size: 0.66rem;
+    letter-spacing: 0.08em;
+}
+
+#reward-screen .reward-next-step-card[data-reward-next-state="ready"] {
+    border-color: rgba(91, 217, 168, 0.36);
+    background:
+        linear-gradient(145deg, rgba(12, 46, 42, 0.82), rgba(8, 22, 31, 0.92)),
+        radial-gradient(circle at 16% 16%, rgba(91, 217, 168, 0.16), transparent 44%);
+}
+
+#reward-screen .reward-next-step-card[data-reward-next-state="blocked"] {
+    border-color: rgba(255, 139, 115, 0.38);
+}
+
 .challenge-btn,
 .menu-btn,
 .talisman-btn,
@@ -348,6 +446,85 @@
 .realm-preview-panel {
     scroll-padding: 16px;
     scroll-padding-bottom: calc(var(--fd-hit-target) + var(--fd-safe-bottom) + var(--fd-space-4));
+}
+
+#map-screen .map-screen-v3 {
+    position: relative;
+}
+
+#map-screen .map-header-right {
+    position: relative;
+}
+
+#map-screen .map-screen-v3.show-map-intel .map-detail-panels {
+    position: absolute;
+    top: 54px;
+    right: 0;
+    z-index: 44;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+    width: min(430px, calc(100vw - 32px));
+    max-height: min(32dvh, 296px);
+    margin-top: 0;
+    padding: 10px;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    backdrop-filter: blur(18px);
+}
+
+#map-screen .map-screen-v3.show-map-intel .map-situation-overview {
+    padding: 0;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+}
+
+#map-screen .map-screen-v3.show-map-intel .map-overview-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 5px;
+}
+
+#map-screen .map-screen-v3.show-map-intel .map-overview-item {
+    min-height: 42px;
+    gap: 2px;
+    padding: 5px 7px;
+}
+
+#map-screen .map-screen-v3.show-map-intel .map-overview-label,
+#map-screen .map-screen-v3.show-map-intel .map-risk-label {
+    font-size: 0.6rem;
+    letter-spacing: 0.08em;
+}
+
+#map-screen .map-screen-v3.show-map-intel .map-overview-value,
+#map-screen .map-screen-v3.show-map-intel .map-risk-value {
+    font-size: 0.68rem;
+    line-height: 1.3;
+}
+
+#map-screen .map-screen-v3.show-map-intel .map-chapter-risk-card {
+    width: 100%;
+    min-height: 145px;
+    max-height: 156px;
+    padding: 8px 9px;
+    overflow-y: auto;
+}
+
+#map-screen .map-screen-v3.show-map-intel .map-risk-title {
+    margin-top: 2px;
+    font-size: 0.76rem;
+}
+
+#map-screen .map-screen-v3.show-map-intel .map-risk-line {
+    margin-top: 4px;
+    grid-template-columns: 46px minmax(0, 1fr);
+    gap: 6px;
+}
+
+#battle-screen #battle-command-panel {
+    box-sizing: border-box;
 }
 
 @media screen and (max-width: 768px) {
@@ -435,6 +612,242 @@
 
     #map-screen #map-expedition-panels .expedition-choice-card {
         overflow: clip;
+    }
+
+    #map-screen #map-expedition-panels .expedition-branch-card {
+        gap: 6px;
+        padding: 10px 12px;
+    }
+
+    #map-screen #map-expedition-panels .expedition-branch-card .expedition-card-kicker {
+        display: none;
+    }
+
+    #map-screen #map-expedition-panels .expedition-branch-card .expedition-card-title {
+        font-size: 15px;
+        line-height: 1.3;
+    }
+
+    #map-screen #map-expedition-panels .expedition-branch-card .expedition-choice-list {
+        gap: 6px;
+    }
+
+    #map-screen #map-expedition-panels .expedition-branch-card .expedition-choice-card {
+        gap: 4px;
+        padding: 7px 8px;
+    }
+
+    #map-screen #map-expedition-panels .expedition-branch-card .expedition-choice-head {
+        align-items: center;
+        gap: 6px;
+    }
+
+    #map-screen #map-expedition-panels .expedition-branch-card .expedition-choice-head strong {
+        font-size: 14px;
+        line-height: 1.25;
+    }
+
+    #map-screen #map-expedition-panels .expedition-branch-card .expedition-choice-head span {
+        font-size: 11px;
+        line-height: 1.25;
+    }
+
+    #map-screen #map-expedition-panels .expedition-branch-card .expedition-choice-card p,
+    #map-screen #map-expedition-panels .expedition-branch-card .expedition-choice-meta span,
+    #map-screen #map-expedition-panels .expedition-branch-card .expedition-observatory-note {
+        display: -webkit-box;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 1;
+        overflow: hidden;
+    }
+
+    #map-screen #map-expedition-panels .expedition-branch-card .expedition-choice-card p {
+        font-size: 12px;
+        line-height: 1.3;
+    }
+
+    #map-screen #map-expedition-panels .expedition-branch-card .expedition-choice-meta {
+        gap: 1px;
+        font-size: 10.5px;
+        line-height: 1.25;
+    }
+
+    #map-screen #map-expedition-panels .expedition-branch-card .expedition-observatory-note {
+        font-size: 11.5px;
+        line-height: 1.3;
+    }
+
+    #map-screen #map-expedition-panels .expedition-branch-card [data-expedition-action="select-branch"] {
+        min-height: 40px;
+        padding: 6px 10px;
+        margin-top: 0;
+    }
+
+    #map-screen .map-screen-v3.show-map-intel {
+        grid-template-rows: auto minmax(124px, 18dvh) minmax(0, 1fr) auto;
+        overflow-x: hidden;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    #map-screen .map-screen-v3.show-map-intel .map-detail-panels {
+        position: static;
+        width: min(360px, calc(100vw - 24px));
+        max-height: min(16dvh, 132px);
+        margin-top: 0;
+    }
+
+    #map-screen .map-screen-v3.show-map-intel .map-scroll-container {
+        min-height: 124px;
+        max-height: none;
+        padding: 8px 12px 12px;
+        overflow-x: hidden !important;
+        overflow-y: auto !important;
+        opacity: 1;
+    }
+
+    #battle-screen #battle-command-panel {
+        top: 54px;
+        left: 6px;
+        width: clamp(186px, calc(100vw - 180px), 210px);
+        max-height: 96px;
+        padding: 6px 7px;
+        overflow-x: hidden;
+        overflow-y: auto;
+        border-radius: 12px;
+        scrollbar-width: thin;
+    }
+
+    #battle-screen #battle-command-panel .battle-command-header {
+        gap: 5px;
+        min-height: 24px;
+    }
+
+    #battle-screen #battle-command-panel .battle-command-title {
+        font-size: 0.68rem;
+    }
+
+    #battle-screen #battle-command-panel .battle-command-spirit-chip {
+        padding: 2px 6px;
+        font-size: 0.58rem;
+    }
+
+    #battle-screen #battle-command-panel .battle-loop-rail {
+        display: flex;
+        margin-top: 3px;
+        gap: 3px;
+        max-height: 22px;
+        overflow: hidden;
+    }
+
+    #battle-screen #battle-command-panel .battle-loop-chip:not(.battle-loop-next) {
+        display: none;
+    }
+
+    #battle-screen #battle-command-panel .battle-loop-next {
+        flex: 1 1 100%;
+        min-height: 20px;
+        padding: 1px 5px;
+    }
+
+    #battle-screen #battle-command-panel .battle-loop-chip-value {
+        white-space: nowrap;
+    }
+
+    #battle-screen #battle-command-panel .battle-command-list {
+        display: flex;
+        grid-template-columns: none;
+        gap: 4px;
+        margin-top: 4px;
+        padding-bottom: 2px;
+        overflow-x: auto;
+        overflow-y: hidden;
+        scrollbar-width: none;
+    }
+
+    #battle-screen #battle-command-panel .battle-command-list::-webkit-scrollbar {
+        display: none;
+    }
+
+    #battle-screen #battle-command-panel .battle-command-btn {
+        flex: 0 0 84px;
+        min-height: 30px;
+        padding: 3px 5px;
+    }
+
+    #battle-screen #battle-command-panel .battle-command-name {
+        font-size: 0.58rem;
+        line-height: 1.08;
+    }
+
+    #battle-screen #battle-command-panel .battle-command-meta {
+        display: none;
+    }
+
+    #battle-screen #battle-command-panel .battle-tactical-advisor.collapsed {
+        display: none;
+        max-height: 0;
+        margin-top: 0;
+        opacity: 0;
+    }
+
+    #battle-screen #battle-command-panel .battle-tactical-advisor:not(.collapsed) {
+        display: block;
+        max-height: 180px;
+        margin-top: 5px;
+        overflow-y: auto;
+    }
+
+    #battle-screen #boss-act-panel {
+        top: 164px;
+        max-height: 108px;
+    }
+
+    body[data-current-screen="map-screen"] #battle-log {
+        top: max(204px, env(safe-area-inset-top)) !important;
+        bottom: auto !important;
+        max-width: min(260px, calc(100vw - 32px));
+        transform: translate(-50%, -8px) !important;
+    }
+
+    body:has(#map-screen.active) #battle-log {
+        top: max(204px, env(safe-area-inset-top)) !important;
+        bottom: auto !important;
+        max-width: min(260px, calc(100vw - 32px));
+        transform: translate(-50%, -8px) !important;
+    }
+
+    body[data-current-screen="map-screen"] #battle-log.show {
+        transform: translate(-50%, 0) !important;
+    }
+
+    body:has(#map-screen.active) #battle-log.show {
+        transform: translate(-50%, 0) !important;
+    }
+
+    #map-screen .map-screen-v3.show-map-tools {
+        grid-template-rows: auto minmax(0, 1fr) auto auto auto;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    #map-screen .map-screen-v3.show-map-intel.show-map-tools {
+        grid-template-rows: auto minmax(124px, 18dvh) auto minmax(0, 1fr) auto;
+    }
+
+    #map-screen .map-screen-v3.show-map-tools .map-footer {
+        position: relative;
+        grid-row: 3;
+        left: auto;
+        right: auto;
+        bottom: auto;
+        width: auto;
+        margin: 8px 12px 0;
+        transform: none;
+    }
+
+    #map-screen .map-screen-v3.show-map-tools #map-expedition-panels {
+        grid-row: 4;
     }
 
     #map-screen #map-expedition-panels .expedition-branch-card {

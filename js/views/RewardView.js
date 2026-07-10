@@ -1176,6 +1176,34 @@ export class RewardView {
             <div class="reward-run-path-entries">${entryMarkup}</div>
         `;
   }
+  updateRewardNextStepCard(state = 'pending', detail = '') {
+    const card = document.getElementById('reward-next-step-card');
+    if (!card) return;
+    const normalized = ['pending', 'ready', 'blocked'].includes(String(state || '')) ? String(state) : 'pending';
+    const copy = {
+      pending: {
+        kicker: '下一步',
+        title: '先选牌或付费跳过',
+        body: '完成本次战利取舍后，继续回章节地图选择下一处节点。'
+      },
+      ready: {
+        kicker: '已就绪',
+        title: '已选定奖励，可继续回章节地图',
+        body: '继续前进会保存本场结算，并恢复地图上的关卡情报与节点选择。'
+      },
+      blocked: {
+        kicker: '暂不可跳过',
+        title: '灵石不足，无法跳过',
+        body: detail || '请选择一张奖励卡牌，或积累足够灵石后再跳过。'
+      }
+    }[normalized];
+    card.dataset.rewardNextState = normalized;
+    card.innerHTML = `
+            <span class="reward-next-step-kicker">${escapeHtml(copy.kicker)}</span>
+            <strong>${escapeHtml(copy.title)}</strong>
+            <span>${escapeHtml(copy.body)}</span>
+        `;
+  }
   showRewardScreen(gold, canSteal, stealEnemy, ringExp = 0, strategicGain = null) {
     this.game.rewardCardSelected = false; // 重置选牌状态
 
@@ -1191,6 +1219,7 @@ export class RewardView {
       continueBtn.disabled = true;
       continueBtn.textContent = '请选择奖励';
     }
+    this.updateRewardNextStepCard('pending');
     this.setRewardScreenState('hidden');
     const bonusParts = [];
     const gainPayload = strategicGain && typeof strategicGain === 'object' ? strategicGain : {};
@@ -1361,6 +1390,7 @@ export class RewardView {
       continueBtn.disabled = false;
       continueBtn.textContent = '继续前进';
     }
+    this.updateRewardNextStepCard('ready');
   }
   skipRewardCard() {
     const cost = this.getRewardSkipCost();
@@ -1373,6 +1403,7 @@ export class RewardView {
       this.continueAfterReward();
     } else {
       Utils.showBattleLog(`灵石不足！需要 ${cost} 灵石才能跳过`);
+      this.updateRewardNextStepCard('blocked', `跳过本次卡牌需要 ${cost} 灵石；当前灵石不足，请选择一张奖励。`);
       // 不启用继续按钮
     }
   }

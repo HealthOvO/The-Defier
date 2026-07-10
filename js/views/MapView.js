@@ -8,6 +8,58 @@ export class MapView {
     this.game = gameInstance;
     this.map = mapInstance;
   }
+  escapeMapBriefText(value) {
+    return String(value ?? '').replace(/[&<>"']/g, ch => ({
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&#39;'
+    }[ch] || ch));
+  }
+  getMapCoreLoopBrief(displayRealmName = '') {
+    const rows = Array.isArray(this.map?.nodes) ? this.map.nodes : [];
+    const accessibleCount = rows.flat().filter(node => node && node.accessible && !node.completed).length;
+    const runPathMeta = this.game?.player && typeof this.game.player.getRunPathMeta === 'function'
+      ? this.game.player.getRunPathMeta()
+      : null;
+    const runPathProgress = this.game?.player?.runPathProgress || null;
+    const phase = runPathMeta && Array.isArray(runPathMeta.phases)
+      ? runPathMeta.phases[Math.max(0, Math.floor(Number(runPathProgress?.currentPhaseIndex) || 0))]
+      : null;
+    const flash = this.game?.lastRunPathMapFeedback && typeof this.game.lastRunPathMapFeedback === 'object'
+      ? this.game.lastRunPathMapFeedback
+      : null;
+    const focusLine = flash?.summary
+      || flash?.rewardText
+      || (runPathMeta?.name ? `${runPathMeta.name}${phase?.label ? ` · ${phase.label}` : ''}${phase?.title ? ` · ${phase.title}` : ''}` : '')
+      || '选择高亮节点继续推进';
+    return {
+      current: displayRealmName || '当前章节',
+      next: accessibleCount > 0 ? `${accessibleCount} 处可进入节点` : '暂无可进入节点',
+      focus: focusLine
+    };
+  }
+  renderMapCoreLoopBrief(displayRealmName = '') {
+    const brief = this.getMapCoreLoopBrief(displayRealmName);
+    const escape = value => this.escapeMapBriefText(value);
+    return `
+                            <div class="map-core-loop-brief" data-core-loop-rail="map" aria-label="地图主循环提示">
+                                <span class="map-core-loop-chip">
+                                    <span class="map-core-loop-label">当前</span>
+                                    <span class="map-core-loop-value">${escape(brief.current)}</span>
+                                </span>
+                                <span class="map-core-loop-chip">
+                                    <span class="map-core-loop-label">可进入</span>
+                                    <span class="map-core-loop-value">${escape(brief.next)}</span>
+                                </span>
+                                <span class="map-core-loop-chip map-core-loop-focus">
+                                    <span class="map-core-loop-label">路线</span>
+                                    <span class="map-core-loop-value">${escape(brief.focus)}</span>
+                                </span>
+                            </div>
+        `;
+  }
   render() {
     console.log('[Debug] MapView.render called');
     const container = document.getElementById('map-screen');
@@ -104,6 +156,7 @@ export class MapView {
                                 <div class="map-canvas-stage">${displayRealmName}</div>
                             </div>
                             <div class="map-canvas-subtitle">${mapSubline}</div>
+                            ${this.renderMapCoreLoopBrief(displayRealmName)}
                             <div class="map-canvas-legend" aria-hidden="true">
                                 <span class="map-legend-chip current">当前可进入</span>
                                 <span class="map-legend-chip completed">已完成</span>
@@ -127,33 +180,41 @@ export class MapView {
     this.map.updateStatusBar();
     this.syncMapChrome(container);
 
-    // Auto-scroll to current row
     setTimeout(() => {
-      const wrapper = document.getElementById('map-scroll-container');
-      let currentRow = null;
-      try {
-        currentRow = document.querySelector('.node-row-v3:has(.map-node-v3.current)');
-      } catch (error) {
-        const currentNode = document.querySelector('.map-node-v3.current');
-        currentRow = currentNode && typeof currentNode.closest === 'function'
-          ? currentNode.closest('.node-row-v3')
-          : null;
-      }
-      if (!currentRow) {
-        const currentNode = document.querySelector('.map-node-v3.current');
-        currentRow = currentNode && typeof currentNode.closest === 'function'
-          ? currentNode.closest('.node-row-v3')
-          : null;
-      }
-      if (wrapper && currentRow) {
-        const scrollPos = currentRow.offsetTop - wrapper.clientHeight / 2 + currentRow.clientHeight / 2;
-        wrapper.scrollTo({
-          top: Math.max(0, scrollPos),
-          behavior: 'smooth'
-        });
-      }
+      this.scrollCurrentMapRowIntoView({ behavior: 'auto' });
     }, 100);
   }
+
+  getCurrentMapRowElement() {
+    let currentRow = null;
+    try {
+      currentRow = document.querySelector('.node-row-v3:has(.map-node-v3.current)');
+    } catch (error) {
+      const currentNode = document.querySelector('.map-node-v3.current');
+      currentRow = currentNode && typeof currentNode.closest === 'function'
+        ? currentNode.closest('.node-row-v3')
+        : null;
+    }
+    if (!currentRow) {
+      const currentNode = document.querySelector('.map-node-v3.current');
+      currentRow = currentNode && typeof currentNode.closest === 'function'
+        ? currentNode.closest('.node-row-v3')
+        : null;
+    }
+    return currentRow;
+  }
+
+  scrollCurrentMapRowIntoView(options = {}) {
+    const wrapper = document.getElementById('map-scroll-container');
+    const currentRow = this.getCurrentMapRowElement();
+    if (!wrapper || !currentRow) return;
+    const scrollPos = currentRow.offsetTop - wrapper.clientHeight / 2 + currentRow.clientHeight / 2;
+    wrapper.scrollTo({
+      top: Math.max(0, scrollPos),
+      behavior: options.behavior || 'auto'
+    });
+  }
+
   updateMapState() {
     this.map.updateStatusBar();
     this.map.nodes.forEach(row => {
@@ -202,6 +263,10 @@ export class MapView {
         shell.dataset.mapIntelUserToggled = 'true';
         shell.classList.toggle('show-map-intel');
         this.syncMapChrome(container);
+        if (shell.classList.contains('show-map-intel')) {
+          requestAnimationFrame(() => this.scrollCurrentMapRowIntoView({ behavior: 'auto' }));
+          setTimeout(() => this.scrollCurrentMapRowIntoView({ behavior: 'auto' }), 220);
+        }
         return;
       }
       if (action === 'toggle-map-tools') {
@@ -241,6 +306,9 @@ export class MapView {
     }
     if (footer) {
       footer.setAttribute('aria-hidden', toolsOpen ? 'false' : 'true');
+      footer.style.opacity = toolsOpen ? '1' : '';
+      footer.style.pointerEvents = toolsOpen ? 'auto' : '';
+      footer.style.transform = toolsOpen ? 'translateY(0)' : '';
     }
   }
 

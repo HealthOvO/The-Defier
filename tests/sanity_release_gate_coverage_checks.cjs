@@ -35,6 +35,7 @@ const verifyAvatars = read('tests/verify_avatars.cjs');
 const browserChallengeAudit = read('tests/browser_challenge_audit.mjs');
 const challengeMobileAudit = read('tests/browser_challenge_mobile_flow_audit.mjs');
 const browserChapterFlowAudit = read('tests/browser_chapter_flow_audit.mjs');
+const browserRunPathAudit = read('tests/browser_run_path_audit.mjs');
 const browserRunPathRewardAudit = read('tests/browser_run_path_reward_audit.mjs');
 const challengeHub = read('js/core/challenge_hub.js');
 const observatoryArchiveChecks = read('tests/sanity_observatory_archive_checks.cjs');
@@ -4321,6 +4322,45 @@ assert.ok(
   assert.ok(
     shopView.includes(needle.replace('this.buildShopServiceDetailMeta', 'this.game.buildShopServiceDetailMeta')),
     `shop view should open service detail without hijacking buy button marker: ${needle}`,
+  );
+});
+
+[
+  'mobile battle loop rail stays visible without stealing end-turn or hand-card hit areas',
+  'data-core-loop-rail="battle"',
+  'battleLoopRail',
+  '胜利后进入战利结算，再回章节地图',
+].forEach((needle) => {
+  assert.ok(
+    browserMobileAudit.includes(needle),
+    `mobile layout audit should cover battle core-loop rail marker: ${needle}`,
+  );
+});
+
+[
+  'map screen keeps a compact core-loop route brief above the node graph',
+  'data-core-loop-rail="map"',
+  'railVisible',
+  'railText',
+].forEach((needle) => {
+  assert.ok(
+    browserRunPathAudit.includes(needle),
+    `browser run path audit should cover map core-loop rail marker: ${needle}`,
+  );
+});
+
+[
+  'reward screen disables continue until a reward card is selected and then exposes the map return step',
+  'reward-next-step-card',
+  '#reward-cards .reward-card',
+  'continue-reward-btn',
+  'continueDisabledBefore',
+  'continueDisabledAfter',
+  '已选定奖励，可继续回章节地图',
+].forEach((needle) => {
+  assert.ok(
+    browserRunPathRewardAudit.includes(needle),
+    `browser run path reward audit should cover reward next-step marker: ${needle}`,
   );
 });
 

@@ -52,7 +52,7 @@ async function safeScreenshot(page, outPath) {
       game.showCharacterSelection();
     }
   });
-  await page.waitForTimeout(300);
+  await page.waitForTimeout(520);
   await page.evaluate(() => {
     if (!window.game) return;
     game.selectCharacter?.('linFeng');
@@ -92,9 +92,12 @@ async function safeScreenshot(page, outPath) {
 
   const mapProbe = await page.evaluate(() => {
     const tracker = document.getElementById('map-run-path-mission');
+    const rail = document.querySelector('[data-core-loop-rail="map"]');
     return {
       visible: !!tracker && getComputedStyle(tracker).display !== 'none',
       text: tracker ? tracker.textContent.replace(/\s+/g, ' ').trim() : '',
+      railVisible: !!rail && getComputedStyle(rail).display !== 'none' && getComputedStyle(rail).visibility !== 'hidden',
+      railText: rail ? rail.textContent.replace(/\s+/g, ' ').trim() : '',
       payload: typeof window.render_game_to_text === 'function'
         ? JSON.parse(window.render_game_to_text())
         : null
@@ -105,6 +108,235 @@ async function safeScreenshot(page, outPath) {
     'map screen shows run path tracker and render_game_to_text keeps run path state',
     !!mapProbe.visible && /窥命流/.test(mapProbe.text) && mapProbe.payload?.player?.runPath?.id === 'insight',
     JSON.stringify(mapProbe)
+  );
+
+  add(
+    'map screen keeps a compact core-loop route brief above the node graph',
+    !!mapProbe.railVisible
+      && /当前/.test(mapProbe.railText || '')
+      && /可进入/.test(mapProbe.railText || '')
+      && /选择高亮节点继续推进|窥命流/.test(mapProbe.railText || ''),
+    JSON.stringify(mapProbe)
+  );
+
+  await page.evaluate(() => {
+    const shell = document.querySelector('#map-screen .map-screen-v3');
+    const intelToggle = document.querySelector('#map-screen [data-map-action="toggle-map-intel"]');
+    if (shell && intelToggle && !shell.classList.contains('show-map-intel') && typeof intelToggle.click === 'function') {
+      intelToggle.click();
+    }
+  });
+  await page.waitForTimeout(520);
+
+  const mapIntelFootprintProbe = await page.evaluate(() => {
+    const rectObj = (el) => {
+      if (!el) return null;
+      const rect = el.getBoundingClientRect();
+      return {
+        left: rect.left,
+        right: rect.right,
+        top: rect.top,
+        bottom: rect.bottom,
+        width: rect.width,
+        height: rect.height,
+      };
+    };
+    const selectorFor = (el) => {
+      if (!el) return '';
+      if (el.id) return `#${el.id}`;
+      const classes = Array.from(el.classList || []).slice(0, 3).join('.');
+      return `${el.tagName.toLowerCase()}${classes ? `.${classes}` : ''}`;
+    };
+    const shell = document.querySelector('#map-screen .map-screen-v3');
+    const detailPanels = document.getElementById('map-detail-panels');
+    const scrollContainer = document.getElementById('map-scroll-container');
+    const routeNodes = Array.from(document.querySelectorAll('.map-node-v3.current:not(.locked), .map-node-v3.current, .map-node-v3.accessible, .map-node-v3'));
+    const footer = document.getElementById('map-expedition-panels');
+    const detailRect = rectObj(detailPanels);
+    const scrollRect = rectObj(scrollContainer);
+    const footerRect = rectObj(footer);
+    const detailVisible = !!detailPanels && getComputedStyle(detailPanels).visibility !== 'hidden' && detailRect?.height > 0;
+    const footerTop = footerRect?.top ?? window.innerHeight;
+    const routeEntries = routeNodes.map((node) => {
+      const rect = rectObj(node);
+      const point = rect
+        ? { x: Math.round(rect.left + rect.width / 2), y: Math.round(rect.top + rect.height / 2) }
+        : null;
+      const hit = point ? document.elementFromPoint(point.x, point.y) : null;
+      const hitOk = !!node && !!hit && (hit === node || node.contains(hit) || hit.contains(node));
+      const inOpenGraphLane = !!rect &&
+        !!scrollRect &&
+        rect.top >= scrollRect.top + 8 &&
+        rect.bottom <= footerTop - 8 &&
+        rect.left >= 0 &&
+        rect.right <= window.innerWidth;
+      return {
+        selector: selectorFor(node),
+        className: node.className || '',
+        rect,
+        point,
+        hit: selectorFor(hit),
+        hitOk,
+        inOpenGraphLane
+      };
+    });
+    const visibleRouteNodes = routeEntries.filter((entry) => entry.inOpenGraphLane && entry.hitOk);
+    const visibleCurrentNodes = visibleRouteNodes.filter((entry) => /\bcurrent\b/.test(entry.className));
+    const routeEntry = visibleCurrentNodes[0] || visibleRouteNodes[0] || routeEntries[0] || null;
+    const maxDrawerHeight = Math.min(310, window.innerHeight * 0.34);
+
+    return {
+      viewport: { width: window.innerWidth, height: window.innerHeight },
+      intelOpen: shell?.classList.contains('show-map-intel') || false,
+      detailVisible,
+      detailRect,
+      scrollRect,
+      footerRect,
+      routeRect: routeEntry?.rect || null,
+      routePoint: routeEntry?.point || null,
+      routeHit: routeEntry?.hit || '',
+      visibleRouteNodeCount: visibleRouteNodes.length,
+      visibleCurrentNodeCount: visibleCurrentNodes.length,
+      routeSamples: routeEntries.slice(0, 8),
+      maxDrawerHeight: Math.round(maxDrawerHeight),
+      ok:
+        !!shell &&
+        !!detailRect &&
+        !!scrollRect &&
+        !!routeEntry?.rect &&
+        detailVisible &&
+        shell.classList.contains('show-map-intel') &&
+        detailRect.height <= maxDrawerHeight &&
+        detailRect.width <= Math.min(470, window.innerWidth - 32) &&
+        detailRect.bottom <= window.innerHeight * 0.48 &&
+        scrollRect.height >= window.innerHeight * 0.42 &&
+        visibleRouteNodes.length >= 4 &&
+        visibleCurrentNodes.length >= 1 &&
+        routeEntry.rect.bottom > detailRect.bottom + 18 &&
+        (!footerRect || footerRect.top >= scrollRect.top + 80)
+    };
+  });
+
+  add(
+    'map intel opens as a compact drawer without covering the route graph',
+    !!mapIntelFootprintProbe && !!mapIntelFootprintProbe.ok,
+    JSON.stringify(mapIntelFootprintProbe)
+  );
+
+  await page.evaluate(() => {
+    const shell = document.querySelector('#map-screen .map-screen-v3');
+    const intelToggle = document.querySelector('#map-screen [data-map-action="toggle-map-intel"]');
+    const toolsToggle = document.querySelector('#map-screen [data-map-action="toggle-map-tools"]');
+    if (shell && intelToggle && shell.classList.contains('show-map-intel') && typeof intelToggle.click === 'function') {
+      intelToggle.click();
+    }
+    if (shell && toolsToggle && !shell.classList.contains('show-map-tools') && typeof toolsToggle.click === 'function') {
+      toolsToggle.click();
+    }
+    window.game?.map?.view?.scrollCurrentMapRowIntoView?.({ behavior: 'auto' });
+  });
+  await page.waitForTimeout(220);
+
+  const mapToolsFootprintProbe = await page.evaluate(() => {
+    const rectObj = (el) => {
+      if (!el) return null;
+      const rect = el.getBoundingClientRect();
+      return {
+        left: rect.left,
+        right: rect.right,
+        top: rect.top,
+        bottom: rect.bottom,
+        width: rect.width,
+        height: rect.height,
+      };
+    };
+    const selectorFor = (el) => {
+      if (!el) return '';
+      if (el.id) return `#${el.id}`;
+      const classes = Array.from(el.classList || []).slice(0, 3).join('.');
+      return `${el.tagName.toLowerCase()}${classes ? `.${classes}` : ''}`;
+    };
+    const overlapArea = (a, b) => {
+      if (!a || !b) return 0;
+      const left = Math.max(a.left, b.left);
+      const right = Math.min(a.right, b.right);
+      const top = Math.max(a.top, b.top);
+      const bottom = Math.min(a.bottom, b.bottom);
+      return Math.max(0, right - left) * Math.max(0, bottom - top);
+    };
+    const shell = document.querySelector('#map-screen .map-screen-v3');
+    const footer = document.getElementById('map-footer');
+    const scrollContainer = document.getElementById('map-scroll-container');
+    const routeNodes = Array.from(document.querySelectorAll('.map-node-v3.current:not(.locked), .map-node-v3.current'));
+    const footerRect = rectObj(footer);
+    const scrollRect = rectObj(scrollContainer);
+    const footerVisible = !!footer && getComputedStyle(footer).visibility !== 'hidden' && Number(getComputedStyle(footer).opacity) > 0.5 && footerRect?.height > 0;
+    const currentEntries = routeNodes.map((node) => {
+      const rect = rectObj(node);
+      const point = rect
+        ? { x: Math.round(rect.left + rect.width / 2), y: Math.round(rect.top + rect.height / 2) }
+        : null;
+      const hit = point ? document.elementFromPoint(point.x, point.y) : null;
+      const hitOk = !!node && !!hit && (hit === node || node.contains(hit) || hit.contains(node));
+      return {
+        selector: selectorFor(node),
+        rect,
+        point,
+        hit: selectorFor(hit),
+        hitOk,
+        footerOverlap: Math.round(overlapArea(rect, footerRect)),
+      };
+    });
+    const currentReachable = currentEntries.filter((entry) => entry.hitOk && entry.footerOverlap <= 12);
+    const footerButtons = Array.from(footer?.querySelectorAll('[data-map-action]') || []).map((button) => {
+      const rect = rectObj(button);
+      const point = rect
+        ? { x: Math.round(rect.left + rect.width / 2), y: Math.round(rect.top + rect.height / 2) }
+        : null;
+      const hit = point ? document.elementFromPoint(point.x, point.y) : null;
+      return {
+        text: (button.textContent || '').replace(/\s+/g, ' ').trim(),
+        rect,
+        hit: selectorFor(hit),
+        ok:
+          !!rect &&
+          rect.height >= 38 &&
+          rect.width >= 76 &&
+          rect.left >= 0 &&
+          rect.right <= window.innerWidth &&
+          rect.bottom <= window.innerHeight &&
+          !!hit &&
+          (hit === button || button.contains(hit) || hit.contains(button)),
+      };
+    });
+
+    return {
+      viewport: { width: window.innerWidth, height: window.innerHeight },
+      toolsOpen: shell?.classList.contains('show-map-tools') || false,
+      footerVisible,
+      footerRect,
+      scrollRect,
+      currentEntries,
+      footerButtons,
+      ok:
+        !!shell &&
+        shell.classList.contains('show-map-tools') &&
+        footerVisible &&
+        !!footerRect &&
+        !!scrollRect &&
+        footerRect.width <= Math.min(360, window.innerWidth - 32) &&
+        footerRect.right <= window.innerWidth - 12 &&
+        footerRect.bottom <= window.innerHeight - 12 &&
+        currentReachable.length >= 1 &&
+        footerButtons.length >= 3 &&
+        footerButtons.every((button) => button.ok)
+    };
+  });
+
+  add(
+    'map tools rail opens without covering current route nodes or losing footer actions',
+    !!mapToolsFootprintProbe && !!mapToolsFootprintProbe.ok,
+    JSON.stringify(mapToolsFootprintProbe)
   );
 
   await safeScreenshot(page, path.join(outDir, 'run-path-map.png'));
