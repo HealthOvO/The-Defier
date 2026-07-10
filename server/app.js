@@ -21,7 +21,7 @@ const PORT = process.env.PORT || 9000;
 
 // Middleware
 app.use(cors()); // 允许跨域，方便前端直接调用
-app.use(express.json()); // 解析 JSON body
+app.use(express.json({ limit: '384kb' })); // Business routes enforce smaller scope-specific limits.
 app.use(attachRequestContext());
 
 // Routes
@@ -84,6 +84,18 @@ const sendVersion = async (req, res) => {
 
 app.get('/version', sendVersion);
 app.get('/api/version', sendVersion);
+
+app.use((error, req, res, next) => {
+    if (error && error.type === 'entity.too.large') {
+        return res.status(413).json({
+            success: false,
+            reason: 'payload_too_large',
+            message: '请求数据超过允许大小',
+            requestId: req.requestId
+        });
+    }
+    return next(error);
+});
 
 // Start Server
 const startServer = async () => {

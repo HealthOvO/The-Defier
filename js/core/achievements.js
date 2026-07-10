@@ -128,7 +128,7 @@ export class AchievementSystem {
   async syncToCloud() {
     if (typeof AuthService === 'undefined' || !AuthService.isLoggedIn()) return;
     console.log('Syncing achievements to cloud...');
-    const data = {
+    const buildSnapshot = () => ({
       unlocked: this.unlockedAchievements,
       claimed: this.claimedAchievements,
       stats: this.stats,
@@ -138,8 +138,15 @@ export class AchievementSystem {
         cardBacks: this.loadCardBacks()
       },
       lastUpdated: Date.now()
-    };
-    await AuthService.saveGlobalData(data);
+    });
+    const firstResult = await AuthService.saveGlobalData(buildSnapshot());
+    if (!firstResult || !firstResult.conflict) return firstResult;
+
+    // Global progress is cumulative. Merge the latest cloud head before rebasing
+    // so another device's achievements are never discarded by a blind retry.
+    const mergeResult = await this.syncFromCloud();
+    if (!mergeResult || !mergeResult.success) return firstResult;
+    return await AuthService.saveGlobalData(buildSnapshot());
   }
   async syncFromCloud() {
     if (typeof AuthService === 'undefined' || !AuthService.isLoggedIn()) {

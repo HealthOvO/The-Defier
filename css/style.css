@@ -9633,6 +9633,156 @@ body {
     background: linear-gradient(0deg, rgba(0, 0, 0, 0.6) 0%, transparent 100%);
 }
 
+.save-history-btn {
+    min-width: 112px;
+    min-height: 34px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    border: 1px solid rgba(132, 190, 177, 0.55);
+    border-radius: 6px;
+    background: rgba(17, 42, 42, 0.82);
+    color: #bfe8dc;
+    font: inherit;
+    font-size: 0.82rem;
+    cursor: pointer;
+}
+
+.save-history-btn:hover,
+.save-history-btn:focus-visible {
+    border-color: #8fd2c0;
+    background: rgba(27, 65, 61, 0.92);
+    color: #fff;
+}
+
+.cloud-save-history-panel {
+    width: min(720px, calc(100vw - 32px));
+    max-height: min(720px, calc(100vh - 40px));
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    padding: 24px;
+}
+
+.cloud-save-history-header {
+    padding-right: 38px;
+    margin-bottom: 16px;
+}
+
+.cloud-save-history-header h2 {
+    margin: 0 0 8px;
+    color: var(--accent-gold);
+    font-size: 1.45rem;
+}
+
+.cloud-save-history-header p {
+    margin: 0;
+    color: var(--text-muted);
+    line-height: 1.5;
+}
+
+.cloud-save-history-list {
+    min-height: 180px;
+    overflow-y: auto;
+    display: grid;
+    gap: 10px;
+    padding-right: 4px;
+}
+
+.cloud-history-item {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 16px;
+    min-height: 92px;
+    padding: 14px 16px;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 8px;
+    background: rgba(8, 14, 18, 0.82);
+}
+
+.cloud-history-item.is-head {
+    border-color: rgba(143, 210, 192, 0.75);
+    background: rgba(18, 48, 44, 0.72);
+}
+
+.cloud-history-copy {
+    min-width: 0;
+}
+
+.cloud-history-heading {
+    color: #fff;
+    font-weight: 700;
+    margin-bottom: 5px;
+}
+
+.cloud-history-detail,
+.cloud-history-operation {
+    color: #c4cbd0;
+    font-size: 0.84rem;
+    line-height: 1.45;
+    overflow-wrap: anywhere;
+}
+
+.cloud-history-operation {
+    margin-top: 3px;
+    color: #8fd2c0;
+}
+
+.cloud-history-restore-btn {
+    width: 84px;
+    min-height: 38px;
+    border: 1px solid var(--accent-gold);
+    border-radius: 6px;
+    background: rgba(95, 70, 30, 0.7);
+    color: #fff1c8;
+    font: inherit;
+    cursor: pointer;
+}
+
+.cloud-history-restore-btn:disabled {
+    border-color: rgba(143, 210, 192, 0.45);
+    background: rgba(28, 58, 52, 0.52);
+    color: #a9c7bf;
+    cursor: default;
+}
+
+.cloud-history-empty {
+    min-height: 180px;
+    display: grid;
+    place-items: center;
+    color: var(--text-muted);
+}
+
+.cloud-save-history-status {
+    min-height: 1.4em;
+    margin: 14px 0 0;
+    color: var(--accent-gold);
+    font-size: 0.88rem;
+}
+
+.cloud-save-history-status.is-error {
+    color: #ffb6b6;
+}
+
+@media (max-width: 640px) {
+    .cloud-save-history-panel {
+        width: calc(100vw - 20px);
+        max-height: calc(100vh - 20px);
+        padding: 18px 14px;
+    }
+
+    .cloud-history-item {
+        grid-template-columns: 1fr;
+        gap: 10px;
+    }
+
+    .cloud-history-restore-btn {
+        width: 100%;
+    }
+}
+
 .slot-empty-text {
     color: var(--text-muted);
     font-style: italic;

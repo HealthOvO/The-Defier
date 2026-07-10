@@ -76,6 +76,10 @@ assert.equal(staleLocal.success, true, 'locally stale save should resolve as a s
 assert.equal(staleLocal.skipped, true, 'locally stale save should be marked skipped');
 assert.equal(backendSaveCalls, 2, 'locally stale save should not call BackendClient');
 
+const confirmedOlderLocal = await AuthService.saveCloudData({ marker: 'confirmed-local', timestamp: 1098 }, 0, { allowOlderLocal: true });
+assert.equal(confirmedOlderLocal.success, true, 'an explicitly confirmed local version should reach the CAS server path');
+assert.equal(backendSaveCalls, 3, 'conflict resolution should bypass only the local timestamp preflight');
+
 AuthService.latestSaveTimeBySlot = { 0: 1100 };
 AuthService.saveQueueBySlot = { 0: Promise.resolve() };
 AuthService.logout();
@@ -134,5 +138,27 @@ assert.equal(cloudResult.cloud, false, 'SaveManager should not treat skipped clo
 assert.equal(cloudResult.cloudSkipped, true, 'SaveManager should expose skipped cloud writes');
 assert.equal(fakeGame.cachedSlots[1], undefined, 'SaveManager should not cache skipped local state as cloud state');
 assert(battleLog.includes('云端已有更新，本次仅保存本地'), 'SaveManager should show a skipped cloud message');
+
+let conflictModal = null;
+fakeGame.showSaveConflictModal = (localData, cloudData, cloudTime) => {
+  conflictModal = { localData, cloudData, cloudTime };
+};
+AuthService.saveCloudData = async () => ({
+  success: false,
+  conflict: true,
+  reason: 'save_conflict',
+  current: {
+    revisionId: 'rev-cloud-newer',
+    saveData: { marker: 'cloud-newer', timestamp: 5000 },
+    saveTime: 5000
+  }
+});
+const conflictSaveResult = saveManager.saveGame();
+const conflictCloudResult = await conflictSaveResult.cloudPromise;
+assert.equal(conflictCloudResult.cloudConflict, true, 'SaveManager should expose revision conflicts');
+assert.equal(fakeGame.cachedSlots[1].marker, 'cloud-newer', 'SaveManager should cache the latest conflicting cloud head');
+assert.equal(conflictModal?.cloudData?.marker, 'cloud-newer', 'SaveManager should open the existing conflict chooser with the latest cloud head');
+assert.equal(conflictModal?.localData?.saveSlot, 1, 'SaveManager should compare the current local save slot in the conflict chooser');
+assert(battleLog.includes('检测到云端新版本，请选择保留哪份进度'), 'SaveManager should explain revision conflicts to the player');
 
 console.log('Frontend cloud sync sanity checks passed.');

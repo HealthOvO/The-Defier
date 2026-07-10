@@ -165,6 +165,12 @@ export const BackendClient = {
     };
     if (Number.isFinite(saveTime)) normalized.saveTime = saveTime;
     if (revision) Object.assign(normalized, revision);
+    if (typeof entry.operation === 'string') normalized.operation = entry.operation;
+    if (typeof entry.parentRevisionId === 'string') normalized.parentRevisionId = entry.parentRevisionId;
+    if (typeof entry.sourceRevisionId === 'string') normalized.sourceRevisionId = entry.sourceRevisionId;
+    if (Number.isFinite(Number(entry.clientUpdatedAt))) normalized.clientUpdatedAt = Number(entry.clientUpdatedAt);
+    if (Number.isFinite(Number(entry.createdAt))) normalized.createdAt = Number(entry.createdAt);
+    if (typeof entry.isHead === 'boolean') normalized.isHead = entry.isHead;
     return normalized;
   },
   normalizeGlobalEntry(entry) {
@@ -189,6 +195,12 @@ export const BackendClient = {
     };
     if (Number.isFinite(globalUpdatedAt)) normalized.globalUpdatedAt = globalUpdatedAt;
     if (revision) Object.assign(normalized, revision);
+    if (typeof entry.operation === 'string') normalized.operation = entry.operation;
+    if (typeof entry.parentRevisionId === 'string') normalized.parentRevisionId = entry.parentRevisionId;
+    if (typeof entry.sourceRevisionId === 'string') normalized.sourceRevisionId = entry.sourceRevisionId;
+    if (Number.isFinite(Number(entry.clientUpdatedAt))) normalized.clientUpdatedAt = Number(entry.clientUpdatedAt);
+    if (Number.isFinite(Number(entry.createdAt))) normalized.createdAt = Number(entry.createdAt);
+    if (typeof entry.isHead === 'boolean') normalized.isHead = entry.isHead;
     return normalized;
   },
   normalizeCloudStateConflict(error, entryType = 'slot', fallbackMessage = '云状态写入冲突') {
@@ -444,7 +456,7 @@ export const BackendClient = {
   },
   async saveCloudData(gameData, slotIndex = 0, options = {}) {
     const slot = Number(slotIndex);
-    const sessionSnapshot = this.captureSignedSessionSnapshot({}, '登录账号已变化，请刷新云存档后重试');
+    const sessionSnapshot = this.captureSignedSessionSnapshot(options, '登录账号已变化，请刷新云存档后重试');
     if (!sessionSnapshot || !sessionSnapshot.success) return sessionSnapshot;
     try {
       const payload = this.cloneData(gameData);
@@ -552,7 +564,7 @@ export const BackendClient = {
     }
   },
   async saveGlobalData(data, options = {}) {
-    const sessionSnapshot = this.captureSignedSessionSnapshot({}, '登录账号已变化，请刷新全局云状态后重试');
+    const sessionSnapshot = this.captureSignedSessionSnapshot(options, '登录账号已变化，请刷新全局云状态后重试');
     if (!sessionSnapshot || !sessionSnapshot.success) return sessionSnapshot;
     try {
       const payload = this.cloneData(data);
@@ -643,7 +655,7 @@ export const BackendClient = {
       message: '未登录'
     };
     const safeLimit = Object.prototype.hasOwnProperty.call(options || {}, 'limit')
-      ? Math.max(1, Math.min(100, Math.floor(Number(options.limit) || 20)))
+      ? Math.max(1, Math.min(20, Math.floor(Number(options.limit) || 20)))
       : null;
     const query = new URLSearchParams();
     if (safeLimit !== null) query.set('limit', String(safeLimit));
@@ -652,13 +664,15 @@ export const BackendClient = {
       const result = await this.requestServer(`${this.getServerConfig().savePathPrefix}/slots/${encodeURIComponent(slot)}/history${suffix}`, {
         method: 'GET'
       });
-      const history = Array.isArray(result && (result.history || result.entries))
-        ? (result.history || result.entries).map(entry => this.normalizeSlotEntry(entry)).filter(Boolean)
+      const historySource = result && (result.revisions || result.history || result.entries);
+      const history = Array.isArray(historySource)
+        ? historySource.map(entry => this.normalizeSlotEntry(entry)).filter(Boolean)
         : [];
       return {
         ...(result && typeof result === 'object' ? result : {}),
         success: true,
         slotIndex: slot,
+        revisions: history,
         history,
         entries: history
       };
@@ -678,7 +692,7 @@ export const BackendClient = {
       success: false,
       message: '云存档历史版本缺失'
     };
-    const sessionSnapshot = this.captureSignedSessionSnapshot({}, '登录账号已变化，请刷新云存档后重试');
+    const sessionSnapshot = this.captureSignedSessionSnapshot(options, '登录账号已变化，请刷新云存档后重试');
     if (!sessionSnapshot || !sessionSnapshot.success) return sessionSnapshot;
     try {
       const baseRevisionId = Object.prototype.hasOwnProperty.call(options || {}, 'baseRevisionId')
@@ -734,7 +748,7 @@ export const BackendClient = {
       message: '未登录'
     };
     const safeLimit = Object.prototype.hasOwnProperty.call(options || {}, 'limit')
-      ? Math.max(1, Math.min(100, Math.floor(Number(options.limit) || 20)))
+      ? Math.max(1, Math.min(20, Math.floor(Number(options.limit) || 20)))
       : null;
     const query = new URLSearchParams();
     if (safeLimit !== null) query.set('limit', String(safeLimit));
@@ -743,12 +757,14 @@ export const BackendClient = {
       const result = await this.requestServer(`${this.getServerConfig().userPathPrefix}/global/history${suffix}`, {
         method: 'GET'
       });
-      const history = Array.isArray(result && (result.history || result.entries))
-        ? (result.history || result.entries).map(entry => this.normalizeGlobalEntry(entry)).filter(Boolean)
+      const historySource = result && (result.revisions || result.history || result.entries);
+      const history = Array.isArray(historySource)
+        ? historySource.map(entry => this.normalizeGlobalEntry(entry)).filter(Boolean)
         : [];
       return {
         ...(result && typeof result === 'object' ? result : {}),
         success: true,
+        revisions: history,
         history,
         entries: history
       };
@@ -767,7 +783,7 @@ export const BackendClient = {
       success: false,
       message: '全局云状态历史版本缺失'
     };
-    const sessionSnapshot = this.captureSignedSessionSnapshot({}, '登录账号已变化，请刷新全局云状态后重试');
+    const sessionSnapshot = this.captureSignedSessionSnapshot(options, '登录账号已变化，请刷新全局云状态后重试');
     if (!sessionSnapshot || !sessionSnapshot.success) return sessionSnapshot;
     try {
       const baseRevisionId = Object.prototype.hasOwnProperty.call(options || {}, 'baseRevisionId')

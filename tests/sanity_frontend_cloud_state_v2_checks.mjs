@@ -225,6 +225,15 @@ assert.deepEqual(
   },
   'slot save request should send the signed v2 envelope'
 );
+const requestCountBeforeAccountMismatch = requestCalls.length;
+const mismatchedAccountSave = await BackendClient.saveCloudData(
+  { marker: 'wrong-account-save', timestamp: 124 },
+  2,
+  { baseRevisionId: 'slot-base-rev', mutationId: 'slot-mutation-0002', expectedUserId: userB.objectId }
+);
+assert.equal(mismatchedAccountSave.success, false, 'BackendClient should reject writes bound to a different account');
+assert.equal(mismatchedAccountSave.reason, 'cloud_state_account_changed');
+assert.equal(requestCalls.length, requestCountBeforeAccountMismatch, 'account mismatch should fail before the network request');
 assert.equal(slotSave.revisionId, 'slot-rev-1');
 assert.equal(slotSave.revisionNumber, 1);
 
@@ -450,6 +459,46 @@ assert.notEqual(localStorage.getItem(revisionStorageKey(userB)), null, 'logout s
 setSession(userA, 'session-token-a-32-characters');
 resetAuthState(userA);
 
+setSession(userB, 'session-token-b-32-characters');
+assert.equal(AuthService.getCurrentUser().objectId, userB.objectId, 'external session changes should be observed immediately');
+assert.equal(AuthService.getSlotRevision(0).revisionId, 'slot-cache-b-0', 'external session changes should switch to account B revision cache');
+setSession(userA, 'session-token-a-32-characters');
+assert.equal(AuthService.getCurrentUser().objectId, userA.objectId, 'switching the external session back should restore account A context');
+assert.equal(AuthService.getSlotRevision(0).revisionId, 'slot-cache-a-0', 'external session changes must not persist account B revisions into account A cache');
+
+let resolveDelayedCloudRead;
+BackendClient.getCloudData = () => new Promise(resolve => {
+  resolveDelayedCloudRead = resolve;
+});
+const delayedCloudRead = AuthService.getCloudData();
+setSession(userB, 'session-token-b-32-characters');
+assert.equal(AuthService.getCurrentUser().objectId, userB.objectId, 'delayed response test should switch to account B');
+resolveDelayedCloudRead({
+  success: true,
+  slots: [{ marker: 'late-account-a-slot' }, null, null, null],
+  slotEntries: [{
+    slotIndex: 0,
+    saveData: { marker: 'late-account-a-slot' },
+    saveTime: 3000,
+    revisionId: 'late-account-a-revision',
+    revisionNumber: 30,
+    contentHash: 'late-account-a-hash',
+    headUpdatedAt: 3001
+  }, null, null, null]
+});
+const delayedCloudReadResult = await delayedCloudRead;
+assert.equal(delayedCloudReadResult.success, false, 'a response from the previous account should not be applied');
+assert.equal(delayedCloudReadResult.reason, 'cloud_state_account_changed');
+assert.equal(AuthService.getSlotRevision(0).revisionId, 'slot-cache-b-0', 'late account A response must not contaminate account B in-memory cache');
+assert.equal(
+  JSON.parse(localStorage.getItem(revisionStorageKey(userB))).slots[0].revisionId,
+  'slot-cache-b-0',
+  'late account A response must not contaminate account B persisted cache'
+);
+
+setSession(userA, 'session-token-a-32-characters');
+assert.equal(AuthService.getCurrentUser().objectId, userA.objectId);
+
 const authSaveCalls = [];
 BackendClient.saveCloudData = async (gameData, slotIndex, options = {}) => {
   authSaveCalls.push({ gameData, slotIndex, options });
@@ -465,7 +514,38 @@ BackendClient.saveCloudData = async (gameData, slotIndex, options = {}) => {
 const authSlotSave = await AuthService.saveCloudData({ marker: 'auth-slot', timestamp: 776 }, 0);
 assert.equal(authSlotSave.success, true, 'AuthService slot save should succeed');
 assert.equal(authSaveCalls.at(-1).options.baseRevisionId, 'slot-cache-a-0', 'AuthService should default slot baseRevisionId from account cache');
+assert.equal(authSaveCalls.at(-1).options.expectedUserId, userA.objectId, 'AuthService should bind the write to the initiating account');
 assert.equal(AuthService.getSlotRevision(0).revisionId, 'slot-save-auth-rev', 'successful slot save should refresh the slot revision cache');
+
+let resolveDelayedCloudSave;
+let delayedCloudSaveOptions = null;
+BackendClient.saveCloudData = async (_gameData, _slotIndex, options = {}) => {
+  delayedCloudSaveOptions = options;
+  return await new Promise(resolve => {
+    resolveDelayedCloudSave = resolve;
+  });
+};
+const delayedCloudSave = AuthService.saveCloudData({ marker: 'late-account-a-write', timestamp: 800 }, 0);
+await Promise.resolve();
+await Promise.resolve();
+assert.equal(typeof resolveDelayedCloudSave, 'function', 'delayed write should reach BackendClient');
+assert.equal(delayedCloudSaveOptions.expectedUserId, userA.objectId, 'delayed write should stay bound to account A');
+setSession(userB, 'session-token-b-32-characters');
+assert.equal(AuthService.getCurrentUser().objectId, userB.objectId);
+resolveDelayedCloudSave({
+  success: true,
+  saveTime: 801,
+  revisionId: 'late-account-a-write-revision',
+  revisionNumber: 31,
+  contentHash: 'late-account-a-write-hash',
+  headUpdatedAt: 802
+});
+const delayedCloudSaveResult = await delayedCloudSave;
+assert.equal(delayedCloudSaveResult.success, false, 'a completed write from the previous account should not drive current UI state');
+assert.equal(delayedCloudSaveResult.reason, 'cloud_state_account_changed');
+assert.equal(AuthService.getSlotRevision(0).revisionId, 'slot-cache-b-0', 'late account A write must not update account B cache');
+setSession(userA, 'session-token-a-32-characters');
+assert.equal(AuthService.getCurrentUser().objectId, userA.objectId);
 
 BackendClient.getCloudData = async () => ({
   success: true,
@@ -499,6 +579,21 @@ const authCloudRead = await AuthService.getCloudData();
 assert.equal(authCloudRead.success, true);
 assert.equal(AuthService.getSlotRevision(1).revisionId, 'slot-read-auth-rev', 'cloud read should hydrate slot revisions');
 
+BackendClient.getCloudSaveHistory = async () => ({
+  success: true,
+  headRevisionId: 'slot-history-head-auth-rev',
+  history: [{
+    isHead: true,
+    revisionId: 'slot-history-head-auth-rev',
+    revisionNumber: 14,
+    contentHash: 'slot-history-head-auth-hash',
+    headUpdatedAt: 900
+  }]
+});
+const authSlotHistory = await AuthService.getCloudSaveHistory(1, { limit: 20 });
+assert.equal(authSlotHistory.success, true, 'AuthService slot history should succeed without a prior slot-list read');
+assert.equal(AuthService.getSlotRevision(1).revisionId, 'slot-history-head-auth-rev', 'slot history should hydrate the current head revision for restore');
+
 BackendClient.saveGlobalData = async (data, options = {}) => ({
   success: false,
   conflict: true,
@@ -530,7 +625,7 @@ BackendClient.restoreCloudSaveRevision = async (slotIndex, sourceRevisionId, opt
 });
 const authSlotRestore = await AuthService.restoreCloudSaveRevision(1, 'slot-source-auth-rev');
 assert.equal(authSlotRestore.success, true, 'AuthService slot restore should succeed');
-assert.equal(authSlotRestore.options.baseRevisionId, 'slot-read-auth-rev', 'AuthService restore should default baseRevisionId from the current slot revision cache');
+assert.equal(authSlotRestore.options.baseRevisionId, 'slot-history-head-auth-rev', 'AuthService restore should default baseRevisionId from the history head cache');
 assert.equal(AuthService.getSlotRevision(1).revisionId, 'slot-restore-auth-rev', 'slot restore should refresh the slot revision cache');
 
 BackendClient.getGlobalData = async () => ({
@@ -544,6 +639,21 @@ BackendClient.getGlobalData = async () => ({
 const authGlobalRead = await AuthService.getGlobalData();
 assert.equal(authGlobalRead.success, true, 'AuthService global read should succeed');
 assert.equal(AuthService.getGlobalRevision().revisionId, 'global-read-auth-rev', 'global read should hydrate the global revision cache');
+
+BackendClient.getGlobalDataHistory = async () => ({
+  success: true,
+  headRevisionId: 'global-history-head-auth-rev',
+  history: [{
+    isHead: true,
+    revisionId: 'global-history-head-auth-rev',
+    revisionNumber: 17,
+    contentHash: 'global-history-head-auth-hash',
+    headUpdatedAt: 1004
+  }]
+});
+const authGlobalHistory = await AuthService.getGlobalDataHistory({ limit: 20 });
+assert.equal(authGlobalHistory.success, true, 'AuthService global history should succeed');
+assert.equal(AuthService.getGlobalRevision().revisionId, 'global-history-head-auth-rev', 'global history should hydrate the current head revision for restore');
 
 BackendClient.requestServer = originals.requestServer;
 BackendClient.saveCloudData = originals.saveCloudData;

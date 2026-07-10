@@ -100,6 +100,24 @@ export class SaveManager {
               cloudSkipped: true,
               cloudResult: res
             };
+          } else if (res && res.conflict) {
+            const current = res.current && typeof res.current === 'object' ? res.current : {};
+            const cloudData = current.saveData || current.data || null;
+            const cloudTime = Number(current.saveTime || current.clientUpdatedAt || current.headUpdatedAt) || Date.now();
+            console.warn('云端存档版本冲突', res);
+            if (cloudData && this.game) {
+              this.game.cachedSlots[targetSlot] = cloudData;
+              if (typeof this.game.showSaveConflictModal === 'function') {
+                this.game.showSaveConflictModal(gameState, cloudData, cloudTime);
+              }
+            }
+            if (typeof Utils !== 'undefined') Utils.showBattleLog('检测到云端新版本，请选择保留哪份进度');
+            return {
+              ...result,
+              cloud: false,
+              cloudConflict: true,
+              cloudResult: res
+            };
           } else {
             console.warn('云端同步失败', res);
             if (typeof Utils !== 'undefined') Utils.showBattleLog('云端同步失败，仅保存本地');

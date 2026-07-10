@@ -6487,13 +6487,30 @@ async function safeElementScreenshot(page, selector, outputPath) {
     window.__livePvpAuditCalls = [];
     window.__livePvpAuditCurrentInviteMode = '';
     window.__livePvpAuditInboxMode = '';
-    await window.PVPScene.loadLivePanel();
+    window.PVPScene.stopLivePolling();
+    const nativeSetInterval = window.setInterval;
+    window.__livePvpAuditIdlePollCallback = null;
+    window.setInterval = (callback, delay, ...args) => {
+      if (Number(delay) === 2500 && !window.__livePvpAuditIdlePollCallback) {
+        window.__livePvpAuditIdlePollCallback = () => callback(...args);
+        return 987654321;
+      }
+      return nativeSetInterval.call(window, callback, delay, ...args);
+    };
+    try {
+      await window.PVPScene.loadLivePanel();
+    } finally {
+      window.setInterval = nativeSetInterval;
+    }
   });
   await page.waitForTimeout(100);
-  await page.evaluate(() => {
+  await page.evaluate(async () => {
     window.__livePvpAuditInboxMode = 'pending';
+    if (typeof window.__livePvpAuditIdlePollCallback !== 'function') {
+      throw new Error('idle live polling callback was not registered');
+    }
+    await window.__livePvpAuditIdlePollCallback();
   });
-  await page.waitForTimeout(2800);
   const inviteInboxAutoRefreshProbe = await page.evaluate(() => ({
     phase: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-phase') || '',
     inbox: document.querySelector('[data-live-invite-inbox]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
@@ -6510,7 +6527,10 @@ async function safeElementScreenshot(page, selector, outputPath) {
       && !/findOpponent|reportMatchResult|GhostEnemy|startPVPBattle|didWin|matchTicket/.test(JSON.stringify(inviteInboxAutoRefreshProbe.calls)),
     JSON.stringify(inviteInboxAutoRefreshProbe),
   );
-  await page.evaluate(() => window.PVPScene.stopLivePolling());
+  await page.evaluate(() => {
+    window.PVPScene.stopLivePolling();
+    window.__livePvpAuditIdlePollCallback = null;
+  });
 
   await page.evaluate(async () => {
     window.PVPScene.liveSession = null;

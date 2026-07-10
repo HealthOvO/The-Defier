@@ -286,18 +286,13 @@ async function runBrowserSmoke(page, targetApiUrl = apiUrl) {
       player: { characterId: 'linFeng', realm: 2, currentHp: 92, maxHp: 120 },
       currentScreen: 'map-screen',
     };
-    const normalAfterFutureSave = await BackendClient.saveCloudData(normalAfterFutureSavePayload, 1);
+    const normalAfterFutureSave = await BackendClient.saveCloudData(normalAfterFutureSavePayload, 1, {
+      baseRevisionId: futureSaveWrite.revisionId,
+    });
     assertStep(normalAfterFutureSave.success && normalAfterFutureSave.skipped === false, 'normal cloud save after future timestamp was skipped', normalAfterFutureSave);
-    const staleSavePayload = {
-      marker: `stale_${runId}`,
-      timestamp: normalAfterFutureSavePayload.timestamp - 1,
-      player: { characterId: 'linFeng', realm: 2, currentHp: 1, maxHp: 120 },
-      currentScreen: 'map-screen',
-    };
-    const staleSaveWrite = await BackendClient.saveCloudData(staleSavePayload, 1);
-    assertStep(staleSaveWrite.success && staleSaveWrite.skipped === true, 'stale cloud save should be marked skipped', staleSaveWrite);
-    const saveReadAfterStale = await BackendClient.getCloudData();
-    assertStep(saveReadAfterStale.success && saveReadAfterStale.slots?.[1]?.marker === normalAfterFutureSavePayload.marker, 'stale cloud save overwrote slot 1', saveReadAfterStale);
+    assertStep(normalAfterFutureSave.revisionNumber === futureSaveWrite.revisionNumber + 1, 'normal cloud save did not advance from the future-write revision', normalAfterFutureSave);
+    const saveReadAfterFuture = await BackendClient.getCloudData();
+    assertStep(saveReadAfterFuture.success && saveReadAfterFuture.slots?.[1]?.marker === normalAfterFutureSavePayload.marker, 'future timestamp prevented the next CAS write', saveReadAfterFuture);
 
     AuthService.latestSaveTimeBySlot = {};
     AuthService.saveQueueBySlot = {};
@@ -336,7 +331,9 @@ async function runBrowserSmoke(page, targetApiUrl = apiUrl) {
       achievements: { browserFutureGlobal: true },
       updatedAt: Date.now() + 6 * 24 * 60 * 60 * 1000,
     };
-    const futureGlobalWrite = await BackendClient.saveGlobalData(futureGlobalPayload);
+    const futureGlobalWrite = await BackendClient.saveGlobalData(futureGlobalPayload, {
+      baseRevisionId: globalWrite.revisionId,
+    });
     assertStep(futureGlobalWrite.success && futureGlobalWrite.skipped === false, 'future global data write failed', futureGlobalWrite);
     assertStep(futureGlobalWrite.globalUpdatedAt < futureGlobalPayload.updatedAt, 'future global timestamp was not canonicalized', futureGlobalWrite);
     await delay(20);
@@ -345,17 +342,13 @@ async function runBrowserSmoke(page, targetApiUrl = apiUrl) {
       achievements: { browserNormalAfterFutureGlobal: true },
       updatedAt: Date.now(),
     };
-    const normalAfterFutureGlobal = await BackendClient.saveGlobalData(normalAfterFutureGlobalPayload);
+    const normalAfterFutureGlobal = await BackendClient.saveGlobalData(normalAfterFutureGlobalPayload, {
+      baseRevisionId: futureGlobalWrite.revisionId,
+    });
     assertStep(normalAfterFutureGlobal.success && normalAfterFutureGlobal.skipped === false, 'normal global write after future timestamp was skipped', normalAfterFutureGlobal);
-    const staleGlobalPayload = {
-      marker: `stale_global_${runId}`,
-      achievements: { staleGlobal: true },
-      updatedAt: normalAfterFutureGlobalPayload.updatedAt - 1,
-    };
-    const staleGlobalWrite = await BackendClient.saveGlobalData(staleGlobalPayload);
-    assertStep(staleGlobalWrite.success && staleGlobalWrite.skipped === true, 'stale global write should be marked skipped', staleGlobalWrite);
-    const globalReadAfterStale = await BackendClient.getGlobalData();
-    assertStep(globalReadAfterStale.success && globalReadAfterStale.data?.marker === normalAfterFutureGlobalPayload.marker, 'stale global write overwrote current global data', globalReadAfterStale);
+    assertStep(normalAfterFutureGlobal.revisionNumber === futureGlobalWrite.revisionNumber + 1, 'normal global write did not advance from the future-write revision', normalAfterFutureGlobal);
+    const globalReadAfterFuture = await BackendClient.getGlobalData();
+    assertStep(globalReadAfterFuture.success && globalReadAfterFuture.data?.marker === normalAfterFutureGlobalPayload.marker, 'future timestamp prevented the next global CAS write', globalReadAfterFuture);
 
     const mainGhostPlayer = {
       characterId: mainName,

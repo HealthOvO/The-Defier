@@ -6,6 +6,9 @@ const {
     CLOUD_STATE_ENTITY_SLOT,
     CLOUD_STATE_GLOBAL_MAX_BYTES,
     CLOUD_STATE_HISTORY_LIMIT_MAX,
+    CLOUD_STATE_MAX_RETAINED_REVISIONS_PER_SCOPE,
+    CLOUD_STATE_MUTATION_RETENTION_MS,
+    CLOUD_STATE_OPS_EVENT_RETENTION_MS,
     CLOUD_STATE_OPERATION_RESTORE,
     CLOUD_STATE_OPERATION_WRITE,
     CLOUD_STATE_PROTOCOL_VERSION,
@@ -93,12 +96,7 @@ async function withWriteTransaction(fn) {
         if (error && error.opsEventType && error.opsScope) {
             try {
                 await withReadConnection(async (auditConnection) => {
-                    await dbRun(
-                        auditConnection,
-                        `INSERT INTO cloud_state_ops_events (event_type, entity_type, entity_key, byte_count, created_at)
-                         VALUES (?, ?, ?, 0, ?)`,
-                        [error.opsEventType, error.opsScope.entityType, error.opsScope.entityKey, Date.now()]
-                    );
+                    await recordOpsEvent(auditConnection, error.opsEventType, error.opsScope, 0);
                 });
             } catch (auditError) {
                 console.error('[CloudState] Failed to write detached ops event:', auditError);
@@ -123,11 +121,67 @@ function makeRequestHash(payload) {
 }
 
 async function recordOpsEvent(connection, eventType, scope, byteCount = 0) {
+    const now = Date.now();
+    const safeBytes = Math.max(0, Number(byteCount) || 0);
     await dbRun(
         connection,
         `INSERT INTO cloud_state_ops_events (event_type, entity_type, entity_key, byte_count, created_at)
          VALUES (?, ?, ?, ?, ?)`,
-        [eventType, scope.entityType, scope.entityKey, Math.max(0, Number(byteCount) || 0), Date.now()]
+        [eventType, scope.entityType, scope.entityKey, safeBytes, now]
+    );
+    await dbRun(
+        connection,
+        `INSERT INTO cloud_state_ops_counters (event_type, event_count, total_bytes, updated_at)
+         VALUES (?, 1, ?, ?)
+         ON CONFLICT(event_type) DO UPDATE SET
+            event_count = cloud_state_ops_counters.event_count + 1,
+            total_bytes = cloud_state_ops_counters.total_bytes + excluded.total_bytes,
+            updated_at = excluded.updated_at`,
+        [eventType, safeBytes, now]
+    );
+}
+
+async function pruneCloudStateData(connection, userId, scope) {
+    const retentionFloor = await dbGet(
+        connection,
+        `SELECT revision_number
+         FROM cloud_state_revisions
+         WHERE user_id = ? AND entity_key = ?
+         ORDER BY revision_number DESC
+         LIMIT 1 OFFSET ?`,
+        [userId, scope.entityKey, CLOUD_STATE_HISTORY_LIMIT_MAX - 1]
+    );
+    if (retentionFloor) {
+        await dbRun(
+            connection,
+            `DELETE FROM cloud_state_revisions
+             WHERE user_id = ? AND entity_key = ? AND revision_number < ?
+               AND revision_id NOT IN (
+                   SELECT source_revision_id
+                   FROM cloud_state_revisions
+                   WHERE user_id = ? AND entity_key = ? AND revision_number >= ?
+                     AND source_revision_id IS NOT NULL
+               )`,
+            [
+                userId,
+                scope.entityKey,
+                Number(retentionFloor.revision_number),
+                userId,
+                scope.entityKey,
+                Number(retentionFloor.revision_number)
+            ]
+        );
+    }
+    const now = Date.now();
+    await dbRun(
+        connection,
+        `DELETE FROM cloud_state_mutations WHERE created_at < ?`,
+        [now - CLOUD_STATE_MUTATION_RETENTION_MS]
+    );
+    await dbRun(
+        connection,
+        `DELETE FROM cloud_state_ops_events WHERE created_at < ?`,
+        [now - CLOUD_STATE_OPS_EVENT_RETENTION_MS]
     );
 }
 
@@ -233,7 +287,6 @@ async function ensureMutationAvailable(connection, userId, scope, mutationId, re
             throw makeError(500, 'cloud_state_corrupt_mutation_receipt', '云状态幂等回执损坏');
         }
     }
-    await recordOpsEvent(connection, 'mutation_conflict', scope, 0);
     throw makeMutationConflictError(scope);
 }
 
@@ -446,6 +499,7 @@ async function legacyWriteSlot(userId, { slotIndex, saveData, saveTime }) {
             normalized
         });
         await recordOpsEvent(connection, 'write', scope, normalized.dataSizeBytes);
+        await pruneCloudStateData(connection, userId, scope);
         return {
             success: true,
             skipped: false,
@@ -500,6 +554,7 @@ async function legacyWriteGlobal(userId, { globalData, globalUpdatedAt }) {
             normalized
         });
         await recordOpsEvent(connection, 'write', scope, normalized.dataSizeBytes);
+        await pruneCloudStateData(connection, userId, scope);
         return {
             success: true,
             skipped: false,
@@ -549,6 +604,7 @@ async function v2WriteSlot(userId, payload) {
         });
         await saveMutationReceipt(connection, userId, scope, mutationId, requestHash, receipt);
         await recordOpsEvent(connection, 'write', scope, normalized.dataSizeBytes);
+        await pruneCloudStateData(connection, userId, scope);
         return receipt;
     });
 }
@@ -585,6 +641,7 @@ async function v2WriteGlobal(userId, payload) {
         });
         await saveMutationReceipt(connection, userId, scope, mutationId, requestHash, receipt);
         await recordOpsEvent(connection, 'write', scope, normalized.dataSizeBytes);
+        await pruneCloudStateData(connection, userId, scope);
         return receipt;
     });
 }
@@ -683,6 +740,7 @@ async function restoreSlot(userId, slotIndex, payload) {
         });
         await saveMutationReceipt(connection, userId, scope, mutationId, requestHash, receipt);
         await recordOpsEvent(connection, 'restore', scope, normalized.dataSizeBytes);
+        await pruneCloudStateData(connection, userId, scope);
         return receipt;
     });
 }
@@ -728,6 +786,7 @@ async function restoreGlobal(userId, payload) {
         });
         await saveMutationReceipt(connection, userId, scope, mutationId, requestHash, receipt);
         await recordOpsEvent(connection, 'restore', scope, normalized.dataSizeBytes);
+        await pruneCloudStateData(connection, userId, scope);
         return receipt;
     });
 }
@@ -737,9 +796,8 @@ async function getOpsOverview() {
         const [eventRows, headSummary, revisionSummary, currentHeadBytes] = await Promise.all([
             dbAll(
                 connection,
-                `SELECT event_type, COUNT(*) AS count, COALESCE(SUM(byte_count), 0) AS bytes
-                 FROM cloud_state_ops_events
-                 GROUP BY event_type`
+                `SELECT event_type, event_count AS count, total_bytes AS bytes
+                 FROM cloud_state_ops_counters`
             ),
             dbGet(
                 connection,
@@ -790,7 +848,11 @@ async function getOpsOverview() {
             limits: {
                 slotMaxBytes: CLOUD_STATE_SLOT_MAX_BYTES,
                 globalMaxBytes: CLOUD_STATE_GLOBAL_MAX_BYTES,
-                historyLimitMax: CLOUD_STATE_HISTORY_LIMIT_MAX
+                historyLimitMax: CLOUD_STATE_HISTORY_LIMIT_MAX,
+                retainedRevisionWindowPerScope: CLOUD_STATE_HISTORY_LIMIT_MAX,
+                maxRetainedRevisionsPerScope: CLOUD_STATE_MAX_RETAINED_REVISIONS_PER_SCOPE,
+                mutationRetentionMs: CLOUD_STATE_MUTATION_RETENTION_MS,
+                opsEventRetentionMs: CLOUD_STATE_OPS_EVENT_RETENTION_MS
             }
         };
     });

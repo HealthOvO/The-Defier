@@ -160,11 +160,11 @@ async function runChecks() {
   try {
     await waitForHealth(server);
     const version = await request('/api/version');
-    assert.strictEqual(version.payload?.schema?.version, 3);
-    assert.strictEqual(version.payload?.schema?.currentMigrationId, '0003_verified_runs');
+    assert.strictEqual(version.payload?.schema?.version, 4);
+    assert.strictEqual(version.payload?.schema?.currentMigrationId, '0004_cloud_state_v2');
     assert.deepStrictEqual(
       version.payload?.schema?.appliedMigrations?.map(entry => entry.id),
-      ['0001_startup_schema', '0002_progression_platform', '0003_verified_runs']
+      ['0001_startup_schema', '0002_progression_platform', '0003_verified_runs', '0004_cloud_state_v2']
     );
     for (const table of [
       'progression_verified_runs',
@@ -183,11 +183,11 @@ async function runChecks() {
     server = startServer();
     await waitForHealth(server);
     const upgradedVersion = await request('/api/version');
-    assert.strictEqual(upgradedVersion.payload?.schema?.currentMigrationId, '0003_verified_runs', 'v2 databases should advance to v3 on restart');
+    assert.strictEqual(upgradedVersion.payload?.schema?.currentMigrationId, '0004_cloud_state_v2', 'older databases should advance through verified runs to cloud state v4 on restart');
     assert.deepStrictEqual(
       upgradedVersion.payload?.schema?.appliedMigrations?.map(entry => entry.id),
-      ['0001_startup_schema', '0002_progression_platform', '0003_verified_runs'],
-      'v2 databases should record the verified run migration after additive upgrade'
+      ['0001_startup_schema', '0002_progression_platform', '0003_verified_runs', '0004_cloud_state_v2'],
+      'older databases should record the complete additive migration chain'
     );
     for (const table of [
       'progression_verified_runs',

@@ -6,6 +6,9 @@ const CLOUD_STATE_REPORT_VERSION = 'cloud-state-ops-overview-v1';
 const CLOUD_STATE_SLOT_MAX_BYTES = 256 * 1024;
 const CLOUD_STATE_GLOBAL_MAX_BYTES = 128 * 1024;
 const CLOUD_STATE_HISTORY_LIMIT_MAX = 20;
+const CLOUD_STATE_MAX_RETAINED_REVISIONS_PER_SCOPE = CLOUD_STATE_HISTORY_LIMIT_MAX * 2;
+const CLOUD_STATE_MUTATION_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
+const CLOUD_STATE_OPS_EVENT_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
 const CLOUD_STATE_ENTITY_SLOT = 'slot';
 const CLOUD_STATE_ENTITY_GLOBAL = 'global';
 const CLOUD_STATE_OPERATION_WRITE = 'write';
@@ -106,7 +109,7 @@ function buildStoredSaveData(saveData, canonicalSaveTime) {
     return typeof saveData === 'string' ? saveData : JSON.stringify(saveData);
 }
 
-function finalizeDataEnvelope(scopeType, dataValue, clientUpdatedAt) {
+function finalizeDataEnvelope(scopeType, dataValue, clientUpdatedAt, { enforceSizeLimit = true } = {}) {
     const dataJson = JSON.stringify(dataValue);
     const isSlot = scopeType === CLOUD_STATE_ENTITY_SLOT;
     if (typeof dataJson !== 'string') {
@@ -118,7 +121,7 @@ function finalizeDataEnvelope(scopeType, dataValue, clientUpdatedAt) {
     }
     const dataSizeBytes = Buffer.byteLength(dataJson, 'utf8');
     const maxBytes = isSlot ? CLOUD_STATE_SLOT_MAX_BYTES : CLOUD_STATE_GLOBAL_MAX_BYTES;
-    if (dataSizeBytes > maxBytes) {
+    if (enforceSizeLimit && dataSizeBytes > maxBytes) {
         throw makeError(
             413,
             isSlot ? 'save_payload_too_large' : 'global_payload_too_large',
@@ -164,7 +167,7 @@ function normalizeLegacyStoredSlot(saveData, saveTime) {
         dataValue = storedLegacyData;
     }
     return {
-        ...finalizeDataEnvelope(CLOUD_STATE_ENTITY_SLOT, dataValue, clampStoredTimestamp(saveTime)),
+        ...finalizeDataEnvelope(CLOUD_STATE_ENTITY_SLOT, dataValue, clampStoredTimestamp(saveTime), { enforceSizeLimit: false }),
         storedLegacyData
     };
 }
@@ -197,7 +200,7 @@ function normalizeLegacyStoredGlobal(globalData, globalUpdatedAt) {
     const clientUpdatedAt = clampStoredTimestamp(globalUpdatedAt, embeddedUpdatedAt);
     const storedGlobalData = { ...safeObject, updatedAt: clientUpdatedAt };
     return {
-        ...finalizeDataEnvelope(CLOUD_STATE_ENTITY_GLOBAL, storedGlobalData, clientUpdatedAt),
+        ...finalizeDataEnvelope(CLOUD_STATE_ENTITY_GLOBAL, storedGlobalData, clientUpdatedAt, { enforceSizeLimit: false }),
         storedLegacyData: JSON.stringify(storedGlobalData)
     };
 }
@@ -253,6 +256,9 @@ module.exports = {
     CLOUD_STATE_ENTITY_SLOT,
     CLOUD_STATE_GLOBAL_MAX_BYTES,
     CLOUD_STATE_HISTORY_LIMIT_MAX,
+    CLOUD_STATE_MAX_RETAINED_REVISIONS_PER_SCOPE,
+    CLOUD_STATE_MUTATION_RETENTION_MS,
+    CLOUD_STATE_OPS_EVENT_RETENTION_MS,
     CLOUD_STATE_OPERATION_LEGACY_IMPORT,
     CLOUD_STATE_OPERATION_RESTORE,
     CLOUD_STATE_OPERATION_WRITE,

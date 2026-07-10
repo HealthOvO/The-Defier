@@ -73,6 +73,7 @@ const pvpLiveSeasonSource = read('server/pvp-live/live-season.js');
 const pvpLiveSeasonClaimsSource = read('server/pvp-live/season-claims.js');
 const pvpLiveSettlementSource = read('server/pvp-live/live-settlement.js');
 const schemaStatusSource = read('server/services/platform/schema-status.js');
+const cloudStateBootstrap = read('server/cloud-state/bootstrap.js');
 const pvpLiveSettlementChecks = read('tests/sanity_pvp_live_settlement_checks.cjs');
 const pvpLiveClientChecks = read('tests/sanity_pvp_live_client_checks.mjs');
 const pvpLiveServiceBridgeChecks = read('tests/sanity_pvp_live_service_bridge_checks.cjs');
@@ -236,7 +237,7 @@ const waitingReportSource = pvpLiveStore.slice(
   'receipt?.idempotent',
   'server_verified must only upgrade an observed event',
   'a checkpoint source must not move across tickets',
-  'v2 databases should advance to v3 on restart',
+  'older databases should advance through verified runs to cloud state v4 on restart',
 ].forEach((needle) => {
   assert.ok(
     verifiedRunsPlatformChecks.includes(needle) || verifiedRunsDocumentation.includes(needle),
@@ -284,6 +285,10 @@ const waitingReportSource = pvpLiveStore.slice(
 [
   '0002_progression_platform',
   '0003_verified_runs',
+  '0004_cloud_state_v2',
+  'cloud_state_revisions',
+  'cloud_state_heads',
+  'cloud_state_ops_counters',
   'progression_events',
   'progression_objective_progress',
   'progression_reward_claims',
@@ -294,7 +299,7 @@ const waitingReportSource = pvpLiveStore.slice(
   'progression_verified_run_receipts',
 ].forEach((needle) => {
   assert.ok(
-    schemaStatusSource.includes(needle) || pvpLiveDatabase.includes(needle),
+    schemaStatusSource.includes(needle) || pvpLiveDatabase.includes(needle) || cloudStateBootstrap.includes(needle),
     `progression schema should pin migration/table marker: ${needle}`,
   );
 });

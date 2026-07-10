@@ -91,6 +91,8 @@ async function createCloudStateTables(db) {
     )`);
     await dbRun(db, `CREATE INDEX IF NOT EXISTS idx_cloud_state_mutations_entity_created
         ON cloud_state_mutations(entity_type, created_at DESC)`);
+    await dbRun(db, `CREATE INDEX IF NOT EXISTS idx_cloud_state_mutations_created
+        ON cloud_state_mutations(created_at)`);
     await dbRun(db, `CREATE TABLE IF NOT EXISTS cloud_state_ops_events (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         event_type TEXT NOT NULL,
@@ -101,6 +103,29 @@ async function createCloudStateTables(db) {
     )`);
     await dbRun(db, `CREATE INDEX IF NOT EXISTS idx_cloud_state_ops_events_type_created
         ON cloud_state_ops_events(event_type, created_at DESC)`);
+    await dbRun(db, `CREATE INDEX IF NOT EXISTS idx_cloud_state_ops_events_created
+        ON cloud_state_ops_events(created_at)`);
+    await dbRun(db, `CREATE TABLE IF NOT EXISTS cloud_state_ops_counters (
+        event_type TEXT PRIMARY KEY,
+        event_count INTEGER NOT NULL DEFAULT 0,
+        total_bytes INTEGER NOT NULL DEFAULT 0,
+        updated_at INTEGER NOT NULL
+    )`);
+    const existingCounters = await dbAll(
+        db,
+        `SELECT event_type, COUNT(*) AS event_count, COALESCE(SUM(byte_count), 0) AS total_bytes,
+                COALESCE(MAX(created_at), 0) AS updated_at
+         FROM cloud_state_ops_events
+         GROUP BY event_type`
+    );
+    for (const counter of existingCounters) {
+        await dbRun(
+            db,
+            `INSERT OR IGNORE INTO cloud_state_ops_counters (event_type, event_count, total_bytes, updated_at)
+             VALUES (?, ?, ?, ?)`,
+            [counter.event_type, Number(counter.event_count) || 0, Number(counter.total_bytes) || 0, Number(counter.updated_at) || Date.now()]
+        );
+    }
 }
 
 async function headExists(db, userId, scope) {
@@ -131,7 +156,7 @@ async function insertLegacyImport(db, userId, scope, normalized, createdAt) {
         normalized.contentHash,
         String(normalized.clientUpdatedAt)
     ].join('|'));
-    await dbRun(
+    const insertedRevision = await dbRun(
         db,
         `INSERT OR IGNORE INTO cloud_state_revisions (
             revision_id, user_id, entity_type, entity_key, slot_index, revision_number,
@@ -171,12 +196,24 @@ async function insertLegacyImport(db, userId, scope, normalized, createdAt) {
             createdAt
         ]
     );
-    await dbRun(
-        db,
-        `INSERT INTO cloud_state_ops_events (event_type, entity_type, entity_key, byte_count, created_at)
-         VALUES ('legacy_import', ?, ?, ?, ?)`,
-        [scope.entityType, scope.entityKey, normalized.dataSizeBytes, createdAt]
-    );
+    if ((insertedRevision && insertedRevision.changes) > 0) {
+        await dbRun(
+            db,
+            `INSERT INTO cloud_state_ops_events (event_type, entity_type, entity_key, byte_count, created_at)
+             VALUES ('legacy_import', ?, ?, ?, ?)`,
+            [scope.entityType, scope.entityKey, normalized.dataSizeBytes, createdAt]
+        );
+        await dbRun(
+            db,
+            `INSERT INTO cloud_state_ops_counters (event_type, event_count, total_bytes, updated_at)
+             VALUES ('legacy_import', 1, ?, ?)
+             ON CONFLICT(event_type) DO UPDATE SET
+                event_count = cloud_state_ops_counters.event_count + 1,
+                total_bytes = cloud_state_ops_counters.total_bytes + excluded.total_bytes,
+                updated_at = excluded.updated_at`,
+            [normalized.dataSizeBytes, createdAt]
+        );
+    }
 }
 
 async function backfillLegacyGameSaves(db) {
@@ -210,9 +247,20 @@ async function backfillLegacyGlobalData(db) {
 }
 
 async function bootstrapCloudStateSchema(db) {
-    await createCloudStateTables(db);
-    await backfillLegacyGameSaves(db);
-    await backfillLegacyGlobalData(db);
+    await dbRun(db, 'BEGIN IMMEDIATE');
+    try {
+        await createCloudStateTables(db);
+        await backfillLegacyGameSaves(db);
+        await backfillLegacyGlobalData(db);
+        await dbRun(db, 'COMMIT');
+    } catch (error) {
+        try {
+            await dbRun(db, 'ROLLBACK');
+        } catch (rollbackError) {
+            console.error('[CloudState] Bootstrap rollback failed:', rollbackError);
+        }
+        throw error;
+    }
 }
 
 module.exports = {

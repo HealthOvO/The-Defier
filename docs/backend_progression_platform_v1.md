@@ -76,11 +76,12 @@ V1 目标包括：
 
 ## 持久化与迁移
 
-Schema 版本为 `3`，当前迁移为 `0003_verified_runs`。新数据库会按顺序记录：
+当前全仓 Schema 版本为 `4`，云状态迁移位于长期进度迁移之后。新数据库会按顺序记录：
 
 1. `0001_startup_schema`
 2. `0002_progression_platform`
 3. `0003_verified_runs`
+4. `0004_cloud_state_v2`
 
 新增表：
 
@@ -92,8 +93,13 @@ Schema 版本为 `3`，当前迁移为 `0003_verified_runs`。新数据库会按
 - `progression_verified_runs`
 - `progression_verified_run_checkpoints`
 - `progression_verified_run_receipts`
+- `cloud_state_revisions`
+- `cloud_state_heads`
+- `cloud_state_mutations`
+- `cloud_state_ops_events`
+- `cloud_state_ops_counters`
 
-迁移只做 additive 的建表、加列、索引和 `occurred_at` 审计字段回填，不解释或重写旧 `game_saves/global_data` blob。旧存档未来若需要 backfill，必须标为 `legacy_blob_import`，默认不得直接发奖。
+长期进度迁移只做 additive 的建表、加列、索引和 `occurred_at` 审计字段回填，不从 `game_saves/global_data` 解释或发放长期进度奖励。`0004_cloud_state_v2` 仅把旧 blob 作为 `legacy_import` 云状态 revision 回填，仍不得据此直接发奖；每个 scope 保留 20 个窗口 revision 和至多 20 个被引用来源，mutation 和原始运维事件保留 30 天，累计运维计数独立保存。
 
 ## 原子性与恢复
 

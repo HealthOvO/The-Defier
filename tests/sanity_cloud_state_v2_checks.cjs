@@ -5,6 +5,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
 const sqlite3 = require('../server/node_modules/sqlite3').verbose();
+const { bootstrapCloudStateSchema } = require('../server/cloud-state/bootstrap');
 
 const ROOT = path.resolve(__dirname, '..');
 const PORT = Number(process.env.CLOUD_STATE_V2_TEST_PORT || 9044);
@@ -18,6 +19,8 @@ const PROTOCOL_VERSION = 'cloud-state-v2';
 const LEGACY_USER_ID = 'legacy-user-a';
 const LEGACY_SLOT_TIME = 1710000000111;
 const LEGACY_GLOBAL_TIME = 1710000000222;
+const LEGACY_SLOT_BLOB = 's'.repeat(270 * 1024);
+const LEGACY_GLOBAL_BLOB = 'g'.repeat(140 * 1024);
 
 function removeDbFiles() {
   for (const suffix of ['', '-wal', '-shm']) {
@@ -59,6 +62,23 @@ function dbAll(sql, params = []) {
   });
 }
 
+function closeDatabase(db) {
+  return new Promise(resolve => db.close(() => resolve()));
+}
+
+async function bootstrapLegacyConcurrently() {
+  const runBootstrap = async () => {
+    const db = new sqlite3.Database(DB_PATH);
+    db.configure('busyTimeout', 5000);
+    try {
+      await bootstrapCloudStateSchema(db);
+    } finally {
+      await closeDatabase(db);
+    }
+  };
+  await Promise.all([runBootstrap(), runBootstrap()]);
+}
+
 async function seedLegacyDatabase() {
   await dbRun(`CREATE TABLE users (
     id TEXT PRIMARY KEY,
@@ -90,7 +110,7 @@ async function seedLegacyDatabase() {
       LEGACY_USER_ID,
       'legacy_user_a',
       'not-used',
-      JSON.stringify({ marker: 'legacy-global-marker', updatedAt: LEGACY_GLOBAL_TIME, flag: true }),
+      JSON.stringify({ marker: 'legacy-global-marker', updatedAt: LEGACY_GLOBAL_TIME, flag: true, blob: LEGACY_GLOBAL_BLOB }),
       LEGACY_GLOBAL_TIME - 5000,
       LEGACY_GLOBAL_TIME
     ]
@@ -100,7 +120,7 @@ async function seedLegacyDatabase() {
      VALUES (?, 2, ?, ?)`,
     [
       LEGACY_USER_ID,
-      JSON.stringify({ marker: 'legacy-slot-marker', hp: 77, timestamp: LEGACY_SLOT_TIME }),
+      JSON.stringify({ marker: 'legacy-slot-marker', hp: 77, timestamp: LEGACY_SLOT_TIME, blob: LEGACY_SLOT_BLOB }),
       LEGACY_SLOT_TIME
     ]
   );
@@ -234,6 +254,27 @@ async function registerUser(prefix) {
 async function main() {
   removeDbFiles();
   await seedLegacyDatabase();
+  await bootstrapLegacyConcurrently();
+
+  const concurrentLegacyImports = await dbGet(
+    `SELECT COUNT(*) AS count
+     FROM cloud_state_revisions
+     WHERE user_id = ? AND operation = 'legacy_import'`,
+    [LEGACY_USER_ID]
+  );
+  assert.strictEqual(Number(concurrentLegacyImports?.count), 2, 'concurrent bootstrap should import each legacy scope once');
+  const concurrentImportEvents = await dbGet(
+    `SELECT COUNT(*) AS count
+     FROM cloud_state_ops_events
+     WHERE event_type = 'legacy_import'`
+  );
+  assert.strictEqual(Number(concurrentImportEvents?.count), 2, 'concurrent bootstrap should emit one event per imported scope');
+  const concurrentImportCounter = await dbGet(
+    `SELECT event_count AS count
+     FROM cloud_state_ops_counters
+     WHERE event_type = 'legacy_import'`
+  );
+  assert.strictEqual(Number(concurrentImportCounter?.count), 2, 'concurrent bootstrap should count each imported scope once');
 
   let server = startServer();
   try {
@@ -258,7 +299,7 @@ async function main() {
       `legacy rows should backfill one global head and one slot head: ${JSON.stringify(legacyHeads)}`
     );
     const legacyRevisions = await dbAll(
-      `SELECT entity_key, revision_number, operation, content_hash
+      `SELECT entity_key, revision_number, operation, content_hash, data_size_bytes
        FROM cloud_state_revisions
        WHERE user_id = ?
        ORDER BY entity_key ASC`,
@@ -270,6 +311,14 @@ async function main() {
       assert.strictEqual(Number(row.revision_number), 1);
       assert.match(row.content_hash || '', /^[a-f0-9]{64}$/);
     });
+    assert(
+      Number(legacyRevisions.find(row => row.entity_key === 'slot:2')?.data_size_bytes) > 256 * 1024,
+      'legacy slot imports must tolerate payloads above the new-write limit'
+    );
+    assert(
+      Number(legacyRevisions.find(row => row.entity_key === 'global')?.data_size_bytes) > 128 * 1024,
+      'legacy global imports must tolerate payloads above the new-write limit'
+    );
 
     await stopServer(server);
     server = startServer();
@@ -281,6 +330,12 @@ async function main() {
       [LEGACY_USER_ID]
     );
     assert.strictEqual(Number(legacyRevisionCount?.count), 2, 'restart should not duplicate legacy backfill revisions');
+    const legacyImportCounterAfterRestart = await dbGet(
+      `SELECT event_count AS count
+       FROM cloud_state_ops_counters
+       WHERE event_type = 'legacy_import'`
+    );
+    assert.strictEqual(Number(legacyImportCounterAfterRestart?.count), 2, 'restart should not double-count legacy imports');
 
     const primary = await registerUser('cloud_state_primary');
     const secondary = await registerUser('cloud_state_secondary');
@@ -408,8 +463,8 @@ async function main() {
       protocolVersion: PROTOCOL_VERSION,
       slotIndex: 0,
       baseRevisionId: followupSlot.payload.revisionId,
-      mutationId: 'mut-slot-restore-0005',
-      sourceRevisionId: initialSlot.payload.revisionId
+      sourceRevisionId: initialSlot.payload.revisionId,
+      mutationId: 'mut-slot-restore-0005'
     };
     const restoredSlot = await request('/api/saves/slots/0/restore', {
       method: 'POST',
@@ -431,8 +486,8 @@ async function main() {
       protocolVersion: PROTOCOL_VERSION,
       slotIndex: 0,
       baseRevisionId: null,
-      mutationId: 'mut-slot-foreign-0006',
-      sourceRevisionId: initialSlot.payload.revisionId
+      sourceRevisionId: initialSlot.payload.revisionId,
+      mutationId: 'mut-slot-foreign-0006'
     };
     const foreignRestore = await request('/api/saves/slots/0/restore', {
       method: 'POST',
@@ -485,8 +540,8 @@ async function main() {
     const restoreGlobalPayload = {
       protocolVersion: PROTOCOL_VERSION,
       baseRevisionId: followupGlobal.payload.revisionId,
-      mutationId: 'mut-global-restore-0003',
-      sourceRevisionId: initialGlobal.payload.revisionId
+      sourceRevisionId: initialGlobal.payload.revisionId,
+      mutationId: 'mut-global-restore-0003'
     };
     const restoredGlobal = await request('/api/user/global/restore', {
       method: 'POST',
@@ -528,6 +583,123 @@ async function main() {
     assert.strictEqual(secondarySlot?.revisionNumber, 1, 'legacy slot write should append its first revision');
     const secondaryGlobal = await request('/api/user/global', { token: secondary.token });
     assert.strictEqual(secondaryGlobal.payload?.revisionNumber, 1, 'legacy global write should append its first revision');
+
+    let retainedHeadRevisionId = null;
+    for (let index = 0; index < 25; index += 1) {
+      const retainedPayload = {
+        protocolVersion: PROTOCOL_VERSION,
+        slotIndex: 3,
+        baseRevisionId: retainedHeadRevisionId,
+        mutationId: `mut-retention-${String(index).padStart(4, '0')}`,
+        saveData: { marker: `retention-${index}` },
+        saveTime: Date.now() + 100 + index
+      };
+      const retainedWrite = await request('/api/saves', {
+        method: 'POST',
+        token: secondary.token,
+        body: { ...retainedPayload, ...signSessionPayload(retainedPayload, secondary.token, `retention-${index}`) }
+      });
+      assert.strictEqual(retainedWrite.status, 200, JSON.stringify(retainedWrite.payload));
+      retainedHeadRevisionId = retainedWrite.payload?.revisionId;
+      if (index === 0) {
+        await dbRun(
+          `UPDATE cloud_state_mutations SET created_at = 1 WHERE user_id = ? AND mutation_id = ?`,
+          [secondary.userId, retainedPayload.mutationId]
+        );
+        await dbRun(
+          `UPDATE cloud_state_ops_events
+           SET created_at = 1
+           WHERE id = (SELECT MIN(id) FROM cloud_state_ops_events)`
+        );
+      }
+    }
+    const retainedRevisionCount = await dbGet(
+      `SELECT COUNT(*) AS count
+       FROM cloud_state_revisions
+       WHERE user_id = ? AND entity_key = 'slot:3'`,
+      [secondary.userId]
+    );
+    assert.strictEqual(Number(retainedRevisionCount?.count), 20, 'each scope should retain the latest 20 revisions');
+    const retainedHistory = await request('/api/saves/slots/3/history?limit=20', { token: secondary.token });
+    assert.strictEqual(retainedHistory.status, 200, JSON.stringify(retainedHistory.payload));
+    assert.strictEqual(retainedHistory.payload?.history?.length, 20);
+    assert.strictEqual(retainedHistory.payload?.history?.[0]?.revisionId, retainedHeadRevisionId);
+    assert.strictEqual(retainedHistory.payload?.history?.[19]?.revisionNumber, 6);
+    const expiredMutationCount = await dbGet(
+      `SELECT COUNT(*) AS count FROM cloud_state_mutations WHERE created_at < ?`,
+      [Date.now() - (30 * 24 * 60 * 60 * 1000)]
+    );
+    assert.strictEqual(Number(expiredMutationCount?.count), 0, 'expired mutation receipts should be pruned');
+    const expiredOpsEventCount = await dbGet(
+      `SELECT COUNT(*) AS count FROM cloud_state_ops_events WHERE created_at < ?`,
+      [Date.now() - (30 * 24 * 60 * 60 * 1000)]
+    );
+    assert.strictEqual(Number(expiredOpsEventCount?.count), 0, 'expired raw ops events should be pruned');
+
+    const retainedSourceRevisionId = retainedHistory.payload?.history?.[19]?.revisionId;
+    const retentionRestorePayload = {
+      protocolVersion: PROTOCOL_VERSION,
+      slotIndex: 3,
+      baseRevisionId: retainedHeadRevisionId,
+      sourceRevisionId: retainedSourceRevisionId,
+      mutationId: 'mut-retention-restore-0025'
+    };
+    const retentionRestore = await request('/api/saves/slots/3/restore', {
+      method: 'POST',
+      token: secondary.token,
+      body: {
+        ...retentionRestorePayload,
+        ...signSessionPayload(retentionRestorePayload, secondary.token, 'retention-restore')
+      }
+    });
+    assert.strictEqual(retentionRestore.status, 200, JSON.stringify(retentionRestore.payload));
+    retainedHeadRevisionId = retentionRestore.payload?.revisionId;
+    const retainedCountWithRestoreSource = await dbGet(
+      `SELECT COUNT(*) AS count
+       FROM cloud_state_revisions
+       WHERE user_id = ? AND entity_key = 'slot:3'`,
+      [secondary.userId]
+    );
+    assert.strictEqual(Number(retainedCountWithRestoreSource?.count), 21, 'a retained restore may keep one referenced source beyond the 20-revision window');
+    const retainedSourceAfterRestore = await dbGet(
+      `SELECT COUNT(*) AS count
+       FROM cloud_state_revisions
+       WHERE user_id = ? AND entity_key = 'slot:3' AND revision_id = ?`,
+      [secondary.userId, retainedSourceRevisionId]
+    );
+    assert.strictEqual(Number(retainedSourceAfterRestore?.count), 1, 'restore should preserve its source while the restore revision remains in the window');
+
+    for (let index = 25; index < 45; index += 1) {
+      const retainedPayload = {
+        protocolVersion: PROTOCOL_VERSION,
+        slotIndex: 3,
+        baseRevisionId: retainedHeadRevisionId,
+        mutationId: `mut-retention-${String(index).padStart(4, '0')}`,
+        saveData: { marker: `retention-${index}` },
+        saveTime: Date.now() + 200 + index
+      };
+      const retainedWrite = await request('/api/saves', {
+        method: 'POST',
+        token: secondary.token,
+        body: { ...retainedPayload, ...signSessionPayload(retainedPayload, secondary.token, `retention-${index}`) }
+      });
+      assert.strictEqual(retainedWrite.status, 200, JSON.stringify(retainedWrite.payload));
+      retainedHeadRevisionId = retainedWrite.payload?.revisionId;
+    }
+    const retainedCountAfterRestoreExpires = await dbGet(
+      `SELECT COUNT(*) AS count
+       FROM cloud_state_revisions
+       WHERE user_id = ? AND entity_key = 'slot:3'`,
+      [secondary.userId]
+    );
+    assert.strictEqual(Number(retainedCountAfterRestoreExpires?.count), 20, 'source revisions should be pruned after their restore revision leaves the retained window');
+    const expiredRetainedSource = await dbGet(
+      `SELECT COUNT(*) AS count
+       FROM cloud_state_revisions
+       WHERE user_id = ? AND entity_key = 'slot:3' AND revision_id = ?`,
+      [secondary.userId, retainedSourceRevisionId]
+    );
+    assert.strictEqual(Number(expiredRetainedSource?.count), 0, 'unreferenced source revisions must not accumulate indefinitely');
 
     const bigSlotPayload = {
       protocolVersion: PROTOCOL_VERSION,
@@ -571,6 +743,10 @@ async function main() {
     });
     assert.strictEqual(opsOverview.status, 200, JSON.stringify(opsOverview.payload));
     assert.strictEqual(opsOverview.payload?.reportVersion, 'cloud-state-ops-overview-v1');
+    assert.strictEqual(opsOverview.payload?.limits?.retainedRevisionWindowPerScope, 20);
+    assert.strictEqual(opsOverview.payload?.limits?.maxRetainedRevisionsPerScope, 40);
+    assert.strictEqual(opsOverview.payload?.limits?.mutationRetentionMs, 30 * 24 * 60 * 60 * 1000);
+    assert.strictEqual(opsOverview.payload?.limits?.opsEventRetentionMs, 30 * 24 * 60 * 60 * 1000);
     assert(Number(opsOverview.payload?.activity?.acceptedWrites) >= 6, `ops should aggregate writes: ${JSON.stringify(opsOverview.payload)}`);
     assert(Number(opsOverview.payload?.activity?.restores) >= 2, `ops should aggregate restores: ${JSON.stringify(opsOverview.payload)}`);
     assert(Number(opsOverview.payload?.activity?.conflicts) >= 2, `ops should aggregate conflicts: ${JSON.stringify(opsOverview.payload)}`);

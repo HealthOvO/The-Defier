@@ -172,7 +172,7 @@ function buildV2GlobalWritePayload(body) {
 }
 
 function buildV2SlotRestorePayload(body, slotIndex) {
-    enforceExactBody(body, ['protocolVersion', 'slotIndex', 'baseRevisionId', 'mutationId', 'sourceRevisionId']);
+    enforceExactBody(body, ['protocolVersion', 'slotIndex', 'baseRevisionId', 'sourceRevisionId', 'mutationId']);
     if (body.protocolVersion !== CLOUD_STATE_PROTOCOL_VERSION) {
         throw makeError(400, 'invalid_protocol_version', 'protocolVersion 无效');
     }
@@ -188,13 +188,13 @@ function buildV2SlotRestorePayload(body, slotIndex) {
         protocolVersion: body.protocolVersion,
         slotIndex: Number(body.slotIndex),
         baseRevisionId: body.baseRevisionId,
-        mutationId: body.mutationId,
-        sourceRevisionId: body.sourceRevisionId
+        sourceRevisionId: body.sourceRevisionId,
+        mutationId: body.mutationId
     };
 }
 
 function buildV2GlobalRestorePayload(body) {
-    enforceExactBody(body, ['protocolVersion', 'baseRevisionId', 'mutationId', 'sourceRevisionId']);
+    enforceExactBody(body, ['protocolVersion', 'baseRevisionId', 'sourceRevisionId', 'mutationId']);
     if (body.protocolVersion !== CLOUD_STATE_PROTOCOL_VERSION) {
         throw makeError(400, 'invalid_protocol_version', 'protocolVersion 无效');
     }
@@ -206,8 +206,8 @@ function buildV2GlobalRestorePayload(body) {
     return {
         protocolVersion: body.protocolVersion,
         baseRevisionId: body.baseRevisionId,
-        mutationId: body.mutationId,
-        sourceRevisionId: body.sourceRevisionId
+        sourceRevisionId: body.sourceRevisionId,
+        mutationId: body.mutationId
     };
 }
 

@@ -60,7 +60,8 @@ const SCHEMA_MIGRATIONS = [
             'cloud_state_revisions',
             'cloud_state_heads',
             'cloud_state_mutations',
-            'cloud_state_ops_events'
+            'cloud_state_ops_events',
+            'cloud_state_ops_counters'
         ]
     })
 ];

@@ -732,6 +732,10 @@ export class SystemView {
                     <div class="talisman-content">
                         <span class="btn-text" style="color:var(--accent-red);">覆盖</span>
                     </div>
+                </button>
+                <button class="save-history-btn" type="button" data-system-action="select-slot" data-slot-index="${index}" data-slot-mode="history" title="查看并恢复云端历史版本">
+                    <span aria-hidden="true">↶</span>
+                    <span>云端历史</span>
                 </button>`;
       slotEl.innerHTML = `
                 <div class="slot-header">${slotName}</div>
@@ -773,6 +777,86 @@ export class SystemView {
       }
     });
     container.__saveSlotDelegatesBound = true;
+  }
+  setCloudSaveHistoryStatus(message, isError = false) {
+    const status = document.getElementById('cloud-save-history-status');
+    if (!status) return;
+    status.textContent = String(message || '');
+    status.classList.toggle('is-error', !!isError);
+  }
+  renderCloudSaveHistory({ slotIndex = 0, loading = false, revisions = [], headRevisionId = '', error = '' } = {}) {
+    const modal = document.getElementById('cloud-save-history-modal');
+    const list = document.getElementById('cloud-save-history-list');
+    const title = document.getElementById('cloud-save-history-title');
+    if (!modal || !list) return;
+    if (title) title.textContent = `命牌 ${Number(slotIndex) + 1} · 云端历史`;
+    list.replaceChildren();
+    this.setCloudSaveHistoryStatus(error || (loading ? '正在读取云端历史...' : ''), !!error);
+    if (loading) {
+      const loadingRow = document.createElement('div');
+      loadingRow.className = 'cloud-history-empty';
+      loadingRow.textContent = '读取中...';
+      list.appendChild(loadingRow);
+    } else if (!error && (!Array.isArray(revisions) || revisions.length === 0)) {
+      const emptyRow = document.createElement('div');
+      emptyRow.className = 'cloud-history-empty';
+      emptyRow.textContent = '暂无可恢复的云端历史';
+      list.appendChild(emptyRow);
+    } else if (!error) {
+      revisions.forEach((revision, index) => {
+        if (!revision || typeof revision !== 'object') return;
+        const revisionId = String(revision.revisionId || '');
+        const saveData = revision.saveData || revision.data || {};
+        const player = saveData && saveData.player || {};
+        const row = document.createElement('article');
+        row.className = 'cloud-history-item';
+        const isHead = !!revision.isHead || revisionId === String(headRevisionId || '');
+        if (isHead) row.classList.add('is-head');
+
+        const copy = document.createElement('div');
+        copy.className = 'cloud-history-copy';
+        const heading = document.createElement('div');
+        heading.className = 'cloud-history-heading';
+        const revisionNumber = Number(revision.revisionNumber);
+        heading.textContent = Number.isFinite(revisionNumber) && revisionNumber > 0
+          ? `版本 ${revisionNumber}${isHead ? ' · 当前' : ''}`
+          : `历史版本 ${index + 1}${isHead ? ' · 当前' : ''}`;
+        const detail = document.createElement('div');
+        detail.className = 'cloud-history-detail';
+        const updatedAt = Number(revision.clientUpdatedAt || revision.createdAt || saveData.timestamp) || 0;
+        const realm = Number(player.realm) || 1;
+        const hp = Number(player.currentHp);
+        const gold = Number(player.gold);
+        detail.textContent = `${updatedAt ? new Date(updatedAt).toLocaleString() : '时间未知'} · 第 ${realm} 重天 · 生命 ${Number.isFinite(hp) ? hp : '?'} · 灵石 ${Number.isFinite(gold) ? gold : '?'}`;
+        const operation = document.createElement('div');
+        operation.className = 'cloud-history-operation';
+        operation.textContent = revision.operation === 'restore'
+          ? '由历史恢复生成'
+          : revision.operation === 'legacy_import' ? '旧存档迁入' : '正常保存';
+        copy.append(heading, detail, operation);
+
+        const action = document.createElement('button');
+        action.type = 'button';
+        action.className = 'cloud-history-restore-btn';
+        action.dataset.cloudRevisionId = revisionId;
+        action.disabled = isHead || !revisionId;
+        action.title = isHead ? '该版本已是当前云端版本' : '恢复此版本并生成新的云端版本';
+        action.textContent = isHead ? '当前版本' : '恢复';
+        row.append(copy, action);
+        list.appendChild(row);
+      });
+    }
+    if (!list.__cloudHistoryDelegateBound) {
+      list.addEventListener('click', event => {
+        const target = event.target;
+        if (!target || typeof target.closest !== 'function') return;
+        const button = target.closest('[data-cloud-revision-id]');
+        if (!button || button.disabled || !list.contains(button)) return;
+        this.game.restoreCloudSaveRevision(button.dataset.cloudRevisionId);
+      });
+      list.__cloudHistoryDelegateBound = true;
+    }
+    modal.classList.add('active');
   }
   showSaveConflictModal(localData, cloudData, cloudTime) {
     const modal = document.getElementById('save-conflict-modal');
