@@ -150,6 +150,16 @@ async function safeScreenshot(page, outPath) {
 
     const panel = document.getElementById('reward-run-path-meta');
     const narrative = document.getElementById('reward-narrative-brief');
+    const nextStep = document.getElementById('reward-next-step-card');
+    const continueBtn = document.getElementById('continue-reward-btn');
+    const firstRewardCard = document.querySelector('#reward-cards .reward-card');
+    const nextStepPendingText = nextStep?.textContent?.replace(/\s+/g, ' ').trim() || '';
+    const continueDisabledBefore = !!continueBtn?.disabled;
+    if (firstRewardCard && typeof firstRewardCard.click === 'function') {
+      firstRewardCard.click();
+    }
+    const nextStepReadyText = nextStep?.textContent?.replace(/\s+/g, ' ').trim() || '';
+    const continueDisabledAfter = !!continueBtn?.disabled;
     const entries = Array.from(panel?.querySelectorAll('.reward-run-path-entry') || []);
     const payload = typeof window.render_game_to_text === 'function'
       ? JSON.parse(window.render_game_to_text())
@@ -160,6 +170,11 @@ async function safeScreenshot(page, outPath) {
       visible: !!panel && getComputedStyle(panel).display !== 'none' && getComputedStyle(panel).visibility !== 'hidden',
       narrativeVisible: !!narrative && getComputedStyle(narrative).display !== 'none' && getComputedStyle(narrative).visibility !== 'hidden',
       narrativeText: narrative?.textContent?.replace(/\s+/g, ' ').trim() || '',
+      nextStepPendingText,
+      nextStepReadyText,
+      continueDisabledBefore,
+      continueDisabledAfter,
+      rewardCardSelected: !!game.rewardCardSelected,
       header: document.querySelector('.reward-run-path-badge')?.textContent?.replace(/\s+/g, ' ').trim() || '',
       status: document.querySelector('.reward-run-path-status')?.textContent?.replace(/\s+/g, ' ').trim() || '',
       entries: entries.map((entry) => ({
@@ -176,6 +191,11 @@ async function safeScreenshot(page, outPath) {
       && !!rewardProbe.visible
       && !!rewardProbe.narrativeVisible
       && /命盘档案/.test(rewardProbe.narrativeText || '')
+      && /先选牌或付费跳过/.test(rewardProbe.nextStepPendingText || '')
+      && rewardProbe.continueDisabledBefore === true
+      && /已选定奖励，可继续回章节地图/.test(rewardProbe.nextStepReadyText || '')
+      && rewardProbe.continueDisabledAfter === false
+      && rewardProbe.rewardCardSelected === true
       && /断命问锋/.test(rewardProbe.narrativeText || '')
       && /破命流/.test(rewardProbe.header || '')
       && /本场推进 2 个阶段/.test(rewardProbe.status || '')
@@ -185,6 +205,16 @@ async function safeScreenshot(page, outPath) {
       && rewardProbe.rewardPayload?.entryCount === 2
       && rewardProbe.rewardPayload?.pathId === 'shatter'
       && rewardProbe.rewardPayload?.narrative?.kicker === '命盘档案',
+    JSON.stringify(rewardProbe || null)
+  );
+
+  add(
+    'reward screen disables continue until a reward card is selected and then exposes the map return step',
+    /先选牌或付费跳过/.test(rewardProbe.nextStepPendingText || '')
+      && rewardProbe.continueDisabledBefore === true
+      && /已选定奖励，可继续回章节地图/.test(rewardProbe.nextStepReadyText || '')
+      && rewardProbe.continueDisabledAfter === false
+      && rewardProbe.rewardCardSelected === true,
     JSON.stringify(rewardProbe || null)
   );
 

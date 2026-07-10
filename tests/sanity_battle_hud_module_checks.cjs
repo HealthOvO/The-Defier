@@ -109,6 +109,11 @@ function assert(condition, message) {
       }
     ],
     advisorExpanded: true,
+    loop: {
+      nodeLabel: '精英战',
+      phaseLabel: '玩家回合',
+      nextLabel: '胜利后进入战利结算，再回章节地图'
+    },
     advisor: {
       recommendation: { label: '守势', desc: '先稳后打' },
       readiness: '当前可用指令 1 项。',
@@ -151,6 +156,11 @@ function assert(condition, message) {
   assert(/万象同判/.test(panelMarkup), 'panel markup should include chapter omen label');
   assert(/雷火崩坏/.test(panelMarkup), 'panel markup should include law weave summary');
   assert(/2 组激活/.test(panelMarkup), 'panel markup should include treasure set summary');
+  assert(/battle-loop-rail/.test(panelMarkup), 'battle command panel should include core loop rail');
+  assert(/data-core-loop-rail="battle"/.test(panelMarkup), 'battle loop rail should expose stable browser marker');
+  assert(/精英战/.test(panelMarkup), 'battle loop rail should include current node label');
+  assert(/玩家回合/.test(panelMarkup), 'battle loop rail should include current phase label');
+  assert(/胜利后进入战利结算，再回章节地图/.test(panelMarkup), 'battle loop rail should include next step label');
   assert(!/onclick=/.test(panelMarkup), 'battle command panel should not contain inline click handlers');
   assert(/data-action="activate-battle-command"/.test(panelMarkup), 'battle command panel should expose command action data attr');
   assert(/data-action="toggle-tactical-advisor"/.test(panelMarkup), 'battle command panel should expose advisor toggle action');

@@ -98,6 +98,15 @@ function add(name, pass, detail = '') {
         height: rect.height,
       };
     };
+    const overlaps = (a, b, margin = 0) => {
+      if (!a || !b) return false;
+      return !(
+        a.right <= b.left + margin ||
+        b.right <= a.left + margin ||
+        a.bottom <= b.top + margin ||
+        b.bottom <= a.top + margin
+      );
+    };
 
     const command = document.getElementById('battle-command-panel');
     const boss = document.getElementById('boss-act-panel');
@@ -108,6 +117,9 @@ function add(name, pass, detail = '') {
     const spiritChipRect = rectObj(spiritChip);
     const advisor = document.querySelector('#battle-command-panel .battle-tactical-advisor');
     const toggleBtn = document.querySelector('#battle-command-panel .battle-advisor-toggle');
+    const battleLoopRail = document.querySelector('#battle-command-panel [data-core-loop-rail="battle"]');
+    const battleLoopRailRect = rectObj(battleLoopRail);
+    const battleLoopText = battleLoopRail?.textContent?.replace(/\s+/g, ' ').trim() || '';
     const metaStrips = Array.from(document.querySelectorAll('.enemy .enemy-meta-strip'));
     const handCards = Array.from(document.querySelectorAll('#hand-cards .card')).slice(0, 3);
     const handCardRects = handCards.map((el) => rectObj(el));
@@ -129,6 +141,8 @@ function add(name, pass, detail = '') {
     return {
       viewport: { width: window.innerWidth, height: window.innerHeight },
       command: rectObj(command),
+      battleLoopRail: battleLoopRailRect,
+      battleLoopText,
       boss: rectObj(boss),
       hand: rectObj(hand),
       endTurn: rectObj(endTurn),
@@ -145,8 +159,18 @@ function add(name, pass, detail = '') {
       advisorVisible: !!advisor && getComputedStyle(advisor).display !== 'none',
       visibleRuleLines,
       ok: !!command && !!boss && !!hand && !!endTurn && !!enemy && !!spiritChipRect &&
-        rectObj(command).height <= 130 &&
+        !!battleLoopRail &&
+        !!battleLoopRailRect &&
+        battleLoopRailRect.width > 0 &&
+        battleLoopRailRect.height > 0 &&
+        /胜利后进入战利结算，再回章节地图/.test(battleLoopText) &&
+        rectObj(command).height <= 104 &&
         rectObj(command).top <= 80 &&
+        rectObj(command).bottom <= rectObj(boss).top - 8 &&
+        battleLoopRailRect.left >= 0 &&
+        battleLoopRailRect.right <= window.innerWidth &&
+        battleLoopRailRect.bottom <= rectObj(command).bottom + 2 &&
+        !overlaps(battleLoopRailRect, rectObj(endTurn), 2) &&
         spiritChipRect.right <= window.innerWidth - 6 &&
         spiritChipRect.top >= rectObj(command).top - 2 &&
         rectObj(boss).height <= 116 &&
@@ -172,6 +196,17 @@ function add(name, pass, detail = '') {
   add(
     'mobile battle HUD stays compact, keeps lanes separated, and still allows explicit advisor expansion',
     !!probe && !!probe.ok,
+    JSON.stringify(probe || null)
+  );
+
+  add(
+    'mobile battle loop rail stays visible without stealing end-turn or hand-card hit areas',
+    !!probe?.battleLoopRail
+      && /胜利后进入战利结算，再回章节地图/.test(probe.battleLoopText || '')
+      && probe.battleLoopRail.left >= 0
+      && probe.battleLoopRail.right <= probe.viewport.width
+      && probe.endTurn
+      && probe.handCardRects.every((rect) => rect && (rect.top >= probe.battleLoopRail.bottom || rect.left >= probe.battleLoopRail.right || rect.right <= probe.battleLoopRail.left)),
     JSON.stringify(probe || null)
   );
 
@@ -472,7 +507,9 @@ function add(name, pass, detail = '') {
         ok: isRectInSafeTapZone(rect)
       };
     });
-    const initialPrimaryCtaOk = initialPrimaryCtaProbes.some((probe) => probe.ok);
+    const initialSafeCtaCount = initialPrimaryCtaProbes.filter((probe) => probe.ok).length;
+    const initialSafeBranchCtaCount = initialPrimaryCtaProbes.filter((probe) => probe.ok && probe.action === 'select-branch').length;
+    const initialPrimaryCtaOk = initialSafeBranchCtaCount >= 2;
     const visibilityAfterScroll = (targetButtons) => {
       const target = targetButtons.find((btn) => isVisible(btn));
       const before = rectObj(target);
@@ -527,6 +564,8 @@ function add(name, pass, detail = '') {
       bountyButtonCount: bountyButtons.length,
       safeBottomLimit,
       initialPrimaryCtaProbes,
+      initialSafeCtaCount,
+      initialSafeBranchCtaCount,
       initialPrimaryCtaOk,
       branchReach,
       bountyReach,
@@ -536,6 +575,7 @@ function add(name, pass, detail = '') {
         isVisible(panels) &&
         initialPanelInViewport &&
         firstCardReadable &&
+        Number(visibleRatio(firstCardRect).toFixed(3)) >= 0.55 &&
         firstCardHeaderOverlap <= 12 &&
         initialVisibleCards.length >= 1 &&
         (panels?.querySelectorAll('.expedition-panel-card').length || 0) >= 6 &&

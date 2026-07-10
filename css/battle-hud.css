@@ -79,6 +79,45 @@
         background var(--hud-transition-fast);
 }
 
+#battle-screen .battle-loop-rail {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 5px;
+    align-items: center;
+}
+
+#battle-screen .battle-loop-chip {
+    display: inline-flex;
+    min-width: 0;
+    align-items: center;
+    gap: 4px;
+    min-height: 22px;
+    padding: 2px 7px;
+    border: 1px solid rgba(245, 202, 107, 0.24);
+    border-radius: 8px;
+    background: rgba(8, 18, 38, 0.66);
+    color: rgba(244, 232, 205, 0.9);
+    font-size: 0.58rem;
+    line-height: 1.15;
+}
+
+#battle-screen .battle-loop-next {
+    flex: 1 1 100%;
+}
+
+#battle-screen .battle-loop-chip-label {
+    flex: 0 0 auto;
+    color: rgba(245, 202, 107, 0.78);
+}
+
+#battle-screen .battle-loop-chip-value {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 #battle-screen .battle-tactical-advisor.collapsed {
     max-height: 38px;
     overflow: hidden;
@@ -680,7 +719,7 @@
     #battle-screen #battle-command-panel {
         top: 68px;
         left: var(--hud-gutter-mobile);
-        width: calc(100vw - 12px);
+        width: clamp(172px, calc(100vw - 180px), 218px);
         max-height: 118px;
         padding: 7px 8px;
         border-radius: 12px;
@@ -689,7 +728,7 @@
 
     #battle-screen .battle-command-panel .battle-command-list,
     #battle-screen #battle-command-panel .battle-command-list {
-        grid-template-columns: repeat(3, minmax(0, 1fr));
+        grid-template-columns: repeat(2, minmax(0, 1fr));
         gap: 4px;
         margin-top: 6px;
     }
@@ -715,6 +754,22 @@
     #battle-screen #battle-command-panel .battle-advisor-toggle {
         min-height: 26px;
         padding: 4px 8px;
+    }
+
+    #battle-screen .battle-loop-rail {
+        gap: 3px;
+        margin-top: 4px;
+    }
+
+    #battle-screen .battle-loop-chip {
+        min-height: 18px;
+        padding: 1px 5px;
+        font-size: 0.5rem;
+        border-radius: 7px;
+    }
+
+    #battle-screen .battle-loop-next {
+        flex-basis: 100%;
     }
 
     #battle-screen .battle-command-panel .battle-tactical-advisor,
@@ -799,7 +854,8 @@
         top: 64px;
         right: 6px;
         left: auto;
-        width: min(184px, calc(100vw - 12px));
+        width: min(156px, calc(100vw - 210px));
+        min-width: 140px;
         padding: 5px 7px;
         z-index: var(--z-battle-mission);
     }
