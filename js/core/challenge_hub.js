@@ -3365,6 +3365,13 @@ const challengeHubMethods = Object.create(null);
   challengeHubMethods.normalizeActiveChallengeRun = function (rawRun = null) {
     const source = rawRun && typeof rawRun === 'object' ? rawRun : null;
     if (!source || !source.ruleId || !source.mode || !source.rotationKey) return null;
+    const runId = typeof this.normalizeProgressionSafeId === 'function' ? this.normalizeProgressionSafeId(source.runId) : String(source.runId || '').trim();
+    const ownerUserId = Object.prototype.hasOwnProperty.call(source, 'ownerUserId')
+      ? String(source.ownerUserId || '').trim()
+      : typeof this.getCurrentProgressionUserId === 'function'
+        ? this.getCurrentProgressionUserId()
+        : '';
+    const saveSlot = Number.isInteger(source.saveSlot) ? source.saveSlot : Number.isInteger(this.currentSaveSlot) ? this.currentSaveSlot : null;
     return {
       mode: ['daily', 'weekly', 'global'].includes(source.mode) ? source.mode : 'daily',
       modeLabel: String(source.modeLabel || HUB_META[source.mode]?.label || HUB_META.daily.label),
@@ -3387,6 +3394,9 @@ const challengeHubMethods = Object.create(null);
         ...this.getChallengeScoreDefaults(),
         ...clone(source.scoreWeights)
       } : this.getChallengeScoreDefaults(),
+      runId: runId || (typeof this.createProgressionSafeId === 'function' ? this.createProgressionSafeId('challenge-run') : `challenge-run-${Date.now()}`),
+      ownerUserId,
+      saveSlot,
       startedAt: clampInt(source.startedAt, 0),
       resolved: !!source.resolved,
       completed: !!source.completed,
@@ -3432,6 +3442,9 @@ const challengeHubMethods = Object.create(null);
         ...defaults,
         ...(bundle.rule.scoreWeights || {})
       },
+      runId: typeof this.createProgressionSafeId === 'function' ? this.createProgressionSafeId('challenge-run') : `challenge-run-${Date.now()}`,
+      ownerUserId: typeof this.getCurrentProgressionUserId === 'function' ? this.getCurrentProgressionUserId() : '',
+      saveSlot: Number.isInteger(this.currentSaveSlot) ? this.currentSaveSlot : null,
       startedAt: Date.now(),
       seedSignature: String(bundle.seedSignature || this.buildChallengeSeedSignature(bundle.mode, bundle.rotationKey, bundle.rule)),
       replayOnly: !!bundle.replayOnly,
@@ -3475,7 +3488,17 @@ const challengeHubMethods = Object.create(null);
       if (savedSlot !== null && this.currentSaveSlot !== null && this.currentSaveSlot !== undefined && clampInt(savedSlot, -1) !== clampInt(this.currentSaveSlot, -2)) {
         return null;
       }
-      return this.normalizeActiveChallengeRun(parsed ? parsed.activeRun : null);
+      const rawRun = parsed ? parsed.activeRun : null;
+      const storedOwnerUserId = rawRun && Object.prototype.hasOwnProperty.call(rawRun, 'ownerUserId')
+        ? String(rawRun.ownerUserId || '').trim()
+        : '';
+      const ownerCompatible = typeof this.isProgressionOwnerCompatible === 'function'
+        ? this.isProgressionOwnerCompatible(storedOwnerUserId)
+        : typeof this.getCurrentProgressionUserId !== 'function'
+          || !this.getCurrentProgressionUserId()
+          || storedOwnerUserId === this.getCurrentProgressionUserId();
+      if (!ownerCompatible) return null;
+      return this.normalizeActiveChallengeRun(rawRun);
     } catch (error) {
       return null;
     }
@@ -3763,13 +3786,45 @@ const challengeHubMethods = Object.create(null);
       });
     }
     if (!run.replayOnly && !run.practiceOnly && options.completed && typeof ProgressionService !== 'undefined' && ProgressionService && typeof ProgressionService.recordActivityCompleted === 'function') {
+      const safeRunId = typeof this.normalizeProgressionSafeId === 'function' ? this.normalizeProgressionSafeId(run.runId) : String(run.runId || '').trim();
+      const goalRealm = clampInt(run.goalRealm, 1, 999);
+      const sourceRef = typeof this.createProgressionSourceRef === 'function'
+        ? this.createProgressionSourceRef({
+            runId: safeRunId,
+            eventType: 'activity_completed',
+            realm: goalRealm,
+            checkpointKey: `challenge:${run.mode}:${run.rotationKey}:${run.ruleId}:completion`
+          })
+        : `challenge:${safeRunId}:${run.rotationKey}:${run.ruleId}:completion`;
       ProgressionService.recordActivityCompleted({
         mode: 'challenge',
+        runId: safeRunId,
+        ownerUserId: String(run.ownerUserId || '').trim(),
+        sourceRef,
+        verificationContext: typeof this.buildProgressionVerificationContext === 'function'
+          ? this.buildProgressionVerificationContext({
+              mode: 'challenge',
+              challengeMode: String(run.mode || ''),
+              rotationKey: String(run.rotationKey || ''),
+              ruleId: String(run.ruleId || ''),
+              goalRealm,
+              saveSlot: Number.isInteger(run.saveSlot) ? run.saveSlot : Number.isInteger(this.currentSaveSlot) ? this.currentSaveSlot : null,
+              seedSignature: String(run.seedSignature || '')
+            })
+          : {
+              mode: String(run.mode || ''),
+              rotationKey: String(run.rotationKey || ''),
+              ruleId: String(run.ruleId || ''),
+              goalRealm,
+              saveSlot: Number.isInteger(run.saveSlot) ? run.saveSlot : null,
+              seedSignature: String(run.seedSignature || '')
+            },
         proof: {
-          challengeMode: ['daily', 'weekly'].includes(String(run.mode || '')) ? String(run.mode) : undefined,
+          challengeMode: ['daily', 'weekly', 'global'].includes(String(run.mode || '')) ? String(run.mode) : undefined,
           rotationKey: String(run.rotationKey || ''),
           ruleId: String(run.ruleId || ''),
-          realm: clampInt(run.goalRealm, 1, 999)
+          realm: goalRealm,
+          runId: safeRunId
         }
       });
       if (typeof ProgressionService.flush === 'function') {
@@ -4406,6 +4461,7 @@ const challengeHubMethods = Object.create(null);
   };
   challengeHubMethods.onRealmComplete = function () {
     const currentRealm = this.player && this.player.realm ? this.player.realm : 1;
+    const shouldSuppressPveCompletion = !!(this.activeChallengeRun && !this.activeChallengeRun.resolved);
     if (this.activeChallengeRun && !this.activeChallengeRun.resolved) {
       this.activeChallengeRun.progress.realmClears += 1;
       if (currentRealm >= this.activeChallengeRun.goalRealm) {
@@ -4417,7 +4473,15 @@ const challengeHubMethods = Object.create(null);
         this.refreshActiveChallengeScore();
       }
     }
-    return typeof originalOnRealmComplete === 'function' ? originalOnRealmComplete.call(this) : undefined;
+    const previousSuppression = this.progressionSuppressPveRealmCompletion;
+    if (shouldSuppressPveCompletion) {
+      this.progressionSuppressPveRealmCompletion = true;
+    }
+    try {
+      return typeof originalOnRealmComplete === 'function' ? originalOnRealmComplete.call(this) : undefined;
+    } finally {
+      this.progressionSuppressPveRealmCompletion = previousSuppression;
+    }
   };
   challengeHubMethods.finishStrategicNode = function (node, title, message, icon = '✨') {
     const result = typeof originalFinishStrategicNode === 'function' ? originalFinishStrategicNode.call(this, node, title, message, icon) : undefined;

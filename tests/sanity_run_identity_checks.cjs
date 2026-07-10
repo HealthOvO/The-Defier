@@ -29,6 +29,8 @@ function loadFile(ctx, filePath) {
 (function run() {
   const root = path.resolve(__dirname, '..');
   const storage = new Map();
+  let currentProgressionUserId = 'progression-account-b';
+  let generatedProgressionRun = 0;
   const ctx = vm.createContext({
     console,
     window: {},
@@ -52,6 +54,11 @@ function loadFile(ctx, filePath) {
     Utils: {
       shuffle: (arr) => arr.slice(),
       showBattleLog: () => {}
+    },
+    ProgressionService: {
+      getCurrentUserId: () => currentProgressionUserId,
+      normalizeSafeId: (value) => /^[A-Za-z0-9._:-]{8,128}$/.test(String(value || '').trim()) ? String(value).trim() : '',
+      createSafeId: (prefix = 'run') => `${prefix}-account-fork-${++generatedProgressionRun}`
     }
   });
   ctx.window = ctx;
@@ -120,6 +127,23 @@ function loadFile(ctx, filePath) {
   game.map = null;
   game.legacyProgress = {};
   game.getLegacyUnspentEssence = () => 0;
+
+  game.progressionRunId = 'run-account-a-existing';
+  game.progressionRunOwnerUserId = 'progression-account-a';
+  game.runStartTime = 1000;
+  const forkedRun = game.restoreProgressionRunIdentity({
+    runId: 'run-account-a-existing',
+    ownerUserId: 'progression-account-a',
+    startedAt: 1000
+  }, 1000);
+  assert(forkedRun.ownerUserId === currentProgressionUserId, 'cross-account save restore should bind a fresh run to the current account');
+  assert(forkedRun.runId !== 'run-account-a-existing', 'cross-account save restore must not reuse the previous account run id');
+  const retainedRun = game.restoreProgressionRunIdentity({
+    runId: forkedRun.runId,
+    ownerUserId: currentProgressionUserId,
+    startedAt: forkedRun.startedAt
+  }, forkedRun.startedAt);
+  assert(retainedRun.runId === forkedRun.runId, 'same-account save restore should retain the stable run id');
 
   Object.keys(CHARACTERS).forEach((charId) => {
     const profile = game.getCharacterIdentityProfile(charId);

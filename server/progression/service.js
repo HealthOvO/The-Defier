@@ -1,6 +1,7 @@
 const crypto = require('node:crypto');
 const sqlite3 = require('sqlite3').verbose();
 const { dbPath } = require('../db/database');
+const { getVerifiedRunOpsOverview } = require('./verified-runs');
 const {
     CATALOG_VERSION,
     DAY_MS,
@@ -764,7 +765,7 @@ async function countCompletedAccounts(connection, objective, cycle) {
 
 async function getOpsOverview(now = Date.now()) {
     const cycles = getCycles(now);
-    return withConnection(async connection => {
+    const overview = await withConnection(async connection => {
         const [eventTotal, activeUsers, modeRows, trustRows, economy] = await Promise.all([
             dbGet(connection, 'SELECT COUNT(*) AS count FROM progression_events'),
             dbGet(connection, 'SELECT COUNT(DISTINCT user_id) AS count FROM progression_events'),
@@ -787,7 +788,8 @@ async function getOpsOverview(now = Date.now()) {
             );
         }
         const acceptedEvents = clampInt(eventTotal && eventTotal.count);
-        const authoritativeEvents = mapCounts(trustRows, 'trust_tier', ['server_authoritative', 'client_observed']).server_authoritative;
+        const trustCounts = mapCounts(trustRows, 'trust_tier', ['server_authoritative', 'server_verified', 'client_observed']);
+        const authoritativeEvents = trustCounts.server_authoritative;
         return {
             success: true,
             reportVersion: 'account-progression-ops-overview-v1',
@@ -798,8 +800,9 @@ async function getOpsOverview(now = Date.now()) {
                 acceptedEvents,
                 activeAccounts: clampInt(activeUsers && activeUsers.count),
                 byMode: mapCounts(modeRows, 'activity_mode', ['pve', 'challenge', 'expedition', 'pvp_live']),
-                byTrust: mapCounts(trustRows, 'trust_tier', ['server_authoritative', 'client_observed']),
-                authoritativeShare: acceptedEvents > 0 ? Number((authoritativeEvents / acceptedEvents).toFixed(4)) : 0
+                byTrust: trustCounts,
+                authoritativeShare: acceptedEvents > 0 ? Number((authoritativeEvents / acceptedEvents).toFixed(4)) : 0,
+                verifiedShare: acceptedEvents > 0 ? Number((trustCounts.server_verified / acceptedEvents).toFixed(4)) : 0
             },
             objectives: {
                 completedByObjective
@@ -813,11 +816,15 @@ async function getOpsOverview(now = Date.now()) {
             },
             recommendedActions: acceptedEvents === 0
                 ? ['seed_cross_mode_activity']
-                : authoritativeEvents === 0
+                : authoritativeEvents === 0 && trustCounts.server_verified === 0
                     ? ['expand_server_authoritative_settlements']
                     : ['monitor_mode_mix_and_claim_rate']
         };
     });
+    return {
+        ...overview,
+        verifiedRuns: await getVerifiedRunOpsOverview(now)
+    };
 }
 
 function makeTrustedPvpProgressionEvent({ userId, matchId, didWin, finishReason }) {

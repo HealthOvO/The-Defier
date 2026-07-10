@@ -750,6 +750,55 @@ export const BackendClient = {
       : '/api/progression';
     return base;
   },
+  cloneUnsignedRequestPayload(payload) {
+    const cloned = payload && typeof payload === 'object' && !Array.isArray(payload)
+      ? this.cloneData(payload) || {}
+      : {};
+    delete cloned.salt;
+    delete cloned.signature;
+    delete cloned.signatureMode;
+    return cloned;
+  },
+  captureProgressionSessionSnapshot(options = {}, failureMessage = '登录账号已变化，请刷新长期进度后重试') {
+    const user = this.getCurrentUser();
+    if (!user) return {
+      success: false,
+      message: '未登录'
+    };
+    const expectedUserId = String(options && options.expectedUserId || '').trim();
+    const currentUserId = String(user && (user.objectId || user.id || user.userId) || '').trim();
+    const boundUserId = expectedUserId || currentUserId;
+    const capturedSession = this.loadServerSession();
+    const capturedSessionUserId = String(capturedSession && capturedSession.user && (capturedSession.user.objectId || capturedSession.user.id || capturedSession.user.userId) || '').trim();
+    const sessionToken = capturedSession && capturedSession.token || '';
+    if (!boundUserId || (expectedUserId && currentUserId !== expectedUserId) || !capturedSession || !sessionToken || capturedSessionUserId !== boundUserId || currentUserId !== boundUserId) {
+      return {
+        success: false,
+        reason: 'progression_account_changed',
+        message: failureMessage
+      };
+    }
+    return {
+      success: true,
+      sessionToken
+    };
+  },
+  async createRequiredSessionIntegrityFields(data, sessionToken, failureMessage = '当前环境不支持验证跑图签名，请刷新后重试') {
+    const integrity = await this.createSessionIntegrityFields(data, {
+      sessionToken
+    });
+    if (!integrity || integrity.signatureMode !== 'session' || !integrity.salt || !integrity.signature) {
+      return {
+        success: false,
+        reason: 'verified_run_signature_required',
+        message: failureMessage
+      };
+    }
+    return {
+      success: true,
+      integrity
+    };
+  },
   async getProgressionStatus() {
     const user = this.getCurrentUser();
     if (!user) return {
@@ -823,6 +872,122 @@ export const BackendClient = {
         error,
         reason: error && error.reason || undefined,
         message: error.message || '长期进度事件上报失败'
+      };
+    }
+  },
+  async startVerifiedProgressionRun(payload = {}, options = {}) {
+    const sessionSnapshot = this.captureProgressionSessionSnapshot(options, '登录账号已变化，请刷新验证跑图后重试');
+    if (!sessionSnapshot || !sessionSnapshot.success) return sessionSnapshot;
+    try {
+      const signedPayload = this.cloneUnsignedRequestPayload(payload);
+      const integrityResult = await this.createRequiredSessionIntegrityFields(signedPayload, sessionSnapshot.sessionToken);
+      if (!integrityResult.success) return integrityResult;
+      const result = await this.requestServer(`${this.getProgressionPathPrefix()}/verified-runs/tickets`, {
+        method: 'POST',
+        authToken: sessionSnapshot.sessionToken,
+        data: {
+          ...signedPayload,
+          ...integrityResult.integrity
+        }
+      });
+      return result && typeof result === 'object' ? result : {
+        success: false,
+        message: '验证跑图发车返回异常'
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error,
+        reason: error && error.reason || undefined,
+        message: error.message || '验证跑图发车失败'
+      };
+    }
+  },
+  async submitVerifiedRunCheckpoint(ticketId = '', payload = {}, options = {}) {
+    const safeTicketId = String(ticketId || '').trim();
+    if (!safeTicketId) return {
+      success: false,
+      message: '验证跑图 ticket 缺失'
+    };
+    const sessionSnapshot = this.captureProgressionSessionSnapshot(options, '登录账号已变化，请刷新验证跑图后重试');
+    if (!sessionSnapshot || !sessionSnapshot.success) return sessionSnapshot;
+    try {
+      const signedPayload = this.cloneUnsignedRequestPayload(payload);
+      const payloadTicketId = String(signedPayload && signedPayload.ticketId || '').trim();
+      if (payloadTicketId && payloadTicketId !== safeTicketId) {
+        return {
+          success: false,
+          reason: 'verified_run_ticket_mismatch',
+          message: '验证跑图 ticket 不一致，请刷新后重试'
+        };
+      }
+      if (!payloadTicketId) {
+        signedPayload.ticketId = safeTicketId;
+      }
+      const integrityResult = await this.createRequiredSessionIntegrityFields(signedPayload, sessionSnapshot.sessionToken);
+      if (!integrityResult.success) return integrityResult;
+      const result = await this.requestServer(`${this.getProgressionPathPrefix()}/verified-runs/${encodeURIComponent(safeTicketId)}/checkpoints`, {
+        method: 'POST',
+        authToken: sessionSnapshot.sessionToken,
+        data: {
+          ...signedPayload,
+          ...integrityResult.integrity
+        }
+      });
+      return result && typeof result === 'object' ? result : {
+        success: false,
+        message: '验证跑图检查点返回异常'
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error,
+        reason: error && error.reason || undefined,
+        message: error.message || '验证跑图检查点上报失败'
+      };
+    }
+  },
+  async settleVerifiedProgressionRun(ticketId = '', payload = {}, options = {}) {
+    const safeTicketId = String(ticketId || '').trim();
+    if (!safeTicketId) return {
+      success: false,
+      message: '验证跑图 ticket 缺失'
+    };
+    const sessionSnapshot = this.captureProgressionSessionSnapshot(options, '登录账号已变化，请刷新验证跑图后重试');
+    if (!sessionSnapshot || !sessionSnapshot.success) return sessionSnapshot;
+    try {
+      const signedPayload = this.cloneUnsignedRequestPayload(payload);
+      const payloadTicketId = String(signedPayload && signedPayload.ticketId || '').trim();
+      if (payloadTicketId && payloadTicketId !== safeTicketId) {
+        return {
+          success: false,
+          reason: 'verified_run_ticket_mismatch',
+          message: '验证跑图 ticket 不一致，请刷新后重试'
+        };
+      }
+      if (!payloadTicketId) {
+        signedPayload.ticketId = safeTicketId;
+      }
+      const integrityResult = await this.createRequiredSessionIntegrityFields(signedPayload, sessionSnapshot.sessionToken);
+      if (!integrityResult.success) return integrityResult;
+      const result = await this.requestServer(`${this.getProgressionPathPrefix()}/verified-runs/${encodeURIComponent(safeTicketId)}/settle`, {
+        method: 'POST',
+        authToken: sessionSnapshot.sessionToken,
+        data: {
+          ...signedPayload,
+          ...integrityResult.integrity
+        }
+      });
+      return result && typeof result === 'object' ? result : {
+        success: false,
+        message: '验证跑图结算返回异常'
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error,
+        reason: error && error.reason || undefined,
+        message: error.message || '验证跑图结算失败'
       };
     }
   },

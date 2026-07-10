@@ -351,6 +351,92 @@ const runE2E = async () => {
     assertStep(progressionLedger.success && progressionLedger.entries?.length === 1, '读取长期进度流水失败', JSON.stringify(progressionLedger));
     console.log('8. 长期进度事件/领奖/流水: 成功');
 
+    const verifiedUserId = String(getSession()?.user?.objectId || getSession()?.user?.id || '');
+    assertStep(verifiedUserId, '验证跑图未取得当前账号标识', JSON.stringify(getSession()));
+    const verifiedRunId = `e2e-verified-run-${Date.now()}`;
+    const verifiedBattleSource = `${verifiedRunId}:r3:battle_won:boss`;
+    const verifiedCompletionSource = `${verifiedRunId}:r3:activity_completed`;
+    const verifiedObserved = await BackendClient.submitProgressionEvents([
+        {
+            eventId: `${verifiedRunId}-observed-battle`,
+            eventType: 'battle_won',
+            mode: 'pve',
+            sourceRef: verifiedBattleSource,
+            proof: { nodeType: 'boss', realm: 3, runId: verifiedRunId }
+        },
+        {
+            eventId: `${verifiedRunId}-observed-completion`,
+            eventType: 'activity_completed',
+            mode: 'pve',
+            sourceRef: verifiedCompletionSource,
+            proof: { realm: 3, reason: 'realm_clear', runId: verifiedRunId }
+        }
+    ], { expectedUserId: verifiedUserId });
+    assertStep(verifiedObserved.success && verifiedObserved.accepted?.length === 2, '验证跑图的观察事件预写入失败', JSON.stringify(verifiedObserved));
+    const verifiedTicketResult = await BackendClient.startVerifiedProgressionRun({
+        clientRunId: verifiedRunId,
+        mode: 'pve',
+        contentVersion: 'verified-run-v1',
+        context: {
+            saveSlot: 0,
+            realm: 3,
+            characterId: 'Hero',
+            runPathId: 'e2e-path',
+            runDestinyId: 'e2e-destiny',
+            spiritCompanionId: 'e2e-companion',
+            mapSnapshotHash: 'map-e2e-verified-0001'
+        }
+    }, { expectedUserId: verifiedUserId });
+    const verifiedTicket = verifiedTicketResult.ticket;
+    assertStep(verifiedTicketResult.success && verifiedTicket?.ticketId && verifiedTicket?.settlementNonce, '验证跑图签票失败', JSON.stringify(verifiedTicketResult));
+    const verifiedCheckpoint = await BackendClient.submitVerifiedRunCheckpoint(verifiedTicket.ticketId, {
+        ticketId: verifiedTicket.ticketId,
+        sourceRef: verifiedBattleSource,
+        eventType: 'battle_won',
+        proof: { nodeType: 'boss', realm: 3, runId: verifiedRunId }
+    }, { expectedUserId: verifiedUserId });
+    assertStep(
+        verifiedCheckpoint.success
+            && verifiedCheckpoint.checkpoint?.sequence === 1
+            && verifiedCheckpoint.checkpoint?.trustTier === 'server_verified'
+            && verifiedCheckpoint.checkpoint?.upgradedObservedEvent === true,
+        '验证跑图 checkpoint 未升级观察事件',
+        JSON.stringify(verifiedCheckpoint)
+    );
+    const verifiedSettlementPayload = {
+        ticketId: verifiedTicket.ticketId,
+        sourceRef: verifiedCompletionSource,
+        outcome: 'completed',
+        settlementNonce: verifiedTicket.settlementNonce,
+        proof: { realm: 3, reason: 'realm_clear', runId: verifiedRunId }
+    };
+    const verifiedSettlement = await BackendClient.settleVerifiedProgressionRun(
+        verifiedTicket.ticketId,
+        verifiedSettlementPayload,
+        { expectedUserId: verifiedUserId }
+    );
+    assertStep(
+        verifiedSettlement.success
+            && verifiedSettlement.receipt?.trustTier === 'server_verified'
+            && verifiedSettlement.receipt?.authorityLevel === 'verified_envelope'
+            && verifiedSettlement.receipt?.upgradedObservedEvent === true,
+        '验证跑图结算未原子升级观察事件',
+        JSON.stringify(verifiedSettlement)
+    );
+    const verifiedReplay = await BackendClient.settleVerifiedProgressionRun(
+        verifiedTicket.ticketId,
+        verifiedSettlementPayload,
+        { expectedUserId: verifiedUserId }
+    );
+    assertStep(
+        verifiedReplay.success
+            && verifiedReplay.receipt?.receiptId === verifiedSettlement.receipt?.receiptId
+            && verifiedReplay.receipt?.idempotent === true,
+        '验证跑图重放未返回同一收据',
+        JSON.stringify(verifiedReplay)
+    );
+    console.log('8. 验证跑图签票/checkpoint/幂等结算: 成功');
+
     const auditRealm = 10000 + Math.floor(Date.now() % 1000000);
     const ghostRes = await AuthService.uploadGhostData({ characterId: 'Hero', currentHp: 500, maxHp: 1000, deck: [{ id: 'audit_strike' }] }, auditRealm);
     console.log('8. 上传残影:', ghostRes.success ? '成功' : '失败', ghostRes.message || '');

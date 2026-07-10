@@ -20,6 +20,15 @@ export class SaveManager {
     }
     try {
       const pvpEconomySnapshot = typeof PVPService !== 'undefined' && PVPService && typeof PVPService.getEconomySnapshot === 'function' ? PVPService.getEconomySnapshot() : null;
+      const progressionRun = this.game && typeof this.game.ensureProgressionRunIdentity === 'function'
+        ? this.game.ensureProgressionRunIdentity({
+            startedAt: this.game.runStartTime || Date.now()
+          })
+        : {
+            runId: '',
+            ownerUserId: '',
+            startedAt: this.game && this.game.runStartTime ? this.game.runStartTime : Date.now()
+          };
       const gameState = {
         version: '5.1.0',
         player: this.game.player.getState(),
@@ -31,6 +40,11 @@ export class SaveManager {
         unlockedRealms: this.game.unlockedRealms || [1],
         currentScreen: this.game.currentScreen,
         saveSlot: this.game.currentSaveSlot,
+        progressionRun: {
+          runId: String(progressionRun.runId || ''),
+          ownerUserId: String(progressionRun.ownerUserId || ''),
+          startedAt: Number(progressionRun.startedAt) > 0 ? Math.floor(Number(progressionRun.startedAt)) : Date.now()
+        },
         combatMeta: {
           stance: this.game.player.stance || 'neutral',
           ruleVersion: 'combat-v2',

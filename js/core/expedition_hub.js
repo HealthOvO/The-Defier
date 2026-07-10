@@ -1698,7 +1698,23 @@ const expeditionHubMethods = Object.create(null);
     try {
       if (typeof localStorage === 'undefined') return null;
       const raw = localStorage.getItem(ACTIVE_EXPEDITION_STATE_KEY);
-      return raw ? expeditionHubMethods.normalizeExpeditionState.call(this, JSON.parse(raw)) : null;
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      const savedSlot = parsed && parsed.currentSaveSlot !== undefined ? parsed.currentSaveSlot : parsed?.expeditionState?.saveSlot;
+      if (savedSlot !== null && savedSlot !== undefined && this.currentSaveSlot !== null && this.currentSaveSlot !== undefined && clampInt(savedSlot, -1) !== clampInt(this.currentSaveSlot, -2)) {
+        return null;
+      }
+      const state = parsed && parsed.expeditionState ? parsed.expeditionState : parsed;
+      const storedOwnerUserId = state && Object.prototype.hasOwnProperty.call(state, 'ownerUserId')
+        ? String(state.ownerUserId || '').trim()
+        : '';
+      const ownerCompatible = typeof this.isProgressionOwnerCompatible === 'function'
+        ? this.isProgressionOwnerCompatible(storedOwnerUserId)
+        : typeof this.getCurrentProgressionUserId !== 'function'
+          || !this.getCurrentProgressionUserId()
+          || storedOwnerUserId === this.getCurrentProgressionUserId();
+      if (!ownerCompatible) return null;
+      return expeditionHubMethods.normalizeExpeditionState.call(this, state);
     } catch (error) {
       return null;
     }
@@ -1710,7 +1726,10 @@ const expeditionHubMethods = Object.create(null);
         localStorage.removeItem(ACTIVE_EXPEDITION_STATE_KEY);
         return;
       }
-      localStorage.setItem(ACTIVE_EXPEDITION_STATE_KEY, JSON.stringify(this.expeditionState));
+      localStorage.setItem(ACTIVE_EXPEDITION_STATE_KEY, JSON.stringify({
+        currentSaveSlot: this.currentSaveSlot,
+        expeditionState: this.expeditionState
+      }));
     } catch (error) {
       console.warn('Persist expedition state failed:', error);
     }
@@ -1817,7 +1836,15 @@ const expeditionHubMethods = Object.create(null);
     const factionHistory = readArray(source.factionHistory).map((entry, index) => normalizeFactionHistoryEntry(entry, index)).slice(-MAX_FACTION_HISTORY);
     const nemesisHistory = readArray(source.nemesisHistory).map((entry, index) => normalizeNemesisHistoryEntry(entry, index)).slice(-MAX_NEMESIS_HISTORY);
     const nemesisSource = source.activeNemesis && typeof source.activeNemesis === 'object' ? source.activeNemesis : {};
+    const runId = typeof this.normalizeProgressionSafeId === 'function' ? this.normalizeProgressionSafeId(source.runId) : String(source.runId || '').trim();
     const normalizedState = {
+      runId: runId || (typeof this.createProgressionSafeId === 'function' ? this.createProgressionSafeId('expedition-run') : `expedition-run-${Date.now()}`),
+      ownerUserId: Object.prototype.hasOwnProperty.call(source, 'ownerUserId')
+        ? String(source.ownerUserId || '').trim()
+        : typeof this.getCurrentProgressionUserId === 'function'
+          ? this.getCurrentProgressionUserId()
+          : '',
+      saveSlot: Number.isInteger(source.saveSlot) ? source.saveSlot : Number.isInteger(this.currentSaveSlot) ? this.currentSaveSlot : null,
       realm: clampInt(source.realm, 1, 18),
       chapterIndex: clampInt(source.chapterIndex, 1, 6),
       chapterName: String(source.chapterName || ''),
@@ -2518,6 +2545,9 @@ const expeditionHubMethods = Object.create(null);
     const activeNemesis = pickUnique(this.getExpeditionNemesisPool(chapterIndex), 1, seed + 29)[0] || null;
     const observatoryLink = this.buildExpeditionObservatoryLink(safeRealm, branchOptions);
     return this.normalizeExpeditionState({
+      runId: typeof this.createProgressionSafeId === 'function' ? this.createProgressionSafeId('expedition-run') : `expedition-run-${Date.now()}`,
+      ownerUserId: typeof this.getCurrentProgressionUserId === 'function' ? this.getCurrentProgressionUserId() : '',
+      saveSlot: Number.isInteger(this.currentSaveSlot) ? this.currentSaveSlot : null,
       realm: safeRealm,
       chapterIndex,
       chapterName: chapter?.name || `第${chapterIndex}章`,
@@ -3933,11 +3963,39 @@ const expeditionHubMethods = Object.create(null);
       });
     }
     if (reason === 'realm_clear' && typeof ProgressionService !== 'undefined' && ProgressionService && typeof ProgressionService.recordActivityCompleted === 'function') {
+      const safeRunId = typeof this.normalizeProgressionSafeId === 'function' ? this.normalizeProgressionSafeId(state.runId) : String(state.runId || '').trim();
+      const safeRealm = clampInt(state.realm, 1, 999);
+      const safeChapterIndex = clampInt(state.chapterIndex, 1, 999);
+      const sourceRef = typeof this.createProgressionSourceRef === 'function'
+        ? this.createProgressionSourceRef({
+            runId: safeRunId,
+            eventType: 'activity_completed',
+            realm: safeRealm,
+            checkpointKey: `expedition:${safeChapterIndex}:completion`
+          })
+        : `expedition:${safeRunId}:${safeChapterIndex}:completion`;
       ProgressionService.recordActivityCompleted({
         mode: 'expedition',
+        runId: safeRunId,
+        ownerUserId: String(state.ownerUserId || '').trim(),
+        sourceRef,
+        verificationContext: typeof this.buildProgressionVerificationContext === 'function'
+          ? this.buildProgressionVerificationContext({
+              mode: 'expedition',
+              realm: safeRealm,
+              chapterIndex: safeChapterIndex,
+              saveSlot: Number.isInteger(state.saveSlot) ? state.saveSlot : Number.isInteger(this.currentSaveSlot) ? this.currentSaveSlot : null
+            })
+          : {
+              realm: safeRealm,
+              chapterIndex: safeChapterIndex,
+              saveSlot: Number.isInteger(state.saveSlot) ? state.saveSlot : null
+            },
         proof: {
-          chapterIndex: clampInt(state.chapterIndex, 1, 999),
-          reason: 'realm_clear'
+          chapterIndex: safeChapterIndex,
+          reason: 'realm_clear',
+          realm: safeRealm,
+          runId: safeRunId
         }
       });
       if (typeof ProgressionService.flush === 'function') {
@@ -4766,10 +4824,20 @@ const expeditionHubMethods = Object.create(null);
     return result;
   };
   expeditionHubMethods.onRealmComplete = function () {
-    if (!this.isEndlessActive() && this.getExpeditionState()) {
+    const activeExpeditionState = !this.isEndlessActive() ? this.getExpeditionState() : null;
+    const shouldSuppressPveCompletion = !!activeExpeditionState;
+    if (activeExpeditionState) {
       this.finalizeExpeditionChapter('realm_clear');
     }
-    return typeof originalOnRealmComplete === 'function' ? originalOnRealmComplete.call(this) : undefined;
+    const previousSuppression = this.progressionSuppressPveRealmCompletion;
+    if (shouldSuppressPveCompletion) {
+      this.progressionSuppressPveRealmCompletion = true;
+    }
+    try {
+      return typeof originalOnRealmComplete === 'function' ? originalOnRealmComplete.call(this) : undefined;
+    } finally {
+      this.progressionSuppressPveRealmCompletion = previousSuppression;
+    }
   };
   expeditionHubMethods.startBattle = function (enemies, node = null) {
     const enemyList = Array.isArray(enemies) ? enemies.filter(Boolean) : [enemies].filter(Boolean);

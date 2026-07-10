@@ -658,6 +658,81 @@ const initDb = () => {
                 if (err) fail(err);
             });
             db.run(`CREATE INDEX IF NOT EXISTS idx_progression_ledger_source ON progression_economy_ledger(source_type, source_id, created_at)`, (err) => {
+                if (err) fail(err);
+            });
+            db.run(`CREATE TABLE IF NOT EXISTS progression_verified_runs (
+                ticket_id TEXT PRIMARY KEY,
+                user_id TEXT NOT NULL,
+                client_run_id TEXT NOT NULL,
+                activity_mode TEXT NOT NULL,
+                content_version TEXT NOT NULL,
+                context_json TEXT NOT NULL DEFAULT '{}',
+                context_hash TEXT NOT NULL,
+                nonce_hash TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'active',
+                checkpoint_count INTEGER NOT NULL DEFAULT 0,
+                battle_wins INTEGER NOT NULL DEFAULT 0,
+                boss_wins INTEGER NOT NULL DEFAULT 0,
+                issued_at INTEGER NOT NULL,
+                expires_at INTEGER NOT NULL,
+                settled_at INTEGER NOT NULL DEFAULT 0,
+                settlement_source_ref TEXT NOT NULL DEFAULT '',
+                updated_at INTEGER NOT NULL,
+                UNIQUE(user_id, client_run_id),
+                FOREIGN KEY(user_id) REFERENCES users(id)
+            )`, (err) => {
+                if (err) fail(err);
+            });
+            db.run(`CREATE INDEX IF NOT EXISTS idx_progression_verified_runs_user_status ON progression_verified_runs(user_id, status, expires_at)`, (err) => {
+                if (err) fail(err);
+            });
+            db.run(`CREATE INDEX IF NOT EXISTS idx_progression_verified_runs_mode_status ON progression_verified_runs(activity_mode, status, issued_at)`, (err) => {
+                if (err) fail(err);
+            });
+            db.run(`CREATE TABLE IF NOT EXISTS progression_verified_run_checkpoints (
+                checkpoint_id TEXT PRIMARY KEY,
+                ticket_id TEXT NOT NULL,
+                user_id TEXT NOT NULL,
+                sequence INTEGER NOT NULL,
+                event_type TEXT NOT NULL,
+                source_ref TEXT NOT NULL,
+                node_type TEXT NOT NULL DEFAULT 'enemy',
+                realm INTEGER NOT NULL DEFAULT 1,
+                proof_json TEXT NOT NULL DEFAULT '{}',
+                created_at INTEGER NOT NULL,
+                UNIQUE(ticket_id, source_ref),
+                UNIQUE(ticket_id, sequence),
+                FOREIGN KEY(ticket_id) REFERENCES progression_verified_runs(ticket_id),
+                FOREIGN KEY(user_id) REFERENCES users(id)
+            )`, (err) => {
+                if (err) fail(err);
+            });
+            db.run(`CREATE INDEX IF NOT EXISTS idx_progression_verified_checkpoints_user_created ON progression_verified_run_checkpoints(user_id, created_at DESC)`, (err) => {
+                if (err) fail(err);
+            });
+            db.run(`CREATE UNIQUE INDEX IF NOT EXISTS idx_progression_verified_checkpoints_user_source ON progression_verified_run_checkpoints(user_id, event_type, source_ref)`, (err) => {
+                if (err) fail(err);
+            });
+            db.run(`CREATE TABLE IF NOT EXISTS progression_verified_run_receipts (
+                receipt_id TEXT PRIMARY KEY,
+                ticket_id TEXT NOT NULL UNIQUE,
+                user_id TEXT NOT NULL,
+                activity_mode TEXT NOT NULL,
+                content_version TEXT NOT NULL,
+                source_ref TEXT NOT NULL,
+                authority_level TEXT NOT NULL DEFAULT 'verified_envelope',
+                event_id TEXT NOT NULL,
+                receipt_json TEXT NOT NULL DEFAULT '{}',
+                created_at INTEGER NOT NULL,
+                FOREIGN KEY(ticket_id) REFERENCES progression_verified_runs(ticket_id),
+                FOREIGN KEY(user_id) REFERENCES users(id)
+            )`, (err) => {
+                if (err) fail(err);
+            });
+            db.run(`CREATE INDEX IF NOT EXISTS idx_progression_verified_receipts_user_created ON progression_verified_run_receipts(user_id, created_at DESC)`, (err) => {
+                if (err) fail(err);
+            });
+            db.run(`CREATE INDEX IF NOT EXISTS idx_progression_verified_receipts_mode_created ON progression_verified_run_receipts(activity_mode, created_at)`, (err) => {
                 if (err) {
                     fail(err);
                     return;

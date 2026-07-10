@@ -385,6 +385,7 @@ function getBountyFocusNodeTypesForTest(bounty) {
 (function run() {
   const root = path.resolve(__dirname, '..');
   const localStorage = createStorage();
+  let currentProgressionUserId = 'expedition-account-a';
 
   const ctx = vm.createContext({
     console,
@@ -491,11 +492,26 @@ function getBountyFocusNodeTypesForTest(bounty) {
   loadFile(ctx, path.join(root, 'js/data/expedition_systems.js'));
   loadFile(ctx, path.join(root, 'js/core/expedition_hub.js'));
 
-  const Game = vm.runInContext('Game', ctx);const game = new Game();
+  const Game = vm.runInContext('Game', ctx);
+  Game.prototype.getCurrentProgressionUserId = function () {
+    return currentProgressionUserId;
+  };
+  Game.prototype.isProgressionOwnerCompatible = function (ownerUserId) {
+    return !currentProgressionUserId || String(ownerUserId || '').trim() === currentProgressionUserId;
+  };
+  const game = new Game();
+  game.currentSaveSlot = 0;
 
   if (typeof ctx.__attachExpeditionHubController === 'function') ctx.__attachExpeditionHubController(game);
 
   const initialState = game.initializeExpeditionForRealm(4, true);
+  game.persistActiveExpeditionState();
+  currentProgressionUserId = 'expedition-account-b';
+  const otherAccountGame = new Game();
+  otherAccountGame.currentSaveSlot = 0;
+  if (typeof ctx.__attachExpeditionHubController === 'function') ctx.__attachExpeditionHubController(otherAccountGame);
+  assert(otherAccountGame.loadActiveExpeditionState() === null, 'same-slot restore must not attach another account expedition state');
+  currentProgressionUserId = 'expedition-account-a';
   assert(initialState.chapterIndex === 2, `realm 4 should map to chapter 2, got ${initialState.chapterIndex}`);
   assert(initialState.branchOptions.length === 3, `expedition should offer 3 branch choices, got ${initialState.branchOptions.length}`);
   assert(initialState.bountyDraft.length === 3, `expedition should draft 3 bounties, got ${initialState.bountyDraft.length}`);

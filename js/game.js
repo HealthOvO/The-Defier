@@ -101,6 +101,8 @@ export class Game {
     this.pendingSpiritCompanionDrafts = {};
     this.pendingRunPathDrafts = {};
     this.runStartTime = null;
+    this.progressionRunId = '';
+    this.progressionRunOwnerUserId = '';
     this.currentSaveSlot = null; // Default to null (unknown), NOT 0 (Slot 1)
     this.cachedSlots = [null, null, null, null]; // Cache for slots
     this.guestMode = false;
@@ -252,6 +254,143 @@ export class Game {
       this.eventManagerHooks = createHooks.call(this);
     }
     return this.eventManagerHooks;
+  }
+  getCurrentProgressionUserId() {
+    if (typeof ProgressionService !== 'undefined' && ProgressionService && typeof ProgressionService.getCurrentUserId === 'function') {
+      try {
+        return String(ProgressionService.getCurrentUserId() || '').trim();
+      } catch (error) {}
+    }
+    return '';
+  }
+  normalizeProgressionSafeId(value) {
+    const raw = String(value || '').trim();
+    if (!raw) return '';
+    if (typeof ProgressionService !== 'undefined' && ProgressionService && typeof ProgressionService.normalizeSafeId === 'function') {
+      try {
+        return String(ProgressionService.normalizeSafeId(raw) || '').trim();
+      } catch (error) {}
+    }
+    return /^[A-Za-z0-9._:-]{8,128}$/.test(raw) ? raw : '';
+  }
+  createProgressionSafeId(prefix = 'run') {
+    if (typeof ProgressionService !== 'undefined' && ProgressionService && typeof ProgressionService.createSafeId === 'function') {
+      try {
+        return String(ProgressionService.createSafeId(prefix) || '').trim();
+      } catch (error) {}
+    }
+    const safePrefix = String(prefix || 'run').replace(/[^A-Za-z0-9._:-]/g, '').slice(0, 24) || 'run';
+    return `${safePrefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`.slice(0, 128);
+  }
+  ensureProgressionRunIdentity(options = {}) {
+    const forceNew = options && options.forceNew === true;
+    const explicitRunId = this.normalizeProgressionSafeId(options?.runId);
+    let nextRunId = explicitRunId || (!forceNew ? this.normalizeProgressionSafeId(this.progressionRunId) : '');
+    if (!nextRunId) {
+      nextRunId = this.createProgressionSafeId(options?.prefix || 'run');
+    }
+    const explicitOwnerProvided = !!options && Object.prototype.hasOwnProperty.call(options, 'ownerUserId');
+    const explicitOwner = explicitOwnerProvided ? String(options.ownerUserId || '').trim() : null;
+    let nextOwnerUserId = explicitOwnerProvided ? explicitOwner : (!forceNew ? String(this.progressionRunOwnerUserId || '').trim() : '');
+    if (!nextOwnerUserId && !explicitOwnerProvided) {
+      nextOwnerUserId = this.getCurrentProgressionUserId();
+    }
+    const startedAtCandidate = Number(options?.startedAt);
+    const fallbackStartedAt = Number(this.runStartTime);
+    const nextStartedAt = Number.isFinite(startedAtCandidate) && startedAtCandidate > 0
+      ? Math.floor(startedAtCandidate)
+      : Number.isFinite(fallbackStartedAt) && fallbackStartedAt > 0
+        ? Math.floor(fallbackStartedAt)
+        : Date.now();
+    this.progressionRunId = nextRunId;
+    this.progressionRunOwnerUserId = nextOwnerUserId;
+    this.runStartTime = nextStartedAt;
+    return {
+      runId: nextRunId,
+      ownerUserId: nextOwnerUserId,
+      startedAt: nextStartedAt
+    };
+  }
+  isProgressionOwnerCompatible(ownerUserId = '') {
+    const currentUserId = this.getCurrentProgressionUserId();
+    if (!currentUserId) return true;
+    return String(ownerUserId || '').trim() === currentUserId;
+  }
+  restoreProgressionRunIdentity(rawRun = null, fallbackStartedAt = Date.now()) {
+    const source = rawRun && typeof rawRun === 'object' ? rawRun : {};
+    const currentUserId = this.getCurrentProgressionUserId();
+    const savedOwnerProvided = Object.prototype.hasOwnProperty.call(source, 'ownerUserId');
+    const savedOwnerUserId = savedOwnerProvided ? String(source.ownerUserId || '').trim() : '';
+    const startedAt = Number(source.startedAt) > 0 ? Number(source.startedAt) : fallbackStartedAt;
+    if (currentUserId && savedOwnerUserId !== currentUserId) {
+      return this.ensureProgressionRunIdentity({
+        forceNew: true,
+        prefix: 'run',
+        ownerUserId: currentUserId,
+        startedAt: Date.now()
+      });
+    }
+    const options = {
+      runId: source.runId,
+      startedAt
+    };
+    if (savedOwnerProvided) options.ownerUserId = savedOwnerUserId;
+    else if (currentUserId) options.ownerUserId = currentUserId;
+    return this.ensureProgressionRunIdentity(options);
+  }
+  buildMapSnapshotHash(nodes = this.map?.nodes) {
+    if (typeof ProgressionService !== 'undefined' && ProgressionService && typeof ProgressionService.buildMapSnapshotHash === 'function') {
+      try {
+        const hashed = ProgressionService.buildMapSnapshotHash(nodes);
+        if (hashed) return String(hashed);
+      } catch (error) {}
+    }
+    const rows = Array.isArray(nodes) ? nodes : [];
+    const serialized = rows.map(row => Array.isArray(row)
+      ? row.map(node => node && typeof node === 'object'
+        ? [String(node.id || ''), String(node.type || ''), node.completed ? '1' : '0'].join(':')
+        : '').filter(Boolean).join(',')
+      : '').join('|');
+    let hash = 0;
+    for (let index = 0; index < serialized.length; index += 1) {
+      hash = hash * 31 + serialized.charCodeAt(index) >>> 0;
+    }
+    return `map-${hash.toString(36)}`;
+  }
+  createProgressionSourceRef({ runId = '', eventType = 'event', realm = 0, checkpointKey = '' } = {}) {
+    const safeRunId = this.normalizeProgressionSafeId(runId) || this.createProgressionSafeId('run');
+    if (typeof ProgressionService !== 'undefined' && ProgressionService && typeof ProgressionService.createStableSourceRef === 'function') {
+      try {
+        const stable = ProgressionService.createStableSourceRef({
+          runId: safeRunId,
+          eventType,
+          realm,
+          checkpointKey
+        });
+        if (stable) return String(stable);
+      } catch (error) {}
+    }
+    const safeEventType = String(eventType || 'event').replace(/[^A-Za-z0-9._:-]/g, '').slice(0, 24) || 'event';
+    const safeRealm = Math.max(0, Math.floor(Number(realm) || 0));
+    const safeCheckpoint = String(checkpointKey || '')
+      .replace(/[^A-Za-z0-9._:-]/g, '-')
+      .replace(/-+/g, '-')
+      .replace(/^-|-$/g, '')
+      .slice(0, 64) || `realm-${safeRealm}`;
+    return `${safeRunId}:${safeEventType}:r${safeRealm}:${safeCheckpoint}`.slice(0, 128);
+  }
+  buildProgressionVerificationContext(extra = {}) {
+    const safeSaveSlot = Number.isInteger(this.currentSaveSlot) ? this.currentSaveSlot : null;
+    const runPathMeta = this.player && typeof this.player.getRunPathMeta === 'function' ? this.player.getRunPathMeta() : null;
+    return {
+      characterId: String(this.player?.characterId || this.selectedCharacterId || ''),
+      runDestinyId: String(this.player?.runDestiny?.id || this.selectedRunDestinyId || ''),
+      spiritCompanionId: String(this.player?.spiritCompanion?.id || this.selectedSpiritCompanionId || ''),
+      runPathId: String(runPathMeta?.id || this.selectedRunPathId || ''),
+      saveSlot: safeSaveSlot,
+      mapSnapshotHash: this.buildMapSnapshotHash(this.map?.nodes),
+      ...extra
+    };
   }
   attachHubControllers() {
     const runtimeGlobal = typeof window !== 'undefined' ? window : typeof global !== 'undefined' ? global : typeof globalThis !== 'undefined' ? globalThis : null;
@@ -4548,6 +4687,11 @@ export class Game {
         ...this.featureFlags,
         ...(gameState.featureFlags || {})
       };
+      const savedProgressionRun = gameState.progressionRun && typeof gameState.progressionRun === 'object' ? gameState.progressionRun : null;
+      this.restoreProgressionRunIdentity(
+        savedProgressionRun,
+        this.runStartTime || gameState.timestamp || Date.now()
+      );
       this.endlessState = this.normalizeEndlessState(gameState.endlessMeta || this.endlessState);
       this.encounterState = this.normalizeEncounterState(gameState.encounterMeta || this.encounterState);
       this.sanctumAgendaState = this.normalizeSanctumAgendaState(gameState.sanctumAgendaState || this.sanctumAgendaState);
@@ -5241,6 +5385,12 @@ export class Game {
     this.comboCount = 0;
     this.lastCardType = null;
     this.runStartTime = Date.now();
+    this.ensureProgressionRunIdentity({
+      forceNew: true,
+      prefix: 'run',
+      ownerUserId: this.getCurrentProgressionUserId(),
+      startedAt: this.runStartTime
+    });
     this.currentBattleNode = null;
     this.rewardCardSelected = false;
     this.encounterState = this.createDefaultEncounterState();
@@ -5406,34 +5556,70 @@ export class Game {
     const isBossBattle = enemyList.some(enemy => !!enemy && !!enemy.isBoss);
     const battleNodeType = this.currentBattleNode && typeof this.currentBattleNode.type === 'string' ? this.currentBattleNode.type : '';
     const challengeRun = this.activeChallengeRun && typeof this.activeChallengeRun === 'object' ? this.activeChallengeRun : null;
+    const expeditionState = typeof this.getExpeditionState === 'function' ? this.getExpeditionState() : this.expeditionState && typeof this.expeditionState === 'object' ? this.expeditionState : null;
     const progressionEligible = !this.player?.isReplay && !challengeRun?.replayOnly && !challengeRun?.practiceOnly;
     if (progressionEligible && typeof ProgressionService !== 'undefined' && ProgressionService && typeof ProgressionService.recordBattleWin === 'function') {
+      const currentRealm = Math.max(1, Math.floor(Number(this.player?.realm) || 1));
       const progressionMode = challengeRun
         ? 'challenge'
-        : this.expeditionState
+        : expeditionState
           ? 'expedition'
           : 'pve';
+      const baseProgressionRun = this.ensureProgressionRunIdentity({
+        startedAt: this.runStartTime || Date.now()
+      });
+      const sourceRunId = progressionMode === 'challenge'
+        ? this.normalizeProgressionSafeId(challengeRun?.runId) || this.createProgressionSafeId('challenge-run')
+        : progressionMode === 'expedition'
+          ? this.normalizeProgressionSafeId(expeditionState?.runId) || this.createProgressionSafeId('expedition-run')
+          : `${baseProgressionRun.runId}:realm:${currentRealm}`;
+      const ownerUserId = progressionMode === 'challenge'
+        ? String(challengeRun?.ownerUserId || '').trim()
+        : progressionMode === 'expedition'
+          ? String(expeditionState?.ownerUserId || '').trim()
+          : baseProgressionRun.ownerUserId;
       const nodeType = isBossBattle || battleNodeType === 'boss'
         ? 'boss'
         : ['enemy', 'elite', 'trial', 'ghost_duel'].includes(battleNodeType)
           ? battleNodeType
           : 'enemy';
+      const battleNodeId = String(this.currentBattleNode?.id || `${nodeType}:${currentRealm}`).trim();
+      const sourceRef = this.createProgressionSourceRef({
+        runId: sourceRunId,
+        eventType: 'battle_won',
+        realm: currentRealm,
+        checkpointKey: `${currentRealm}:${battleNodeId}`
+      });
+      const verificationContext = progressionMode === 'challenge'
+        ? {
+            challengeMode: String(challengeRun?.mode || ''),
+            rotationKey: String(challengeRun?.rotationKey || ''),
+            ruleId: String(challengeRun?.ruleId || ''),
+            goalRealm: Math.max(1, Math.floor(Number(challengeRun?.goalRealm) || 1)),
+            saveSlot: Number.isInteger(challengeRun?.saveSlot) ? challengeRun.saveSlot : Number.isInteger(this.currentSaveSlot) ? this.currentSaveSlot : null,
+            seedSignature: String(challengeRun?.seedSignature || '')
+          }
+        : progressionMode === 'expedition'
+          ? {
+              realm: Math.max(1, Math.floor(Number(expeditionState?.realm) || currentRealm)),
+              chapterIndex: Math.max(1, Math.floor(Number(expeditionState?.chapterIndex) || 1)),
+              saveSlot: Number.isInteger(expeditionState?.saveSlot) ? expeditionState.saveSlot : Number.isInteger(this.currentSaveSlot) ? this.currentSaveSlot : null
+            }
+          : this.buildProgressionVerificationContext({
+              realm: currentRealm
+            });
       ProgressionService.recordBattleWin({
         mode: progressionMode,
+        runId: sourceRunId,
+        ownerUserId,
+        sourceRef,
+        verificationContext,
         proof: {
           nodeType,
-          realm: Math.max(1, Math.floor(Number(this.player?.realm) || 1))
+          realm: currentRealm,
+          runId: sourceRunId
         }
       });
-      if (progressionMode === 'pve' && nodeType === 'boss' && typeof ProgressionService.recordActivityCompleted === 'function') {
-        ProgressionService.recordActivityCompleted({
-          mode: 'pve',
-          proof: {
-            nodeType: 'boss',
-            realm: Math.max(1, Math.floor(Number(this.player?.realm) || 1))
-          }
-        });
-      }
       if (typeof ProgressionService.flush === 'function') {
         Promise.resolve().then(() => ProgressionService.flush()).catch(() => {});
       }

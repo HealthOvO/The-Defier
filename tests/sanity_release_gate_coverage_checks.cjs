@@ -90,7 +90,14 @@ const progressionPlatformChecks = read('tests/sanity_progression_platform_checks
 const progressionTimeBoundaryChecks = read('tests/sanity_progression_time_boundary_checks.cjs');
 const progressionClientChecks = read('tests/sanity_progression_client_checks.mjs');
 const progressionBridgeChecks = read('tests/sanity_progression_bridge_checks.cjs');
+const verifiedRunsPlatformChecks = read('tests/sanity_verified_runs_platform_checks.cjs');
+const verifiedRunsClientChecks = read('tests/sanity_verified_runs_client_checks.mjs');
+const verifiedRunsBridgeChecks = read('tests/sanity_verified_runs_bridge_checks.cjs');
+const runIdentityChecks = read('tests/sanity_run_identity_checks.cjs');
+const weeklyChallengeChecks = read('tests/sanity_weekly_challenge_checks.cjs');
+const expeditionStateChecks = read('tests/sanity_expedition_state_checks.cjs');
 const progressionDocumentation = read('docs/backend_progression_platform_v1.md');
+const verifiedRunsDocumentation = read('docs/backend_verified_runs_v1.md');
 const shopManager = read('js/managers/ShopManager.js');
 const coreUtils = read('js/core/utils.js');
 const gameSource = read('js/game.js');
@@ -219,12 +226,71 @@ const waitingReportSource = pvpLiveStore.slice(
 });
 
 [
+  'server_verified',
+  'verified_envelope',
+  'concurrent checkpoints should receive unique monotonic sequences',
+  'verified checkpoint must upgrade instead of double-counting observed events',
+  'ticket ownership should not leak across accounts',
+  'run_ticket_expired',
+  'receipt?.idempotent',
+  'server_verified must only upgrade an observed event',
+  'a checkpoint source must not move across tickets',
+  'v2 databases should advance to v3 on restart',
+].forEach((needle) => {
+  assert.ok(
+    verifiedRunsPlatformChecks.includes(needle) || verifiedRunsDocumentation.includes(needle),
+    `verified run platform should pin transaction/trust marker: ${needle}`,
+  );
+});
+
+[
+  'session churn must not switch verified run bearer token after signing',
+  'stable observed source should deduplicate locally',
+  'verified network failure must not invalidate observed fallback success',
+  'terminal verification rejection should fall back without retry loop',
+  'verified queues should remain partitioned by account',
+  'map snapshot hash should include nested node state',
+  'verified_run_signature_required should be a terminal one-way fallback',
+].forEach((needle) => {
+  assert.ok(
+    verifiedRunsClientChecks.includes(needle),
+    `verified run client should pin queue/account marker: ${needle}`,
+  );
+});
+
+[
+  [runIdentityChecks, 'cross-account save restore should bind a fresh run to the current account'],
+  [weeklyChallengeChecks, 'same-slot restore must not attach another account challenge run'],
+  [expeditionStateChecks, 'same-slot restore must not attach another account expedition state'],
+].forEach(([source, needle]) => {
+  assert.ok(source.includes(needle), `verified run restore tests should pin account isolation marker: ${needle}`);
+});
+
+[
+  'progressionRunOwnerUserId',
+  'currentSaveSlot',
+  'seedSignature',
+  "VERIFIED_AUTHORITY_LEVEL = 'verified_envelope'",
+  "VERIFIED_TRUST_TIER = 'server_verified'",
+  '不包含线上部署',
+].forEach((needle) => {
+  assert.ok(
+    verifiedRunsBridgeChecks.includes(needle) || verifiedRunsDocumentation.includes(needle),
+    `verified run bridge/docs should pin gameplay boundary: ${needle}`,
+  );
+});
+
+[
   '0002_progression_platform',
+  '0003_verified_runs',
   'progression_events',
   'progression_objective_progress',
   'progression_reward_claims',
   'progression_economy_balances',
   'progression_economy_ledger',
+  'progression_verified_runs',
+  'progression_verified_run_checkpoints',
+  'progression_verified_run_receipts',
 ].forEach((needle) => {
   assert.ok(
     schemaStatusSource.includes(needle) || pvpLiveDatabase.includes(needle),

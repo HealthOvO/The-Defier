@@ -178,11 +178,11 @@ async function runChecks() {
   try {
     await waitForHealth(server);
     const version = await request('/api/version');
-    assert.strictEqual(version.payload?.schema?.version, 2, 'progression platform should advance schema version');
-    assert.strictEqual(version.payload?.schema?.currentMigrationId, '0002_progression_platform');
+    assert.strictEqual(version.payload?.schema?.version, 3, 'verified runs should advance schema version');
+    assert.strictEqual(version.payload?.schema?.currentMigrationId, '0003_verified_runs');
     assert.deepStrictEqual(
       version.payload?.schema?.appliedMigrations?.map(entry => entry.id),
-      ['0001_startup_schema', '0002_progression_platform'],
+      ['0001_startup_schema', '0002_progression_platform', '0003_verified_runs'],
       'fresh databases should record the full migration chain'
     );
 

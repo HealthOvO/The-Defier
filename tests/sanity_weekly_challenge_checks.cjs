@@ -29,6 +29,7 @@ function loadFile(ctx, filePath) {
 (function run() {
   const root = path.resolve(__dirname, '..');
   const storage = new Map();
+  let currentProgressionUserId = 'challenge-account-a';
   const pvpState = {
     coins: 0,
     totalEarned: 0,
@@ -130,6 +131,12 @@ function loadFile(ctx, filePath) {
   ctx.Game.prototype.getRunVowMetaById = function (id) {
     return { id, name: `誓约-${id}` };
   };
+  ctx.Game.prototype.getCurrentProgressionUserId = function () {
+    return currentProgressionUserId;
+  };
+  ctx.Game.prototype.isProgressionOwnerCompatible = function (ownerUserId) {
+    return !currentProgressionUserId || String(ownerUserId || '').trim() === currentProgressionUserId;
+  };
   ctx.Game.prototype.getCollectionUnlockHistory = function () {
     return this.unlocks.slice().reverse();
   };
@@ -173,6 +180,12 @@ function loadFile(ctx, filePath) {
   game.activeChallengeRun = game.createActiveChallengeRun(dailyBundle);
   game.activeChallengeRun.progress.battleWins = 2;
   game.activeChallengeRun.progress.realmClears = 1;
+  game.persistActiveChallengeRun();
+  currentProgressionUserId = 'challenge-account-b';
+  const otherAccountGame = new Game();
+  if (typeof ctx.__attachChallengeHubController === 'function') ctx.__attachChallengeHubController(otherAccountGame);
+  assert(otherAccountGame.restoreActiveChallengeRun() === null, 'same-slot restore must not attach another account challenge run');
+  currentProgressionUserId = 'challenge-account-a';
   game.player.currentHp = 60;
   game.player.maxHp = 80;
   game.player.collectedLaws = [{ id: 'lawA' }, { id: 'lawB' }];

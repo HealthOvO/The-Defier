@@ -41,6 +41,16 @@ const SCHEMA_MIGRATIONS = [
             'progression_economy_balances',
             'progression_economy_ledger'
         ]
+    }),
+    makeMigration({
+        id: '0003_verified_runs',
+        version: 3,
+        description: 'Account-bound verified run tickets, checkpoints, and receipts',
+        resources: [
+            'progression_verified_runs',
+            'progression_verified_run_checkpoints',
+            'progression_verified_run_receipts'
+        ]
     })
 ];
 const CURRENT_MIGRATION = SCHEMA_MIGRATIONS[SCHEMA_MIGRATIONS.length - 1];

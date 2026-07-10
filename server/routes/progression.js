@@ -9,6 +9,11 @@ const {
     getStatus,
     recordClientEvents
 } = require('../progression/service');
+const {
+    issueVerifiedRunTicket,
+    recordVerifiedRunCheckpoint,
+    settleVerifiedRun
+} = require('../progression/verified-runs');
 
 const router = express.Router();
 
@@ -32,6 +37,14 @@ function requireSignedPayload(req, res, payload, route) {
         return false;
     }
     return true;
+}
+
+function getSignedBusinessPayload(body) {
+    const source = body && typeof body === 'object' && !Array.isArray(body) ? { ...body } : {};
+    delete source.salt;
+    delete source.signature;
+    delete source.signatureMode;
+    return source;
 }
 
 function getOpsToken() {
@@ -64,6 +77,40 @@ function requireOpsToken(req, res) {
 
 router.get('/status', authenticate, asyncHandler(async (req, res) => {
     res.json(await getStatus(req.user.id));
+}));
+
+router.post('/verified-runs/tickets', authenticate, asyncHandler(async (req, res) => {
+    const payload = getSignedBusinessPayload(req.body);
+    if (!requireSignedPayload(req, res, payload, 'POST /api/progression/verified-runs/tickets')) return;
+    res.json(await issueVerifiedRunTicket(req.user.id, payload));
+}));
+
+router.post('/verified-runs/:ticketId/checkpoints', authenticate, asyncHandler(async (req, res) => {
+    const ticketId = String(req.params.ticketId || '').trim();
+    const payload = getSignedBusinessPayload(req.body);
+    if (!ticketId || String(payload.ticketId || '').trim() !== ticketId) {
+        return res.status(400).json({
+            success: false,
+            reason: 'verified_run_ticket_mismatch',
+            message: 'checkpoint ticket 与请求路径不一致'
+        });
+    }
+    if (!requireSignedPayload(req, res, payload, 'POST /api/progression/verified-runs/:ticketId/checkpoints')) return;
+    res.json(await recordVerifiedRunCheckpoint(req.user.id, ticketId, payload));
+}));
+
+router.post('/verified-runs/:ticketId/settle', authenticate, asyncHandler(async (req, res) => {
+    const ticketId = String(req.params.ticketId || '').trim();
+    const payload = getSignedBusinessPayload(req.body);
+    if (!ticketId || String(payload.ticketId || '').trim() !== ticketId) {
+        return res.status(400).json({
+            success: false,
+            reason: 'verified_run_ticket_mismatch',
+            message: 'settlement ticket 与请求路径不一致'
+        });
+    }
+    if (!requireSignedPayload(req, res, payload, 'POST /api/progression/verified-runs/:ticketId/settle')) return;
+    res.json(await settleVerifiedRun(req.user.id, ticketId, payload));
 }));
 
 router.post('/events', authenticate, asyncHandler(async (req, res) => {

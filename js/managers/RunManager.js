@@ -6,6 +6,7 @@ import { BOSS_MECHANICS } from "../data/boss_mechanics.js";
 import { TREASURES } from "../data/treasures.js";
 import { ENEMIES } from "../data/index.js";
 import { AuthService } from "../services/authService.js";
+import { ProgressionService } from "../services/progression-service.js";
 export class RunManager {
   constructor(gameInstance) {
     this.game = gameInstance;
@@ -2013,6 +2014,62 @@ export class RunManager {
     // Update max realm reached (Next unlocked)
     if (this.game.player.realm + 1 > this.game.player.maxRealmReached) {
       this.game.player.maxRealmReached = this.game.player.realm + 1;
+    }
+    const expeditionState = typeof this.game.getExpeditionState === 'function' ? this.game.getExpeditionState() : this.game.expeditionState;
+    const challengeRun = this.game.activeChallengeRun && typeof this.game.activeChallengeRun === 'object' ? this.game.activeChallengeRun : null;
+    const shouldRecordPveCompletion = !this.game.player?.isReplay
+      && !this.game.progressionSuppressPveRealmCompletion
+      && !challengeRun
+      && !expeditionState
+      && typeof ProgressionService !== 'undefined'
+      && ProgressionService
+      && typeof ProgressionService.recordActivityCompleted === 'function';
+    if (shouldRecordPveCompletion) {
+      const progressionRun = typeof this.game.ensureProgressionRunIdentity === 'function'
+        ? this.game.ensureProgressionRunIdentity({
+            startedAt: this.game.runStartTime || Date.now()
+          })
+        : {
+            runId: '',
+            ownerUserId: ''
+          };
+      const currentRealmRunId = progressionRun.runId ? `${progressionRun.runId}:realm:${currentRealm}` : '';
+      const currentNodeId = String(this.game.currentBattleNode?.id || `boss:${currentRealm}`).trim();
+      const sourceRef = typeof this.game.createProgressionSourceRef === 'function'
+        ? this.game.createProgressionSourceRef({
+            runId: currentRealmRunId,
+            eventType: 'activity_completed',
+            realm: currentRealm,
+            checkpointKey: `${currentRealm}:${currentNodeId}:boss-complete`
+          })
+        : `pve:${currentRealmRunId}:${currentNodeId}:boss-complete`;
+      const verificationContext = typeof this.game.buildProgressionVerificationContext === 'function'
+        ? this.game.buildProgressionVerificationContext({
+            mode: 'pve',
+            realm: currentRealm,
+            completionType: 'realm_clear',
+            nodeId: currentNodeId
+          })
+        : {
+            realm: currentRealm,
+            saveSlot: Number.isInteger(this.game.currentSaveSlot) ? this.game.currentSaveSlot : null
+          };
+      ProgressionService.recordActivityCompleted({
+        mode: 'pve',
+        runId: currentRealmRunId,
+        ownerUserId: progressionRun.ownerUserId || '',
+        sourceRef,
+        verificationContext,
+        proof: {
+          nodeType: 'boss',
+          realm: currentRealm,
+          reason: 'realm_clear',
+          runId: currentRealmRunId
+        }
+      });
+      if (typeof ProgressionService.flush === 'function') {
+        Promise.resolve().then(() => ProgressionService.flush()).catch(() => {});
+      }
     }
 
     // 检查是否通关所有天域 (现在是18重)
