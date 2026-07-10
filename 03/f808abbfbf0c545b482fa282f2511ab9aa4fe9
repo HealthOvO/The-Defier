@@ -1,0 +1,67 @@
+css/battle-hud.css
+  s_ca5652313828d6::t_52a3636e570ebf 82-120,722,731,759-774,857-858
+css/frontend-upgrade.css
+  s_ca5652313828d6::t_87345f78b13a45 95-100,102-152,374-414,451-529,618-853
+css/mobile.css
+  s_ca5652313828d6::t_eceab1eabd046c 300-314,579-588
+docs/superpowers/plans/2026-07-09-frontend-core-loop-experience.md
+  s_9a2947967769a3::t_b29e00640075f8 1-84
+docs/superpowers/specs/2026-07-09-frontend-core-loop-experience-design.md
+  s_9a2947967769a3::t_eb1764e7baabc0 1-96
+index.html
+  s_bae69f1b7fab46::t_b9fb88bb968010 1654
+js/core/battle.js
+  s_ca5652313828d6::t_ae8cb2056c8d65 9200-9221,9346-9347
+js/ui/battle-hud.js
+  s_ca5652313828d6::t_644a05419d3f26 209-233,251,413,447
+js/views/MapView.js
+  s_ca5652313828d6::t_980958bece2deb 11-62,159,184,187-217,266-269,309-311
+js/views/RewardView.js
+  s_bae69f1b7fab46::t_1243d31a4ff51b 1179-1206,1222,1393,1406
+tests/browser_mobile_layout_audit.mjs
+  s_ca5652313828d6::t_3d001b5c73933b 101-109,120-122,144-145,162-167,169-173,202-212,510-512,567-568,578
+tests/browser_run_path_audit.mjs
+  s_ca5652313828d6::t_deac49de943336 55,95,99-100,113-341
+tests/browser_run_path_reward_audit.mjs
+  s_bae69f1b7fab46::t_8674cdaceaf061 153-162,173-177,194-198,211-220
+tests/sanity_battle_hud_module_checks.cjs
+  s_ca5652313828d6::t_daf25b53255f90 112-116,159-163
+tests/sanity_release_gate_coverage_checks.cjs
+  s_ca5652313828d6::t_bf6d7c8092059f 38,4467-4505
+tests/test_reward_view.cjs
+  s_ca5652313828d6::t_247709a3725a99 3-26,36-37,43-44,56-59,62-65,68-69,72,80-85
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.5",
+  "base_commit_sha": "03f808abbfbf0c545b482fa282f2511ab9aa4fe9",
+  "prompts": {},
+  "sessions": {
+    "s_9a2947967769a3": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f4738-0e43-7b40-853b-9af4037ddbad",
+        "model": "unknown"
+      },
+      "human_author": "AI Agent <bot@example.com>"
+    },
+    "s_bae69f1b7fab46": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ed4f6-e7ac-73e0-a29e-119f3eddb407",
+        "model": "unknown"
+      },
+      "human_author": "AI Agent <bot@example.com>"
+    },
+    "s_ca5652313828d6": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f3fed-94d5-77b2-9af0-61333559ff38",
+        "model": "unknown"
+      },
+      "human_author": "AI Agent <bot@example.com>"
+    }
+  },
+  "attestation_metadata": {},
+  "remote_transcripts": {}
+}
