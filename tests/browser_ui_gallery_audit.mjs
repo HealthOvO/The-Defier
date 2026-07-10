@@ -784,24 +784,16 @@ function collectCoreLoopDesignSystemProbe(options = {}) {
 
   await page.setViewportSize({ width: 390, height: 844 });
   await page.waitForTimeout(250);
-  const mobileCollectionProbe = await page.evaluate(() => {
+  const mobileCollectionProbe = await page.evaluate(async () => {
     if (!window.game || typeof game.showCollection !== 'function') return { ok: false, reason: 'no_collection_api' };
     game.showCollection('laws');
     const tabs = Array.from(document.querySelectorAll('#collection [data-collection-tab]'));
-    const targetTab =
-      tabs.find((tab) => ['builds', 'sanctum', 'slates', 'chapters'].includes(tab.dataset.collectionTab || '')) ||
-      tabs.find((tab) => (tab.dataset.collectionTab || '') !== 'laws');
-    targetTab?.click();
+    const targetTab = tabs[tabs.length - 1] || null;
     const shell = document.querySelector('.codex-shell');
-    const activeTab = document.querySelector('#collection [data-collection-tab].active');
-    const activePanel = document.querySelector('#collection [data-collection-panel].active');
     const tabRail = tabs[0]?.parentElement || null;
-    if (!shell || !activeTab || !activePanel || !targetTab || !tabRail) {
+    if (!shell || !targetTab || !tabRail) {
       return { ok: false, reason: 'missing_mobile_collection_nodes' };
     }
-    const rect = shell.getBoundingClientRect();
-    const panelRect = activePanel.getBoundingClientRect();
-    const railRect = tabRail.getBoundingClientRect();
     const rectObj = (el) => {
       if (!el) return null;
       const itemRect = el.getBoundingClientRect();
@@ -820,7 +812,10 @@ function collectCoreLoopDesignSystemProbe(options = {}) {
       const classes = Array.from(el.classList || []).slice(0, 3).join('.');
       return `${el.tagName.toLowerCase()}${classes ? `.${classes}` : ''}`;
     };
-    const tabProbes = tabs.map((tab) => {
+    const tabProbes = [];
+    for (const tab of tabs) {
+      tab.click();
+      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
       const tabRect = rectObj(tab);
       const point = tabRect ? {
         x: Math.round(tabRect.left + tabRect.width / 2),
@@ -829,15 +824,28 @@ function collectCoreLoopDesignSystemProbe(options = {}) {
       const hit = point && point.x >= 0 && point.y >= 0 && point.x <= window.innerWidth && point.y <= window.innerHeight
         ? document.elementFromPoint(point.x, point.y)
         : null;
-      return {
+      const activeTab = document.querySelector('#collection [data-collection-tab].active');
+      const activePanel = document.querySelector('#collection [data-collection-panel].active');
+      tabProbes.push({
         section: tab.dataset.collectionTab || '',
         text: (tab.textContent || '').replace(/\s+/g, ' ').trim(),
         rect: tabRect,
         hit: selectorFor(hit),
         hitOk: !!hit && (hit === tab || tab.contains(hit) || hit.contains(tab)),
         textFits: tab.scrollWidth <= tab.clientWidth + 2,
-      };
-    });
+        activeTab: activeTab?.dataset.collectionTab || '',
+        activePanel: activePanel?.dataset.collectionPanel || '',
+        railScrollLeft: Math.round(tabRail.scrollLeft),
+      });
+    }
+    const activeTab = document.querySelector('#collection [data-collection-tab].active');
+    const activePanel = document.querySelector('#collection [data-collection-panel].active');
+    if (!activeTab || !activePanel) {
+      return { ok: false, reason: 'missing_mobile_collection_active_state', tabProbes };
+    }
+    const rect = shell.getBoundingClientRect();
+    const panelRect = activePanel.getBoundingClientRect();
+    const railRect = tabRail.getBoundingClientRect();
     return {
       ok:
         rect.left >= 0 &&
@@ -850,7 +858,12 @@ function collectCoreLoopDesignSystemProbe(options = {}) {
         activePanel.dataset.collectionPanel === targetTab.dataset.collectionTab &&
         document.documentElement.scrollWidth <= window.innerWidth + 2 &&
         tabProbes.length >= 8 &&
-        tabProbes.every((probe) => probe.hitOk && probe.textFits && probe.rect?.height >= 44),
+        tabProbes.every((probe) => probe.hitOk
+          && probe.textFits
+          && probe.rect?.height >= 44
+          && probe.activeTab === probe.section
+          && probe.activePanel === probe.section) &&
+        tabRail.scrollLeft > 0,
       activeSection: activeTab.dataset.collectionTab,
       targetSection: targetTab.dataset.collectionTab,
       shellRect: {
@@ -879,6 +892,7 @@ function collectCoreLoopDesignSystemProbe(options = {}) {
       },
       railScrollWidth: Math.round(tabRail.scrollWidth),
       railClientWidth: Math.round(tabRail.clientWidth),
+      railScrollLeft: Math.round(tabRail.scrollLeft),
       tabProbes,
     };
   });

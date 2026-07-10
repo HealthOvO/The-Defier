@@ -110,6 +110,39 @@ async function clickRuneTab(page, label) {
     JSON.stringify(rankingCopyProbe)
   );
 
+  const rankingFeedbackProbe = await page.evaluate(async () => {
+    const service = window.PVPService;
+    const scene = window.PVPScene;
+    const hint = document.getElementById('pvp-challenge-intent');
+    if (!service || !scene || typeof scene.findMatch !== 'function') {
+      return { ok: false, reason: 'pvp_runtime_missing' };
+    }
+    const originalFindOpponent = service.findOpponent;
+    service.findOpponent = async () => ({ success: false, message: '审计匹配失败提示' });
+    try {
+      await scene.findMatch();
+      return {
+        ok: true,
+        text: hint?.textContent || '',
+        tone: hint?.dataset.feedbackTone || '',
+        role: hint?.getAttribute('role') || '',
+        live: hint?.getAttribute('aria-live') || ''
+      };
+    } finally {
+      service.findOpponent = originalFindOpponent;
+      scene.setMatchingState(false);
+    }
+  });
+  add(
+    'ranking match failure remains visible in an inline live status',
+    rankingFeedbackProbe.ok
+      && /审计匹配失败提示/.test(rankingFeedbackProbe.text)
+      && rankingFeedbackProbe.tone === 'error'
+      && rankingFeedbackProbe.role === 'status'
+      && rankingFeedbackProbe.live === 'polite',
+    JSON.stringify(rankingFeedbackProbe)
+  );
+
   const rankingDangerProbe = await page.evaluate(() => {
     const payload = JSON.parse(window.render_game_to_text());
     const brief = document.getElementById('pvp-ranking-brief');
@@ -472,13 +505,39 @@ async function clickRuneTab(page, label) {
     return {
       wallet,
       cardState: cardOverlay?.dataset.state || null,
-      buttonText: cardOverlay?.querySelector('.buy-btn-text')?.textContent || ''
+      buttonText: cardOverlay?.querySelector('.buy-btn-text')?.textContent || '',
+      actionStatus: document.getElementById('shop-action-status')?.textContent || '',
+      actionTone: document.getElementById('shop-action-status')?.dataset.feedbackTone || ''
     };
   });
   add(
     'shop purchase deducts coins and updates item ownership state',
-    shopAfter.wallet < shopBefore.wallet && (shopAfter.cardState === 'owned' || /已拥有/.test(shopAfter.buttonText)),
+    shopAfter.wallet < shopBefore.wallet
+      && (shopAfter.cardState === 'owned' || /已拥有/.test(shopAfter.buttonText))
+      && shopAfter.actionStatus.length > 0
+      && shopAfter.actionTone === 'success',
     JSON.stringify({ shopBefore, shopAfter })
+  );
+
+  const shopFailureFeedbackProbe = await page.evaluate(() => {
+    window.PVPScene?.purchaseShopItem?.('missing-audit-shop-item');
+    const status = document.getElementById('shop-action-status');
+    return {
+      text: status?.textContent || '',
+      tone: status?.dataset.feedbackTone || '',
+      role: status?.getAttribute('role') || '',
+      live: status?.getAttribute('aria-live') || '',
+      hidden: !!status?.hidden
+    };
+  });
+  add(
+    'shop purchase failure remains visible in an inline live status',
+    shopFailureFeedbackProbe.text.length > 0
+      && shopFailureFeedbackProbe.tone === 'error'
+      && shopFailureFeedbackProbe.role === 'status'
+      && shopFailureFeedbackProbe.live === 'polite'
+      && !shopFailureFeedbackProbe.hidden,
+    JSON.stringify(shopFailureFeedbackProbe)
   );
 
   const shopMetaProbe = await page.evaluate(() => {

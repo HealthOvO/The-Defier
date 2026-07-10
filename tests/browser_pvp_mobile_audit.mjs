@@ -361,17 +361,102 @@ function rectObj(el) {
         height: Math.round(rect.height),
       };
     };
-    const header = document.querySelector('.pvp-shop-header');
+    const layout = document.querySelector('#tab-shop .shop-layout');
+    const header = document.querySelector('#tab-shop .shop-header-bar');
     const wallet = document.getElementById('shop-wallet-amount');
-    const grid = document.querySelector('.pvp-shop-grid, .shop-grid, #shop-items-grid');
+    const grid = document.querySelector('#tab-shop .shop-unified-grid');
+    const categories = Array.from(document.querySelectorAll('#tab-shop .shop-category'));
+    const cards = Array.from(document.querySelectorAll('#tab-shop .talisman-card'));
+    const actionStatus = document.getElementById('shop-action-status');
     return {
-      ok: !!wallet && /\d/.test(wallet.textContent || '') && (!header || toRect(header).right <= window.innerWidth) && (!grid || toRect(grid).right <= window.innerWidth + 2),
+      ok: !!layout
+        && !!header
+        && !!wallet
+        && !!grid
+        && /\d/.test(wallet.textContent || '')
+        && categories.length === 4
+        && cards.length >= 3
+        && toRect(layout).right <= window.innerWidth + 2
+        && toRect(header).right <= window.innerWidth + 2
+        && toRect(grid).right <= window.innerWidth + 2
+        && categories.every(category => toRect(category)?.right <= window.innerWidth + 2)
+        && cards.every(card => toRect(card)?.right <= window.innerWidth + 2)
+        && !!actionStatus
+        && !actionStatus.hidden
+        && actionStatus.textContent === ''
+        && actionStatus.getAttribute('role') === 'status'
+        && actionStatus.getAttribute('aria-live') === 'polite'
+        && getComputedStyle(actionStatus).display !== 'none',
+      layout: toRect(layout),
       header: toRect(header),
       wallet: wallet?.textContent || '',
       grid: toRect(grid),
+      categoryCount: categories.length,
+      cardCount: cards.length,
+      actionStatus: {
+        hidden: !!actionStatus?.hidden,
+        text: actionStatus?.textContent || '',
+        role: actionStatus?.getAttribute('role') || '',
+        live: actionStatus?.getAttribute('aria-live') || '',
+        display: actionStatus ? getComputedStyle(actionStatus).display : ''
+      }
     };
   });
   add('pvp mobile shop keeps wallet and content inside viewport', !!shopProbe?.ok, JSON.stringify(shopProbe || null));
+
+  const shopAction = page.locator('#tab-shop .buy-overlay:not(:disabled)').last();
+  await shopAction.scrollIntoViewIfNeeded();
+  const shopScrollBeforePurchase = await page.evaluate(() => document.getElementById('pvp-screen')?.scrollTop || 0);
+  await shopAction.click({ timeout: 5000 });
+  await page.waitForTimeout(250);
+  const shopFeedbackProbe = await page.evaluate((scrollBeforePurchase) => {
+    const status = document.getElementById('shop-action-status');
+    const screen = document.getElementById('pvp-screen');
+    const rect = status?.getBoundingClientRect() || null;
+    const centerX = rect ? Math.max(0, Math.min(window.innerWidth - 1, rect.left + rect.width / 2)) : 0;
+    const centerY = rect ? Math.max(0, Math.min(window.innerHeight - 1, rect.top + rect.height / 2)) : 0;
+    const hit = rect ? document.elementFromPoint(centerX, centerY) : null;
+    return {
+      ok: !!status
+        && !status.hidden
+        && status.getAttribute('role') === 'status'
+        && status.getAttribute('aria-live') === 'polite'
+        && status.dataset.feedbackTone === 'success'
+        && status.textContent.trim().length > 0
+        && getComputedStyle(status).position === 'sticky'
+        && scrollBeforePurchase > 100
+        && (screen?.scrollTop || 0) > 100
+        && !!rect
+        && rect.width > 0
+        && rect.height > 0
+        && rect.top >= 0
+        && rect.bottom <= window.innerHeight
+        && !!hit
+        && (hit === status || status.contains(hit)),
+      text: status?.textContent?.replace(/\s+/g, ' ').trim() || '',
+      tone: status?.dataset.feedbackTone || '',
+      role: status?.getAttribute('role') || '',
+      live: status?.getAttribute('aria-live') || '',
+      position: status ? getComputedStyle(status).position : '',
+      scrollBeforePurchase,
+      scrollAfterPurchase: screen?.scrollTop || 0,
+      rect: rect ? {
+        left: Math.round(rect.left),
+        right: Math.round(rect.right),
+        top: Math.round(rect.top),
+        bottom: Math.round(rect.bottom),
+        width: Math.round(rect.width),
+        height: Math.round(rect.height)
+      } : null,
+      topHit: !!hit && !!status && (hit === status || status.contains(hit))
+    };
+  }, shopScrollBeforePurchase);
+  add(
+    'pvp mobile shop keeps first purchase feedback sticky, visible, and top-hit after scrolling to a later item',
+    !!shopFeedbackProbe?.ok,
+    JSON.stringify(shopFeedbackProbe || null)
+  );
+  await safeScreenshot(page, path.join(outDir, 'pvp-mobile-shop-feedback.png'));
 
   await clickRuneTab(page, '护山阵');
   await page.waitForTimeout(500);

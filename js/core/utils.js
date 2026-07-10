@@ -314,7 +314,10 @@ export const Utils = {
       modal.id = 'card-detail-modal';
       modal.className = 'modal-overlay card-detail-overlay';
       modal.onclick = e => {
-        if (e.target === modal) modal.style.display = 'none';
+        if (e.target === modal) {
+          modal.style.display = 'none';
+          modal.classList.remove('active');
+        }
       };
       document.body.appendChild(modal);
     }
@@ -405,10 +408,12 @@ export const Utils = {
             </div>
         `;
     modal.style.display = 'flex';
+    modal.classList.add('active');
     const closeBtn = modal.querySelector('[data-card-detail-close="true"]');
     if (closeBtn) {
       closeBtn.addEventListener('click', () => {
         modal.style.display = 'none';
+        modal.classList.remove('active');
       });
     }
     const container = modal.querySelector('.card-detail-container');
@@ -424,7 +429,10 @@ export const Utils = {
       modal.id = 'card-detail-modal';
       modal.className = 'modal-overlay card-detail-overlay';
       modal.onclick = e => {
-        if (e.target === modal) modal.style.display = 'none';
+        if (e.target === modal) {
+          modal.style.display = 'none';
+          modal.classList.remove('active');
+        }
       };
       document.body.appendChild(modal);
     }
@@ -507,10 +515,12 @@ export const Utils = {
             </div>
         `;
     modal.style.display = 'flex';
+    modal.classList.add('active');
     const closeBtn = modal.querySelector('[data-card-detail-close="true"]');
     if (closeBtn) {
       closeBtn.addEventListener('click', () => {
         modal.style.display = 'none';
+        modal.classList.remove('active');
       });
     }
     const container = modal.querySelector('.card-detail-container');
