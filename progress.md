@@ -13991,3 +13991,25 @@ Original prompt: 进入全自动审查与修复模式，按顺序审查并修复
 - 当前结论
   - 动态卡牌详情、通用 alert、法宝囊叠 alert 三条高风险弹窗链路已进入前端布局 release gate，并在桌面、矮屏、移动端完整通过。
   - 这仍不是线上部署记录；本轮没有同步生产服务器，也没有改动生产数据。
+
+## 2026-07-10 非核心循环前端全景收口
+
+- 设计 / 实现
+  - 在独立 worktree `frontend-surface-closure-20260710` 完成挑战、PVP、藏经阁、主菜单、角色页、奖励页与引导弹窗的桌面 / 移动端统一收口，并补齐设计说明和实施计划。
+  - PVP 移动端改为稳定的四分页导航与前置操作栏；隐藏无可用动作的命令组和会遮挡内容的战斗日志，榜单练习、实时论道、护山阵、商店均保留首屏可达操作。
+  - PVP 分页补齐 tab / tabpanel 语义、方向键与 Home / End 键盘导航；榜单匹配结果、商店兑换结果改为独立页内 live status，商店状态在 390px 视口滚动后保持 sticky 可见。
+  - 藏经阁八个分页在移动端改为单行横向轨道并自动把当前分页滚入视野；法则筛选改为移动端 disclosure；章节档案新增 daily / weekly / global 三条演练快捷入口，并保证冷加载时即时切页、真实控制器加载后再完成焦点渲染。
+  - 奖励卡补齐 button 语义、键盘选择、`aria-pressed` / `aria-disabled` 与不可重复领取保护；未选奖励时使用页内 required live status，不再依赖已隐藏的战斗日志。
+  - 主菜单恢复移动端纵向滚动，角色选择在移动端使用自然高度、桌面使用内部滚动；弹窗、奖励页和 PVP 激活时统一处理战斗日志遮挡及动态弹窗层级。
+
+- 真实浏览器与门禁
+  - in-app browser 在 390x844、412x915 与桌面视口检查 PVP、商店、藏经阁、主菜单、角色选择和弹窗；商店实测滚动 `984px` 后兑换，live status 保持 `top=8px`、视口内可见且顶部命中。
+  - `output/frontend-surface-closure-final-layout-audit-v3/report.json`：212/212 finding、0 失败、0 console error。
+  - `output/frontend-surface-closure-pvp-mobile-sticky-v2/report.json`：8/8 finding、0 失败、0 console error；`output/frontend-surface-closure-pvp-live-real-dom-sync-v2/report.json`：92/92 finding、0 失败、0 console error。
+  - `output/frontend-surface-closure-reward-required-v3/report.json`、`output/frontend-surface-closure-chapter-cold-v5/report.json` 均为 0 失败、0 console error，分别覆盖奖励 required live status 与受控冷加载的即时 / 最终 DOM 渲染。
+  - `npm run test:release:local` 最终 fresh 报告 `output/release-browser-audits-frontend-surface-closure-final-v8/report.json`：29/29 模块、1009 条 finding、0 失败、0 console error、411 张截图，`missingModules=[]`、`duplicateModules=[]`、`unknownModules=[]`。
+  - 资源文件头与浏览器解码门禁均通过，本轮没有发现需要补生成的缺失图片。
+
+- 当前结论
+  - 非核心循环前端的遮挡、移动端拥挤、关键操作不可见、页内反馈缺失与键盘 / 读屏语义问题已按设计、实现、真实浏览器检查、挑战者复核和完整发布门禁流程收口。
+  - 本轮尚未提交、push、合并或部署生产服务器；正式线上仍保持不变。

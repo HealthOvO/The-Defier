@@ -297,6 +297,21 @@
         gap: 10px;
     }
 
+    #map-screen .map-core-loop-brief {
+        gap: 5px;
+        margin-top: 8px;
+    }
+
+    #map-screen .map-core-loop-chip {
+        min-height: 24px;
+        padding: 3px 7px;
+        font-size: 0.62rem;
+    }
+
+    #map-screen .map-core-loop-focus {
+        flex-basis: 100%;
+    }
+
     .expedition-overview-card {
         grid-column: span 1;
     }
@@ -559,6 +574,16 @@
     #reward-screen .reward-actions {
         padding-left: 14px;
         padding-right: 14px;
+    }
+
+    #reward-screen .reward-next-step-card {
+        min-height: auto;
+        padding: 9px 10px;
+        font-size: 0.78rem;
+    }
+
+    #reward-screen .reward-next-step-card strong {
+        font-size: 0.86rem;
     }
 
     #reward-screen .steal-chance {

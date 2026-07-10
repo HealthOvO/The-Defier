@@ -112,6 +112,18 @@ export const PVPScene = {
     }
     this.renderChallengeIntent();
   },
+  showRankingActionStatus(message, tone = 'info') {
+    const hint = document.getElementById('pvp-challenge-intent');
+    if (!hint) return;
+    hint.textContent = String(message || '').trim() || '镜像练习状态已更新。';
+    hint.dataset.feedbackTone = ['success', 'warning', 'error'].includes(tone) ? tone : 'info';
+  },
+  showShopActionStatus(message, tone = 'info') {
+    const status = document.getElementById('shop-action-status');
+    if (!status) return;
+    status.textContent = String(message || '').trim() || '诸天阁状态已更新。';
+    status.dataset.feedbackTone = ['success', 'warning', 'error'].includes(tone) ? tone : 'info';
+  },
   getPersonalityRuleSet(type) {
     return this.PERSONA_RULES[type] || this.PERSONA_RULES.balanced;
   },
@@ -236,6 +248,7 @@ export const PVPScene = {
       btn.title = duelBrief ? `${duelBrief.targetName}｜${duelBrief.engagementLabel}｜${duelBrief.modeLabel}｜不是真人排位` : '镜像练习，不是真人排位';
     }
     if (hint) {
+      delete hint.dataset.feedbackTone;
       hint.textContent = duelBrief ? `已锁定练习：${duelBrief.targetName} ｜ ${duelBrief.engagementLabel} ｜ ${duelBrief.modeLabel} ｜ 不是真人排位` : '镜像练习不是真人排位；未锁定焦点目标时，将自动按榜位推演对手。';
     }
   },
@@ -444,9 +457,12 @@ export const PVPScene = {
     this.activeTab = tabName;
 
     // Update Runes
-    document.querySelectorAll('.rune-tab').forEach(btn => btn.classList.remove('active'));
-    const activeBtn = document.querySelector(`.rune-tab[onclick*="'${tabName}'"]`);
-    if (activeBtn) activeBtn.classList.add('active');
+    document.querySelectorAll('.rune-tab').forEach(btn => {
+      const active = btn.dataset.pvpTab === tabName;
+      btn.classList.toggle('active', active);
+      btn.setAttribute('aria-selected', active ? 'true' : 'false');
+      btn.tabIndex = active ? 0 : -1;
+    });
 
     // Update Content Panes
     document.querySelectorAll('.pvp-tab-pane').forEach(el => {
@@ -458,11 +474,45 @@ export const PVPScene = {
       activePane.classList.add('active');
     }
 
+    const scrollContainers = [
+      document.getElementById('pvp-screen'),
+      document.querySelector('#pvp-screen .pvp-content-container'),
+      activePane
+    ];
+    scrollContainers.forEach(container => {
+      if (typeof container?.scrollTo === 'function') {
+        container.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+      }
+    });
+
     // Load Data
     if (!shouldSkipLoad && tabName === 'ranking') this.loadRankings();
     if (!shouldSkipLoad && tabName === 'live') this.loadLivePanel();
     if (!shouldSkipLoad && tabName === 'defense') this.loadDefenseInfo();
     if (!shouldSkipLoad && tabName === 'shop') this.loadShop();
+  },
+  handleTabKeydown(event) {
+    const currentTab = event?.target?.closest?.('#pvp-screen .rune-tab[data-pvp-tab]');
+    if (!currentTab) return;
+    const tabs = Array.from(document.querySelectorAll('#pvp-screen .rune-tab[data-pvp-tab]'));
+    const currentIndex = tabs.indexOf(currentTab);
+    if (currentIndex < 0) return;
+    let nextIndex = currentIndex;
+    if (event.key === 'ArrowRight' || event.key === 'ArrowDown') {
+      nextIndex = (currentIndex + 1) % tabs.length;
+    } else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') {
+      nextIndex = (currentIndex - 1 + tabs.length) % tabs.length;
+    } else if (event.key === 'Home') {
+      nextIndex = 0;
+    } else if (event.key === 'End') {
+      nextIndex = tabs.length - 1;
+    } else {
+      return;
+    }
+    event.preventDefault();
+    const nextTab = tabs[nextIndex];
+    this.switchTab(nextTab.dataset.pvpTab);
+    nextTab.focus({ preventScroll: true });
   },
   getLiveSession() {
     this.ensureLiveLifecycleBindings();
@@ -4458,9 +4508,12 @@ export const PVPScene = {
   activateLiveReplayShareViewerSurface() {
     if (typeof document === 'undefined') return;
     this.activeTab = 'live';
-    document.querySelectorAll('.rune-tab').forEach(btn => btn.classList.remove('active'));
-    const liveTabButton = document.querySelector('.rune-tab[data-pvp-tab="live"]');
-    if (liveTabButton) liveTabButton.classList.add('active');
+    document.querySelectorAll('.rune-tab').forEach(btn => {
+      const active = btn.dataset.pvpTab === 'live';
+      btn.classList.toggle('active', active);
+      btn.setAttribute('aria-selected', active ? 'true' : 'false');
+      btn.tabIndex = active ? 0 : -1;
+    });
     document.querySelectorAll('.pvp-tab-pane').forEach(el => {
       el.classList.remove('active');
       el.style.display = '';
@@ -7011,13 +7064,18 @@ export const PVPScene = {
   },
   async findMatch() {
     if (this.isMatching) {
-      Utils.showBattleLog("正在匹配中，请稍候...");
+      const message = "正在匹配中，请稍候...";
+      Utils.showBattleLog(message);
+      this.showRankingActionStatus(message, 'warning');
       return;
     }
+    let finalFeedback = null;
     this.setMatchingState(true);
     try {
       if (!PVPService || typeof PVPService.findOpponent !== 'function') {
-        Utils.showBattleLog("匹配服务未就绪");
+        const message = "匹配服务未就绪";
+        Utils.showBattleLog(message);
+        finalFeedback = { message, tone: 'error' };
         return;
       }
       if (!PVPService.currentRankData) await PVPService.syncRank();
@@ -7064,32 +7122,46 @@ export const PVPScene = {
             forcePractice: !!(result.opponent.rank && result.opponent.rank.isLocal)
           });
         }
+        let successMessage = '已锁定镜像练习对手';
         if (result.opponent && result.opponent.rank && result.opponent.rank.isLocal) {
-          Utils.showBattleLog(preferredRank ? "已按焦点目标切入镜像练习" : "已进入离线练习匹配");
+          successMessage = preferredRank ? "已按焦点目标切入镜像练习" : "已进入离线练习匹配";
+          Utils.showBattleLog(successMessage);
         } else if (result.opponent && result.opponent.matchIntent) {
-          Utils.showBattleLog(`已锁定：${result.opponent.matchIntent.targetName} · ${result.opponent.matchIntent.modeLabel}`);
+          successMessage = `已锁定：${result.opponent.matchIntent.targetName} · ${result.opponent.matchIntent.modeLabel}`;
+          Utils.showBattleLog(successMessage);
         }
+        this.setMatchingState(false);
+        this.showRankingActionStatus(successMessage, 'success');
         this.startPVPBattle(result.opponent);
       } else {
-        Utils.showBattleLog(result.message || "未找到合适的对手");
+        const message = result.message || "未找到合适的对手";
+        Utils.showBattleLog(message);
+        finalFeedback = { message, tone: 'error' };
       }
     } catch (e) {
       console.error("PVP matching failed:", e);
-      Utils.showBattleLog("匹配失败，请稍后重试");
+      const message = "匹配失败，请稍后重试";
+      Utils.showBattleLog(message);
+      finalFeedback = { message, tone: 'error' };
     } finally {
-      this.setMatchingState(false);
+      if (this.isMatching) this.setMatchingState(false);
+      if (finalFeedback) this.showRankingActionStatus(finalFeedback.message, finalFeedback.tone);
     }
   },
   startPVPBattle(opponentData) {
     try {
       const gameRef = this.getGameRef();
       if (!gameRef) {
-        Utils.showBattleLog("游戏实例未就绪，无法开始 PvP");
+        const message = "游戏实例未就绪，无法开始 PvP";
+        Utils.showBattleLog(message);
+        this.showRankingActionStatus(message, 'error');
         return;
       }
       if (!opponentData || !opponentData.battleData) {
         console.error("Opponent data invalid", opponentData);
-        Utils.showBattleLog("对手数据异常，无法开始");
+        const message = "对手数据异常，无法开始";
+        Utils.showBattleLog(message);
+        this.showRankingActionStatus(message, 'error');
         return;
       }
       const ghostData = opponentData.battleData;
@@ -7136,12 +7208,16 @@ export const PVPScene = {
         gameRef.battle.init([ghost]);
       } else {
         console.error("Battle module not ready");
-        Utils.showBattleLog("战斗模块初始化失败");
+        const message = "战斗模块初始化失败";
+        Utils.showBattleLog(message);
+        this.showRankingActionStatus(message, 'error');
         gameRef.showScreen('index'); // Return to safe screen
       }
     } catch (e) {
       console.error("PVP Start Crash:", e);
-      Utils.showBattleLog("切磋启动失败，请查看控制台");
+      const message = "切磋启动失败，请查看控制台";
+      Utils.showBattleLog(message);
+      this.showRankingActionStatus(message, 'error');
       const gameRef = this.getGameRef();
       if (gameRef) {
         gameRef.mode = 'pve';
@@ -7353,12 +7429,9 @@ export const PVPScene = {
 
     // Update Sidebar UI
     document.querySelectorAll('.shop-category').forEach(el => {
-      el.classList.remove('active');
-      // Simple check for onclick attribute content
-      const clickAttr = el.getAttribute('onclick');
-      if (clickAttr && clickAttr.includes(`'${category}'`)) {
-        el.classList.add('active');
-      }
+      const active = String(el.dataset.shopCategory || '') === String(category || 'all');
+      el.classList.toggle('active', active);
+      el.setAttribute('aria-pressed', active ? 'true' : 'false');
     });
   },
   loadShop() {
@@ -7483,6 +7556,7 @@ export const PVPScene = {
     const stockText = remaining === null ? '不限量' : `剩余 ${remaining}/${Math.max(0, Math.floor(Number(item.stock) || 0))}`;
     let buyText = '兑换';
     if (state.reason === 'owned') buyText = '已拥有';else if (state.reason === 'equippable') buyText = '佩戴';else if (state.reason === 'equipped') buyText = '卸下';else if (state.reason === 'sold_out') buyText = '已售罄';else if (state.reason === 'insufficient') buyText = '币不足';
+    const actionAvailable = state.buyable || state.reason === 'equippable' || state.reason === 'equipped';
     el.innerHTML = `
             <div class="talisman-top-decor"></div>
             <div class="talisman-icon-area">
@@ -7498,14 +7572,17 @@ export const PVPScene = {
                 </div>
                 <div class="shop-stock-info">${stockText}</div>
             </div>
-            <div class="buy-overlay ${state.buyable ? 'buyable' : `state-${state.reason || 'locked'}`}" data-state="${state.reason || 'locked'}">
+            <button type="button" class="buy-overlay ${state.buyable ? 'buyable' : `state-${state.reason || 'locked'}`}"
+                data-state="${state.reason || 'locked'}"
+                aria-label="${renderEscapeHtml(`${buyText} ${item.name || '商品'}`)}"
+                ${actionAvailable ? '' : 'disabled'}>
                 <span class="buy-btn-text">${buyText}</span>
-            </div>
+            </button>
         `;
     const overlay = el.querySelector('.buy-overlay');
     if (overlay) {
       overlay.dataset.itemId = item.id || '';
-      if (state.buyable || state.reason === 'equippable' || state.reason === 'equipped') {
+      if (actionAvailable) {
         overlay.addEventListener('click', () => this.purchaseShopItem(item.id));
       }
     }
@@ -7514,14 +7591,18 @@ export const PVPScene = {
   purchaseShopItem(itemId) {
     if (!itemId) return;
     if (typeof PVPService === 'undefined' || !PVPService || typeof PVPService.handleShopItemAction !== 'function') {
-      Utils.showBattleLog('商店服务未就绪');
+      const message = '商店服务未就绪';
+      Utils.showBattleLog(message);
+      this.showShopActionStatus(message, 'error');
       return;
     }
     const result = PVPService.handleShopItemAction(itemId, {
       game: this.getGameRef()
     });
     if (result && result.success) {
-      Utils.showBattleLog(result.message || '兑换成功');
+      const message = result.message || '兑换成功';
+      Utils.showBattleLog(message);
+      this.showShopActionStatus(message, 'success');
       if (result.wallet && typeof result.wallet.coins === 'number') {
         const walletEl = document.getElementById('shop-wallet-amount');
         if (walletEl) walletEl.textContent = Math.max(0, Math.floor(result.wallet.coins));
@@ -7535,7 +7616,9 @@ export const PVPScene = {
         gameRef.autoSave();
       }
     } else {
-      Utils.showBattleLog(result && result.message ? result.message : '兑换失败');
+      const message = result && result.message ? result.message : '兑换失败';
+      Utils.showBattleLog(message);
+      this.showShopActionStatus(message, 'error');
     }
     this.loadShop();
   }

@@ -172,26 +172,31 @@
 
         <div class="pvp-layout-split">
             <!-- Left: Navigation Runes -->
-            <div class="pvp-nav-sidebar">
-                <button class="rune-tab" data-pvp-tab="ranking" onclick="PVPScene.switchTab('ranking')">
+            <div class="pvp-nav-sidebar" role="tablist" aria-label="论道分页"
+                onkeydown="PVPScene.handleTabKeydown(event)">
+                <button id="pvp-tab-ranking" class="rune-tab" type="button" role="tab" tabindex="-1" aria-selected="false"
+                    aria-controls="tab-ranking" data-pvp-tab="ranking" onclick="PVPScene.switchTab('ranking')">
                     <div class="rune-icon-container">
                         <span class="rune-icon">📜</span>
                     </div>
                     <span class="rune-name">天道榜</span>
                 </button>
-                <button class="rune-tab active" data-pvp-tab="live" onclick="PVPScene.switchTab('live')">
+                <button id="pvp-tab-live" class="rune-tab active" type="button" role="tab" tabindex="0" aria-selected="true"
+                    aria-controls="tab-live" data-pvp-tab="live" onclick="PVPScene.switchTab('live')">
                     <div class="rune-icon-container">
                         <span class="rune-icon">⚔️</span>
                     </div>
                     <span class="rune-name">实时论道</span>
                 </button>
-                <button class="rune-tab" onclick="PVPScene.switchTab('defense')">
+                <button id="pvp-tab-defense" class="rune-tab" type="button" role="tab" tabindex="-1" aria-selected="false"
+                    aria-controls="tab-defense" data-pvp-tab="defense" onclick="PVPScene.switchTab('defense')">
                     <div class="rune-icon-container">
                         <span class="rune-icon">🛡️</span>
                     </div>
                     <span class="rune-name">护山阵</span>
                 </button>
-                <button class="rune-tab" onclick="PVPScene.switchTab('shop')">
+                <button id="pvp-tab-shop" class="rune-tab" type="button" role="tab" tabindex="-1" aria-selected="false"
+                    aria-controls="tab-shop" data-pvp-tab="shop" onclick="PVPScene.switchTab('shop')">
                     <div class="rune-icon-container">
                         <span class="rune-icon">🏯</span>
                     </div>
@@ -202,7 +207,8 @@
             <!-- Right: Content Area -->
             <div class="pvp-content-container">
                 <!-- Ranking Tab -->
-                <div id="tab-ranking" class="pvp-tab-pane pvp-legacy-ranking-pane">
+                <div id="tab-ranking" class="pvp-tab-pane pvp-legacy-ranking-pane" role="tabpanel"
+                    aria-labelledby="pvp-tab-ranking">
                     <div id="pvp-ranking-brief" class="pvp-risk-brief" data-risk-tier="none">
                         <div class="pvp-risk-kicker">镜像练习 · 天道榜入口</div>
                         <div class="pvp-risk-title">选择一名榜单残影，查看读题建议并进行镜像练习</div>
@@ -217,7 +223,7 @@
                     </div>
 
                     <div class="pvp-nav-footer">
-                        <div class="challenge-intent-line" id="pvp-challenge-intent">镜像练习不是真人排位；未锁定焦点目标时，将自动按榜位推演对手。</div>
+                        <div class="challenge-intent-line" id="pvp-challenge-intent" role="status" aria-live="polite">镜像练习不是真人排位；未锁定焦点目标时，将自动按榜位推演对手。</div>
                         <button class="challenge-btn pulse" data-pvp-legacy-practice onclick="PVPScene.findMatch()">
                             <span class="btn-glow"></span>
                             <span class="text">🧪 镜像练习</span>
@@ -226,7 +232,8 @@
                 </div>
 
                 <!-- Live PVP Tab -->
-                <div id="tab-live" class="pvp-tab-pane pvp-live-shell active" data-live-pvp-root data-live-phase="idle">
+                <div id="tab-live" class="pvp-tab-pane pvp-live-shell active" role="tabpanel"
+                    aria-labelledby="pvp-tab-live" data-live-pvp-root data-live-phase="idle">
                     <div class="pvp-risk-brief pvp-live-status-card">
                         <div class="pvp-risk-kicker">实时论道 · 服务端权威</div>
                         <div class="pvp-risk-header">
@@ -338,7 +345,7 @@
                         </div>
                     </div>
                     <div class="pvp-nav-footer pvp-live-footer">
-                        <div class="challenge-intent-line" data-live-last-error>实时论道不会自动匹配残影；没有真人时可取消排队。</div>
+                        <div class="challenge-intent-line" data-live-last-error role="status" aria-live="polite">实时论道不会自动匹配残影；没有真人时可取消排队。</div>
                         <div class="pvp-live-action-bar pvp-live-command-rail" data-live-command-rail aria-label="实时论道操作">
                             <div class="pvp-live-command-group" data-live-command-group="queue" aria-label="排位队列">
                                 <button class="challenge-btn" data-live-action="join-queue" onclick="PVPScene.joinLiveQueue()">
@@ -381,7 +388,8 @@
 
                 <!-- Defense Tab -->
                 <!-- Defense Tab (Hushan Formation) -->
-                <div id="tab-defense" class="pvp-tab-pane" style="display:none;">
+                <div id="tab-defense" class="pvp-tab-pane" role="tabpanel" aria-labelledby="pvp-tab-defense"
+                    style="display:none;">
                     <div class="defense-layout-split">
                         <!-- Left: Formation Visualizer -->
                         <div class="formation-visualizer-panel">
@@ -472,26 +480,31 @@
             </div>
 
             <!-- Shop Tab (Zhutian Pavilion) -->
-            <div id="tab-shop" class="pvp-tab-pane" style="display:none;">
+            <div id="tab-shop" class="pvp-tab-pane" role="tabpanel" aria-labelledby="pvp-tab-shop"
+                style="display:none;">
                 <div class="shop-layout">
                     <!-- Left: Categories -->
                     <div class="shop-sidebar">
-                        <div class="shop-category active" onclick="PVPScene.filterShop('all')">
+                        <button type="button" class="shop-category active" data-shop-category="all" aria-pressed="true"
+                            onclick="PVPScene.filterShop('all')">
                             <span class="cat-icon">💠</span>
                             <span class="cat-name">全部</span>
-                        </div>
-                        <div class="shop-category" onclick="PVPScene.filterShop('cards')">
+                        </button>
+                        <button type="button" class="shop-category" data-shop-category="cards" aria-pressed="false"
+                            onclick="PVPScene.filterShop('cards')">
                             <span class="cat-icon">📜</span>
                             <span class="cat-name">秘籍</span>
-                        </div>
-                        <div class="shop-category" onclick="PVPScene.filterShop('items')">
+                        </button>
+                        <button type="button" class="shop-category" data-shop-category="items" aria-pressed="false"
+                            onclick="PVPScene.filterShop('items')">
                             <span class="cat-icon">💊</span>
                             <span class="cat-name">丹药</span>
-                        </div>
-                        <div class="shop-category" onclick="PVPScene.filterShop('cosmetics')">
+                        </button>
+                        <button type="button" class="shop-category" data-shop-category="cosmetics" aria-pressed="false"
+                            onclick="PVPScene.filterShop('cosmetics')">
                             <span class="cat-icon">👘</span>
                             <span class="cat-name">外观</span>
-                        </div>
+                        </button>
                     </div>
 
                     <!-- Right: Content -->
@@ -508,6 +521,7 @@
                             <div class="shop-meta-item" id="shop-cosmetic-status">称号：未佩戴 ｜ 外观：未佩戴</div>
                             <div class="shop-meta-item" id="shop-reward-status">连胜 0 ｜ 下场胜利预估 +0 天道币（倍率 x1.00）</div>
                         </div>
+                        <div class="shop-action-status" id="shop-action-status" role="status" aria-live="polite"></div>
                         <div class="shop-activity-log" id="shop-activity-log">
                             <div class="shop-log-empty">暂无交易记录</div>
                         </div>
@@ -656,48 +670,58 @@
                                     <input id="law-codex-search" type="search" placeholder="输入法则名、元素、共鸣或描述关键词"
                                         oninput="game.setLawCodexSearchQuery(this.value)">
                                 </label>
-                                <label class="compendium-control">
-                                    <span>收录状态</span>
-                                    <select id="law-codex-status-filter" onchange="game.setLawCodexStatusFilter(this.value)">
-                                        <option value="all">全部法则</option>
-                                        <option value="owned">仅已掌握</option>
-                                        <option value="unowned">仅未掌握</option>
-                                    </select>
-                                </label>
-                                <label class="compendium-control">
-                                    <span>元素</span>
-                                    <select id="law-codex-element-filter" onchange="game.setLawCodexElementFilter(this.value)">
-                                        <option value="all">全部元素</option>
-                                        <option value="thunder">雷</option>
-                                        <option value="fire">火</option>
-                                        <option value="ice">冰</option>
-                                        <option value="sword">剑</option>
-                                        <option value="void">虚空</option>
-                                        <option value="chaos">混沌</option>
-                                        <option value="blood">血</option>
-                                        <option value="life">生命</option>
-                                        <option value="earth">土</option>
-                                        <option value="wind">风</option>
-                                        <option value="time">时间</option>
-                                        <option value="space">空间</option>
-                                        <option value="karma">因果</option>
-                                        <option value="reversal">逆转</option>
-                                        <option value="metal">金</option>
-                                        <option value="wood">木</option>
-                                    </select>
-                                </label>
-                                <label class="compendium-control">
-                                    <span>共鸣进度</span>
-                                    <select id="law-codex-resonance-filter" onchange="game.setLawCodexResonanceFilter(this.value)">
-                                        <option value="all">全部共鸣状态</option>
-                                        <option value="active">已激活</option>
-                                        <option value="ready">待装配</option>
-                                        <option value="near">差 1 枚</option>
-                                        <option value="locked">未成型</option>
-                                    </select>
-                                </label>
-                                <button type="button" class="compendium-chip utility" id="law-codex-filter-clear"
-                                    onclick="game.clearLawCodexFilters()">清空检索</button>
+                                <div class="codex-filter-disclosure">
+                                    <button type="button" class="codex-filter-toggle" aria-expanded="false"
+                                        aria-controls="law-codex-filter-options"
+                                        onclick="this.setAttribute('aria-expanded', document.getElementById('law-codex-filter-options').classList.toggle('is-open'))">
+                                        <span>筛选条件</span>
+                                        <span class="codex-filter-summary">状态 · 元素 · 共鸣</span>
+                                    </button>
+                                    <div class="codex-filter-options" id="law-codex-filter-options">
+                                        <label class="compendium-control">
+                                            <span>收录状态</span>
+                                            <select id="law-codex-status-filter" onchange="game.setLawCodexStatusFilter(this.value)">
+                                                <option value="all">全部法则</option>
+                                                <option value="owned">仅已掌握</option>
+                                                <option value="unowned">仅未掌握</option>
+                                            </select>
+                                        </label>
+                                        <label class="compendium-control">
+                                            <span>元素</span>
+                                            <select id="law-codex-element-filter" onchange="game.setLawCodexElementFilter(this.value)">
+                                                <option value="all">全部元素</option>
+                                                <option value="thunder">雷</option>
+                                                <option value="fire">火</option>
+                                                <option value="ice">冰</option>
+                                                <option value="sword">剑</option>
+                                                <option value="void">虚空</option>
+                                                <option value="chaos">混沌</option>
+                                                <option value="blood">血</option>
+                                                <option value="life">生命</option>
+                                                <option value="earth">土</option>
+                                                <option value="wind">风</option>
+                                                <option value="time">时间</option>
+                                                <option value="space">空间</option>
+                                                <option value="karma">因果</option>
+                                                <option value="reversal">逆转</option>
+                                                <option value="metal">金</option>
+                                                <option value="wood">木</option>
+                                            </select>
+                                        </label>
+                                        <label class="compendium-control">
+                                            <span>共鸣进度</span>
+                                            <select id="law-codex-resonance-filter" onchange="game.setLawCodexResonanceFilter(this.value)">
+                                                <option value="all">全部共鸣状态</option>
+                                                <option value="active">已激活</option>
+                                                <option value="ready">待装配</option>
+                                                <option value="near">差 1 枚</option>
+                                                <option value="locked">未成型</option>
+                                            </select>
+                                        </label>
+                                        <button type="button" class="compendium-chip utility" id="law-codex-filter-clear"
+                                            onclick="game.clearLawCodexFilters()">清空检索</button>
+                                    </div>
+                                </div>
                             </div>
 
                             <div class="codex-section">
@@ -829,6 +853,9 @@
                                     </select>
                                 </label>
                             </div>
+
+                            <section class="chapter-codex-quick-action" id="chapter-codex-quick-action"
+                                aria-live="polite"></section>
 
                             <div class="codex-section">
                                 <div class="codex-section-header">
@@ -1651,6 +1678,7 @@
                             <div id="reward-run-path-meta" class="reward-run-path-meta" style="display:none;"></div>
                         </div>
                         <div class="reward-actions reward-panel">
+                            <div id="reward-next-step-card" class="reward-next-step-card" role="status" aria-live="polite"></div>
                             <button class="continue-btn" id="continue-reward-btn" onclick="game.continueAfterReward()"
                                 disabled>请先选择一张卡牌</button>
                             <button class="skip-reward-btn" onclick="game.skipRewardCard()">跳过卡牌 (扣20灵石)</button>

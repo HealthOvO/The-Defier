@@ -5353,12 +5353,26 @@ const collectionHubMethods = Object.create(null);
     if (subtitleEl) subtitleEl.textContent = meta.subtitle;
     this.renderRewardSeasonBoardHandoffArrival(state.section);
     this.renderSeasonBoardTaskFollowArrival(state.section);
+    let activeTabButton = null;
     document.querySelectorAll('#collection [data-collection-tab]').forEach(button => {
-      button.classList.toggle('active', button.dataset.collectionTab === state.section);
+      const active = button.dataset.collectionTab === state.section;
+      button.classList.toggle('active', active);
+      if (active) activeTabButton = button;
     });
     document.querySelectorAll('#collection [data-collection-panel]').forEach(panel => {
       panel.classList.toggle('active', panel.dataset.collectionPanel === state.section);
     });
+    if (activeTabButton && typeof window !== 'undefined' && window.matchMedia?.('(max-width: 768px)').matches) {
+      const tabRail = activeTabButton.parentElement;
+      if (tabRail && typeof tabRail.scrollTo === 'function') {
+        const centeredLeft = activeTabButton.offsetLeft - (tabRail.clientWidth - activeTabButton.offsetWidth) / 2;
+        const maxScrollLeft = Math.max(0, tabRail.scrollWidth - tabRail.clientWidth);
+        tabRail.scrollTo({
+          left: Math.min(maxScrollLeft, Math.max(0, centeredLeft)),
+          behavior: 'auto'
+        });
+      }
+    }
   };
   collectionHubMethods.renderSpiritCodex = function () {
     if (typeof document === 'undefined') return;
@@ -5466,6 +5480,7 @@ const collectionHubMethods = Object.create(null);
     if (typeof document === 'undefined') return;
     const grid = document.getElementById('chapter-codex-grid');
     const detail = document.getElementById('chapter-codex-detail');
+    const quickAction = document.getElementById('chapter-codex-quick-action');
     const summary = document.getElementById('chapter-codex-summary');
     const hints = document.getElementById('chapter-codex-hints');
     const searchInput = document.getElementById('chapter-codex-search');
@@ -5500,9 +5515,27 @@ const collectionHubMethods = Object.create(null);
             `).join('') : '<div class="codex-empty-state">当前检索条件下没有匹配的章节档案。</div>';
     if (!selected) {
       detail.innerHTML = '<div class="codex-empty-state">暂无章节档案。</div>';
+      if (quickAction) quickAction.innerHTML = '';
       return;
     }
     const drillFocus = typeof this.buildChapterCodexTrainingFocus === 'function' ? this.buildChapterCodexTrainingFocus(selected) : null;
+    const drillModesMarkup = drillFocus ? this.getChapterCodexDrillModes().map(mode => `<button type="button" class="collection-inline-btn"
+        data-collection-action="apply-chapter-drill-focus"
+        data-chapter-quick-action="true"
+        data-chapter-id="${escapeHtml(selected.id)}"
+        data-challenge-mode="${escapeHtml(mode.mode)}"
+        aria-label="将${escapeHtml(selected.fullName)}设为${escapeHtml(mode.shortLabel)}章节演练"
+        title="${escapeHtml(mode.description)}">${escapeHtml(mode.shortLabel)}</button>`).join('') : '';
+    if (quickAction) {
+      quickAction.innerHTML = drillFocus ? `
+            <div class="chapter-codex-quick-copy">
+                <span class="codex-side-kicker">当前章节演练</span>
+                <strong>${escapeHtml(selected.fullName)}</strong>
+                <span>${escapeHtml(drillFocus.themeLabel || '章节复盘')} · 选择观星赛道后直接开始</span>
+            </div>
+            <div class="collection-action-row">${drillModesMarkup}</div>
+        ` : '';
+    }
     detail.innerHTML = `
             <div class="collection-detail-shell">
                 <section class="collection-detail-hero">

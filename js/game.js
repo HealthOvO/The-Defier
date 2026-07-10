@@ -4745,13 +4745,16 @@ export class Game {
       : {
           tab: safeTab
         };
-    this.showScreen('challenge-screen');
-    return this.ensureChallengeHubLoaded().then(hub => {
+    const routeToLoadedHub = () => this.ensureChallengeHubLoaded().then(hub => {
       if (hub && typeof hub.showChallengeHub === 'function') {
         hub.showChallengeHub(safeTab);
+      } else {
+        this.showScreen('challenge-screen');
       }
       return hub;
     });
+    this.showScreen('challenge-screen');
+    return routeToLoadedHub();
   }
   initChallengeHub() {
     if (this.challengeHub && typeof this.challengeHub.initChallengeHub === 'function') {

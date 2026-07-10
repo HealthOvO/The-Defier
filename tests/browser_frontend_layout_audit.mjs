@@ -21,7 +21,8 @@ const reportLogMode = String(
 const viewports = [
   { id: 'desktop', width: 1440, height: 960, isMobile: false },
   { id: 'short', width: 1366, height: 720, isMobile: false },
-  { id: 'mobile', width: 390, height: 844, isMobile: true },
+  { id: 'mobile-390', width: 390, height: 844, isMobile: true },
+  { id: 'mobile-412', width: 412, height: 915, isMobile: true },
 ];
 
 const scenarios = [
@@ -1715,6 +1716,8 @@ async function inspectLayout(page, rootSelector, scenarioId) {
     let treasureDetailModalProbe = null;
     let lawDetailModalProbe = null;
     let rewardModalProbe = null;
+    let pvpLiveMobileProbe = null;
+    let collectionLawsMobileProbe = null;
     const readHitState = (element) => {
       const rect = element ? element.getBoundingClientRect() : null;
       const point = rect ? {
@@ -2322,6 +2325,160 @@ async function inspectLayout(page, rootSelector, scenarioId) {
         });
       }
     }
+    if (scenarioId === 'pvp-screen' && viewport.width <= 520) {
+      const header = document.querySelector('#pvp-screen .screen-header');
+      const nav = document.querySelector('#pvp-screen .pvp-nav-sidebar');
+      const statusCard = root.querySelector('.pvp-live-status-card');
+      const joinQueueButton = root.querySelector('[data-live-action="join-queue"]');
+      const headerRect = header ? header.getBoundingClientRect() : null;
+      const navRect = nav ? nav.getBoundingClientRect() : null;
+      const statusRect = statusCard ? statusCard.getBoundingClientRect() : null;
+      const joinQueueHit = readHitState(joinQueueButton);
+      const topChromeTop = Math.min(
+        headerRect?.top ?? Number.POSITIVE_INFINITY,
+        navRect?.top ?? Number.POSITIVE_INFINITY,
+      );
+      const topChromeBottom = Math.max(
+        headerRect?.bottom ?? Number.NEGATIVE_INFINITY,
+        navRect?.bottom ?? Number.NEGATIVE_INFINITY,
+      );
+      const topChromeFootprint = Number.isFinite(topChromeTop) && Number.isFinite(topChromeBottom)
+        ? Math.round((topChromeBottom - topChromeTop) * 10) / 10
+        : null;
+      pvpLiveMobileProbe = {
+        headerRect: headerRect ? rectObj(headerRect) : null,
+        navRect: navRect ? rectObj(navRect) : null,
+        statusRect: statusRect ? rectObj(statusRect) : null,
+        joinQueueRect: joinQueueHit.rect,
+        joinQueueVisible: !!(joinQueueButton && isVisible(joinQueueButton)),
+        joinQueueInViewport: rectFitsViewport(joinQueueHit.rect, 2),
+        joinQueueTopHit: joinQueueHit.topHit,
+        joinQueueTopAt: joinQueueHit.topSelector,
+        joinQueueBeforeStatus: !!(joinQueueHit.rect && statusRect && joinQueueHit.rect.bottom <= statusRect.top + 2),
+        topChromeFootprint,
+        topChromeMax: Math.round(viewport.height * 0.34 * 10) / 10,
+      };
+      if (
+        !pvpLiveMobileProbe.headerRect
+        || !pvpLiveMobileProbe.navRect
+        || !pvpLiveMobileProbe.statusRect
+        || !pvpLiveMobileProbe.joinQueueVisible
+        || !pvpLiveMobileProbe.joinQueueInViewport
+        || !pvpLiveMobileProbe.joinQueueTopHit
+        || !pvpLiveMobileProbe.joinQueueBeforeStatus
+        || !Number.isFinite(pvpLiveMobileProbe.topChromeFootprint)
+        || pvpLiveMobileProbe.topChromeFootprint > pvpLiveMobileProbe.topChromeMax
+      ) {
+        issues.push({
+          type: 'pvp-live-mobile-entry-visibility-invalid',
+          selector: '[data-live-pvp-root]',
+          detail: pvpLiveMobileProbe,
+        });
+      }
+    }
+    if (scenarioId === 'collection-laws' && viewport.width <= 520) {
+      const tabBar = root.querySelector('.collection-tab-bar');
+      const toggle = root.querySelector('.codex-filter-toggle[aria-expanded]');
+      const disclosure = root.querySelector('.codex-filter-disclosure');
+      const options = root.querySelector('#law-codex-filter-options.codex-filter-options');
+      const toolbar = root.querySelector('.codex-toolbar');
+      const firstSection = root.querySelector('[data-collection-panel="laws"].active .codex-section, .collection-tab-panel.active .codex-section');
+      const tabButtons = Array.from(root.querySelectorAll('.collection-tab-bar .collection-tab-btn')).filter(isVisible);
+      const toggleHit = readHitState(toggle);
+      const tabButtonRects = tabButtons.map((button) => button.getBoundingClientRect());
+      const tabButtonTops = tabButtonRects.map((rect) => Math.round(rect.top * 10) / 10);
+      const tabBarStyle = tabBar ? getComputedStyle(tabBar) : null;
+      const initialOptionsVisible = !!(options && isVisible(options));
+      const initialExpanded = toggle?.getAttribute('aria-expanded') || '';
+      const firstSectionRect = firstSection ? firstSection.getBoundingClientRect() : null;
+      const initial = {
+        tabBarRect: tabBar ? rectObj(tabBar.getBoundingClientRect()) : null,
+        tabBarScrollWidth: tabBar?.scrollWidth || 0,
+        tabBarClientWidth: tabBar?.clientWidth || 0,
+        tabBarScrollHeight: tabBar?.scrollHeight || 0,
+        tabBarClientHeight: tabBar?.clientHeight || 0,
+        tabBarOverflowX: tabBarStyle?.overflowX || '',
+        tabBarFlexWrap: tabBarStyle?.flexWrap || '',
+        tabButtonCount: tabButtons.length,
+        tabButtonTops,
+        disclosureVisible: !!(disclosure && isVisible(disclosure)),
+        toggleVisible: !!(toggle && isVisible(toggle)),
+        toggleTopHit: toggleHit.topHit,
+        toggleTopAt: toggleHit.topSelector,
+        toggleAriaExpanded: initialExpanded,
+        optionsPresent: !!options,
+        optionsVisible: initialOptionsVisible,
+        optionsOpenClass: !!options?.classList.contains('is-open'),
+        firstSectionRect: firstSectionRect ? rectObj(firstSectionRect) : null,
+        firstSectionTopOk: !!(firstSectionRect && firstSectionRect.top >= -2 && firstSectionRect.top <= viewport.height * 0.82),
+      };
+
+      let expanded = null;
+      if (toggle) toggle.click();
+
+      const interactiveControls = Array.from(options?.querySelectorAll('input, select, button, [role="button"]') || [])
+        .filter(isVisible);
+      const controlProbes = interactiveControls.map((control) => {
+        const hit = readHitState(control);
+        return {
+          selector: selectorFor(control),
+          rect: hit.rect,
+          topHit: hit.topHit,
+          topAt: hit.topSelector,
+          scrollWidth: control.scrollWidth,
+          clientWidth: control.clientWidth,
+        };
+      });
+      expanded = {
+        toggleAriaExpanded: toggle?.getAttribute('aria-expanded') || '',
+        optionsVisible: !!(options && isVisible(options)),
+        optionsOpenClass: !!options?.classList.contains('is-open'),
+        optionsRect: options ? rectObj(options.getBoundingClientRect()) : null,
+        optionsScrollWidth: options?.scrollWidth || 0,
+        optionsClientWidth: options?.clientWidth || 0,
+        toolbarRect: toolbar ? rectObj(toolbar.getBoundingClientRect()) : null,
+        toolbarScrollWidth: toolbar?.scrollWidth || 0,
+        toolbarClientWidth: toolbar?.clientWidth || 0,
+        controls: controlProbes,
+      };
+
+      collectionLawsMobileProbe = {
+        initial,
+        expanded,
+      };
+      const tabBarSingleLine = tabButtonTops.length > 0 && Math.max(...tabButtonTops) - Math.min(...tabButtonTops) <= 8;
+      const tabBarHorizontalScroll = !!tabBar
+        && /(auto|scroll|overlay)/.test(initial.tabBarOverflowX)
+        && initial.tabBarFlexWrap === 'nowrap'
+        && initial.tabBarScrollWidth > initial.tabBarClientWidth + 8;
+      const expandedControlsOk = expanded.controls.length >= 4
+        && expanded.controls.every((control) => control.topHit && control.scrollWidth <= control.clientWidth + 2);
+      if (
+        !initial.tabBarRect
+        || !tabBarSingleLine
+        || !tabBarHorizontalScroll
+        || !initial.disclosureVisible
+        || !initial.toggleVisible
+        || !initial.toggleTopHit
+        || initial.toggleAriaExpanded !== 'false'
+        || !initial.optionsPresent
+        || initial.optionsVisible
+        || initial.optionsOpenClass
+        || !initial.firstSectionTopOk
+        || expanded.toggleAriaExpanded !== 'true'
+        || !expanded.optionsVisible
+        || !expanded.optionsOpenClass
+        || expanded.optionsScrollWidth > expanded.optionsClientWidth + 2
+        || expanded.toolbarScrollWidth > expanded.toolbarClientWidth + 2
+        || !expandedControlsOk
+      ) {
+        issues.push({
+          type: 'collection-laws-mobile-filter-disclosure-invalid',
+          selector: '#collection',
+          detail: collectionLawsMobileProbe,
+        });
+      }
+    }
     if (scenarioId === 'save-slots-modal') {
       const content = root.querySelector('.modal-content');
       const slots = Array.from(root.querySelectorAll('.save-slot')).filter(isVisible);
@@ -2798,6 +2955,8 @@ async function inspectLayout(page, rootSelector, scenarioId) {
       treasureDetailModalProbe,
       lawDetailModalProbe,
       rewardModalProbe,
+      pvpLiveMobileProbe,
+      collectionLawsMobileProbe,
       rootRect: rectObj(rootRect),
     };
   }, { rootSelector, scenarioId });
@@ -2926,6 +3085,559 @@ async function inspectBattleLogStress(page, rootSelector, scenarioId) {
       targetCount: targets.length,
     };
   }, { rootSelector, scenarioId });
+}
+
+async function inspectPvpTabMobileSurface(page, scenarioId) {
+  if (scenarioId !== 'pvp-screen') {
+    return { ok: true, skipped: true };
+  }
+
+  return page.evaluate(async () => {
+    const viewport = { width: window.innerWidth, height: window.innerHeight };
+    if (viewport.width > 520) {
+      return { ok: true, skipped: true, viewport };
+    }
+    if (!window.PVPScene || typeof window.PVPScene.switchTab !== 'function') {
+      return {
+        ok: false,
+        skipped: false,
+        viewport,
+        issues: [{ type: 'missing-pvp-scene-switch-tab' }],
+      };
+    }
+
+    const issues = [];
+    const waitForPaint = () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    const waitForMs = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+    const rectObj = (rect) => ({
+      left: Math.round(rect.left * 10) / 10,
+      top: Math.round(rect.top * 10) / 10,
+      right: Math.round(rect.right * 10) / 10,
+      bottom: Math.round(rect.bottom * 10) / 10,
+      width: Math.round(rect.width * 10) / 10,
+      height: Math.round(rect.height * 10) / 10,
+    });
+    const selectorFor = (el) => {
+      if (!el) return '';
+      if (el.id) return `#${el.id}`;
+      const classes = Array.from(el.classList || []).slice(0, 3).join('.');
+      return `${el.tagName.toLowerCase()}${classes ? `.${classes}` : ''}`;
+    };
+    const hasHiddenAncestor = (el) => {
+      let node = el;
+      while (node && node instanceof Element) {
+        const style = getComputedStyle(node);
+        if (style.display === 'none' || style.visibility === 'hidden' || Number(style.opacity) === 0) return true;
+        node = node.parentElement;
+      }
+      return false;
+    };
+    const isVisible = (el) => {
+      if (!el || !(el instanceof Element)) return false;
+      if (hasHiddenAncestor(el)) return false;
+      const style = getComputedStyle(el);
+      if (style.display === 'none' || style.visibility === 'hidden' || Number(style.opacity) === 0) return false;
+      const rect = el.getBoundingClientRect();
+      return rect.width >= 2
+        && rect.height >= 2
+        && rect.right > 0
+        && rect.bottom > 0
+        && rect.left < viewport.width
+        && rect.top < viewport.height;
+    };
+    const rectFitsViewport = (rect, tolerance = 2) => !!(rect
+      && rect.left >= -tolerance
+      && rect.top >= -tolerance
+      && rect.right <= viewport.width + tolerance
+      && rect.bottom <= viewport.height + tolerance);
+    const overlapArea = (a, b) => {
+      const width = Math.max(0, Math.min(a.right, b.right) - Math.max(a.left, b.left));
+      const height = Math.max(0, Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top));
+      return width * height;
+    };
+    const readHitState = (element) => {
+      const rect = element ? element.getBoundingClientRect() : null;
+      const point = rect ? {
+        x: Math.round(rect.left + rect.width / 2),
+        y: Math.round(rect.top + rect.height / 2),
+      } : null;
+      const inViewport = !!(point && point.x >= 0 && point.y >= 0 && point.x <= viewport.width && point.y <= viewport.height);
+      const top = inViewport ? document.elementFromPoint(point.x, point.y) : null;
+      return {
+        rect: rect ? rectObj(rect) : null,
+        point,
+        inViewport,
+        topSelector: selectorFor(top),
+        topHit: !!(element && top && (top === element || element.contains(top))),
+      };
+    };
+    const showBattleOverlays = () => {
+      if (typeof Utils !== 'undefined' && typeof Utils.showBattleLog === 'function') {
+        Utils.showBattleLog('移动端分页切换压力测试：日志不应遮挡排名、实时论道、护山阵或诸天阁入口。', {
+          category: 'system',
+          duration: 6000,
+        });
+      }
+      if (typeof Utils !== 'undefined' && typeof Utils.toggleBattleLogPanel === 'function') {
+        Utils.toggleBattleLogPanel(true);
+      }
+    };
+    const getCriticalTargets = (tab, pane) => {
+      if (!pane) return [];
+      const selectorsByTab = {
+        ranking: ['[data-pvp-legacy-practice]'],
+        live: ['[data-live-action="join-queue"]'],
+        defense: ['.ink-btn-large', '#guardian-formation', '.dao-card'],
+        shop: ['.shop-category', '.buy-overlay', '.talisman-card'],
+      };
+      const selectors = selectorsByTab[tab] || [];
+      const seen = new Set();
+      const targets = [];
+      for (const selector of selectors) {
+        for (const element of Array.from(pane.querySelectorAll(selector))) {
+          if (!isVisible(element) || seen.has(element)) continue;
+          seen.add(element);
+          targets.push(element);
+        }
+      }
+      return targets;
+    };
+    const tabs = ['ranking', 'live', 'defense', 'shop'];
+    const tabProbes = [];
+    const rankingTab = document.querySelector('.rune-tab[data-pvp-tab="ranking"]');
+    const liveTab = document.querySelector('.rune-tab[data-pvp-tab="live"]');
+    window.PVPScene.switchTab('ranking');
+    await waitForPaint();
+    rankingTab?.focus();
+    rankingTab?.dispatchEvent(new KeyboardEvent('keydown', {
+      key: 'ArrowRight',
+      bubbles: true,
+      cancelable: true,
+    }));
+    await waitForPaint();
+    const keyboardProbe = {
+      activeTab: window.PVPScene.activeTab || '',
+      focusedTab: document.activeElement?.dataset?.pvpTab || '',
+      rankingTabIndex: rankingTab?.getAttribute('tabindex') || '',
+      rankingSelected: rankingTab?.getAttribute('aria-selected') || '',
+      liveTabIndex: liveTab?.getAttribute('tabindex') || '',
+      liveSelected: liveTab?.getAttribute('aria-selected') || '',
+    };
+    if (keyboardProbe.activeTab !== 'live'
+      || keyboardProbe.focusedTab !== 'live'
+      || keyboardProbe.rankingTabIndex !== '-1'
+      || keyboardProbe.rankingSelected !== 'false'
+      || keyboardProbe.liveTabIndex !== '0'
+      || keyboardProbe.liveSelected !== 'true') {
+      issues.push({ type: 'pvp-tab-keyboard-navigation-invalid', detail: keyboardProbe });
+    }
+
+    for (const tab of tabs) {
+      showBattleOverlays();
+      await waitForPaint();
+      await window.PVPScene.switchTab(tab);
+      for (let attempt = 0; attempt < 10; attempt += 1) {
+        await waitForPaint();
+        await waitForMs(40);
+        const pane = document.getElementById(`tab-${tab}`);
+        const tabButton = document.querySelector(`.rune-tab[data-pvp-tab="${tab}"]`);
+        const paneStyle = pane ? getComputedStyle(pane) : null;
+        const paneOpacity = paneStyle ? Number.parseFloat(paneStyle.opacity || '1') : 0;
+        const tabReady = !!pane
+          && pane.classList.contains('active')
+          && !!tabButton?.classList.contains('active')
+          && paneStyle?.display !== 'none'
+          && paneOpacity >= 0.95;
+        if (tabReady) break;
+      }
+
+      const pane = document.getElementById(`tab-${tab}`);
+      const paneStyle = pane ? getComputedStyle(pane) : null;
+      const paneVisible = !!(pane
+        && pane.classList.contains('active')
+        && paneStyle?.display !== 'none'
+        && Number.parseFloat(paneStyle.opacity || '1') >= 0.95
+        && isVisible(pane));
+      const criticalTargets = getCriticalTargets(tab, pane);
+      const log = document.getElementById('battle-log');
+      const panel = document.querySelector('.battle-log-panel') || document.getElementById('battle-log-panel');
+      const logVisible = isVisible(log);
+      const panelVisible = isVisible(panel);
+      const overlayStates = [
+        { id: 'battle-log', element: log, visible: logVisible },
+        { id: 'battle-log-panel', element: panel, visible: panelVisible },
+      ].map((overlay) => {
+        const rect = overlay.visible ? overlay.element.getBoundingClientRect() : null;
+        const blockedTargets = [];
+        if (overlay.visible && rect) {
+          for (const target of criticalTargets) {
+            const targetRect = target.getBoundingClientRect();
+            const hit = readHitState(target);
+            const area = overlapArea(rect, targetRect);
+            if (area > 12 || !hit.topHit) {
+              blockedTargets.push({
+                selector: selectorFor(target),
+                text: (target.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 80),
+                rect: rectObj(targetRect),
+                overlapArea: Math.round(area),
+                topHit: hit.topHit,
+                topAt: hit.topSelector,
+              });
+            }
+          }
+        }
+        return {
+          id: overlay.id,
+          visible: overlay.visible,
+          rect: rect ? rectObj(rect) : null,
+          blockedTargets,
+        };
+      });
+
+      const tabProbe = {
+        tab,
+        paneVisible,
+        paneRect: pane ? rectObj(pane.getBoundingClientRect()) : null,
+        criticalTargets: criticalTargets.map((element) => {
+          const hit = readHitState(element);
+          return {
+            selector: selectorFor(element),
+            text: (element.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 100),
+            rect: hit.rect,
+            topHit: hit.topHit,
+            topAt: hit.topSelector,
+          };
+        }),
+        overlayStates,
+      };
+
+      if (!paneVisible) {
+        issues.push({ type: 'pvp-tab-pane-not-visible', tab, detail: tabProbe });
+      }
+      for (const overlayState of overlayStates) {
+        if (overlayState.blockedTargets.length > 0) {
+          issues.push({
+            type: 'pvp-tab-battle-overlay-blocks-target',
+            tab,
+            overlay: overlayState.id,
+            blockedTargets: overlayState.blockedTargets,
+          });
+        }
+      }
+
+      if (tab === 'ranking') {
+        const rankingCta = pane?.querySelector('[data-pvp-legacy-practice]') || null;
+        const rankingHit = readHitState(rankingCta);
+        tabProbe.rankingCta = {
+          visible: !!(rankingCta && isVisible(rankingCta)),
+          rect: rankingHit.rect,
+          inViewport: rectFitsViewport(rankingHit.rect, 2),
+          topHit: rankingHit.topHit,
+          topAt: rankingHit.topSelector,
+          text: rankingCta ? (rankingCta.textContent || '').replace(/\s+/g, ' ').trim() : '',
+        };
+        if (!tabProbe.rankingCta.visible || !tabProbe.rankingCta.inViewport || !tabProbe.rankingCta.topHit) {
+          issues.push({
+            type: 'pvp-ranking-mirror-practice-cta-invalid',
+            tab,
+            detail: tabProbe.rankingCta,
+          });
+        }
+      }
+
+      if (tab === 'shop') {
+        const categories = Array.from(pane?.querySelectorAll('.shop-category') || []).filter(isVisible);
+        const firstItem = pane?.querySelector('.talisman-card') || null;
+        const firstOverlay = pane?.querySelector('.buy-overlay') || null;
+        const firstOverlayHit = readHitState(firstOverlay);
+        const overflowNodes = Array.from(pane?.querySelectorAll('*') || [])
+          .filter((element) => isVisible(element))
+          .filter((element) => {
+            const style = getComputedStyle(element);
+            return style.overflowX !== 'hidden' && element.scrollWidth > element.clientWidth + 2;
+          })
+          .slice(0, 12)
+          .map((element) => ({
+            selector: selectorFor(element),
+            scrollWidth: element.scrollWidth,
+            clientWidth: element.clientWidth,
+          }));
+        tabProbe.shop = {
+          categories: categories.map((element) => {
+            const hit = readHitState(element);
+            return {
+              selector: selectorFor(element),
+              tagName: element.tagName.toLowerCase(),
+              type: element.getAttribute('type') || '',
+              ariaPressed: element.getAttribute('aria-pressed') || '',
+              rect: hit.rect,
+              topHit: hit.topHit,
+              topAt: hit.topSelector,
+              text: (element.textContent || '').replace(/\s+/g, ' ').trim(),
+            };
+          }),
+          firstItemRect: firstItem ? rectObj(firstItem.getBoundingClientRect()) : null,
+          firstItemFullyVisible: firstItem ? rectFitsViewport(rectObj(firstItem.getBoundingClientRect()), 2) : false,
+          firstOverlayVisible: !!(firstOverlay && isVisible(firstOverlay)),
+          firstOverlayRect: firstOverlayHit.rect,
+          firstOverlayTopHit: firstOverlayHit.topHit,
+          firstOverlayTopAt: firstOverlayHit.topSelector,
+          firstOverlayText: firstOverlay ? (firstOverlay.textContent || '').replace(/\s+/g, ' ').trim() : '',
+          paneScrollWidth: pane?.scrollWidth || 0,
+          paneClientWidth: pane?.clientWidth || 0,
+          documentScrollWidth: document.documentElement.scrollWidth,
+          viewportWidth: viewport.width,
+          overflowNodes,
+        };
+        const categoriesOk = tabProbe.shop.categories.length >= 4
+          && tabProbe.shop.categories.every((entry) => entry.tagName === 'button' && entry.type === 'button' && entry.ariaPressed !== '' && entry.topHit);
+        const noHorizontalOverflow = tabProbe.shop.documentScrollWidth <= viewport.width + 2
+          && tabProbe.shop.paneScrollWidth <= tabProbe.shop.paneClientWidth + 2
+          && tabProbe.shop.overflowNodes.length === 0;
+        if (!categoriesOk
+          || !noHorizontalOverflow
+          || !tabProbe.shop.firstItemFullyVisible
+          || !tabProbe.shop.firstOverlayVisible
+          || !tabProbe.shop.firstOverlayTopHit) {
+          issues.push({
+            type: 'pvp-shop-mobile-surface-invalid',
+            tab,
+            detail: tabProbe.shop,
+          });
+        }
+      }
+
+      tabProbes.push(tabProbe);
+    }
+
+    return {
+      ok: issues.length === 0,
+      skipped: false,
+      viewport,
+      keyboardProbe,
+      tabProbes,
+      issues,
+    };
+  });
+}
+
+async function inspectPvpDesktopShopSurface(page, scenarioId) {
+  if (scenarioId !== 'pvp-screen') {
+    return { ok: true, skipped: true };
+  }
+
+  return page.evaluate(async () => {
+    const viewport = { width: window.innerWidth, height: window.innerHeight };
+    if (viewport.width <= 520) {
+      return { ok: true, skipped: true, viewport };
+    }
+    if (!window.PVPScene || typeof window.PVPScene.switchTab !== 'function') {
+      return { ok: false, skipped: false, viewport, issues: [{ type: 'missing-pvp-scene-switch-tab' }] };
+    }
+
+    window.PVPScene.switchTab('shop');
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    await new Promise((resolve) => setTimeout(resolve, 80));
+
+    const pane = document.getElementById('tab-shop');
+    const categories = Array.from(pane?.querySelectorAll('.shop-category') || []);
+    const firstItem = pane?.querySelector('.talisman-card') || null;
+    const buyButton = firstItem?.querySelector('.buy-overlay') || null;
+    const rect = buyButton?.getBoundingClientRect() || null;
+    const buttonInViewport = !!rect
+      && rect.left >= 0
+      && rect.right <= viewport.width
+      && rect.top >= 0
+      && rect.bottom <= viewport.height;
+    const hit = buttonInViewport
+      ? document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2)
+      : null;
+    buyButton?.focus({ preventScroll: true });
+    const categoryStyles = categories.map((category) => {
+      const style = getComputedStyle(category);
+      return {
+        tagName: category.tagName.toLowerCase(),
+        type: category.getAttribute('type') || '',
+        backgroundColor: style.backgroundColor,
+        backgroundImage: style.backgroundImage,
+        color: style.color,
+      };
+    });
+    const issues = [];
+    const categoryButtonsValid = categoryStyles.length >= 4
+      && categoryStyles.every((entry) => entry.tagName === 'button'
+        && entry.type === 'button'
+        && !['rgb(239, 239, 239)', 'rgb(255, 255, 255)'].includes(entry.backgroundColor));
+    const buyButtonValid = !!buyButton
+      && buyButton.tagName === 'BUTTON'
+      && !!rect
+      && rect.width >= 44
+      && rect.height >= 44
+      && rect.left >= 0
+      && rect.right <= viewport.width
+      && getComputedStyle(buyButton).display !== 'none'
+      && getComputedStyle(buyButton).visibility !== 'hidden'
+      && Number(getComputedStyle(buyButton).opacity) > 0
+      && (!buttonInViewport || (!!hit && (hit === buyButton || buyButton.contains(hit))))
+      && document.activeElement === buyButton;
+    if (!categoryButtonsValid) {
+      issues.push({ type: 'pvp-shop-desktop-category-button-style-invalid', detail: categoryStyles });
+    }
+    if (!buyButtonValid) {
+      issues.push({
+        type: 'pvp-shop-desktop-buy-button-invalid',
+        detail: {
+          tagName: buyButton?.tagName || '',
+          rect: rect ? {
+            left: Math.round(rect.left),
+            top: Math.round(rect.top),
+            right: Math.round(rect.right),
+            bottom: Math.round(rect.bottom),
+            width: Math.round(rect.width),
+            height: Math.round(rect.height),
+          } : null,
+          focused: document.activeElement === buyButton,
+          buttonInViewport,
+          hit: !buttonInViewport || (!!hit && !!buyButton && (hit === buyButton || buyButton.contains(hit))),
+        },
+      });
+    }
+
+    return {
+      ok: issues.length === 0,
+      skipped: false,
+      viewport,
+      categoryStyles,
+      categoryButtonsValid,
+      buyButtonValid,
+      issues,
+    };
+  });
+}
+
+async function inspectSettingsModalLayering(page, scenarioId) {
+  if (scenarioId !== 'settings-modal') {
+    return { ok: true, skipped: true };
+  }
+
+  return page.evaluate(async () => {
+    const viewport = { width: window.innerWidth, height: window.innerHeight };
+    if (viewport.width > 520) {
+      return { ok: true, skipped: true, viewport };
+    }
+
+    const waitForPaint = () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    const rectObj = (rect) => ({
+      left: Math.round(rect.left * 10) / 10,
+      top: Math.round(rect.top * 10) / 10,
+      right: Math.round(rect.right * 10) / 10,
+      bottom: Math.round(rect.bottom * 10) / 10,
+      width: Math.round(rect.width * 10) / 10,
+      height: Math.round(rect.height * 10) / 10,
+    });
+    const selectorFor = (el) => {
+      if (!el) return '';
+      if (el.id) return `#${el.id}`;
+      const classes = Array.from(el.classList || []).slice(0, 3).join('.');
+      return `${el.tagName.toLowerCase()}${classes ? `.${classes}` : ''}`;
+    };
+    const hasHiddenAncestor = (el) => {
+      let node = el;
+      while (node && node instanceof Element) {
+        const style = getComputedStyle(node);
+        if (style.display === 'none' || style.visibility === 'hidden' || Number(style.opacity) === 0) return true;
+        node = node.parentElement;
+      }
+      return false;
+    };
+    const isVisible = (el) => {
+      if (!el || !(el instanceof Element)) return false;
+      if (hasHiddenAncestor(el)) return false;
+      const style = getComputedStyle(el);
+      if (style.display === 'none' || style.visibility === 'hidden' || Number(style.opacity) === 0) return false;
+      const rect = el.getBoundingClientRect();
+      return rect.width >= 2
+        && rect.height >= 2
+        && rect.right > 0
+        && rect.bottom > 0
+        && rect.left < viewport.width
+        && rect.top < viewport.height;
+    };
+    const readHitState = (element) => {
+      const rect = element ? element.getBoundingClientRect() : null;
+      const point = rect ? {
+        x: Math.round(rect.left + rect.width / 2),
+        y: Math.round(rect.top + rect.height / 2),
+      } : null;
+      const inViewport = !!(point && point.x >= 0 && point.y >= 0 && point.x <= viewport.width && point.y <= viewport.height);
+      const top = inViewport ? document.elementFromPoint(point.x, point.y) : null;
+      return {
+        rect: rect ? rectObj(rect) : null,
+        point,
+        inViewport,
+        topSelector: selectorFor(top),
+        topHit: !!(element && top && (top === element || element.contains(top))),
+      };
+    };
+
+    if (typeof Utils !== 'undefined' && typeof Utils.showBattleLog === 'function') {
+      Utils.showBattleLog('设置面板层级压力测试：关闭按钮必须压过战斗日志。', {
+        category: 'system',
+        duration: 6000,
+      });
+    }
+    if (typeof Utils !== 'undefined' && typeof Utils.toggleBattleLogPanel === 'function') {
+      Utils.toggleBattleLogPanel(true);
+    }
+    await waitForPaint();
+
+    const modal = document.getElementById('settings-modal');
+    const content = modal?.querySelector('.modal-content') || null;
+    const closeButton = modal?.querySelector('.modal-close') || null;
+    const log = document.getElementById('battle-log');
+    const panel = document.querySelector('.battle-log-panel') || document.getElementById('battle-log-panel');
+    const closeHit = readHitState(closeButton);
+    const modalZ = Number.parseInt(getComputedStyle(modal || document.body).zIndex || '0', 10) || 0;
+    const contentZ = Number.parseInt(getComputedStyle(content || modal || document.body).zIndex || '0', 10) || 0;
+    const logZ = log ? (Number.parseInt(getComputedStyle(log).zIndex || '0', 10) || 0) : 0;
+    const panelZ = panel ? (Number.parseInt(getComputedStyle(panel).zIndex || '0', 10) || 0) : 0;
+    const detail = {
+      viewport,
+      modalVisible: !!(modal && isVisible(modal)),
+      contentVisible: !!(content && isVisible(content)),
+      closeVisible: !!(closeButton && isVisible(closeButton)),
+      closeRect: closeHit.rect,
+      closeTopHit: closeHit.topHit,
+      closeTopAt: closeHit.topSelector,
+      battleLogVisible: !!(log && isVisible(log)),
+      battleLogRect: log && isVisible(log) ? rectObj(log.getBoundingClientRect()) : null,
+      battleLogPanelVisible: !!(panel && isVisible(panel)),
+      battleLogPanelRect: panel && isVisible(panel) ? rectObj(panel.getBoundingClientRect()) : null,
+      modalZ,
+      contentZ,
+      battleLogZ: logZ,
+      battleLogPanelZ: panelZ,
+    };
+    const issues = [];
+    if (!detail.modalVisible || !detail.contentVisible) {
+      issues.push({ type: 'settings-modal-not-visible', detail });
+    }
+    if (!detail.closeVisible || !detail.closeTopHit) {
+      issues.push({ type: 'settings-modal-close-unreachable', detail });
+    }
+    if (Math.max(modalZ, contentZ) <= logZ || Math.max(modalZ, contentZ) <= panelZ) {
+      issues.push({ type: 'settings-modal-zindex-not-above-battle-log', detail });
+    }
+    if (detail.battleLogVisible || detail.battleLogPanelVisible) {
+      issues.push({ type: 'battle-log-visible-over-settings-modal', detail });
+    }
+    return {
+      ok: issues.length === 0,
+      skipped: false,
+      issues,
+      detail,
+    };
+  });
 }
 
 async function inspectMapNodeClickability(page, scenarioId) {
@@ -3277,6 +3989,9 @@ async function inspectBattleOverlaySwitchGuard(page) {
       const rootSelector = prepareResult?.rootSelector || scenario.root;
       const result = await inspectLayout(page, rootSelector, scenario.id);
       const overlayStress = await inspectBattleLogStress(page, rootSelector, scenario.id);
+      const pvpTabMobileSurface = await inspectPvpTabMobileSurface(page, scenario.id);
+      const pvpDesktopShopSurface = await inspectPvpDesktopShopSurface(page, scenario.id);
+      const settingsModalLayering = await inspectSettingsModalLayering(page, scenario.id);
       const mapExpeditionIntel = await inspectMapExpeditionIntelPersistence(page, scenario.id);
       const mapNodeClick = await inspectMapNodeClickability(page, scenario.id);
       let overlayStressScreenshot = null;
@@ -3297,6 +4012,9 @@ async function inspectBattleOverlaySwitchGuard(page) {
         screenshot: screenshotCaptured ? path.relative(process.cwd(), screenshotPath).replace(/\\/g, '/') : null,
         screenshotMode,
         overlayStress,
+        pvpTabMobileSurface,
+        pvpDesktopShopSurface,
+        settingsModalLayering,
         mapExpeditionIntel,
         mapNodeClick,
         overlayStressScreenshot,
@@ -3312,6 +4030,9 @@ async function inspectBattleOverlaySwitchGuard(page) {
         && realBattleResolverOk
         && !!result?.ok
         && !!overlayStress?.ok
+        && !!pvpTabMobileSurface?.ok
+        && !!pvpDesktopShopSurface?.ok
+        && !!settingsModalLayering?.ok
         && !!mapExpeditionIntel?.ok
         && !!mapNodeClick?.ok;
       add(

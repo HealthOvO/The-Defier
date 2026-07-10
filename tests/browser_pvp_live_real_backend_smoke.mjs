@@ -2597,7 +2597,9 @@ async function writeReport() {
         };
       }, { before: statusPayoffCardBeforeProbe.before, cardSelector: statusPayoffCardSelector });
       let statusPayoffCardSecondTouchActionable = null;
-      if (statusPayoffCardConfirmProbe.after?.stateVersion === statusPayoffCardBeforeProbe.before?.stateVersion) {
+      const statusPayoffNeedsSecondTouch = statusPayoffCardConfirmProbe.after?.stateVersion === statusPayoffCardBeforeProbe.before?.stateVersion
+        && statusPayoffCardConfirmProbe.confirmingCardInstanceId === statusPayoffCardBeforeProbe.card?.instanceId;
+      if (statusPayoffNeedsSecondTouch) {
         statusPayoffCardSecondTouchActionable = await clickLiveControl(statusPayoffAttackerClient.page, statusPayoffCardSelector, `${seatSlug(statusPayoffFirstSeat)}-status-payoff-card-submit`);
       }
       const statusPayoffAttackerAfter = await waitForLiveSnapshot(
@@ -2617,8 +2619,7 @@ async function writeReport() {
         statusPayoffCardBeforeProbe.before?.currentSeat === statusPayoffFirstSeat
           && statusPayoffCardBeforeProbe.preview?.cardInstanceId === statusPayoffCardBeforeProbe.card?.instanceId
           && statusPayoffCardBeforeProbe.preview?.targetSeat === statusPayoffSecondSeat
-          && (/再次点击确认出牌/.test(statusPayoffCardConfirmProbe.hint)
-            || Number(statusPayoffCardConfirmProbe.after?.stateVersion || 0) > Number(statusPayoffCardBeforeProbe.before?.stateVersion || 0))
+          && (!statusPayoffNeedsSecondTouch || /再次点击确认出牌/.test(statusPayoffCardConfirmProbe.hint))
           && statusPayoffAttackerAfter.stateVersion > statusPayoffCardBeforeProbe.before?.stateVersion
           && statusPayoffAttackerProbe.typeAttr === 'play_card'
           && statusPayoffAttackerProbe.actorAttr === statusPayoffFirstSeat
@@ -2658,6 +2659,7 @@ async function writeReport() {
           statusPayoffSecondSeat,
           statusPayoffCardBeforeProbe,
           statusPayoffCardConfirmProbe,
+          statusPayoffNeedsSecondTouch,
           statusPayoffAttackerAfter,
           statusPayoffAttackerProbe,
           statusPayoffCardFirstTouchActionable,
@@ -3906,6 +3908,19 @@ async function writeReport() {
         && afterPlaySecond.opponent?.handCount >= 0,
       JSON.stringify({ activeFirstSeat, activeSecondSeat, playFirst, afterPlaySecond, acceptedCardTouchActionable }),
     );
+    await secondSeatClient.page.waitForFunction(() => {
+      const report = window.PVPScene?.getLiveSnapshot?.()?.actionReceiptReport || null;
+      const receipt = document.querySelector('[data-live-action-receipt]');
+      const survival = document.querySelector('[data-live-action-survival]');
+      const renderedSequence = Number(receipt?.getAttribute('data-live-action-receipt-seq') || 0);
+      return !!report
+        && Number(report.latestSequence || 0) > 0
+        && renderedSequence === Number(report.latestSequence)
+        && receipt?.getAttribute('data-live-action-receipt-source') === report.sourceVisibility
+        && /预算后/.test(receipt?.textContent || '')
+        && survival?.getAttribute('data-live-action-survival-target') === report.damage?.targetSeat
+        && survival?.getAttribute('data-live-action-survival-hp-after') === String(report.damage?.targetHpAfter ?? '');
+    }, null, { timeout: 10000 });
     const afterPlayReceiptProbe = await secondSeatClient.page.evaluate(() => {
       const snapshot = window.PVPScene.getLiveSnapshot();
       const textPayload = JSON.parse(window.render_game_to_text()).pvp?.live || null;

@@ -150,6 +150,11 @@ async function safeScreenshot(page, outPath) {
 
     const panel = document.getElementById('reward-run-path-meta');
     const narrative = document.getElementById('reward-narrative-brief');
+    const nextStep = document.getElementById('reward-next-step-card');
+    const continueBtn = document.getElementById('continue-reward-btn');
+    const firstRewardCard = document.querySelector('#reward-cards .reward-card');
+    const nextStepPendingText = nextStep?.textContent?.replace(/\s+/g, ' ').trim() || '';
+    const continueDisabledBefore = !!continueBtn?.disabled;
     const entries = Array.from(panel?.querySelectorAll('.reward-run-path-entry') || []);
     const payload = typeof window.render_game_to_text === 'function'
       ? JSON.parse(window.render_game_to_text())
@@ -160,6 +165,13 @@ async function safeScreenshot(page, outPath) {
       visible: !!panel && getComputedStyle(panel).display !== 'none' && getComputedStyle(panel).visibility !== 'hidden',
       narrativeVisible: !!narrative && getComputedStyle(narrative).display !== 'none' && getComputedStyle(narrative).visibility !== 'hidden',
       narrativeText: narrative?.textContent?.replace(/\s+/g, ' ').trim() || '',
+      nextStepPendingText,
+      continueDisabledBefore,
+      rewardCardRole: firstRewardCard?.getAttribute('role') || '',
+      rewardCardTabIndex: firstRewardCard?.getAttribute('tabindex') || '',
+      rewardCardAriaPressed: firstRewardCard?.getAttribute('aria-pressed') || '',
+      rewardCardAriaDisabled: firstRewardCard?.getAttribute('aria-disabled') || '',
+      rewardCardAriaLabel: firstRewardCard?.getAttribute('aria-label') || '',
       header: document.querySelector('.reward-run-path-badge')?.textContent?.replace(/\s+/g, ' ').trim() || '',
       status: document.querySelector('.reward-run-path-status')?.textContent?.replace(/\s+/g, ' ').trim() || '',
       entries: entries.map((entry) => ({
@@ -176,6 +188,13 @@ async function safeScreenshot(page, outPath) {
       && !!rewardProbe.visible
       && !!rewardProbe.narrativeVisible
       && /命盘档案/.test(rewardProbe.narrativeText || '')
+      && /先选牌或付费跳过/.test(rewardProbe.nextStepPendingText || '')
+      && rewardProbe.continueDisabledBefore === true
+      && rewardProbe.rewardCardRole === 'button'
+      && rewardProbe.rewardCardTabIndex === '0'
+      && rewardProbe.rewardCardAriaPressed === 'false'
+      && rewardProbe.rewardCardAriaDisabled === 'false'
+      && /选择奖励卡牌/.test(rewardProbe.rewardCardAriaLabel || '')
       && /断命问锋/.test(rewardProbe.narrativeText || '')
       && /破命流/.test(rewardProbe.header || '')
       && /本场推进 2 个阶段/.test(rewardProbe.status || '')
@@ -186,6 +205,115 @@ async function safeScreenshot(page, outPath) {
       && rewardProbe.rewardPayload?.pathId === 'shatter'
       && rewardProbe.rewardPayload?.narrative?.kicker === '命盘档案',
     JSON.stringify(rewardProbe || null)
+  );
+
+  const rewardRequiredFeedbackProbe = await page.evaluate(() => {
+    game.rewardCardSelected = false;
+    game.continueAfterReward();
+    const nextStep = document.getElementById('reward-next-step-card');
+    const continueBtn = document.getElementById('continue-reward-btn');
+    const battleLog = document.getElementById('battle-log');
+    return {
+      text: nextStep?.textContent?.replace(/\s+/g, ' ').trim() || '',
+      state: nextStep?.dataset.rewardNextState || '',
+      role: nextStep?.getAttribute('role') || '',
+      live: nextStep?.getAttribute('aria-live') || '',
+      visible: !!nextStep
+        && getComputedStyle(nextStep).display !== 'none'
+        && getComputedStyle(nextStep).visibility !== 'hidden',
+      continueDisabled: !!continueBtn?.disabled,
+      battleLogHidden: !battleLog || getComputedStyle(battleLog).display === 'none',
+      rewardCardSelected: !!game.rewardCardSelected
+    };
+  });
+
+  add(
+    'reward blocked continue uses a visible inline live status while the battle log is suppressed',
+    /请先选择一张卡牌奖励/.test(rewardRequiredFeedbackProbe.text)
+      && rewardRequiredFeedbackProbe.state === 'required'
+      && rewardRequiredFeedbackProbe.role === 'status'
+      && rewardRequiredFeedbackProbe.live === 'polite'
+      && rewardRequiredFeedbackProbe.visible === true
+      && rewardRequiredFeedbackProbe.continueDisabled === true
+      && rewardRequiredFeedbackProbe.battleLogHidden === true
+      && rewardRequiredFeedbackProbe.rewardCardSelected === false,
+    JSON.stringify(rewardRequiredFeedbackProbe)
+  );
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.waitForTimeout(150);
+  await page.evaluate(() => {
+    if (document.activeElement instanceof HTMLElement) {
+      document.activeElement.blur();
+    }
+    window.scrollTo(0, 0);
+  });
+
+  let rewardCardFocused = false;
+  let rewardCardTabCount = 0;
+  for (; rewardCardTabCount < 12; rewardCardTabCount += 1) {
+    await page.keyboard.press('Tab');
+    rewardCardFocused = await page.evaluate(() => {
+      const firstRewardCard = document.querySelector('#reward-cards .reward-card');
+      return document.activeElement === firstRewardCard;
+    });
+    if (rewardCardFocused) {
+      break;
+    }
+  }
+
+  if (rewardCardFocused) {
+    await page.keyboard.press('Space');
+    await page.waitForTimeout(80);
+  }
+
+  const rewardKeyboardProbe = await page.evaluate((tabCount) => {
+    const firstRewardCard = document.querySelector('#reward-cards .reward-card');
+    const continueBtn = document.getElementById('continue-reward-btn');
+    const nextStep = document.getElementById('reward-next-step-card');
+    const active = document.activeElement;
+    const rect = active && typeof active.getBoundingClientRect === 'function'
+      ? active.getBoundingClientRect()
+      : null;
+    const centerX = rect ? Math.max(0, Math.min(window.innerWidth - 1, rect.left + rect.width / 2)) : null;
+    const centerY = rect ? Math.max(0, Math.min(window.innerHeight - 1, rect.top + rect.height / 2)) : null;
+    const hit = rect ? document.elementFromPoint(centerX, centerY) : null;
+    const hitMatches = !!active && !!hit && (hit === active || active.contains(hit) || hit.contains(active));
+    return {
+      tabCount,
+      focusedFirstRewardCard: active === firstRewardCard,
+      rewardCardSelected: !!game.rewardCardSelected,
+      continueDisabledAfter: !!continueBtn?.disabled,
+      nextStepText: nextStep?.textContent?.replace(/\s+/g, ' ').trim() || '',
+      ariaPressed: firstRewardCard?.getAttribute('aria-pressed') || '',
+      ariaDisabled: firstRewardCard?.getAttribute('aria-disabled') || '',
+      activeTag: active?.tagName || '',
+      activeRole: active?.getAttribute?.('role') || '',
+      activeInViewport: !!rect
+        && rect.width > 0
+        && rect.height > 0
+        && rect.top >= 0
+        && rect.left >= 0
+        && rect.bottom <= window.innerHeight
+        && rect.right <= window.innerWidth,
+      hitMatches
+    };
+  }, rewardCardTabCount + 1);
+
+  add(
+    'reward screen disables continue until a reward card is selected and then exposes the map return step',
+    rewardCardFocused === true
+      && rewardKeyboardProbe.tabCount <= 12
+      && rewardKeyboardProbe.focusedFirstRewardCard === true
+      && rewardKeyboardProbe.rewardCardSelected === true
+      && rewardKeyboardProbe.continueDisabledAfter === false
+      && /已选定奖励，可继续回章节地图/.test(rewardKeyboardProbe.nextStepText || '')
+      && rewardKeyboardProbe.ariaPressed === 'true'
+      && rewardKeyboardProbe.ariaDisabled === 'true'
+      && rewardKeyboardProbe.activeRole === 'button'
+      && rewardKeyboardProbe.activeInViewport === true
+      && rewardKeyboardProbe.hitMatches === true,
+    JSON.stringify(rewardKeyboardProbe || null)
   );
 
   await safeScreenshot(page, path.join(outDir, 'reward-run-path-meta.png'));

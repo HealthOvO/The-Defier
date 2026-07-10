@@ -1707,11 +1707,21 @@ async function safeElementScreenshot(page, selector, outputPath) {
         hit: selectorFor(hit),
       };
     };
+    const isRendered = (el) => {
+      if (!el || el.hidden) return false;
+      const style = getComputedStyle(el);
+      const rect = el.getBoundingClientRect();
+      return style.display !== 'none'
+        && style.visibility !== 'hidden'
+        && Number(style.opacity) > 0
+        && rect.width > 0
+        && rect.height > 0;
+    };
     const statusCard = document.querySelector('.pvp-live-status-card');
     const riskHeading = statusCard?.querySelector('.pvp-risk-heading');
 	    const statusChip = statusCard?.querySelector('.pvp-risk-dri');
 	    const boundary = statusCard?.querySelector('[data-live-mode-boundary]');
-	    const actions = Array.from(document.querySelectorAll('.pvp-live-footer [data-live-action]:not([hidden])'));
+	    const actions = Array.from(document.querySelectorAll('.pvp-live-footer [data-live-action]')).filter(isRendered);
 	    const trustGrid = statusCard?.querySelector('[data-live-trust-grid]');
 	    const trustItems = Array.from(trustGrid?.querySelectorAll('[data-live-trust-item]') || [])
 	      .filter((item) => !item.hidden && getComputedStyle(item).display !== 'none')
@@ -1734,13 +1744,18 @@ async function safeElementScreenshot(page, selector, outputPath) {
 	      }];
 	    }));
 	    const commandRail = document.querySelector('[data-live-command-rail]');
-	    const commandGroups = Array.from(commandRail?.querySelectorAll('[data-live-command-group]') || []).map((group) => ({
-	      group: group.getAttribute('data-live-command-group') || '',
-	      rect: rectObj(group),
-	      display: getComputedStyle(group).display,
-	      actions: Array.from(group.querySelectorAll('[data-live-action]:not([hidden])')).map((button) => button.getAttribute('data-live-action') || ''),
-	    }));
+	    const commandGroups = Array.from(commandRail?.querySelectorAll('[data-live-command-group]') || []).map((group) => {
+	      const groupActions = Array.from(group.querySelectorAll('[data-live-action]'));
+	      return {
+	        group: group.getAttribute('data-live-command-group') || '',
+	        rect: rectObj(group),
+	        display: getComputedStyle(group).display,
+	        actions: groupActions.map((button) => button.getAttribute('data-live-action') || ''),
+	        renderedActions: groupActions.filter(isRendered).map((button) => button.getAttribute('data-live-action') || ''),
+	      };
+	    });
 	    return {
+	      phase: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-phase') || '',
 	      viewportWidth: window.innerWidth,
 	      scrollWidth: document.documentElement.scrollWidth,
 	      statusCard: rectObj(statusCard),
@@ -1804,11 +1819,22 @@ async function safeElementScreenshot(page, selector, outputPath) {
         hit: selectorFor(hit),
       };
     };
-    const actionProbes = Array.from(document.querySelectorAll('.pvp-live-footer [data-live-action]:not([hidden])')).map((button) => ({
+    const actionProbes = Array.from(document.querySelectorAll('.pvp-live-footer [data-live-action]'))
+      .filter((button) => {
+        const style = getComputedStyle(button);
+        const rect = button.getBoundingClientRect();
+        return !button.hidden
+          && style.display !== 'none'
+          && style.visibility !== 'hidden'
+          && Number(style.opacity) > 0
+          && rect.width > 0
+          && rect.height > 0;
+      })
+      .map((button) => ({
       action: button.getAttribute('data-live-action') || '',
       label: (button.textContent || '').replace(/\s+/g, ' ').trim(),
       hit: centerHit(button),
-    }));
+      }));
     const actionRects = actionProbes.map((probe) => probe.hit.rect).filter(Boolean);
     const actionOverlapCount = actionRects.reduce((count, rect, index) => {
       return count + actionRects.slice(index + 1).filter((other) => overlaps(rect, other, -2)).length;
@@ -1829,9 +1855,9 @@ async function safeElementScreenshot(page, selector, outputPath) {
       && /镜像练习/.test(mediumEntryProbe.boundaryText)
       && mediumEntryProbe.boundaryScrollWidth <= mediumEntryProbe.boundaryClientWidth + 2
       && mediumEntryProbe.boundaryWhiteSpace !== 'nowrap'
-	      && mediumEntryProbe.actionCount >= 3
+	      && mediumEntryProbe.actionCount >= 1
 	      && mediumActionProbe.actionOverlapCount === 0
-	      && mediumActionProbe.actionProbes.length >= 3
+	      && mediumActionProbe.actionProbes.length >= 1
 	      && mediumActionProbe.actionProbes.every((probe) => probe.hit.ok && probe.hit.rect?.width >= 44 && probe.hit.rect?.height >= 40 && probe.hit.rect?.height <= 96),
 	    JSON.stringify({ header: mediumEntryProbe, actions: mediumActionProbe }),
 	  );
@@ -1859,17 +1885,21 @@ async function safeElementScreenshot(page, selector, outputPath) {
 	      && ['queue', 'turn', 'practice', 'danger'].every((group) =>
 	        mediumEntryProbe.commandGroups.some((probe) => probe.group === group)
 	      )
-	      && mediumEntryProbe.commandGroups.every((probe) =>
-	        probe.rect
+	      && mediumEntryProbe.commandGroups.every((probe) => probe.display === 'none'
+	        ? probe.renderedActions.length === 0
+	        : probe.rect
 	          && probe.rect.left >= -1
 	          && probe.rect.right <= mediumEntryProbe.viewportWidth + 2
-	          && probe.display === 'flex'
-	          && probe.actions.length >= 1
+	          && ['flex', 'grid'].includes(probe.display)
+	          && probe.renderedActions.length >= 1
+	      )
+	      && mediumEntryProbe.commandGroups.some((probe) =>
+	        probe.group === 'queue'
+	          && probe.renderedActions.includes('join-queue')
 	      )
 	      && mediumEntryProbe.commandGroups.some((probe) =>
 	        probe.group === 'danger'
-	          && probe.actions.length === 1
-	          && probe.actions[0] === 'surrender'
+	          && probe.actions.includes('surrender')
 	      ),
 	    JSON.stringify({ header: mediumEntryProbe, actions: mediumActionProbe }),
 	  );
@@ -8016,6 +8046,46 @@ async function safeElementScreenshot(page, selector, outputPath) {
     JSON.stringify(mobileTurnHandoffProbe),
   );
   await mobilePage.evaluate(() => {
+    document.getElementById('pvp-screen')?.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+  }).catch(() => {});
+  await mobilePage.waitForTimeout(100);
+  const mobileNavProbe = await mobilePage.evaluate(() => {
+    const probeElement = (el) => {
+      if (!el) return null;
+      const style = getComputedStyle(el);
+      const rect = el.getBoundingClientRect();
+      if (el.hidden
+        || style.display === 'none'
+        || style.visibility === 'hidden'
+        || Number(style.opacity) === 0
+        || rect.width <= 0
+        || rect.height <= 0) {
+        return null;
+      }
+      const x = Math.round(rect.left + rect.width / 2);
+      const y = Math.round(rect.top + rect.height / 2);
+      const hit = x >= 0 && y >= 0 && x <= window.innerWidth && y <= window.innerHeight
+        ? document.elementFromPoint(x, y)
+        : null;
+      return {
+        left: Math.round(rect.left),
+        right: Math.round(rect.right),
+        top: Math.round(rect.top),
+        bottom: Math.round(rect.bottom),
+        width: Math.round(rect.width),
+        height: Math.round(rect.height),
+        hitOk: !!hit && (hit === el || el.contains(hit) || hit.contains(el)),
+      };
+    };
+    return {
+      viewportWidth: window.innerWidth,
+      viewportHeight: window.innerHeight,
+      scrollTop: document.getElementById('pvp-screen')?.scrollTop || 0,
+      tabs: Array.from(document.querySelectorAll('.pvp-nav-sidebar .rune-tab')).map(probeElement).filter(Boolean),
+      actions: Array.from(document.querySelectorAll('.pvp-live-footer [data-live-action]')).map(probeElement).filter(Boolean),
+    };
+  });
+  await mobilePage.evaluate(() => {
     const statusCard = document.querySelector('.pvp-live-status-card');
     const root = document.querySelector('[data-live-pvp-root]');
     if (statusCard && typeof statusCard.scrollIntoView === 'function') {
@@ -8045,7 +8115,16 @@ async function safeElementScreenshot(page, selector, outputPath) {
     const statusCard = document.querySelector('.pvp-live-status-card');
     const eventPanel = document.querySelector('.pvp-live-event-panel');
     const tabs = Array.from(document.querySelectorAll('.pvp-nav-sidebar .rune-tab'));
-    const buttons = Array.from(document.querySelectorAll('.pvp-live-footer [data-live-action]'));
+    const buttons = Array.from(document.querySelectorAll('.pvp-live-footer [data-live-action]')).filter((button) => {
+      const style = getComputedStyle(button);
+      const rect = button.getBoundingClientRect();
+      return !button.hidden
+        && style.display !== 'none'
+        && style.visibility !== 'hidden'
+        && Number(style.opacity) > 0
+        && rect.width > 0
+        && rect.height > 0;
+    });
     const pvpScreen = document.getElementById('pvp-screen');
     return {
       phase: root?.getAttribute('data-live-phase') || '',
@@ -8081,7 +8160,18 @@ async function safeElementScreenshot(page, selector, outputPath) {
     return {
       viewportWidth: window.innerWidth,
       viewportHeight: window.innerHeight,
-      buttons: Array.from(document.querySelectorAll('.pvp-live-footer [data-live-action]')).map((button) => toRect(button)),
+      buttons: Array.from(document.querySelectorAll('.pvp-live-footer [data-live-action]'))
+        .filter((button) => {
+          const style = getComputedStyle(button);
+          const rect = button.getBoundingClientRect();
+          return !button.hidden
+            && style.display !== 'none'
+            && style.visibility !== 'hidden'
+            && Number(style.opacity) > 0
+            && rect.width > 0
+            && rect.height > 0;
+        })
+        .map((button) => toRect(button)),
     };
   });
   add(
@@ -8096,9 +8186,24 @@ async function safeElementScreenshot(page, selector, outputPath) {
       && mobileProbe.root?.right <= mobileProbe.viewportWidth + 2
       && mobileProbe.eventPanel?.left >= -1
       && mobileProbe.eventPanel?.right <= mobileProbe.viewportWidth + 2
-      && mobileProbe.tabs.every((rect) => rect && rect.left >= -1 && rect.right <= mobileProbe.viewportWidth + 2)
+      && mobileNavProbe.tabs.length === 4
+      && mobileNavProbe.tabs.every((rect) => rect
+        && rect.left >= -1
+        && rect.right <= mobileNavProbe.viewportWidth + 2
+        && rect.top >= -1
+        && rect.bottom <= mobileNavProbe.viewportHeight + 2
+        && rect.hitOk)
+      && mobileNavProbe.actions.length >= 1
+      && mobileNavProbe.actions.every((rect) => rect
+        && rect.left >= -1
+        && rect.right <= mobileNavProbe.viewportWidth + 2
+        && rect.top >= -1
+        && rect.bottom <= mobileNavProbe.viewportHeight + 2
+        && rect.height >= 44
+        && rect.hitOk)
+      && mobileBottomProbe.buttons.length >= 1
       && mobileBottomProbe.buttons.every((rect) => rect && rect.left >= -1 && rect.right <= mobileBottomProbe.viewportWidth + 2 && rect.bottom <= mobileBottomProbe.viewportHeight + 2 && rect.height >= 44),
-    JSON.stringify({ top: mobileProbe, bottom: mobileBottomProbe }),
+    JSON.stringify({ nav: mobileNavProbe, top: mobileProbe, bottom: mobileBottomProbe }),
   );
   await mobilePage.evaluate(async () => {
     const finishedView = {

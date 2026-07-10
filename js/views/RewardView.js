@@ -1176,6 +1176,39 @@ export class RewardView {
             <div class="reward-run-path-entries">${entryMarkup}</div>
         `;
   }
+  updateRewardNextStepCard(state = 'pending', detail = '') {
+    const card = document.getElementById('reward-next-step-card');
+    if (!card) return;
+    const normalized = ['pending', 'ready', 'required', 'blocked'].includes(String(state || '')) ? String(state) : 'pending';
+    const copy = {
+      pending: {
+        kicker: '下一步',
+        title: '先选牌或付费跳过',
+        body: '完成本次战利取舍后，继续回章节地图选择下一处节点。'
+      },
+      ready: {
+        kicker: '已就绪',
+        title: '已选定奖励，可继续回章节地图',
+        body: '继续前进会保存本场结算，并恢复地图上的关卡情报与节点选择。'
+      },
+      required: {
+        kicker: '尚未完成',
+        title: '请先选择一张卡牌奖励',
+        body: detail || '选择一张卡牌，或支付灵石跳过本次卡牌后，才能继续回章节地图。'
+      },
+      blocked: {
+        kicker: '暂不可跳过',
+        title: '灵石不足，无法跳过',
+        body: detail || '请选择一张奖励卡牌，或积累足够灵石后再跳过。'
+      }
+    }[normalized];
+    card.dataset.rewardNextState = normalized;
+    card.innerHTML = `
+            <span class="reward-next-step-kicker">${escapeHtml(copy.kicker)}</span>
+            <strong>${escapeHtml(copy.title)}</strong>
+            <span>${escapeHtml(copy.body)}</span>
+        `;
+  }
   showRewardScreen(gold, canSteal, stealEnemy, ringExp = 0, strategicGain = null) {
     this.game.rewardCardSelected = false; // 重置选牌状态
 
@@ -1191,6 +1224,7 @@ export class RewardView {
       continueBtn.disabled = true;
       continueBtn.textContent = '请选择奖励';
     }
+    this.updateRewardNextStepCard('pending');
     this.setRewardScreenState('hidden');
     const bonusParts = [];
     const gainPayload = strategicGain && typeof strategicGain === 'object' ? strategicGain : {};
@@ -1309,23 +1343,24 @@ export class RewardView {
     const cards = this.game.getRewardCardsForCurrentRun(rewardCardCount);
     cards.forEach((card, index) => {
       const cardEl = Utils.createCardElement(card, index);
+      const rewardCardId = `${String(card?.id || 'reward-card')}-${index}`;
+      const rewardCardLabel = this.buildRewardCardAriaLabel(card);
       cardEl.classList.add('reward-card');
       cardEl.classList.add(`rarity-${card.rarity || 'common'}`);
+      cardEl.dataset.rewardCardId = rewardCardId;
+      cardEl.dataset.rewardCardLabel = rewardCardLabel;
+      cardEl.setAttribute('role', 'button');
+      cardEl.setAttribute('tabindex', '0');
+      cardEl.setAttribute('aria-pressed', 'false');
+      cardEl.setAttribute('aria-disabled', 'false');
+      cardEl.setAttribute('aria-label', rewardCardLabel);
       cardEl.addEventListener('click', () => {
-        // 防止重复选择
-        if (this.game.rewardCardSelected) return;
-        this.game.rewardCardSelected = true;
-        this.selectRewardCard(card);
-
-        // 禁用其他卡牌
-        rewardCards.querySelectorAll('.card').forEach(c => {
-          if (c !== cardEl) {
-            c.style.opacity = '0.3';
-            c.style.pointerEvents = 'none';
-          }
-        });
-        cardEl.style.border = '3px solid var(--accent-gold)';
-        cardEl.style.transform = 'scale(1.1)';
+        this.handleRewardCardSelection(card, cardEl, rewardCards);
+      });
+      cardEl.addEventListener('keydown', (event) => {
+        if (event.key !== 'Enter' && event.key !== ' ' && event.key !== 'Spacebar') return;
+        event.preventDefault();
+        cardEl.click();
       });
       rewardCards.appendChild(cardEl);
     });
@@ -1348,7 +1383,46 @@ export class RewardView {
     }
     this.game.showScreen('reward-screen');
   }
+  buildRewardCardAriaLabel(card) {
+    const name = String(card?.name || '未知卡牌').trim() || '未知卡牌';
+    const rarity = Utils.getCardRarityName(card?.rarity || 'common');
+    const type = Utils.getCardTypeName(card?.type || '');
+    return [`选择奖励卡牌`, name, rarity ? `${rarity}品质` : '', type ? `${type}牌` : ''].filter(Boolean).join('，');
+  }
+  syncRewardCardSelectionState(selectedRewardCardId = '') {
+    const selectedId = String(selectedRewardCardId || '');
+    document.querySelectorAll('#reward-cards .reward-card').forEach((rewardCardEl) => {
+      const isSelected = selectedId !== '' && rewardCardEl.dataset.rewardCardId === selectedId;
+      rewardCardEl.setAttribute('aria-pressed', isSelected ? 'true' : 'false');
+      rewardCardEl.setAttribute('tabindex', isSelected ? '0' : '-1');
+      rewardCardEl.setAttribute('aria-disabled', selectedId ? 'true' : 'false');
+      const baseLabel = rewardCardEl.dataset.rewardCardLabel || '选择奖励卡牌';
+      rewardCardEl.setAttribute('aria-label', isSelected ? `已选择，${baseLabel}` : baseLabel);
+    });
+  }
+  handleRewardCardSelection(card, cardEl, rewardCards) {
+    if (this.game.rewardCardSelected) return;
+    this.game.rewardCardSelected = true;
+    this.selectRewardCard(card);
+    this.syncRewardCardSelectionState(cardEl?.dataset?.rewardCardId || card?.id || '');
+
+    // 禁用其他卡牌
+    rewardCards.querySelectorAll('.card').forEach(c => {
+      if (c !== cardEl) {
+        c.style.opacity = '0.3';
+        c.style.pointerEvents = 'none';
+      }
+    });
+    if (cardEl) {
+      cardEl.style.border = '3px solid var(--accent-gold)';
+      cardEl.style.transform = 'scale(1.1)';
+      if (typeof cardEl.focus === 'function') {
+        cardEl.focus({ preventScroll: true });
+      }
+    }
+  }
   selectRewardCard(card) {
+    this.game.rewardCardSelected = true;
     this.game.player.addCardToDeck(card);
     Utils.showBattleLog(`获得卡牌: ${card.name}`);
 
@@ -1361,6 +1435,7 @@ export class RewardView {
       continueBtn.disabled = false;
       continueBtn.textContent = '继续前进';
     }
+    this.updateRewardNextStepCard('ready');
   }
   skipRewardCard() {
     const cost = this.getRewardSkipCost();
@@ -1373,6 +1448,7 @@ export class RewardView {
       this.continueAfterReward();
     } else {
       Utils.showBattleLog(`灵石不足！需要 ${cost} 灵石才能跳过`);
+      this.updateRewardNextStepCard('blocked', `跳过本次卡牌需要 ${cost} 灵石；当前灵石不足，请选择一张奖励。`);
       // 不启用继续按钮
     }
   }
@@ -1436,6 +1512,7 @@ export class RewardView {
     // 双重保险：必须已选择卡牌（包括跳过）
     if (!this.game.rewardCardSelected) {
       Utils.showBattleLog('请先选择一张卡牌奖励，或支付灵石跳过');
+      this.updateRewardNextStepCard('required');
       return;
     }
 

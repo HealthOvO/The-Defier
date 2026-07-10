@@ -9197,6 +9197,28 @@ export class Battle {
       this.updateBattleUI();
     }
   }
+  resolveBattleCoreLoopContext() {
+    const nodeType = String(this.game?.currentBattleNode?.type || '').trim();
+    const nodeLabelMap = {
+      enemy: '普通战',
+      elite: '精英战',
+      boss: '主宰战',
+      trial: '试炼战',
+      ghost_duel: '残影战'
+    };
+    const phaseLabel = this.battleEnded
+      ? '结算中'
+      : this.isProcessingCard || this.isTurnTransitioning
+        ? '行动处理中'
+        : this.currentTurn === 'player'
+          ? '玩家回合'
+          : '敌方回合';
+    return {
+      nodeLabel: nodeLabelMap[nodeType] || '战斗节点',
+      phaseLabel,
+      nextLabel: '胜利后进入战利结算，再回章节地图'
+    };
+  }
   bindBattleIntentTooltipDelegation(root) {
     if (!root || root.dataset.intentTooltipBound === '1') return;
     const forward = event => this.handleBattleIntentTooltipEvent(event);
@@ -9321,7 +9343,8 @@ export class Battle {
       commands: commandButtonData,
       systems,
       advisor,
-      advisorExpanded
+      advisorExpanded,
+      loop: this.resolveBattleCoreLoopContext()
     });
     if (typeof panel.querySelector !== 'function') return;
     this.bindBattleCommandPanelDelegation(panel);

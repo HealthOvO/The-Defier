@@ -206,6 +206,31 @@ import { escapeAttr as importedEscapeAttr, escapeHtml as importedEscapeHtml } fr
             </div>
         `;
   };
+  api.buildBattleLoopRailMarkup = function buildBattleLoopRailMarkup(input = {}) {
+    const escapeHtml = api.escapeHtml;
+    const escapeAttr = api.escapeAttr;
+    const nodeLabel = String(input.nodeLabel || '').trim();
+    const phaseLabel = String(input.phaseLabel || '').trim();
+    const nextLabel = String(input.nextLabel || '').trim();
+    if (!nodeLabel && !phaseLabel && !nextLabel) return '';
+    const items = [
+      { key: 'node', label: '当前', value: nodeLabel },
+      { key: 'phase', label: '状态', value: phaseLabel },
+      { key: 'next', label: '下一步', value: nextLabel }
+    ].filter(item => item.value);
+    return `
+            <section class="battle-loop-rail"
+                     data-core-loop-rail="battle"
+                     aria-label="战斗主循环提示">
+                ${items.map(item => `
+                    <span class="battle-loop-chip battle-loop-${escapeAttr(item.key)}">
+                        <span class="battle-loop-chip-label">${escapeHtml(item.label)}</span>
+                        <span class="battle-loop-chip-value">${escapeHtml(item.value)}</span>
+                    </span>
+                `).join('')}
+            </section>
+        `;
+  };
   api.buildBattleCommandPanelMarkup = function buildBattleCommandPanelMarkup(input = {}) {
     const escapeHtml = api.escapeHtml;
     const escapeAttr = api.escapeAttr;
@@ -223,6 +248,7 @@ import { escapeAttr as importedEscapeAttr, escapeHtml as importedEscapeHtml } fr
     const systemDetailMarkup = api.buildBattleSystemsDetailMarkup({
       items: Array.isArray(systems.stripItems) ? systems.stripItems : []
     });
+    const loopRailMarkup = api.buildBattleLoopRailMarkup(input.loop || {});
     const commandButtons = commands.map(command => `
             <button class="${escapeHtml(command.classes || 'battle-command-btn')}" ${command.disabled ? 'disabled' : ''}
                     data-action="activate-battle-command"
@@ -384,6 +410,7 @@ import { escapeAttr as importedEscapeAttr, escapeHtml as importedEscapeHtml } fr
             <div class="battle-command-track">
                 <div class="battle-command-fill" style="width:${progress}%"></div>
             </div>
+            ${loopRailMarkup}
             <section id="battle-tactical-advisor"
                      class="battle-tactical-advisor ${advisorExpanded ? '' : 'collapsed'}"
                      aria-hidden="${advisorExpanded ? 'false' : 'true'}">
@@ -417,4 +444,5 @@ export const buildEnemyMetaStripMarkup = BattleHUD.buildEnemyMetaStripMarkup;
 export const buildBossActPanelMarkup = BattleHUD.buildBossActPanelMarkup;
 export const buildBattleSystemsStripMarkup = BattleHUD.buildBattleSystemsStripMarkup;
 export const buildBattleSystemsDetailMarkup = BattleHUD.buildBattleSystemsDetailMarkup;
+export const buildBattleLoopRailMarkup = BattleHUD.buildBattleLoopRailMarkup;
 export const buildBattleCommandPanelMarkup = BattleHUD.buildBattleCommandPanelMarkup;
