@@ -1,0 +1,25 @@
+js/services/authService.js
+  s_77c642ce4cb628::t_1a412ae12a6ab5 12-13,21-192,222,230,252,270,282,294,303,323,328-330,352-356,358,369-375,388-457
+js/services/backend-client.js
+  s_77c642ce4cb628::t_2a3bef16c9a6dc 2,83-92,128-208,445,447-448,452-472,475,477-478,481,483,489-490,492-494,498,519-520,524-525,527-532,541-542,554-556,560-579,582,584-585,588,590,596-597,599-601,605,620-621,624-627,633,638-820,1093-1116,1141,1148
+tests/sanity_frontend_cloud_state_v2_checks.mjs
+  s_77c642ce4cb628::t_fff8b26c85f4be 1-606
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.5",
+  "base_commit_sha": "45a84962d2ec3377b0fb228b878b39e82f075ca1",
+  "prompts": {},
+  "sessions": {
+    "s_77c642ce4cb628": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f4c50-60f2-7c91-a417-09352c99ea9d",
+        "model": "unknown"
+      },
+      "human_author": "AI Agent <bot@example.com>"
+    }
+  },
+  "attestation_metadata": {},
+  "remote_transcripts": {}
+}
