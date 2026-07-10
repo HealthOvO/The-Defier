@@ -1,0 +1,71 @@
+css/frontend-upgrade.css
+  s_ca5652313828d6::t_d0834828085135 290-293,337-340,417,569-578,946-1622
+docs/superpowers/plans/2026-07-10-frontend-surface-closure.md
+  s_3eacaa32e0cd5e::t_81baff472b5eb5 1-9
+docs/superpowers/specs/2026-07-10-frontend-surface-closure-design.md
+  s_ca5652313828d6::t_97a7cf670072ac 1-67
+index.html
+  s_ca5652313828d6::t_0325447f5119b1 175-178,184-185,191-192,198-199,210-211,226,235-236,348,391-392,483-484,488-489,492-494,497-499,502-504,507,524,673-724,857-859,1681
+js/core/collection_hub.js
+  s_ca5652313828d6::t_d7c21f34eefe2d 5356,5358-5360,5365-5375,5483,5518,5522-5538
+js/core/utils.js
+  s_ca5652313828d6::t_6268cba8d05c94 317-320,411,416,432-435,518,523
+js/game.js
+  s_ca5652313828d6::t_2afad03483a747 4604,4607-4608,4612-4613
+js/scenes/pvp-scene.js
+  s_ca5652313828d6::t_1e7d1a3ff97a59 115-126,251,460-465,477-487,494-516,4511-4516,7067-7069,7072,7076-7078,7125,7127-7128,7130-7131,7133-7134,7137-7139,7143-7145,7147-7148,7155-7157,7162-7164,7211-7213,7218-7220,7432-7434,7559,7575-7578,7580,7585,7594-7596,7603-7605,7619-7621
+js/views/RewardView.js
+  s_ca5652313828d6::t_0b80849bae9a21 1182,1194-1198,1346-1347,1350-1356,1358-1363,1386-1423,1425,1515
+tests/browser_chapter_flow_audit.mjs
+  s_ca5652313828d6::t_f23b7563c89f40 88,91-104,106-108,112-147,149-180,234-394
+tests/browser_frontend_layout_audit.mjs
+  s_155473f3c41a3e::t_2a16c31cda3e40 24-25,1719-1720,2328-2481,2958-2959,3090-3642,3992-3994,4015-4017,4033-4035
+tests/browser_pvp_audit.mjs
+  s_ca5652313828d6::t_4989a82f7203ed 113-145,508-510,515-518,522-542
+tests/browser_pvp_live_audit.mjs
+  s_ca5652313828d6::t_ec145f3d901406 1710-1719,1724,1747-1756,1758,1822-1833,1837,1858,1860,1888-1890,1893-1898,1902,8048-8087,8118-8127,8163-8174,8189-8204,8206
+tests/browser_pvp_live_real_backend_smoke.mjs
+  s_ca5652313828d6::t_8ced30d4700e97 2600-2602,2622,2662,3911-3923
+tests/browser_pvp_mobile_audit.mjs
+  s_ca5652313828d6::t_6b0eb3b67631c8 364-365,367-370,372-390,394-402,407-460
+tests/browser_run_path_reward_audit.mjs
+  s_ca5652313828d6::t_93b0f7146cb92b 170-174,193-197,210-302,305-316
+tests/browser_ui_gallery_audit.mjs
+  s_ca5652313828d6::t_5d4e1ad26d255a 787,791,794,815-818,827-829,836-848,861-866,895
+tests/test_reward_view.cjs
+  s_ca5652313828d6::t_ca1cacb4c20a72 52-54,56,62,68,82-83,87-93,95-96,98-121,123-168
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.5",
+  "base_commit_sha": "a634fd911ea85173ffce5c974c93145daae28599",
+  "prompts": {},
+  "sessions": {
+    "s_155473f3c41a3e": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f4b2a-6b3d-7971-a684-c2f0189de97c",
+        "model": "unknown"
+      },
+      "human_author": "AI Agent <bot@example.com>"
+    },
+    "s_3eacaa32e0cd5e": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f4a99-e13d-7962-b3a3-7129916973ac",
+        "model": "unknown"
+      },
+      "human_author": "AI Agent <bot@example.com>"
+    },
+    "s_ca5652313828d6": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f3fed-94d5-77b2-9af0-61333559ff38",
+        "model": "unknown"
+      },
+      "human_author": "AI Agent <bot@example.com>"
+    }
+  },
+  "attestation_metadata": {},
+  "remote_transcripts": {}
+}
