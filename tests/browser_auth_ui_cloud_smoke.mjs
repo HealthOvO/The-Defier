@@ -25,7 +25,8 @@ fs.mkdirSync(outDir, { recursive: true });
 const findings = [];
 const consoleErrors = [];
 const AUTH_UI_CLOUD_FINDING = 'real auth UI register/login syncs global progress, loads cloud slot, and writes save back to cloud';
-const SAVE_CONFLICT_FINDING = 'real save conflict modal keeps local/cloud choices consistent with backend state';
+const SAVE_CONFLICT_FINDING = 'real save CAS conflict modal rebases explicit local or cloud choices without silent overwrite';
+const CLOUD_HISTORY_FINDING = 'cloud save history restores an immutable revision through the real UI';
 
 function usesHttpsAppWithLoopbackApi(targetApiUrl = apiUrl) {
   try {
@@ -60,6 +61,7 @@ function recordConsoleError(text) {
   if (/ERR_CONNECTION_(CLOSED|RESET)/.test(message)) return;
   if (/ERR_NETWORK_CHANGED/.test(message)) return;
   if (/Failed to load resource: net::ERR_FILE_NOT_FOUND/.test(message)) return;
+  if (/Failed to load resource: the server responded with a status of 409 \(Conflict\)/.test(message)) return;
   consoleErrors.push(message);
 }
 
@@ -136,6 +138,18 @@ async function fetchCloudSlots(token) {
     throw new Error(`cloud slots fetch failed: ${res.status} ${JSON.stringify(payload)}`);
   }
   return payload.data || [];
+}
+
+async function fetchCloudHistory(token, slotIndex) {
+  const res = await fetch(`${apiUrl}/api/saves/slots/${slotIndex}/history?limit=20`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const payload = await res.json();
+  const revisions = payload && (payload.revisions || payload.history || payload.entries);
+  if (!res.ok || !payload?.success || !Array.isArray(revisions)) {
+    throw new Error(`cloud history fetch failed: ${res.status} ${JSON.stringify(payload)}`);
+  }
+  return { ...payload, revisions };
 }
 
 function sessionSignature(dataStr, salt, token) {
@@ -342,7 +356,7 @@ async function waitForGame(page) {
 
 async function runConflictDecisionProbe(browser, token, serverSession, choice, slotIndex) {
   const timestampBase = Date.now() - 120000 - (slotIndex * 10000);
-  const staleLocalChoice = choice === 'stale-local';
+  const casRaceChoice = choice === 'cas-race';
   const cloudPayload = createConflictSave({
     marker: `${choice}-cloud-conflict-${runId}`,
     timestamp: timestampBase,
@@ -353,7 +367,7 @@ async function runConflictDecisionProbe(browser, token, serverSession, choice, s
   });
   const localPayload = createConflictSave({
     marker: `${choice}-local-conflict-${runId}`,
-    timestamp: staleLocalChoice ? timestampBase - 1000 : timestampBase + 30000,
+    timestamp: timestampBase + 30000,
     slotIndex,
     realm: choice === 'local' ? 6 : 7,
     currentHp: choice === 'local' ? 77 : 79,
@@ -418,7 +432,22 @@ async function runConflictDecisionProbe(browser, token, serverSession, choice, s
     }, { cloudPayload, localPayload, slotIndex });
     await safeAuditScreenshot(conflictPage, path.join(outDir, `save-conflict-${choice}-modal.png`));
 
-    if (choice === 'local' || staleLocalChoice) {
+    let raceCloudPayload = null;
+    if (casRaceChoice) {
+      raceCloudPayload = createConflictSave({
+        marker: `${choice}-new-head-${runId}`,
+        timestamp: timestampBase + 60000,
+        slotIndex,
+        realm: 8,
+        currentHp: 66,
+        gold: 9900,
+      });
+      await uploadCloudSave(token, slotIndex, raceCloudPayload, raceCloudPayload.timestamp);
+      await waitForCloudSlotMarker(token, slotIndex, raceCloudPayload.marker);
+    }
+
+    let casRaceFirst = null;
+    if (choice === 'local' || casRaceChoice) {
       await conflictPage.evaluate(() => {
         const original = window.game.resolveSaveConflict.bind(window.game);
         window.__lastConflictResolveResult = null;
@@ -439,14 +468,14 @@ async function runConflictDecisionProbe(browser, token, serverSession, choice, s
         };
       });
       await conflictPage.click('#save-conflict-modal [onclick="game.resolveSaveConflict(\'local\')"]');
-      if (staleLocalChoice) {
+      if (casRaceChoice) {
         await conflictPage.waitForFunction(
           () => window.__lastConflictResolveResult?.settled === true,
           null,
           { timeout: uiWaitTimeoutMs }
         );
-        const cloudRow = await waitForCloudSlotMarker(token, slotIndex, cloudPayload.marker);
-        const after = await conflictPage.evaluate(({ localPayload, cloudPayload, slotIndex }) => {
+        const racedCloudRow = await waitForCloudSlotMarker(token, slotIndex, raceCloudPayload.marker);
+        casRaceFirst = await conflictPage.evaluate(({ localPayload, raceCloudPayload, slotIndex }) => {
           const modal = document.getElementById('save-conflict-modal');
           const raw = localStorage.getItem('theDefierSave');
           const save = raw ? JSON.parse(raw) : null;
@@ -459,28 +488,20 @@ async function runConflictDecisionProbe(browser, token, serverSession, choice, s
             currentSaveSlot: window.game?.currentSaveSlot ?? null,
             slotMatched: window.game?.currentSaveSlot === slotIndex,
             resolveFulfilled: !!resolveResult?.fulfilled,
-            resolveSkipped: !!resolveResult?.value?.skipped,
-            resolveMessage: resolveResult?.value?.message || '',
-            battleLogMentionsSkipped: document.body?.textContent?.includes('云端已有更新，本地存档未覆盖云端') || false,
-            tempCloudMarkerStillCloud: window.game?.tempCloudData?.marker === cloudPayload.marker,
+            resolveConflict: !!resolveResult?.value?.conflict,
+            resolveReason: resolveResult?.value?.reason || '',
+            battleLogMentionsRace: document.body?.textContent?.includes('云端版本再次变化') || false,
+            tempCloudMarkerIsLatest: window.game?.tempCloudData?.marker === raceCloudPayload.marker,
+            cachedMarkerIsLatest: window.game?.cachedSlots?.[slotIndex]?.marker === raceCloudPayload.marker,
           };
-        }, { localPayload, cloudPayload, slotIndex });
-        await safeAuditScreenshot(conflictPage, path.join(outDir, 'save-conflict-stale-local-after.png'));
-        return {
-          choice,
-          slotIndex,
-          cloudSeedMarker: cloudPayload.marker,
-          localMarker: localPayload.marker,
-          before,
-          after,
-          dialogMessages,
-          cloudReadbackMarker: cloudRow.saveData?.marker || '',
-          cloudReadbackGold: Number(cloudRow.saveData?.player?.gold || 0),
-          cloudReadbackSaveTime: Number(cloudRow.saveTime || 0),
-          cloudReadbackMarkerStillCloud: cloudRow.saveData?.marker === cloudPayload.marker,
-          cloudReadbackGoldStillCloud: Number(cloudRow.saveData?.player?.gold || 0) === cloudPayload.player.gold,
-          cloudSaveTimeUnchanged: Number(cloudRow.saveTime || 0) === Number(seededCloudRow.saveTime || 0),
-        };
+        }, { localPayload, raceCloudPayload, slotIndex });
+        casRaceFirst.cloudReadbackMarker = racedCloudRow.saveData?.marker || '';
+        casRaceFirst.cloudReadbackStillLatest = racedCloudRow.saveData?.marker === raceCloudPayload.marker;
+        await safeAuditScreenshot(conflictPage, path.join(outDir, 'save-conflict-cas-race-after-first-confirm.png'));
+        await conflictPage.evaluate(() => {
+          window.__lastConflictResolveResult = null;
+        });
+        await conflictPage.click('#save-conflict-modal [onclick="game.resolveSaveConflict(\'local\')"]');
       }
       await conflictPage.waitForFunction(
         () => !document.getElementById('save-conflict-modal')?.classList.contains('active'),
@@ -508,6 +529,7 @@ async function runConflictDecisionProbe(browser, token, serverSession, choice, s
         cloudSeedMarker: cloudPayload.marker,
         localMarker: localPayload.marker,
         before,
+        casRaceFirst,
         after,
         dialogMessages,
         cloudReadbackMarker: cloudRow.saveData?.marker || '',
@@ -568,6 +590,199 @@ async function runConflictDecisionProbe(browser, token, serverSession, choice, s
       cloudReadbackMarkerStillCloud: cloudRow.saveData?.marker === cloudPayload.marker,
       cloudReadbackGoldStillCloud: Number(cloudRow.saveData?.player?.gold || 0) === cloudPayload.player.gold,
       cloudSaveTimeUnchanged: Number(cloudRow.saveTime || 0) === Number(seededCloudRow.saveTime || 0),
+    };
+  } finally {
+    await context.close();
+  }
+}
+
+async function runCloudHistoryRestoreProbe(browser, token, serverSession, slotIndex = 0) {
+  const activeSlotBeforeHistory = slotIndex === 3 ? 2 : 3;
+  const beforeHistory = await fetchCloudHistory(token, slotIndex);
+  const headRevisionId = String(
+    beforeHistory.headRevisionId
+      || beforeHistory.currentRevisionId
+      || beforeHistory.revisions.find(revision => revision?.isHead)?.revisionId
+      || beforeHistory.revisions[0]?.revisionId
+      || ''
+  );
+  const sourceRevision = beforeHistory.revisions.find(revision => {
+    const revisionId = String(revision?.revisionId || '');
+    const saveData = revision?.saveData || revision?.data || null;
+    return revisionId && revisionId !== headRevisionId && saveData?.marker;
+  });
+  if (!sourceRevision) {
+    throw new Error(`cloud history did not contain a restorable prior revision: ${JSON.stringify(beforeHistory)}`);
+  }
+  const sourceRevisionId = String(sourceRevision.revisionId);
+  const sourceData = sourceRevision.saveData || sourceRevision.data;
+  const sourceMarker = String(sourceData.marker || '');
+  const sourceRealm = Number(sourceData?.player?.realm || 0);
+  const sourceGold = Number(sourceData?.player?.gold || 0);
+  const sourceHp = Number(sourceData?.player?.currentHp || 0);
+  const sourceStillPresentBefore = beforeHistory.revisions.some(revision => revision?.revisionId === sourceRevisionId);
+  const maxRevisionNumberBefore = Math.max(0, ...beforeHistory.revisions.map(revision => Number(revision?.revisionNumber) || 0));
+
+  const context = await browser.newContext({
+    viewport: { width: 390, height: 844 },
+    isMobile: true,
+    hasTouch: true,
+  });
+  const page = await context.newPage();
+  page.on('console', msg => {
+    if (msg.type() === 'error') recordConsoleError(msg.text());
+  });
+  page.on('pageerror', error => recordConsoleError(error.message));
+  try {
+    await configurePage(page);
+    await page.addInitScript(({ serverSession, activeSlotBeforeHistory }) => {
+      localStorage.setItem('theDefierServerSession', JSON.stringify(serverSession));
+      localStorage.setItem('lastSaveSlot', String(activeSlotBeforeHistory));
+      sessionStorage.setItem('currentSaveSlot', String(activeSlotBeforeHistory));
+    }, { serverSession, activeSlotBeforeHistory });
+    await waitForGame(page);
+    await page.evaluate(async (activeSlot) => {
+      window.game.currentSaveSlot = activeSlot;
+      localStorage.setItem('lastSaveSlot', String(activeSlot));
+      sessionStorage.setItem('currentSaveSlot', String(activeSlot));
+      await window.game.openSaveSlotsWithSync();
+    }, activeSlotBeforeHistory);
+    const historyButton = `#save-slots-modal [data-system-action="select-slot"][data-slot-index="${slotIndex}"][data-slot-mode="history"]`;
+    await page.waitForSelector(historyButton, { timeout: uiWaitTimeoutMs });
+    const sessionLossProbe = await page.evaluate(({ historyButton, activeSlotBeforeHistory }) => {
+      localStorage.removeItem('theDefierServerSession');
+      const action = document.querySelector(historyButton);
+      action?.click();
+      return {
+        saveSlotsStayedActive: !!document.getElementById('save-slots-modal')?.classList.contains('active'),
+        historyStayedClosed: !document.getElementById('cloud-save-history-modal')?.classList.contains('active'),
+        activeSlotUnchanged: window.game?.currentSaveSlot === activeSlotBeforeHistory
+      };
+    }, { historyButton, activeSlotBeforeHistory });
+    await page.evaluate((restoredSession) => {
+      localStorage.setItem('theDefierServerSession', JSON.stringify(restoredSession));
+    }, serverSession);
+    await page.click(historyButton);
+    await page.waitForSelector('#cloud-save-history-modal.active', { timeout: uiWaitTimeoutMs });
+    await page.waitForSelector(`[data-cloud-revision-id="${sourceRevisionId}"]:not(:disabled)`, { timeout: uiWaitTimeoutMs });
+    const before = await page.evaluate(({ sourceRevisionId, activeSlotBeforeHistory }) => {
+      const modal = document.getElementById('cloud-save-history-modal');
+      const rows = Array.from(document.querySelectorAll('#cloud-save-history-list .cloud-history-item'));
+      const currentRows = rows.filter(row => row.classList.contains('is-head'));
+      const sourceButton = document.querySelector(`[data-cloud-revision-id="${sourceRevisionId}"]`);
+      const panel = modal?.querySelector('.cloud-save-history-panel');
+      const panelRect = panel?.getBoundingClientRect();
+      const sourceRowRect = sourceButton?.closest('.cloud-history-item')?.getBoundingClientRect();
+      const sourceButtonRect = sourceButton?.getBoundingClientRect();
+      return {
+        modalActive: !!modal?.classList.contains('active'),
+        rowCount: rows.length,
+        currentRowCount: currentRows.length,
+        sourceRestoreEnabled: !!sourceButton && !sourceButton.disabled,
+        nonDestructiveCopyVisible: modal?.textContent?.includes('原记录保持不变') || false,
+        saveSlotsModalInactive: !document.getElementById('save-slots-modal')?.classList.contains('active'),
+        mobilePanelContained: !!panelRect
+          && panelRect.left >= -1
+          && panelRect.right <= window.innerWidth + 1
+          && panelRect.top >= -1
+          && panelRect.bottom <= window.innerHeight + 1,
+        mobileNoHorizontalOverflow: !!panel && panel.scrollWidth <= panel.clientWidth + 1,
+        mobileRestoreButtonStacked: !!sourceRowRect && !!sourceButtonRect
+          && sourceButtonRect.width >= sourceRowRect.width - 40,
+        activeSlotUnchangedByHistory: window.game?.currentSaveSlot === activeSlotBeforeHistory,
+        sessionSlotUnchangedByHistory: sessionStorage.getItem('currentSaveSlot') === String(activeSlotBeforeHistory),
+        persistedSlotUnchangedByHistory: localStorage.getItem('lastSaveSlot') === String(activeSlotBeforeHistory),
+      };
+    }, { sourceRevisionId, activeSlotBeforeHistory });
+    await safeAuditScreenshot(page, path.join(outDir, 'cloud-save-history-before-restore.png'));
+
+    const localSaveBeforeAccountSwitch = await page.evaluate(() => localStorage.getItem('theDefierSave'));
+    let accountSwitchInjected = false;
+    const saveReadRoute = async (route) => {
+      if (!accountSwitchInjected && route.request().method() === 'GET') {
+        accountSwitchInjected = true;
+        await page.evaluate(() => localStorage.removeItem('theDefierServerSession'));
+      }
+      await route.continue();
+    };
+    await page.route('**/api/saves', saveReadRoute);
+    await page.click(`[data-cloud-revision-id="${sourceRevisionId}"]`);
+    await page.waitForSelector('#generic-confirm-modal.active #generic-confirm-btn', { timeout: uiWaitTimeoutMs });
+    await page.click('#generic-confirm-btn');
+    await page.waitForFunction(() => {
+      const status = document.getElementById('cloud-save-history-status')?.textContent || '';
+      return status.includes('不会载入旧账号数据');
+    }, null, { timeout: uiWaitTimeoutMs });
+    const accountSwitchDuringRestoreProbe = await page.evaluate((expectedLocalSave) => ({
+      accountSwitchInjected: !localStorage.getItem('theDefierServerSession'),
+      historyModalStillActive: !!document.getElementById('cloud-save-history-modal')?.classList.contains('active'),
+      localSaveUnchanged: localStorage.getItem('theDefierSave') === expectedLocalSave,
+      statusBlockedOldAccountLoad: (document.getElementById('cloud-save-history-status')?.textContent || '').includes('不会载入旧账号数据')
+    }), localSaveBeforeAccountSwitch);
+    await page.unroute('**/api/saves', saveReadRoute);
+    await page.evaluate((restoredSession) => {
+      localStorage.setItem('theDefierServerSession', JSON.stringify(restoredSession));
+    }, serverSession);
+
+    await page.click(`[data-cloud-revision-id="${sourceRevisionId}"]`);
+    await page.waitForSelector('#generic-confirm-modal.active #generic-confirm-btn', { timeout: uiWaitTimeoutMs });
+    const navigation = page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: navigationTimeoutMs })
+      .then(() => true)
+      .catch(() => false);
+    await page.click('#generic-confirm-btn');
+    const reloadObserved = await navigation;
+    await page.waitForFunction(({ sourceRealm, sourceGold, sourceHp }) => {
+      try {
+        const save = JSON.parse(localStorage.getItem('theDefierSave') || 'null');
+        return Number(save?.player?.realm || 0) === sourceRealm
+          && Number(save?.player?.gold || 0) === sourceGold
+          && Number(save?.player?.currentHp || 0) === sourceHp
+          && Number(window.game?.player?.realm || 0) === sourceRealm
+          && Number(window.game?.player?.gold || 0) === sourceGold;
+      } catch {
+        return false;
+      }
+    }, { sourceRealm, sourceGold, sourceHp }, { timeout: uiWaitTimeoutMs });
+
+    const afterHistory = await fetchCloudHistory(token, slotIndex);
+    const restoredHeadRevisionId = afterHistory.headRevisionId
+      || afterHistory.currentRevisionId
+      || afterHistory.revisions.find(revision => revision?.isHead)?.revisionId;
+    const restoredHead = afterHistory.revisions.find(revision => revision?.revisionId === restoredHeadRevisionId)
+      || afterHistory.revisions[0]
+      || null;
+    const restoredData = restoredHead?.saveData || restoredHead?.data || null;
+    const cloudRows = await fetchCloudSlots(token);
+    const cloudHead = cloudRows.find(row => row.slotIndex === slotIndex) || null;
+    const after = await page.evaluate(({ sourceRealm, sourceGold, sourceHp }) => {
+      const save = JSON.parse(localStorage.getItem('theDefierSave') || 'null');
+      return {
+        localMarker: save?.marker || '',
+        localStateMatched: Number(save?.player?.realm || 0) === sourceRealm
+          && Number(save?.player?.gold || 0) === sourceGold
+          && Number(save?.player?.currentHp || 0) === sourceHp,
+        runtimeStateMatched: Number(window.game?.player?.realm || 0) === sourceRealm
+          && Number(window.game?.player?.gold || 0) === sourceGold,
+        justLoadedMarkerSet: sessionStorage.getItem('justLoadedSave') === 'true',
+      };
+    }, { sourceRealm, sourceGold, sourceHp });
+    return {
+      slotIndex,
+      sourceRevisionId,
+      sourceMarker,
+      sessionLossProbe,
+      accountSwitchDuringRestoreProbe,
+      before,
+      after,
+      reloadObserved,
+      sourceStillPresentBefore,
+      sourceStillPresentAfter: afterHistory.revisions.some(revision => revision?.revisionId === sourceRevisionId),
+      restoredOperation: restoredHead?.operation || '',
+      restoredSourceRevisionId: restoredHead?.sourceRevisionId || '',
+      restoredRevisionAdvanced: Number(restoredHead?.revisionNumber || 0) > maxRevisionNumberBefore,
+      restoredMarkerMatched: restoredData?.marker === sourceMarker,
+      cloudHeadMarkerMatched: cloudHead?.saveData?.marker === sourceMarker,
+      cloudHeadRevisionMatched: cloudHead?.revisionId === restoredHead?.revisionId,
     };
   } finally {
     await context.close();
@@ -1031,6 +1246,7 @@ async function runSmoke(page, browser) {
   let saveConflictProbe = null;
   let cleanCloudRestoreProbe = null;
   let rewardCloudRestoreProbe = null;
+  let cloudHistoryProbe = null;
   try {
     await configurePage(loginPage);
     await loginPage.addInitScript(({ localAchievementId, localCardBackId, localUnlockId }) => {
@@ -1247,9 +1463,10 @@ async function runSmoke(page, browser) {
     await safeAuditScreenshot(loginPage, path.join(outDir, 'cloud-save-writeback.png'));
     cleanCloudRestoreProbe = await runCleanCloudRestoreProbe(browser, serverSession, writebackGold);
     rewardCloudRestoreProbe = await runRewardCloudRestoreProbe(loginPage, browser, loginToken, serverSession, writebackGold);
+    cloudHistoryProbe = await runCloudHistoryRestoreProbe(browser, loginToken, serverSession, 0);
     saveConflictProbe = {
       invalidSlot: await runInvalidConflictSlotProbe(browser, loginToken, serverSession),
-      skipped: await runConflictDecisionProbe(browser, loginToken, serverSession, 'stale-local', 1),
+      casRace: await runConflictDecisionProbe(browser, loginToken, serverSession, 'cas-race', 1),
       local: await runConflictDecisionProbe(browser, loginToken, serverSession, 'local', 2),
       cloud: await runConflictDecisionProbe(browser, loginToken, serverSession, 'cloud', 3),
     };
@@ -1273,6 +1490,7 @@ async function runSmoke(page, browser) {
     loginSessionProbe,
     cleanCloudRestoreProbe,
     rewardCloudRestoreProbe,
+    cloudHistoryProbe,
     saveConflictProbe,
   };
 }
@@ -1314,7 +1532,7 @@ try {
   const result = await runSmoke(page, browser);
   await page.close();
   const invalidSlotConflict = result.saveConflictProbe?.invalidSlot || null;
-  const skippedConflict = result.saveConflictProbe?.skipped || null;
+  const casRaceConflict = result.saveConflictProbe?.casRace || null;
   const localConflict = result.saveConflictProbe?.local || null;
   const cloudConflict = result.saveConflictProbe?.cloud || null;
 
@@ -1397,26 +1615,30 @@ try {
       && invalidSlotConflict.cloudReadbackMarkerStillCloud
       && invalidSlotConflict.cloudReadbackGoldStillCloud
       && invalidSlotConflict.cloudSaveTimeUnchanged
-      && skippedConflict
-      && skippedConflict.before?.modalActive
-      && skippedConflict.before?.slotMatched
-      && skippedConflict.before?.localInfoHasRealm
-      && skippedConflict.before?.localInfoHasGold
-      && skippedConflict.before?.cloudInfoHasRealm
-      && skippedConflict.before?.cloudInfoHasGold
-      && skippedConflict.before?.tempCloudMarkerMatched
-      && skippedConflict.after?.modalStillActive
-      && skippedConflict.after?.slotMatched
-      && skippedConflict.after?.localStorageKeptLocal
-      && skippedConflict.after?.cachedSlotNotOverwritten
-      && skippedConflict.after?.resolveFulfilled
-      && skippedConflict.after?.resolveSkipped
-      && skippedConflict.after?.resolveMessage === 'stale-save-ignored'
-      && skippedConflict.after?.battleLogMentionsSkipped
-      && skippedConflict.after?.tempCloudMarkerStillCloud
-      && skippedConflict.cloudReadbackMarkerStillCloud
-      && skippedConflict.cloudReadbackGoldStillCloud
-      && skippedConflict.cloudSaveTimeUnchanged
+      && casRaceConflict
+      && casRaceConflict.before?.modalActive
+      && casRaceConflict.before?.slotMatched
+      && casRaceConflict.before?.localInfoHasRealm
+      && casRaceConflict.before?.localInfoHasGold
+      && casRaceConflict.before?.cloudInfoHasRealm
+      && casRaceConflict.before?.cloudInfoHasGold
+      && casRaceConflict.before?.tempCloudMarkerMatched
+      && casRaceConflict.casRaceFirst?.modalStillActive
+      && casRaceConflict.casRaceFirst?.slotMatched
+      && casRaceConflict.casRaceFirst?.localStorageKeptLocal
+      && casRaceConflict.casRaceFirst?.cachedSlotNotOverwritten
+      && casRaceConflict.casRaceFirst?.resolveFulfilled
+      && casRaceConflict.casRaceFirst?.resolveConflict
+      && casRaceConflict.casRaceFirst?.resolveReason === 'save_conflict'
+      && casRaceConflict.casRaceFirst?.battleLogMentionsRace
+      && casRaceConflict.casRaceFirst?.tempCloudMarkerIsLatest
+      && casRaceConflict.casRaceFirst?.cachedMarkerIsLatest
+      && casRaceConflict.casRaceFirst?.cloudReadbackStillLatest
+      && casRaceConflict.after?.modalClosed
+      && casRaceConflict.after?.localStorageKeptLocal
+      && casRaceConflict.after?.cachedSlotUpdated
+      && casRaceConflict.cloudReadbackMarkerMatched
+      && casRaceConflict.cloudReadbackGoldMatched
       && localConflict
       && localConflict.before?.modalActive
       && localConflict.before?.slotMatched
@@ -1452,9 +1674,44 @@ try {
       && cloudConflict.cloudSaveTimeUnchanged,
     JSON.stringify(result.saveConflictProbe)
   );
+  add(
+    CLOUD_HISTORY_FINDING,
+    result.cloudHistoryProbe?.before?.modalActive
+      && result.cloudHistoryProbe.before.rowCount >= 2
+      && result.cloudHistoryProbe.before.currentRowCount === 1
+      && result.cloudHistoryProbe.before.sourceRestoreEnabled
+      && result.cloudHistoryProbe.before.nonDestructiveCopyVisible
+      && result.cloudHistoryProbe.before.saveSlotsModalInactive
+      && result.cloudHistoryProbe.before.mobilePanelContained
+      && result.cloudHistoryProbe.before.mobileNoHorizontalOverflow
+      && result.cloudHistoryProbe.before.mobileRestoreButtonStacked
+      && result.cloudHistoryProbe.before.activeSlotUnchangedByHistory
+      && result.cloudHistoryProbe.before.sessionSlotUnchangedByHistory
+      && result.cloudHistoryProbe.before.persistedSlotUnchangedByHistory
+      && result.cloudHistoryProbe.sessionLossProbe?.saveSlotsStayedActive
+      && result.cloudHistoryProbe.sessionLossProbe?.historyStayedClosed
+      && result.cloudHistoryProbe.sessionLossProbe?.activeSlotUnchanged
+      && result.cloudHistoryProbe.accountSwitchDuringRestoreProbe?.accountSwitchInjected
+      && result.cloudHistoryProbe.accountSwitchDuringRestoreProbe?.historyModalStillActive
+      && result.cloudHistoryProbe.accountSwitchDuringRestoreProbe?.localSaveUnchanged
+      && result.cloudHistoryProbe.accountSwitchDuringRestoreProbe?.statusBlockedOldAccountLoad
+      && result.cloudHistoryProbe.reloadObserved
+      && result.cloudHistoryProbe.after?.localStateMatched
+      && result.cloudHistoryProbe.after?.runtimeStateMatched
+      && result.cloudHistoryProbe.sourceStillPresentBefore
+      && result.cloudHistoryProbe.sourceStillPresentAfter
+      && result.cloudHistoryProbe.restoredOperation === 'restore'
+      && result.cloudHistoryProbe.restoredSourceRevisionId === result.cloudHistoryProbe.sourceRevisionId
+      && result.cloudHistoryProbe.restoredRevisionAdvanced
+      && result.cloudHistoryProbe.restoredMarkerMatched
+      && result.cloudHistoryProbe.cloudHeadMarkerMatched
+      && result.cloudHistoryProbe.cloudHeadRevisionMatched,
+    JSON.stringify(result.cloudHistoryProbe)
+  );
 } catch (error) {
   add(AUTH_UI_CLOUD_FINDING, false, error?.message || String(error));
   add(SAVE_CONFLICT_FINDING, false, error?.message || String(error));
+  add(CLOUD_HISTORY_FINDING, false, error?.message || String(error));
 } finally {
   if (browser) await browser.close().catch(() => {});
   await stopBackend(server);

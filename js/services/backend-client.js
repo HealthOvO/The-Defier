@@ -1,4 +1,5 @@
 export const SESSION_STORAGE_KEY = 'theDefierServerSession';
+export const CLOUD_STATE_PROTOCOL_VERSION = 'cloud-state-v2';
 export const BackendClient = {
   provider: 'server',
   initError: null,
@@ -79,6 +80,16 @@ export const BackendClient = {
     const random = Array.from(bytes).map(value => value.toString(16).padStart(2, '0')).join('');
     return `session-${prefix}-${random}`;
   },
+  createMutationId() {
+    const cryptoObj = this.getRuntimeCrypto();
+    if (!cryptoObj || typeof cryptoObj.getRandomValues !== 'function') {
+      return `mutation-${Date.now().toString(36)}-${Math.floor(Math.random() * 1e12).toString(36)}`;
+    }
+    const bytes = new Uint8Array(12);
+    cryptoObj.getRandomValues(bytes);
+    const random = Array.from(bytes).map(value => value.toString(16).padStart(2, '0')).join('');
+    return `mutation-${Date.now().toString(36)}-${random}`;
+  },
   bytesToHex(bytes) {
     return Array.from(bytes || []).map(value => value.toString(16).padStart(2, '0')).join('');
   },
@@ -112,6 +123,99 @@ export const BackendClient = {
       salt,
       signature,
       signatureMode: 'session'
+    };
+  },
+  normalizeRevisionId(value) {
+    const normalized = String(value || '').trim();
+    return normalized || null;
+  },
+  normalizeRevisionMetadata(source) {
+    if (!source || typeof source !== 'object') return null;
+    const revisionId = this.normalizeRevisionId(source.revisionId);
+    const revisionNumber = Number(source.revisionNumber);
+    const contentHash = typeof source.contentHash === 'string' && source.contentHash ? source.contentHash : null;
+    const headUpdatedAt = Number(source.headUpdatedAt);
+    const metadata = {};
+    if (revisionId) metadata.revisionId = revisionId;
+    if (Number.isFinite(revisionNumber)) metadata.revisionNumber = revisionNumber;
+    if (contentHash) metadata.contentHash = contentHash;
+    if (Number.isFinite(headUpdatedAt)) metadata.headUpdatedAt = headUpdatedAt;
+    return Object.keys(metadata).length > 0 ? metadata : null;
+  },
+  parseStructuredPayloadData(rawValue) {
+    if (typeof rawValue !== 'string') return this.cloneData(rawValue);
+    try {
+      return JSON.parse(rawValue);
+    } catch (error) {
+      return rawValue;
+    }
+  },
+  normalizeSlotEntry(entry) {
+    if (!entry || typeof entry !== 'object') return null;
+    const slotIndex = Number(entry.slotIndex);
+    const saveTime = Number(entry.saveTime);
+    const saveData = this.parseStructuredPayloadData(
+      Object.prototype.hasOwnProperty.call(entry, 'saveData') ? entry.saveData : entry.data
+    );
+    const revision = this.normalizeRevisionMetadata(entry);
+    const normalized = {
+      slotIndex: Number.isInteger(slotIndex) ? slotIndex : null,
+      saveData,
+      data: this.cloneData(saveData)
+    };
+    if (Number.isFinite(saveTime)) normalized.saveTime = saveTime;
+    if (revision) Object.assign(normalized, revision);
+    if (typeof entry.operation === 'string') normalized.operation = entry.operation;
+    if (typeof entry.parentRevisionId === 'string') normalized.parentRevisionId = entry.parentRevisionId;
+    if (typeof entry.sourceRevisionId === 'string') normalized.sourceRevisionId = entry.sourceRevisionId;
+    if (Number.isFinite(Number(entry.clientUpdatedAt))) normalized.clientUpdatedAt = Number(entry.clientUpdatedAt);
+    if (Number.isFinite(Number(entry.createdAt))) normalized.createdAt = Number(entry.createdAt);
+    if (typeof entry.isHead === 'boolean') normalized.isHead = entry.isHead;
+    return normalized;
+  },
+  normalizeGlobalEntry(entry) {
+    if (entry === undefined || entry === null) return null;
+    const hasRevisionMetadata = !!this.normalizeRevisionMetadata(entry);
+    let dataSource = entry;
+    if (entry && typeof entry === 'object') {
+      if (Object.prototype.hasOwnProperty.call(entry, 'globalData')) {
+        dataSource = entry.globalData;
+      } else if (Object.prototype.hasOwnProperty.call(entry, 'data')) {
+        dataSource = entry.data;
+      } else if (hasRevisionMetadata) {
+        dataSource = {};
+      }
+    }
+    const data = this.parseStructuredPayloadData(dataSource);
+    const globalUpdatedAt = Number(entry && entry.globalUpdatedAt);
+    const revision = this.normalizeRevisionMetadata(entry);
+    const normalized = {
+      data,
+      globalData: this.cloneData(data)
+    };
+    if (Number.isFinite(globalUpdatedAt)) normalized.globalUpdatedAt = globalUpdatedAt;
+    if (revision) Object.assign(normalized, revision);
+    if (typeof entry.operation === 'string') normalized.operation = entry.operation;
+    if (typeof entry.parentRevisionId === 'string') normalized.parentRevisionId = entry.parentRevisionId;
+    if (typeof entry.sourceRevisionId === 'string') normalized.sourceRevisionId = entry.sourceRevisionId;
+    if (Number.isFinite(Number(entry.clientUpdatedAt))) normalized.clientUpdatedAt = Number(entry.clientUpdatedAt);
+    if (Number.isFinite(Number(entry.createdAt))) normalized.createdAt = Number(entry.createdAt);
+    if (typeof entry.isHead === 'boolean') normalized.isHead = entry.isHead;
+    return normalized;
+  },
+  normalizeCloudStateConflict(error, entryType = 'slot', fallbackMessage = '云状态写入冲突') {
+    const payload = error && error.payload && typeof error.payload === 'object' ? error.payload : null;
+    const currentRaw = payload && payload.current && typeof payload.current === 'object' ? payload.current : null;
+    const current = entryType === 'global'
+      ? this.normalizeGlobalEntry(currentRaw)
+      : this.normalizeSlotEntry(currentRaw);
+    return {
+      success: false,
+      conflict: true,
+      reason: payload && payload.reason ? payload.reason : error && error.reason ? error.reason : `${entryType}_conflict`,
+      current: current || this.cloneData(currentRaw),
+      error,
+      message: error && error.message ? error.message : fallbackMessage
     };
   },
   createError(message, code = null, extra = null) {
@@ -350,37 +454,60 @@ export const BackendClient = {
     this.clearServerSession();
     this.currentUser = null;
   },
-  async saveCloudData(gameData, slotIndex = 0) {
+  async saveCloudData(gameData, slotIndex = 0, options = {}) {
     const slot = Number(slotIndex);
-    const user = this.getCurrentUser();
-    if (!user) return {
-      success: false,
-      message: '未登录'
-    };
+    const sessionSnapshot = this.captureSignedSessionSnapshot(options, '登录账号已变化，请刷新云存档后重试');
+    if (!sessionSnapshot || !sessionSnapshot.success) return sessionSnapshot;
     try {
       const payload = this.cloneData(gameData);
       const saveTime = Number.isFinite(payload && payload.timestamp) ? payload.timestamp : Date.now();
-      const integrity = await this.createSessionIntegrityFields(payload);
+      const baseRevisionId = Object.prototype.hasOwnProperty.call(options || {}, 'baseRevisionId')
+        ? this.normalizeRevisionId(options.baseRevisionId)
+        : null;
+      const mutationId = typeof options?.mutationId === 'string' && options.mutationId
+        ? options.mutationId
+        : this.createMutationId();
+      const signedPayload = {
+        protocolVersion: CLOUD_STATE_PROTOCOL_VERSION,
+        slotIndex: slot,
+        baseRevisionId,
+        mutationId,
+        saveData: payload,
+        saveTime
+      };
+      const integrityResult = await this.createRequiredSessionIntegrityFields(
+        signedPayload,
+        sessionSnapshot.sessionToken,
+        '当前环境不支持云存档签名，请刷新后重试',
+        'cloud_state_signature_required'
+      );
+      if (!integrityResult.success) return integrityResult;
       const result = await this.requestServer(this.getServerConfig().savePathPrefix, {
         method: 'POST',
+        authToken: sessionSnapshot.sessionToken,
         data: {
-          slotIndex: slot,
-          saveData: payload,
-          saveTime,
-          ...integrity
+          ...signedPayload,
+          ...integrityResult.integrity
         }
       });
+      const revision = this.normalizeRevisionMetadata(result);
       const serverSaveTime = Number(result && result.saveTime);
-      return {
+      const response = {
         success: true,
         skipped: !!(result && result.skipped),
         saveTime: Number.isFinite(serverSaveTime) ? serverSaveTime : saveTime,
         message: result && result.message ? result.message : undefined
       };
+      if (revision) Object.assign(response, revision);
+      return response;
     } catch (error) {
+      if (Number(error && error.code) === 409) {
+        return this.normalizeCloudStateConflict(error, 'slot', '云存档保存冲突');
+      }
       return {
         success: false,
         error,
+        reason: error && error.reason || undefined,
         message: error.message || '云存档保存失败'
       };
     }
@@ -401,19 +528,21 @@ export const BackendClient = {
         method: 'GET'
       });
       const slots = [null, null, null, null];
+      const slotEntries = [null, null, null, null];
+      const revisions = {};
       let maxTime = 0;
       if (result && Array.isArray(result.data)) {
         result.data.forEach(item => {
-          const idx = item.slotIndex;
+          const normalized = this.normalizeSlotEntry(item);
+          const idx = normalized && Number.isInteger(normalized.slotIndex) ? normalized.slotIndex : Number(item && item.slotIndex);
           if (idx >= 0 && idx <= 3) {
-            let dataToUse = item.saveData;
-            if (typeof dataToUse === 'string') {
-              try {
-                dataToUse = JSON.parse(dataToUse);
-              } catch (e) {}
+            slots[idx] = this.cloneData(normalized ? normalized.saveData : null);
+            slotEntries[idx] = normalized;
+            if (normalized) {
+              const revision = this.normalizeRevisionMetadata(normalized);
+              if (revision) revisions[idx] = revision;
+              if (Number.isFinite(normalized.saveTime) && normalized.saveTime > maxTime) maxTime = normalized.saveTime;
             }
-            slots[idx] = this.cloneData(dataToUse);
-            if (item.saveTime > maxTime) maxTime = item.saveTime;
           }
         });
       }
@@ -421,6 +550,8 @@ export const BackendClient = {
       return {
         success: true,
         slots: slots,
+        slotEntries,
+        revisions,
         serverTime: maxTime || Date.now(),
         isEmpty: typeof result?.isEmpty === 'boolean' ? result.isEmpty : fallbackIsEmpty
       };
@@ -432,35 +563,58 @@ export const BackendClient = {
       };
     }
   },
-  async saveGlobalData(data) {
-    const user = this.getCurrentUser();
-    if (!user) return {
-      success: false,
-      message: '未登录'
-    };
+  async saveGlobalData(data, options = {}) {
+    const sessionSnapshot = this.captureSignedSessionSnapshot(options, '登录账号已变化，请刷新全局云状态后重试');
+    if (!sessionSnapshot || !sessionSnapshot.success) return sessionSnapshot;
     try {
       const payload = this.cloneData(data);
       const globalUpdatedAt = Number.isFinite(payload && payload.updatedAt) ? payload.updatedAt : Date.now();
-      const integrity = await this.createSessionIntegrityFields(payload);
+      const baseRevisionId = Object.prototype.hasOwnProperty.call(options || {}, 'baseRevisionId')
+        ? this.normalizeRevisionId(options.baseRevisionId)
+        : null;
+      const mutationId = typeof options?.mutationId === 'string' && options.mutationId
+        ? options.mutationId
+        : this.createMutationId();
+      const signedPayload = {
+        protocolVersion: CLOUD_STATE_PROTOCOL_VERSION,
+        baseRevisionId,
+        mutationId,
+        globalData: payload,
+        globalUpdatedAt
+      };
+      const integrityResult = await this.createRequiredSessionIntegrityFields(
+        signedPayload,
+        sessionSnapshot.sessionToken,
+        '当前环境不支持全局云状态签名，请刷新后重试',
+        'cloud_state_signature_required'
+      );
+      if (!integrityResult.success) return integrityResult;
       const result = await this.requestServer(`${this.getServerConfig().userPathPrefix}/global`, {
         method: 'POST',
+        authToken: sessionSnapshot.sessionToken,
         data: {
-          globalData: payload,
-          globalUpdatedAt,
-          ...integrity
+          ...signedPayload,
+          ...integrityResult.integrity
         }
       });
+      const revision = this.normalizeRevisionMetadata(result);
       const serverUpdatedAt = Number(result && result.globalUpdatedAt);
-      return {
+      const response = {
         success: true,
         skipped: !!(result && result.skipped),
         globalUpdatedAt: Number.isFinite(serverUpdatedAt) ? serverUpdatedAt : globalUpdatedAt,
         message: result && result.message ? result.message : undefined
       };
+      if (revision) Object.assign(response, revision);
+      return response;
     } catch (error) {
+      if (Number(error && error.code) === 409) {
+        return this.normalizeCloudStateConflict(error, 'global', '全局云状态保存冲突');
+      }
       return {
         success: false,
         error,
+        reason: error && error.reason || undefined,
         message: error.message || '全局数据保存失败'
       };
     }
@@ -475,15 +629,208 @@ export const BackendClient = {
       const result = await this.requestServer(`${this.getServerConfig().userPathPrefix}/global`, {
         method: 'GET'
       });
+      const normalized = this.normalizeGlobalEntry(result);
+      const revision = this.normalizeRevisionMetadata(normalized || result);
       return {
         success: true,
-        data: result && Object.prototype.hasOwnProperty.call(result, 'data') ? result.data : result
+        data: normalized ? normalized.data : result && Object.prototype.hasOwnProperty.call(result, 'data') ? result.data : result,
+        globalUpdatedAt: normalized && Number.isFinite(normalized.globalUpdatedAt) ? normalized.globalUpdatedAt : undefined,
+        revision,
+        ...(revision || {})
       };
     } catch (error) {
       return {
         success: false,
         error,
+        reason: error && error.reason || undefined,
         message: error.message || '全局数据读取失败'
+      };
+    }
+  },
+  async getCloudSaveHistory(slotIndex = 0, options = {}) {
+    const slot = Number(slotIndex);
+    const user = this.getCurrentUser();
+    if (!user) return {
+      success: false,
+      message: '未登录'
+    };
+    const safeLimit = Object.prototype.hasOwnProperty.call(options || {}, 'limit')
+      ? Math.max(1, Math.min(20, Math.floor(Number(options.limit) || 20)))
+      : null;
+    const query = new URLSearchParams();
+    if (safeLimit !== null) query.set('limit', String(safeLimit));
+    const suffix = query.toString() ? `?${query.toString()}` : '';
+    try {
+      const result = await this.requestServer(`${this.getServerConfig().savePathPrefix}/slots/${encodeURIComponent(slot)}/history${suffix}`, {
+        method: 'GET'
+      });
+      const historySource = result && (result.revisions || result.history || result.entries);
+      const history = Array.isArray(historySource)
+        ? historySource.map(entry => this.normalizeSlotEntry(entry)).filter(Boolean)
+        : [];
+      return {
+        ...(result && typeof result === 'object' ? result : {}),
+        success: true,
+        slotIndex: slot,
+        revisions: history,
+        history,
+        entries: history
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error,
+        reason: error && error.reason || undefined,
+        message: error.message || '云存档历史读取失败'
+      };
+    }
+  },
+  async restoreCloudSaveRevision(slotIndex = 0, sourceRevisionId = '', options = {}) {
+    const slot = Number(slotIndex);
+    const safeSourceRevisionId = this.normalizeRevisionId(sourceRevisionId);
+    if (!safeSourceRevisionId) return {
+      success: false,
+      message: '云存档历史版本缺失'
+    };
+    const sessionSnapshot = this.captureSignedSessionSnapshot(options, '登录账号已变化，请刷新云存档后重试');
+    if (!sessionSnapshot || !sessionSnapshot.success) return sessionSnapshot;
+    try {
+      const baseRevisionId = Object.prototype.hasOwnProperty.call(options || {}, 'baseRevisionId')
+        ? this.normalizeRevisionId(options.baseRevisionId)
+        : null;
+      const mutationId = typeof options?.mutationId === 'string' && options.mutationId
+        ? options.mutationId
+        : this.createMutationId();
+      const signedPayload = {
+        protocolVersion: CLOUD_STATE_PROTOCOL_VERSION,
+        slotIndex: slot,
+        baseRevisionId,
+        sourceRevisionId: safeSourceRevisionId,
+        mutationId
+      };
+      const integrityResult = await this.createRequiredSessionIntegrityFields(
+        signedPayload,
+        sessionSnapshot.sessionToken,
+        '当前环境不支持云存档签名，请刷新后重试',
+        'cloud_state_signature_required'
+      );
+      if (!integrityResult.success) return integrityResult;
+      const result = await this.requestServer(`${this.getServerConfig().savePathPrefix}/slots/${encodeURIComponent(slot)}/restore`, {
+        method: 'POST',
+        authToken: sessionSnapshot.sessionToken,
+        data: {
+          ...signedPayload,
+          ...integrityResult.integrity
+        }
+      });
+      const normalized = this.normalizeSlotEntry(result && typeof result === 'object' ? result : null);
+      return {
+        ...(result && typeof result === 'object' ? result : {}),
+        success: true,
+        ...(normalized || {})
+      };
+    } catch (error) {
+      if (Number(error && error.code) === 409) {
+        return this.normalizeCloudStateConflict(error, 'slot', '云存档恢复冲突');
+      }
+      return {
+        success: false,
+        error,
+        reason: error && error.reason || undefined,
+        message: error.message || '云存档恢复失败'
+      };
+    }
+  },
+  async getGlobalDataHistory(options = {}) {
+    const user = this.getCurrentUser();
+    if (!user) return {
+      success: false,
+      message: '未登录'
+    };
+    const safeLimit = Object.prototype.hasOwnProperty.call(options || {}, 'limit')
+      ? Math.max(1, Math.min(20, Math.floor(Number(options.limit) || 20)))
+      : null;
+    const query = new URLSearchParams();
+    if (safeLimit !== null) query.set('limit', String(safeLimit));
+    const suffix = query.toString() ? `?${query.toString()}` : '';
+    try {
+      const result = await this.requestServer(`${this.getServerConfig().userPathPrefix}/global/history${suffix}`, {
+        method: 'GET'
+      });
+      const historySource = result && (result.revisions || result.history || result.entries);
+      const history = Array.isArray(historySource)
+        ? historySource.map(entry => this.normalizeGlobalEntry(entry)).filter(Boolean)
+        : [];
+      return {
+        ...(result && typeof result === 'object' ? result : {}),
+        success: true,
+        revisions: history,
+        history,
+        entries: history
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error,
+        reason: error && error.reason || undefined,
+        message: error.message || '全局云状态历史读取失败'
+      };
+    }
+  },
+  async restoreGlobalDataRevision(sourceRevisionId = '', options = {}) {
+    const safeSourceRevisionId = this.normalizeRevisionId(sourceRevisionId);
+    if (!safeSourceRevisionId) return {
+      success: false,
+      message: '全局云状态历史版本缺失'
+    };
+    const sessionSnapshot = this.captureSignedSessionSnapshot(options, '登录账号已变化，请刷新全局云状态后重试');
+    if (!sessionSnapshot || !sessionSnapshot.success) return sessionSnapshot;
+    try {
+      const baseRevisionId = Object.prototype.hasOwnProperty.call(options || {}, 'baseRevisionId')
+        ? this.normalizeRevisionId(options.baseRevisionId)
+        : null;
+      const mutationId = typeof options?.mutationId === 'string' && options.mutationId
+        ? options.mutationId
+        : this.createMutationId();
+      const signedPayload = {
+        protocolVersion: CLOUD_STATE_PROTOCOL_VERSION,
+        baseRevisionId,
+        sourceRevisionId: safeSourceRevisionId,
+        mutationId
+      };
+      const integrityResult = await this.createRequiredSessionIntegrityFields(
+        signedPayload,
+        sessionSnapshot.sessionToken,
+        '当前环境不支持全局云状态签名，请刷新后重试',
+        'cloud_state_signature_required'
+      );
+      if (!integrityResult.success) return integrityResult;
+      const result = await this.requestServer(`${this.getServerConfig().userPathPrefix}/global/restore`, {
+        method: 'POST',
+        authToken: sessionSnapshot.sessionToken,
+        data: {
+          ...signedPayload,
+          ...integrityResult.integrity
+        }
+      });
+      const normalized = this.normalizeGlobalEntry(result && typeof result === 'object' ? result : null);
+      const revision = this.normalizeRevisionMetadata(normalized || result);
+      return {
+        ...(result && typeof result === 'object' ? result : {}),
+        success: true,
+        ...(normalized || {}),
+        revision,
+        ...(revision || {})
+      };
+    } catch (error) {
+      if (Number(error && error.code) === 409) {
+        return this.normalizeCloudStateConflict(error, 'global', '全局云状态恢复冲突');
+      }
+      return {
+        success: false,
+        error,
+        reason: error && error.reason || undefined,
+        message: error.message || '全局云状态恢复失败'
       };
     }
   },
@@ -759,6 +1106,30 @@ export const BackendClient = {
     delete cloned.signatureMode;
     return cloned;
   },
+  captureSignedSessionSnapshot(options = {}, failureMessage = '登录账号已变化，请刷新云存档后重试') {
+    const user = this.getCurrentUser();
+    if (!user) return {
+      success: false,
+      message: '未登录'
+    };
+    const expectedUserId = String(options && options.expectedUserId || '').trim();
+    const currentUserId = String(user && (user.objectId || user.id || user.userId) || '').trim();
+    const boundUserId = expectedUserId || currentUserId;
+    const capturedSession = this.loadServerSession();
+    const capturedSessionUserId = String(capturedSession && capturedSession.user && (capturedSession.user.objectId || capturedSession.user.id || capturedSession.user.userId) || '').trim();
+    const sessionToken = capturedSession && capturedSession.token || '';
+    if (!boundUserId || (expectedUserId && currentUserId !== expectedUserId) || !capturedSession || !sessionToken || capturedSessionUserId !== boundUserId || currentUserId !== boundUserId) {
+      return {
+        success: false,
+        reason: 'cloud_state_account_changed',
+        message: failureMessage
+      };
+    }
+    return {
+      success: true,
+      sessionToken
+    };
+  },
   captureProgressionSessionSnapshot(options = {}, failureMessage = '登录账号已变化，请刷新长期进度后重试') {
     const user = this.getCurrentUser();
     if (!user) return {
@@ -783,14 +1154,14 @@ export const BackendClient = {
       sessionToken
     };
   },
-  async createRequiredSessionIntegrityFields(data, sessionToken, failureMessage = '当前环境不支持验证跑图签名，请刷新后重试') {
+  async createRequiredSessionIntegrityFields(data, sessionToken, failureMessage = '当前环境不支持验证跑图签名，请刷新后重试', failureReason = 'verified_run_signature_required') {
     const integrity = await this.createSessionIntegrityFields(data, {
       sessionToken
     });
     if (!integrity || integrity.signatureMode !== 'session' || !integrity.salt || !integrity.signature) {
       return {
         success: false,
-        reason: 'verified_run_signature_required',
+        reason: failureReason,
         message: failureMessage
       };
     }

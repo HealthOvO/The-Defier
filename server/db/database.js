@@ -6,6 +6,7 @@ const {
     getSchemaStatus,
     recordCurrentSchemaMigration
 } = require('../services/platform/schema-status');
+const { bootstrapCloudStateSchema } = require('../cloud-state/bootstrap');
 
 const dbPath = process.env.DEFIER_DB_PATH
     ? path.resolve(process.env.DEFIER_DB_PATH)
@@ -737,10 +738,17 @@ const initDb = () => {
                     fail(err);
                     return;
                 }
-                recordCurrentSchemaMigration(db, (migrationErr) => {
-                    if (migrationErr) fail(migrationErr);
-                    else done();
-                });
+                (async () => {
+                    try {
+                        await bootstrapCloudStateSchema(db);
+                        recordCurrentSchemaMigration(db, (migrationErr) => {
+                            if (migrationErr) fail(migrationErr);
+                            else done();
+                        });
+                    } catch (bootstrapError) {
+                        fail(bootstrapError);
+                    }
+                })();
             });
         });
     });

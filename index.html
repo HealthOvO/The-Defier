@@ -1983,7 +1983,20 @@
             </div>
             <p id="save-conflict-status"
                 style="font-size: 0.86rem; color: var(--accent-gold); min-height: 1.3em; margin: 0 0 14px;"></p>
-            <p style="font-size: 0.8rem; color: #666;">注意：选择后将不可撤销。如果云端没有存档，建议选择“保留本地”以上传进度。</p>
+            <p style="font-size: 0.8rem; color: #777;">选择后会生成新的云端版本；需要时仍可从“云端历史”恢复旧进度。</p>
+        </div>
+    </div>
+
+    <div id="cloud-save-history-modal" class="modal">
+        <div class="modal-content cloud-save-history-panel">
+            <button class="modal-close" type="button" title="关闭云端历史"
+                onclick="game.closeCloudSaveHistory()">×</button>
+            <div class="cloud-save-history-header">
+                <h2 id="cloud-save-history-title">云端历史</h2>
+                <p>恢复会生成新的云端版本，原记录保持不变。</p>
+            </div>
+            <div id="cloud-save-history-list" class="cloud-save-history-list"></div>
+            <p id="cloud-save-history-status" class="cloud-save-history-status" aria-live="polite"></p>
         </div>
     </div>
 

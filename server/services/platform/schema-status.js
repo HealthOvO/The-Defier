@@ -51,6 +51,18 @@ const SCHEMA_MIGRATIONS = [
             'progression_verified_run_checkpoints',
             'progression_verified_run_receipts'
         ]
+    }),
+    makeMigration({
+        id: '0004_cloud_state_v2',
+        version: 4,
+        description: 'Cloud state revisions, heads, restore history, and ops overview',
+        resources: [
+            'cloud_state_revisions',
+            'cloud_state_heads',
+            'cloud_state_mutations',
+            'cloud_state_ops_events',
+            'cloud_state_ops_counters'
+        ]
     })
 ];
 const CURRENT_MIGRATION = SCHEMA_MIGRATIONS[SCHEMA_MIGRATIONS.length - 1];

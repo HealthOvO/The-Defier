@@ -105,6 +105,8 @@ export class Game {
     this.progressionRunOwnerUserId = '';
     this.currentSaveSlot = null; // Default to null (unknown), NOT 0 (Slot 1)
     this.cachedSlots = [null, null, null, null]; // Cache for slots
+    this.cachedSlotEntries = [null, null, null, null];
+    this.cloudHistorySlot = null;
     this.guestMode = false;
     this.guideState = this.loadGuideState();
     this.legacyStorageKey = 'theDefierLegacyV1';
@@ -528,7 +530,7 @@ export class Game {
     const config = this.publicReplayShareConfig;
     if (!config || !config.shareToken) return false;
     if (typeof document !== 'undefined') {
-      ['auth-modal', 'save-slots-modal', 'generic-confirm-modal', 'save-conflict-modal'].forEach(id => {
+      ['auth-modal', 'save-slots-modal', 'generic-confirm-modal', 'save-conflict-modal', 'cloud-save-history-modal'].forEach(id => {
         const el = document.getElementById(id);
         if (el) el.classList.remove('active');
       });
@@ -571,7 +573,7 @@ export class Game {
     if (!config) return false;
     this.guestMode = true;
     if (typeof document !== 'undefined') {
-      ['auth-modal', 'save-slots-modal', 'generic-confirm-modal', 'save-conflict-modal'].forEach(id => {
+      ['auth-modal', 'save-slots-modal', 'generic-confirm-modal', 'save-conflict-modal', 'cloud-save-history-modal'].forEach(id => {
         const el = document.getElementById(id);
         if (el) el.classList.remove('active');
       });
@@ -8629,6 +8631,7 @@ export class Game {
 
       // Update cache
       this.cachedSlots = slots;
+      this.cachedSlotEntries = Array.isArray(res.slotEntries) ? res.slotEntries : this.cachedSlotEntries;
       this.renderSaveSlots(slots);
     } catch (e) {
       console.error('Sync failed', e);
@@ -8722,6 +8725,7 @@ export class Game {
       if (res.success && res.slots) {
         slots = res.slots;
       }
+      this.cachedSlotEntries = Array.isArray(res.slotEntries) ? res.slotEntries : this.cachedSlotEntries;
 
       // 修正：如果云端虽然返回成功，但存档全空（新注册账号），也应该尝试绑定旧存档
       const isCloudEmpty = res.isEmpty || slots && slots.every(s => s === null);
@@ -8746,6 +8750,13 @@ export class Game {
 
   // 选择存档位操作
   selectSlot(index, mode) {
+    if (mode === 'history') {
+      const slotsModal = document.getElementById('save-slots-modal');
+      this.cloudHistoryReturnToSlots = !!slotsModal?.classList.contains('active');
+      if (slotsModal) slotsModal.classList.remove('active');
+      this.showCloudSaveHistory(index);
+      return;
+    }
     this.currentSaveSlot = index;
     // 持久化存储，防止刷新丢失
     sessionStorage.setItem('currentSaveSlot', index);
@@ -8914,6 +8925,101 @@ export class Game {
     return this.systemView.showSaveConflictModal(localData, cloudData, cloudTime);
   }
 
+  async showCloudSaveHistory(slotIndex) {
+    const slot = Number(slotIndex);
+    if (!Number.isInteger(slot) || slot < 0 || slot > 3) return;
+    const historyUser = AuthService.getCurrentUser();
+    const historyUserId = AuthService.getUserIdentity(historyUser);
+    if (!historyUserId) {
+      Utils.showBattleLog('登录后才能查看云端历史');
+      this.closeCloudSaveHistory(true);
+      return;
+    }
+    this.cloudHistorySlot = slot;
+    this.cloudHistoryUserId = historyUserId;
+    if (!this.systemView) this.systemView = new SystemView(this);
+    this.systemView.renderCloudSaveHistory({ slotIndex: slot, loading: true, revisions: [] });
+    const result = await AuthService.getCloudSaveHistory(slot, { limit: 20 });
+    if (!result || !result.success) {
+      this.systemView.renderCloudSaveHistory({
+        slotIndex: slot,
+        loading: false,
+        revisions: [],
+        error: result && result.message || '云端历史读取失败'
+      });
+      return;
+    }
+    const revisions = Array.isArray(result.revisions)
+      ? result.revisions
+      : Array.isArray(result.history) ? result.history : Array.isArray(result.entries) ? result.entries : [];
+    this.systemView.renderCloudSaveHistory({
+      slotIndex: slot,
+      loading: false,
+      revisions,
+      headRevisionId: result.headRevisionId || result.currentRevisionId || ''
+    });
+  }
+
+  closeCloudSaveHistory(returnToSlots = true) {
+    const historyModal = document.getElementById('cloud-save-history-modal');
+    if (historyModal) historyModal.classList.remove('active');
+    if (returnToSlots && this.cloudHistoryReturnToSlots) {
+      const slotsModal = document.getElementById('save-slots-modal');
+      if (slotsModal) slotsModal.classList.add('active');
+    }
+    this.cloudHistoryReturnToSlots = false;
+    this.cloudHistoryUserId = null;
+  }
+
+  restoreCloudSaveRevision(revisionId) {
+    const slot = Number(this.cloudHistorySlot);
+    const sourceRevisionId = String(revisionId || '').trim();
+    const historyUserId = String(this.cloudHistoryUserId || '').trim();
+    if (!Number.isInteger(slot) || slot < 0 || slot > 3 || !sourceRevisionId) return;
+    const isHistoryUserCurrent = () => AuthService.getUserIdentity(AuthService.getCurrentUser()) === historyUserId;
+    this.showConfirmModal('恢复后会生成新的云端版本，并载入该进度。历史记录不会被删除。', async () => {
+      if (!this.systemView) this.systemView = new SystemView(this);
+      if (!historyUserId || !isHistoryUserCurrent()) {
+        this.systemView.setCloudSaveHistoryStatus('登录账号已变化，已停止恢复，请重新打开云端历史。', true);
+        return;
+      }
+      this.systemView.setCloudSaveHistoryStatus('正在恢复云端版本...');
+      const restored = await AuthService.restoreCloudSaveRevision(slot, sourceRevisionId);
+      if (!restored || !restored.success) {
+        const message = restored && restored.message || '云端版本恢复失败';
+        this.systemView.setCloudSaveHistoryStatus(message, true);
+        return;
+      }
+      if (!isHistoryUserCurrent()) {
+        this.systemView.setCloudSaveHistoryStatus('登录账号已变化，云端已恢复，但不会载入旧账号数据。', true);
+        return;
+      }
+      const refreshed = await AuthService.getCloudData();
+      if (!refreshed || !refreshed.success || !isHistoryUserCurrent()) {
+        const message = refreshed && refreshed.reason === 'cloud_state_account_changed'
+          ? '登录账号已变化，云端已恢复，但不会载入旧账号数据。'
+          : '云端版本已恢复，但刷新失败，请重新同步存档位。';
+        this.systemView.setCloudSaveHistoryStatus(message, true);
+        return;
+      }
+      const restoredData = Array.isArray(refreshed.slots) ? refreshed.slots[slot] : null;
+      if (!restoredData) {
+        this.systemView.setCloudSaveHistoryStatus('恢复成功，但载入数据失败，请重新同步存档位。', true);
+        return;
+      }
+      this.cachedSlots = refreshed.slots;
+      this.cachedSlotEntries = Array.isArray(refreshed.slotEntries) ? refreshed.slotEntries : this.cachedSlotEntries;
+      this.currentSaveSlot = slot;
+      sessionStorage.setItem('currentSaveSlot', String(slot));
+      localStorage.setItem('lastSaveSlot', String(slot));
+      localStorage.setItem('theDefierSave', JSON.stringify(restoredData));
+      sessionStorage.setItem('justLoadedSave', 'true');
+      Utils.showBattleLog(`已恢复并载入 存档 ${slot + 1} 的云端历史版本`);
+      this.closeCloudSaveHistory(false);
+      setTimeout(() => window.location.reload(), 400);
+    });
+  }
+
   // 解决存档冲突
   resolveSaveConflict(choice) {
     const modal = document.getElementById('save-conflict-modal');
@@ -8936,7 +9042,7 @@ export class Game {
             return;
           }
           setConflictStatus('正在同步本地存档...');
-          return AuthService.saveCloudData(data, targetSlot).then(res => {
+          return AuthService.saveCloudData(data, targetSlot, { allowOlderLocal: true }).then(res => {
             if (res.success && !res.skipped) {
               setConflictStatus('');
               Utils.showBattleLog(`本地存档已覆盖云端！(Slot ${targetSlot + 1})`);
@@ -8946,6 +9052,15 @@ export class Game {
             } else if (res.success && res.skipped) {
               setConflictStatus('云端已有更新，本地存档未覆盖云端', '#ffd36b');
               Utils.showBattleLog('云端已有更新，本地存档未覆盖云端');
+            } else if (res && res.conflict) {
+              const current = res.current && typeof res.current === 'object' ? res.current : {};
+              const latestCloudData = current.saveData || current.data || null;
+              if (latestCloudData) {
+                this.tempCloudData = latestCloudData;
+                if (this.cachedSlots) this.cachedSlots[targetSlot] = latestCloudData;
+              }
+              setConflictStatus('同步期间云端再次更新，请重新确认后再试。', '#ffd36b');
+              Utils.showBattleLog('云端版本再次变化，未覆盖任何进度');
             } else {
               setConflictStatus(`云端同步失败：${res.message || '未知错误'}`, '#ffb6b6');
               alert('云端同步失败：' + (res.message || '未知错误'));

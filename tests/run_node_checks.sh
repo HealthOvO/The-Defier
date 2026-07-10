@@ -7,7 +7,10 @@ cd "$ROOT_DIR"
 node tests/sanity_auth_config_checks.cjs
 node tests/sanity_backend_hmac_checks.cjs
 node tests/sanity_backend_timestamp_checks.cjs
+node tests/sanity_cloud_state_v2_checks.cjs
 node tests/sanity_frontend_cloud_sync_checks.mjs
+node tests/sanity_frontend_cloud_state_v2_checks.mjs
+node tests/sanity_cloud_state_ui_checks.cjs
 node tests/sanity_frontend_upgrade_asset_checks.cjs
 node tests/sanity_frontend_design_system_checks.cjs
 node tests/sanity_core_loop_design_system_checks.cjs

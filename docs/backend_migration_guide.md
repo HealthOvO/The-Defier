@@ -51,6 +51,7 @@ localStorage.setItem('theDefierServerConfig', JSON.stringify({
 - 可信中间层、自建工具或服务端代理仍可使用服务端私有 HMAC secret 的 `v1` 签名模式。
 - 当请求显式携带 `salt` 或 `signature` 任一字段时，服务端会视为一次完整性签名尝试；两者必须同时存在且满足格式要求，否则返回 400，即使未开启强制模式。
 - 存档、全局数据和残影写入会对客户端时间戳做归一化：只接受有限、非负、不过分超前的毫秒时间；异常值会回退到服务端当前时间，避免旧客户端或恶意请求把数据永久锁成未来版本。
+- 云状态 V2 强制签名完整业务体，并以服务端 revision/CAS 处理并发；详细合同见 `docs/backend_cloud_state_v2.md`。旧 blob-only 签名只作为客户端升级期间的兼容路径。
 
 ### 1. 认证模块 (Auth)
 
@@ -69,9 +70,9 @@ localStorage.setItem('theDefierServerConfig', JSON.stringify({
 #### 2.1 保存存档
 - **POST** `/api/saves`
 - **Auth**: Required
-- **Body**: `{ "slotIndex": 0, "saveData": { ... }, "saveTime": 1710000000000, "salt": "optional-nonce", "signature": "optional-hmac", "signatureMode": "session" }`
-- **Note**: `saveTime` 较旧时不会覆盖已有新存档；浏览器客户端使用 `signatureMode: "session"`。
-- **Response**: `{ "success": true, "skipped": false }`
+- **Body (V2)**: `{ "protocolVersion": "cloud-state-v2", "slotIndex": 0, "baseRevisionId": null, "mutationId": "...", "saveData": { ... }, "saveTime": 1710000000000, "salt": "nonce", "signature": "hmac", "signatureMode": "session" }`
+- **Note**: V2 必须签名全部业务字段。`baseRevisionId` 与当前 head 不同时返回 `409 save_conflict`，不会静默覆盖。未带 `protocolVersion` 的旧客户端仍按 `saveTime` 兼容写入。
+- **Response**: `{ "success": true, "revisionId": "...", "revisionNumber": 1, "contentHash": "...", "headUpdatedAt": 1710000000000 }`
 
 #### 2.2 读取云存档 (多槽位)
 - **GET** `/api/saves`
@@ -81,25 +82,36 @@ localStorage.setItem('theDefierServerConfig', JSON.stringify({
 {
     "success": true,
     "data": [
-        { "slotIndex": 0, "saveData": { ... }, "saveTime": 1710000000000 },
-        { "slotIndex": 1, "saveData": { ... }, "saveTime": 1710000000000 }
+        { "slotIndex": 0, "saveData": { ... }, "saveTime": 1710000000000, "revisionId": "...", "revisionNumber": 3 },
+        { "slotIndex": 1, "saveData": { ... }, "saveTime": 1710000000000, "revisionId": "...", "revisionNumber": 1 }
     ]
 }
 ```
+
+#### 2.3 历史与恢复
+
+- **GET** `/api/saves/slots/:slotIndex/history?limit=20`
+- **POST** `/api/saves/slots/:slotIndex/restore`
+- 恢复请求带 `baseRevisionId/sourceRevisionId/mutationId` 并签名完整业务体；恢复通过追加 revision 生成新 head，不会原地修改历史。
 
 ### 3. 全局数据模块 (Global Data)
 
 #### 3.1 保存全局数据 (如成就)
 - **POST** `/api/user/global`
 - **Auth**: Required
-- **Body**: `{ "globalData": { "achievements": [...], "updatedAt": 1710000000000 }, "globalUpdatedAt": 1710000000000, "salt": "optional-nonce", "signature": "optional-hmac", "signatureMode": "session" }`
-- **Note**: `globalData` 必须是对象；数组、字符串和空值会返回 400。`globalUpdatedAt` 较旧时不会覆盖已有新数据。
-- **Response**: `{ "success": true, "skipped": false, "globalUpdatedAt": 1710000000000 }`
+- **Body (V2)**: `{ "protocolVersion": "cloud-state-v2", "baseRevisionId": null, "mutationId": "...", "globalData": { "achievements": [...] }, "globalUpdatedAt": 1710000000000, "salt": "nonce", "signature": "hmac", "signatureMode": "session" }`
+- **Note**: `globalData` 必须是对象；数组、字符串和空值会返回 400。V2 使用 revision/CAS，旧客户端继续按时间戳兼容。
+- **Response**: `{ "success": true, "globalUpdatedAt": 1710000000000, "revisionId": "...", "revisionNumber": 2 }`
 
 #### 3.2 读取全局数据
 - **GET** `/api/user/global`
 - **Auth**: Required
-- **Response**: `{ "success": true, "data": { "achievements": [...] }, "globalUpdatedAt": 1710000000000 }`
+- **Response**: `{ "success": true, "data": { "achievements": [...] }, "globalUpdatedAt": 1710000000000, "revisionId": "...", "revisionNumber": 2 }`
+
+#### 3.3 历史与恢复
+
+- **GET** `/api/user/global/history?limit=20`
+- **POST** `/api/user/global/restore`
 
 ### 4. 异步 PVP 残影 (Ghosts)
 
@@ -133,6 +145,15 @@ localStorage.setItem('theDefierServerConfig', JSON.stringify({
 - `save_time` (bigint)
 - Unique Key: `(user_id, slot_index)`
 
+### cloud_state_heads / cloud_state_revisions
+- `cloud_state_heads` 保存每个账号、每个 scope 的当前 revision 与内容哈希。
+- `cloud_state_revisions` 保存不可变版本、父版本、恢复来源、规范化内容和客户端时间。
+- 每个 scope 保留最近 20 个版本，并保留该窗口内恢复记录仍引用的来源版本，物理上限为 40 个 revision。
+
+### cloud_state_mutations / cloud_state_ops_*
+- `cloud_state_mutations` 保存 V2 mutation 幂等回执，保留 30 天。
+- `cloud_state_ops_events` 保存 30 天脱敏事件明细；`cloud_state_ops_counters` 保存不回退的累计聚合。
+
 ### game_ghosts
 - `id` (PK)
 - `user_id` (FK -> users.id)
@@ -143,8 +164,8 @@ localStorage.setItem('theDefierServerConfig', JSON.stringify({
 - Index on `realm`
 - Unique Key: `(user_id)`
 
-## 第一阶段迁移提示
+## 当前迁移提示
 
-1. 当前仅将认证与云存档抽象为 `BackendClient`。
-2. `PVPService` 中强依赖 Bmob `PlayerRank` 和 `GhostSnapshot` 的逻辑暂时未动。目前若关闭 Bmob 并启用 Server，PVP 将自动降级使用本地离线逻辑。
-3. 后续阶段可以继续扩充 `BackendClient` 来支持 PVP 的 `PlayerRank` 同步与匹配接口。
+1. `0004_cloud_state_v2` 以事务方式幂等回填旧槽位和账号全局数据；旧数据不会因超过 V2 新写入上限而阻断启动。
+2. 旧客户端继续使用时间戳兼容写入，新客户端必须使用完整业务体签名、revision/CAS 和 mutationId，失败时不得降级旧协议。
+3. 云状态只管理四个存档槽和账号全局数据；PVP、长期进度、可信运行与经济账本继续由各自服务端域负责。
