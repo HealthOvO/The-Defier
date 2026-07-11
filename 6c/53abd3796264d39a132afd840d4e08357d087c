@@ -1,0 +1,27 @@
+index.html
+  s_bae69f1b7fab46::t_42a28b344d25e7 22
+tests/browser_event_branch_audit.mjs
+  s_bae69f1b7fab46::t_ed4354124a8e01 178-181
+tests/browser_feature_audit.mjs
+  s_bae69f1b7fab46::t_84fac60436c6ac 40
+tests/browser_mobile_layout_audit.mjs
+  s_bae69f1b7fab46::t_eeb4a3e61267b5 39
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "6c53abd3796264d39a132afd840d4e08357d087c",
+  "prompts": {},
+  "sessions": {
+    "s_bae69f1b7fab46": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ed4f6-e7ac-73e0-a29e-119f3eddb407",
+        "model": "unknown"
+      },
+      "human_author": "AI Agent <bot@example.com>"
+    }
+  },
+  "attestation_metadata": {},
+  "remote_transcripts": {}
+}
