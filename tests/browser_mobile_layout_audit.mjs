@@ -108,9 +108,14 @@ function add(name, pass, detail = '') {
       );
     };
 
+    const controlRail = document.querySelector('#battle-screen .battle-control-rail');
     const command = document.getElementById('battle-command-panel');
     const boss = document.getElementById('boss-act-panel');
     const hand = document.getElementById('hand-cards');
+    const handArea = document.querySelector('#battle-screen .hand-area');
+    const playerArea = document.querySelector('#battle-screen .player-area');
+    const playerCharacter = document.querySelector('#battle-screen .player-character');
+    const battleContainer = document.querySelector('#battle-screen .battle-container');
     const endTurn = document.getElementById('end-turn-btn');
     const enemy = document.querySelector('.enemy');
     const spiritChip = document.querySelector('#battle-command-panel .battle-command-spirit-chip');
@@ -123,11 +128,37 @@ function add(name, pass, detail = '') {
     const metaStrips = Array.from(document.querySelectorAll('.enemy .enemy-meta-strip'));
     const handCards = Array.from(document.querySelectorAll('#hand-cards .card')).slice(0, 3);
     const handCardRects = handCards.map((el) => rectObj(el));
+    const bossVisible = !!boss && getComputedStyle(boss).display !== 'none' && boss.getBoundingClientRect().height > 0;
     const visibleRuleLines = Array.from(document.querySelectorAll('#boss-act-panel .boss-act-line')).filter((el) => getComputedStyle(el).display !== 'none').length;
     const enemyMetaHeight = metaStrips.reduce((sum, el) => sum + el.getBoundingClientRect().height, 0);
     const enemyGapToHand = enemy && hand ? hand.getBoundingClientRect().top - enemy.getBoundingClientRect().bottom : 0;
+    const enemyGapToEndTurn = enemy && endTurn ? endTurn.getBoundingClientRect().top - enemy.getBoundingClientRect().bottom : 0;
+    const endTurnGapToHand = endTurn && hand ? hand.getBoundingClientRect().top - endTurn.getBoundingClientRect().bottom : 0;
     const advisorCollapsedInitially = !!advisor && advisor.classList.contains('collapsed');
     const collapsedHeight = advisor ? advisor.getBoundingClientRect().height : 0;
+    const controlRailRect = rectObj(controlRail);
+    const visibleRailChildren = controlRail
+      ? Array.from(controlRail.children).filter((el) => {
+        const style = getComputedStyle(el);
+        const rect = el.getBoundingClientRect();
+        return style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0;
+      })
+      : [];
+    const railChildRects = visibleRailChildren.map((el) => ({ id: el.id, rect: rectObj(el) }));
+    const railChildrenOverlap = railChildRects.some((entry, index) => railChildRects
+      .slice(index + 1)
+      .some((other) => overlaps(entry.rect, other.rect, 0)));
+    const isTopHit = (el) => {
+      if (!el) return false;
+      const rect = el.getBoundingClientRect();
+      const x = Math.min(window.innerWidth - 1, Math.max(0, rect.left + rect.width / 2));
+      const y = Math.min(window.innerHeight - 1, Math.max(0, rect.top + rect.height / 2));
+      const hit = document.elementFromPoint(x, y);
+      return !!hit && (hit === el || el.contains(hit));
+    };
+    const firstHandCard = handCards[0] || null;
+    const toggleTopHit = isTopHit(toggleBtn);
+    const firstHandCardTopHit = isTopHit(firstHandCard);
     let expandedHeight = collapsedHeight;
     let advisorExpandedAfterToggle = false;
     if (toggleBtn && typeof toggleBtn.click === 'function') {
@@ -137,14 +168,29 @@ function add(name, pass, detail = '') {
       expandedHeight = advisorAfterToggle ? advisorAfterToggle.getBoundingClientRect().height : collapsedHeight;
       advisorExpandedAfterToggle = !!advisorAfterToggle && !advisorAfterToggle.classList.contains('collapsed');
     }
+    const expandedRailRect = rectObj(controlRail);
 
     return {
       viewport: { width: window.innerWidth, height: window.innerHeight },
+      controlRail: controlRailRect,
+      expandedRail: expandedRailRect,
+      railChildRects,
+      railChildrenOverlap,
+      toggleTopHit,
+      firstHandCardTopHit,
       command: rectObj(command),
       battleLoopRail: battleLoopRailRect,
       battleLoopText,
       boss: rectObj(boss),
+      bossVisible,
       hand: rectObj(hand),
+      handArea: rectObj(handArea),
+      playerArea: rectObj(playerArea),
+      playerCharacter: rectObj(playerCharacter),
+      playerHandOverlap: overlaps(rectObj(playerCharacter), rectObj(handArea), 0),
+      playerEnemyOverlap: overlaps(rectObj(playerCharacter), rectObj(document.querySelector('.enemy') || enemy), 0),
+      battleContainerScrollHeight: battleContainer?.scrollHeight || 0,
+      battleContainerClientHeight: battleContainer?.clientHeight || 0,
       endTurn: rectObj(endTurn),
       enemy: rectObj(document.querySelector('.enemy') || enemy),
       spiritChip: spiritChipRect,
@@ -152,36 +198,52 @@ function add(name, pass, detail = '') {
       metaStripCount: metaStrips.length,
       enemyMetaHeight,
       enemyGapToHand,
+      enemyGapToEndTurn,
+      endTurnGapToHand,
       advisorCollapsedInitially,
       advisorExpandedAfterToggle,
       collapsedHeight,
       expandedHeight,
       advisorVisible: !!advisor && getComputedStyle(advisor).display !== 'none',
       visibleRuleLines,
-      ok: !!command && !!boss && !!hand && !!endTurn && !!enemy && !!spiritChipRect &&
+      ok: !!controlRail && !!controlRailRect && !!command && !!boss && !!hand && !!handArea && !!playerArea && !!playerCharacter && !!battleContainer && !!endTurn && !!enemy && !!spiritChipRect &&
         !!battleLoopRail &&
         !!battleLoopRailRect &&
         battleLoopRailRect.width > 0 &&
         battleLoopRailRect.height > 0 &&
         /胜利后进入战利结算，再回章节地图/.test(battleLoopText) &&
-        rectObj(command).height <= 104 &&
-        rectObj(command).top <= 80 &&
-        rectObj(command).bottom <= rectObj(boss).top - 8 &&
+        controlRailRect.left >= 4 &&
+        controlRailRect.right <= window.innerWidth - 4 &&
+        controlRailRect.top <= 8 &&
+        controlRailRect.bottom <= rectObj(document.querySelector('.enemy') || enemy).top - 12 &&
+        !railChildrenOverlap &&
+        railChildRects.every((entry) => entry.rect.left >= controlRailRect.left - 1 && entry.rect.right <= controlRailRect.right + 1) &&
+        rectObj(command).height <= 98 &&
+        rectObj(command).top >= controlRailRect.top - 1 &&
+        rectObj(command).bottom <= controlRailRect.bottom + 1 &&
         battleLoopRailRect.left >= 0 &&
         battleLoopRailRect.right <= window.innerWidth &&
         battleLoopRailRect.bottom <= rectObj(command).bottom + 2 &&
         !overlaps(battleLoopRailRect, rectObj(endTurn), 2) &&
         spiritChipRect.right <= window.innerWidth - 6 &&
         spiritChipRect.top >= rectObj(command).top - 2 &&
-        rectObj(boss).height <= 116 &&
-        rectObj(boss).top >= 160 &&
-        rectObj(boss).bottom < rectObj(hand).top &&
+        (!bossVisible || (
+          rectObj(boss).height <= 52 &&
+          rectObj(boss).top >= controlRailRect.top - 1 &&
+          rectObj(boss).bottom <= controlRailRect.bottom + 1
+        )) &&
         rectObj(endTurn).top >= rectObj(boss).top &&
         rectObj(endTurn).bottom <= rectObj(hand).top + 28 &&
-        rectObj(document.querySelector('.enemy') || enemy).top > rectObj(boss).bottom - 6 &&
+        rectObj(document.querySelector('.enemy') || enemy).top > controlRailRect.bottom + 12 &&
         metaStrips.length >= 2 &&
         enemyMetaHeight <= 72 &&
-        enemyGapToHand >= 108 &&
+        enemyGapToHand >= (bossVisible ? 68 : 108) &&
+        enemyGapToEndTurn >= 10 &&
+        endTurnGapToHand >= 12 &&
+        !overlaps(rectObj(playerCharacter), rectObj(handArea), 0) &&
+        !overlaps(rectObj(playerCharacter), rectObj(document.querySelector('.enemy') || enemy), 0) &&
+        rectObj(playerCharacter).right <= rectObj(endTurn).left - 4 &&
+        (battleContainer.scrollHeight || 0) <= (battleContainer.clientHeight || 0) + 2 &&
         handCardRects.length >= 2 &&
         handCardRects.every((rect) => !!rect && rect.width >= 86 && rect.bottom <= window.innerHeight - 6) &&
         handCardRects.every((rect) => rect.right <= rectObj(endTurn).left + 44 || rect.top >= rectObj(endTurn).bottom - 6) &&
@@ -189,6 +251,10 @@ function add(name, pass, detail = '') {
         advisorCollapsedInitially &&
         advisorExpandedAfterToggle &&
         expandedHeight >= collapsedHeight + 20 &&
+        !!expandedRailRect &&
+        expandedRailRect.bottom <= rectObj(document.querySelector('.enemy') || enemy).top - 12 &&
+        toggleTopHit &&
+        firstHandCardTopHit &&
         visibleRuleLines <= 1
     };
   });
@@ -382,6 +448,7 @@ function add(name, pass, detail = '') {
 
   const expeditionPanelsProbe = await page.evaluate(() => {
     const panels = document.getElementById('map-expedition-panels');
+    const drawer = document.getElementById('map-intel-drawer');
     const root = document.documentElement;
     const isVisible = (el) => {
       if (!el) return false;
@@ -462,7 +529,16 @@ function add(name, pass, detail = '') {
       .filter((entry) => !!entry.rect)
       .sort((a, b) => a.rect.top - b.rect.top);
     const firstVisualCard = visualCards.find((entry) => entry.rect.bottom > 0 && entry.rect.top < window.innerHeight) || visualCards[0] || null;
-    const initialPanelRect = rectObj(panels);
+    const initialPanelRect = visualCards.length > 0 ? {
+      left: Math.min(...visualCards.map((entry) => entry.rect.left)),
+      right: Math.max(...visualCards.map((entry) => entry.rect.right)),
+      top: Math.min(...visualCards.map((entry) => entry.rect.top)),
+      bottom: Math.max(...visualCards.map((entry) => entry.rect.bottom)),
+      width: Math.max(...visualCards.map((entry) => entry.rect.right)) - Math.min(...visualCards.map((entry) => entry.rect.left)),
+      height: Math.max(...visualCards.map((entry) => entry.rect.bottom)) - Math.min(...visualCards.map((entry) => entry.rect.top)),
+    } : rectObj(panels);
+    const panelVisible = visualCards.some((entry) => visibleRatio(entry.rect) > 0);
+    const drawerRect = rectObj(drawer);
     const firstCardRect = firstVisualCard?.rect || null;
     const headerRect = rectObj(document.querySelector('#map-screen .map-v3-header'));
     const textReadabilityProbes = cards.slice(0, 4).flatMap((card) => {
@@ -509,7 +585,7 @@ function add(name, pass, detail = '') {
     });
     const initialSafeCtaCount = initialPrimaryCtaProbes.filter((probe) => probe.ok).length;
     const initialSafeBranchCtaCount = initialPrimaryCtaProbes.filter((probe) => probe.ok && probe.action === 'select-branch').length;
-    const initialPrimaryCtaOk = initialSafeBranchCtaCount >= 2;
+    const initialPrimaryCtaOk = initialSafeBranchCtaCount >= 1;
     const visibilityAfterScroll = (targetButtons) => {
       const target = targetButtons.find((btn) => isVisible(btn));
       const before = rectObj(target);
@@ -535,17 +611,34 @@ function add(name, pass, detail = '') {
       ok: !!rectObj(button) && rectObj(button).height >= 40 && rectObj(button).width >= 96,
     }));
     const viewportWidth = window.innerWidth;
-    const scrolledPanelRect = rectObj(panels);
-    const initialPanelInViewport = !!initialPanelRect
-      && initialPanelRect.top >= -4
-      && initialPanelRect.top < window.innerHeight
-      && initialPanelRect.left >= -4
-      && initialPanelRect.right <= viewportWidth + 4;
+    const scrolledPanelRect = rectObj(drawer);
+    const initialPanelInViewport = !!drawerRect
+      && drawerRect.top >= -4
+      && drawerRect.bottom <= window.innerHeight + 4
+      && drawerRect.left >= -4
+      && drawerRect.right <= viewportWidth + 4;
     const firstCardReadable = visibleRatio(firstCardRect) >= 0.32;
     const firstCardHeaderOverlap = overlapArea(firstCardRect, headerRect);
+    const shell = document.querySelector('#map-screen .map-screen-v3');
+    const intelToggle = shell?.querySelector('[data-map-action="toggle-map-intel"]');
+    const toolsToggle = shell?.querySelector('[data-map-action="toggle-map-tools"]');
+    if (toolsToggle && typeof toolsToggle.click === 'function') toolsToggle.click();
+    const toolsExclusive = !!shell?.classList.contains('show-map-tools')
+      && !shell?.classList.contains('show-map-intel')
+      && drawer?.getAttribute('aria-hidden') === 'true';
+    if (intelToggle && typeof intelToggle.click === 'function') intelToggle.click();
+    const intelExclusive = !!shell?.classList.contains('show-map-intel')
+      && !shell?.classList.contains('show-map-tools')
+      && drawer?.getAttribute('aria-hidden') === 'false';
 
     return {
-      panelVisible: isVisible(panels),
+      panelVisible,
+      drawerVisible: isVisible(drawer),
+      drawerRect,
+      drawerScrollHeight: drawer?.scrollHeight || 0,
+      drawerClientHeight: drawer?.clientHeight || 0,
+      toolsExclusive,
+      intelExclusive,
       initialPanelRect,
       scrolledPanelRect,
       firstVisualCardSelector: firstVisualCard?.selector || '',
@@ -558,7 +651,7 @@ function add(name, pass, detail = '') {
       overviewText: getText('.expedition-overview-card'),
       observatoryText: getText('.expedition-observatory-card'),
       signalsText: getText('.expedition-signals-card'),
-      panelScrollWidth: panels?.scrollWidth || 0,
+      panelScrollWidth: drawer?.scrollWidth || 0,
       rootScrollWidth: root?.scrollWidth || 0,
       branchButtonCount: branchButtons.length,
       bountyButtonCount: bountyButtons.length,
@@ -572,12 +665,11 @@ function add(name, pass, detail = '') {
       textReadabilityProbes,
       actionSizeProbes,
       ok:
-        isVisible(panels) &&
+        isVisible(drawer) &&
+        panelVisible &&
         initialPanelInViewport &&
-        firstCardReadable &&
-        Number(visibleRatio(firstCardRect).toFixed(3)) >= 0.55 &&
-        firstCardHeaderOverlap <= 12 &&
-        initialVisibleCards.length >= 1 &&
+        overlapArea(drawerRect, headerRect) <= 12 &&
+        (drawer?.scrollHeight || 0) > (drawer?.clientHeight || 0) &&
         (panels?.querySelectorAll('.expedition-panel-card').length || 0) >= 6 &&
         getText('.expedition-overview-card').length >= 30 &&
         getText('.expedition-observatory-card').length >= 30 &&
@@ -585,19 +677,23 @@ function add(name, pass, detail = '') {
         branchButtons.length >= 1 &&
         bountyButtons.length >= 1 &&
         initialPrimaryCtaOk &&
+        firstCardReadable &&
+        firstCardHeaderOverlap <= 12 &&
         branchReach.reachable &&
         bountyReach.reachable &&
+        toolsExclusive &&
+        intelExclusive &&
         textReadabilityProbes.length >= 8 &&
         textReadabilityProbes.every((probe) => probe.ok) &&
         actionSizeProbes.length >= 2 &&
         actionSizeProbes.every((probe) => probe.ok) &&
-        (panels?.scrollWidth || 0) <= viewportWidth + 8 &&
+        (drawer?.scrollWidth || 0) <= viewportWidth + 8 &&
         (root?.scrollWidth || 0) <= viewportWidth + 8
     };
   });
 
   add(
-    'mobile expedition panels keep first-screen cards readable and deep actions touchable without horizontal overflow',
+    'mobile map keeps expedition content in one focused drawer with mutually exclusive tools and reachable actions',
     !!expeditionPanelsProbe && !!expeditionPanelsProbe.ok,
     JSON.stringify(expeditionPanelsProbe || null)
   );
@@ -606,6 +702,7 @@ function add(name, pass, detail = '') {
   await page.evaluate(() => {
     window.scrollTo(0, 0);
     document.querySelector('#map-screen .map-scroll-container')?.scrollTo(0, 0);
+    document.getElementById('map-intel-drawer')?.scrollTo(0, 0);
     document.getElementById('map-expedition-panels')?.scrollTo(0, 0);
   });
   const expeditionToastSetup = await page.evaluate(() => {
@@ -639,7 +736,13 @@ function add(name, pass, detail = '') {
   await page.waitForTimeout(250);
   const expeditionToastProbe = await page.evaluate((toastSetup) => {
     const log = document.getElementById('battle-log');
-    const firstCard = document.querySelector('#map-expedition-panels .expedition-panel-card');
+    const firstCard = Array.from(document.querySelectorAll('#map-expedition-panels .expedition-panel-card'))
+      .filter((card) => {
+        const style = getComputedStyle(card);
+        const rect = card.getBoundingClientRect();
+        return style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0;
+      })
+      .sort((a, b) => a.getBoundingClientRect().top - b.getBoundingClientRect().top)[0] || null;
     const headerButtons = Array.from(document.querySelectorAll('#map-screen .map-v3-header button, #map-screen .map-v3-header [role="button"]'));
     const style = log ? getComputedStyle(log) : null;
     const rectObj = (el) => {

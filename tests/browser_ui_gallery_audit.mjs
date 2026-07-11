@@ -477,7 +477,7 @@ function collectCoreLoopDesignSystemProbe(options = {}) {
     const viewportOk = rect ? viewportOkFor(rect) : false;
     const radius = parseFloat(style?.borderRadius || '0');
     const borderOk = style?.borderTopWidth !== '0px' || kind === 'card';
-    const radiusOk = kind === 'card' ? radius >= 8 : radius >= 12;
+    const radiusOk = kind === 'card' || kind === 'compactSurface' ? radius >= 8 : radius >= 12;
     return {
       name,
       selector,
@@ -1207,8 +1207,8 @@ function collectCoreLoopDesignSystemProbe(options = {}) {
   const battleCoreLoopProbe = await page.evaluate(collectCoreLoopDesignSystemProbe, {
     activeScreenId: 'battle-screen',
     surfaceTargets: [
-      ['battleCommandPanel', '#battle-screen #battle-command-panel', 'surface'],
-      ['bossActPanel', '#battle-screen #boss-act-panel', 'surface'],
+      ['battleCommandPanel', '#battle-screen #battle-command-panel', 'compactSurface'],
+      ['bossActPanel', '#battle-screen #boss-act-panel', 'compactSurface'],
       ['handCard', '#battle-screen #hand-cards .card', 'card'],
     ],
     hitTargets: [
@@ -1267,17 +1267,33 @@ function collectCoreLoopDesignSystemProbe(options = {}) {
     const shell = document.querySelector('#map-screen .map-screen-v3');
     const intelToggle = document.querySelector('#map-screen [data-map-action="toggle-map-intel"]');
     const toolsToggle = document.querySelector('#map-screen [data-map-action="toggle-map-tools"]');
+    if (shell?.classList.contains('show-map-tools') && typeof toolsToggle?.click === 'function') toolsToggle.click();
     if (shell && !shell.classList.contains('show-map-intel') && typeof intelToggle?.click === 'function') intelToggle.click();
-    if (shell && !shell.classList.contains('show-map-tools') && typeof toolsToggle?.click === 'function') toolsToggle.click();
   });
-  const mapCoreLoopProbe = await page.evaluate(collectCoreLoopDesignSystemProbe, {
+  const mapIntelCoreLoopProbe = await page.evaluate(collectCoreLoopDesignSystemProbe, {
     activeScreenId: 'map-screen',
     scrollHitTargetsIntoView: true,
     surfaceTargets: [
       ['mapDetailPanels', '#map-screen .map-detail-panels', 'surface'],
-      ['mapFooter', '#map-screen .map-footer', 'surface'],
       ['mapNode', '#map-screen .map-node-v3', 'card'],
       ['expeditionPanelCard', '#map-screen .expedition-panel-card', 'surface'],
+    ],
+    hitTargets: [
+      ['mapNode', '#map-screen .map-node-v3'],
+      ['mapHeaderAction', '#map-screen .map-v3-header [data-map-action]'],
+    ],
+  });
+  await page.evaluate(() => {
+    const shell = document.querySelector('#map-screen .map-screen-v3');
+    const toolsToggle = document.querySelector('#map-screen [data-map-action="toggle-map-tools"]');
+    if (shell && !shell.classList.contains('show-map-tools') && typeof toolsToggle?.click === 'function') toolsToggle.click();
+  });
+  const mapToolsCoreLoopProbe = await page.evaluate(collectCoreLoopDesignSystemProbe, {
+    activeScreenId: 'map-screen',
+    scrollHitTargetsIntoView: true,
+    surfaceTargets: [
+      ['mapFooter', '#map-screen .map-footer', 'surface'],
+      ['mapNode', '#map-screen .map-node-v3', 'card'],
     ],
     hitTargets: [
       ['mapNode', '#map-screen .map-node-v3'],
@@ -1287,8 +1303,8 @@ function collectCoreLoopDesignSystemProbe(options = {}) {
   });
   add(
     'core play-loop design system primitives are visible on map route controls',
-    !!mapCoreLoopProbe?.ok,
-    JSON.stringify(mapCoreLoopProbe || null)
+    !!mapIntelCoreLoopProbe?.ok && !!mapToolsCoreLoopProbe?.ok,
+    JSON.stringify({ intel: mapIntelCoreLoopProbe || null, tools: mapToolsCoreLoopProbe || null })
   );
 
   await boot(page);

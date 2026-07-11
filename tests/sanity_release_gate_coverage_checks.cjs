@@ -4275,7 +4275,7 @@ assert.ok(
   'actionSizeProbes',
   'lineHeightRatio',
   'fontSize >= (node.classList.contains(\'expedition-card-title\') ? 15 : 12)',
-  'mobile expedition panels keep first-screen cards readable and deep actions touchable without horizontal overflow',
+  'mobile map keeps expedition content in one focused drawer with mutually exclusive tools and reachable actions',
 ].forEach((needle) => {
   assert.ok(
     browserMobileAudit.includes(needle),

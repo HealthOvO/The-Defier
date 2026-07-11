@@ -1512,20 +1512,22 @@
         </div>
         <div class="battle-container">
             <div id="battle-treasures" class="treasures-bar battle-pos"></div>
-            <div id="battle-environment" class="environment-display" style="display:none;">
-                <!-- 动态填充 -->
-            </div>
-            <div id="legacy-mission-tracker" class="legacy-mission-tracker" style="display:none;">
-                <div class="legacy-mission-header">
-                    <span class="legacy-mission-tag">传承试炼</span>
-                    <span id="legacy-mission-reward" class="legacy-mission-reward">+0 精粹</span>
+            <aside class="battle-control-rail" aria-label="战场信息与指令">
+                <div id="battle-environment" class="environment-display" hidden>
+                    <!-- 动态填充 -->
                 </div>
-                <div id="legacy-mission-title" class="legacy-mission-title">暂无传承试炼</div>
-                <div class="legacy-mission-progress-track">
-                    <div id="legacy-mission-progress-fill" class="legacy-mission-progress-fill"></div>
+                <div id="legacy-mission-tracker" class="legacy-mission-tracker" style="display:none;">
+                    <div class="legacy-mission-header">
+                        <span class="legacy-mission-tag">传承试炼</span>
+                        <span id="legacy-mission-reward" class="legacy-mission-reward">+0 精粹</span>
+                    </div>
+                    <div id="legacy-mission-title" class="legacy-mission-title">暂无传承试炼</div>
+                    <div class="legacy-mission-progress-track">
+                        <div id="legacy-mission-progress-fill" class="legacy-mission-progress-fill"></div>
+                    </div>
+                    <div id="legacy-mission-progress-text" class="legacy-mission-progress-text">0/0</div>
                 </div>
-                <div id="legacy-mission-progress-text" class="legacy-mission-progress-text">0/0</div>
-            </div>
+            </aside>
             <!-- 敌人区域 -->
             <div class="enemy-area">
                 <div class="enemy-container" id="enemy-container">

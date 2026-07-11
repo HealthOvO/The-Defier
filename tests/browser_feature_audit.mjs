@@ -795,20 +795,22 @@ async function safeScreenshot(page, outPath) {
     } catch (error) {
       systemsHud = { parseError: String(error && error.message || error) };
     }
-    let advisorCollapsedAfterToggle = false;
-    let advisorStaysCollapsedWhileHovered = false;
-    let advisorDragged = false;
+    const advisorCollapsedInitially = !!(advisor && advisor.classList.contains('collapsed'));
+    let advisorExpandedAfterToggle = false;
+    let advisorStaysExpandedWhileHovered = false;
+    let advisorDragPrevented = false;
     let advisorDragDelta = { x: 0, y: 0 };
+    const advisorDocked = !!(panel && panel.closest('.battle-control-rail'));
     const toggleBtn = panel ? panel.querySelector('.battle-advisor-toggle') : null;
     if (toggleBtn && typeof toggleBtn.click === 'function') {
       toggleBtn.click();
       if (typeof game.battle.updateBattleUI === 'function') game.battle.updateBattleUI();
       panel = document.getElementById('battle-command-panel');
       const advisorAfterToggle = panel ? panel.querySelector('#battle-tactical-advisor') : null;
-      advisorCollapsedAfterToggle = !!(advisorAfterToggle && advisorAfterToggle.classList.contains('collapsed'));
+      advisorExpandedAfterToggle = !!(advisorAfterToggle && !advisorAfterToggle.classList.contains('collapsed'));
       if (advisorAfterToggle) {
         advisorAfterToggle.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }));
-        advisorStaysCollapsedWhileHovered = advisorAfterToggle.classList.contains('collapsed');
+        advisorStaysExpandedWhileHovered = !advisorAfterToggle.classList.contains('collapsed');
         advisorAfterToggle.dispatchEvent(new MouseEvent('mouseleave', { bubbles: true }));
       }
 
@@ -861,7 +863,7 @@ async function safeScreenshot(page, outPath) {
         x: Math.round(afterRect.left - beforeRect.left),
         y: Math.round(afterRect.top - beforeRect.top)
       };
-      advisorDragged = Math.abs(advisorDragDelta.x) >= 40 && Math.abs(advisorDragDelta.y) >= 16;
+      advisorDragPrevented = Math.abs(advisorDragDelta.x) < 2 && Math.abs(advisorDragDelta.y) < 2;
     }
 
     const commandId = state.commands[0].id;
@@ -927,9 +929,11 @@ async function safeScreenshot(page, outPath) {
       advisorFocusedIndex,
       advisorThreatChips,
       helperLoaded,
-      advisorCollapsedAfterToggle,
-      advisorStaysCollapsedWhileHovered,
-      advisorDragged,
+      advisorCollapsedInitially,
+      advisorExpandedAfterToggle,
+      advisorStaysExpandedWhileHovered,
+      advisorDocked,
+      advisorDragPrevented,
       advisorDragDelta,
       commandId,
       before,
@@ -975,9 +979,11 @@ async function safeScreenshot(page, outPath) {
       Number(battleCommandProbe.advisorCardStepCount || 0) >= 1 &&
       !!battleCommandProbe.advisorFocusApplied &&
       (!!battleCommandProbe.advisorPreviewApplied || !!battleCommandProbe.advisorTargetingPreview) &&
-      !!battleCommandProbe.advisorCollapsedAfterToggle &&
-      !!battleCommandProbe.advisorStaysCollapsedWhileHovered &&
-      !!battleCommandProbe.advisorDragged,
+      !!battleCommandProbe.advisorCollapsedInitially &&
+      !!battleCommandProbe.advisorExpandedAfterToggle &&
+      !!battleCommandProbe.advisorStaysExpandedWhileHovered &&
+      !!battleCommandProbe.advisorDocked &&
+      !!battleCommandProbe.advisorDragPrevented,
     JSON.stringify(battleCommandProbe || null)
   );
 
@@ -4351,55 +4357,85 @@ async function safeScreenshot(page, outPath) {
       if (typeof battle.updateBattleUI === 'function') battle.updateBattleUI();
     }
 
+    const controlRail = document.querySelector('#battle-screen .battle-control-rail');
     const bossPanel = document.getElementById('boss-act-panel');
     const commandPanel = document.getElementById('battle-command-panel');
     const missionPanel = document.getElementById('legacy-mission-tracker');
-    const enemyArea = document.querySelector('.enemy-area');
     const enemyIntent = document.querySelector('.enemy .enemy-intent');
+    const hand = document.getElementById('hand-cards');
     const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 0;
     const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
 
     const rectToObj = (rect) => rect ? ({ left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom, width: rect.width, height: rect.height, centerX: rect.left + rect.width / 2 }) : null;
+    const isVisible = (element) => {
+      if (!element || element.hidden) return false;
+      const style = getComputedStyle(element);
+      const rect = element.getBoundingClientRect();
+      return style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0;
+    };
+    const overlaps = (a, b) => !!a && !!b && a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
 
+    const railRect = controlRail ? rectToObj(controlRail.getBoundingClientRect()) : null;
     const bossRect = bossPanel ? rectToObj(bossPanel.getBoundingClientRect()) : null;
     const commandRect = commandPanel ? rectToObj(commandPanel.getBoundingClientRect()) : null;
     const missionRect = missionPanel ? rectToObj(missionPanel.getBoundingClientRect()) : null;
-    const enemyRect = enemyArea ? rectToObj(enemyArea.getBoundingClientRect()) : null;
     const enemyIntentRect = enemyIntent ? rectToObj(enemyIntent.getBoundingClientRect()) : null;
+    const handRect = hand ? rectToObj(hand.getBoundingClientRect()) : null;
+    const visibleRailChildren = controlRail
+      ? Array.from(controlRail.children).filter(isVisible).map((element) => ({ id: element.id, rect: rectToObj(element.getBoundingClientRect()) }))
+      : [];
+    const railChildrenOverlap = visibleRailChildren.some((entry, index) => visibleRailChildren
+      .slice(index + 1)
+      .some((other) => overlaps(entry.rect, other.rect)));
 
-    const commandOnLeftRail = !!commandRect && commandRect.centerX < viewportWidth * 0.34;
-    const missionOnRightRail = !!missionRect && missionRect.centerX > viewportWidth * 0.72;
-    const bossCentered = !!bossRect && Math.abs(bossRect.centerX - viewportWidth / 2) < viewportWidth * 0.12;
-    const commandAvoidsCore = !!commandRect && (!enemyRect || commandRect.right <= enemyRect.left + enemyRect.width * 0.38);
-    const commandCompact = !!commandRect
-      && commandRect.width <= Math.min(320, viewportWidth * 0.23)
-      && commandRect.height <= Math.min(420, viewportHeight * 0.5);
-    const bossCompact = !!bossRect && bossRect.width < viewportWidth * 0.72;
-    const bossAvoidsEnemyIntent = !bossRect || !enemyIntentRect
-      || bossRect.right <= enemyIntentRect.left - 12
-      || bossRect.bottom <= enemyIntentRect.top - 10
-      || bossRect.left >= enemyIntentRect.right + 12;
+    const railInsideViewport = !!railRect
+      && railRect.left >= 0
+      && railRect.top >= 0
+      && railRect.right <= viewportWidth
+      && railRect.bottom <= viewportHeight;
+    const railOnLeft = !!railRect && railRect.right <= viewportWidth * 0.3;
+    const railAvoidsHand = !!railRect && !!handRect && railRect.bottom <= handRect.top - 10;
+    const childrenInsideRail = !!railRect && visibleRailChildren.every((entry) => entry.rect
+      && entry.rect.left >= railRect.left - 1
+      && entry.rect.right <= railRect.right + 1);
+    const bossDocked = isVisible(bossPanel) && bossPanel?.parentElement === controlRail;
+    const commandDocked = isVisible(commandPanel) && commandPanel?.parentElement === controlRail;
+    const missionDocked = !missionPanel || missionPanel.parentElement === controlRail;
+    const bossAvoidsEnemyIntent = !bossRect || !enemyIntentRect || !overlaps(bossRect, enemyIntentRect);
 
     return {
-      ok: commandOnLeftRail && missionOnRightRail && bossCentered && commandAvoidsCore && commandCompact && bossCompact && bossAvoidsEnemyIntent,
+      ok: !!controlRail
+        && railInsideViewport
+        && railOnLeft
+        && railAvoidsHand
+        && childrenInsideRail
+        && !railChildrenOverlap
+        && bossDocked
+        && commandDocked
+        && missionDocked
+        && bossAvoidsEnemyIntent,
       viewportWidth,
       viewportHeight,
-      commandOnLeftRail,
-      missionOnRightRail,
-      bossCentered,
-      commandAvoidsCore,
-      commandCompact,
-      bossCompact,
+      railInsideViewport,
+      railOnLeft,
+      railAvoidsHand,
+      childrenInsideRail,
+      railChildrenOverlap,
+      bossDocked,
+      commandDocked,
+      missionDocked,
       bossAvoidsEnemyIntent,
+      railRect,
+      visibleRailChildren,
       bossRect,
       commandRect,
       missionRect,
-      enemyRect,
-      enemyIntentRect
+      enemyIntentRect,
+      handRect
     };
   });
   add(
-    'battle overlay layout keeps boss info centered without covering enemy intent lane',
+    'battle control rail stacks boss and commands without covering hand or intent lanes',
     !!battleOverlayLayoutProbe && !!battleOverlayLayoutProbe.ok,
     JSON.stringify(battleOverlayLayoutProbe || null)
   );

@@ -7,6 +7,12 @@ const read = (relativePath) => fs.readFileSync(path.join(root, relativePath), 'u
 
 const designSystemCss = read('css/design-system.css');
 const frontendUpgradeCss = read('css/frontend-upgrade.css');
+const indexHtml = read('index.html');
+const mapView = read('js/views/MapView.js');
+const battleRuntime = read('js/core/battle.js');
+const characterSelectView = read('js/views/CharacterSelectView.js');
+const rewardView = read('js/views/RewardView.js');
+const systemView = read('js/views/SystemView.js');
 const uiGalleryAudit = read('tests/browser_ui_gallery_audit.mjs');
 const releaseCoverageChecks = read('tests/sanity_release_gate_coverage_checks.cjs');
 const runNodeChecks = read('tests/run_node_checks.sh');
@@ -29,6 +35,30 @@ const runNodeChecks = read('tests/run_node_checks.sh');
 ].forEach((needle) => {
   assert.ok(designSystemCss.includes(needle), `design system should expose reusable token: ${needle}`);
 });
+
+[
+  '.map-intel-drawer',
+  '.battle-control-rail',
+  '.story-intro-summary',
+  '.reward-popup-content',
+  '.system-prompt-content',
+  '#reward-screen .reward-cards',
+].forEach((needle) => {
+  assert.ok(frontendUpgradeCss.includes(needle), `visual-density layer should own responsive surface: ${needle}`);
+});
+
+assert.ok(indexHtml.includes('class="battle-control-rail"'), 'battle environment and commands should share one semantic control rail');
+assert.ok(mapView.includes('id="map-intel-drawer"'), 'map detail and expedition content should share one intel drawer');
+assert.ok(mapView.includes("shell.classList.remove('show-map-tools')"), 'opening map intel should close the tools lane');
+assert.ok(mapView.includes("shell.classList.remove('show-map-intel')"), 'opening map tools should close the intel drawer');
+assert.ok(battleRuntime.includes("panel.closest('.battle-control-rail')"), 'battle command panel should no longer support free overlap while docked');
+assert.ok(battleRuntime.includes('controlRail.appendChild(panel)'), 'battle command panel should mount inside the shared rail');
+assert.ok(characterSelectView.includes("document.createElement('details')"), 'character lore should use progressive disclosure');
+assert.ok(characterSelectView.includes("data-character-select"), 'character cards should use a native selection control');
+assert.ok(characterSelectView.includes("?.setAttribute('aria-pressed'"), 'character controls should expose selection state');
+assert.ok(characterSelectView.includes('details class="char-story-panel"'), 'selected character detail should use progressive disclosure');
+assert.ok(rewardView.includes('reward-popup-content'), 'reward popup sizing should be CSS-owned');
+assert.ok(systemView.includes('system-prompt-content'), 'system prompt sizing should be CSS-owned');
 
 [
   '.fd-surface',

@@ -34,8 +34,9 @@ export class CharacterSelectView {
         this.selectRunPath(runPathCard.dataset.runPathId || '');
         return;
       }
-      const characterCard = event.target.closest('.character-card[data-id]');
-      if (!characterCard || !container.contains(characterCard) || characterCard.classList.contains('locked')) return;
+      const selectButton = event.target.closest('[data-character-select]');
+      const characterCard = selectButton?.closest('.character-card[data-id]');
+      if (!selectButton || !characterCard || !container.contains(characterCard) || characterCard.classList.contains('locked')) return;
       this.selectCharacter(characterCard.dataset.id || '');
     });
     container.addEventListener('error', event => {
@@ -225,14 +226,20 @@ export class CharacterSelectView {
       container.innerHTML = '';
 
       // 剧情背景
-      const introDiv = document.createElement('div');
+      const introDiv = document.createElement('details');
       introDiv.className = 'story-intro';
       introDiv.innerHTML = `
-                <p><strong>背景设定：</strong></p>
-                <p>“命环”，乃天道为万物众生设下的枷锁，意在限制潜力，维持统治。</p>
-                <p>然而天道亦有善恶，善念留下一线生机，即为“逆命者”。</p>
-                <p>恶念化身天道之主，对此大为震怒，封印善念，并派遣“天罚者”猎杀逆命之人。</p>
-                <p>如今，你作为新的逆命者觉醒，需在天罚者的追猎下不断突破命环，最终斩杀恶道，解放众生。</p>
+                <summary class="story-intro-summary">
+                    <span class="story-intro-kicker">世界背景</span>
+                    <strong>命环为锁，逆命者于追猎中觉醒</strong>
+                    <span class="story-intro-toggle" aria-hidden="true"></span>
+                </summary>
+                <div class="story-intro-copy">
+                    <p>“命环”，乃天道为万物众生设下的枷锁，意在限制潜力，维持统治。</p>
+                    <p>然而天道亦有善恶，善念留下一线生机，即为“逆命者”。</p>
+                    <p>恶念化身天道之主，对此大为震怒，封印善念，并派遣“天罚者”猎杀逆命之人。</p>
+                    <p>如今，你作为新的逆命者觉醒，需在天罚者的追猎下不断突破命环，最终斩杀恶道，解放众生。</p>
+                </div>
             `;
       container.appendChild(introDiv);
       const cardsContainer = document.createElement('div');
@@ -261,54 +268,60 @@ export class CharacterSelectView {
           avatarHtml = `<span class="char-avatar-emoji">${escapeHtml(portrait.fallbackText)}</span>`;
         }
         card.innerHTML = `
-                    <div class="selected-mark">✔</div>
-                    <div class="card-inner">
-                        <div class="char-header">
-                            <div class="char-ink-bg">✦</div>
-                            <div class="char-avatar-wrapper">
-                                ${avatarHtml}
-                            </div>
+                    <button type="button" class="character-card-select" data-character-select
+                            aria-pressed="false" aria-label="选择${escapeAttr(char.name)}" ${locked ? 'disabled' : ''}>
+                        <span class="selected-mark" aria-hidden="true">✔</span>
+                        <span class="card-inner">
+                            <span class="char-header">
+                                <span class="char-ink-bg">✦</span>
+                                <span class="char-avatar-wrapper">
+                                    ${avatarHtml}
+                                </span>
+                            </span>
+                            <span class="char-body">
+                                <span class="char-name">${escapeHtml(char.name)}</span>
+                                <span class="char-title">${escapeHtml(char.title)}</span>
+                                <span class="char-desc">${escapeHtml(char.description)}</span>
+                                <span class="char-identity-strip">
+                                    <span class="char-identity-pill primary">${escapeHtml(identityProfile?.unlockLabel || '已解锁')}</span>
+                                    <span class="char-identity-pill">${escapeHtml(identityProfile?.recommendedDestinyText || '待推演')}</span>
+                                    <span class="char-identity-pill">${escapeHtml(identityProfile?.recommendedSpiritText || '待追索')}</span>
+                                </span>
+                                <span class="char-keyword-strip">
+                                    ${(identityProfile?.keywords || []).map(keyword => `<span class="char-keyword-chip">${escapeHtml(keyword)}</span>`).join('')}
+                                </span>
+
+                                <span class="char-relic-info">
+                                    <span class="relic-name"><span>🔮</span> ${escapeHtml(char.relic.name)}</span>
+                                    <span class="relic-desc">${escapeHtml(char.relic.desc)}</span>
+                                </span>
+
+                                <span class="char-stats-preview">
+                                    <span class="stat-item">
+                                        <span class="stat-value">${escapeHtml(char.stats.maxHp)}</span>
+                                        <span class="stat-label">HP</span>
+                                    </span>
+                                    <span class="stat-item">
+                                        <span class="stat-value">${escapeHtml(char.stats.energy)}</span>
+                                        <span class="stat-label">灵力</span>
+                                    </span>
+                                    <span class="stat-item">
+                                        <span class="stat-value">${escapeHtml(char.stats.draw || 5)}</span>
+                                        <span class="stat-label">抽牌</span>
+                                    </span>
+                                </span>
+                            </span>
+                        </span>
+                    </button>
+                    <details class="char-story-panel">
+                        <summary>角色档案</summary>
+                        <div class="char-story-content">
+                            <div class="char-story-line"><strong>剧情简介：</strong>${escapeHtml(identityProfile?.synopsis || char.description)}</div>
+                            <div class="char-story-line"><strong>推荐玩法：</strong>${escapeHtml(identityProfile?.identityHook || '围绕角色专属节奏推进本局。')}</div>
+                            <div class="char-story-line"><strong>角色专线：</strong>${escapeHtml(identityProfile?.exclusiveLine?.summary || '更多专属内容等待追索。')}</div>
+                            <div class="char-story-line muted"><strong>解锁进度：</strong>${escapeHtml(identityProfile?.unlockHint || (locked ? lockReason : '已满足出阵条件。'))}</div>
                         </div>
-                        <div class="char-body">
-                            <div class="char-name">${escapeHtml(char.name)}</div>
-                            <div class="char-title">${escapeHtml(char.title)}</div>
-                            <div class="char-desc">${escapeHtml(char.description)}</div>
-                            <div class="char-identity-strip">
-                                <span class="char-identity-pill primary">${escapeHtml(identityProfile?.unlockLabel || '已解锁')}</span>
-                                <span class="char-identity-pill">${escapeHtml(identityProfile?.recommendedDestinyText || '待推演')}</span>
-                                <span class="char-identity-pill">${escapeHtml(identityProfile?.recommendedSpiritText || '待追索')}</span>
-                            </div>
-                            <div class="char-keyword-strip">
-                                ${(identityProfile?.keywords || []).map(keyword => `<span class="char-keyword-chip">${escapeHtml(keyword)}</span>`).join('')}
-                            </div>
-                            <div class="char-story-panel">
-                                <div class="char-story-line"><strong>剧情简介：</strong>${escapeHtml(identityProfile?.synopsis || char.description)}</div>
-                                <div class="char-story-line"><strong>推荐玩法：</strong>${escapeHtml(identityProfile?.identityHook || '围绕角色专属节奏推进本局。')}</div>
-                                <div class="char-story-line"><strong>角色专线：</strong>${escapeHtml(identityProfile?.exclusiveLine?.summary || '更多专属内容等待追索。')}</div>
-                                <div class="char-story-line muted"><strong>解锁进度：</strong>${escapeHtml(identityProfile?.unlockHint || (locked ? lockReason : '已满足出阵条件。'))}</div>
-                            </div>
-                            
-                            <div class="char-relic-info">
-                                <div class="relic-name"><span>🔮</span> ${escapeHtml(char.relic.name)}</div>
-                                <div class="relic-desc">${escapeHtml(char.relic.desc)}</div>
-                            </div>
-                            
-                            <div class="char-stats-preview">
-                                <div class="stat-item">
-                                    <span class="stat-value">${escapeHtml(char.stats.maxHp)}</span>
-                                    <span class="stat-label">HP</span>
-                                </div>
-                                <div class="stat-item">
-                                    <span class="stat-value">${escapeHtml(char.stats.energy)}</span>
-                                    <span class="stat-label">灵力</span>
-                                </div>
-                                <div class="stat-item">
-                                    <span class="stat-value">${escapeHtml(char.stats.draw || 5)}</span>
-                                    <span class="stat-label">抽牌</span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+                    </details>
                 `;
         cardsContainer.appendChild(card);
       }
@@ -367,7 +380,9 @@ export class CharacterSelectView {
     this.game.selectedCharacterId = charId;
     const cards = document.querySelectorAll('.character-card');
     cards.forEach(c => {
-      if (c.dataset.id === charId) c.classList.add('selected');else c.classList.remove('selected');
+      const selected = c.dataset.id === charId;
+      c.classList.toggle('selected', selected);
+      c.querySelector('[data-character-select]')?.setAttribute('aria-pressed', selected ? 'true' : 'false');
     });
     this.renderRunDestinySelection(charId);
     this.renderSpiritCompanionSelection(charId);

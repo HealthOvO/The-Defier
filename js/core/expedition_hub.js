@@ -4362,6 +4362,7 @@ const expeditionHubMethods = Object.create(null);
 	    if (!shell.classList.contains('show-map-intel') && shell.dataset.mapIntelUserToggled !== 'true') {
 	      shell.classList.add('show-map-intel');
 	      const intelButton = shell.querySelector('[data-map-action="toggle-map-intel"]');
+	      const intelDrawer = shell.querySelector('#map-intel-drawer');
 	      const detailPanels = shell.querySelector('#map-detail-panels');
 	      if (intelButton) {
 	        intelButton.textContent = '收起情报';
@@ -4369,6 +4370,9 @@ const expeditionHubMethods = Object.create(null);
 	      }
 	      if (detailPanels) {
 	        detailPanels.setAttribute('aria-hidden', 'false');
+	      }
+	      if (intelDrawer) {
+	        intelDrawer.setAttribute('aria-hidden', 'false');
 	      }
 	      container.setAttribute('aria-hidden', 'false');
 	    }

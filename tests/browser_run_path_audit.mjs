@@ -148,15 +148,17 @@ async function safeScreenshot(page, outPath) {
       return `${el.tagName.toLowerCase()}${classes ? `.${classes}` : ''}`;
     };
     const shell = document.querySelector('#map-screen .map-screen-v3');
+    const drawer = document.getElementById('map-intel-drawer');
     const detailPanels = document.getElementById('map-detail-panels');
     const scrollContainer = document.getElementById('map-scroll-container');
     const routeNodes = Array.from(document.querySelectorAll('.map-node-v3.current:not(.locked), .map-node-v3.current, .map-node-v3.accessible, .map-node-v3'));
     const footer = document.getElementById('map-expedition-panels');
+    const drawerRect = rectObj(drawer);
     const detailRect = rectObj(detailPanels);
     const scrollRect = rectObj(scrollContainer);
     const footerRect = rectObj(footer);
+    const drawerStyle = drawer ? getComputedStyle(drawer) : null;
     const detailVisible = !!detailPanels && getComputedStyle(detailPanels).visibility !== 'hidden' && detailRect?.height > 0;
-    const footerTop = footerRect?.top ?? window.innerHeight;
     const routeEntries = routeNodes.map((node) => {
       const rect = rectObj(node);
       const point = rect
@@ -167,8 +169,9 @@ async function safeScreenshot(page, outPath) {
       const inOpenGraphLane = !!rect &&
         !!scrollRect &&
         rect.top >= scrollRect.top + 8 &&
-        rect.bottom <= footerTop - 8 &&
+        rect.bottom <= scrollRect.bottom - 8 &&
         rect.left >= 0 &&
+        rect.right <= scrollRect.right - 8 &&
         rect.right <= window.innerWidth;
       return {
         selector: selectorFor(node),
@@ -183,12 +186,16 @@ async function safeScreenshot(page, outPath) {
     const visibleRouteNodes = routeEntries.filter((entry) => entry.inOpenGraphLane && entry.hitOk);
     const visibleCurrentNodes = visibleRouteNodes.filter((entry) => /\bcurrent\b/.test(entry.className));
     const routeEntry = visibleCurrentNodes[0] || visibleRouteNodes[0] || routeEntries[0] || null;
-    const maxDrawerHeight = Math.min(310, window.innerHeight * 0.34);
+    const maxDrawerWidth = Math.min(470, window.innerWidth - 32);
 
     return {
       viewport: { width: window.innerWidth, height: window.innerHeight },
       intelOpen: shell?.classList.contains('show-map-intel') || false,
       detailVisible,
+      drawerRect,
+      drawerScrollHeight: drawer?.scrollHeight || 0,
+      drawerClientHeight: drawer?.clientHeight || 0,
+      drawerOverflowY: drawerStyle?.overflowY || '',
       detailRect,
       scrollRect,
       footerRect,
@@ -198,27 +205,34 @@ async function safeScreenshot(page, outPath) {
       visibleRouteNodeCount: visibleRouteNodes.length,
       visibleCurrentNodeCount: visibleCurrentNodes.length,
       routeSamples: routeEntries.slice(0, 8),
-      maxDrawerHeight: Math.round(maxDrawerHeight),
+      maxDrawerWidth: Math.round(maxDrawerWidth),
       ok:
         !!shell &&
+        !!drawerRect &&
         !!detailRect &&
         !!scrollRect &&
         !!routeEntry?.rect &&
         detailVisible &&
         shell.classList.contains('show-map-intel') &&
-        detailRect.height <= maxDrawerHeight &&
-        detailRect.width <= Math.min(470, window.innerWidth - 32) &&
-        detailRect.bottom <= window.innerHeight * 0.48 &&
+        drawerRect.width <= maxDrawerWidth &&
+        drawerRect.height >= window.innerHeight * 0.72 &&
+        drawerRect.left >= scrollRect.right - 2 &&
+        drawerRect.right <= window.innerWidth + 1 &&
+        ['auto', 'scroll'].includes(drawerStyle?.overflowY || '') &&
+        (drawer?.scrollHeight || 0) > (drawer?.clientHeight || 0) &&
+        detailRect.left >= drawerRect.left - 1 &&
+        detailRect.right <= drawerRect.right + 1 &&
+        detailRect.width <= drawerRect.width + 1 &&
         scrollRect.height >= window.innerHeight * 0.42 &&
         visibleRouteNodes.length >= 4 &&
         visibleCurrentNodes.length >= 1 &&
-        routeEntry.rect.bottom > detailRect.bottom + 18 &&
-        (!footerRect || footerRect.top >= scrollRect.top + 80)
+        routeEntry.rect.right <= drawerRect.left - 18 &&
+        (!footerRect || footerRect.height === 0 || footerRect.left >= drawerRect.left - 1)
     };
   });
 
   add(
-    'map intel opens as a compact drawer without covering the route graph',
+    'map intel opens as a scrollable side drawer without covering the route graph',
     !!mapIntelFootprintProbe && !!mapIntelFootprintProbe.ok,
     JSON.stringify(mapIntelFootprintProbe)
   );

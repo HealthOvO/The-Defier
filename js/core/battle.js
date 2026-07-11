@@ -498,11 +498,13 @@ export class Battle {
   updateBossActUI() {
     const battleContainer = document.querySelector('#battle-screen .battle-container') || document.querySelector('.battle-container');
     if (!battleContainer) return;
+    const controlRail = battleContainer.querySelector('.battle-control-rail');
     let panel = document.getElementById('boss-act-panel');
     const displayState = this.getBossActDisplayState();
     if (!displayState) {
       if (panel) {
-        panel.style.display = 'none';
+        panel.hidden = true;
+        panel.style.display = '';
         panel.innerHTML = '';
       }
       return;
@@ -511,12 +513,20 @@ export class Battle {
       panel = document.createElement('div');
       panel.id = 'boss-act-panel';
       panel.className = 'boss-act-panel';
-      const enemyArea = battleContainer.querySelector('.enemy-area');
-      if (enemyArea) {
-        battleContainer.insertBefore(panel, enemyArea);
+      if (controlRail) {
+        const commandPanel = controlRail.querySelector('#battle-command-panel');
+        controlRail.insertBefore(panel, commandPanel || null);
       } else {
-        battleContainer.insertBefore(panel, battleContainer.firstChild);
+        const enemyArea = battleContainer.querySelector('.enemy-area');
+        if (enemyArea) {
+          battleContainer.insertBefore(panel, enemyArea);
+        } else {
+          battleContainer.insertBefore(panel, battleContainer.firstChild);
+        }
       }
+    } else if (controlRail && panel.parentElement !== controlRail) {
+      const commandPanel = controlRail.querySelector('#battle-command-panel');
+      controlRail.insertBefore(panel, commandPanel || null);
     }
     const {
       boss,
@@ -526,7 +536,8 @@ export class Battle {
       hpPercent
     } = displayState;
     const counterChips = this.resolveBossActCounterChips(displayState);
-    panel.style.display = 'block';
+    panel.hidden = false;
+    panel.style.display = '';
     if (typeof DefierBattleHud === 'undefined' || !DefierBattleHud || typeof DefierBattleHud.buildBossActPanelMarkup !== 'function') {
       return;
     }
@@ -4781,7 +4792,7 @@ export class Battle {
     this.turnStartTime = typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now();
     this.encounterRewardConsumed = false;
     this.lastPlayerCardSnapshot = null;
-    this.tacticalAdvisorCollapsed = this.shouldUseCompactBattleHud();
+    this.tacticalAdvisorCollapsed = true;
     this.installBattlePlayerHooks();
 
     // --- P1 机制：解析残影 (Ghost) 行为库 ---
@@ -9098,11 +9109,12 @@ export class Battle {
   }
   applyBattleCommandPanelPosition(panel) {
     if (!panel) return false;
-    if (this.shouldUseCompactBattleHud()) {
+    if (panel.closest('.battle-control-rail') || this.shouldUseCompactBattleHud()) {
       panel.style.left = '';
       panel.style.top = '';
       panel.style.transform = '';
       panel.classList.remove('custom-position', 'dragging');
+      this.battleCommandPanelPosition = null;
       return false;
     }
     const position = this.battleCommandPanelPosition;
@@ -9128,6 +9140,7 @@ export class Battle {
     const handle = event.target && typeof event.target.closest === 'function' ? event.target.closest('.battle-advisor-drag-handle, .battle-advisor-header') : null;
     const panel = document.getElementById('battle-command-panel');
     if (!handle || !panel) return false;
+    if (panel.closest('.battle-control-rail')) return false;
     if (event.target && typeof event.target.closest === 'function' && event.target.closest('.battle-advisor-cardstep-btn, .battle-advisor-matrix-btn, .battle-advisor-toggle')) {
       return false;
     }
@@ -9297,9 +9310,12 @@ export class Battle {
       panel.className = 'battle-command-panel';
       const battleContainer = document.querySelector('#battle-screen .battle-container') || document.querySelector('.battle-container');
       if (battleContainer) {
+        const controlRail = battleContainer.querySelector('.battle-control-rail');
         const envEl = document.getElementById('battle-environment');
         const missionEl = document.getElementById('legacy-mission-tracker');
-        if (missionEl && missionEl.parentElement === battleContainer) {
+        if (controlRail) {
+          controlRail.appendChild(panel);
+        } else if (missionEl && missionEl.parentElement === battleContainer) {
           missionEl.insertAdjacentElement('afterend', panel);
         } else if (envEl && envEl.parentElement === battleContainer) {
           envEl.insertAdjacentElement('afterend', panel);
@@ -9309,6 +9325,10 @@ export class Battle {
       }
     }
     if (!panel) return;
+    const controlRail = document.querySelector('#battle-screen .battle-control-rail');
+    if (controlRail && panel.parentElement !== controlRail) {
+      controlRail.appendChild(panel);
+    }
     if (typeof DefierBattleHud === 'undefined' || !DefierBattleHud || typeof DefierBattleHud.buildBattleCommandPanelMarkup !== 'function') {
       return;
     }
@@ -9380,7 +9400,8 @@ export class Battle {
     const escapeHtml = value => String(value || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     const squad = this.activeSquadEcology || null;
     if (this.activeEnvironment || encounter || squad || chapter) {
-      envEl.style.display = 'flex';
+      envEl.hidden = false;
+      envEl.style.display = '';
       envEl.innerHTML = `
                 ${chapter ? `<span class="chapter-rule-chip" title="${escapeHtml(chapter.stageDesc || '')}">
                         <span class="chapter-rule-icon">${escapeHtml(chapter.icon || '☯️')}</span>
@@ -9431,7 +9452,8 @@ export class Battle {
       }
       envEl.title = titleSegments.join(' ｜ ');
     } else {
-      envEl.style.display = 'none';
+      envEl.hidden = true;
+      envEl.style.display = '';
     }
   }
 }
