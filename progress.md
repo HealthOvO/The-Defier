@@ -14033,3 +14033,33 @@ Original prompt: 进入全自动审查与修复模式，按顺序审查并修复
 - 当前结论
   - 全游戏云状态已经具备可并发写入、可追溯、可显式解决冲突、可非破坏恢复、可兼容迁移和可运维观测的 V2 基线。
   - 本轮只完成本地开发、测试、提交、合并与 push；没有 rsync、没有重启生产服务、没有写入生产数据，`https://080305.xyz/` 保持不变。
+
+## 2026-07-11 全游戏赛季运营与权威经济平台 V1（S101）
+
+- 策划 / 平台
+  - 新增版本化赛季、日/周/赛季契约、统一荣誉钱包、追加式账本、固定价格外观商店、账号级永久权益、正式真人榜、不可变定榜与幂等赛季结算。
+  - PVE、挑战、远征只通过 `server_verified` 可信事件推进非战力契约；正式 PVP 契约和排行榜只接受 live PVP 的 `server_authoritative` 结算。
+  - 人工补偿使用 JWT + ops token 双重鉴权、目标账号重复确认、原因白名单、1-5000 荣誉限额和 mutation 幂等；钱包、ledger、补偿记录、回执和脱敏审计同事务提交。
+  - Schema 升级为 V5；迁移只回放服务端 live PVP 正式结算，不把旧存档、旧异步 PVP、旧 PVP 钱包或客户端自述升级为平台货币与正式名次。
+
+- PVP 赛季权威边界
+  - 正式赛季分与旧 `pvp_ranks` 累计段位分离，二者在原 live 结算事务中独立投影；实时赛季接口只读取 `pvp_season_ladders`。
+  - 赛季归属优先使用服务端 `setup.battleStartedAt` 并持久化为 `match_started_at`；房间创建时间只作为历史缺失回退。
+  - 每场结算追加 `(season_id, user_id, match_id)` 日志，防止旧结果重放回滚新榜。最终 snapshot 后的迟到结算和启动恢复只写 `post_snapshot_noop`，不改变正式榜。
+  - 一小时仅为最短定榜缓冲；生成最终 snapshot 前还必须在同一写事务确认所有赛季内开战的正式对局均已结算或作废。活跃友谊赛、测试对局和无排位影响平局不会误阻塞。
+
+- 玩家端 / 发布门禁
+  - 主菜单新增“赛季司”，提供契约、商店、天道榜、账本四个 tab，包含游客态、加载/空/错态、领取、确认购买、分页账本、个人名次和移动端布局。
+  - 异步读写绑定发起账号，旧账号响应不能覆盖新账号；浏览器 mock 的读写状态也按账号隔离。
+  - 通用确认框补齐 dialog 语义、关闭按钮可访问名称、Tab/Shift+Tab 焦点陷阱，以及按钮、Escape、`game.closeModal()` 三种取消路径的回调与焦点恢复。
+  - Pages CI 分片仍执行各自 `report.json` 的结构汇总；缺失、重复、未知或旧 run id 报告都会失败，不再因设置 filter 跳过结构门禁。
+
+- 反向审查 / 验证
+  - 三轮 gpt-5.4 挑战者审查发现并修复：终局快照可能漏掉跨小时边界对局、冻结后迟到结果读段位失败、正式赛季接口误读旧累计段位、账号 mock 假阳性、领取/兑换焦点丢失、确认框 Escape/程序关闭绕过取消、焦点逃出 dialog、关闭按钮无可访问名称，以及测试对局排除分支缺覆盖。
+  - `npm run test:release:local` 最终通过；fresh run id 为 `release-1783739038-70357`。
+  - `output/release-browser-audits-s101-final-v3/report.json`：30/30 模块、1053 条 finding、0 失败、0 console error、416 张截图，`missingModules=[]`、`duplicateModules=[]`、`unknownModules=[]`。
+  - `output/release-browser-audits-s101-final-v3/season-ops/report.json`：43/43 finding、0 失败、0 console error，覆盖领取/兑换竞态、账号切换、桌面/390px 布局、键盘 tab、焦点恢复、错误/空态和账本分页。
+
+- 当前结论
+  - 全游戏赛季运营与权威经济平台 V1 已完成本地设计、开发、迁移、兼容、挑战者修复与完整 release gate。
+  - 本轮没有 rsync、没有 SSH、没有重启生产服务、没有写生产数据；`https://080305.xyz/` 保持不变。

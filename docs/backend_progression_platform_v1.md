@@ -42,11 +42,13 @@ V1 将 PVE、挑战、远征和 live PVP 的活动收据汇入独立的账号进
 
 周期以 UTC 为准。日周期从 00:00 开始，周周期从周一 00:00 开始。超过回溯窗口或未来偏差窗口的客户端事件会被拒绝，不能通过延迟上报把旧事件计入新周期。
 
-V1 目标包括：
+V2 目录在保留 V1 日/周/终身目标的基础上加入赛季目标：
 
 - 每日：3 场战斗、1 次活动收官、2 种玩法参与；
 - 每周：5 次活动收官、3 次 Boss 胜利、3 种玩法参与；
 - live PVP 权威周目标：3 场正式真人对局；
+- 赛季可信目标：12 次可信收官、3 种可信玩法；
+- 赛季权威目标：10 场正式真人对局、4 场正式胜利；
 - 终身：首次收官、10 次收官、参与 3 种玩法。
 
 每个目标在 API 中携带 `trustRequirement`。客户端观察目标与服务端权威目标不会混淆。
@@ -76,12 +78,13 @@ V1 目标包括：
 
 ## 持久化与迁移
 
-当前全仓 Schema 版本为 `4`，云状态迁移位于长期进度迁移之后。新数据库会按顺序记录：
+当前全仓 Schema 版本为 `5`。新数据库会按顺序记录：
 
 1. `0001_startup_schema`
 2. `0002_progression_platform`
 3. `0003_verified_runs`
 4. `0004_cloud_state_v2`
+5. `0005_season_ops_economy`
 
 新增表：
 
@@ -98,14 +101,30 @@ V1 目标包括：
 - `cloud_state_mutations`
 - `cloud_state_ops_events`
 - `cloud_state_ops_counters`
+- `season_ops_seasons`
+- `season_ops_offers`
+- `season_ops_mutations`
+- `season_ops_purchases`
+- `season_ops_compensations`
+- `season_ops_entitlements`
+- `pvp_season_ladders`
+- `pvp_season_ladder_results`
+- `season_ops_leaderboard_snapshots`
+- `season_ops_leaderboard_entries`
+- `season_ops_settlements`
+- `season_ops_ops_events`
+- `season_ops_ops_counters`
 
-长期进度迁移只做 additive 的建表、加列、索引和 `occurred_at` 审计字段回填，不从 `game_saves/global_data` 解释或发放长期进度奖励。`0004_cloud_state_v2` 仅把旧 blob 作为 `legacy_import` 云状态 revision 回填，仍不得据此直接发奖；每个 scope 保留 20 个窗口 revision 和至多 20 个被引用来源，mutation 和原始运维事件保留 30 天，累计运维计数独立保存。
+长期进度迁移只做 additive 的建表、加列、索引和 `occurred_at` 审计字段回填，不从 `game_saves/global_data` 解释或发放长期进度奖励。`0004_cloud_state_v2` 仅把旧 blob 作为 `legacy_import` 云状态 revision 回填，仍不得据此直接发奖；`0005_season_ops_economy` 只回放赛季时间窗内的 live PVP 正式结算，不接受旧异步 PVP 或客户端自述。每个云状态 scope 保留 20 个窗口 revision 和至多 20 个被引用来源，mutation 和原始运维事件保留 30 天，累计运维计数独立保存。
 
 ## 原子性与恢复
 
 - 玩家领奖使用独立 SQLite 连接和 `BEGIN IMMEDIATE`；claim、余额和 ledger 在同一事务提交。
 - 并发双击或双设备领取时，一个请求创建正式 claim，其他请求返回 `alreadyClaimed=true`，余额只增加一次。
 - live PVP 的两条权威进度事件与正式积分/奖励结算在同一事务写入。
+- live PVP 的逐场权威结果、正式赛季榜和兼容累计段位与原结算同事务提交；正式榜不读取旧 `pvp_ranks` 作为排名真值，旧结果重放也不能回滚新榜。
+- live PVP 的赛季归属优先使用 `setup.battleStartedAt`；最终 snapshot 后的迟到结算与启动回放只能追加 `post_snapshot_noop` 审计，不能改变定榜。
+- 人工补偿在独立写事务中原子提交钱包、ledger、补偿记录和 mutation 回执；目标账号需重复确认，原因、金额与协议版本均进入幂等请求哈希。
 - 旧结算记录被重新读取时，会以 `INSERT OR IGNORE` 补齐缺失的权威进度事件，且不会重复推进。
 - 目标投影可从 append-only 事件重算；状态查询使用只读快照，运营总览直接基于事件统计，不依赖玩家是否打开过进度页面。
 

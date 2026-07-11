@@ -7,6 +7,7 @@ const {
     recordCurrentSchemaMigration
 } = require('../services/platform/schema-status');
 const { bootstrapCloudStateSchema } = require('../cloud-state/bootstrap');
+const { bootstrapSeasonOpsSchema } = require('../season-ops/bootstrap');
 
 const dbPath = process.env.DEFIER_DB_PATH
     ? path.resolve(process.env.DEFIER_DB_PATH)
@@ -499,12 +500,18 @@ const initDb = () => {
                 winner_coins_awarded INTEGER NOT NULL,
                 loser_coins_awarded INTEGER NOT NULL,
                 payload TEXT,
+                match_started_at INTEGER NOT NULL DEFAULT 0,
                 created_at INTEGER NOT NULL,
                 FOREIGN KEY(match_id) REFERENCES pvp_live_matches(match_id),
                 FOREIGN KEY(winner_user_id) REFERENCES users(id),
                 FOREIGN KEY(loser_user_id) REFERENCES users(id)
             )`, (err) => {
                 if (err) fail(err);
+            });
+            db.run(`ALTER TABLE pvp_live_match_settlements ADD COLUMN match_started_at INTEGER NOT NULL DEFAULT 0`, (err) => {
+                if (err && !/duplicate column/i.test(String(err.message || ''))) {
+                    fail(err);
+                }
             });
             db.run(`CREATE INDEX IF NOT EXISTS idx_pvp_live_settlements_winner ON pvp_live_match_settlements(winner_user_id, created_at)`, (err) => {
                 if (err) fail(err);
@@ -741,6 +748,7 @@ const initDb = () => {
                 (async () => {
                     try {
                         await bootstrapCloudStateSchema(db);
+                        await bootstrapSeasonOpsSchema(db);
                         recordCurrentSchemaMigration(db, (migrationErr) => {
                             if (migrationErr) fail(migrationErr);
                             else done();

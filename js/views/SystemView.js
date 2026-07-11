@@ -499,6 +499,14 @@ export class SystemView {
     modal.classList.add('active');
   }
   showConfirmModal(message, onConfirm, onCancel = null) {
+    const returnFocus = typeof HTMLElement !== 'undefined' && document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const restoreInvokerFocus = () => {
+      queueMicrotask(() => {
+        if (returnFocus && returnFocus.isConnected && !returnFocus.disabled) {
+          returnFocus.focus({ preventScroll: true });
+        }
+      });
+    };
     let modal = document.getElementById('generic-confirm-modal');
 
     // 动态创建模态框
@@ -506,14 +514,18 @@ export class SystemView {
       modal = document.createElement('div');
       modal.id = 'generic-confirm-modal';
       modal.className = 'modal';
+      modal.setAttribute('role', 'dialog');
+      modal.setAttribute('aria-modal', 'true');
+      modal.setAttribute('aria-labelledby', 'generic-confirm-title');
+      modal.setAttribute('aria-describedby', 'generic-confirm-message');
       modal.style.zIndex = '10000'; // 确保在最上层
       modal.innerHTML = `
                 <div class="modal-content" style="text-align: center; max-width: 400px; padding: 30px;">
                     <h3 id="generic-confirm-title" style="color: var(--accent-gold); margin-bottom: 20px;">提示</h3>
                     <p id="generic-confirm-message" style="color: #ccc; margin-bottom: 30px; line-height: 1.6; font-size: 1.1rem; white-space: pre-line;"></p>
                     <div style="display: flex; justify-content: center; gap: 20px;">
-                        <button id="generic-confirm-btn" class="menu-btn primary small">确定</button>
-                        <button id="generic-cancel-btn" class="menu-btn small">取消</button>
+                        <button id="generic-confirm-btn" class="menu-btn primary small" type="button">确定</button>
+                        <button id="generic-cancel-btn" class="menu-btn small" type="button">取消</button>
                     </div>
                 </div>
             `;
@@ -522,6 +534,8 @@ export class SystemView {
       // 绑定通用关闭
       const closeBtn = document.createElement('button');
       closeBtn.className = 'modal-close';
+      closeBtn.type = 'button';
+      closeBtn.setAttribute('aria-label', '关闭确认框');
       closeBtn.innerHTML = '×';
       const modalContent = modal.querySelector('.modal-content');
       if (!modalContent) return;
@@ -534,13 +548,24 @@ export class SystemView {
     const cancelBtn = document.getElementById('generic-cancel-btn');
     if (msgEl) msgEl.textContent = message;
 
-    // 绑定事件 (使用 onclick 覆盖之前的绑定，防止多次触发)
+    const finishConfirmation = confirmed => {
+      if (!modal.classList.contains('active')) return;
+      modal.classList.remove('active');
+      if (confirmed) {
+        if (typeof onConfirm === 'function') onConfirm();
+      } else if (typeof onCancel === 'function') {
+        onCancel();
+      }
+      restoreInvokerFocus();
+    };
+
+    // 绑定事件 (覆盖之前的绑定，防止多次触发)
     const closeBtn = modal.querySelector('.modal-close');
     if (closeBtn) {
       if (closeBtn.__systemClickHandler) {
         closeBtn.removeEventListener('click', closeBtn.__systemClickHandler);
       }
-      const closeHandler = () => modal.classList.remove('active');
+      const closeHandler = () => finishConfirmation(false);
       closeBtn.addEventListener('click', closeHandler);
       closeBtn.__systemClickHandler = closeHandler;
     }
@@ -548,10 +573,7 @@ export class SystemView {
       if (confirmBtn.__systemClickHandler) {
         confirmBtn.removeEventListener('click', confirmBtn.__systemClickHandler);
       }
-      const confirmHandler = () => {
-        modal.classList.remove('active');
-        if (typeof onConfirm === 'function') onConfirm();
-      };
+      const confirmHandler = () => finishConfirmation(true);
       confirmBtn.addEventListener('click', confirmHandler);
       confirmBtn.__systemClickHandler = confirmHandler;
     }
@@ -559,16 +581,46 @@ export class SystemView {
       if (cancelBtn.__systemClickHandler) {
         cancelBtn.removeEventListener('click', cancelBtn.__systemClickHandler);
       }
-      const cancelHandler = () => {
-        modal.classList.remove('active');
-        if (typeof onCancel === 'function') onCancel();
-      };
+      const cancelHandler = () => finishConfirmation(false);
       cancelBtn.addEventListener('click', cancelHandler);
       cancelBtn.__systemClickHandler = cancelHandler;
     }
 
+    if (modal.__systemKeydownHandler) {
+      modal.removeEventListener('keydown', modal.__systemKeydownHandler);
+    }
+    const keydownHandler = event => {
+      if (!modal.classList.contains('active')) return;
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        event.stopPropagation();
+        finishConfirmation(false);
+        return;
+      }
+      if (event.key !== 'Tab') return;
+      const controls = Array.from(modal.querySelectorAll('button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'))
+        .filter(element => element instanceof HTMLElement && element.offsetParent !== null);
+      if (controls.length === 0) {
+        event.preventDefault();
+        return;
+      }
+      const first = controls[0];
+      const last = controls[controls.length - 1];
+      if (event.shiftKey && (document.activeElement === first || !modal.contains(document.activeElement))) {
+        event.preventDefault();
+        last.focus({ preventScroll: true });
+      } else if (!event.shiftKey && (document.activeElement === last || !modal.contains(document.activeElement))) {
+        event.preventDefault();
+        first.focus({ preventScroll: true });
+      }
+    };
+    modal.addEventListener('keydown', keydownHandler);
+    modal.__systemKeydownHandler = keydownHandler;
+    modal.__systemCancelHandler = () => finishConfirmation(false);
+
     // 显示
     modal.classList.add('active');
+    if (confirmBtn) confirmBtn.focus({ preventScroll: true });
   }
   showAlertModal(message, title = '提示', onOk = null) {
     let modal = document.getElementById('generic-alert-modal');

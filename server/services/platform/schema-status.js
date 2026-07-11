@@ -63,6 +63,26 @@ const SCHEMA_MIGRATIONS = [
             'cloud_state_ops_events',
             'cloud_state_ops_counters'
         ]
+    }),
+    makeMigration({
+        id: '0005_season_ops_economy',
+        version: 5,
+        description: 'Versioned seasons, authoritative economy, ladder snapshots, and settlement recovery',
+        resources: [
+            'season_ops_seasons',
+            'season_ops_offers',
+            'season_ops_mutations',
+            'season_ops_purchases',
+            'season_ops_compensations',
+            'season_ops_entitlements',
+            'pvp_season_ladders',
+            'pvp_season_ladder_results',
+            'season_ops_leaderboard_snapshots',
+            'season_ops_leaderboard_entries',
+            'season_ops_settlements',
+            'season_ops_ops_events',
+            'season_ops_ops_counters'
+        ]
     })
 ];
 const CURRENT_MIGRATION = SCHEMA_MIGRATIONS[SCHEMA_MIGRATIONS.length - 1];

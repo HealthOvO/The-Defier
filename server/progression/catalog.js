@@ -1,7 +1,11 @@
 const DAY_MS = 24 * 60 * 60 * 1000;
-const CATALOG_VERSION = 'account-progression-v1';
+const CATALOG_VERSION = 'account-progression-v2';
 const REWARD_IMPACT = 'cosmetic_only';
 const REWARD_CURRENCY = 'renown';
+const {
+    SEASON_OBJECTIVES,
+    getSeasonCycle
+} = require('../season-ops/catalog');
 
 const OBJECTIVES = [
     {
@@ -93,7 +97,8 @@ const OBJECTIVES = [
         title: '三途同修',
         reward: 150,
         trustRequirement: 'client_observed'
-    }
+    },
+    ...SEASON_OBJECTIVES
 ];
 
 function makeUtcDayCycle(now = Date.now()) {
@@ -133,6 +138,7 @@ function getCycles(now = Date.now()) {
     return {
         daily: makeUtcDayCycle(now),
         weekly: makeUtcWeekCycle(now),
+        season: getSeasonCycle(now),
         lifetime: makeLifetimeCycle()
     };
 }

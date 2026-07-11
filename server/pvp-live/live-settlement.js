@@ -5,6 +5,8 @@ const {
     recordSeasonRewardClaimsFromCollection
 } = require('./season-claims');
 const { makeTrustedPvpProgressionEvent } = require('../progression/service');
+const { recordAuthoritativePvpResult } = require('../season-ops/service');
+const { getSeasonForTime, getSeasonState } = require('../season-ops/catalog');
 
 const SEASON_ID = 's1-genesis';
 const SEASON_NAME = '开天赛季';
@@ -281,19 +283,46 @@ async function getLiveUser(userId, fallbackName) {
     };
 }
 
-async function ensureRank(user) {
+async function ensureRank(user, seasonId = SEASON_ID) {
     const now = Date.now();
     const rankId = makeRankId(user.id);
     await dbRun(
         `INSERT OR IGNORE INTO pvp_ranks (id, user_id, user_name, score, wins, losses, realm, division, season_id, created_at, updated_at)
          VALUES (?, ?, ?, 1000, 0, 0, 1, ?, ?, ?, ?)`,
-        [rankId, user.id, user.username, getDivisionByScore(1000), SEASON_ID, now, now]
+        [rankId, user.id, user.username, getDivisionByScore(1000), seasonId || SEASON_ID, now, now]
     );
     await dbRun(
         `UPDATE pvp_ranks SET user_name = ? WHERE user_id = ?`,
         [user.username, user.id]
     );
     return dbGet(`SELECT * FROM pvp_ranks WHERE user_id = ?`, [user.id]);
+}
+
+async function getAuthoritativeSeasonRank(user, fallbackRank, seasonId = SEASON_ID) {
+    const row = await dbGet(
+        `SELECT score, wins, losses, division, created_at, updated_at
+         FROM pvp_season_ladders
+         WHERE season_id = ? AND user_id = ?`,
+        [seasonId || SEASON_ID, user.id]
+    );
+    if (row) {
+        return {
+            ...fallbackRank,
+            score: Math.max(0, Math.floor(Number(row.score) || 1000)),
+            wins: Math.max(0, Math.floor(Number(row.wins) || 0)),
+            losses: Math.max(0, Math.floor(Number(row.losses) || 0)),
+            division: String(row.division || getDivisionByScore(row.score)),
+            created_at: Math.max(0, Math.floor(Number(row.created_at) || Number(fallbackRank.created_at) || Date.now())),
+            updated_at: Math.max(0, Math.floor(Number(row.updated_at) || Number(fallbackRank.updated_at) || Date.now()))
+        };
+    }
+    return {
+        ...fallbackRank,
+        score: 1000,
+        wins: 0,
+        losses: 0,
+        division: getDivisionByScore(1000)
+    };
 }
 
 async function ensureEconomy(userId) {
@@ -383,6 +412,23 @@ function calculateElo(myRating, opponentRating, didWin) {
     };
 }
 
+function getMatchSeasonContext(match, settledAt = Date.now()) {
+    const matchStartedAt = Math.max(
+        0,
+        Math.floor(Number(match && match.state && match.state.setup && match.state.setup.battleStartedAt)
+            || Number(match && match.createdAt)
+            || Number(match && match.state && match.state.setup && match.state.setup.startedAt)
+            || Number(settledAt)
+            || Date.now())
+    );
+    const season = getSeasonForTime(matchStartedAt, { includeGrace: false });
+    const state = season ? getSeasonState(season, matchStartedAt) : null;
+    return {
+        matchStartedAt,
+        season: state && state.isActive ? season : null
+    };
+}
+
 function calculateReward({ didWin, opponentRating, currentRating, winStreak = 0, lossStreak = 0 }) {
     const division = getDivisionByScore(currentRating);
     const divisionMultiplier = division === '天穹榜' ? 1.2 : division === '凌霄榜' ? 1.12 : division === '问道榜' ? 1.06 : 1;
@@ -428,7 +474,7 @@ function getSeat(state, seatId) {
     return state && state.seats && state.seats[seatId] ? state.seats[seatId] : null;
 }
 
-async function recordTrustedProgressionEvent(input, now) {
+async function recordTrustedProgressionEvent(input, occurredAt, receivedAt = Date.now()) {
     const event = makeTrustedPvpProgressionEvent(input);
     if (!event) return false;
     const result = await dbRun(
@@ -450,14 +496,14 @@ async function recordTrustedProgressionEvent(input, now) {
             event.pvpMatches,
             event.pvpWins,
             JSON.stringify(event.proof || {}),
-            now,
-            now
+            occurredAt,
+            receivedAt
         ]
     );
     return result.changes > 0;
 }
 
-async function recordTrustedProgressionSettlement({ matchId, finishReason, winner, loser, now }) {
+async function recordTrustedProgressionSettlement({ matchId, finishReason, winner, loser, occurredAt, receivedAt }) {
     const entries = [
         winner && { userId: winner.userId, didWin: true },
         loser && { userId: loser.userId, didWin: false }
@@ -467,16 +513,16 @@ async function recordTrustedProgressionSettlement({ matchId, finishReason, winne
             ...entry,
             matchId,
             finishReason
-        }, now);
+        }, occurredAt, receivedAt);
     }
 }
 
-function buildParticipantSummary({ user, rankRow, opponentUser, opponentRankRow, didWin, match, finishReason, calc, coinsAwarded, now }) {
+function buildParticipantSummary({ user, rankRow, opponentUser, opponentRankRow, didWin, match, finishReason, calc, coinsAwarded, seasonId, seasonName, now }) {
     const opponentScore = Math.max(0, Math.floor(Number(opponentRankRow.score) || 1000));
     return {
         source: 'live_pvp',
-        seasonId: SEASON_ID,
-        seasonName: SEASON_NAME,
+        seasonId: seasonId || SEASON_ID,
+        seasonName: seasonName || SEASON_NAME,
         matchId: match.matchId,
         opponentRankId: makeRankId(opponentUser.id),
         opponentUserId: opponentUser.id,
@@ -494,15 +540,35 @@ function buildParticipantSummary({ user, rankRow, opponentUser, opponentRankRow,
     };
 }
 
-async function settleParticipant({ user, opponentUser, rankRow, opponentRankRow, didWin, match, finishReason, now }) {
+async function settleParticipant({
+    user,
+    opponentUser,
+    rankRow,
+    opponentRankRow,
+    legacyRankRow,
+    opponentLegacyRankRow,
+    didWin,
+    match,
+    finishReason,
+    seasonId,
+    seasonName,
+    seasonEligible,
+    matchStartedAt,
+    now
+}) {
     const currentRating = Math.max(0, Math.floor(Number(rankRow.score) || 1000));
     const opponentRating = Math.max(0, Math.floor(Number(opponentRankRow.score) || 1000));
     const calc = calculateElo(currentRating, opponentRating, didWin);
     const wins = Math.max(0, Math.floor(Number(rankRow.wins) || 0)) + (didWin ? 1 : 0);
     const losses = Math.max(0, Math.floor(Number(rankRow.losses) || 0)) + (didWin ? 0 : 1);
+    const legacyCurrentRating = Math.max(0, Math.floor(Number(legacyRankRow.score) || 1000));
+    const legacyOpponentRating = Math.max(0, Math.floor(Number(opponentLegacyRankRow.score) || 1000));
+    const legacyCalc = calculateElo(legacyCurrentRating, legacyOpponentRating, didWin);
+    const legacyWins = Math.max(0, Math.floor(Number(legacyRankRow.wins) || 0)) + (didWin ? 1 : 0);
+    const legacyLosses = Math.max(0, Math.floor(Number(legacyRankRow.losses) || 0)) + (didWin ? 0 : 1);
     await dbRun(
         `UPDATE pvp_ranks SET score = ?, wins = ?, losses = ?, division = ?, updated_at = ? WHERE user_id = ?`,
-        [calc.newRating, wins, losses, getDivisionByScore(calc.newRating), now, user.id]
+        [legacyCalc.newRating, legacyWins, legacyLosses, getDivisionByScore(legacyCalc.newRating), now, user.id]
     );
 
     const economy = await ensureEconomy(user.id);
@@ -514,8 +580,8 @@ async function settleParticipant({ user, opponentUser, rankRow, opponentRankRow,
     });
     const coinsAwarded = calculateReward({
         didWin,
-        opponentRating,
-        currentRating,
+        opponentRating: legacyOpponentRating,
+        currentRating: legacyCurrentRating,
         winStreak: settlementEconomy.winStreak,
         lossStreak: settlementEconomy.lossStreak
     });
@@ -531,29 +597,35 @@ async function settleParticipant({ user, opponentUser, rankRow, opponentRankRow,
         lastRewardAt: now
     };
     nextEconomyBase.bestWinStreak = Math.max(nextEconomyBase.bestWinStreak, nextEconomyBase.winStreak);
-    const honorCollectionGrant = grantSeasonHonorCollection(nextEconomyBase, {
-        gamesPlayed: wins + losses,
-        now
-    });
-    await recordSeasonRewardClaims(db, {
-        userId: user.id,
-        seasonId: SEASON_ID,
-        rewards: honorCollectionGrant.newlyUnlocked,
-        claimSource: 'live_ranked_settlement',
-        sourceMatchId: match.matchId,
-        claimedAt: now
-    });
+    const honorCollectionGrant = seasonEligible && seasonId === SEASON_ID
+        ? grantSeasonHonorCollection(nextEconomyBase, {
+            gamesPlayed: wins + losses,
+            now
+        })
+        : { economy: nextEconomyBase, collection: null, newlyUnlocked: [], currentEntry: null, claim: null };
+    if (seasonEligible && seasonId === SEASON_ID) {
+        await recordSeasonRewardClaims(db, {
+            userId: user.id,
+            seasonId,
+            rewards: honorCollectionGrant.newlyUnlocked,
+            claimSource: 'live_ranked_settlement',
+            sourceMatchId: match.matchId,
+            claimedAt: now
+        });
+    }
 
     const historyEntry = buildParticipantSummary({
         user,
-        rankRow,
+        rankRow: legacyRankRow,
         opponentUser,
-        opponentRankRow,
+        opponentRankRow: opponentLegacyRankRow,
         didWin,
         match,
         finishReason,
-        calc,
+        calc: legacyCalc,
         coinsAwarded,
+        seasonId,
+        seasonName,
         now
     });
     let nextEconomy = appendEconomyLog(honorCollectionGrant.economy, {
@@ -579,21 +651,45 @@ async function settleParticipant({ user, opponentUser, rankRow, opponentRankRow,
         `INSERT OR IGNORE INTO pvp_match_history
             (ticket_id, user_id, opponent_user_id, did_win, rating_delta, score_after, coins_awarded, payload, created_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [`live:${match.matchId}:${user.id}`, user.id, opponentUser.id, didWin ? 1 : 0, calc.delta, calc.newRating, coinsAwarded, JSON.stringify(historyEntry), now]
+        [`live:${match.matchId}:${user.id}`, user.id, opponentUser.id, didWin ? 1 : 0, legacyCalc.delta, legacyCalc.newRating, coinsAwarded, JSON.stringify(historyEntry), now]
     );
+
+    await recordAuthoritativePvpResult(db, {
+        seasonId,
+        userId: user.id,
+        userName: user.username,
+        matchId: match.matchId,
+        didWin,
+        score: calc.newRating,
+        wins,
+        losses,
+        rankedGames: wins + losses,
+        division: getDivisionByScore(calc.newRating),
+        occurredAt: matchStartedAt,
+        updatedAt: now
+    });
 
     return {
         userId: user.id,
         didWin,
-        oldScore: currentRating,
-        newScore: calc.newRating,
-        ratingDelta: calc.delta,
+        oldScore: legacyCurrentRating,
+        newScore: legacyCalc.newRating,
+        ratingDelta: legacyCalc.delta,
         coinsAwarded,
-        wins,
-        losses,
-        rankedGames: wins + losses,
-        seasonId: SEASON_ID,
-        seasonName: SEASON_NAME,
+        wins: legacyWins,
+        losses: legacyLosses,
+        rankedGames: legacyWins + legacyLosses,
+        seasonId,
+        seasonName,
+        seasonRank: {
+            oldScore: currentRating,
+            newScore: calc.newRating,
+            ratingDelta: calc.delta,
+            wins,
+            losses,
+            rankedGames: wins + losses,
+            division: getDivisionByScore(calc.newRating)
+        },
         seasonHonorClaim: honorCollectionGrant.claim
     };
 }
@@ -646,7 +742,8 @@ function makeSqliteLivePvpSettlement() {
                         finishReason: existing.finish_reason || finishReason,
                         winner: existingWinner,
                         loser: existingLoser,
-                        now: Math.max(0, Math.floor(Number(existing.created_at) || Date.now()))
+                        occurredAt: Math.max(0, Math.floor(Number(existing.match_started_at) || Number(match.createdAt) || Number(existing.created_at) || Date.now())),
+                        receivedAt: Math.max(0, Math.floor(Number(existing.created_at) || Date.now()))
                     });
                     return {
                         settled: true,
@@ -658,17 +755,28 @@ function makeSqliteLivePvpSettlement() {
 
                 const winnerUser = await getLiveUser(winnerSeat.userId, winnerSeat.displayName);
                 const loserUser = await getLiveUser(loserSeat.userId, loserSeat.displayName);
-                const winnerRank = await ensureRank(winnerUser);
-                const loserRank = await ensureRank(loserUser);
                 const now = Date.now();
+                const seasonContext = getMatchSeasonContext(match, now);
+                const seasonId = seasonContext.season && seasonContext.season.seasonId || SEASON_ID;
+                const seasonName = seasonContext.season && seasonContext.season.title || SEASON_NAME;
+                const winnerLegacyRank = await ensureRank(winnerUser, seasonId);
+                const loserLegacyRank = await ensureRank(loserUser, seasonId);
+                const winnerRank = await getAuthoritativeSeasonRank(winnerUser, winnerLegacyRank, seasonId);
+                const loserRank = await getAuthoritativeSeasonRank(loserUser, loserLegacyRank, seasonId);
                 const winnerResult = await settleParticipant({
                     user: winnerUser,
                     opponentUser: loserUser,
                     rankRow: winnerRank,
                     opponentRankRow: loserRank,
+                    legacyRankRow: winnerLegacyRank,
+                    opponentLegacyRankRow: loserLegacyRank,
                     didWin: true,
                     match,
                     finishReason,
+                    seasonId,
+                    seasonName,
+                    seasonEligible: !!seasonContext.season,
+                    matchStartedAt: seasonContext.matchStartedAt,
                     now
                 });
                 const loserResult = await settleParticipant({
@@ -676,9 +784,15 @@ function makeSqliteLivePvpSettlement() {
                     opponentUser: winnerUser,
                     rankRow: loserRank,
                     opponentRankRow: winnerRank,
+                    legacyRankRow: loserLegacyRank,
+                    opponentLegacyRankRow: winnerLegacyRank,
                     didWin: false,
                     match,
                     finishReason,
+                    seasonId,
+                    seasonName,
+                    seasonEligible: !!seasonContext.season,
+                    matchStartedAt: seasonContext.matchStartedAt,
                     now
                 });
                 const payload = {
@@ -687,14 +801,15 @@ function makeSqliteLivePvpSettlement() {
                     winner: winnerResult,
                     loser: loserResult,
                     finishReason,
+                    matchStartedAt: seasonContext.matchStartedAt,
                     settledAt: now
                 };
                 await dbRun(
                     `INSERT INTO pvp_live_match_settlements
                         (match_id, winner_user_id, loser_user_id, winner_seat, loser_seat, finish_reason,
                          rating_delta_winner, rating_delta_loser, winner_score_after, loser_score_after,
-                         winner_coins_awarded, loser_coins_awarded, payload, created_at)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                         winner_coins_awarded, loser_coins_awarded, payload, match_started_at, created_at)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
                     [
                         match.matchId,
                         winnerUser.id,
@@ -709,6 +824,7 @@ function makeSqliteLivePvpSettlement() {
                         winnerResult.coinsAwarded,
                         loserResult.coinsAwarded,
                         JSON.stringify(payload),
+                        seasonContext.matchStartedAt,
                         now
                     ]
                 );
@@ -717,7 +833,8 @@ function makeSqliteLivePvpSettlement() {
                     finishReason,
                     winner: winnerResult,
                     loser: loserResult,
-                    now
+                    occurredAt: seasonContext.matchStartedAt,
+                    receivedAt: now
                 });
                 return { settled: true, matchId: match.matchId, ...payload };
             });

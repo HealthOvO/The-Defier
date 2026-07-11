@@ -178,11 +178,11 @@ async function runChecks() {
   try {
     await waitForHealth(server);
     const version = await request('/api/version');
-    assert.strictEqual(version.payload?.schema?.version, 4, 'cloud state should advance schema version without removing progression migrations');
-    assert.strictEqual(version.payload?.schema?.currentMigrationId, '0004_cloud_state_v2');
+    assert.strictEqual(version.payload?.schema?.version, 5, 'season ops should advance schema version without removing progression migrations');
+    assert.strictEqual(version.payload?.schema?.currentMigrationId, '0005_season_ops_economy');
     assert.deepStrictEqual(
       version.payload?.schema?.appliedMigrations?.map(entry => entry.id),
-      ['0001_startup_schema', '0002_progression_platform', '0003_verified_runs', '0004_cloud_state_v2'],
+      ['0001_startup_schema', '0002_progression_platform', '0003_verified_runs', '0004_cloud_state_v2', '0005_season_ops_economy'],
       'fresh databases should record the full migration chain'
     );
 
@@ -255,7 +255,7 @@ async function runChecks() {
     const status = await request('/api/progression/status', { token: primary.token });
     assert.strictEqual(status.status, 200);
     assert.strictEqual(status.payload?.reportVersion, 'account-progression-status-v1');
-    assert.strictEqual(status.payload?.catalogVersion, 'account-progression-v1');
+    assert.strictEqual(status.payload?.catalogVersion, 'account-progression-v2');
     assert.strictEqual(objective(status, 'daily_battle_wins')?.current, 3);
     assert.strictEqual(objective(status, 'daily_battle_wins')?.claimable, true);
     assert.strictEqual(objective(status, 'daily_battle_wins')?.trustRequirement, 'client_observed');
@@ -264,6 +264,9 @@ async function runChecks() {
     assert.strictEqual(objective(status, 'daily_mode_variety')?.current, 3);
     assert.strictEqual(objective(status, 'weekly_activity_completions')?.claimable, false);
     assert.strictEqual(objective(status, 'milestone_first_completion')?.claimable, true);
+    assert.strictEqual(objective(status, 'season_verified_activity_completions')?.current, 0, 'client-observed completions must not satisfy verified season contracts');
+    assert.strictEqual(objective(status, 'season_verified_mode_variety')?.current, 0, 'client-observed variety must not satisfy verified season contracts');
+    assert.strictEqual(objective(status, 'season_live_pvp_matches')?.current, 0, 'client-observed events must not satisfy authoritative PVP contracts');
     assert(status.payload?.recentEvents?.every(entry => !('sourceRef' in entry)), 'player status should not echo source references');
 
     const replay = await signedRequest('/api/progression/events', {

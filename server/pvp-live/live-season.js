@@ -99,11 +99,11 @@ async function buildLivePvpSeasonStatus(db, userId) {
     return withLiveSettlementReadGate(async () => {
     const rankRow = id ? await dbGet(
         db,
-        `SELECT score, division, season_id, wins, losses
-         FROM pvp_ranks
-         WHERE user_id = ?
+        `SELECT score, division, season_id, wins, losses, ranked_games
+         FROM pvp_season_ladders
+         WHERE season_id = ? AND user_id = ? AND authoritative_participant = 1 AND ranked_games > 0
          LIMIT 1`,
-        [id]
+        [SEASON_ID, id]
     ) : null;
     const economyRow = id ? await dbGet(
         db,
@@ -117,13 +117,9 @@ async function buildLivePvpSeasonStatus(db, userId) {
     const rawCollection = economy && economy.seasonHonorCollection && typeof economy.seasonHonorCollection === 'object' && !Array.isArray(economy.seasonHonorCollection)
         ? economy.seasonHonorCollection
         : null;
-    const rawCollectionSeasonId = String(rawCollection && rawCollection.seasonId || '');
-    const economySeasonIsCurrent = rawCollectionSeasonId === SEASON_ID;
-    const rankSeasonId = String(rankRow && rankRow.season_id || '');
-    const rankIsCurrentSeason = !!rankRow && (!rankSeasonId || rankSeasonId === SEASON_ID);
-    const wins = Math.max(0, Math.floor(Number(rankIsCurrentSeason ? rankRow.wins : economySeasonIsCurrent && economy && economy.wins) || 0));
-    const losses = Math.max(0, Math.floor(Number(rankIsCurrentSeason ? rankRow.losses : economySeasonIsCurrent && economy && economy.losses) || 0));
-    const rankedGames = wins + losses;
+    const wins = Math.max(0, Math.floor(Number(rankRow && rankRow.wins) || 0));
+    const losses = Math.max(0, Math.floor(Number(rankRow && rankRow.losses) || 0));
+    const rankedGames = Math.max(wins + losses, Math.floor(Number(rankRow && rankRow.ranked_games) || 0));
     const rewardTrack = makeSeasonRewardTrack();
     const nextReward = rewardTrack.find(reward => reward.targetGames > rankedGames) || rewardTrack[rewardTrack.length - 1] || null;
     const claimLedger = mergeClaimLedgers(
@@ -152,8 +148,8 @@ async function buildLivePvpSeasonStatus(db, userId) {
             reportVersion: 'pvp-live-season-progress-v1',
             userId: id,
             seasonId: SEASON_ID,
-            score: Math.max(0, Math.floor(Number(rankIsCurrentSeason && rankRow && rankRow.score) || 1000)),
-            division: String(rankIsCurrentSeason && rankRow && rankRow.division || '潜龙榜'),
+            score: Math.max(0, Math.floor(Number(rankRow && rankRow.score) || 1000)),
+            division: String(rankRow && rankRow.division || '潜龙榜'),
             wins,
             losses,
             rankedGames,

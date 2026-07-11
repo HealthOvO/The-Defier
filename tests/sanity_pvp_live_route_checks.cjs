@@ -392,6 +392,13 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
             [`rank-${preLedgerCurrentUserId}`, preLedgerCurrentUserId, preLedgerCurrentUsername, staleSeasonNow, staleSeasonNow]
         );
         await dbRun(
+            `INSERT INTO pvp_season_ladders
+              (season_id, user_id, user_name, score, wins, losses, ranked_games, division,
+               authoritative_participant, first_authoritative_at, last_match_id, last_result, updated_at, created_at)
+             VALUES ('s1-genesis', ?, ?, 1042, 1, 0, 1, '潜龙榜', 1, ?, 'live-season-status-match-0001', 'win', ?, ?)`,
+            [preLedgerCurrentUserId, preLedgerCurrentUsername, staleSeasonNow, staleSeasonNow, staleSeasonNow]
+        );
+        await dbRun(
             `INSERT INTO pvp_economy (user_id, economy_data, updated_at)
              VALUES (?, ?, ?)
              ON CONFLICT(user_id) DO UPDATE SET economy_data = excluded.economy_data, updated_at = excluded.updated_at`,
@@ -416,6 +423,8 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
         );
         const preLedgerCurrentStatus = await request(baseUrl, '/api/pvp/live/season', { token: preLedgerCurrentToken });
         assert.equal(preLedgerCurrentStatus.status, 200, 'live season endpoint should handle current season economy before durable ledger migration');
+        assert.equal(preLedgerCurrentStatus.payload.userProgress?.score, 1042, 'live season status should read the isolated authoritative season score');
+        assert.equal(preLedgerCurrentStatus.payload.userProgress?.rankedGames, 1, 'live season status should ignore legacy cumulative match totals');
         assert.equal(preLedgerCurrentStatus.payload.userProgress?.collection?.totalUnlocked, 1, 'current season economy fallback should keep visible honor count before ledger migration');
         assert.equal(preLedgerCurrentStatus.payload.userProgress?.claimLedger?.[0]?.rewardId, 's1_genesis_honor_mark_1', 'current season economy fallback should expose current honor claim before ledger migration');
         assert.equal(preLedgerCurrentStatus.payload.userProgress?.claimLedger?.[0]?.claimSource, 'economy_snapshot', 'current season economy fallback should identify read-only snapshot source');

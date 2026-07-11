@@ -2477,9 +2477,12 @@ class LivePvpStore {
         if (!settlementResult || settlementResult.settled !== true) return null;
         const participants = {};
         const buildSeasonHonorReport = (result) => {
-            const wins = Math.max(0, Math.floor(Number(result && result.wins) || (result && result.didWin ? 1 : 0)));
-            const losses = Math.max(0, Math.floor(Number(result && result.losses) || (result && result.didWin ? 0 : 1)));
-            const gamesPlayed = Math.max(1, Math.floor(Number(result && result.rankedGames) || wins + losses || 1));
+            const seasonRank = result && result.seasonRank && typeof result.seasonRank === 'object'
+                ? result.seasonRank
+                : result;
+            const wins = Math.max(0, Math.floor(Number(seasonRank && seasonRank.wins) || (result && result.didWin ? 1 : 0)));
+            const losses = Math.max(0, Math.floor(Number(seasonRank && seasonRank.losses) || (result && result.didWin ? 0 : 1)));
+            const gamesPlayed = Math.max(1, Math.floor(Number(seasonRank && seasonRank.rankedGames) || wins + losses || 1));
             const milestones = [1, 3, 5, 10, 20, 50];
             const targetGames = milestones.find(target => target > gamesPlayed) || Math.max(gamesPlayed, milestones[milestones.length - 1]);
             const remainingGames = Math.max(0, targetGames - gamesPlayed);

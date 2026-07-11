@@ -51,7 +51,8 @@ export const BackendClient = {
       userPathPrefix: typeof config.userPathPrefix === 'string' ? config.userPathPrefix.trim() : '/api/user',
       ghostPathPrefix: typeof config.ghostPathPrefix === 'string' ? config.ghostPathPrefix.trim() : '/api/ghosts',
       pvpPathPrefix: typeof config.pvpPathPrefix === 'string' ? config.pvpPathPrefix.trim() : '/api/pvp',
-      progressionPathPrefix: typeof config.progressionPathPrefix === 'string' ? config.progressionPathPrefix.trim() : '/api/progression'
+      progressionPathPrefix: typeof config.progressionPathPrefix === 'string' ? config.progressionPathPrefix.trim() : '/api/progression',
+      seasonOpsPathPrefix: typeof config.seasonOpsPathPrefix === 'string' ? config.seasonOpsPathPrefix.trim() : '/api/season-ops'
     };
   },
   cloneData(data) {
@@ -1096,6 +1097,12 @@ export const BackendClient = {
       ? config.progressionPathPrefix.trim().replace(/\/+$/, '')
       : '/api/progression';
     return base;
+  },
+  getSeasonOpsPathPrefix() {
+    const config = this.getServerConfig();
+    return config && typeof config.seasonOpsPathPrefix === 'string' && config.seasonOpsPathPrefix.trim()
+      ? config.seasonOpsPathPrefix.trim().replace(/\/+$/, '')
+      : '/api/season-ops';
   },
   cloneUnsignedRequestPayload(payload) {
     const cloned = payload && typeof payload === 'object' && !Array.isArray(payload)
@@ -2212,6 +2219,151 @@ export const BackendClient = {
         error,
         reason: error && error.reason || undefined,
         message: error.message || '实时论道避开对手提交失败'
+      };
+    }
+  },
+  async getSeasonOpsDashboard(options = {}) {
+    const session = this.captureProgressionSessionSnapshot(options, '登录账号已变化，请刷新赛季司后重试');
+    if (!session || !session.success) return session;
+    const expectedUserId = String(options.expectedUserId || this.getCurrentUser()?.objectId || this.getCurrentUser()?.id || '').trim();
+    try {
+      const result = await this.requestServer(`${this.getSeasonOpsPathPrefix()}/current`, {
+        method: 'GET',
+        authToken: session.sessionToken
+      });
+      const currentUserId = String(this.getCurrentUser()?.objectId || this.getCurrentUser()?.id || '').trim();
+      if (!expectedUserId || currentUserId !== expectedUserId) {
+        return {
+          success: false,
+          reason: 'season_ops_account_changed',
+          message: '登录账号已变化，旧赛季数据未应用'
+        };
+      }
+      return result && typeof result === 'object' ? result : {
+        success: false,
+        message: '赛季司状态返回异常'
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error,
+        reason: error && error.reason || undefined,
+        message: error.message || '赛季司状态读取失败'
+      };
+    }
+  },
+  async getSeasonOpsLeaderboard(options = {}) {
+    const expectedUserId = String(options.expectedUserId || this.getCurrentUser()?.objectId || this.getCurrentUser()?.id || '').trim();
+    const session = this.captureProgressionSessionSnapshot(options, '登录账号已变化，请刷新权威榜单后重试');
+    if (!session || !session.success) return session;
+    const limit = Math.max(1, Math.min(50, Math.floor(Number(options.limit) || 20)));
+    try {
+      const result = await this.requestServer(`${this.getSeasonOpsPathPrefix()}/leaderboard?limit=${limit}`, {
+        method: 'GET',
+        authToken: session.sessionToken
+      });
+      const currentUserId = String(this.getCurrentUser()?.objectId || this.getCurrentUser()?.id || '').trim();
+      if (!expectedUserId || currentUserId !== expectedUserId) {
+        return {
+          success: false,
+          reason: 'season_ops_account_changed',
+          message: '登录账号已变化，旧榜单数据未应用'
+        };
+      }
+      return result;
+    } catch (error) {
+      return {
+        success: false,
+        error,
+        reason: error && error.reason || undefined,
+        message: error.message || '权威榜单读取失败'
+      };
+    }
+  },
+  async getSeasonOpsLedger(options = {}) {
+    const expectedUserId = String(options.expectedUserId || this.getCurrentUser()?.objectId || this.getCurrentUser()?.id || '').trim();
+    const session = this.captureProgressionSessionSnapshot(options, '登录账号已变化，请刷新荣誉账本后重试');
+    if (!session || !session.success) return session;
+    const query = new URLSearchParams();
+    query.set('limit', String(Math.max(1, Math.min(50, Math.floor(Number(options.limit) || 20)))));
+    const cursor = String(options.cursor || '').trim();
+    if (/^\d+:[A-Za-z0-9._:-]{8,128}$/.test(cursor)) query.set('cursor', cursor);
+    try {
+      const result = await this.requestServer(`${this.getSeasonOpsPathPrefix()}/ledger?${query.toString()}`, {
+        method: 'GET',
+        authToken: session.sessionToken
+      });
+      const currentUserId = String(this.getCurrentUser()?.objectId || this.getCurrentUser()?.id || '').trim();
+      if (!expectedUserId || currentUserId !== expectedUserId) {
+        return {
+          success: false,
+          reason: 'season_ops_account_changed',
+          message: '登录账号已变化，旧账本数据未应用'
+        };
+      }
+      return result;
+    } catch (error) {
+      return {
+        success: false,
+        error,
+        reason: error && error.reason || undefined,
+        message: error.message || '荣誉账本读取失败'
+      };
+    }
+  },
+  async purchaseSeasonOpsOffer(offerId = '', seasonId = '', options = {}) {
+    const safeOfferId = String(offerId || '').trim();
+    const safeSeasonId = String(seasonId || '').trim();
+    if (!safeOfferId || !safeSeasonId) return {
+      success: false,
+      reason: 'invalid_purchase',
+      message: '赛季商品或赛季标识缺失'
+    };
+    const expectedUserId = String(options.expectedUserId || this.getCurrentUser()?.objectId || this.getCurrentUser()?.id || '').trim();
+    const session = this.captureProgressionSessionSnapshot({ expectedUserId }, '登录账号已变化，请刷新外观商店后重试');
+    if (!session || !session.success) return session;
+    const payload = {
+      protocolVersion: 'season-ops-v1',
+      seasonId: safeSeasonId,
+      offerId: safeOfferId,
+      mutationId: String(options.mutationId || this.createMutationId()).trim()
+    };
+    const integrity = await this.createRequiredSessionIntegrityFields(
+      payload,
+      session.sessionToken,
+      '当前环境不支持赛季购买签名，请刷新后重试',
+      'season_ops_signature_required'
+    );
+    if (!integrity || !integrity.success) return integrity;
+    try {
+      const result = await this.requestServer(`${this.getSeasonOpsPathPrefix()}/store/purchases`, {
+        method: 'POST',
+        authToken: session.sessionToken,
+        data: {
+          ...payload,
+          ...integrity.integrity
+        }
+      });
+      const currentUserId = String(this.getCurrentUser()?.objectId || this.getCurrentUser()?.id || '').trim();
+      if (!expectedUserId || currentUserId !== expectedUserId) {
+        return {
+          success: false,
+          reason: 'season_ops_account_changed',
+          mutationId: payload.mutationId,
+          message: '登录账号已变化，购买回执未应用；原账号可刷新账本确认结果'
+        };
+      }
+      return {
+        ...(result && typeof result === 'object' ? result : { success: false, message: '赛季购买返回异常' }),
+        mutationId: payload.mutationId
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error,
+        reason: error && error.reason || undefined,
+        mutationId: payload.mutationId,
+        message: error.message || '赛季商品购买失败'
       };
     }
   },
