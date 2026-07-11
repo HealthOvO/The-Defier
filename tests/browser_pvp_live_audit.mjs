@@ -53,6 +53,28 @@ async function safeElementScreenshot(page, selector, outputPath) {
   }
 }
 
+async function clickVisiblePostReviewAction(page, actionId) {
+  const selector = `[data-live-post-match-review]:visible [data-live-post-review-action="${actionId}"]`;
+  let lastError = null;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      const actions = page.locator(selector);
+      const action = actions.first();
+      await action.waitFor({ state: 'visible', timeout: 5000 });
+      const visibleActionCount = await actions.count();
+      if (visibleActionCount !== 1) {
+        throw new Error(`expected one visible ${actionId} post-review action, found ${visibleActionCount}`);
+      }
+      await action.click({ timeout: 3000, force: true });
+      return;
+    } catch (error) {
+      lastError = error;
+      await page.waitForTimeout(80);
+    }
+  }
+  throw lastError;
+}
+
 (async () => {
   const executablePath = process.env.PLAYWRIGHT_EXECUTABLE_PATH || undefined;
   const browser = await chromium.launch({
@@ -67,6 +89,19 @@ async function safeElementScreenshot(page, selector, outputPath) {
   });
   page.on('pageerror', (err) => {
     consoleErrors.push(String(err));
+  });
+
+  await page.addInitScript(() => {
+    const sessionToken = 'browser-pvp-live-audit-session-token';
+    localStorage.setItem('theDefierServerSession', JSON.stringify({
+      token: sessionToken,
+      user: {
+        objectId: 'browser-pvp-live-audit-user',
+        username: '真人论道审计员',
+        sessionToken
+      }
+    }));
+    sessionStorage.setItem('currentSaveSlot', '0');
   });
 
   await page.goto(url, { waitUntil: 'domcontentloaded' });
@@ -6162,7 +6197,7 @@ async function safeElementScreenshot(page, selector, outputPath) {
     JSON.stringify(nextStepPrimaryFocusProbe),
   );
 
-  await page.click('[data-live-post-review-action="practice"]', { timeout: 5000, force: true });
+  await clickVisiblePostReviewAction(page, 'practice');
   await page.waitForTimeout(450);
   const postReviewPracticeProbe = await page.evaluate(() => {
     const payload = typeof window.render_game_to_text === 'function'
@@ -6331,6 +6366,12 @@ async function safeElementScreenshot(page, selector, outputPath) {
     JSON.stringify(unsafePracticePlanProbe),
   );
 
+  const postReviewPracticeAuthProbe = await page.evaluate(() => ({
+    guestMode: !!window.game?.guestMode,
+    forceCloudLogin: typeof window.game?.shouldForceCloudLogin === 'function'
+      ? window.game.shouldForceCloudLogin()
+      : null,
+  }));
   await page.click('#confirm-character-btn', { timeout: 5000, force: true });
   await page.waitForTimeout(900);
   const postReviewDrillStartProbe = await page.evaluate(() => {
@@ -6351,6 +6392,8 @@ async function safeElementScreenshot(page, selector, outputPath) {
   add(
     'live UI post-match practice drill can start replay-only no-reward challenge run',
     postReviewDrillStartProbe.currentScreen === 'map-screen'
+      && postReviewPracticeAuthProbe.guestMode === false
+      && postReviewPracticeAuthProbe.forceCloudLogin === false
       && postReviewDrillStartProbe.activeRun?.replayOnly === true
       && postReviewDrillStartProbe.activeRun?.practiceOnly === true
       && postReviewDrillStartProbe.activeRun?.currentScore === 0
@@ -6359,7 +6402,7 @@ async function safeElementScreenshot(page, selector, outputPath) {
       && /真人练习|不计奖励|练习不计分/.test(postReviewDrillStartProbe.bannerText || '')
       && /训练重点/.test(postReviewDrillStartProbe.focusText || '')
       && !/findOpponent|reportMatchResult|GhostEnemy|startPVPBattle|didWin|matchTicket/.test(JSON.stringify(postReviewDrillStartProbe.calls)),
-    JSON.stringify(postReviewDrillStartProbe),
+    JSON.stringify({ ...postReviewDrillStartProbe, authGate: postReviewPracticeAuthProbe }),
   );
 
   await page.evaluate(async () => {
@@ -6368,7 +6411,7 @@ async function safeElementScreenshot(page, selector, outputPath) {
     await window.PVPScene.loadLivePanel();
   });
   await page.waitForTimeout(100);
-  await page.click('[data-live-post-match-review]:visible [data-live-post-review-action="queue_again"]', { timeout: 5000, force: true });
+  await clickVisiblePostReviewAction(page, 'queue_again');
   await page.waitForTimeout(200);
   const postReviewRequeueProbe = await page.evaluate(() => ({
     phase: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-phase') || '',
@@ -6641,7 +6684,7 @@ async function safeElementScreenshot(page, selector, outputPath) {
     await window.PVPScene.loadLivePanel();
   });
   await page.waitForTimeout(100);
-  await page.click('[data-live-post-match-review]:visible [data-live-post-review-action="friendly_rematch"]', { timeout: 5000, force: true });
+  await clickVisiblePostReviewAction(page, 'friendly_rematch');
   await page.waitForTimeout(120);
   const friendlyRematchProbe = await page.evaluate(() => ({
     phase: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-phase') || '',
@@ -6761,7 +6804,7 @@ async function safeElementScreenshot(page, selector, outputPath) {
     await window.PVPScene.loadLivePanel();
   });
   await page.waitForTimeout(100);
-  await page.click('[data-live-post-match-review]:visible [data-live-post-review-action="friendly_rematch"]', { timeout: 5000, force: true });
+  await clickVisiblePostReviewAction(page, 'friendly_rematch');
   await page.waitForTimeout(120);
   const friendlyCancelWaitProbe = await page.evaluate(() => {
     const series = document.querySelector('[data-live-friendly-series]');
@@ -6861,7 +6904,7 @@ async function safeElementScreenshot(page, selector, outputPath) {
     actionIds: Array.from(document.querySelectorAll('[data-live-post-review-action]')).map(button => button.getAttribute('data-live-post-review-action')),
     snapshot: window.PVPScene.getLiveSnapshot()?.friendlySeries || null,
   }));
-  await page.click('[data-live-post-match-review]:visible [data-live-post-review-action="friendly_rematch"]', { timeout: 5000, force: true });
+  await clickVisiblePostReviewAction(page, 'friendly_rematch');
   await page.waitForTimeout(2800);
   const friendlyDeciderRecoveryProbe = await page.evaluate(() => ({
     phase: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-phase') || '',

@@ -37,6 +37,7 @@ async function safeScreenshot(page, outPath) {
   });
 
   await page.addInitScript(() => {
+    window.__ALLOW_DEBUG_EVENT_HOOKS__ = true;
     try {
       localStorage.removeItem('theDefierGuideStateV1');
       localStorage.setItem('theDefierLegacyV1', JSON.stringify({

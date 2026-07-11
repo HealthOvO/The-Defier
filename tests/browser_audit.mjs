@@ -223,28 +223,36 @@ async function openNewGameEntry(page) {
 
   const newGameState = await page.evaluate(() => {
     const modal = document.getElementById('generic-confirm-modal');
-    const cloudEnabled = (typeof AuthService !== 'undefined' && typeof AuthService.isCloudEnabled === 'function')
-      ? AuthService.isCloudEnabled()
-      : null;
+    const confirmMessage = document.getElementById('generic-confirm-message')?.textContent?.trim() || '';
+    const rootServerConfig = window.__THE_DEFIER_CONFIG__?.server;
+    let serverConfig = rootServerConfig && typeof rootServerConfig === 'object' ? { ...rootServerConfig } : null;
+    try {
+      const localConfig = JSON.parse(localStorage.getItem('theDefierServerConfig') || 'null');
+      if (localConfig && typeof localConfig === 'object') {
+        serverConfig = { ...(serverConfig || {}), ...localConfig };
+      }
+    } catch {}
+    const cloudEnabled = !!(serverConfig && typeof serverConfig.baseUrl === 'string' && serverConfig.baseUrl.trim());
     return {
       confirmModalActive: !!modal && modal.classList.contains('active'),
+      confirmMessage,
       mode: window.game?.currentScreen || null,
       cloudEnabled
     };
   });
-  if (newGameState.cloudEnabled !== true) {
-    add(
-      'new game falls back to local character selection when cloud is disabled',
-      newGameState.mode === 'character-selection-screen' && !newGameState.confirmModalActive,
-      JSON.stringify(newGameState)
-    );
-  } else {
-    add(
-      'new game shows login-or-guest confirm when cloud is enabled',
-      newGameState.confirmModalActive,
-      JSON.stringify(newGameState)
-    );
-  }
+  const cloudEntryObserved = newGameState.confirmModalActive
+    && /尚未登录/.test(newGameState.confirmMessage)
+    && /云端存档/.test(newGameState.confirmMessage);
+  const offlineEntryObserved = newGameState.mode === 'character-selection-screen'
+    && !newGameState.confirmModalActive;
+  const entryMatchesKnownConfig = newGameState.cloudEnabled
+    ? cloudEntryObserved
+    : offlineEntryObserved;
+  add(
+    'new game follows configured cloud-or-local entry flow',
+    entryMatchesKnownConfig,
+    JSON.stringify(newGameState)
+  );
 
   if (newGameState.confirmModalActive) {
     await page.click('#generic-cancel-btn', { timeout: 3000 });

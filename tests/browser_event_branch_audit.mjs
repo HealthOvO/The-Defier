@@ -175,6 +175,10 @@ async function bootstrapRun(page) {
     consoleErrors.push(String(err));
   });
 
+  await page.addInitScript(() => {
+    window.__ALLOW_DEBUG_EVENT_HOOKS__ = true;
+  });
+
   await page.goto(url, { waitUntil: 'domcontentloaded' });
   await page.waitForTimeout(900);
   await bootstrapRun(page);

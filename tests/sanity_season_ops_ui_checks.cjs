@@ -14,11 +14,14 @@ const challengeRules = read('js/data/challenge_rules.js');
 
 [
   'id="season-ops-screen"',
+  'id="season-ops-stylesheet"',
+  'href="css/season-ops.css"',
   "game.showSeasonOps('contracts')",
   'aria-label="赛季司"',
 ].forEach(marker => {
   assert.ok(html.includes(marker), `season ops entry should include ${marker}`);
 });
+assert.equal((html.match(/id="season-ops-stylesheet"/g) || []).length, 1, 'season ops should preload exactly one named stylesheet');
 
 [
   'import { SeasonOpsView }',

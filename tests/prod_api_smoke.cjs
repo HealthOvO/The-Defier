@@ -812,6 +812,7 @@ async function main() {
 
   const opponentPvpRank = await request('/api/pvp/rank', { token: opponent.sessionToken });
   requireOk('opponent PVP rank read', opponentPvpRank);
+  assert.strictEqual(opponentPvpRank.payload.rank?.user?.username, opponentName, `opponent PVP rank should bind the smoke account: ${JSON.stringify(opponentPvpRank.payload)}`);
 
   await assertLivePvpInviteSmoke({
     host: user,
@@ -835,9 +836,26 @@ async function main() {
     playerCName: rankedCName
   });
 
-  const pvpLeaderboard = await request('/api/pvp/leaderboard?limit=20', { token: user.sessionToken });
+  const pvpLeaderboard = await request('/api/pvp/leaderboard?limit=50', { token: user.sessionToken });
   requireOk('PVP leaderboard read', pvpLeaderboard);
-  assert(Array.isArray(pvpLeaderboard.payload.data) && pvpLeaderboard.payload.data.some(rank => rank.user && rank.user.username === opponentName), `PVP leaderboard should include opponent: ${JSON.stringify(pvpLeaderboard.payload)}`);
+  const leaderboardRows = pvpLeaderboard.payload.data;
+  assert(Array.isArray(leaderboardRows), `PVP leaderboard should return an array: ${JSON.stringify(pvpLeaderboard.payload)}`);
+  assert(leaderboardRows.length > 0 && leaderboardRows.length <= 50, `PVP leaderboard should honor its page limit: ${leaderboardRows.length}`);
+  leaderboardRows.forEach((rank, index) => {
+    assert(rank && rank.user && rank.user.objectId && rank.user.username, `PVP leaderboard row ${index} should expose a public user`);
+    assert(Number.isFinite(Number(rank.score)), `PVP leaderboard row ${index} should expose a numeric score`);
+    if (index > 0) {
+      assert(Number(leaderboardRows[index - 1].score) >= Number(rank.score), `PVP leaderboard should be score-descending at row ${index}`);
+    }
+  });
+  const opponentLeaderboardEntry = leaderboardRows.find(rank => rank.user?.objectId === opponent.objectId);
+  const opponentScore = Number(opponentPvpRank.payload.rank?.score);
+  const cutoffScore = Number(leaderboardRows.at(-1)?.score);
+  assert(
+    opponentLeaderboardEntry
+      || (leaderboardRows.length === 50 && Number.isFinite(opponentScore) && Number.isFinite(cutoffScore) && opponentScore <= cutoffScore),
+    `PVP leaderboard omitted the smoke opponent despite an available slot or qualifying score: ${JSON.stringify({ rowCount: leaderboardRows.length, opponentScore, cutoffScore })}`,
+  );
 
   const pvpMatchRequest = {
     myScore: pvpRank.payload.rank.score,

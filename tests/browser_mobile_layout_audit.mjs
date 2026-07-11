@@ -36,6 +36,7 @@ function add(name, pass, detail = '') {
   });
 
   await page.addInitScript(() => {
+    window.__ALLOW_DEBUG_EVENT_HOOKS__ = true;
     try {
       localStorage.setItem('theDefierDebug', 'true');
       localStorage.setItem('theDefierLegacyV1', JSON.stringify({ essence: 40, spent: 0, upgrades: {}, lastPreset: 'tempo' }));
