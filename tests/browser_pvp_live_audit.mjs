@@ -1862,12 +1862,15 @@ async function safeElementScreenshot(page, selector, outputPath) {
 	    JSON.stringify({ header: mediumEntryProbe, actions: mediumActionProbe }),
 	  );
 	  add(
-	    'pvp live trusted control surface groups status, receipt, and command rail',
+	    'pvp live trusted control surface keeps essential idle status and command rail readable',
 	    !!mediumEntryProbe.trustGrid
 	      && mediumEntryProbe.trustGrid.left >= 0
 	      && mediumEntryProbe.trustGrid.right <= mediumEntryProbe.viewportWidth + 2
-	      && ['match-quality', 'mode-boundary', 'turn-timer', 'connection', 'realtime', 'fairness', 'action-receipt', 'momentum', 'intent'].every((item) =>
+	      && ['match-quality', 'mode-boundary', 'connection', 'realtime'].every((item) =>
 	        mediumEntryProbe.trustItems.some((probe) => probe.item === item)
+	      )
+	      && ['turn-timer', 'fairness', 'action-receipt', 'momentum', 'intent'].every((item) =>
+	        !mediumEntryProbe.trustItems.some((probe) => probe.item === item)
 	      )
 	      && mediumEntryProbe.trustItems.every((probe) =>
 	        probe.rect
@@ -1881,7 +1884,7 @@ async function safeElementScreenshot(page, selector, outputPath) {
 	          && mediumEntryProbe.trustLiveRegions?.[key]?.ariaLive === 'polite'
 	      )
 	      && !!mediumEntryProbe.commandRail
-	      && mediumEntryProbe.commandRailDisplay === 'grid'
+	      && ['flex', 'grid'].includes(mediumEntryProbe.commandRailDisplay)
 	      && ['queue', 'turn', 'practice', 'danger'].every((group) =>
 	        mediumEntryProbe.commandGroups.some((probe) => probe.group === group)
 	      )

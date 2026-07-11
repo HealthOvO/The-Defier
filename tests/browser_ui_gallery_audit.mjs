@@ -370,9 +370,10 @@ function collectDesignSystemProbe(options = {}) {
     height: Math.round(rect.height),
   } : null;
   const fdSurfaceChecks = surfaceTargets.map((target) => {
-    const [name, selector, kind = 'surface'] = Array.isArray(target)
+    const [name, selector, kind = 'surface', targetOptions = {}] = Array.isArray(target)
       ? target
-      : [target.name, target.selector, target.kind || 'surface'];
+      : [target.name, target.selector, target.kind || 'surface', target.options || {}];
+    const optionalWhenHidden = targetOptions.optionalWhenHidden === true;
     const node = document.querySelector(selector);
     const style = node ? getComputedStyle(node) : null;
     const screen = node?.closest('.screen') || null;
@@ -402,12 +403,13 @@ function collectDesignSystemProbe(options = {}) {
       ok:
         !!style &&
         activeOk &&
-        visibleOk &&
+        (visibleOk || optionalWhenHidden) &&
         viewportOk &&
         surfaceOk,
       activeScreenId: screen?.id || '',
       activeOk,
       visibleOk,
+      optionalWhenHidden,
       viewportOk,
       borderRadius: style?.borderRadius || '',
       borderTopWidth: style?.borderTopWidth || '',
@@ -1079,10 +1081,18 @@ function collectCoreLoopDesignSystemProbe(options = {}) {
   await captureScreenshot(page, '10-shop-screen.png');
 
   await boot(page);
-  const pvpProbe = await page.evaluate(() => {
+  const pvpProbe = await page.evaluate(async () => {
     if (!window.game || typeof window.PVPScene === 'undefined') return { ok: false, reason: 'no_pvp_api' };
     game.showScreen('pvp-screen');
-    if (typeof PVPScene.onShow === 'function') PVPScene.onShow();
+    if (typeof PVPScene.onShow === 'function') {
+      const pending = PVPScene.onShow();
+      if (pending && typeof pending.then === 'function') {
+        await Promise.race([
+          pending,
+          new Promise((resolve) => setTimeout(resolve, 800)),
+        ]);
+      }
+    }
     const layout = document.querySelector('#pvp-screen .pvp-layout-split');
     if (!layout) return { ok: false, reason: 'missing_pvp_layout' };
     const rect = layout.getBoundingClientRect();
@@ -1103,6 +1113,7 @@ function collectCoreLoopDesignSystemProbe(options = {}) {
     };
   });
   add('pvp screen keeps sidebar and content inside the shared shell', !!pvpProbe?.ok, JSON.stringify(pvpProbe || null));
+  await page.waitForTimeout(250);
   await captureScreenshot(page, '11-pvp-screen.png');
 
   await boot(page);
@@ -1388,7 +1399,7 @@ function collectCoreLoopDesignSystemProbe(options = {}) {
       ['pvpLiveActionBar', '#pvp-screen .pvp-live-action-bar', 'actionBar'],
       ['pvpLiveAction', '#pvp-screen .pvp-live-action-bar .challenge-btn[data-live-action="join-queue"]', 'control'],
       ['pvpModeBoundary', '#pvp-screen .pvp-live-mode-boundary', 'chip'],
-      ['pvpActionReceipt', '#pvp-screen .pvp-live-action-receipt', 'chip'],
+      ['pvpActionReceipt', '#pvp-screen .pvp-live-action-receipt', 'chip', { optionalWhenHidden: true }],
       ['pvpSeatBadge', '#pvp-screen .pvp-live-seat-badge', 'chip'],
     ],
   });

@@ -638,37 +638,25 @@ export class EventView {
     const container = document.getElementById('deck-view-cards');
     // Clear previous content
     container.innerHTML = '';
-    container.style.display = 'flex';
-    container.style.flexDirection = 'row'; // Ensure row layout for split view
+    container.classList.add('event-upgrade-layout');
 
     // Create Split Layout
     const listContainer = document.createElement('div');
-    listContainer.style.flex = '1';
-    listContainer.style.display = 'flex';
-    listContainer.style.flexWrap = 'wrap';
-    listContainer.style.justifyContent = 'center';
-    listContainer.style.alignContent = 'flex-start';
-    listContainer.style.overflowY = 'auto';
-    listContainer.style.maxHeight = '60vh';
+    listContainer.className = 'event-upgrade-list';
     const previewContainer = document.createElement('div');
-    previewContainer.style.width = '300px';
-    previewContainer.style.borderLeft = '1px solid rgba(255,255,255,0.1)';
-    previewContainer.style.padding = '10px';
-    previewContainer.style.display = 'flex';
-    previewContainer.style.flexDirection = 'column';
-    previewContainer.style.alignItems = 'center';
+    previewContainer.className = 'event-upgrade-preview';
     container.appendChild(listContainer);
     container.appendChild(previewContainer);
 
     // Preview UI Elements
     previewContainer.innerHTML = `
-            <h3 style="color:var(--accent-gold);margin-top:0;">升级预览</h3>
-            <div id="upgrade-preview-placeholder" style="color:#666;margin-top:50px;">
+            <h3 class="event-upgrade-title">升级预览</h3>
+            <div id="upgrade-preview-placeholder" class="event-upgrade-placeholder">
                 鼠标悬浮或点击卡牌<br>查看升级效果
             </div>
-            <div id="upgrade-preview-card" style="display:none; transform:scale(1.1); margin: 20px 0;"></div>
-            <div id="upgrade-diff-text" style="width:100%; font-size:0.9rem; color:#ddd; margin: 10px 0; background:rgba(0,0,0,0.3); padding:8px; border-radius:4px; display:none;"></div>
-            <button id="confirm-upgrade-btn" class="menu-btn" style="margin-top:auto; width:100%;" disabled>确认升级</button>
+            <div id="upgrade-preview-card" class="event-upgrade-preview-card" style="display:none;"></div>
+            <div id="upgrade-diff-text" class="event-upgrade-diff" style="display:none;"></div>
+            <button id="confirm-upgrade-btn" class="menu-btn event-upgrade-confirm" disabled>确认升级</button>
         `;
     const confirmBtn = previewContainer.querySelector('#confirm-upgrade-btn');
     const previewCardDiv = previewContainer.querySelector('#upgrade-preview-card');
@@ -692,6 +680,9 @@ export class EventView {
       cardEl.classList.add(`rarity-${card.rarity || 'common'}`);
       cardEl.style.cursor = 'pointer';
       cardEl.dataset.index = index;
+      cardEl.setAttribute('role', 'button');
+      cardEl.setAttribute('tabindex', '0');
+      cardEl.setAttribute('aria-label', `预览升级：${card.name || '未命名卡牌'}`);
 
       // Interaction Logic
       const showPreview = () => {
@@ -719,7 +710,7 @@ export class EventView {
       });
 
       // Click: Select and Enable Confirm
-      cardEl.addEventListener('click', () => {
+      const selectCard = () => {
         // Deselect others
         listContainer.querySelectorAll('.card').forEach(c => c.style.border = '');
         // Select this
@@ -728,6 +719,12 @@ export class EventView {
         showPreview(); // Force show this preview
         confirmBtn.disabled = false;
         confirmBtn.classList.remove('disabled');
+      };
+      cardEl.addEventListener('click', selectCard);
+      cardEl.addEventListener('keydown', event => {
+        if (event.key !== 'Enter' && event.key !== ' ') return;
+        event.preventDefault();
+        selectCard();
       });
       listContainer.appendChild(cardEl);
     });
@@ -741,8 +738,7 @@ export class EventView {
       Utils.showBattleLog(`${card.name} 升级为 ${upgraded.name}！`);
 
       // Clean up styles
-      container.style.display = '';
-      container.style.flexDirection = '';
+      container.classList.remove('event-upgrade-layout');
       this.game.closeModal();
       this.game.onEventComplete();
     };

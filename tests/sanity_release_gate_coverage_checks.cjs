@@ -6,6 +6,7 @@ const path = require('node:path');
 
 const root = path.resolve(__dirname, '..');
 const read = (relativePath) => fs.readFileSync(path.join(root, relativePath), 'utf8');
+const packageJson = JSON.parse(read('package.json'));
 
 const prodReadScript = read('scripts/check-production-read-only.sh');
 const prodApiSmoke = read('tests/prod_api_smoke.cjs');
@@ -37,6 +38,37 @@ const challengeMobileAudit = read('tests/browser_challenge_mobile_flow_audit.mjs
 const browserChapterFlowAudit = read('tests/browser_chapter_flow_audit.mjs');
 const browserRunPathAudit = read('tests/browser_run_path_audit.mjs');
 const browserRunPathRewardAudit = read('tests/browser_run_path_reward_audit.mjs');
+const requiredBrowserReleaseAudits = [
+  'core',
+  'feature',
+  'automation-boot',
+  'map-overview-risk',
+  'ui-gallery',
+  'frontend-layout',
+  'backend-client',
+  'auth-ui-cloud',
+  'mobile',
+  'reward-mobile',
+  'meta',
+  'chapter-flow',
+  'run-path',
+  'run-path-events',
+  'run-path-reward',
+  'dongfu',
+  'challenge',
+  'expedition',
+  'events',
+  'vow-choice',
+  'guide',
+  'inheritance',
+  'pvp',
+  'pvp-live',
+  'pvp-live-real',
+  'pvp-live-mobile-real',
+  'pvp-mobile',
+  'pvp-mobile-result',
+  'challenge-mobile-flow',
+];
 const challengeHub = read('js/core/challenge_hub.js');
 const observatoryArchiveChecks = read('tests/sanity_observatory_archive_checks.cjs');
 const mapPathSynergyChecks = read('tests/sanity_map_path_synergy_checks.cjs');
@@ -658,7 +690,15 @@ const browserAutomationBootAudit = read('tests/browser_automation_boot_audit.mjs
 [
   'node tests/browser_feature_audit.mjs "$BASE_URL" "$OUTPUT_ROOT/feature"',
   'node tests/browser_audit.mjs "$BASE_URL" "$OUTPUT_ROOT/core"',
+  'node tests/browser_automation_boot_audit.mjs "$BASE_URL" "$OUTPUT_ROOT/automation-boot"',
+  'node tests/browser_map_overview_risk_audit.mjs "$BASE_URL" "$OUTPUT_ROOT/map-overview-risk"',
+  'node tests/browser_ui_gallery_audit.mjs "$BASE_URL" "$OUTPUT_ROOT/ui-gallery"',
+  'node tests/browser_frontend_layout_audit.mjs "$BASE_URL" "$OUTPUT_ROOT/frontend-layout"',
   'node tests/browser_backend_client_smoke.mjs "$BASE_URL" "$OUTPUT_ROOT/backend-client"',
+  'node tests/browser_auth_ui_cloud_smoke.mjs "$BASE_URL" "$OUTPUT_ROOT/auth-ui-cloud"',
+  'node tests/browser_mobile_layout_audit.mjs "$BASE_URL" "$OUTPUT_ROOT/mobile"',
+  'node tests/browser_reward_meta_mobile_audit.mjs "$BASE_URL" "$OUTPUT_ROOT/reward-mobile"',
+  'node tests/browser_meta_screen_audit.mjs "$BASE_URL" "$OUTPUT_ROOT/meta"',
   'node tests/browser_pvp_audit.mjs "$BASE_URL" "$OUTPUT_ROOT/pvp"',
   'node tests/browser_pvp_live_audit.mjs "$BASE_URL" "$OUTPUT_ROOT/pvp-live"',
   'node tests/browser_pvp_live_real_backend_smoke.mjs "$BASE_URL" "$OUTPUT_ROOT/pvp-live-real"',
@@ -667,15 +707,37 @@ const browserAutomationBootAudit = read('tests/browser_automation_boot_audit.mjs
   'node tests/browser_pvp_mobile_audit.mjs "$BASE_URL" "$OUTPUT_ROOT/pvp-mobile"',
   'node tests/browser_pvp_mobile_result_audit.mjs "$BASE_URL" "$OUTPUT_ROOT/pvp-mobile-result"',
   'node tests/browser_chapter_flow_audit.mjs "$BASE_URL" "$OUTPUT_ROOT/chapter-flow"',
+  'node tests/browser_run_path_audit.mjs "$BASE_URL" "$OUTPUT_ROOT/run-path"',
   'node tests/browser_run_path_event_audit.mjs "$BASE_URL" "$OUTPUT_ROOT/run-path-events"',
   'node tests/browser_run_path_reward_audit.mjs "$BASE_URL" "$OUTPUT_ROOT/run-path-reward"',
+  'node tests/browser_dongfu_audit.mjs "$BASE_URL" "$OUTPUT_ROOT/dongfu"',
+  'node tests/browser_challenge_audit.mjs "$BASE_URL" "$OUTPUT_ROOT/challenge"',
+  'node tests/browser_expedition_audit.mjs "$BASE_URL" "$OUTPUT_ROOT/expedition"',
   'node tests/browser_event_branch_audit.mjs "$BASE_URL" "$OUTPUT_ROOT/events"',
+  'node tests/browser_vow_choice_audit.mjs "$BASE_URL" "$OUTPUT_ROOT/vow-choice"',
+  'node tests/browser_guide_modal_audit.mjs "$BASE_URL" "$OUTPUT_ROOT/guide"',
+  'node tests/browser_inheritance_audit.mjs "$BASE_URL" "$OUTPUT_ROOT/inheritance"',
+  'node tests/browser_challenge_mobile_flow_audit.mjs "$BASE_URL" "$OUTPUT_ROOT/challenge-mobile-flow"',
 ].forEach((needle) => {
   assert.ok(
     browserReleaseScript.includes(needle),
     `browser release gate should run required audit script: ${needle}`,
   );
 });
+
+const configuredBrowserReleaseAudits = [...browserReleaseScript.matchAll(/run_selected_audit\s+([^\s]+)/g)].map((match) => match[1]);
+assert.strictEqual(requiredBrowserReleaseAudits.length, 29, 'required browser release audit list should pin all 29 audits');
+assert.deepStrictEqual(
+  configuredBrowserReleaseAudits,
+  requiredBrowserReleaseAudits,
+  'browser release gate should keep the full explicit 29-audit coverage set in sync',
+);
+
+assert.strictEqual(
+  packageJson.scripts['test:browser:frontend-layout-density'],
+  'node tests/browser_frontend_layout_audit.mjs',
+  'package.json should expose a dedicated frontend layout/density browser audit script',
+);
 
 [
   'SELECTED_AUDIT_MODULES',
@@ -900,7 +962,7 @@ assert.ok(
   'collectImageRefs',
   'assertSiteAssetIfPresent',
   'assets/images/ui/main-menu-hero.webp',
-  'assets/images/logo.webp',
+  'assets/images/logo-v2.webp',
   'type="image/webp"',
   'js/data/characters.js',
   'js/data/enemies.js',

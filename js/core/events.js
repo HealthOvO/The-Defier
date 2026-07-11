@@ -77,13 +77,13 @@ export class EventSystem {
       const canChoose = this.checkCondition(choice.condition);
       const disabledClass = canChoose ? '' : 'disabled';
       return `
-                <div class="event-choice ${disabledClass}" data-index="${index}" ${canChoose ? '' : 'style="opacity: 0.5; pointer-events: none;"'}>
+                <button type="button" class="event-choice ${disabledClass}" data-index="${index}" ${canChoose ? '' : 'disabled aria-disabled="true"'}>
                     <div class="choice-icon">${choice.icon}</div>
                     <div class="choice-content">
                         <div class="choice-text">${choice.text}</div>
                         <div class="choice-result ${choice.resultType}">${choice.result}</div>
                     </div>
-                </div>
+                </button>
             `;
     }).join('');
   }
@@ -130,6 +130,7 @@ export class EventSystem {
     choiceEls.forEach(el => {
       el.style.pointerEvents = 'none';
       el.classList.add('disabled');
+      if (el instanceof HTMLButtonElement) el.disabled = true;
     });
     const results = [];
     try {

@@ -18,14 +18,27 @@ const reportLogMode = String(
   process.env.FRONTEND_LAYOUT_REPORT_LOG || (process.env.CI ? 'summary' : 'full'),
 ).toLowerCase();
 
-const viewports = [
+function filterAuditItems(items, envValue) {
+  const requested = String(envValue || '')
+    .split(',')
+    .map((value) => value.trim())
+    .filter(Boolean);
+  if (requested.length === 0) return items;
+  const requestedIds = new Set(requested);
+  return items.filter((item) => requestedIds.has(item.id));
+}
+
+const viewports = filterAuditItems([
   { id: 'desktop', width: 1440, height: 960, isMobile: false },
   { id: 'short', width: 1366, height: 720, isMobile: false },
+  { id: 'mobile-375', width: 375, height: 812, isMobile: true },
   { id: 'mobile-390', width: 390, height: 844, isMobile: true },
   { id: 'mobile-412', width: 412, height: 915, isMobile: true },
-];
+  { id: 'tablet-portrait-768', width: 768, height: 1024, isMobile: true },
+  { id: 'tablet-landscape-1024', width: 1024, height: 768, isMobile: true },
+], process.env.FRONTEND_LAYOUT_VIEWPORTS);
 
-const scenarios = [
+const scenarios = filterAuditItems([
   { id: 'main-menu', root: '#main-menu', title: 'Main Menu' },
   { id: 'pvp-screen', root: '#pvp-screen', title: 'PVP Hub' },
   { id: 'character-selection-screen', root: '#character-selection-screen', title: 'Character Selection' },
@@ -78,7 +91,10 @@ const scenarios = [
   { id: 'alert-modal', root: '#generic-alert-modal', title: 'Alert Modal' },
   { id: 'treasure-bag-alert-modal', root: '#generic-alert-modal', title: 'Treasure Bag Alert Stack' },
   { id: 'purification-modal', root: '#purification-modal', title: 'Purification Modal' },
-];
+], process.env.FRONTEND_LAYOUT_SCENARIOS);
+
+if (viewports.length === 0) throw new Error('FRONTEND_LAYOUT_VIEWPORTS did not match any configured viewport');
+if (scenarios.length === 0) throw new Error('FRONTEND_LAYOUT_SCENARIOS did not match any configured scenario');
 
 const realBattleResolverScenarios = new Set([
   'horizon-barter-modal',
@@ -3655,7 +3671,7 @@ async function inspectMapNodeClickability(page, scenarioId) {
 
   const selector = '#map-screen .map-node-v3.available:not(.completed):not(.locked), #map-screen .map-node-v3.current:not(.completed):not(.locked), #map-screen .map-node-v3:not(.completed):not(.locked)';
   try {
-    const shouldCloseMobileIntel = await page.evaluate(() => window.innerWidth <= 520
+    const shouldCloseMobileIntel = await page.evaluate(() => window.innerWidth <= 768
       && !!document.querySelector('#map-screen .map-screen-v3.show-map-intel'));
     if (shouldCloseMobileIntel) {
       const intelToggle = page.locator('#map-screen [data-map-action="toggle-map-intel"]');
@@ -3764,7 +3780,7 @@ async function inspectMapNodeClickability(page, scenarioId) {
       battleActive: !!document.querySelector('#battle-screen.active'),
     }));
     const viewport = page.viewportSize();
-    if (viewport && viewport.width <= 520) {
+    if (viewport && viewport.width <= 768) {
       await page.touchscreen.tap(target.point.x, target.point.y);
     } else {
       await page.mouse.click(target.point.x, target.point.y);

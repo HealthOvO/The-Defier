@@ -12,6 +12,7 @@
     "build:pages": "bash scripts/prepare-pages.sh .site",
     "test:node": "bash tests/run_node_checks.sh",
     "test:browser:feature": "node tests/browser_feature_audit.mjs",
+    "test:browser:frontend-layout-density": "node tests/browser_frontend_layout_audit.mjs",
     "test:browser:mobile": "node tests/browser_mobile_layout_audit.mjs",
     "test:browser:backend": "node tests/browser_backend_client_smoke.mjs",
     "test:browser:auth-cloud": "node tests/browser_auth_ui_cloud_smoke.mjs",

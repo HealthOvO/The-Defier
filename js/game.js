@@ -7092,9 +7092,11 @@ export class Game {
     const skill = this.player.activeSkill;
     if (!skill || this.player.skillLevel === 0) {
       btn.style.display = 'none';
+      btn.setAttribute('aria-hidden', 'true');
       return;
     }
     btn.style.display = 'flex';
+    btn.removeAttribute('aria-hidden');
 
     // Icon
     const iconEl = btn.querySelector('.skill-icon');
@@ -7136,6 +7138,8 @@ export class Game {
       overlay.style.height = '0%';
       btn.classList.add('cooldown');
       btn.classList.remove('ready');
+      btn.setAttribute('aria-disabled', 'true');
+      btn.setAttribute('aria-label', `${skill.name}，冷却中，还需 ${this.player.skillCooldown} 回合`);
 
       // 在lore位置显示CD信息（仅tooltip可见）
       if (loreEl) {
@@ -7149,6 +7153,8 @@ export class Game {
       btn.style.opacity = '1';
       btn.classList.remove('cooldown');
       btn.classList.add('ready');
+      btn.setAttribute('aria-disabled', 'false');
+      btn.setAttribute('aria-label', `释放主动技能：${skill.name}`);
 
       // 恢复lore文本
       if (loreEl) {

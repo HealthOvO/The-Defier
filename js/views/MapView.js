@@ -152,21 +152,21 @@ export class MapView {
                 </aside>
 
                 <div class="map-scroll-container" id="map-scroll-container">
-                    <div class="map-content-wrapper" id="map-content-wrapper">
-                        <div class="map-canvas-header">
-                            <div class="map-canvas-kicker">当前关卡</div>
-                            <div class="map-canvas-title-row">
-                                <div class="map-canvas-title">${mapHeadline}</div>
-                                <div class="map-canvas-stage">${displayRealmName}</div>
-                            </div>
-                            <div class="map-canvas-subtitle">${mapSubline}</div>
-                            ${this.renderMapCoreLoopBrief(displayRealmName)}
-                            <div class="map-canvas-legend" aria-hidden="true">
-                                <span class="map-legend-chip current">当前可进入</span>
-                                <span class="map-legend-chip completed">已完成</span>
-                                <span class="map-legend-chip locked">未解锁</span>
-                            </div>
+                    <div class="map-canvas-header">
+                        <div class="map-canvas-kicker">当前关卡</div>
+                        <div class="map-canvas-title-row">
+                            <div class="map-canvas-title">${mapHeadline}</div>
+                            <div class="map-canvas-stage">${displayRealmName}</div>
                         </div>
+                        <div class="map-canvas-subtitle">${mapSubline}</div>
+                        ${this.renderMapCoreLoopBrief(displayRealmName)}
+                        <div class="map-canvas-legend" aria-hidden="true">
+                            <span class="map-legend-chip current">当前可进入</span>
+                            <span class="map-legend-chip completed">已完成</span>
+                            <span class="map-legend-chip locked">未解锁</span>
+                        </div>
+                    </div>
+                    <div class="map-content-wrapper" id="map-content-wrapper">
                         <!-- SVG Layer -->
                         <svg class="map-connections-svg" id="map-svg-layer"></svg>
                     </div>
