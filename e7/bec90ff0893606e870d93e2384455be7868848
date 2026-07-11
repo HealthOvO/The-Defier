@@ -1,0 +1,63 @@
+css/frontend-upgrade.css
+  s_ca5652313828d6::t_5887939e989fd6 1623-2388
+index.html
+  s_ca5652313828d6::t_99ff32f45136af 1515-1517,1519-1528,1530
+js/core/battle.js
+  s_ca5652313828d6::t_634f5428ddfcb1 501,506-507,516-518,520-525,527-529,539-540,4795,9112,9117,9143,9313,9316-9318,9328-9331,9403-9404,9455-9456
+js/core/expedition_hub.js
+  s_bae69f1b7fab46::t_f886d425c7960c 4365,4374-4376
+js/views/CharacterSelectView.js
+  s_bae69f1b7fab46::t_dc05d303f04a3b 37-39,229,232-242,271-322,324,383-385
+js/views/MapView.js
+  s_ca5652313828d6::t_99fb526993424a 118,122-126,151-152,269-271,283-286,301,316-318
+js/views/RewardView.js
+  s_ca5652313828d6::t_542494e3464b9e 1545
+js/views/SystemView.js
+  s_ca5652313828d6::t_f97fcfc3313bee 511,514,583,586
+tests/browser_event_branch_audit.mjs
+  s_ca5652313828d6::t_ce962562669d36 4,16-21
+tests/browser_feature_audit.mjs
+  s_ca5652313828d6::t_83e62783d83813 798-801,803,810,813,866,932-936,982-986,4360,4365,4370-4376,4378,4383-4404,4407-4416,4419-4426,4428-4429,4433-4434,4438
+tests/browser_frontend_layout_audit.mjs
+  s_ca5652313828d6::t_e556dba3448dca 2295-2300,2323-2324,3656,3658-3679,3747,3761-3762,3775-3776,3780-3799,3806
+tests/browser_mobile_layout_audit.mjs
+  s_ca5652313828d6::t_03be557b634238 111,115-118,131,135-136,139-161,171,175-180,185,187-193,201-202,209,215-223,230-234,237,240-246,254-257,451,532-541,588,614-619,622-632,635-641,654,668-669,671-672,680-681,684-685,690,696,705,739-745
+tests/browser_pvp_live_real_backend_smoke.mjs
+  s_ca5652313828d6::t_6e8fe3e0fa45af 28-31,172-173,177,378,381,390,478,706-718,876,1654-1656,1749,1831-1832,1908,2259,2288,2290,2308,2310,2935-2937,2981-2983,3777-3811,3845,4238-4241,5340-5405,5409,5492-5497,5499
+tests/browser_run_path_audit.mjs
+  s_ca5652313828d6::t_ec9600f70ef1a6 151,156,160,172,174,189,195-198,208,211,217-225,229-230,235
+tests/browser_run_path_reward_audit.mjs
+  s_ca5652313828d6::t_ff2fbe0246ef73 4,25-30
+tests/browser_ui_gallery_audit.mjs
+  s_ca5652313828d6::t_61f5b9649c10c4 480,1210-1211,1270,1273,1281-1297,1306-1307
+tests/sanity_frontend_design_system_checks.cjs
+  s_ca5652313828d6::t_da4d8c2f168281 10-15,39-62
+tests/sanity_release_gate_coverage_checks.cjs
+  s_bae69f1b7fab46::t_5f46f816d10e99 4278
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "e7bec90ff0893606e870d93e2384455be7868848",
+  "prompts": {},
+  "sessions": {
+    "s_bae69f1b7fab46": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ed4f6-e7ac-73e0-a29e-119f3eddb407",
+        "model": "unknown"
+      },
+      "human_author": "AI Agent <bot@example.com>"
+    },
+    "s_ca5652313828d6": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f3fed-94d5-77b2-9af0-61333559ff38",
+        "model": "unknown"
+      },
+      "human_author": "AI Agent <bot@example.com>"
+    }
+  },
+  "attestation_metadata": {},
+  "remote_transcripts": {}
+}
