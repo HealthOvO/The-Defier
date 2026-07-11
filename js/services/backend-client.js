@@ -1,5 +1,10 @@
 export const SESSION_STORAGE_KEY = 'theDefierServerSession';
 export const CLOUD_STATE_PROTOCOL_VERSION = 'cloud-state-v2';
+const AUTHORITATIVE_RUN_SAFE_ID = /^[A-Za-z0-9._:-]{8,128}$/;
+const AUTHORITATIVE_RUN_ENTITY_ID = /^[A-Za-z0-9._:-]{1,128}$/;
+const AUTHORITATIVE_RUN_MODES = new Set(['pve', 'challenge', 'expedition']);
+const AUTHORITATIVE_RUN_COMMANDS = new Set(['select_node', 'play_card', 'end_turn', 'choose_reward', 'abandon']);
+const AUTHORITATIVE_RUN_CONTENT_VERSION = 'authoritative-trials-v1';
 export const BackendClient = {
   provider: 'server',
   initError: null,
@@ -90,6 +95,53 @@ export const BackendClient = {
     cryptoObj.getRandomValues(bytes);
     const random = Array.from(bytes).map(value => value.toString(16).padStart(2, '0')).join('');
     return `mutation-${Date.now().toString(36)}-${random}`;
+  },
+  normalizeAuthoritativeRunSafeId(value) {
+    const text = String(value || '').trim();
+    return AUTHORITATIVE_RUN_SAFE_ID.test(text) ? text : '';
+  },
+  normalizeAuthoritativeRunEntityId(value) {
+    const text = String(value || '').trim();
+    return AUTHORITATIVE_RUN_ENTITY_ID.test(text) ? text : '';
+  },
+  normalizeAuthoritativeRunMode(value) {
+    const mode = String(value || '').trim();
+    return AUTHORITATIVE_RUN_MODES.has(mode) ? mode : '';
+  },
+  normalizeAuthoritativeRunCommand(value) {
+    const command = String(value || '').trim();
+    return AUTHORITATIVE_RUN_COMMANDS.has(command) ? command : '';
+  },
+  normalizeAuthoritativeRunExpectedVersion(value) {
+    const version = Number(value);
+    return Number.isFinite(version) && version >= 0 ? Math.floor(version) : null;
+  },
+  createAuthoritativeRunRequestId(prefix = 'ar') {
+    const safePrefix = String(prefix || 'ar').replace(/[^A-Za-z0-9._:-]/g, '').slice(0, 32) || 'ar';
+    const raw = this.createMutationId().replace(/^mutation-/, '');
+    return this.normalizeAuthoritativeRunSafeId(`${safePrefix}-${raw}`) || this.normalizeAuthoritativeRunSafeId(raw) || this.createMutationId();
+  },
+  sanitizeAuthoritativeRunActionPayload(command = '', payload = {}) {
+    const source = payload && typeof payload === 'object' && !Array.isArray(payload) ? payload : {};
+    switch (this.normalizeAuthoritativeRunCommand(command)) {
+      case 'select_node': {
+        const nodeId = this.normalizeAuthoritativeRunEntityId(source.nodeId || source.routeNodeId || source.choiceId);
+        return nodeId ? { nodeId } : null;
+      }
+      case 'play_card': {
+        const cardInstanceId = this.normalizeAuthoritativeRunEntityId(source.cardInstanceId);
+        return cardInstanceId ? { cardInstanceId } : null;
+      }
+      case 'choose_reward': {
+        const rewardId = this.normalizeAuthoritativeRunEntityId(source.rewardId);
+        return rewardId ? { rewardId } : null;
+      }
+      case 'end_turn':
+      case 'abandon':
+        return {};
+      default:
+        return null;
+    }
   },
   bytesToHex(bytes) {
     return Array.from(bytes || []).map(value => value.toString(16).padStart(2, '0')).join('');
@@ -1366,6 +1418,356 @@ export const BackendClient = {
         error,
         reason: error && error.reason || undefined,
         message: error.message || '验证跑图结算失败'
+      };
+    }
+  },
+  getAuthoritativeRunsPathPrefix() {
+    return `${this.getProgressionPathPrefix()}/authoritative-runs`;
+  },
+  async beginAuthoritativeRun(payload = {}, options = {}) {
+    const expectedUserId = String(options.expectedUserId || this.getCurrentUser()?.objectId || this.getCurrentUser()?.id || '').trim();
+    const session = this.captureProgressionSessionSnapshot({ expectedUserId }, '登录账号已变化，请刷新权威试炼后重试');
+    if (!session || !session.success) return session;
+    const clientRunId = this.normalizeAuthoritativeRunSafeId(payload && payload.clientRunId)
+      || this.createAuthoritativeRunRequestId('ar-client');
+    const mode = this.normalizeAuthoritativeRunMode(payload && payload.mode);
+    const contentVersion = this.normalizeAuthoritativeRunSafeId(payload && payload.contentVersion) || AUTHORITATIVE_RUN_CONTENT_VERSION;
+    if (!mode) return {
+      success: false,
+      reason: 'authoritative_run_invalid_mode',
+      clientRunId,
+      message: '权威试炼模式不支持'
+    };
+    const signedPayload = {
+      clientRunId,
+      mode,
+      contentVersion
+    };
+    const integrity = await this.createRequiredSessionIntegrityFields(
+      signedPayload,
+      session.sessionToken,
+      '当前环境不支持权威试炼签名，请刷新后重试',
+      'authoritative_run_signature_required'
+    );
+    if (!integrity || !integrity.success) {
+      return {
+        ...integrity,
+        clientRunId
+      };
+    }
+    try {
+      const result = await this.requestServer(this.getAuthoritativeRunsPathPrefix(), {
+        method: 'POST',
+        authToken: session.sessionToken,
+        data: {
+          ...signedPayload,
+          ...integrity.integrity
+        }
+      });
+      const currentUserId = String(this.getCurrentUser()?.objectId || this.getCurrentUser()?.id || '').trim();
+      if (!expectedUserId || currentUserId !== expectedUserId) {
+        return {
+          success: false,
+          reason: 'authoritative_run_account_changed',
+          clientRunId,
+          message: '登录账号已变化，发车回执未应用；原账号可刷新权威试炼确认结果'
+        };
+      }
+      return {
+        ...(result && typeof result === 'object' ? result : { success: false, message: '权威试炼发车返回异常' }),
+        clientRunId
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error,
+        reason: error && error.reason || undefined,
+        clientRunId,
+        message: error.message || '权威试炼发车失败'
+      };
+    }
+  },
+  async getCurrentAuthoritativeRun(mode = '', options = {}) {
+    const expectedUserId = String(options.expectedUserId || this.getCurrentUser()?.objectId || this.getCurrentUser()?.id || '').trim();
+    const session = this.captureProgressionSessionSnapshot({ expectedUserId }, '登录账号已变化，请刷新权威试炼后重试');
+    if (!session || !session.success) return session;
+    const safeMode = this.normalizeAuthoritativeRunMode(mode || options.mode);
+    if (!safeMode) return {
+      success: false,
+      reason: 'authoritative_run_invalid_mode',
+      message: '权威试炼模式不支持'
+    };
+    try {
+      const result = await this.requestServer(`${this.getAuthoritativeRunsPathPrefix()}/current?mode=${encodeURIComponent(safeMode)}`, {
+        method: 'GET',
+        authToken: session.sessionToken
+      });
+      const currentUserId = String(this.getCurrentUser()?.objectId || this.getCurrentUser()?.id || '').trim();
+      if (!expectedUserId || currentUserId !== expectedUserId) {
+        return {
+          success: false,
+          reason: 'authoritative_run_account_changed',
+          mode: safeMode,
+          message: '登录账号已变化，旧权威试炼状态未应用'
+        };
+      }
+      return result && typeof result === 'object' ? result : {
+        success: false,
+        message: '权威试炼当前状态返回异常'
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error,
+        reason: error && error.reason || undefined,
+        mode: safeMode,
+        message: error.message || '权威试炼当前状态读取失败'
+      };
+    }
+  },
+  async getAuthoritativeRun(runId = '', options = {}) {
+    const safeRunId = this.normalizeAuthoritativeRunSafeId(runId);
+    if (!safeRunId) return {
+      success: false,
+      reason: 'authoritative_run_missing_id',
+      message: '权威试炼 runId 缺失'
+    };
+    const expectedUserId = String(options.expectedUserId || this.getCurrentUser()?.objectId || this.getCurrentUser()?.id || '').trim();
+    const session = this.captureProgressionSessionSnapshot({ expectedUserId }, '登录账号已变化，请刷新权威试炼后重试');
+    if (!session || !session.success) return session;
+    try {
+      const result = await this.requestServer(`${this.getAuthoritativeRunsPathPrefix()}/${encodeURIComponent(safeRunId)}`, {
+        method: 'GET',
+        authToken: session.sessionToken
+      });
+      const currentUserId = String(this.getCurrentUser()?.objectId || this.getCurrentUser()?.id || '').trim();
+      if (!expectedUserId || currentUserId !== expectedUserId) {
+        return {
+          success: false,
+          reason: 'authoritative_run_account_changed',
+          runId: safeRunId,
+          message: '登录账号已变化，旧权威试炼状态未应用'
+        };
+      }
+      return result && typeof result === 'object' ? result : {
+        success: false,
+        message: '权威试炼状态返回异常'
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error,
+        reason: error && error.reason || undefined,
+        runId: safeRunId,
+        message: error.message || '权威试炼状态读取失败'
+      };
+    }
+  },
+  async submitAuthoritativeRunAction(runId = '', action = {}, options = {}) {
+    const safeRunId = this.normalizeAuthoritativeRunSafeId(runId);
+    if (!safeRunId) return {
+      success: false,
+      reason: 'authoritative_run_missing_id',
+      message: '权威试炼 runId 缺失'
+    };
+    const expectedUserId = String(options.expectedUserId || this.getCurrentUser()?.objectId || this.getCurrentUser()?.id || '').trim();
+    const session = this.captureProgressionSessionSnapshot({ expectedUserId }, '登录账号已变化，请刷新权威试炼后重试');
+    if (!session || !session.success) return session;
+    const actionId = this.normalizeAuthoritativeRunSafeId(action && action.actionId)
+      || this.normalizeAuthoritativeRunSafeId(options.actionId)
+      || this.createAuthoritativeRunRequestId('ar-action');
+    const expectedVersion = this.normalizeAuthoritativeRunExpectedVersion(action && action.expectedVersion);
+    const command = this.normalizeAuthoritativeRunCommand(action && action.command);
+    const payload = this.sanitizeAuthoritativeRunActionPayload(command, action && action.payload);
+    if (expectedVersion === null) return {
+      success: false,
+      reason: 'authoritative_run_invalid_version',
+      runId: safeRunId,
+      actionId,
+      message: '权威试炼版本号无效'
+    };
+    if (!command) return {
+      success: false,
+      reason: 'authoritative_run_invalid_command',
+      runId: safeRunId,
+      actionId,
+      message: '权威试炼指令不支持'
+    };
+    if (!payload) return {
+      success: false,
+      reason: 'authoritative_run_invalid_payload',
+      runId: safeRunId,
+      actionId,
+      message: '权威试炼指令载荷无效'
+    };
+    const signedPayload = {
+      runId: safeRunId,
+      actionId,
+      expectedVersion,
+      command,
+      payload
+    };
+    const integrity = await this.createRequiredSessionIntegrityFields(
+      signedPayload,
+      session.sessionToken,
+      '当前环境不支持权威试炼签名，请刷新后重试',
+      'authoritative_run_signature_required'
+    );
+    if (!integrity || !integrity.success) {
+      return {
+        ...integrity,
+        runId: safeRunId,
+        actionId
+      };
+    }
+    try {
+      const result = await this.requestServer(`${this.getAuthoritativeRunsPathPrefix()}/${encodeURIComponent(safeRunId)}/actions`, {
+        method: 'POST',
+        authToken: session.sessionToken,
+        data: {
+          ...signedPayload,
+          ...integrity.integrity
+        }
+      });
+      const currentUserId = String(this.getCurrentUser()?.objectId || this.getCurrentUser()?.id || '').trim();
+      if (!expectedUserId || currentUserId !== expectedUserId) {
+        return {
+          success: false,
+          reason: 'authoritative_run_account_changed',
+          runId: safeRunId,
+          actionId,
+          message: '登录账号已变化，行动回执未应用；原账号可刷新权威试炼确认结果'
+        };
+      }
+      return {
+        ...(result && typeof result === 'object' ? result : { success: false, message: '权威试炼行动返回异常' }),
+        runId: safeRunId,
+        actionId
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error,
+        reason: error && error.reason || undefined,
+        details: error && error.payload && error.payload.details || undefined,
+        run: error && error.payload && error.payload.run || undefined,
+        runId: safeRunId,
+        actionId,
+        message: error.message || '权威试炼行动失败'
+      };
+    }
+  },
+  async settleAuthoritativeRun(runId = '', payload = {}, options = {}) {
+    const safeRunId = this.normalizeAuthoritativeRunSafeId(runId);
+    if (!safeRunId) return {
+      success: false,
+      reason: 'authoritative_run_missing_id',
+      message: '权威试炼 runId 缺失'
+    };
+    const expectedUserId = String(options.expectedUserId || this.getCurrentUser()?.objectId || this.getCurrentUser()?.id || '').trim();
+    const session = this.captureProgressionSessionSnapshot({ expectedUserId }, '登录账号已变化，请刷新权威试炼后重试');
+    if (!session || !session.success) return session;
+    const mutationId = this.normalizeAuthoritativeRunSafeId(payload && payload.mutationId)
+      || this.normalizeAuthoritativeRunSafeId(options.mutationId)
+      || this.createAuthoritativeRunRequestId('ar-settle');
+    const expectedVersion = this.normalizeAuthoritativeRunExpectedVersion(payload && payload.expectedVersion);
+    if (expectedVersion === null) return {
+      success: false,
+      reason: 'authoritative_run_invalid_version',
+      runId: safeRunId,
+      mutationId,
+      message: '权威试炼版本号无效'
+    };
+    const signedPayload = {
+      runId: safeRunId,
+      mutationId,
+      expectedVersion
+    };
+    const integrity = await this.createRequiredSessionIntegrityFields(
+      signedPayload,
+      session.sessionToken,
+      '当前环境不支持权威试炼签名，请刷新后重试',
+      'authoritative_run_signature_required'
+    );
+    if (!integrity || !integrity.success) {
+      return {
+        ...integrity,
+        runId: safeRunId,
+        mutationId
+      };
+    }
+    try {
+      const result = await this.requestServer(`${this.getAuthoritativeRunsPathPrefix()}/${encodeURIComponent(safeRunId)}/settle`, {
+        method: 'POST',
+        authToken: session.sessionToken,
+        data: {
+          ...signedPayload,
+          ...integrity.integrity
+        }
+      });
+      const currentUserId = String(this.getCurrentUser()?.objectId || this.getCurrentUser()?.id || '').trim();
+      if (!expectedUserId || currentUserId !== expectedUserId) {
+        return {
+          success: false,
+          reason: 'authoritative_run_account_changed',
+          runId: safeRunId,
+          mutationId,
+          message: '登录账号已变化，结算回执未应用；原账号可刷新权威试炼确认结果'
+        };
+      }
+      return {
+        ...(result && typeof result === 'object' ? result : { success: false, message: '权威试炼结算返回异常' }),
+        runId: safeRunId,
+        mutationId
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error,
+        reason: error && error.reason || undefined,
+        details: error && error.payload && error.payload.details || undefined,
+        run: error && error.payload && error.payload.run || undefined,
+        runId: safeRunId,
+        mutationId,
+        message: error.message || '权威试炼结算失败'
+      };
+    }
+  },
+  async getAuthoritativeRunReplay(runId = '', options = {}) {
+    const safeRunId = this.normalizeAuthoritativeRunSafeId(runId);
+    if (!safeRunId) return {
+      success: false,
+      reason: 'authoritative_run_missing_id',
+      message: '权威试炼 runId 缺失'
+    };
+    const expectedUserId = String(options.expectedUserId || this.getCurrentUser()?.objectId || this.getCurrentUser()?.id || '').trim();
+    const session = this.captureProgressionSessionSnapshot({ expectedUserId }, '登录账号已变化，请刷新权威试炼回放后重试');
+    if (!session || !session.success) return session;
+    try {
+      const result = await this.requestServer(`${this.getAuthoritativeRunsPathPrefix()}/${encodeURIComponent(safeRunId)}/replay`, {
+        method: 'GET',
+        authToken: session.sessionToken
+      });
+      const currentUserId = String(this.getCurrentUser()?.objectId || this.getCurrentUser()?.id || '').trim();
+      if (!expectedUserId || currentUserId !== expectedUserId) {
+        return {
+          success: false,
+          reason: 'authoritative_run_account_changed',
+          runId: safeRunId,
+          message: '登录账号已变化，旧权威试炼回放未应用'
+        };
+      }
+      return result && typeof result === 'object' ? result : {
+        success: false,
+        message: '权威试炼回放返回异常'
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error,
+        reason: error && error.reason || undefined,
+        runId: safeRunId,
+        message: error.message || '权威试炼回放读取失败'
       };
     }
   },

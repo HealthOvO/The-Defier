@@ -1,5 +1,25 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-07-11: V10-S102 全游戏服务端权威运行与反作弊平台 V2
+  - 本轮完成
+    - 新增独立的“权威试炼”可玩切片，在赛季司内覆盖 PVE、挑战、远征三种服务器裁定场景；浏览器只提交择路、出牌、结束回合、选奖励、放弃与结算命令，不再自述伤害、随机数、敌方行动、奖励或最终得分。
+    - 服务端新增冻结内容目录、确定性状态机、服务器种子随机流、递增动作序列、动作哈希链、每 8 步快照、损坏缓存恢复、完整 genesis 重放和一次性 `server_authoritative` 赛季进度结算；首轮敌意均低于满血，不会出现先手直接秒杀。
+    - SQLite 升级到 V6 `0006_authoritative_runs_v2`，新增 run、action、snapshot、receipt、catalog、ops event/counter 表；事务故障注入证明行动与结算中途失败会整体回滚，同版本并发只接受一个动作，重复动作与重复结算保持幂等。
+    - 客户端新增账号绑定签名、过期响应抑制、stale version 权威投影接管、断点恢复和明确的新局 ID；终局“再开一局”不会复用上一局幂等键。页面持续展示服务器版本、状态哈希、链首、恢复次数、敌方意图与完整重放回执。
+    - 运维面新增脱敏汇总与保留清理；公开投影和公开回放不包含 seed、RNG 状态或有序抽牌堆，运维事件只展示哈希化 run/account 引用。
+    - 两轮 `gpt-5.4` 挑战者审查共发现并修复 6 条边界：账号 reset 后旧请求回灌、Panel 误应用 suppressed 回包、跨模式刷新复活上一模式、首次加载失败不再重试、过期后重复 action 绕过 TTL、长期未触碰的过期 active run 无法被保留清理；对应竞态与保留测试均已加入 Node 门禁。
+  - 权威边界
+    - 旧主线 PVE、旧挑战和旧远征继续作为离线/旧客户端兼容路径，仍属于 `client_observed` 或 `server_verified`；只有赛季司“权威试炼”从发车到完整重放结算的运行才是 `server_authoritative`，不会把旧客户端结果误升为正式权威结果。
+  - 已验证
+    - 完整 Node 门禁：`npm run test:node`，新增确定性黄金回放、3 模式性质模拟、V6 重启迁移、API/越权/并发/故障恢复/幂等/保留清理、客户端竞态和 UI 回归均通过。
+    - 本地生产构建：`npm run build:pages`。
+    - Season Ops 桌面/移动浏览器审计：`AUDIT_FILTER=season-ops ./tests/run_browser_release_checks.sh http://127.0.0.1:4187 output/s102-authoritative-mock`，0 failed、0 console error。
+    - 三模式真实后端浏览器 release gate：`AUDIT_FILTER=authoritative-runs-real BROWSER_RELEASE_RUN_ID=s102-authoritative-all-modes ./tests/run_browser_release_checks.sh http://127.0.0.1:4187 output/s102-authoritative-release-all-modes`，PVE、挑战、远征均通过真实页面按钮完成并结算；PVE 额外覆盖整页刷新恢复，报告 19/19 findings、0 console error，数据库为三种模式各保留 1 个 settled run、1 个回执和 1 条权威进度事件。
+    - 挑战者修复后定向复验：`AUDIT_FILTER=season-ops,authoritative-runs-real BROWSER_RELEASE_RUN_ID=s102-challenger-fixes ./tests/run_browser_release_checks.sh http://127.0.0.1:4187 output/s102-challenger-fixes`，两个模块结构汇总通过、0 failed、0 console error。
+    - 最终完整本地发布门禁：`PORT=4192 OUTPUT_ROOT=output/s102-full-release-after-review PVP_LIVE_REAL_AUDIT_TIMEOUT_SECONDS=1200 npm run test:release:local`，31/31 browser reports、1079 findings、0 failed、0 console error、422 screenshots，missing / duplicate / unexpected modules 均为空；其中权威试炼 19/19、赛季司 50/50，并覆盖激活中的权威 tab 外部切号清场。
+  - 当前结论
+    - 本轮只做本地开发、测试、后续合并与推送；未执行 SSH、rsync、systemd、Nginx、生产数据写入或线上部署，不能把 `https://080305.xyz/` 视为已更新。
+
 - 2026-07-09: V10 真 PVP · 实时后端闭环玩家面同步
   - 本轮完成
     - 当前版本口径从“前端焕新”推进为“实时后端闭环”：真人实时论道、服务端权威对局、PVP 结算回执、分享脱敏战报、低压力再战、举报异常、避开此对手和赛季荣誉收藏都归入同一条玩家可读成长链。

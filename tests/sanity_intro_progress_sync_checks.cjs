@@ -60,6 +60,7 @@ function assert(condition, message) {
     '低压力再战',
     '举报异常',
     '避开此对手',
+    '权威试炼',
   ];
 
   const introOnlyAnchors = [
@@ -82,6 +83,7 @@ function assert(condition, message) {
     '实时论道赛后复盘',
     'PVP 练习快照',
     '不写正式积分',
+    '权威试炼',
   ];
 
   sharedAnchors.forEach((anchor) => {

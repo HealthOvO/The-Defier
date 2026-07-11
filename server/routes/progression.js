@@ -14,6 +14,16 @@ const {
     recordVerifiedRunCheckpoint,
     settleVerifiedRun
 } = require('../progression/verified-runs');
+const {
+    getAuthoritativeRun,
+    getAuthoritativeRunOpsOverview,
+    getAuthoritativeRunReplay,
+    getCurrentAuthoritativeRun,
+    issueAuthoritativeRun,
+    pruneAuthoritativeRunHistory,
+    settleAuthoritativeRun,
+    submitAuthoritativeRunAction
+} = require('../progression/authoritative-runs/service');
 
 const router = express.Router();
 
@@ -77,6 +87,52 @@ function requireOpsToken(req, res) {
 
 router.get('/status', authenticate, asyncHandler(async (req, res) => {
     res.json(await getStatus(req.user.id));
+}));
+
+router.post('/authoritative-runs', authenticate, asyncHandler(async (req, res) => {
+    const payload = getSignedBusinessPayload(req.body);
+    if (!requireSignedPayload(req, res, payload, 'POST /api/progression/authoritative-runs')) return;
+    res.json(await issueAuthoritativeRun(req.user.id, payload));
+}));
+
+router.get('/authoritative-runs/current', authenticate, asyncHandler(async (req, res) => {
+    res.json(await getCurrentAuthoritativeRun(req.user.id, req.query && req.query.mode));
+}));
+
+router.get('/authoritative-runs/:runId/replay', authenticate, asyncHandler(async (req, res) => {
+    res.json(await getAuthoritativeRunReplay(req.user.id, req.params.runId));
+}));
+
+router.get('/authoritative-runs/:runId', authenticate, asyncHandler(async (req, res) => {
+    res.json(await getAuthoritativeRun(req.user.id, req.params.runId));
+}));
+
+router.post('/authoritative-runs/:runId/actions', authenticate, asyncHandler(async (req, res) => {
+    const runId = String(req.params.runId || '').trim();
+    const payload = getSignedBusinessPayload(req.body);
+    if (!runId || String(payload.runId || '').trim() !== runId) {
+        return res.status(400).json({
+            success: false,
+            reason: 'authoritative_run_id_mismatch',
+            message: '动作 run 与请求路径不一致'
+        });
+    }
+    if (!requireSignedPayload(req, res, payload, 'POST /api/progression/authoritative-runs/:runId/actions')) return;
+    res.json(await submitAuthoritativeRunAction(req.user.id, runId, payload));
+}));
+
+router.post('/authoritative-runs/:runId/settle', authenticate, asyncHandler(async (req, res) => {
+    const runId = String(req.params.runId || '').trim();
+    const payload = getSignedBusinessPayload(req.body);
+    if (!runId || String(payload.runId || '').trim() !== runId) {
+        return res.status(400).json({
+            success: false,
+            reason: 'authoritative_run_id_mismatch',
+            message: '结算 run 与请求路径不一致'
+        });
+    }
+    if (!requireSignedPayload(req, res, payload, 'POST /api/progression/authoritative-runs/:runId/settle')) return;
+    res.json(await settleAuthoritativeRun(req.user.id, runId, payload));
 }));
 
 router.post('/verified-runs/tickets', authenticate, asyncHandler(async (req, res) => {
@@ -146,6 +202,16 @@ router.get('/ops/overview', asyncHandler(async (req, res) => {
     res.json(await getOpsOverview());
 }));
 
+router.get('/ops/authoritative-runs', asyncHandler(async (req, res) => {
+    if (!requireOpsToken(req, res)) return;
+    res.json(await getAuthoritativeRunOpsOverview());
+}));
+
+router.post('/ops/authoritative-runs/retention', asyncHandler(async (req, res) => {
+    if (!requireOpsToken(req, res)) return;
+    res.json(await pruneAuthoritativeRunHistory(req.body && req.body.retentionDays));
+}));
+
 router.use((error, req, res, next) => {
     if (res.headersSent) return next(error);
     const status = Number(error && error.statusCode) || 500;
@@ -154,6 +220,8 @@ router.use((error, req, res, next) => {
         success: false,
         reason: error && error.reason || 'progression_error',
         message: status >= 500 ? '长期进度服务暂时不可用' : error.message,
+        details: status < 500 && error && error.details || undefined,
+        run: status < 500 && error && error.details && error.details.run || undefined,
         requestId: req.requestId
     });
 });

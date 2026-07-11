@@ -2,6 +2,7 @@ const crypto = require('node:crypto');
 const sqlite3 = require('sqlite3').verbose();
 const { dbPath } = require('../db/database');
 const { getVerifiedRunOpsOverview } = require('./verified-runs');
+const { getAuthoritativeRunOpsOverview } = require('./authoritative-runs/service');
 const {
     CATALOG_VERSION,
     DAY_MS,
@@ -520,9 +521,11 @@ async function getStatus(userId, now = Date.now()) {
             catalogVersion: CATALOG_VERSION,
             generatedAt: now,
             authorityBoundary: {
-                serverAuthoritative: ['pvp_live'],
+                serverAuthoritative: ['pvp_live', 'pve', 'challenge', 'expedition'],
+                serverAuthoritativeSourceKinds: ['live_pvp_settlement', 'authoritative_run_settlement'],
                 serverVerified: ['pve', 'challenge', 'expedition'],
                 clientObserved: ['pve', 'challenge', 'expedition'],
+                legacyRunCompatibility: 'legacy PVE, challenge, and expedition remain observed or verified-envelope; only Authoritative Trials V2 mint authoritative events',
                 clientObservedRewardImpact: REWARD_IMPACT
             },
             cycles: snapshot.cycles,
@@ -834,7 +837,8 @@ async function getOpsOverview(now = Date.now()) {
     });
     return {
         ...overview,
-        verifiedRuns: await getVerifiedRunOpsOverview(now)
+        verifiedRuns: await getVerifiedRunOpsOverview(now),
+        authoritativeRuns: await getAuthoritativeRunOpsOverview(now)
     };
 }
 

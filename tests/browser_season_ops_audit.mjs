@@ -325,6 +325,201 @@ async function installSeasonOpsMock(page) {
         purchasedAt: now,
       };
     };
+
+    const authoritativePanel = window.game.seasonOpsView?.authoritativeRunPanel;
+    const authoritativeService = authoritativePanel?.service;
+    let authoritativeRun = null;
+    let authoritativeRunOwnerId = '';
+    let authoritativeRunCounter = 0;
+    let authoritativeVersion = 0;
+    window.__authoritativeBrowserCalls = [];
+    const buildAuthoritativeProjection = phase => ({
+      schemaVersion: 2,
+      protocolVersion: 'authoritative-run-v2',
+      contentVersion: 'authoritative-trials-v1',
+      contentHash: 'aa18ac01c39d1c1c38d0c26fe3d83d92a3b34035b25305628e00a96a42bdd281',
+      runId: authoritativeRun?.runId || '',
+      mode: 'pve',
+      runStatus: authoritativeRun?.status || 'active',
+      version: authoritativeVersion,
+      phase,
+      allowedCommands: phase === 'route'
+        ? ['select_node', 'abandon']
+        : phase === 'battle'
+          ? ['play_card', 'end_turn', 'abandon']
+          : phase === 'reward'
+            ? ['choose_reward', 'abandon']
+            : [],
+      scenario: {
+        scenarioId: 'pve-balanced-trial',
+        title: '平衡试炼',
+        description: '浏览器审计权威试炼',
+        turnBudget: 0,
+        betweenEncounterHeal: 0,
+      },
+      player: {
+        hp: 42,
+        maxHp: 50,
+        block: phase === 'battle' ? 4 : 0,
+        energy: 2,
+        hand: phase === 'battle'
+          ? [{ instanceId: 'browser-card-strike-01', cardId: 'strike', name: '破势', description: '造成 8 点伤害。', cost: 1 }]
+          : [],
+        drawPileCount: 7,
+        discardPileCount: 2,
+        deckSize: 10,
+      },
+      route: {
+        stage: phase === 'completed' ? 3 : 1,
+        totalStages: 3,
+        choices: phase === 'route'
+          ? [{ nodeId: 'browser-node-01', stage: 1, type: 'enemy', enemyId: 'ink_scout', name: '墨影斥候', threat: '普通', maxHp: 18, boss: false }]
+          : [],
+        completedNodes: phase === 'completed'
+          ? [{ nodeId: 'browser-node-01', nodeType: 'enemy', enemyId: 'ink_scout', boss: false }]
+          : [],
+      },
+      battle: phase === 'battle' ? {
+        nodeId: 'browser-node-01',
+        nodeType: 'enemy',
+        turn: 1,
+        enemy: {
+          enemyId: 'ink_scout',
+          name: '墨影斥候',
+          hp: 8,
+          maxHp: 18,
+          block: 0,
+          vulnerable: 0,
+          intent: { type: 'attack', amount: 6, label: '墨刃 6' },
+        },
+      } : null,
+      reward: phase === 'reward' ? {
+        choices: [{ rewardId: 'browser-reward-heal', kind: 'heal', name: '调息', description: '回复 10 点生命。' }],
+      } : null,
+      summary: phase === 'completed' ? {
+        result: 'completed',
+        reason: 'boss_defeated',
+        score: 588,
+        grade: 'A',
+        mode: 'pve',
+        scenarioId: 'pve-balanced-trial',
+        encountersWon: 3,
+        bossWins: 1,
+        turns: 9,
+        cardsPlayed: 14,
+        damageDealt: 82,
+        damageTaken: 8,
+        remainingHp: 42,
+        maxHp: 50,
+      } : null,
+    });
+    const buildAuthoritativeRun = phase => ({
+      runId: authoritativeRun.runId,
+      clientRunId: authoritativeRun.clientRunId,
+      mode: 'pve',
+      status: authoritativeRun.status,
+      protocolVersion: 'authoritative-run-v2',
+      contentVersion: 'authoritative-trials-v1',
+      contentHash: 'aa18ac01c39d1c1c38d0c26fe3d83d92a3b34035b25305628e00a96a42bdd281',
+      authorityLevel: 'server',
+      trustTier: 'server_authoritative',
+      stateVersion: authoritativeVersion,
+      actionCount: Math.max(0, authoritativeVersion - 1),
+      startedAt: now,
+      expiresAt: now + 86_400_000,
+      completedAt: phase === 'completed' ? now + 10_000 : 0,
+      settledAt: authoritativeRun.status === 'settled' ? now + 11_000 : 0,
+      updatedAt: now + authoritativeVersion,
+      integrity: {
+        stateHash: `browser-state-${authoritativeVersion}`,
+        chainHead: `browser-chain-${authoritativeVersion}`,
+        snapshotInterval: 8,
+        fullyReplayRequiredForSettlement: true,
+      },
+      recovery: { recoveryCount: 1, resumable: authoritativeRun.status === 'active' || authoritativeRun.status === 'completed' },
+      receipt: authoritativeRun.receipt || null,
+      projection: buildAuthoritativeProjection(phase),
+    });
+    const successEnvelope = (phase, extra = {}) => ({
+      success: true,
+      reportVersion: 'authoritative-browser-mock-v1',
+      run: buildAuthoritativeRun(phase),
+      ...extra,
+    });
+    if (authoritativeService) {
+      authoritativeService.current = async ({ mode, expectedUserId } = {}) => {
+        window.__authoritativeBrowserCalls.push(`current:${mode}:${expectedUserId}`);
+        if (expectedUserId !== currentUser?.objectId
+          || expectedUserId !== authoritativeRunOwnerId
+          || mode !== 'pve'
+          || !authoritativeRun) return { success: true, run: null };
+        return successEnvelope(authoritativeRun.phase);
+      };
+      authoritativeService.get = async ({ runId, expectedUserId } = {}) => {
+        window.__authoritativeBrowserCalls.push(`get:${runId}:${expectedUserId}`);
+        if (!authoritativeRun
+          || runId !== authoritativeRun.runId
+          || expectedUserId !== currentUser?.objectId
+          || expectedUserId !== authoritativeRunOwnerId) {
+          return { success: false, reason: 'authoritative_run_not_found', message: '权威卷面不存在' };
+        }
+        return successEnvelope(authoritativeRun.phase);
+      };
+      authoritativeService.begin = async ({ mode, forceNew = false, expectedUserId } = {}) => {
+        window.__authoritativeBrowserCalls.push(`begin:${mode}:${forceNew}:${expectedUserId}`);
+        if (expectedUserId !== currentUser?.objectId) return { success: false, reason: 'authoritative_run_account_changed', message: '账号已变化' };
+        if (!authoritativeRun || forceNew) {
+          authoritativeRunCounter += 1;
+          authoritativeVersion = 1;
+          authoritativeRun = {
+            runId: `browser-authoritative-run-${authoritativeRunCounter}`,
+            clientRunId: `browser-authoritative-client-${authoritativeRunCounter}`,
+            phase: 'route',
+            status: 'active',
+            receipt: null,
+          };
+          authoritativeRunOwnerId = expectedUserId;
+        }
+        return successEnvelope(authoritativeRun.phase);
+      };
+      authoritativeService.action = async ({ runId, command, expectedVersion, expectedUserId } = {}) => {
+        window.__authoritativeBrowserCalls.push(`action:${command}:${expectedVersion}:${expectedUserId}`);
+        if (!authoritativeRun
+          || runId !== authoritativeRun.runId
+          || expectedUserId !== currentUser?.objectId
+          || expectedUserId !== authoritativeRunOwnerId) {
+          return { success: false, reason: 'authoritative_run_not_found', message: '权威卷面不存在' };
+        }
+        authoritativeVersion += 1;
+        if (command === 'select_node') authoritativeRun.phase = 'battle';
+        else if (command === 'play_card') authoritativeRun.phase = 'reward';
+        else if (command === 'choose_reward') {
+          authoritativeRun.phase = 'completed';
+          authoritativeRun.status = 'completed';
+        }
+        return successEnvelope(authoritativeRun.phase, {
+          action: { command, acceptedAt: now + authoritativeVersion, events: [{ type: command === 'play_card' ? 'card_played' : command }] },
+        });
+      };
+      authoritativeService.settle = async ({ runId, expectedVersion, expectedUserId } = {}) => {
+        window.__authoritativeBrowserCalls.push(`settle:${runId}:${expectedVersion}:${expectedUserId}`);
+        if (!authoritativeRun
+          || runId !== authoritativeRun.runId
+          || expectedUserId !== currentUser?.objectId
+          || expectedUserId !== authoritativeRunOwnerId
+          || authoritativeRun.phase !== 'completed') {
+          return { success: false, reason: 'authoritative_run_not_completed', message: '权威试炼尚未完成' };
+        }
+        authoritativeRun.status = 'settled';
+        authoritativeRun.receipt = {
+          receiptId: 'browser-authoritative-receipt-01',
+          settledAt: now + 11_000,
+          progressDelta: { battleWins: 3, bossWins: 1, activityCompletions: 1 },
+          integrity: { fullReplayPassed: true },
+        };
+        return successEnvelope('completed', { receipt: structuredClone(authoritativeRun.receipt) });
+      };
+    }
     await window.game.showSeasonOps('contracts');
     return { success: true };
   });
@@ -404,19 +599,19 @@ try {
   const mock = await installSeasonOpsMock(page);
   add('debug mock installed', mock.success, mock.reason || '');
   await page.waitForSelector('#season-ops-screen [data-season-ops-phase="ready"]');
-  add('four tabs render', await page.locator('[data-season-ops-action="switch-tab"]').count() === 4);
+  add('five tabs render', await page.locator('[data-season-ops-action="switch-tab"]').count() === 5);
   add('contracts render all cycles', await page.locator('.season-ops-section-card').count() >= 3);
   const desktopLayout = await readLayout(page);
   add('desktop has no horizontal overflow', desktopLayout.documentScrollWidth === desktopLayout.viewportWidth && desktopLayout.rootScrollWidth === desktopLayout.rootClientWidth, JSON.stringify(desktopLayout));
   add('desktop header does not overlap content', desktopLayout.headerOverlapsBody === false, JSON.stringify(desktopLayout));
   add('desktop controls meet touch target', desktopLayout.narrowButtons.length === 0, JSON.stringify(desktopLayout.narrowButtons));
-  add('tablist exposes four semantic tabs', await page.locator('#season-ops-screen [role="tablist"] [role="tab"]').count() === 4);
+  add('tablist exposes five semantic tabs', await page.locator('#season-ops-screen [role="tablist"] [role="tab"]').count() === 5);
   add('active tab exposes aria-selected', await page.locator('#season-ops-screen [role="tab"][aria-selected="true"]').getAttribute('data-tab-id') === 'contracts');
   await page.locator('#season-ops-screen [role="tab"][data-tab-id="contracts"]').focus();
   await page.keyboard.press('End');
   add('tab keyboard navigation selects and focuses the last tab', await page.evaluate(() => {
     const tab = document.activeElement;
-    return tab?.getAttribute('data-tab-id') === 'ledger' && tab?.getAttribute('aria-selected') === 'true';
+    return tab?.getAttribute('data-tab-id') === 'authoritative' && tab?.getAttribute('aria-selected') === 'true';
   }));
   await page.locator('#season-ops-screen [role="tab"][data-tab-id="contracts"]').click();
   await safeAuditScreenshot(page, path.join(outDir, 'season-ops-contracts-desktop.png'), 'browser_season_ops_audit', { timeout: 9000 });
@@ -510,25 +705,66 @@ try {
   add('ledger can load older records', await page.locator('.season-ops-ledger-row').count() === ledgerCountBeforePaging + 1);
   add('ledger paging preserves focus when the load button disappears', await page.evaluate(() => document.activeElement?.dataset?.seasonOpsFocusFallback === 'load-ledger'));
 
+  await page.locator('[data-season-ops-action="switch-tab"][data-tab-id="authoritative"]').click();
+  await page.waitForSelector('[data-season-ops-action="authoritative-begin"]');
+  add('authoritative tab exposes server-owned boundary', (await page.locator('.season-ops-authoritative-panel').innerText()).includes('浏览器只提交命令'));
+  await page.locator('[data-season-ops-action="authoritative-begin"]').click();
+  await page.waitForSelector('[data-season-ops-action="authoritative-select-node"]');
+  add('authoritative route renders server choices', await page.locator('[data-season-ops-action="authoritative-select-node"]').count() === 1);
+  await page.locator('[data-season-ops-action="authoritative-select-node"]').click();
+  await page.waitForSelector('[data-season-ops-action="authoritative-play-card"]');
+  add('authoritative battle exposes intent and command-only hand', /墨刃 6/.test(await page.locator('.season-ops-authoritative-panel').innerText()));
+  await page.locator('[data-season-ops-action="authoritative-refresh"]').click();
+  add('authoritative refresh preserves confirmed battle version', await page.locator('[data-season-ops-action="authoritative-play-card"]').isVisible());
+  await page.locator('[data-season-ops-action="authoritative-play-card"]').click();
+  await page.waitForSelector('[data-season-ops-action="authoritative-choose-reward"]');
+  await page.locator('[data-season-ops-action="authoritative-choose-reward"]').click();
+  await page.waitForSelector('[data-season-ops-action="authoritative-settle"]');
+  await page.locator('[data-season-ops-action="authoritative-settle"]').click();
+  await page.waitForSelector('[data-season-ops-action="authoritative-begin-new"]');
+  add('authoritative settlement exposes full replay receipt', /回放 通过/.test(await page.locator('.season-ops-authoritative-panel').innerText()));
+  await safeAuditScreenshot(page, path.join(outDir, 'season-ops-authoritative-settled-desktop.png'), 'browser_season_ops_audit', { timeout: 9000 });
+  await page.locator('[data-season-ops-action="authoritative-begin-new"]').click();
+  await page.waitForSelector('[data-season-ops-action="authoritative-select-node"]');
+  add('authoritative new run bypasses prior idempotency key', await page.evaluate(() => {
+    const calls = window.__authoritativeBrowserCalls || [];
+    return calls.some(call => call.startsWith('begin:pve:true:'))
+      && window.game?.seasonOpsView?.authoritativeRunPanel?.lastRunMeta?.runId === 'browser-authoritative-run-2';
+  }));
+
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.locator('[data-season-ops-action="switch-tab"][data-tab-id="contracts"]').click();
   const mobileLayout = await readLayout(page);
   add('mobile 390 has no horizontal overflow', mobileLayout.documentScrollWidth === 390 && mobileLayout.rootScrollWidth === mobileLayout.rootClientWidth, JSON.stringify(mobileLayout));
   add('mobile header does not overlap content', mobileLayout.headerOverlapsBody === false, JSON.stringify(mobileLayout));
   add('mobile controls meet touch target', mobileLayout.narrowButtons.length === 0, JSON.stringify(mobileLayout.narrowButtons));
-  await safeAuditScreenshot(page, path.join(outDir, 'season-ops-contracts-mobile.png'), 'browser_season_ops_audit', { timeout: 9000 });
+  await safeAuditScreenshot(page, path.join(outDir, 'season-ops-authoritative-mobile.png'), 'browser_season_ops_audit', { timeout: 9000 });
 
   await page.evaluate(() => {
     window.__seasonOpsDeferNextDashboard();
     window.__seasonOpsSwitchUser({ objectId: 'season-browser-user-b', username: '换卷测试者' });
   });
   await page.waitForFunction(() => typeof window.__seasonOpsResolveDashboard === 'function');
+  await page.waitForFunction(() => {
+    const view = window.game?.seasonOpsView;
+    const panel = view?.authoritativeRunPanel;
+    return view?.boundUserId === 'season-browser-user-b'
+      && panel?.lastRunMeta === null
+      && panel?.getCurrentProjection?.() === null;
+  });
+  add('active authoritative tab clears the previous account run on external switch', await page.evaluate(() => {
+    const panel = window.game?.seasonOpsView?.authoritativeRunPanel;
+    const text = document.querySelector('.season-ops-authoritative-panel')?.textContent || '';
+    return panel?.lastRunMeta === null
+      && panel?.getCurrentProjection?.() === null
+      && !text.includes('browser-authoritative-run-2');
+  }));
   add('external account switch clears the previous dashboard while loading', await page.evaluate(() => {
     const view = window.game.seasonOpsView;
     return view.boundUserId === 'season-browser-user-b' && view.dashboard === null && view.phase === 'loading';
   }));
   await page.evaluate(() => window.__seasonOpsResolveDashboard());
   await page.waitForFunction(() => window.game?.seasonOpsView?.phase === 'ready');
+  await page.locator('[data-season-ops-action="switch-tab"][data-tab-id="contracts"]').click();
   add('external account switch rebinds account identity', (await page.locator('.season-ops-account-chip').first().innerText()).includes('换卷测试者'));
   add('external account switch requests and renders only the new account payload', await page.evaluate(() => {
     const view = window.game.seasonOpsView;

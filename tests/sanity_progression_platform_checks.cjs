@@ -178,11 +178,11 @@ async function runChecks() {
   try {
     await waitForHealth(server);
     const version = await request('/api/version');
-    assert.strictEqual(version.payload?.schema?.version, 5, 'season ops should advance schema version without removing progression migrations');
-    assert.strictEqual(version.payload?.schema?.currentMigrationId, '0005_season_ops_economy');
+    assert.strictEqual(version.payload?.schema?.version, 6, 'authoritative runs should advance schema version without removing progression migrations');
+    assert.strictEqual(version.payload?.schema?.currentMigrationId, '0006_authoritative_runs_v2');
     assert.deepStrictEqual(
       version.payload?.schema?.appliedMigrations?.map(entry => entry.id),
-      ['0001_startup_schema', '0002_progression_platform', '0003_verified_runs', '0004_cloud_state_v2', '0005_season_ops_economy'],
+      ['0001_startup_schema', '0002_progression_platform', '0003_verified_runs', '0004_cloud_state_v2', '0005_season_ops_economy', '0006_authoritative_runs_v2'],
       'fresh databases should record the full migration chain'
     );
 

@@ -1,14 +1,18 @@
 import { AuthService } from "../services/authService.js";
 import { BackendClient, SESSION_STORAGE_KEY } from "../services/backend-client.js";
+import { AuthoritativeRunPanel } from "./AuthoritativeRunPanel.js";
 import { buildDataAttributes, escapeHtml } from "../ui/render-safe.js";
 
 const TAB_ORDER = ["contracts", "store", "leaderboard", "ledger"];
+const UI_TAB_ORDER = [...TAB_ORDER, "authoritative"];
+const AUTHORITATIVE_TAB_ID = "authoritative";
 
 const TAB_META = {
   contracts: { id: "contracts", label: "契约", icon: "卷" },
   store: { id: "store", label: "外观商店", icon: "藏" },
   leaderboard: { id: "leaderboard", label: "权威榜单", icon: "榜" },
-  ledger: { id: "ledger", label: "账本", icon: "簿" }
+  ledger: { id: "ledger", label: "账本", icon: "簿" },
+  authoritative: { id: "authoritative", label: "权威试炼", icon: "试" }
 };
 
 const TRUST_META = {
@@ -28,7 +32,7 @@ const TRUST_META = {
     label: "服务端权威",
     shortLabel: "权威",
     tone: "authoritative",
-    note: "仅正式真人结算写入榜单与权威契约。"
+    note: "真人结算与权威试炼可推进权威契约；只有真人排位进入正式榜。"
   }
 };
 
@@ -133,6 +137,12 @@ export class SeasonOpsView {
     this.pendingPurchases = new Set();
     this.purchaseMutationIds = new Map();
     this.pendingFocusKey = "";
+    this.authoritativeRunPanel = new AuthoritativeRunPanel({
+      getCurrentUserId: () => this.getCurrentUserId(),
+      requestRender: () => this.render(),
+      requestLogin: () => this.openLoginModal(),
+      requestConfirm: message => this.requestConfirmation(message)
+    });
     this.boundClickHandler = this.handleClick.bind(this);
     this.boundKeydownHandler = this.handleKeydown.bind(this);
     this.boundStorageHandler = this.handleStorageChange.bind(this);
@@ -223,6 +233,7 @@ export class SeasonOpsView {
       this.phase = "not_logged_in";
       this.isRefreshing = false;
       this.isLoadingLedger = false;
+      await this.authoritativeRunPanel.handleAuthStateChanged({ active: this.activeTab === AUTHORITATIVE_TAB_ID });
       this.render();
       return { success: false, reason: "not_logged_in", message: "未登录" };
     }
@@ -244,6 +255,10 @@ export class SeasonOpsView {
       this.notice = null;
     }
     this.render();
+    const shouldRefreshAuthoritative = this.activeTab === AUTHORITATIVE_TAB_ID;
+    const authoritativePromise = shouldRefreshAuthoritative
+      ? this.authoritativeRunPanel.activate({ force: true }).catch(error => ({ success: false, error, message: error.message || "权威试炼读取失败" }))
+      : Promise.resolve({ success: true, skipped: true });
 
     const generation = this.invalidateReadResponses();
     const requestId = ++this.requestSeq;
@@ -261,6 +276,7 @@ export class SeasonOpsView {
     this.dashboard = normalized;
     this.phase = this.isDashboardEmpty(normalized) ? "empty" : "ready";
     this.notice = null;
+    await authoritativePromise;
     this.render();
     return { success: true, dashboard: normalized };
   }
@@ -271,6 +287,11 @@ export class SeasonOpsView {
     this.activeTab = normalized;
     if (options.render !== false) {
       this.render();
+    }
+    if (normalized === AUTHORITATIVE_TAB_ID) {
+      this.authoritativeRunPanel.activate({ force: false }).catch(error => {
+        console.warn("Authoritative run panel activation failed:", error);
+      });
     }
   }
 
@@ -283,6 +304,7 @@ export class SeasonOpsView {
     this.pendingPurchases.clear();
     this.purchaseMutationIds.clear();
     this.isLoadingLedger = false;
+    await this.authoritativeRunPanel.handleAuthStateChanged({ active: this.activeTab === AUTHORITATIVE_TAB_ID });
     if (!currentUserId) {
       this.dashboard = null;
       this.notice = null;
@@ -299,6 +321,7 @@ export class SeasonOpsView {
   }
 
   destroy() {
+    this.authoritativeRunPanel.destroy();
     const container = this.getContainer();
     if (!container) return;
     if (container.__seasonOpsBound) {
@@ -359,16 +382,16 @@ export class SeasonOpsView {
       ? event.target.closest('[data-season-ops-action="switch-tab"]')
       : null;
     if (!tab) return;
-    const currentIndex = TAB_ORDER.indexOf(normalizeText(tab.dataset.tabId));
+    const currentIndex = UI_TAB_ORDER.indexOf(normalizeText(tab.dataset.tabId));
     if (currentIndex < 0) return;
     let nextIndex = currentIndex;
-    if (event.key === "ArrowRight") nextIndex = (currentIndex + 1) % TAB_ORDER.length;
-    else if (event.key === "ArrowLeft") nextIndex = (currentIndex - 1 + TAB_ORDER.length) % TAB_ORDER.length;
+    if (event.key === "ArrowRight") nextIndex = (currentIndex + 1) % UI_TAB_ORDER.length;
+    else if (event.key === "ArrowLeft") nextIndex = (currentIndex - 1 + UI_TAB_ORDER.length) % UI_TAB_ORDER.length;
     else if (event.key === "Home") nextIndex = 0;
-    else if (event.key === "End") nextIndex = TAB_ORDER.length - 1;
+    else if (event.key === "End") nextIndex = UI_TAB_ORDER.length - 1;
     else return;
     event.preventDefault();
-    const nextTabId = TAB_ORDER[nextIndex];
+    const nextTabId = UI_TAB_ORDER[nextIndex];
     this.setActiveTab(nextTabId);
     const nextTab = this.getContainer()?.querySelector(`[data-season-ops-action="switch-tab"][data-tab-id="${nextTabId}"]`);
     if (nextTab) nextTab.focus();
@@ -376,7 +399,7 @@ export class SeasonOpsView {
 
   normalizeTabId(tabId = "") {
     const value = normalizeText(tabId).toLowerCase();
-    if (TAB_ORDER.includes(value)) return value;
+    if (UI_TAB_ORDER.includes(value)) return value;
     return "";
   }
 
@@ -706,7 +729,7 @@ export class SeasonOpsView {
           ><span aria-hidden="true">←</span></button>
           <div class="season-ops-title-copy">
             <div class="season-ops-kicker">赛季司</div>
-            <h2>契约、外观、权威榜与荣誉账本</h2>
+            <h2>契约、外观、权威榜、账本与权威试炼</h2>
             <p>${escapeHtml(season ? buildFallbackSeasonLabel(season) : "登录后读取本账号赛季卷宗。")}</p>
           </div>
         </div>
@@ -773,7 +796,7 @@ export class SeasonOpsView {
 
   renderTabs() {
     const disabled = this.phase === "loading" && !this.dashboard;
-    const buttons = TAB_ORDER.map(tabId => {
+    const buttons = UI_TAB_ORDER.map(tabId => {
       const meta = TAB_META[tabId];
       return `
         <button
@@ -809,6 +832,10 @@ export class SeasonOpsView {
   }
 
   renderContent() {
+    if (this.activeTab === AUTHORITATIVE_TAB_ID) {
+      return this.authoritativeRunPanel.render();
+    }
+
     if (this.phase === "not_logged_in") {
       return this.renderStatePanel(
         "未登录",
@@ -1137,6 +1164,10 @@ export class SeasonOpsView {
     if (!actionNode || actionNode.disabled || !container.contains(actionNode)) return;
     const action = normalizeText(actionNode.dataset.seasonOpsAction);
     if (!action) return;
+    if (action.startsWith("authoritative-")) {
+      await this.authoritativeRunPanel.handleAction(actionNode);
+      return;
+    }
 
     if (action === "refresh") {
       await this.refresh({ silent: false });
@@ -1405,6 +1436,10 @@ export class SeasonOpsView {
 
   requestPurchaseConfirmation(offer) {
     const message = `确认用 ${offer.price.amount} 荣誉兑换「${offer.title}」？\n\n该权益只提供外观，不影响战斗资源与榜单权重。`;
+    return this.requestConfirmation(message);
+  }
+
+  requestConfirmation(message) {
     return new Promise(resolve => {
       if (this.game && typeof this.game.showConfirmModal === "function") {
         this.game.showConfirmModal(message, () => resolve(true), () => resolve(false));

@@ -29,6 +29,11 @@ node tests/sanity_season_ops_client_checks.mjs
 node tests/sanity_verified_runs_platform_checks.cjs
 node tests/sanity_verified_runs_client_checks.mjs
 node tests/sanity_verified_runs_bridge_checks.cjs
+node tests/sanity_authoritative_runs_engine_checks.cjs
+node tests/sanity_authoritative_runs_migration_checks.cjs
+node tests/sanity_authoritative_runs_platform_checks.cjs
+node tests/sanity_authoritative_runs_client_checks.mjs
+node tests/sanity_authoritative_runs_ui_checks.mjs
 node tests/sanity_balance_checks.cjs
 node tests/sanity_expansion_system_checks.cjs
 node tests/sanity_event_flow_checks.cjs

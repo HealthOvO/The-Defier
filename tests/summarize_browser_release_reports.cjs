@@ -31,6 +31,7 @@ const EXPECTED_RELEASE_MODULES = [
   'dongfu',
   'challenge',
   'season-ops',
+  'authoritative-runs-real',
   'expedition',
   'events',
   'vow-choice',

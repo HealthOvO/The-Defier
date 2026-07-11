@@ -8,6 +8,7 @@ const {
 } = require('../services/platform/schema-status');
 const { bootstrapCloudStateSchema } = require('../cloud-state/bootstrap');
 const { bootstrapSeasonOpsSchema } = require('../season-ops/bootstrap');
+const { bootstrapAuthoritativeRunsSchema } = require('../progression/authoritative-runs/bootstrap');
 
 const dbPath = process.env.DEFIER_DB_PATH
     ? path.resolve(process.env.DEFIER_DB_PATH)
@@ -32,7 +33,14 @@ const initDb = () => {
             }
         };
         db.serialize(() => {
-            db.run('PRAGMA journal_mode = WAL');
+            db.run('PRAGMA journal_mode = WAL', (err) => {
+                // A second process may open a brand-new database while the first
+                // process is switching it to WAL. The winner persists WAL for the
+                // database; the loser can safely continue after the transient lock.
+                if (err && !/SQLITE_BUSY|database is locked/i.test(String(err.message || err))) {
+                    fail(err);
+                }
+            });
             db.run(createSchemaMigrationsTableSql(), (err) => {
                 if (err) fail(err);
             });
@@ -749,6 +757,7 @@ const initDb = () => {
                     try {
                         await bootstrapCloudStateSchema(db);
                         await bootstrapSeasonOpsSchema(db);
+                        await bootstrapAuthoritativeRunsSchema(db);
                         recordCurrentSchemaMigration(db, (migrationErr) => {
                             if (migrationErr) fail(migrationErr);
                             else done();
