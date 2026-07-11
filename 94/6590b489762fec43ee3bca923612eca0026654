@@ -1,0 +1,107 @@
+.github/workflows/pages.yml
+  s_bae69f1b7fab46::t_66260b5f9183ec 75,99
+css/season-ops.css
+  s_f358df5e8472c0::t_e38af7696fcef2 205,394-418,775-987,996-1000,1045-1050,1118-1129
+docs/README.md
+  s_bae69f1b7fab46::t_9bb6505e52f888 24
+docs/backend_authoritative_runs_v2.md
+  s_bae69f1b7fab46::t_7ef72e3e5fd449 1-62
+docs/backend_migration_guide.md
+  s_bae69f1b7fab46::t_e835200111d4cc 143-154,203-211,214,219-221
+docs/backend_progression_platform_v1.md
+  s_bae69f1b7fab46::t_6d961c065bad3e 19,27-28,79,83,90,120-126
+docs/superpowers/plans/2026-07-11-authoritative-runs-v2.md
+  s_bae69f1b7fab46::t_fd872585343367 1-57
+docs/superpowers/specs/2026-07-11-authoritative-runs-v2-design.md
+  s_bae69f1b7fab46::t_234f9a57df4e75 1-238
+game-intro.html
+  s_bae69f1b7fab46::t_ed202b965d92b3 166
+index.html
+  s_bae69f1b7fab46::t_56b5099fcdbcd0 151
+js/services/backend-client.js
+  s_bae69f1b7fab46::t_2d864a2a02b371 3-7,99-145,1424-1773
+js/views/SystemView.js
+  s_bae69f1b7fab46::t_9cea9654c93c19 413
+server/db/database.js
+  s_bae69f1b7fab46::t_c9ce2448e9d840 11,36-43,760
+server/progression/authoritative-runs/bootstrap.js
+  s_bae69f1b7fab46::t_1cb1c2e368755d 1-399
+server/progression/authoritative-runs/canonical.js
+  s_bae69f1b7fab46::t_1fcde3bc826c47 1-82
+server/progression/authoritative-runs/catalog.js
+  s_bae69f1b7fab46::t_df372b66309945 1-222
+server/progression/authoritative-runs/engine.js
+  s_bae69f1b7fab46::t_917e4e0693eaa6 1-579
+server/progression/service.js
+  s_bae69f1b7fab46::t_98477e2259a417 5,524-525,528,840-841
+server/routes/progression.js
+  s_bae69f1b7fab46::t_6f737278429fd3 17-26,92-137,205-214,223-224
+server/services/platform/schema-status.js
+  s_d67a50dcebbcf7::t_eebdbb684b8aee 86-99
+tests/backend_platform_checks.cjs
+  s_bae69f1b7fab46::t_4f9481e391ad78 108-109,131-134,146,179-183
+tests/browser_authoritative_runs_real_backend_smoke.mjs
+  s_bae69f1b7fab46::t_f10118fa3ae898 1-545
+tests/run_browser_release_checks.sh
+  s_bae69f1b7fab46::t_976f7045195892 33,177
+tests/run_node_checks.sh
+  s_bae69f1b7fab46::t_31c8ed0ead8702 32-36
+tests/sanity_authoritative_runs_engine_checks.cjs
+  s_bae69f1b7fab46::t_bca4c1da4cce56 1-178
+tests/sanity_authoritative_runs_migration_checks.cjs
+  s_ca5652313828d6::t_986549d280decc 1-505
+tests/sanity_cloud_state_v2_checks.cjs
+  s_bae69f1b7fab46::t_2448f41eb98ad0 285-286
+tests/sanity_intro_progress_sync_checks.cjs
+  s_bae69f1b7fab46::t_a1b6d85a73adcb 63,86
+tests/sanity_progression_platform_checks.cjs
+  s_bae69f1b7fab46::t_14b4e6fa399f49 181-182,185
+tests/sanity_season_ops_platform_checks.cjs
+  s_bae69f1b7fab46::t_a39dd8353e4839 107-108,207-208
+tests/sanity_verified_runs_platform_checks.cjs
+  s_bae69f1b7fab46::t_873a499002803d 163-164,167,186,189
+tests/summarize_browser_release_reports.cjs
+  s_bae69f1b7fab46::t_10ee9c27e8eac0 34
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "946590b489762fec43ee3bca923612eca0026654",
+  "prompts": {},
+  "sessions": {
+    "s_bae69f1b7fab46": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ed4f6-e7ac-73e0-a29e-119f3eddb407",
+        "model": "unknown"
+      },
+      "human_author": "AI Agent <bot@example.com>"
+    },
+    "s_ca5652313828d6": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f3fed-94d5-77b2-9af0-61333559ff38",
+        "model": "unknown"
+      },
+      "human_author": "AI Agent <bot@example.com>"
+    },
+    "s_d67a50dcebbcf7": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f501a-830b-7a51-b8d2-4b0f4808e096",
+        "model": "unknown"
+      },
+      "human_author": "AI Agent <bot@example.com>"
+    },
+    "s_f358df5e8472c0": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f5025-2b6e-7531-ac09-d5b2c6a99284",
+        "model": "unknown"
+      },
+      "human_author": "AI Agent <bot@example.com>"
+    }
+  },
+  "attestation_metadata": {},
+  "remote_transcripts": {}
+}
