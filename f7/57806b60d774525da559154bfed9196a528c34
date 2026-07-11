@@ -1,0 +1,103 @@
+.github/workflows/pages.yml
+  s_bae69f1b7fab46::t_651117ba93ca43 75
+css/season-ops.css
+  s_bae69f1b7fab46::t_be72eb04e46958 1-869
+docs/backend_migration_guide.md
+  s_bae69f1b7fab46::t_0f121336aa7a25 20-21,38,132-142,180-190,193-199
+docs/backend_progression_platform_v1.md
+  s_bae69f1b7fab46::t_8c4da56aaf23d0 45,50-51,81,87,104-118,125-127
+docs/backend_season_ops_economy_v1.md
+  s_bae69f1b7fab46::t_d75d55ae78165a 1-47
+docs/superpowers/plans/2026-07-11-season-ops-economy.md
+  s_bae69f1b7fab46::t_2e93f030a34849 1-37
+docs/superpowers/specs/2026-07-11-season-ops-economy-design.md
+  s_bae69f1b7fab46::t_6d91b6f096bc68 1-129
+index.html
+  s_bae69f1b7fab46::t_af18d834259f75 99-104,155-157
+js/config/bmob.config.example.js
+  s_bae69f1b7fab46::t_0da2e7d0f8c674 21-22
+js/config/bmob.config.js
+  s_bae69f1b7fab46::t_7e3481aa28ede7 39-40
+js/data/challenge_rules.js
+  s_bae69f1b7fab46::t_0c3c204f948ff8 29,64,95,130,162,164-165,186,188-189,219,221-222,243,245-246,277,279-280,292,294-301
+js/services/backend-client.js
+  s_bae69f1b7fab46::t_c8d602108a6e35 54-55,1101-1106,2225-2369
+js/views/SeasonOpsView.js
+  s_bae69f1b7fab46::t_d783174e510c95 1-1420
+js/views/SystemView.js
+  s_bae69f1b7fab46::t_328a3f4314d565 502-509,517-520,527-528,537-538,551-562,568,576,584,589-620,623
+server/app.js
+  s_bae69f1b7fab46::t_e121e589d9daa7 18,37,129
+server/db/database.js
+  s_bae69f1b7fab46::t_972b81b8c15fc4 10,503,511-515,751
+server/progression/catalog.js
+  s_bae69f1b7fab46::t_892ad175972817 2,5-8,100-101,141
+server/progression/service.js
+  s_00e122dad5017b::t_6bafc829244042 194-195,481,491-492,524,556-561
+server/pvp-live/live-season.js
+  s_bae69f1b7fab46::t_1c33420e71e25b 102-104,106,120-122,151-152
+server/pvp-live/live-settlement.js
+  s_bae69f1b7fab46::t_356e9ece108978 8-9,286,292,301-327,415-431,477,499-500,506,516,520,524-525,543-558,564-568,571,583-584,600-615,619,621,625,627-628,654,657-658,660-661,663,667-692,745-746,759-765,771-772,776-779,787-788,792-795,804,811-812,827,836-837
+server/pvp-live/live-store.js
+  s_bae69f1b7fab46::t_37a5e7ae15ae1c 2480-2485
+server/routes/season-ops.js
+  s_bae69f1b7fab46::t_1efe1697b223e7 1-178
+server/season-ops/bootstrap.js
+  s_bae69f1b7fab46::t_3d308018841a59 1-626
+server/season-ops/catalog.js
+  s_bae69f1b7fab46::t_fdf68ba536d1ac 1-337
+server/season-ops/service.js
+  s_bae69f1b7fab46::t_1c623b5dd5003e 1-2013
+server/services/platform/schema-status.js
+  s_bae69f1b7fab46::t_5f2b5c0eb05602 66-85
+tests/backend_platform_checks.cjs
+  s_bae69f1b7fab46::t_ee1e6a7ed71b52 108-109,127-130,142,170-174
+tests/run_browser_release_checks.sh
+  s_bae69f1b7fab46::t_e7acc2ce8ad9aa 176
+tests/run_node_checks.sh
+  s_bae69f1b7fab46::t_c037b421a3e5b0 20,27-28
+tests/sanity_cloud_state_v2_checks.cjs
+  s_bae69f1b7fab46::t_9091a78c125a4d 285-286
+tests/sanity_progression_platform_checks.cjs
+  s_bae69f1b7fab46::t_7d86e36268c35c 181-182,185,258,267-269
+tests/sanity_pvp_live_route_checks.cjs
+  s_bae69f1b7fab46::t_d1ccc8dd515579 394-400,426-427
+tests/sanity_pvp_live_settlement_checks.cjs
+  s_bae69f1b7fab46::t_c9262e6ea4ed7c 8,122-130,158-160,176-185,219-316,472,683-704
+tests/sanity_release_gate_coverage_checks.cjs
+  s_bae69f1b7fab46::t_1d0d7a9650f82a 36,96-103,175,183-272,339,388,400-403,782,790-799,831,842,980-982,3262-3267
+tests/sanity_season_ops_client_checks.mjs
+  s_bae69f1b7fab46::t_79d8d830a2601d 1-215
+tests/sanity_verified_runs_platform_checks.cjs
+  s_bae69f1b7fab46::t_2aa55492babe75 163-164,167,186,189,383-388
+tests/sanity_weekly_challenge_checks.cjs
+  s_bae69f1b7fab46::t_d911eaf41053ac 221-223
+tests/summarize_browser_release_reports.cjs
+  s_bae69f1b7fab46::t_663f81de9e9548 33
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "f757806b60d774525da559154bfed9196a528c34",
+  "prompts": {},
+  "sessions": {
+    "s_00e122dad5017b": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f4e75-5439-7c42-bfa2-a8a591657e58",
+        "model": "unknown"
+      },
+      "human_author": "AI Agent <bot@example.com>"
+    },
+    "s_bae69f1b7fab46": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ed4f6-e7ac-73e0-a29e-119f3eddb407",
+        "model": "unknown"
+      },
+      "human_author": "AI Agent <bot@example.com>"
+    }
+  },
+  "attestation_metadata": {},
+  "remote_transcripts": {}
+}
