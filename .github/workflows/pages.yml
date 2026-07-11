@@ -72,7 +72,7 @@ jobs:
           - shard: core-ui
             audits: core,feature,automation-boot,map-overview-risk,ui-gallery
           - shard: frontend-layout
-            audits: frontend-layout
+            audits: frontend-layout,season-ops
           - shard: backend-mobile-meta
             audits: backend-client,auth-ui-cloud,mobile,reward-mobile,meta
           - shard: run-path-challenge

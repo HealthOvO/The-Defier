@@ -218,7 +218,9 @@ function loadFile(ctx, filePath) {
   const claimed = game.claimChallengeMilestone('weekly', 'weekly_score_860');
   assert(claimed === true, 'weekly milestone should be claimable once totalScore is high enough');
   assert(liveWeeklyEntry.claimedRewards.weekly_score_860 === true, 'weekly milestone should persist as claimed');
-  assert(pvpState.ownedItems.title_supreme === true, 'weekly high score reward should unlock title_supreme');
+  assert(game.legacyGranted === 12, `weekly high score reward should grant 12 legacy essence, got ${game.legacyGranted}`);
+  assert(!pvpState.ownedItems.title_supreme, 'challenge rewards must not mutate competitive PVP cosmetics or economy');
+  assert(pvpState.coins === 0, `challenge rewards must not grant PVP coins, got ${pvpState.coins}`);
 
   const globalBundle = game.buildChallengeBundle('global', new Date('2026-03-14T08:00:00'));
   const globalEntry = game.getChallengeProgressEntry('global', globalBundle.rotationKey, true);

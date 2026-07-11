@@ -160,11 +160,11 @@ async function runChecks() {
   try {
     await waitForHealth(server);
     const version = await request('/api/version');
-    assert.strictEqual(version.payload?.schema?.version, 4);
-    assert.strictEqual(version.payload?.schema?.currentMigrationId, '0004_cloud_state_v2');
+    assert.strictEqual(version.payload?.schema?.version, 5);
+    assert.strictEqual(version.payload?.schema?.currentMigrationId, '0005_season_ops_economy');
     assert.deepStrictEqual(
       version.payload?.schema?.appliedMigrations?.map(entry => entry.id),
-      ['0001_startup_schema', '0002_progression_platform', '0003_verified_runs', '0004_cloud_state_v2']
+      ['0001_startup_schema', '0002_progression_platform', '0003_verified_runs', '0004_cloud_state_v2', '0005_season_ops_economy']
     );
     for (const table of [
       'progression_verified_runs',
@@ -183,10 +183,10 @@ async function runChecks() {
     server = startServer();
     await waitForHealth(server);
     const upgradedVersion = await request('/api/version');
-    assert.strictEqual(upgradedVersion.payload?.schema?.currentMigrationId, '0004_cloud_state_v2', 'older databases should advance through verified runs to cloud state v4 on restart');
+    assert.strictEqual(upgradedVersion.payload?.schema?.currentMigrationId, '0005_season_ops_economy', 'older databases should advance through verified runs to season ops v5 on restart');
     assert.deepStrictEqual(
       upgradedVersion.payload?.schema?.appliedMigrations?.map(entry => entry.id),
-      ['0001_startup_schema', '0002_progression_platform', '0003_verified_runs', '0004_cloud_state_v2'],
+      ['0001_startup_schema', '0002_progression_platform', '0003_verified_runs', '0004_cloud_state_v2', '0005_season_ops_economy'],
       'older databases should record the complete additive migration chain'
     );
     for (const table of [
@@ -380,6 +380,12 @@ async function runChecks() {
     assert.strictEqual(settled.status, 200, JSON.stringify(settled.payload));
     assert.strictEqual(settled.payload?.receipt?.authorityLevel, 'verified_envelope');
     assert.strictEqual(settled.payload?.receipt?.trustTier, 'server_verified');
+    const verifiedSeasonStatus = await request('/api/progression/status', { token: primary.token });
+    const verifiedSeasonCompletion = verifiedSeasonStatus.payload?.objectives?.find(entry => entry.objectiveId === 'season_verified_activity_completions');
+    const verifiedSeasonVariety = verifiedSeasonStatus.payload?.objectives?.find(entry => entry.objectiveId === 'season_verified_mode_variety');
+    assert.strictEqual(verifiedSeasonCompletion?.current, 1, 'verified run settlement should advance the trusted season completion objective');
+    assert.strictEqual(verifiedSeasonCompletion?.trustRequirement, 'server_verified');
+    assert.strictEqual(verifiedSeasonVariety?.current, 1, 'verified PVE should count as one trusted season mode');
     const firstReceiptId = settled.payload?.receipt?.receiptId;
     const duplicateSettlement = await signedRequest(`/api/progression/verified-runs/${pveTicket.ticketId}/settle`, {
       token: primary.token,

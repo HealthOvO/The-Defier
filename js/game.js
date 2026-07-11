@@ -42,6 +42,7 @@ import { MetaProgressionManager } from "./managers/MetaProgressionManager.js";
 import { SeasonBoardManager } from "./managers/SeasonBoardManager.js";
 import { SanctumAgendaManager } from "./managers/SanctumAgendaManager.js";
 import { CampfireView } from "./views/CampfireView.js";
+import { SeasonOpsView } from "./views/SeasonOpsView.js";
 import { attachRegisteredHubControllers } from "./runtime/hub-registry.js";
 /**
  * The Defier 4.2 - 逆命者
@@ -151,6 +152,7 @@ export class Game {
     this.inventoryView = new InventoryView(this);
     this.rewardView = new RewardView(this);
     this.eventView = new EventView(this);
+    this.seasonOpsView = null;
     this.publicReplayShareConfig = this.parsePublicReplayShareConfig();
     this.automationBootConfig = this.parseAutomationBootConfig();
     this.boundGlobalEvents = false;
@@ -3898,7 +3900,13 @@ export class Game {
     // ESC关闭模态框
     document.addEventListener('keydown', e => {
       if (e.key === 'Escape') {
-        this.closeModal();
+        const activeConfirm = document.getElementById('generic-confirm-modal');
+        if (activeConfirm?.classList.contains('active') && typeof activeConfirm.__systemCancelHandler === 'function') {
+          e.preventDefault();
+          activeConfirm.__systemCancelHandler();
+        } else {
+          this.closeModal();
+        }
         if (typeof Utils !== 'undefined' && Utils.toggleBattleLogPanel) {
           Utils.toggleBattleLogPanel(false);
         }
@@ -5272,6 +5280,12 @@ export class Game {
   showScreen(screenId) {
     if (!this.systemView) this.systemView = new SystemView(this);
     return this.systemView.showScreen(screenId);
+  }
+
+  showSeasonOps(tab = 'contracts') {
+    this.showScreen('season-ops-screen');
+    if (!this.seasonOpsView) this.seasonOpsView = new SeasonOpsView(this);
+    return this.seasonOpsView.show({ tab });
   }
 
   // 更新角色信息界面
@@ -7007,6 +7021,14 @@ export class Game {
 
   // 关闭模态框
   closeModal(options = {}) {
+    const activeConfirm = document.getElementById('generic-confirm-modal');
+    if (
+      options.invokeConfirmCancel !== false
+      && activeConfirm?.classList.contains('active')
+      && typeof activeConfirm.__systemCancelHandler === 'function'
+    ) {
+      activeConfirm.__systemCancelHandler();
+    }
     const invokeRewardCallback = options.invokeRewardCallback !== false;
     this.closeRewardModal({
       invokeCallback: invokeRewardCallback
@@ -8698,6 +8720,11 @@ export class Game {
     setTimeout(async () => {
       this.closeModal();
       this.checkLoginStatus();
+      if (this.seasonOpsView) {
+        this.seasonOpsView.handleAuthStateChanged().catch(error => {
+          console.warn('Season ops auth refresh failed:', error);
+        });
+      }
       const globalSyncPromise = this.syncGlobalProgressFromCloud(successMsg.includes('注册') ? 'register' : 'login');
 
       // 登录成功后，获取云端存档列表并展示选择界面

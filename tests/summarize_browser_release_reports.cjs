@@ -30,6 +30,7 @@ const EXPECTED_RELEASE_MODULES = [
   'run-path-reward',
   'dongfu',
   'challenge',
+  'season-ops',
   'expedition',
   'events',
   'vow-choice',

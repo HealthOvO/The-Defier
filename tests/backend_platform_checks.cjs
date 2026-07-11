@@ -105,8 +105,8 @@ async function main() {
     assert.strictEqual(version.payload?.gitSha, 'platform-test-sha', '/api/version should prefer deployment git sha env');
     assert.match(version.payload?.packageLockDigest || '', /^[a-f0-9]{16,64}$/, '/api/version should expose root lockfile digest');
     assert.match(version.payload?.serverPackageLockDigest || '', /^[a-f0-9]{16,64}$/, '/api/version should expose server lockfile digest');
-    assert.strictEqual(version.payload?.schema?.version, 4, '/api/version should expose schema version');
-    assert.strictEqual(version.payload?.schema?.currentMigrationId, '0004_cloud_state_v2', '/api/version should expose current migration id');
+    assert.strictEqual(version.payload?.schema?.version, 5, '/api/version should expose schema version');
+    assert.strictEqual(version.payload?.schema?.currentMigrationId, '0005_season_ops_economy', '/api/version should expose current migration id');
     assert.ok(Array.isArray(version.payload?.schema?.appliedMigrations), '/api/version should expose applied migration list');
     assert.ok(
       version.payload.schema.appliedMigrations.some(item => item.id === '0001_startup_schema' && Number(item.appliedAt) > 0),
@@ -124,6 +124,10 @@ async function main() {
       version.payload.schema.appliedMigrations.some(item => item.id === '0004_cloud_state_v2' && Number(item.appliedAt) > 0),
       '/api/version should include applied cloud state schema migration'
     );
+    assert.ok(
+      version.payload.schema.appliedMigrations.some(item => item.id === '0005_season_ops_economy' && Number(item.appliedAt) > 0),
+      '/api/version should include applied season ops schema migration'
+    );
     const rootVersion = await request('/version');
     assert.strictEqual(rootVersion.status, 200, `/version should return 200: ${JSON.stringify(rootVersion.payload)}`);
     assert.deepStrictEqual(rootVersion.payload?.schema, version.payload.schema, '/version and /api/version should share schema payload');
@@ -135,7 +139,7 @@ async function main() {
     assert.strictEqual(health.payload?.status, 'ok', '/api/health should keep status=ok');
     assert.strictEqual(health.payload?.message, 'The Defier Backend is running', '/api/health should preserve existing health message');
     assert.strictEqual(health.payload?.checks?.database, 'ok', '/api/health should report database status');
-    assert.strictEqual(health.payload?.schema?.currentMigrationId, '0004_cloud_state_v2', '/api/health should expose current schema migration');
+    assert.strictEqual(health.payload?.schema?.currentMigrationId, '0005_season_ops_economy', '/api/health should expose current schema migration');
     assert.strictEqual(health.payload?.version?.gitSha, 'platform-test-sha', '/api/health should include runtime version summary');
     const healthJson = JSON.stringify(health.payload);
     assert(!healthJson.includes(JWT_SECRET), '/api/health must not leak JWT secret');
@@ -163,6 +167,11 @@ async function main() {
     assert.strictEqual(Number(cloudStateMigration?.version), 4, 'cloud state migration should record schema version 4');
     assert.match(cloudStateMigration?.checksum || '', /^[a-f0-9]{16,64}$/, 'cloud state migration should record stable checksum');
     assert(Number(cloudStateMigration?.applied_at) > 0, 'cloud state migration should record applied timestamp');
+    const seasonOpsMigration = await dbGet('SELECT id, version, checksum, applied_at FROM schema_migrations WHERE id = ?', ['0005_season_ops_economy']);
+    assert.strictEqual(seasonOpsMigration?.id, '0005_season_ops_economy', 'schema_migrations should record season ops migration');
+    assert.strictEqual(Number(seasonOpsMigration?.version), 5, 'season ops migration should record schema version 5');
+    assert.match(seasonOpsMigration?.checksum || '', /^[a-f0-9]{16,64}$/, 'season ops migration should record stable checksum');
+    assert(Number(seasonOpsMigration?.applied_at) > 0, 'season ops migration should record applied timestamp');
 
     console.log('Backend platform checks passed.');
   } catch (error) {

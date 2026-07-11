@@ -5,6 +5,7 @@ const path = require('node:path');
 const { spawn } = require('node:child_process');
 const sqlite3 = require('../server/node_modules/sqlite3').verbose();
 const { createLivePvpStore } = require('../server/pvp-live/live-store');
+const { SEASONS, SETTLEMENT_FINALIZATION_DELAY_MS } = require('../server/season-ops/catalog');
 
 const ROOT_DIR = path.resolve(__dirname, '..');
 const PORT = Number(process.env.PVP_LIVE_SETTLEMENT_PORT || 9022);
@@ -118,6 +119,15 @@ async function assertRound14DrawSettlementNoRankedImpact() {
 async function assertRound14ScoreSettlementWritesRankedHistory() {
   const { makeSqliteLivePvpSettlement } = require('../server/pvp-live/live-settlement');
   const settlement = makeSqliteLivePvpSettlement();
+  const seededAt = Date.now();
+  await dbRun(
+    `INSERT INTO pvp_ranks
+       (id, user_id, user_name, score, wins, losses, realm, division, season_id, created_at, updated_at)
+     VALUES
+       ('pvp-rank-score-user-a', 'score-user-a', '甲', 1500, 7, 2, 1, '问道榜', 's1-genesis', ?, ?),
+       ('pvp-rank-score-user-b', 'score-user-b', '乙', 1400, 4, 5, 1, '问道榜', 's1-genesis', ?, ?)`,
+    [seededAt, seededAt, seededAt, seededAt],
+  );
   const match = {
     matchId: 'round14-score-direct-settlement',
     mode: 'ranked',
@@ -145,6 +155,9 @@ async function assertRound14ScoreSettlementWritesRankedHistory() {
   const result = await settlement.settleMatch(match);
   assert.equal(result.settled, true, 'round14 score settlement should write ranked settlement');
   assert.equal(result.finishReason, 'round14_score', 'round14 score settlement should keep finish reason');
+  assert.equal(result.winner.oldScore, 1500, 'legacy settlement report should preserve the old-client rating baseline');
+  assert.equal(result.winner.seasonRank.oldScore, 1000, 'official season projection should expose its isolated rating baseline');
+  assert.equal(result.winner.seasonRank.rankedGames, 1, 'official season projection should keep season-only match count');
   const settlementRow = await dbGet(
     'SELECT * FROM pvp_live_match_settlements WHERE match_id = ?',
     [match.matchId],
@@ -160,10 +173,16 @@ async function assertRound14ScoreSettlementWritesRankedHistory() {
   assert.equal(historyCount.count, 2, 'round14 score settlement should append both player history rows');
   const winnerRank = await dbGet('SELECT * FROM pvp_ranks WHERE user_id = ?', ['score-user-a']);
   const loserRank = await dbGet('SELECT * FROM pvp_ranks WHERE user_id = ?', ['score-user-b']);
-  assert.equal(winnerRank.wins, 1, 'round14 score winner should receive rank win');
-  assert.equal(loserRank.losses, 1, 'round14 score loser should receive rank loss');
-  assert.ok(winnerRank.score > 1000, 'round14 score winner rating should increase');
-  assert.ok(loserRank.score < 1000, 'round14 score loser rating should decrease');
+  assert.equal(winnerRank.wins, 8, 'live settlement should preserve and increment the legacy winner record');
+  assert.equal(loserRank.losses, 6, 'live settlement should preserve and increment the legacy loser record');
+  assert.ok(winnerRank.score > 1500, 'legacy winner rating should continue from its pre-rollout score');
+  assert.ok(loserRank.score < 1400, 'legacy loser rating should continue from its pre-rollout score');
+  const winnerSeasonRank = await dbGet('SELECT * FROM pvp_season_ladders WHERE season_id = ? AND user_id = ?', ['s1-genesis', 'score-user-a']);
+  const loserSeasonRank = await dbGet('SELECT * FROM pvp_season_ladders WHERE season_id = ? AND user_id = ?', ['s1-genesis', 'score-user-b']);
+  assert.equal(winnerSeasonRank.score, 1016, 'official season rating should start from a clean 1000 baseline');
+  assert.equal(loserSeasonRank.score, 984, 'official season loser rating should stay isolated from legacy score');
+  assert.equal(winnerSeasonRank.wins, 1, 'official season wins should start from zero');
+  assert.equal(loserSeasonRank.losses, 1, 'official season losses should start from zero');
   const progressionRows = await new Promise((resolve, reject) => {
     const database = new sqlite3.Database(DB_PATH);
     database.all(
@@ -197,6 +216,104 @@ async function assertRound14ScoreSettlementWritesRankedHistory() {
   const trustedWeekly = winnerProgression.objectives.find(entry => entry.objectiveId === 'weekly_live_pvp_matches');
   assert.equal(trustedWeekly.current, 1, 'live settlement should project into the trusted weekly PVP objective');
   assert.equal(trustedWeekly.trustRequirement, 'server_authoritative', 'weekly live objective should preserve authoritative trust requirement');
+  const trustedSeasonMatches = winnerProgression.objectives.find(entry => entry.objectiveId === 'season_live_pvp_matches');
+  const trustedSeasonWins = winnerProgression.objectives.find(entry => entry.objectiveId === 'season_live_pvp_wins');
+  assert.equal(trustedSeasonMatches.current, 1, 'live settlement should project into the authoritative season match objective');
+  assert.equal(trustedSeasonWins.current, 1, 'only the live winner should advance the authoritative season win objective');
+}
+
+async function assertBoundaryMatchUsesAuthoritativeStartTime() {
+  const { makeSqliteLivePvpSettlement } = require('../server/pvp-live/live-settlement');
+  const settlement = makeSqliteLivePvpSettlement();
+  const matchStartedAt = SEASONS[0].endsAt - 1000;
+  const settledAt = SEASONS[0].endsAt + SETTLEMENT_FINALIZATION_DELAY_MS + 1000;
+  const originalNow = Date.now;
+  Date.now = () => settledAt;
+  try {
+    await dbRun(
+      `INSERT OR IGNORE INTO users (id, username, password_hash, created_at)
+       VALUES ('boundary-user-a', 'boundary_user_a', 'test-hash', ?),
+              ('boundary-user-b', 'boundary_user_b', 'test-hash', ?)`,
+      [matchStartedAt, matchStartedAt],
+    );
+    const match = {
+      matchId: 'season-boundary-direct-settlement',
+      mode: 'ranked',
+      createdAt: matchStartedAt,
+      state: {
+        status: 'finished',
+        mode: 'ranked',
+        setup: { battleStartedAt: matchStartedAt },
+        seats: {
+          A: { seatId: 'A', userId: 'boundary-user-a', displayName: '边界甲' },
+          B: { seatId: 'B', userId: 'boundary-user-b', displayName: '边界乙' },
+        },
+        events: [{
+          eventType: 'match_finished',
+          payload: { winnerSeat: 'A', loserSeat: 'B', finishReason: 'round14_score' },
+        }],
+      },
+    };
+    const result = await settlement.settleMatch(match);
+    assert.equal(result.settled, true, 'a match started before season end should still settle after the minimum finalization delay when no snapshot exists');
+    const settlementRow = await dbGet(
+      'SELECT match_started_at, created_at FROM pvp_live_match_settlements WHERE match_id = ?',
+      [match.matchId],
+    );
+    assert.equal(Number(settlementRow.match_started_at), matchStartedAt, 'settlement gate should preserve authoritative match start');
+    assert.equal(Number(settlementRow.created_at), settledAt, 'settlement gate should separately preserve completion time');
+    const ladderRow = await dbGet(
+      'SELECT score, ranked_games, last_match_id FROM pvp_season_ladders WHERE season_id = ? AND user_id = ?',
+      [SEASONS[0].seasonId, 'boundary-user-a'],
+    );
+    assert.equal(ladderRow.last_match_id, match.matchId, 'boundary match should remain in the season where it started');
+    assert.equal(Number(ladderRow.ranked_games), 1);
+    const progressionRow = await dbGet(
+      'SELECT occurred_at, received_at FROM progression_events WHERE user_id = ? AND source_ref = ?',
+      ['boundary-user-a', match.matchId],
+    );
+    assert.equal(Number(progressionRow.occurred_at), matchStartedAt, 'season objective event should use match start time');
+    assert.equal(Number(progressionRow.received_at), settledAt, 'season objective event should retain settlement receipt time');
+
+    await dbRun(
+      `INSERT OR IGNORE INTO users (id, username, password_hash, created_at)
+       VALUES ('post-boundary-user-a', 'post_boundary_user_a', 'test-hash', ?),
+              ('post-boundary-user-b', 'post_boundary_user_b', 'test-hash', ?)`,
+      [matchStartedAt, matchStartedAt],
+    );
+    const postBoundaryMatch = {
+      matchId: 'season-post-boundary-direct-settlement',
+      mode: 'ranked',
+      createdAt: matchStartedAt,
+      state: {
+        status: 'finished',
+        mode: 'ranked',
+        setup: { battleStartedAt: SEASONS[0].endsAt + 1 },
+        seats: {
+          A: { seatId: 'A', userId: 'post-boundary-user-a', displayName: '跨季甲' },
+          B: { seatId: 'B', userId: 'post-boundary-user-b', displayName: '跨季乙' },
+        },
+        events: [{
+          eventType: 'match_finished',
+          payload: { winnerSeat: 'A', loserSeat: 'B', finishReason: 'round14_score' },
+        }],
+      },
+    };
+    const postBoundaryResult = await settlement.settleMatch(postBoundaryMatch);
+    assert.equal(postBoundaryResult.settled, true, 'legacy settlement may complete after a setup crosses the season boundary');
+    const postBoundaryLadder = await dbGet(
+      'SELECT score FROM pvp_season_ladders WHERE season_id = ? AND user_id = ?',
+      [SEASONS[0].seasonId, 'post-boundary-user-a'],
+    );
+    assert.equal(postBoundaryLadder, null, 'a room created before season end must not enter the old season when battle starts after the boundary');
+    const postBoundarySettlement = await dbGet(
+      'SELECT match_started_at FROM pvp_live_match_settlements WHERE match_id = ?',
+      [postBoundaryMatch.matchId],
+    );
+    assert.equal(Number(postBoundarySettlement.match_started_at), SEASONS[0].endsAt + 1, 'battleStartedAt must override room creation for season membership');
+  } finally {
+    Date.now = originalNow;
+  }
 }
 
 function startServer() {
@@ -352,6 +469,7 @@ function dbRun(sql, params = []) {
   await assertTransientSettlementFailureRetriesBeforeRelease();
   await assertRound14DrawSettlementNoRankedImpact();
   await assertRound14ScoreSettlementWritesRankedHistory();
+  await assertBoundaryMatchUsesAuthoritativeStartTime();
 
   await withServer(async () => {
     const userA = await registerUser('live_settle_a');
@@ -562,6 +680,28 @@ function dbRun(sql, params = []) {
     assert.ok(settlementRow, 'pvp_live_match_settlements should record the live settlement gate');
     assert.equal(settlementRow.winner_user_id, userA.userId, 'settlement gate should persist winner user id');
     assert.equal(settlementRow.loser_user_id, userB.userId, 'settlement gate should persist loser user id');
+    const authoritativeLadderA = await dbGet(
+      'SELECT * FROM pvp_season_ladders WHERE season_id = ? AND user_id = ?',
+      ['s1-genesis', userA.userId],
+    );
+    const authoritativeLadderB = await dbGet(
+      'SELECT * FROM pvp_season_ladders WHERE season_id = ? AND user_id = ?',
+      ['s1-genesis', userB.userId],
+    );
+    assert.equal(authoritativeLadderA?.score, rankAfterA.payload.rank.score, 'live winner settlement should project the authoritative season score in the same transaction');
+    assert.equal(authoritativeLadderB?.score, rankAfterB.payload.rank.score, 'live loser settlement should project the authoritative season score in the same transaction');
+    assert.equal(authoritativeLadderA?.last_match_id, joinB.payload.matchId, 'authoritative winner ladder should trace the settled live match');
+    assert.equal(authoritativeLadderB?.last_match_id, joinB.payload.matchId, 'authoritative loser ladder should trace the settled live match');
+    assert.equal(Number(authoritativeLadderA?.authoritative_participant), 1, 'live winner should become an authoritative season participant');
+    assert.equal(Number(authoritativeLadderB?.authoritative_participant), 1, 'live loser should become an authoritative season participant');
+
+    const seasonLeaderboard = await request('/api/season-ops/leaderboard?limit=10', { token: userA.token });
+    assert.equal(seasonLeaderboard.status, 200, 'season ops leaderboard should expose the live authoritative projection');
+    const winnerLeaderboardEntry = seasonLeaderboard.payload?.entries?.find(entry => entry.userName === userA.username);
+    const loserLeaderboardEntry = seasonLeaderboard.payload?.entries?.find(entry => entry.userName === userB.username);
+    assert.equal(winnerLeaderboardEntry?.score, rankAfterA.payload.rank.score, 'ranked live winner should appear with the projected authoritative score');
+    assert.equal(loserLeaderboardEntry?.score, rankAfterB.payload.rank.score, 'ranked live loser should appear with the projected authoritative score');
+    assert.ok(seasonLeaderboard.payload?.entries?.every(entry => entry.userId === undefined), 'public season leaderboard entries must not expose user ids');
 
     const historyCount = await dbGet(
       'SELECT COUNT(*) AS count FROM pvp_match_history WHERE ticket_id LIKE ?',

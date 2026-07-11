@@ -282,8 +282,8 @@ async function main() {
 
     const version = await request('/api/version');
     assert.strictEqual(version.status, 200, JSON.stringify(version.payload));
-    assert.strictEqual(version.payload?.schema?.version, 4, 'schema version should advance to v4');
-    assert.strictEqual(version.payload?.schema?.currentMigrationId, '0004_cloud_state_v2');
+    assert.strictEqual(version.payload?.schema?.version, 5, 'schema version should advance through season ops v5');
+    assert.strictEqual(version.payload?.schema?.currentMigrationId, '0005_season_ops_economy');
     assert(version.payload?.schema?.appliedMigrations?.some(item => item.id === '0004_cloud_state_v2'), 'applied migrations should include v4');
 
     const legacyHeads = await dbAll(

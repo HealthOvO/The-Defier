@@ -17,7 +17,8 @@ localStorage.setItem('theDefierServerConfig', JSON.stringify({
     authPathPrefix: '/api/auth',
     savePathPrefix: '/api/saves',
     userPathPrefix: '/api/user',
-    ghostPathPrefix: '/api/ghosts'
+    ghostPathPrefix: '/api/ghosts',
+    seasonOpsPathPrefix: '/api/season-ops'
 }));
 ```
 
@@ -34,6 +35,7 @@ localStorage.setItem('theDefierServerConfig', JSON.stringify({
 | `JWT_SECRET` | 生产环境必填 | 生产环境必须配置至少 32 字符的 JWT 私钥；开发环境未配置时仅使用本地默认值。 |
 | `DEFIER_HMAC_SECRET` | `DEFIER_INTEGRITY_REQUIRED=1` 时必填 | 服务端私有 HMAC 密钥，至少 32 字符，只能保存在服务端环境变量中。 |
 | `DEFIER_INTEGRITY_REQUIRED` | 可选 | 设为 `1`/`true`/`yes`/`on` 时，`/api/saves`、`/api/user/global` 与 `/api/ghosts/current` 强制要求 `signature` 和 `salt` 并校验通过。 |
+| `DEFIER_OPS_TOKEN` | 使用运营接口时必填 | 长期进度与赛季运营接口共用的服务端运维令牌；不得进入前端配置。 |
 
 启动校验：
 
@@ -127,6 +129,17 @@ localStorage.setItem('theDefierServerConfig', JSON.stringify({
 - **Auth**: Optional (如果不带 Token，则不排除自身数据；如果带 Token，需在查询时排除当前用户)
 - **Response**: `{ "success": true, "data": { "userName": "对手名", "realm": 3, "ghostData": { ... } } }`
 
+### 5. 赛季运营与权威经济
+
+- **GET** `/api/season-ops/current`：当前账号的周期契约、荣誉钱包、外观权益、商品、正式榜和近期流水。
+- **GET** `/api/season-ops/leaderboard?limit=20`：只读取 live PVP 服务端权威结算形成的赛季榜。
+- **GET** `/api/season-ops/ledger?limit=20&cursor=...`：读取当前账号的追加式荣誉账本。
+- **POST** `/api/season-ops/store/purchases`：签名业务体为 `protocolVersion/seasonId/offerId/mutationId`，同请求持久返回原回执，改参复用返回 409。
+- **运营接口** `/api/season-ops/ops/*`：同时要求账号 JWT 与 `x-defier-ops-token`；定榜、结算和对账还必须在 body 中传入完全一致的 `confirmSeasonId`。写操作只记录脱敏 actorRef 与 requestId。
+- **POST** `/api/season-ops/ops/compensations`：额外要求 `targetUserId === confirmTargetUserId`，单次只可补 1-5000 荣誉，原因限 `service_incident/settlement_repair/support_resolution`；`mutationId` 重试返回原回执，改参复用返回 409。
+
+正式排行只接收 live PVP 的 `server_authoritative` 事务结果。挑战、远征、旧 PVP 钱包和旧 `pvp_ranks` 不得直接升级为平台荣誉或正式赛季名次。详细合同见 `backend_season_ops_economy_v1.md`。
+
 ## 建议的表结构 (关系型数据库示例)
 
 ### users
@@ -164,8 +177,23 @@ localStorage.setItem('theDefierServerConfig', JSON.stringify({
 - Index on `realm`
 - Unique Key: `(user_id)`
 
+### season_ops_* / pvp_season_ladders
+
+- `season_ops_seasons`、`season_ops_offers` 保存带内容哈希的不可变目录。
+- `season_ops_mutations`、`season_ops_purchases` 保存幂等请求和购买回执。
+- `season_ops_compensations` 保存人工补偿回执、原因、脱敏操作者引用和关联 ledger；不向聚合运维响应暴露目标 user id。
+- `season_ops_entitlements` 保存账号级永久外观权益。
+- `pvp_season_ladders` 以 `(season_id, user_id)` 隔离正式赛季排名。
+- `pvp_season_ladder_results` 以 `(season_id, user_id, match_id)` 追加逐场权威结果，阻止历史重放覆盖新榜，并支持启动时按 `match_started_at` 重算。
+- `season_ops_leaderboard_snapshots/entries` 保存不可变定榜；`season_ops_settlements` 保存幂等奖励状态。
+- `season_ops_ops_events/counters` 保存脱敏运维事实和累计计数。
+
 ## 当前迁移提示
 
-1. `0004_cloud_state_v2` 以事务方式幂等回填旧槽位和账号全局数据；旧数据不会因超过 V2 新写入上限而阻断启动。
-2. 旧客户端继续使用时间戳兼容写入，新客户端必须使用完整业务体签名、revision/CAS 和 mutationId，失败时不得降级旧协议。
-3. 云状态只管理四个存档槽和账号全局数据；PVP、长期进度、可信运行与经济账本继续由各自服务端域负责。
+1. 当前 Schema 版本为 `5`；启动顺序为 `0001_startup_schema`、`0002_progression_platform`、`0003_verified_runs`、`0004_cloud_state_v2`、`0005_season_ops_economy`。
+2. `0004_cloud_state_v2` 以事务方式幂等回填旧槽位和账号全局数据；旧数据不会因超过 V2 新写入上限而阻断启动。
+3. `0005_season_ops_economy` 优先按服务端战斗状态 `setup.battleStartedAt` 回填 `match_started_at` 并重放赛季有效时间窗内的 live PVP 正式结算；仅在旧状态缺失时回退到房间创建时间，不能把历史异步 PVP、练习局或赛季外对局写入新榜。
+4. 旧 `pvp_ranks` 保持累计段位兼容，正式赛季榜从 1000 独立起算；升级不会用旧累计分污染赛季榜，也不会在首场新结算时清零旧客户端段位。
+5. 最终 snapshot 至少等待赛季结束一小时，并在同一写事务内确认没有赛季内开战且尚未结算/作废的正式对局；仅经过固定时间但仍有 unresolved match 时返回 `season_snapshot_matches_pending`。已存在最终 snapshot 的赛季保持冻结：运行时迟到结算与启动回放只写 `post_snapshot_noop` 逐场审计，不更新 `pvp_season_ladders`。
+6. 旧客户端继续使用时间戳兼容写入，新客户端必须使用完整业务体签名、revision/CAS 和 mutationId，失败时不得降级旧协议。
+7. 云状态只管理四个存档槽和账号全局数据；PVP、长期进度、可信运行与赛季经济继续由各自服务端域负责。

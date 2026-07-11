@@ -191,6 +191,8 @@ function makeEventWhere(objective, cycle) {
     }
     if (objective.trustRequirement === 'server_authoritative') {
         where.push("trust_tier = 'server_authoritative'");
+    } else if (objective.trustRequirement === 'server_verified') {
+        where.push("trust_tier IN ('server_verified', 'server_authoritative')");
     }
     return { where, params };
 }
@@ -476,6 +478,7 @@ async function getStatus(userId, now = Date.now()) {
         );
         const objectives = snapshot.rows.map(({ objective, cycle, current, completedAt }) => {
             const claimedAt = claimKeys.get(`${cycle.id}|${objective.objectiveId}`) || 0;
+            const claimWindowOpen = objective.scope !== 'season' || ['active', 'grace'].includes(String(cycle && cycle.state || ''));
             return {
                 objectiveId: objective.objectiveId,
                 title: objective.title,
@@ -485,7 +488,8 @@ async function getStatus(userId, now = Date.now()) {
                 target: objective.target,
                 completed: current >= objective.target,
                 completedAt,
-                claimable: current >= objective.target && claimedAt === 0,
+                claimable: current >= objective.target && claimedAt === 0 && claimWindowOpen,
+                claimWindowOpen,
                 claimed: claimedAt > 0,
                 claimedAt,
                 trustRequirement: objective.trustRequirement,
@@ -517,6 +521,7 @@ async function getStatus(userId, now = Date.now()) {
             generatedAt: now,
             authorityBoundary: {
                 serverAuthoritative: ['pvp_live'],
+                serverVerified: ['pve', 'challenge', 'expedition'],
                 clientObserved: ['pve', 'challenge', 'expedition'],
                 clientObservedRewardImpact: REWARD_IMPACT
             },
@@ -548,6 +553,12 @@ async function claimReward(userId, objectiveId, requestedCycleId, now = Date.now
     }
     const cycles = getCycles(now);
     const cycle = cycles[objective.scope];
+    if (objective.scope === 'season' && !['active', 'grace'].includes(String(cycle && cycle.state || ''))) {
+        const error = new Error('season reward claim window is closed');
+        error.statusCode = 409;
+        error.reason = 'season_claim_window_closed';
+        throw error;
+    }
     if (String(requestedCycleId || '') !== cycle.id) {
         const error = new Error('reward cycle is not current');
         error.statusCode = 409;

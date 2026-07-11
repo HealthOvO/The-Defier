@@ -33,6 +33,7 @@ const browserRunPathEventAudit = read('tests/browser_run_path_event_audit.mjs');
 const browserMobileAudit = read('tests/browser_mobile_layout_audit.mjs');
 const verifyAvatars = read('tests/verify_avatars.cjs');
 const browserChallengeAudit = read('tests/browser_challenge_audit.mjs');
+const browserSeasonOpsAudit = read('tests/browser_season_ops_audit.mjs');
 const challengeMobileAudit = read('tests/browser_challenge_mobile_flow_audit.mjs');
 const browserChapterFlowAudit = read('tests/browser_chapter_flow_audit.mjs');
 const browserRunPathAudit = read('tests/browser_run_path_audit.mjs');
@@ -92,6 +93,14 @@ const progressionPlatformChecks = read('tests/sanity_progression_platform_checks
 const progressionTimeBoundaryChecks = read('tests/sanity_progression_time_boundary_checks.cjs');
 const progressionClientChecks = read('tests/sanity_progression_client_checks.mjs');
 const progressionBridgeChecks = read('tests/sanity_progression_bridge_checks.cjs');
+const seasonOpsRoute = read('server/routes/season-ops.js');
+const seasonOpsService = read('server/season-ops/service.js');
+const seasonOpsBootstrap = read('server/season-ops/bootstrap.js');
+const seasonOpsCatalog = read('server/season-ops/catalog.js');
+const seasonOpsPlatformChecks = read('tests/sanity_season_ops_platform_checks.cjs');
+const seasonOpsClientChecks = read('tests/sanity_season_ops_client_checks.mjs');
+const seasonOpsUiChecks = read('tests/sanity_season_ops_ui_checks.cjs');
+const seasonOpsDocumentation = read('docs/backend_season_ops_economy_v1.md');
 const verifiedRunsPlatformChecks = read('tests/sanity_verified_runs_platform_checks.cjs');
 const verifiedRunsClientChecks = read('tests/sanity_verified_runs_client_checks.mjs');
 const verifiedRunsBridgeChecks = read('tests/sanity_verified_runs_bridge_checks.cjs');
@@ -163,12 +172,105 @@ const waitingReportSource = pvpLiveStore.slice(
 });
 
 [
-  'account-progression-v1',
+  'account-progression-v2',
   'weekly_live_pvp_matches',
   "rewardImpact: REWARD_IMPACT",
   "spendPolicy: 'cosmetic_only'",
 ].forEach((needle) => {
   assert.ok(progressionCatalog.includes(needle), `progression catalog should pin non-power objective marker: ${needle}`);
+});
+
+[
+  "router.get('/current'",
+  "router.get('/leaderboard'",
+  "router.get('/ledger'",
+  "router.post('/store/purchases'",
+  "router.post('/ops/seasons/:seasonId/snapshot'",
+  'verifyRequestIntegrity',
+  'x-defier-ops-token',
+  'requireOpsTokenMiddleware, authenticate',
+  'getOpsContext(req)',
+  'confirmSeasonId',
+].forEach((needle) => {
+  assert.ok(seasonOpsRoute.includes(needle), `season ops route should pin API/security marker: ${needle}`);
+});
+
+[
+  'BEGIN IMMEDIATE',
+  'mutation_reused',
+  'balance >= ?',
+  'authoritative_participant = 1 AND ranked_games > 0',
+  'pvp_season_ladder_results',
+  'season_snapshot_settlement_window_open',
+  'season_snapshot_corrupt',
+  'season_snapshot_matches_pending',
+  'season_ops_settlements',
+  'cosmetic_only',
+].forEach((needle) => {
+  assert.ok(seasonOpsService.includes(needle), `season ops service should pin economy/snapshot marker: ${needle}`);
+});
+
+[
+  'season_ops_mutations',
+  'season_ops_entitlements',
+  'pvp_season_ladders',
+  'pvp_season_ladder_results',
+  'season_ops_leaderboard_snapshots',
+  'match_started_at',
+  'SEASON_OPS_CATALOG_DRIFT',
+].forEach((needle) => {
+  assert.ok(seasonOpsBootstrap.includes(needle), `season ops bootstrap should pin migration marker: ${needle}`);
+});
+
+[
+  'season-ops-catalog-v1',
+  'season-ops-v1',
+  'server_verified',
+  'server_authoritative',
+  "const REWARD_IMPACT = 'cosmetic_only'",
+].forEach((needle) => {
+  assert.ok(seasonOpsCatalog.includes(needle), `season ops catalog should pin authority/non-power marker: ${needle}`);
+});
+
+[
+  'same mutation replay should return the durable receipt',
+  'active season must not be snapshotted early',
+  'only unresolved official season matches should block finalization after the elapsed buffer',
+  'replayed settlement must not pay twice',
+  'snapshot replay should fail closed',
+  'catalog bootstrap should fail closed',
+].forEach((needle) => {
+  assert.ok(seasonOpsPlatformChecks.includes(needle), `season ops platform test should pin risk marker: ${needle}`);
+});
+
+[
+  'getSeasonOpsDashboard',
+  'getSeasonOpsLeaderboard',
+  'getSeasonOpsLedger',
+  'should reject a response after account churn',
+  'purchase response must not apply after account churn',
+  'purchase request should retry once after a network failure',
+  'one logical purchase must reuse the fixed mutation id across retries',
+  'season_ops_signature_required',
+  'season_ops_account_changed',
+].forEach((needle) => {
+  assert.ok(seasonOpsClientChecks.includes(needle), `season ops client test should pin account marker: ${needle}`);
+});
+
+[
+  'season ops letter spacing must remain zero',
+  'challenge rewards must not write the legacy PVP economy',
+  'closing a purchase confirmation must resolve it through the cancel callback',
+].forEach((needle) => {
+  assert.ok(seasonOpsUiChecks.includes(needle), `season ops UI test should pin experience marker: ${needle}`);
+});
+
+[
+  '正式排行只接收 live PVP',
+  '同账号、同 mutationId、同请求返回原回执',
+  '本阶段不执行生产部署',
+].forEach((needle) => {
+  assert.ok(seasonOpsDocumentation.includes(needle), `season ops docs should pin release boundary: ${needle}`);
 });
 
 [
@@ -237,7 +339,7 @@ const waitingReportSource = pvpLiveStore.slice(
   'receipt?.idempotent',
   'server_verified must only upgrade an observed event',
   'a checkpoint source must not move across tickets',
-  'older databases should advance through verified runs to cloud state v4 on restart',
+  'older databases should advance through verified runs to season ops v5 on restart',
 ].forEach((needle) => {
   assert.ok(
     verifiedRunsPlatformChecks.includes(needle) || verifiedRunsDocumentation.includes(needle),
@@ -286,6 +388,7 @@ const waitingReportSource = pvpLiveStore.slice(
   '0002_progression_platform',
   '0003_verified_runs',
   '0004_cloud_state_v2',
+  '0005_season_ops_economy',
   'cloud_state_revisions',
   'cloud_state_heads',
   'cloud_state_ops_counters',
@@ -297,6 +400,10 @@ const waitingReportSource = pvpLiveStore.slice(
   'progression_verified_runs',
   'progression_verified_run_checkpoints',
   'progression_verified_run_receipts',
+  'season_ops_seasons',
+  'pvp_season_ladders',
+  'pvp_season_ladder_results',
+  'season_ops_settlements',
 ].forEach((needle) => {
   assert.ok(
     schemaStatusSource.includes(needle) || pvpLiveDatabase.includes(needle) || cloudStateBootstrap.includes(needle),
@@ -675,11 +782,22 @@ const browserAutomationBootAudit = read('tests/browser_automation_boot_audit.mjs
   'node tests/browser_run_path_event_audit.mjs "$BASE_URL" "$OUTPUT_ROOT/run-path-events"',
   'node tests/browser_run_path_reward_audit.mjs "$BASE_URL" "$OUTPUT_ROOT/run-path-reward"',
   'node tests/browser_event_branch_audit.mjs "$BASE_URL" "$OUTPUT_ROOT/events"',
+  'node tests/browser_season_ops_audit.mjs "$BASE_URL" "$OUTPUT_ROOT/season-ops"',
 ].forEach((needle) => {
   assert.ok(
     browserReleaseScript.includes(needle),
     `browser release gate should run required audit script: ${needle}`,
   );
+});
+
+[
+  'guest entry opens season ops',
+  'purchase requires explicit confirmation',
+  'ledger can load older records',
+  'mobile header does not overlap content',
+  'console errors are empty',
+].forEach((needle) => {
+  assert.ok(browserSeasonOpsAudit.includes(needle), `season ops browser audit should pin experience marker: ${needle}`);
 });
 
 [
@@ -713,6 +831,7 @@ const browserAutomationBootAudit = read('tests/browser_automation_boot_audit.mjs
 });
 
 [
+  'audits: frontend-layout,season-ops',
   'audits: expedition,events,vow-choice,guide,inheritance,pvp,pvp-live,pvp-live-real,pvp-live-mobile-real,pvp-mobile,pvp-mobile-result,challenge-mobile-flow',
   "if: contains(matrix.audits, 'backend-client') || contains(matrix.audits, 'auth-ui-cloud') || contains(matrix.audits, 'pvp-live-real') || contains(matrix.audits, 'pvp-live-mobile-real')",
 ].forEach((needle) => {
@@ -723,6 +842,7 @@ const browserAutomationBootAudit = read('tests/browser_automation_boot_audit.mjs
 });
 
 [
+  "'season-ops'",
   "'pvp-live'",
   "'pvp-live-real'",
   "'pvp-live-mobile-real'",
@@ -860,6 +980,9 @@ assert.ok(
   'node tests/sanity_progression_platform_checks.cjs',
   'node tests/sanity_progression_client_checks.mjs',
   'node tests/sanity_progression_bridge_checks.cjs',
+  'node tests/sanity_season_ops_ui_checks.cjs',
+  'node tests/sanity_season_ops_platform_checks.cjs',
+  'node tests/sanity_season_ops_client_checks.mjs',
   'node tests/sanity_event_flow_checks.cjs',
   'node tests/sanity_event_bias_distribution_checks.cjs',
   'node tests/sanity_engineering_event_surface_checks.cjs',
@@ -3139,8 +3262,12 @@ assert.ok(
   'round14 draw should be treated as no ranked impact instead of invalid finished seats',
   'round14 score settlement should write ranked settlement',
   'round14 score settlement should append both player history rows',
-  'round14 score winner should receive rank win',
-  'round14 score loser should receive rank loss',
+  'live settlement should preserve and increment the legacy winner record',
+  'live settlement should preserve and increment the legacy loser record',
+  'official season rating should start from a clean 1000 baseline',
+  'a match started before season end should still settle after the minimum finalization delay when no snapshot exists',
+  'settlement gate should preserve authoritative match start',
+  'season objective event should use match start time',
   'winner reward should exceed loser reward',
   'loser state view should expose settlement report after live settlement',
   'loser settlement report should match authoritative rank score',

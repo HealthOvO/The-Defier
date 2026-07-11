@@ -26,11 +26,8 @@ export const CHALLENGE_RULES = {
       id: 'daily_clear',
       label: '完成今日天机',
       target: 1,
-      rewardText: '天道币 +120 / 藏经阁记录「今日天机·焚脉试锋」',
+      rewardText: '藏经阁记录「今日天机·焚脉试锋」',
       rewards: [{
-        kind: 'pvpCoins',
-        amount: 120
-      }, {
         kind: 'codexRecord',
         id: 'daily_ember_break_record',
         name: '今日天机·焚脉试锋',
@@ -64,11 +61,8 @@ export const CHALLENGE_RULES = {
       id: 'daily_clear',
       label: '完成今日天机',
       target: 1,
-      rewardText: '天道币 +120 / 藏经阁记录「今日天机·寒潮行医」',
+      rewardText: '藏经阁记录「今日天机·寒潮行医」',
       rewards: [{
-        kind: 'pvpCoins',
-        amount: 120
-      }, {
         kind: 'codexRecord',
         id: 'daily_frost_clinic_record',
         name: '今日天机·寒潮行医',
@@ -98,11 +92,8 @@ export const CHALLENGE_RULES = {
       id: 'daily_clear',
       label: '完成今日天机',
       target: 1,
-      rewardText: '天道币 +120 / 藏经阁记录「今日天机·玄甲守誓」',
+      rewardText: '藏经阁记录「今日天机·玄甲守誓」',
       rewards: [{
-        kind: 'pvpCoins',
-        amount: 120
-      }, {
         kind: 'codexRecord',
         id: 'daily_bastion_vow_record',
         name: '今日天机·玄甲守誓',
@@ -136,11 +127,8 @@ export const CHALLENGE_RULES = {
       id: 'daily_clear',
       label: '完成今日天机',
       target: 1,
-      rewardText: '天道币 +120 / 藏经阁记录「今日天机·星录推演」',
+      rewardText: '藏经阁记录「今日天机·星录推演」',
       rewards: [{
-        kind: 'pvpCoins',
-        amount: 120
-      }, {
         kind: 'codexRecord',
         id: 'daily_star_script_record',
         name: '今日天机·星录推演',
@@ -171,10 +159,10 @@ export const CHALLENGE_RULES = {
       id: 'weekly_score_360',
       label: '周积分 360',
       target: 360,
-      rewardText: '天道币 +180',
+      rewardText: '传承精魄 +4',
       rewards: [{
-        kind: 'pvpCoins',
-        amount: 180
+        kind: 'legacyEssence',
+        amount: 4
       }]
     }, {
       id: 'weekly_score_620',
@@ -195,11 +183,10 @@ export const CHALLENGE_RULES = {
       id: 'weekly_score_860',
       label: '周积分 860',
       target: 860,
-      rewardText: '称号·独断万古（若已拥有则天道币 +300）',
+      rewardText: '传承精魄 +12',
       rewards: [{
-        kind: 'pvpItem',
-        itemId: 'title_supreme',
-        fallbackCoins: 300
+        kind: 'legacyEssence',
+        amount: 12
       }]
     }]
   }, {
@@ -229,10 +216,10 @@ export const CHALLENGE_RULES = {
       id: 'weekly_score_360',
       label: '周积分 360',
       target: 360,
-      rewardText: '天道币 +180',
+      rewardText: '传承精魄 +4',
       rewards: [{
-        kind: 'pvpCoins',
-        amount: 180
+        kind: 'legacyEssence',
+        amount: 4
       }]
     }, {
       id: 'weekly_score_620',
@@ -253,11 +240,10 @@ export const CHALLENGE_RULES = {
       id: 'weekly_score_860',
       label: '周积分 860',
       target: 860,
-      rewardText: '称号·独断万古（若已拥有则天道币 +300）',
+      rewardText: '传承精魄 +12',
       rewards: [{
-        kind: 'pvpItem',
-        itemId: 'title_supreme',
-        fallbackCoins: 300
+        kind: 'legacyEssence',
+        amount: 12
       }]
     }]
   }],
@@ -288,10 +274,10 @@ export const CHALLENGE_RULES = {
       id: 'global_score_980',
       label: '榜单分 980',
       target: 980,
-      rewardText: '天道币 +260 / 观星档案「众生试炼·裂镜公案」',
+      rewardText: '传承精魄 +10 / 观星档案「众生试炼·裂镜公案」',
       rewards: [{
-        kind: 'pvpCoins',
-        amount: 260
+        kind: 'legacyEssence',
+        amount: 10
       }, {
         kind: 'codexRecord',
         id: 'global_mirror_crack_record',
@@ -303,11 +289,16 @@ export const CHALLENGE_RULES = {
       id: 'global_score_1180',
       label: '榜单分 1180',
       target: 1180,
-      rewardText: '法相·虚空行者（若已拥有则天道币 +420）',
+      rewardText: '传承精魄 +16 / 观星档案「裂镜高阶答卷」',
       rewards: [{
-        kind: 'pvpItem',
-        itemId: 'skin_void_walker',
-        fallbackCoins: 420
+        kind: 'legacyEssence',
+        amount: 16
+      }, {
+        kind: 'codexRecord',
+        id: 'global_mirror_crack_master_record',
+        name: '裂镜高阶答卷',
+        icon: '🜂',
+        note: '众生试炼高阶答卷已归档，不影响真人论道强度。'
       }]
     }]
   }],
