@@ -16,13 +16,15 @@ V1 将 PVE、挑战、远征和 live PVP 的活动收据汇入独立的账号进
 
 | 信任等级 | 当前来源 | 可用于 | 不可用于 |
 | --- | --- | --- | --- |
-| `server_authoritative` | live PVP 正式结算事务 | 正式任务进度、运营统计、荣誉奖励 | 推断隐藏手牌或客户端私有状态 |
+| `server_authoritative` | live PVP 正式结算事务；PVE、挑战、远征的 Authoritative Trials V2 完整重放结算 | 正式任务进度、运营统计、荣誉奖励；未来竞争性非 PVP 投影的唯一合格输入 | 推断隐藏手牌或客户端私有状态；把旧本地 run 追认为权威 |
 | `server_verified` | PVE、挑战、远征的 `verified_envelope` 结算 | 非竞争荣誉进度、采用率、可信度分层统计 | 战力、排名、PVP 积分、可交易资产、宣称战斗已由服务端复算 |
 | `client_observed` | 已登录客户端的 PVE、挑战、远征收据 | 有日上限的非竞争荣誉进度、玩法采用率 | 战力、排名、PVP 积分、正式胜负认定 |
 
 浏览器用 session token 生成的 HMAC 只能证明请求与当前登录态一致，不能证明客户端报告的战斗结果真实。服务端仅接受最多回溯 24 小时、最多超前 30 秒的 `occurredAt`，未来时间会收敛到服务端接收时间；周期归属和日上限使用校验后的发生时间，接收时间单独保留用于审计。
 
 `server_verified` 比 `client_observed` 多验证账号绑定 ticket、固定内容版本与上下文、单调 checkpoint、过期时间、结算 nonce 和一次性消费，但仍不验证客户端每一步战斗演算。完整契约见 `backend_verified_runs_v1.md`。
+
+Authoritative Trials V2 是独立的可玩服务端状态机。客户端只提交路线、出牌、结束回合、奖励和放弃命令；服务端拥有 seed、抽牌、敌方意图、生命、奖励、分数和终局。只有从序列 0 完整重放后与当前状态哈希及动作链头一致的 run，才直接铸造一条 `server_authoritative` 事件。它不会把旧 PVE、挑战或远征存档静默升级为权威。完整契约见 `backend_authoritative_runs_v2.md`。
 
 ## 事件契约
 
@@ -74,17 +76,18 @@ V2 目录在保留 V1 日/周/终身目标的基础上加入赛季目标：
 - 请求头：`x-defier-ops-token`
 - 服务端私密环境变量：`DEFIER_OPS_TOKEN`
 
-未配置或未提供 token 时返回 404，错误 token 返回 403。响应只包含固定枚举聚合：玩法分布、信任等级分布、目标完成人数、领取数和荣誉余额，不包含 user id、event id、source ref 或 proof。
+未配置或未提供 token 时返回 404，错误 token 返回 403。响应包含固定枚举聚合，以及权威 run 的哈希化 run/account 引用和脱敏事件摘要；不包含原始 user id、event id、source ref、proof、seed、动作 payload 或规范状态。
 
 ## 持久化与迁移
 
-当前全仓 Schema 版本为 `5`。新数据库会按顺序记录：
+当前全仓 Schema 版本为 `6`。新数据库会按顺序记录：
 
 1. `0001_startup_schema`
 2. `0002_progression_platform`
 3. `0003_verified_runs`
 4. `0004_cloud_state_v2`
 5. `0005_season_ops_economy`
+6. `0006_authoritative_runs_v2`
 
 新增表：
 
@@ -114,6 +117,13 @@ V2 目录在保留 V1 日/周/终身目标的基础上加入赛季目标：
 - `season_ops_settlements`
 - `season_ops_ops_events`
 - `season_ops_ops_counters`
+- `progression_authoritative_run_catalogs`
+- `progression_authoritative_runs`
+- `progression_authoritative_run_actions`
+- `progression_authoritative_run_snapshots`
+- `progression_authoritative_run_receipts`
+- `progression_authoritative_run_ops_events`
+- `progression_authoritative_run_ops_counters`
 
 长期进度迁移只做 additive 的建表、加列、索引和 `occurred_at` 审计字段回填，不从 `game_saves/global_data` 解释或发放长期进度奖励。`0004_cloud_state_v2` 仅把旧 blob 作为 `legacy_import` 云状态 revision 回填，仍不得据此直接发奖；`0005_season_ops_economy` 只回放赛季时间窗内的 live PVP 正式结算，不接受旧异步 PVP 或客户端自述。每个云状态 scope 保留 20 个窗口 revision 和至多 20 个被引用来源，mutation 和原始运维事件保留 30 天，累计运维计数独立保存。
 

@@ -104,8 +104,8 @@ async function runConcurrentStartupCheck() {
   const second = startServer(PORT + 1);
   try {
     const [firstHealth, secondHealth] = await Promise.all([waitForHealth(first), waitForHealth(second)]);
-    assert.strictEqual(firstHealth.payload?.schema?.currentMigrationId, '0005_season_ops_economy');
-    assert.strictEqual(secondHealth.payload?.schema?.currentMigrationId, '0005_season_ops_economy');
+    assert.strictEqual(firstHealth.payload?.schema?.currentMigrationId, '0006_authoritative_runs_v2');
+    assert.strictEqual(secondHealth.payload?.schema?.currentMigrationId, '0006_authoritative_runs_v2');
   } finally {
     await Promise.all([stopServer(first), stopServer(second)]);
   }
@@ -204,8 +204,8 @@ async function seedWallet(userId, balance) {
 
 async function runApiChecks(server) {
   const health = await waitForHealth(server);
-  assert.strictEqual(health.payload?.schema?.version, 5, 'season ops should be schema v5');
-  assert.strictEqual(health.payload?.schema?.currentMigrationId, '0005_season_ops_economy');
+  assert.strictEqual(health.payload?.schema?.version, 6, 'season ops should coexist with authoritative runs schema v6');
+  assert.strictEqual(health.payload?.schema?.currentMigrationId, '0006_authoritative_runs_v2');
 
   const unauthenticated = await request('/api/season-ops/current');
   assert.strictEqual(unauthenticated.status, 401, 'season dashboard should require JWT');

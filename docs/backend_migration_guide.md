@@ -140,6 +140,18 @@ localStorage.setItem('theDefierServerConfig', JSON.stringify({
 
 正式排行只接收 live PVP 的 `server_authoritative` 事务结果。挑战、远征、旧 PVP 钱包和旧 `pvp_ranks` 不得直接升级为平台荣誉或正式赛季名次。详细合同见 `backend_season_ops_economy_v1.md`。
 
+### 6. 服务端权威试炼 V2
+
+- **POST** `/api/progression/authoritative-runs`：签发或恢复账号绑定的 PVE、挑战、远征权威 run。
+- **GET** `/api/progression/authoritative-runs/current?mode=...`：读取当前模式未结束或待结算 run。
+- **GET** `/api/progression/authoritative-runs/:runId`：按账号读取权威投影；跨账号统一返回 404。
+- **POST** `/api/progression/authoritative-runs/:runId/actions`：提交 `select_node/play_card/end_turn/choose_reward/abandon`；签名业务体必须包含路径一致的 `runId`、全局唯一 `actionId`、`expectedVersion`、命令和白名单载荷。
+- **POST** `/api/progression/authoritative-runs/:runId/settle`：提交路径一致的 `runId`、`mutationId` 和 `expectedVersion`；只有从 genesis 完整重放到相同终态的 run 才写入一次 `server_authoritative` 进度事件。
+- **GET** `/api/progression/authoritative-runs/:runId/replay`：返回当前账号的脱敏动作链与最终公开投影，不返回 seed、抽牌堆顺序或内部状态。
+- **GET/POST** `/api/progression/ops/authoritative-runs*`：使用 `x-defier-ops-token` 读取脱敏聚合或执行 7-365 天终态历史清理。
+
+权威试炼不接受客户端自述生命、伤害、奖励、随机数、分数或完成结果。网络失败时客户端保留上一次服务端投影，不会降级为本地演算。完整合同见 `backend_authoritative_runs_v2.md`。
+
 ## 建议的表结构 (关系型数据库示例)
 
 ### users
@@ -188,12 +200,22 @@ localStorage.setItem('theDefierServerConfig', JSON.stringify({
 - `season_ops_leaderboard_snapshots/entries` 保存不可变定榜；`season_ops_settlements` 保存幂等奖励状态。
 - `season_ops_ops_events/counters` 保存脱敏运维事实和累计计数。
 
+### progression_authoritative_run_*
+
+- `progression_authoritative_run_catalogs` 保存不可变内容快照与内容哈希。
+- `progression_authoritative_runs` 保存账号、模式、状态版本、当前规范状态哈希和动作链头。
+- `progression_authoritative_run_actions` 保存全局唯一 actionId、严格序列、前序哈希与结果哈希。
+- `progression_authoritative_run_snapshots` 保存序列 0、每 8 动作及终态快照。
+- `progression_authoritative_run_receipts` 保存一次性完整重放结算回执。
+- `progression_authoritative_run_ops_events/counters` 保存脱敏恢复、拒绝、结算、过期与清理事实。
+
 ## 当前迁移提示
 
-1. 当前 Schema 版本为 `5`；启动顺序为 `0001_startup_schema`、`0002_progression_platform`、`0003_verified_runs`、`0004_cloud_state_v2`、`0005_season_ops_economy`。
+1. 当前 Schema 版本为 `6`；启动顺序为 `0001_startup_schema`、`0002_progression_platform`、`0003_verified_runs`、`0004_cloud_state_v2`、`0005_season_ops_economy`、`0006_authoritative_runs_v2`。
 2. `0004_cloud_state_v2` 以事务方式幂等回填旧槽位和账号全局数据；旧数据不会因超过 V2 新写入上限而阻断启动。
 3. `0005_season_ops_economy` 优先按服务端战斗状态 `setup.battleStartedAt` 回填 `match_started_at` 并重放赛季有效时间窗内的 live PVP 正式结算；仅在旧状态缺失时回退到房间创建时间，不能把历史异步 PVP、练习局或赛季外对局写入新榜。
 4. 旧 `pvp_ranks` 保持累计段位兼容，正式赛季榜从 1000 独立起算；升级不会用旧累计分污染赛季榜，也不会在首场新结算时清零旧客户端段位。
 5. 最终 snapshot 至少等待赛季结束一小时，并在同一写事务内确认没有赛季内开战且尚未结算/作废的正式对局；仅经过固定时间但仍有 unresolved match 时返回 `season_snapshot_matches_pending`。已存在最终 snapshot 的赛季保持冻结：运行时迟到结算与启动回放只写 `post_snapshot_noop` 逐场审计，不更新 `pvp_season_ladders`。
-6. 旧客户端继续使用时间戳兼容写入，新客户端必须使用完整业务体签名、revision/CAS 和 mutationId，失败时不得降级旧协议。
-7. 云状态只管理四个存档槽和账号全局数据；PVP、长期进度、可信运行与赛季经济继续由各自服务端域负责。
+6. `0006_authoritative_runs_v2` 追加不可变内容目录、run、动作日志、快照、回执和运维表；启动时内容哈希漂移会 fail closed，不会改写已存在的版本。
+7. 旧客户端继续使用时间戳兼容写入，新客户端必须使用完整业务体签名、revision/CAS 和 mutationId，失败时不得降级旧协议。
+8. 云状态只管理四个存档槽和账号全局数据；PVP、长期进度、可信运行、权威试炼与赛季经济继续由各自服务端域负责。

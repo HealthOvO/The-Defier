@@ -21,6 +21,7 @@ const browserPvpAudit = read('tests/browser_pvp_audit.mjs');
 const browserPvpMobileAudit = read('tests/browser_pvp_mobile_audit.mjs');
 const browserPvpLiveAudit = read('tests/browser_pvp_live_audit.mjs');
 const browserPvpLiveRealSmoke = read('tests/browser_pvp_live_real_backend_smoke.mjs');
+const browserAuthoritativeRunsRealSmoke = read('tests/browser_authoritative_runs_real_backend_smoke.mjs');
 const browserFeatureAudit = read('tests/browser_feature_audit.mjs');
 const browserUiGalleryAudit = read('tests/browser_ui_gallery_audit.mjs');
 const frontendUpgradeAssetChecks = read('tests/sanity_frontend_upgrade_asset_checks.cjs');
@@ -109,6 +110,18 @@ const weeklyChallengeChecks = read('tests/sanity_weekly_challenge_checks.cjs');
 const expeditionStateChecks = read('tests/sanity_expedition_state_checks.cjs');
 const progressionDocumentation = read('docs/backend_progression_platform_v1.md');
 const verifiedRunsDocumentation = read('docs/backend_verified_runs_v1.md');
+const authoritativeRunsCatalog = read('server/progression/authoritative-runs/catalog.js');
+const authoritativeRunsEngine = read('server/progression/authoritative-runs/engine.js');
+const authoritativeRunsBootstrap = read('server/progression/authoritative-runs/bootstrap.js');
+const authoritativeRunsService = read('server/progression/authoritative-runs/service.js');
+const authoritativeRunsClient = read('js/services/authoritative-run-service.js');
+const authoritativeRunsPanel = read('js/views/AuthoritativeRunPanel.js');
+const authoritativeRunsEngineChecks = read('tests/sanity_authoritative_runs_engine_checks.cjs');
+const authoritativeRunsMigrationChecks = read('tests/sanity_authoritative_runs_migration_checks.cjs');
+const authoritativeRunsPlatformChecks = read('tests/sanity_authoritative_runs_platform_checks.cjs');
+const authoritativeRunsClientChecks = read('tests/sanity_authoritative_runs_client_checks.mjs');
+const authoritativeRunsUiChecks = read('tests/sanity_authoritative_runs_ui_checks.mjs');
+const authoritativeRunsDocumentation = read('docs/backend_authoritative_runs_v2.md');
 const shopManager = read('js/managers/ShopManager.js');
 const coreUtils = read('js/core/utils.js');
 const gameSource = read('js/game.js');
@@ -339,7 +352,7 @@ const waitingReportSource = pvpLiveStore.slice(
   'receipt?.idempotent',
   'server_verified must only upgrade an observed event',
   'a checkpoint source must not move across tickets',
-  'older databases should advance through verified runs to season ops v5 on restart',
+  'older databases should advance through verified runs to authoritative runs v6 on restart',
 ].forEach((needle) => {
   assert.ok(
     verifiedRunsPlatformChecks.includes(needle) || verifiedRunsDocumentation.includes(needle),
@@ -371,6 +384,44 @@ const waitingReportSource = pvpLiveStore.slice(
 });
 
 [
+  'sanity_authoritative_runs_engine_checks.cjs',
+  'sanity_authoritative_runs_migration_checks.cjs',
+  'sanity_authoritative_runs_platform_checks.cjs',
+  'sanity_authoritative_runs_client_checks.mjs',
+  'sanity_authoritative_runs_ui_checks.mjs',
+].forEach((needle) => {
+  assert.ok(runNodeChecks.includes(needle), `node gate should execute authoritative runs check: ${needle}`);
+});
+
+[
+  [authoritativeRunsCatalog, "CONTENT_VERSION = 'authoritative-trials-v1'"],
+  [authoritativeRunsCatalog, "PROTOCOL_VERSION = 'authoritative-run-v2'"],
+  [authoritativeRunsEngine, 'function createInitialState'],
+  [authoritativeRunsEngine, 'function projectState'],
+  [authoritativeRunsService, 'makeGenesisHash'],
+  [authoritativeRunsService, 'makeActionHash'],
+  [authoritativeRunsService, 'replayFromGenesis'],
+  [authoritativeRunsService, "trustTier: TRUST_TIER"],
+  [authoritativeRunsClient, 'resolveProjectionAcceptance'],
+  [authoritativeRunsClient, 'forceNew'],
+  [authoritativeRunsPanel, 'server_authoritative'],
+  [authoritativeRunsEngineChecks, 'replay must be byte-identical'],
+  [authoritativeRunsMigrationChecks, '0006_authoritative_runs_v2'],
+  [authoritativeRunsPlatformChecks, 'settle must mint a single server_authoritative progression event'],
+  [authoritativeRunsPlatformChecks, 'expiredDuplicateAction'],
+  [authoritativeRunsPlatformChecks, 'expiredActiveRuns'],
+  [authoritativeRunsClientChecks, 'failed action must not advance the confirmed projection'],
+  [authoritativeRunsClientChecks, 'reset should invalidate every in-flight projection request'],
+  [authoritativeRunsUiChecks, 'terminal new-run action should bypass the cached begin id'],
+  [authoritativeRunsUiChecks, 'failed first load should retry when the tab is re-entered'],
+  [authoritativeRunsUiChecks, 'cross-mode refresh must not fetch the previous mode run id'],
+  [authoritativeRunsUiChecks, 'suppressed response must not replace panel metadata'],
+  [authoritativeRunsDocumentation, 'full journal replay'],
+].forEach(([source, needle]) => {
+  assert.ok(source.includes(needle), `authoritative runs V2 should pin release marker: ${needle}`);
+});
+
+[
   'progressionRunOwnerUserId',
   'currentSaveSlot',
   'seedSignature',
@@ -389,6 +440,7 @@ const waitingReportSource = pvpLiveStore.slice(
   '0003_verified_runs',
   '0004_cloud_state_v2',
   '0005_season_ops_economy',
+  '0006_authoritative_runs_v2',
   'cloud_state_revisions',
   'cloud_state_heads',
   'cloud_state_ops_counters',
@@ -404,9 +456,17 @@ const waitingReportSource = pvpLiveStore.slice(
   'pvp_season_ladders',
   'pvp_season_ladder_results',
   'season_ops_settlements',
+  'progression_authoritative_run_catalogs',
+  'progression_authoritative_runs',
+  'progression_authoritative_run_actions',
+  'progression_authoritative_run_snapshots',
+  'progression_authoritative_run_receipts',
 ].forEach((needle) => {
   assert.ok(
-    schemaStatusSource.includes(needle) || pvpLiveDatabase.includes(needle) || cloudStateBootstrap.includes(needle),
+    schemaStatusSource.includes(needle)
+      || pvpLiveDatabase.includes(needle)
+      || cloudStateBootstrap.includes(needle)
+      || authoritativeRunsBootstrap.includes(needle),
     `progression schema should pin migration/table marker: ${needle}`,
   );
 });
@@ -783,6 +843,7 @@ const browserAutomationBootAudit = read('tests/browser_automation_boot_audit.mjs
   'node tests/browser_run_path_reward_audit.mjs "$BASE_URL" "$OUTPUT_ROOT/run-path-reward"',
   'node tests/browser_event_branch_audit.mjs "$BASE_URL" "$OUTPUT_ROOT/events"',
   'node tests/browser_season_ops_audit.mjs "$BASE_URL" "$OUTPUT_ROOT/season-ops"',
+  'node tests/browser_authoritative_runs_real_backend_smoke.mjs "$BASE_URL" "$OUTPUT_ROOT/authoritative-runs-real"',
 ].forEach((needle) => {
   assert.ok(
     browserReleaseScript.includes(needle),
@@ -791,10 +852,24 @@ const browserAutomationBootAudit = read('tests/browser_automation_boot_audit.mjs
 });
 
 [
+  'real backend boots schema V6',
+  'full browser reload resumes the same server run',
+  'settlement receipt confirms full genesis replay',
+  'real UI completes and settles all three authoritative modes',
+  'all modes mint exactly one receipt and event per settled run',
+  'database persists one receipt and one authoritative progression event',
+  'ops overview reports settlement through redacted references',
+  'real settled mobile view has no horizontal overflow',
+].forEach((needle) => {
+  assert.ok(browserAuthoritativeRunsRealSmoke.includes(needle), `authoritative runs real browser gate should pin marker: ${needle}`);
+});
+
+[
   'guest entry opens season ops',
   'purchase requires explicit confirmation',
   'ledger can load older records',
   'mobile header does not overlap content',
+  'active authoritative tab clears the previous account run on external switch',
   'console errors are empty',
 ].forEach((needle) => {
   assert.ok(browserSeasonOpsAudit.includes(needle), `season ops browser audit should pin experience marker: ${needle}`);
@@ -831,9 +906,9 @@ const browserAutomationBootAudit = read('tests/browser_automation_boot_audit.mjs
 });
 
 [
-  'audits: frontend-layout,season-ops',
+  'audits: frontend-layout,season-ops,authoritative-runs-real',
   'audits: expedition,events,vow-choice,guide,inheritance,pvp,pvp-live,pvp-live-real,pvp-live-mobile-real,pvp-mobile,pvp-mobile-result,challenge-mobile-flow',
-  "if: contains(matrix.audits, 'backend-client') || contains(matrix.audits, 'auth-ui-cloud') || contains(matrix.audits, 'pvp-live-real') || contains(matrix.audits, 'pvp-live-mobile-real')",
+  "if: contains(matrix.audits, 'backend-client') || contains(matrix.audits, 'auth-ui-cloud') || contains(matrix.audits, 'pvp-live-real') || contains(matrix.audits, 'pvp-live-mobile-real') || contains(matrix.audits, 'authoritative-runs-real')",
 ].forEach((needle) => {
   assert.ok(
     pagesWorkflow.includes(needle),
@@ -843,6 +918,7 @@ const browserAutomationBootAudit = read('tests/browser_automation_boot_audit.mjs
 
 [
   "'season-ops'",
+  "'authoritative-runs-real'",
   "'pvp-live'",
   "'pvp-live-real'",
   "'pvp-live-mobile-real'",

@@ -83,6 +83,20 @@ const SCHEMA_MIGRATIONS = [
             'season_ops_ops_events',
             'season_ops_ops_counters'
         ]
+    }),
+    makeMigration({
+        id: '0006_authoritative_runs_v2',
+        version: 6,
+        description: 'Server-authoritative deterministic run catalog, journals, receipts, and ops telemetry',
+        resources: [
+            'progression_authoritative_run_catalogs',
+            'progression_authoritative_runs',
+            'progression_authoritative_run_actions',
+            'progression_authoritative_run_snapshots',
+            'progression_authoritative_run_receipts',
+            'progression_authoritative_run_ops_events',
+            'progression_authoritative_run_ops_counters'
+        ]
     })
 ];
 const CURRENT_MIGRATION = SCHEMA_MIGRATIONS[SCHEMA_MIGRATIONS.length - 1];

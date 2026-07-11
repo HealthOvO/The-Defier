@@ -21,6 +21,7 @@
 
 - `backend_progression_platform_v1.md`: 已实现的全游戏长期进度后端契约，包含跨玩法事件信任边界、周期目标、幂等奖励、荣誉账本、运营总览、迁移与服务端权威化路径。
 - `backend_verified_runs_v1.md`: PVE、挑战和远征可信结算 V1，包含 run ticket、内容版本、一次性 nonce、checkpoint、原子结算、账号隔离、离线兼容、运营聚合及 `verified_envelope` 的有限信任边界。
+- `backend_authoritative_runs_v2.md`: PVE、挑战和远征的服务端权威试炼 V2，包含确定性状态机、命令协议、动作哈希链、快照恢复、完整重放结算、SQLite V6、账号隔离、运维与保留策略；旧玩法仍保留观察/可信兼容边界。
 - `production_deploy.md`: 正式线上部署、备份、Nginx 与生产验证流程。
 - `backend_migration_guide.md`: 后端迁移、API 与本地/生产切换说明。
 - `code_review_hmac_fix_report_2026-05-15.md`: HMAC 安全边界修复记录。
