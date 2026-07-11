@@ -1,0 +1,65 @@
+css/frontend-upgrade.css
+  s_3fe6e1a7ecb78f::t_d812867b2945c9 15-31,2406-3211
+index.html
+  s_ca5652313828d6::t_3e3a1a4429c394 9,36,295-309,311-317,1560-1569,1571,1575-1577,1593,1602,1966-1974,1977-1981,1984,1986-1987
+js/core/events.js
+  s_ca5652313828d6::t_a2d7d3c1687ff5 80,86,133
+js/game.js
+  s_ca5652313828d6::t_f402a6e9d51586 7095,7099,7141-7142,7156-7157
+js/views/EventView.js
+  s_ca5652313828d6::t_7e3f0bba193926 641,645,647,653-654,657-659,683-685,713,722-727,741
+js/views/MapView.js
+  s_ca5652313828d6::t_9038cc79d7efed 155-159,161-169
+js/views/ShopView.js
+  s_ca5652313828d6::t_d89fc19edc01a0 77-80,91-96,98-99,104-105,131-133,155,160-162,165-171
+package.json
+  s_bae69f1b7fab46::t_3400070dbd6eab 15
+tests/browser_frontend_layout_audit.mjs
+  s_bae69f1b7fab46::t_ae66ab8ba13eab 21-31,34,37-39,41,94-97,3674,3783
+tests/browser_meta_screen_audit.mjs
+  s_ca5652313828d6::t_12cbf159e7735d 2543,2548,2563,2565,2574-2583,2599-2603,2613
+tests/browser_pvp_live_audit.mjs
+  s_ca5652313828d6::t_2de0f1eb6d6660 1865,1869,1872-1874,1887
+tests/browser_reward_meta_mobile_audit.mjs
+  s_ca5652313828d6::t_55e3ad633d60e1 266,277,289-292,298,319,334-343
+tests/browser_ui_gallery_audit.mjs
+  s_ca5652313828d6::t_ca39eb8ac1da7e 373,375-376,406,412,1084,1087-1095,1116,1402
+tests/sanity_frontend_upgrade_asset_checks.cjs
+  s_ca5652313828d6::t_3419836e93aefc 36,64
+tests/sanity_release_gate_coverage_checks.cjs
+  s_ca5652313828d6::t_5dc41e361f8958 9,41-71,693-696,698-701,710,713-715,717-720,728-741,965
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "c70a29018fe6878567695df43d28a07e2199072c",
+  "prompts": {},
+  "sessions": {
+    "s_3fe6e1a7ecb78f": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f503b-4766-77f0-b759-034419208608",
+        "model": "unknown"
+      },
+      "human_author": "AI Agent <bot@example.com>"
+    },
+    "s_bae69f1b7fab46": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ed4f6-e7ac-73e0-a29e-119f3eddb407",
+        "model": "unknown"
+      },
+      "human_author": "AI Agent <bot@example.com>"
+    },
+    "s_ca5652313828d6": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f3fed-94d5-77b2-9af0-61333559ff38",
+        "model": "unknown"
+      },
+      "human_author": "AI Agent <bot@example.com>"
+    }
+  },
+  "attestation_metadata": {},
+  "remote_transcripts": {}
+}
