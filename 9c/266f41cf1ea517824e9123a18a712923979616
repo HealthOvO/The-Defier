@@ -1,0 +1,23 @@
+tests/browser_pvp_live_audit.mjs
+  s_ca5652313828d6::t_bf303eedb27b10 39-52,108,7291
+tests/sanity_release_gate_coverage_checks.cjs
+  s_ca5652313828d6::t_5abd0c3b31af8e 1672-1674
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "9c266f41cf1ea517824e9123a18a712923979616",
+  "prompts": {},
+  "sessions": {
+    "s_ca5652313828d6": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f3fed-94d5-77b2-9af0-61333559ff38",
+        "model": "unknown"
+      },
+      "human_author": "AI Agent <bot@example.com>"
+    }
+  },
+  "attestation_metadata": {},
+  "remote_transcripts": {}
+}
