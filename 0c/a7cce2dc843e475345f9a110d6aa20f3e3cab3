@@ -1,0 +1,31 @@
+tests/prod_api_smoke.cjs
+  s_4b76be7aade8ba::t_0b73f353f320ff 298-302
+tests/sanity_release_gate_coverage_checks.cjs
+  s_ca5652313828d6::t_84ed33fb6a2be1 550
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "0ca7cce2dc843e475345f9a110d6aa20f3e3cab3",
+  "prompts": {},
+  "sessions": {
+    "s_4b76be7aade8ba": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f54a6-f679-72d3-a86f-a6d6a7a75624",
+        "model": "unknown"
+      },
+      "human_author": "AI Agent <bot@example.com>"
+    },
+    "s_ca5652313828d6": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f3fed-94d5-77b2-9af0-61333559ff38",
+        "model": "unknown"
+      },
+      "human_author": "AI Agent <bot@example.com>"
+    }
+  },
+  "attestation_metadata": {},
+  "remote_transcripts": {}
+}
