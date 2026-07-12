@@ -1,0 +1,91 @@
+css/style.css
+  s_bae69f1b7fab46::t_355277664ee7ed 20122-20137
+docs/backend_authoritative_world_rift_v1.md
+  s_bae69f1b7fab46::t_fc5cf5d334dcab 1-277
+docs/backend_migration_guide.md
+  s_bae69f1b7fab46::t_a0c61710ce526a 214,221-223
+docs/backend_progression_platform_v1.md
+  s_bae69f1b7fab46::t_a0cf2588907cba 83,92,137-145
+index.html
+  s_acd9a2aa3f2eec::t_ec8a742efb23c5 1237-1238
+js/config/bmob.config.example.js
+  s_aea750c9318c46::t_a7c703af22c843 23-24
+js/config/bmob.config.js
+  s_aea750c9318c46::t_eb5f9c922c8c88 41-42
+js/services/authoritative-run-service.js
+  s_bae69f1b7fab46::t_4c275432326b34 4
+js/services/backend-client.js
+  s_bae69f1b7fab46::t_ce2d7ea5b05419 5,61-62,1167-1172,2984-3185
+js/services/world-rift-service.js
+  s_acd9a2aa3f2eec::t_d0d58893dab724 1-828
+js/views/AuthoritativeRunPanel.js
+  s_bae69f1b7fab46::t_2093a139b61150 3,6,39-44,167,175,189-191,204-209,215,222,308-312,331-336,355-360,378-381,383,389-398,404-408,452-463,491-497,677,732-733,746-748,751,759,800-841,884
+server/app.js
+  s_aea750c9318c46::t_4bb3650c4da1f4 20,41,135
+server/db/database.js
+  s_aea750c9318c46::t_a7d6c243c65ab8 13,764
+server/progression/authoritative-runs/engine.js
+  s_bae69f1b7fab46::t_209b0cd3eeef8e 5,24
+server/services/platform/schema-status.js
+  s_aea750c9318c46::t_a2bb72914ce69b 115-130
+server/world-rift/bootstrap.js
+  s_aea750c9318c46::t_df6441566584e8 1-379
+server/world-rift/catalog.js
+  s_aea750c9318c46::t_bf1cf69bef6808 1-211
+server/world-rift/service.js
+  s_bae69f1b7fab46::t_653aac3058f0fb 1-2093
+tests/backend_platform_checks.cjs
+  s_bae69f1b7fab46::t_737087bd7e73c6 108-109,139-142,154,197-201
+tests/run_node_checks.sh
+  s_bae69f1b7fab46::t_5c5fd81cc39776 39-41
+tests/sanity_authoritative_runs_engine_checks.cjs
+  s_bae69f1b7fab46::t_3c848462fa2b45 159,199-223
+tests/sanity_authoritative_runs_platform_checks.cjs
+  s_bae69f1b7fab46::t_dff033e76606ff 349-350,360-361
+tests/sanity_authoritative_runs_ui_checks.mjs
+  s_bae69f1b7fab46::t_f321e8c5f092bf 492-561
+tests/sanity_cloud_state_v2_checks.cjs
+  s_bae69f1b7fab46::t_11edd55b2410fc 285-286,289
+tests/sanity_progression_platform_checks.cjs
+  s_bae69f1b7fab46::t_91719b82556035 181-182,185
+tests/sanity_season_ops_platform_checks.cjs
+  s_bae69f1b7fab46::t_deb19b31ff20f9 107-108,207-208
+tests/sanity_verified_runs_platform_checks.cjs
+  s_bae69f1b7fab46::t_77bd90c098f096 163-164,167,186,189
+tests/sanity_world_rift_client_checks.mjs
+  s_acd9a2aa3f2eec::t_b417c0b9eccb20 1-356
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "f43dee3d9c91cdab57309ee00cad2ba85991f907",
+  "prompts": {},
+  "sessions": {
+    "s_acd9a2aa3f2eec": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f54f1-3b9b-7db2-a42a-d90e2945d8e8",
+        "model": "unknown"
+      },
+      "human_author": "AI Agent <bot@example.com>"
+    },
+    "s_aea750c9318c46": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f54f1-3b20-72c3-893c-55c5c37020c7",
+        "model": "unknown"
+      },
+      "human_author": "AI Agent <bot@example.com>"
+    },
+    "s_bae69f1b7fab46": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ed4f6-e7ac-73e0-a29e-119f3eddb407",
+        "model": "unknown"
+      },
+      "human_author": "AI Agent <bot@example.com>"
+    }
+  },
+  "attestation_metadata": {},
+  "remote_transcripts": {}
+}
