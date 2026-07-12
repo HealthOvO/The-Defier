@@ -127,6 +127,9 @@ async function readPanel(page) {
   return page.evaluate(() => {
     const panel = window.game?.seasonOpsView?.authoritativeRunPanel;
     const projection = panel?.getCurrentProjection?.() || null;
+    const challengeLadderState = panel?.challengeLadderService?.getState?.()
+      || panel?.challengeLadderState
+      || null;
     return {
       projection,
       status: panel?.getStatus?.() || '',
@@ -134,6 +137,8 @@ async function readPanel(page) {
       receipt: panel?.lastReceipt || null,
       busy: panel?.isBusy?.() || false,
       error: panel?.serviceState?.lastError || null,
+      currentMode: panel?.getCurrentMode?.() || '',
+      challengeLadderState,
     };
   });
 }
@@ -151,6 +156,78 @@ async function openAuthoritativeTab(page) {
     }
   });
   await page.waitForSelector('#season-ops-screen.active .season-ops-authoritative-panel');
+}
+
+async function selectAuthoritativeMode(page, mode) {
+  await page.locator(`[data-season-ops-action="authoritative-select-mode"][data-mode="${cssValue(mode)}"]`).click({ force: true });
+  return waitForPanel(
+    page,
+    expectedMode => {
+      const panel = window.game?.seasonOpsView?.authoritativeRunPanel;
+      return panel?.getCurrentMode?.() === expectedMode && !panel?.isBusy?.();
+    },
+    mode,
+  );
+}
+
+async function readChallengeHub(page) {
+  return page.evaluate(() => ({
+    currentScreen: window.game?.currentScreen || '',
+    activeTab: window.game?.challengeHubState?.tab || '',
+    title: document.getElementById('challenge-hub-title')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+    subtitle: document.getElementById('challenge-hub-subtitle')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+    summaryText: document.getElementById('challenge-hub-summary')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+    rulesText: document.getElementById('challenge-hub-rules')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+    rewardsText: document.getElementById('challenge-hub-rewards')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+    rankingText: document.getElementById('challenge-hub-ranking')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+    launchText: document.getElementById('challenge-hub-launch')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+    rankRowCount: document.querySelectorAll('[data-challenge-ladder-rank]').length,
+    authoritativeRewardCount: document.querySelectorAll('#challenge-hub-rewards [data-authoritative-milestone]').length,
+    legacyClaimCount: document.querySelectorAll('#challenge-hub-rewards [data-challenge-action="claim-milestone"]').length,
+    launchCta: document.querySelector('[data-challenge-action="open-authoritative-ladder"]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+  }));
+}
+
+async function openChallengeHubGlobal(page, expectedRemainingAttempts = null) {
+  await page.evaluate(() => {
+    for (const id of ['save-slots-modal', 'auth-modal', 'generic-confirm-modal', 'save-conflict-modal']) {
+      document.getElementById(id)?.classList.remove('active');
+    }
+    window.game?.showChallengeHub?.('global');
+  });
+  await page.waitForSelector('#challenge-screen.active #challenge-hub-ranking', { timeout: 15000 });
+  await page.waitForFunction(
+    expected => {
+      const tab = window.game?.challengeHubState?.tab || '';
+      const rankingText = document.getElementById('challenge-hub-ranking')?.textContent?.replace(/\s+/g, ' ').trim() || '';
+      const launchText = document.getElementById('challenge-hub-launch')?.textContent?.replace(/\s+/g, ' ').trim() || '';
+      if (window.game?.currentScreen !== 'challenge-screen' || tab !== 'global') return false;
+      if (!/权威众生榜/.test(rankingText) || !/权威众生试炼|离线练习/.test(launchText)) return false;
+      if (expected === null) return /正式次数/.test(rankingText);
+      return rankingText.includes(`正式次数 ${expected}/3`);
+    },
+    expectedRemainingAttempts,
+    { timeout: 20000 },
+  );
+  await page.waitForTimeout(400);
+  return readChallengeHub(page);
+}
+
+async function openLadderFromChallengeHub(page) {
+  await page.locator('[data-challenge-action="open-authoritative-ladder"]').click({ force: true });
+  await page.waitForSelector('#season-ops-screen.active .season-ops-authoritative-panel', { timeout: 15000 });
+  return waitForPanel(
+    page,
+    () => {
+      const panel = window.game?.seasonOpsView?.authoritativeRunPanel;
+      const state = panel?.challengeLadderService?.getState?.() || panel?.challengeLadderState || {};
+      return panel?.getCurrentMode?.() === 'challenge_ladder'
+        && !!state?.current
+        && !panel?.isBusy?.();
+    },
+    null,
+    20000,
+  );
 }
 
 async function prepareLoggedInPage(page) {
@@ -269,7 +346,7 @@ async function readLayout(page) {
 }
 
 async function completeAdditionalMode(page, mode, maxAttempts = 3) {
-  await page.locator(`[data-season-ops-action="authoritative-select-mode"][data-mode="${cssValue(mode)}"]`).click({ force: true });
+  await selectAuthoritativeMode(page, mode);
   await page.waitForSelector('[data-season-ops-action="authoritative-begin"]');
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     const beginSelector = attempt === 1
@@ -328,7 +405,7 @@ try {
   apiUrl = `http://127.0.0.1:${port}`;
   backend = startBackend();
   const health = await waitForHealth();
-  add('real backend boots schema V6', health?.schema?.currentMigrationId === '0006_authoritative_runs_v2', JSON.stringify(health?.schema || {}));
+  add('real backend boots schema V7', health?.schema?.version === 7 && health?.schema?.currentMigrationId === '0007_authoritative_challenge_ladder', JSON.stringify(health?.schema || {}));
 
   const launchArgs = [];
   if (new URL(appUrl).protocol === 'https:') {
@@ -361,18 +438,82 @@ try {
   page.on('pageerror', error => recordConsoleError(error));
   await prepareLoggedInPage(page);
 
+  const ladderCurrentBefore = await page.evaluate(async () => {
+    const { BackendClient } = window.__THE_DEFIER_SERVICES__;
+    const user = BackendClient.getCurrentUser();
+    return BackendClient.getChallengeLadderCurrent({
+      expectedUserId: user?.objectId || user?.id || '',
+    });
+  });
+  add('challenge ladder GET current returns initial allowance before any formal run', ladderCurrentBefore?.success === true
+    && ladderCurrentBefore?.protocolVersion === 'authoritative-challenge-ladder-v1'
+    && Number(ladderCurrentBefore?.allowance?.attemptLimit) === 3
+    && Number(ladderCurrentBefore?.allowance?.usedAttempts) === 0
+    && Number(ladderCurrentBefore?.allowance?.remainingAttempts) === 3
+    && !ladderCurrentBefore?.personalBest
+    && Array.isArray(ladderCurrentBefore?.leaderboard?.entries)
+    && ladderCurrentBefore.leaderboard.entries.length === 0, JSON.stringify(ladderCurrentBefore));
+
+  const challengeHubBefore = await openChallengeHubGlobal(page, 3);
+  add('challenge hub global UI shows formal attempts and official ladder copy before submission', challengeHubBefore.currentScreen === 'challenge-screen'
+    && challengeHubBefore.activeTab === 'global'
+    && /众生试炼/.test(challengeHubBefore.title)
+    && /权威众生榜/.test(challengeHubBefore.rankingText)
+    && /正式次数 3\/3/.test(challengeHubBefore.rankingText)
+    && /server_authoritative/.test(challengeHubBefore.rankingText)
+    && challengeHubBefore.summaryText.includes(ladderCurrentBefore.rotation.title)
+    && challengeHubBefore.rulesText.includes(ladderCurrentBefore.rotation.scoring.formulaText)
+    && challengeHubBefore.authoritativeRewardCount === ladderCurrentBefore.milestones.length
+    && challengeHubBefore.legacyClaimCount === 0
+    && /荣誉/.test(challengeHubBefore.rewardsText)
+    && /本周尚无正式成绩/.test(challengeHubBefore.rankingText)
+    && /进入权威众生试炼/.test(challengeHubBefore.launchText), JSON.stringify(challengeHubBefore));
+  add('global formal surface uses the server rotation and excludes legacy local rewards', challengeHubBefore.summaryText.includes(ladderCurrentBefore.rotation.title)
+    && challengeHubBefore.rulesText.includes(ladderCurrentBefore.rotation.scoring.formulaText)
+    && challengeHubBefore.authoritativeRewardCount === ladderCurrentBefore.milestones.length
+    && challengeHubBefore.legacyClaimCount === 0, JSON.stringify(challengeHubBefore));
+  await safeAuditScreenshot(page, path.join(outDir, 'challenge-ladder-hub-before.png'), 'browser_authoritative_runs_real_backend_smoke', { timeout: 9000 });
+
+  let panel = await openLadderFromChallengeHub(page);
+  add('challenge hub CTA opens the authoritative challenge ladder mode', panel.currentMode === 'challenge_ladder'
+    && !panel.projection
+    && Number(panel.challengeLadderState?.current?.allowance?.remainingAttempts) === 3, JSON.stringify({
+      currentMode: panel.currentMode,
+      ladderState: panel.challengeLadderState?.current ? {
+        remainingAttempts: panel.challengeLadderState.current.allowance?.remainingAttempts,
+        attemptLimit: panel.challengeLadderState.current.allowance?.attemptLimit,
+      } : null,
+    }));
+  add('authoritative ladder panel renders real attempt chips and no-score state', Number(panel.challengeLadderState?.current?.allowance?.attemptLimit) === 3
+    && Number(panel.challengeLadderState?.current?.allowance?.remainingAttempts) === 3
+    && !panel.challengeLadderState?.current?.personalBest, JSON.stringify(panel.challengeLadderState?.current || null));
+
   await page.waitForSelector('[data-season-ops-action="authoritative-begin"]');
-  add('real server initially reports no active authoritative run', true);
   await page.locator('[data-season-ops-action="authoritative-begin"]').click();
-  let panel = await waitForPanel(
+  panel = await waitForPanel(
     page,
-    () => window.game?.seasonOpsView?.authoritativeRunPanel?.getCurrentProjection?.()?.phase === 'route',
+    () => {
+      const candidate = window.game?.seasonOpsView?.authoritativeRunPanel;
+      const projection = candidate?.getCurrentProjection?.();
+      return candidate?.getCurrentMode?.() === 'challenge_ladder'
+        && projection?.mode === 'challenge_ladder'
+        && projection?.phase === 'route';
+    },
   );
   const runId = panel.projection.runId;
-  add('browser receives server-issued run projection', /^arun-/.test(runId) && panel.runMeta?.trustTier === 'server_authoritative', JSON.stringify(panel.runMeta));
+  add('formal challenge ladder attempt binds a server-authoritative run', /^arun-/.test(runId)
+    && panel.currentMode === 'challenge_ladder'
+    && panel.projection?.mode === 'challenge_ladder'
+    && panel.runMeta?.trustTier === 'server_authoritative'
+    && panel.challengeLadderState?.attempt?.runId === runId
+    && Number(panel.challengeLadderState?.attempt?.attemptIndex) === 1
+    && Number(panel.challengeLadderState?.attempt?.seedSlot) === 1, JSON.stringify({
+      runMeta: panel.runMeta,
+      attempt: panel.challengeLadderState?.attempt,
+    }));
   const publicProjectionJson = JSON.stringify(panel.projection);
   add('public projection hides seed and ordered draw pile', !/"(?:seed|rng|drawPile)"/.test(publicProjectionJson));
-  await safeAuditScreenshot(page, path.join(outDir, 'authoritative-route-desktop.png'), 'browser_authoritative_runs_real_backend_smoke', { timeout: 9000 });
+  await safeAuditScreenshot(page, path.join(outDir, 'challenge-ladder-route-desktop.png'), 'browser_authoritative_runs_real_backend_smoke', { timeout: 9000 });
 
   let actionCount = 0;
   let reloadChecked = false;
@@ -390,7 +531,7 @@ try {
       const maxHp = Number(panel.projection.player?.maxHp || 0);
       openingFairnessChecked = true;
       add('opening enemy intent cannot one-shot full health', intent >= 0 && maxHp > 0 && intent < maxHp, `${intent}/${maxHp}`);
-      await safeAuditScreenshot(page, path.join(outDir, 'authoritative-battle-desktop.png'), 'browser_authoritative_runs_real_backend_smoke', { timeout: 9000 });
+      await safeAuditScreenshot(page, path.join(outDir, 'challenge-ladder-battle-desktop.png'), 'browser_authoritative_runs_real_backend_smoke', { timeout: 9000 });
     }
 
     if (!refreshChecked && panel.projection.phase === 'battle') {
@@ -418,39 +559,53 @@ try {
         { timeout: 30000 },
       );
       await openAuthoritativeTab(page);
+      await selectAuthoritativeMode(page, 'challenge_ladder');
       panel = await waitForPanel(
         page,
         expected => {
           const candidate = window.game?.seasonOpsView?.authoritativeRunPanel;
           const projection = candidate?.getCurrentProjection?.();
-          return projection?.runId === expected.runId && Number(projection.version) === expected.version && !candidate?.isBusy?.();
+          return candidate?.getCurrentMode?.() === 'challenge_ladder'
+            && projection?.runId === expected.runId
+            && Number(projection.version) === expected.version
+            && !candidate?.isBusy?.();
         },
         { runId, version: versionBeforeReload },
         20000,
       );
       reloadChecked = true;
       add('full browser reload resumes the same server run', panel.projection.runId === runId && panel.projection.version === versionBeforeReload);
-      await safeAuditScreenshot(page, path.join(outDir, 'authoritative-resumed-desktop.png'), 'browser_authoritative_runs_real_backend_smoke', { timeout: 9000 });
+      await safeAuditScreenshot(page, path.join(outDir, 'challenge-ladder-resumed-desktop.png'), 'browser_authoritative_runs_real_backend_smoke', { timeout: 9000 });
     }
   }
 
-  add('real browser strategy completes without client state simulation', panel.projection?.phase === 'completed', `${panel.projection?.phase || 'missing'} after ${actionCount} actions`);
-  if (panel.projection?.phase !== 'completed') throw new Error(`authoritative run did not complete: ${JSON.stringify(panel)}`);
+  add('real browser strategy completes the formal challenge ladder run without client simulation', panel.projection?.phase === 'completed', `${panel.projection?.phase || 'missing'} after ${actionCount} actions`);
+  if (panel.projection?.phase !== 'completed') throw new Error(`challenge ladder run did not complete: ${JSON.stringify(panel)}`);
   await page.locator('[data-season-ops-action="authoritative-settle"]').click();
   panel = await waitForPanel(
     page,
     expectedRunId => {
       const candidate = window.game?.seasonOpsView?.authoritativeRunPanel;
+      const ladderState = candidate?.challengeLadderService?.getState?.() || candidate?.challengeLadderState || {};
       return candidate?.lastRunMeta?.runId === expectedRunId
         && candidate?.lastRunMeta?.status === 'settled'
         && candidate?.lastReceipt?.integrity?.fullReplayPassed === true
+        && ladderState?.lastResult?.runId === expectedRunId
+        && Number(ladderState?.current?.allowance?.usedAttempts) >= 1
+        && Number(ladderState?.current?.allowance?.remainingAttempts) === 2
         && !candidate?.isBusy?.();
     },
     runId,
-    20000,
+    25000,
   );
-  add('settlement receipt confirms full genesis replay', panel.status === 'settled' && panel.receipt?.integrity?.fullReplayPassed === true, JSON.stringify(panel.receipt));
-  await safeAuditScreenshot(page, path.join(outDir, 'authoritative-settled-desktop.png'), 'browser_authoritative_runs_real_backend_smoke', { timeout: 9000 });
+  add('settlement auto-submits the challenge ladder result with a full replay receipt', panel.status === 'settled'
+    && panel.receipt?.integrity?.fullReplayPassed === true
+    && panel.challengeLadderState?.lastResult?.runId === runId, JSON.stringify({
+      receipt: panel.receipt,
+      lastResult: panel.challengeLadderState?.lastResult,
+    }));
+  add('settlement receipt confirms full genesis replay', panel.receipt?.integrity?.fullReplayPassed === true, JSON.stringify(panel.receipt));
+  await safeAuditScreenshot(page, path.join(outDir, 'challenge-ladder-settled-desktop.png'), 'browser_authoritative_runs_real_backend_smoke', { timeout: 9000 });
 
   const replay = await page.evaluate(async targetRunId => {
     const { BackendClient } = window.__THE_DEFIER_SERVICES__;
@@ -464,23 +619,79 @@ try {
     && replay?.replay?.actions?.every((entry, index) => entry.sequence === index + 1), JSON.stringify(replay?.replay && { actionCount: replay.replay.actionCount, phase: replay.replay.finalState?.phase }));
   add('public replay contains no secret RNG material', !/"(?:seed|rng|drawPile)"/.test(replayJson));
 
+  const ladderCurrentAfter = await page.evaluate(async () => {
+    const { BackendClient } = window.__THE_DEFIER_SERVICES__;
+    const user = BackendClient.getCurrentUser();
+    return BackendClient.getChallengeLadderCurrent({
+      expectedUserId: user?.objectId || user?.id || '',
+    });
+  });
+  add('challenge ladder GET current after submission returns personal best leaderboard and my rank', ladderCurrentAfter?.success === true
+    && ladderCurrentAfter?.personalBest?.runId === runId
+    && Number(ladderCurrentAfter?.allowance?.usedAttempts) === 1
+    && Number(ladderCurrentAfter?.allowance?.remainingAttempts) === 2
+    && Array.isArray(ladderCurrentAfter?.leaderboard?.entries)
+    && ladderCurrentAfter.leaderboard.entries.length >= 1
+    && Number(ladderCurrentAfter?.leaderboard?.myRank?.rank || 0) >= 1, JSON.stringify(ladderCurrentAfter));
+
   const persisted = await dbGet(
-    `SELECT status, state_version, action_count,
+    `SELECT ar.status AS run_status,
+            ar.activity_mode,
+            ar.state_version,
+            ar.action_count,
+            a.status AS attempt_status,
+            a.attempt_index,
+            a.seed_slot,
+            r.result_id,
+            r.official_score,
+            e.best_result_id,
+            e.official_score AS leaderboard_score,
             (SELECT COUNT(*) FROM progression_authoritative_run_receipts WHERE run_id = ?) AS receipt_count,
-            (SELECT COUNT(*) FROM progression_events WHERE source_ref = ? AND trust_tier = 'server_authoritative') AS event_count
-     FROM progression_authoritative_runs WHERE run_id = ?`,
+            (SELECT COUNT(*) FROM progression_events WHERE source_ref = ? AND trust_tier = 'server_authoritative') AS event_count,
+            (SELECT COUNT(*) FROM challenge_ladder_mutations WHERE user_id = a.user_id AND request_type = 'submit') AS submit_mutation_count
+     FROM progression_authoritative_runs ar
+     JOIN challenge_ladder_attempts a ON a.run_id = ar.run_id
+     LEFT JOIN challenge_ladder_results r ON r.run_id = ar.run_id
+     LEFT JOIN challenge_ladder_entries e ON e.rotation_id = a.rotation_id AND e.user_id = a.user_id
+     WHERE ar.run_id = ?`,
     [runId, `authoritative:${runId}`, runId],
   );
-  add('database persists one receipt and one authoritative progression event', persisted?.status === 'settled'
+  add('database persists settled authoritative receipt plus ladder result and leaderboard entry', persisted?.run_status === 'settled'
+    && persisted?.activity_mode === 'challenge_ladder'
+    && persisted?.attempt_status === 'submitted'
+    && Number(persisted.attempt_index) === 1
+    && Number(persisted.seed_slot) === 1
     && Number(persisted.state_version) === actionCount
     && Number(persisted.action_count) === actionCount
+    && !!persisted?.result_id
+    && persisted?.best_result_id === persisted?.result_id
+    && Number(persisted.leaderboard_score) === Number(persisted.official_score)
     && Number(persisted.receipt_count) === 1
-    && Number(persisted.event_count) === 1, JSON.stringify(persisted));
+    && Number(persisted.event_count) === 1
+    && Number(persisted.submit_mutation_count) === 1, JSON.stringify(persisted));
 
+  const challengeHubAfter = await openChallengeHubGlobal(page, 2);
+  add('challenge hub global UI refreshes to the real ladder result after submit', challengeHubAfter.currentScreen === 'challenge-screen'
+    && challengeHubAfter.activeTab === 'global'
+    && /权威众生榜/.test(challengeHubAfter.rankingText)
+    && /正式次数 2\/3/.test(challengeHubAfter.rankingText)
+    && /server_authoritative/.test(challengeHubAfter.rankingText)
+    && challengeHubAfter.summaryText.includes('个人正式最高分')
+    && challengeHubAfter.summaryText.includes('938')
+    && challengeHubAfter.legacyClaimCount === 0
+    && challengeHubAfter.authoritativeRewardCount >= 1
+    && challengeHubAfter.rankRowCount >= 1
+    && challengeHubAfter.rankingText.includes(username)
+    && /继续权威众生试炼|进入权威众生试炼/.test(challengeHubAfter.launchText), JSON.stringify(challengeHubAfter));
+  await safeAuditScreenshot(page, path.join(outDir, 'challenge-ladder-hub-after.png'), 'browser_authoritative_runs_real_backend_smoke', { timeout: 9000 });
+
+  await openLadderFromChallengeHub(page);
+  const pveResult = await completeAdditionalMode(page, 'pve');
   const challengeResult = await completeAdditionalMode(page, 'challenge');
   const expeditionResult = await completeAdditionalMode(page, 'expedition');
-  add('real UI completes and settles all three authoritative modes', challengeResult.replayActionCount === challengeResult.actionCount
-    && expeditionResult.replayActionCount === expeditionResult.actionCount, JSON.stringify({ challengeResult, expeditionResult }));
+  add('real UI completes and settles all three base authoritative modes alongside challenge ladder', pveResult.replayActionCount === pveResult.actionCount
+    && challengeResult.replayActionCount === challengeResult.actionCount
+    && expeditionResult.replayActionCount === expeditionResult.actionCount, JSON.stringify({ pveResult, challengeResult, expeditionResult }));
 
   const aggregate = await dbGet(
     `SELECT
@@ -488,13 +699,15 @@ try {
         (SELECT COUNT(*) FROM progression_events WHERE source_kind = 'authoritative_run_settlement' AND trust_tier = 'server_authoritative') AS event_count,
         (SELECT COUNT(*) FROM progression_authoritative_runs WHERE activity_mode = 'pve' AND status = 'settled') AS pve_settled,
         (SELECT COUNT(*) FROM progression_authoritative_runs WHERE activity_mode = 'challenge' AND status = 'settled') AS challenge_settled,
-        (SELECT COUNT(*) FROM progression_authoritative_runs WHERE activity_mode = 'expedition' AND status = 'settled') AS expedition_settled`,
+        (SELECT COUNT(*) FROM progression_authoritative_runs WHERE activity_mode = 'expedition' AND status = 'settled') AS expedition_settled,
+        (SELECT COUNT(*) FROM progression_authoritative_runs WHERE activity_mode = 'challenge_ladder' AND status = 'settled') AS ladder_settled`,
   );
-  add('all modes mint exactly one receipt and event per settled run', Number(aggregate?.receipt_count) === 3
-    && Number(aggregate?.event_count) === 3
+  add('all base modes and challenge ladder mint exactly one receipt and event per settled run', Number(aggregate?.receipt_count) === 4
+    && Number(aggregate?.event_count) === 4
     && Number(aggregate?.pve_settled) === 1
     && Number(aggregate?.challenge_settled) === 1
-    && Number(aggregate?.expedition_settled) === 1, JSON.stringify(aggregate));
+    && Number(aggregate?.expedition_settled) === 1
+    && Number(aggregate?.ladder_settled) === 1, JSON.stringify(aggregate));
 
   const opsResponse = await fetch(`${apiUrl}/api/progression/ops/authoritative-runs`, {
     headers: { 'x-defier-ops-token': opsToken },
@@ -503,21 +716,42 @@ try {
   const opsJson = JSON.stringify(ops);
   add('ops overview reports settlement through redacted references', opsResponse.ok
     && ops?.success === true
-    && ops?.totals?.receipts === 3
-    && ops?.byStatus?.settled === 3
+    && ops?.totals?.receipts === 4
+    && ops?.byStatus?.settled === 4
     && ops?.byMode?.pve >= 1
     && ops?.byMode?.challenge >= 1
     && ops?.byMode?.expedition >= 1
+    && ops?.byMode?.challenge_ladder >= 1
     && !opsJson.includes(username)
     && !opsJson.includes(runId), JSON.stringify(ops));
+
+  const sessionToken = await page.evaluate(() => window.__THE_DEFIER_SERVICES__?.BackendClient?.loadServerSession?.()?.token || '');
+  const ladderOpsResponse = await fetch(`${apiUrl}/api/challenge-ladder/ops/overview`, {
+    headers: {
+      Authorization: `Bearer ${sessionToken}`,
+      'x-defier-ops-token': opsToken,
+    },
+  });
+  const ladderOps = await ladderOpsResponse.json();
+  const ladderOpsJson = JSON.stringify(ladderOps);
+  add('challenge ladder ops overview reports redacted attempt result and claim aggregates', ladderOpsResponse.ok
+    && ladderOps?.success === true
+    && Number(ladderOps?.totals?.attempts) === 1
+    && Number(ladderOps?.totals?.results) === 1
+    && Number(ladderOps?.attemptStates?.submitted) === 1
+    && !ladderOpsJson.includes(username)
+    && !ladderOpsJson.includes(runId), JSON.stringify(ladderOps));
+
+  await openChallengeHubGlobal(page, 2);
+  await openLadderFromChallengeHub(page);
 
   await page.setViewportSize({ width: 390, height: 844 });
   const mobileLayout = await readLayout(page);
   add('real settled mobile view has no horizontal overflow', mobileLayout.documentScrollWidth === 390
     && mobileLayout.rootScrollWidth === mobileLayout.rootClientWidth, JSON.stringify(mobileLayout));
   add('real settled mobile controls meet touch target', mobileLayout.undersized.length === 0, JSON.stringify(mobileLayout.undersized));
-  await page.locator('[data-season-ops-action="authoritative-begin-new"]').scrollIntoViewIfNeeded();
-  await safeAuditScreenshot(page, path.join(outDir, 'authoritative-settled-mobile.png'), 'browser_authoritative_runs_real_backend_smoke', { timeout: 9000 });
+  await page.locator('[data-season-ops-action="authoritative-begin"]').scrollIntoViewIfNeeded();
+  await safeAuditScreenshot(page, path.join(outDir, 'challenge-ladder-settled-mobile.png'), 'browser_authoritative_runs_real_backend_smoke', { timeout: 9000 });
   add('real browser console errors are empty', consoleErrors.length === 0, consoleErrors.join('\n'));
 } catch (error) {
   add('authoritative real-backend browser runtime', false, error?.stack || error);

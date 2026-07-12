@@ -240,8 +240,8 @@ async function main() {
     await waitForHealth(server, 'fresh-start');
     const version = await request(PORT, '/api/version');
     assert.strictEqual(version.status, 200, JSON.stringify(version.payload));
-    assert.strictEqual(version.payload?.schema?.version, 6);
-    assert.strictEqual(version.payload?.schema?.currentMigrationId, '0006_authoritative_runs_v2');
+    assert.strictEqual(version.payload?.schema?.version, 7);
+    assert.strictEqual(version.payload?.schema?.currentMigrationId, '0007_authoritative_challenge_ladder');
     assert.deepStrictEqual(
       version.payload?.schema?.appliedMigrations?.map(entry => entry.id),
       [
@@ -250,7 +250,8 @@ async function main() {
         '0003_verified_runs',
         '0004_cloud_state_v2',
         '0005_season_ops_economy',
-        '0006_authoritative_runs_v2'
+        '0006_authoritative_runs_v2',
+        '0007_authoritative_challenge_ladder'
       ]
     );
 
@@ -432,7 +433,20 @@ async function main() {
     server = startServer({ port: PORT, dbPath: DB_PATH, gitSha: 'authoritative-runs-v2-reapply' });
     await waitForHealth(server, 'upgrade-reapply');
     const upgraded = await request(PORT, '/api/version');
-    assert.strictEqual(upgraded.payload?.schema?.currentMigrationId, '0006_authoritative_runs_v2');
+    assert.strictEqual(upgraded.payload?.schema?.currentMigrationId, '0007_authoritative_challenge_ladder');
+    assert.deepStrictEqual(
+      upgraded.payload?.schema?.appliedMigrations?.map(entry => entry.id),
+      [
+        '0001_startup_schema',
+        '0002_progression_platform',
+        '0003_verified_runs',
+        '0004_cloud_state_v2',
+        '0005_season_ops_economy',
+        '0006_authoritative_runs_v2',
+        '0007_authoritative_challenge_ladder'
+      ],
+      'reapplying authoritative runs should still converge on the full schema chain'
+    );
     await assertTablesExist(DB_PATH);
     const migrationCount = await dbGet(
       DB_PATH,
@@ -441,6 +455,13 @@ async function main() {
        WHERE id = '0006_authoritative_runs_v2'`
     );
     assert.strictEqual(Number(migrationCount?.count), 1, 'migration row should stay single after reapply');
+    const challengeLadderMigrationCount = await dbGet(
+      DB_PATH,
+      `SELECT COUNT(*) AS count
+       FROM schema_migrations
+       WHERE id = '0007_authoritative_challenge_ladder'`
+    );
+    assert.strictEqual(Number(challengeLadderMigrationCount?.count), 1, 'challenge ladder migration row should remain present after reapplying 0006');
 
     await stopServer(server);
     server = null;
@@ -475,6 +496,13 @@ async function main() {
          WHERE id = '0006_authoritative_runs_v2'`
       );
       assert.strictEqual(Number(concurrentMigrationCount?.count), 1, 'concurrent startup should keep one migration row');
+      const concurrentChallengeLadderMigrationCount = await dbGet(
+        CONCURRENT_DB_PATH,
+        `SELECT COUNT(*) AS count
+         FROM schema_migrations
+         WHERE id = '0007_authoritative_challenge_ladder'`
+      );
+      assert.strictEqual(Number(concurrentChallengeLadderMigrationCount?.count), 1, 'concurrent startup should keep one challenge ladder migration row');
       const concurrentIndices = await dbAll(
         CONCURRENT_DB_PATH,
         `SELECT name

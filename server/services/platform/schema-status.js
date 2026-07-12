@@ -97,6 +97,21 @@ const SCHEMA_MIGRATIONS = [
             'progression_authoritative_run_ops_events',
             'progression_authoritative_run_ops_counters'
         ]
+    }),
+    makeMigration({
+        id: '0007_authoritative_challenge_ladder',
+        version: 7,
+        description: 'Authoritative rotating challenge attempts, results, leaderboard, rewards, and ops telemetry',
+        resources: [
+            'challenge_ladder_rotations',
+            'challenge_ladder_attempts',
+            'challenge_ladder_results',
+            'challenge_ladder_entries',
+            'challenge_ladder_reward_claims',
+            'challenge_ladder_mutations',
+            'challenge_ladder_ops_events',
+            'challenge_ladder_ops_counters'
+        ]
     })
 ];
 const CURRENT_MIGRATION = SCHEMA_MIGRATIONS[SCHEMA_MIGRATIONS.length - 1];

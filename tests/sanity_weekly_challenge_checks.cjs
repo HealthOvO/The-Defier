@@ -117,6 +117,46 @@ function loadFile(ctx, filePath) {
       saveEconomyState(next) {
         Object.assign(pvpState, normalizeEconomyState(next));
       }
+    },
+    ChallengeLadderService: {
+      getState() {
+        return {
+          current: {
+            rotation: {
+              rotationId: 'acl-2026-w11',
+              title: '众生试炼·权威轮换',
+              attemptLimit: 3
+            },
+            allowance: {
+              attemptLimit: 3,
+              usedAttempts: 1,
+              remainingAttempts: 2
+            },
+            personalBest: {
+              officialScore: 1337,
+              completedAttempts: 1
+            },
+            leaderboard: {
+              myRank: { rank: 2 },
+              entries: [
+                { rank: 1, userName: '权威榜首', officialScore: 1400, isSelf: false },
+                { rank: 2, userName: '你', officialScore: 1337, isSelf: true }
+              ]
+            },
+            previousGrace: {
+              rotation: { rotationId: 'acl-2026-w10', title: '上轮权威试卷' },
+              personalBest: { officialScore: 1200, completedAttempts: 1 },
+              milestones: [{ milestoneId: 'clear', claimable: true, claimed: false }]
+            },
+            milestones: []
+          },
+          pending: null,
+          lastError: null
+        };
+      },
+      async current() {
+        return { success: true };
+      }
     }
   });
   ctx.window = ctx;
@@ -225,8 +265,16 @@ function loadFile(ctx, filePath) {
   const globalBundle = game.buildChallengeBundle('global', new Date('2026-03-14T08:00:00'));
   const globalEntry = game.getChallengeProgressEntry('global', globalBundle.rotationKey, true);
   globalEntry.bestScore = 1260;
-  const leaderboard = game.buildChallengeBundle('global', new Date('2026-03-14T08:00:00')).leaderboard;
-  assert(leaderboard.some((row) => row.highlight && row.score === 1260), 'global leaderboard should inject the player row when bestScore exists');
+  const authoritativeGlobalBundle = game.buildChallengeBundle('global', new Date('2026-03-14T08:00:00'));
+  const leaderboard = authoritativeGlobalBundle.leaderboard;
+  assert(leaderboard.some((row) => row.highlight && row.score === 1337), 'global leaderboard should consume the server-authoritative self row');
+  assert(!leaderboard.some((row) => row.score === 1260), 'local challenge best score must not leak into the formal leaderboard');
+  assert(authoritativeGlobalBundle.progress.attempts === 1, 'global overview should show the server-authoritative attempt count');
+  assert(authoritativeGlobalBundle.progress.completions === 1, 'global overview should show the server-authoritative completion count');
+  assert(authoritativeGlobalBundle.progress.bestScore === 1337, 'global overview should show the server-authoritative best score');
+  assert(authoritativeGlobalBundle.rewards.length === 0, 'global formal surface must not expose legacy local reward cards');
+  assert(authoritativeGlobalBundle.officialLadder.previousGrace.rotation.rotationId === 'acl-2026-w10', 'global formal surface should preserve previous-grace claim context');
+  assert(game.claimChallengeMilestone('global', 'global_score_1000') === false, 'legacy local milestone claims must be disabled on the formal global tab');
 
   const sanctum = game.getSanctumOverviewData();
   const observatory = sanctum.rooms.find((room) => room.id === 'observatory');

@@ -80,7 +80,7 @@ V2 目录在保留 V1 日/周/终身目标的基础上加入赛季目标：
 
 ## 持久化与迁移
 
-当前全仓 Schema 版本为 `6`。新数据库会按顺序记录：
+当前全仓 Schema 版本为 `7`。新数据库会按顺序记录：
 
 1. `0001_startup_schema`
 2. `0002_progression_platform`
@@ -88,6 +88,7 @@ V2 目录在保留 V1 日/周/终身目标的基础上加入赛季目标：
 4. `0004_cloud_state_v2`
 5. `0005_season_ops_economy`
 6. `0006_authoritative_runs_v2`
+7. `0007_authoritative_challenge_ladder`
 
 新增表：
 
@@ -124,6 +125,14 @@ V2 目录在保留 V1 日/周/终身目标的基础上加入赛季目标：
 - `progression_authoritative_run_receipts`
 - `progression_authoritative_run_ops_events`
 - `progression_authoritative_run_ops_counters`
+- `challenge_ladder_rotations`
+- `challenge_ladder_attempts`
+- `challenge_ladder_results`
+- `challenge_ladder_entries`
+- `challenge_ladder_reward_claims`
+- `challenge_ladder_mutations`
+- `challenge_ladder_ops_events`
+- `challenge_ladder_ops_counters`
 
 长期进度迁移只做 additive 的建表、加列、索引和 `occurred_at` 审计字段回填，不从 `game_saves/global_data` 解释或发放长期进度奖励。`0004_cloud_state_v2` 仅把旧 blob 作为 `legacy_import` 云状态 revision 回填，仍不得据此直接发奖；`0005_season_ops_economy` 只回放赛季时间窗内的 live PVP 正式结算，不接受旧异步 PVP 或客户端自述。每个云状态 scope 保留 20 个窗口 revision 和至多 20 个被引用来源，mutation 和原始运维事件保留 30 天，累计运维计数独立保存。
 

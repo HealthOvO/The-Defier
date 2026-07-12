@@ -18,8 +18,10 @@ function createServiceStub() {
   const beginCalls = [];
   const currentCalls = [];
   const getCalls = [];
+  const settleCalls = [];
   let currentHandler = async () => ({ success: true, run: null });
   let getHandler = async () => ({ success: true, run: null });
+  let settleHandler = async () => ({ success: true, run: null });
   return {
     getState() {
       return JSON.parse(JSON.stringify(state));
@@ -56,7 +58,10 @@ function createServiceStub() {
       return { success: true, run: null };
     },
     action: async () => ({ success: true, run: null }),
-    settle: async () => ({ success: true, run: null }),
+    settle: async options => {
+      settleCalls.push(options);
+      return settleHandler(options);
+    },
     __setState(nextState) {
       state = {
         ...state,
@@ -74,11 +79,17 @@ function createServiceStub() {
     __getGetCalls() {
       return getCalls.slice();
     },
+    __getSettleCalls() {
+      return settleCalls.slice();
+    },
     __setCurrentHandler(handler) {
       currentHandler = handler;
     },
     __setGetHandler(handler) {
       getHandler = handler;
+    },
+    __setSettleHandler(handler) {
+      settleHandler = handler;
     }
   };
 }
@@ -409,5 +420,73 @@ assert.equal(modeService.__getGetCalls().length, 0, "cross-mode refresh must not
 assert.equal(modeService.__getCurrentCalls().at(-1).mode, "challenge", "cross-mode refresh should query the selected mode");
 assert.equal(modePanel.getCurrentMode(), "challenge", "failed cross-mode refresh must not snap back to the previous mode");
 modePanel.destroy();
+
+const ladderService = createServiceStub();
+ladderService.__setCurrentHandler(async () => ({ success: true, run: null }));
+ladderService.__setSettleHandler(async () => ({
+  success: true,
+  run: createRunEnvelope({
+    mode: "challenge_ladder",
+    phase: "completed",
+    status: "settled",
+    settledAt: Date.UTC(2026, 6, 11, 9, 0)
+  })
+}));
+const ladderCalls = { current: 0, start: 0, submit: 0 };
+const ladderState = {
+  current: {
+    rotation: { rotationId: "acl-2026-w28", title: "衡常试卷", attemptLimit: 3 },
+    allowance: { attemptLimit: 3, usedAttempts: 1, remainingAttempts: 2 },
+    personalBest: { officialScore: 613 },
+    leaderboard: { myRank: { rank: 4 }, entries: [] },
+    resumableAttempt: null
+  },
+  attempt: null,
+  pending: null,
+  lastError: null
+};
+const challengeLadderService = {
+  getState: () => JSON.parse(JSON.stringify(ladderState)),
+  subscribe: () => noop,
+  current: async () => {
+    ladderCalls.current += 1;
+    return { success: true, ...ladderState.current };
+  },
+  start: async () => {
+    ladderCalls.start += 1;
+    return {
+      success: true,
+      run: createRunEnvelope({ mode: "challenge_ladder", phase: "route", status: "active" })
+    };
+  },
+  submit: async () => {
+    ladderCalls.submit += 1;
+    return { success: true, result: { officialScore: 613 } };
+  }
+};
+const ladderPanel = new AuthoritativeRunPanel({
+  service: ladderService,
+  challengeLadderService,
+  getCurrentUserId: () => "ui-user-ladder",
+  requestRender: noop
+});
+await ladderPanel.selectMode("challenge_ladder");
+html = ladderPanel.render();
+assert.match(html, /众生试炼/);
+assert.match(html, /正式次数 2\/3/);
+assert.match(html, /个人最佳 613/);
+assert.match(html, /当前第 4 名/);
+await ladderPanel.beginRun();
+assert.equal(ladderCalls.start, 1, "challenge ladder must start through the ladder quota service");
+assert.equal(ladderService.__getBeginCalls().length, 0, "challenge ladder must not bypass quota through generic authoritative start");
+assert.equal(ladderCalls.current >= 3, true, "challenge ladder start should refresh the authoritative allowance snapshot");
+const ladderSettlement = await ladderPanel.settleRun();
+assert.equal(ladderService.__getSettleCalls().length, 1);
+assert.equal(ladderCalls.submit, 1, "settled challenge ladder run must be projected into the formal leaderboard");
+assert.equal(ladderSettlement.ladderSubmission.success, true);
+const ladderCurrentCallsBeforeRecovery = ladderCalls.current;
+await ladderPanel.refreshProjection();
+assert.equal(ladderCalls.current, ladderCurrentCallsBeforeRecovery + 1, "ladder recovery must trigger current auto-projection before reloading the run");
+ladderPanel.destroy();
 
 console.log("Authoritative runs UI checks passed.");

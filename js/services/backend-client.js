@@ -2,7 +2,7 @@ export const SESSION_STORAGE_KEY = 'theDefierServerSession';
 export const CLOUD_STATE_PROTOCOL_VERSION = 'cloud-state-v2';
 const AUTHORITATIVE_RUN_SAFE_ID = /^[A-Za-z0-9._:-]{8,128}$/;
 const AUTHORITATIVE_RUN_ENTITY_ID = /^[A-Za-z0-9._:-]{1,128}$/;
-const AUTHORITATIVE_RUN_MODES = new Set(['pve', 'challenge', 'expedition']);
+const AUTHORITATIVE_RUN_MODES = new Set(['pve', 'challenge', 'expedition', 'challenge_ladder']);
 const AUTHORITATIVE_RUN_COMMANDS = new Set(['select_node', 'play_card', 'end_turn', 'choose_reward', 'abandon']);
 const AUTHORITATIVE_RUN_CONTENT_VERSION = 'authoritative-trials-v1';
 export const BackendClient = {
@@ -57,7 +57,8 @@ export const BackendClient = {
       ghostPathPrefix: typeof config.ghostPathPrefix === 'string' ? config.ghostPathPrefix.trim() : '/api/ghosts',
       pvpPathPrefix: typeof config.pvpPathPrefix === 'string' ? config.pvpPathPrefix.trim() : '/api/pvp',
       progressionPathPrefix: typeof config.progressionPathPrefix === 'string' ? config.progressionPathPrefix.trim() : '/api/progression',
-      seasonOpsPathPrefix: typeof config.seasonOpsPathPrefix === 'string' ? config.seasonOpsPathPrefix.trim() : '/api/season-ops'
+      seasonOpsPathPrefix: typeof config.seasonOpsPathPrefix === 'string' ? config.seasonOpsPathPrefix.trim() : '/api/season-ops',
+      challengeLadderPathPrefix: typeof config.challengeLadderPathPrefix === 'string' ? config.challengeLadderPathPrefix.trim() : '/api/challenge-ladder'
     };
   },
   cloneData(data) {
@@ -1155,6 +1156,12 @@ export const BackendClient = {
     return config && typeof config.seasonOpsPathPrefix === 'string' && config.seasonOpsPathPrefix.trim()
       ? config.seasonOpsPathPrefix.trim().replace(/\/+$/, '')
       : '/api/season-ops';
+  },
+  getChallengeLadderPathPrefix() {
+    const config = this.getServerConfig();
+    return config && typeof config.challengeLadderPathPrefix === 'string' && config.challengeLadderPathPrefix.trim()
+      ? config.challengeLadderPathPrefix.trim().replace(/\/+$/, '')
+      : '/api/challenge-ladder';
   },
   cloneUnsignedRequestPayload(payload) {
     const cloned = payload && typeof payload === 'object' && !Array.isArray(payload)
@@ -2766,6 +2773,204 @@ export const BackendClient = {
         reason: error && error.reason || undefined,
         mutationId: payload.mutationId,
         message: error.message || '赛季商品购买失败'
+      };
+    }
+  },
+  async getChallengeLadderCurrent(options = {}) {
+    const expectedUserId = String(options.expectedUserId || this.getCurrentUser()?.objectId || this.getCurrentUser()?.id || '').trim();
+    const session = this.captureProgressionSessionSnapshot({ expectedUserId }, '登录账号已变化，请刷新众生试炼后重试');
+    if (!session || !session.success) return session;
+    try {
+      const result = await this.requestServer(`${this.getChallengeLadderPathPrefix()}/current`, {
+        method: 'GET',
+        authToken: session.sessionToken
+      });
+      const currentUserId = String(this.getCurrentUser()?.objectId || this.getCurrentUser()?.id || '').trim();
+      if (!expectedUserId || currentUserId !== expectedUserId) {
+        return {
+          success: false,
+          reason: 'challenge_ladder_account_changed',
+          message: '登录账号已变化，旧众生榜数据未应用'
+        };
+      }
+      return result && typeof result === 'object' ? result : {
+        success: false,
+        reason: 'challenge_ladder_invalid_response',
+        message: '众生试炼状态返回异常'
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error,
+        reason: error && error.reason || undefined,
+        message: error.message || '众生试炼状态读取失败'
+      };
+    }
+  },
+  async startChallengeLadderAttempt(request = {}, options = {}) {
+    const expectedUserId = String(options.expectedUserId || this.getCurrentUser()?.objectId || this.getCurrentUser()?.id || '').trim();
+    const session = this.captureProgressionSessionSnapshot({ expectedUserId }, '登录账号已变化，请重新进入众生试炼');
+    if (!session || !session.success) return session;
+    const rotationId = this.normalizeAuthoritativeRunSafeId(request.rotationId);
+    const clientAttemptId = this.normalizeAuthoritativeRunSafeId(request.clientAttemptId)
+      || this.createAuthoritativeRunRequestId('acl-attempt');
+    const mutationId = this.normalizeAuthoritativeRunSafeId(request.mutationId)
+      || this.createAuthoritativeRunRequestId('acl-start');
+    if (!rotationId) return {
+      success: false,
+      reason: 'challenge_ladder_rotation_required',
+      message: '众生试炼轮换标识缺失'
+    };
+    const payload = {
+      protocolVersion: 'authoritative-challenge-ladder-v1',
+      rotationId,
+      clientAttemptId,
+      mutationId
+    };
+    const integrity = await this.createRequiredSessionIntegrityFields(
+      payload,
+      session.sessionToken,
+      '当前环境不支持众生试炼签名，请刷新后重试',
+      'challenge_ladder_signature_required'
+    );
+    if (!integrity || !integrity.success) return { ...integrity, clientAttemptId, mutationId };
+    try {
+      const result = await this.requestServer(`${this.getChallengeLadderPathPrefix()}/attempts`, {
+        method: 'POST',
+        authToken: session.sessionToken,
+        data: { ...payload, ...integrity.integrity }
+      });
+      const currentUserId = String(this.getCurrentUser()?.objectId || this.getCurrentUser()?.id || '').trim();
+      if (!expectedUserId || currentUserId !== expectedUserId) {
+        return {
+          success: false,
+          reason: 'challenge_ladder_account_changed',
+          clientAttemptId,
+          mutationId,
+          message: '登录账号已变化，发车回执未应用；原账号可刷新恢复'
+        };
+      }
+      return {
+        ...(result && typeof result === 'object' ? result : { success: false, message: '众生试炼发车返回异常' }),
+        clientAttemptId,
+        mutationId
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error,
+        reason: error && error.reason || undefined,
+        clientAttemptId,
+        mutationId,
+        message: error.message || '众生试炼发车失败'
+      };
+    }
+  },
+  async submitChallengeLadderResult(request = {}, options = {}) {
+    const safeRunId = this.normalizeAuthoritativeRunSafeId(request.runId);
+    if (!safeRunId) return {
+      success: false,
+      reason: 'challenge_ladder_run_required',
+      message: '众生试炼权威 run 缺失'
+    };
+    const expectedUserId = String(options.expectedUserId || this.getCurrentUser()?.objectId || this.getCurrentUser()?.id || '').trim();
+    const session = this.captureProgressionSessionSnapshot({ expectedUserId }, '登录账号已变化，请刷新众生试炼后重试');
+    if (!session || !session.success) return session;
+    const mutationId = this.normalizeAuthoritativeRunSafeId(request.mutationId)
+      || this.createAuthoritativeRunRequestId('acl-submit');
+    const payload = {
+      protocolVersion: 'authoritative-challenge-ladder-v1',
+      runId: safeRunId,
+      mutationId
+    };
+    const integrity = await this.createRequiredSessionIntegrityFields(
+      payload,
+      session.sessionToken,
+      '当前环境不支持众生试炼结算签名，请刷新后重试',
+      'challenge_ladder_signature_required'
+    );
+    if (!integrity || !integrity.success) return { ...integrity, mutationId };
+    try {
+      const result = await this.requestServer(`${this.getChallengeLadderPathPrefix()}/results`, {
+        method: 'POST',
+        authToken: session.sessionToken,
+        data: { ...payload, ...integrity.integrity }
+      });
+      const currentUserId = String(this.getCurrentUser()?.objectId || this.getCurrentUser()?.id || '').trim();
+      if (!expectedUserId || currentUserId !== expectedUserId) {
+        return {
+          success: false,
+          reason: 'challenge_ladder_account_changed',
+          mutationId,
+          message: '登录账号已变化，榜单回执未应用；原账号可刷新恢复'
+        };
+      }
+      return {
+        ...(result && typeof result === 'object' ? result : { success: false, message: '众生试炼结算返回异常' }),
+        mutationId
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error,
+        reason: error && error.reason || undefined,
+        mutationId,
+        message: error.message || '众生试炼榜单提交失败'
+      };
+    }
+  },
+  async claimChallengeLadderReward(milestoneId = '', request = {}, options = {}) {
+    const safeMilestoneId = this.normalizeAuthoritativeRunEntityId(milestoneId);
+    const safeRotationId = this.normalizeAuthoritativeRunSafeId(request.rotationId);
+    if (!safeMilestoneId || !safeRotationId) return {
+      success: false,
+      reason: 'challenge_ladder_reward_required',
+      message: '众生试炼奖励或轮换标识缺失'
+    };
+    const expectedUserId = String(options.expectedUserId || this.getCurrentUser()?.objectId || this.getCurrentUser()?.id || '').trim();
+    const session = this.captureProgressionSessionSnapshot({ expectedUserId }, '登录账号已变化，请刷新众生试炼后重试');
+    if (!session || !session.success) return session;
+    const mutationId = this.normalizeAuthoritativeRunSafeId(request.mutationId)
+      || this.createAuthoritativeRunRequestId('acl-claim');
+    const payload = {
+      protocolVersion: 'authoritative-challenge-ladder-v1',
+      rotationId: safeRotationId,
+      milestoneId: safeMilestoneId,
+      mutationId
+    };
+    const integrity = await this.createRequiredSessionIntegrityFields(
+      payload,
+      session.sessionToken,
+      '当前环境不支持众生试炼领奖签名，请刷新后重试',
+      'challenge_ladder_signature_required'
+    );
+    if (!integrity || !integrity.success) return { ...integrity, mutationId };
+    try {
+      const result = await this.requestServer(`${this.getChallengeLadderPathPrefix()}/rewards/${encodeURIComponent(safeMilestoneId)}/claim`, {
+        method: 'POST',
+        authToken: session.sessionToken,
+        data: { ...payload, ...integrity.integrity }
+      });
+      const currentUserId = String(this.getCurrentUser()?.objectId || this.getCurrentUser()?.id || '').trim();
+      if (!expectedUserId || currentUserId !== expectedUserId) {
+        return {
+          success: false,
+          reason: 'challenge_ladder_account_changed',
+          mutationId,
+          message: '登录账号已变化，领奖回执未应用；原账号可刷新账本确认'
+        };
+      }
+      return {
+        ...(result && typeof result === 'object' ? result : { success: false, message: '众生试炼领奖返回异常' }),
+        mutationId
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error,
+        reason: error && error.reason || undefined,
+        mutationId,
+        message: error.message || '众生试炼领奖失败'
       };
     }
   },

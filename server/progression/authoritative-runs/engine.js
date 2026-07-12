@@ -2,7 +2,7 @@ const crypto = require('node:crypto');
 const { cloneJson } = require('./canonical');
 const { CONTENT_VERSION, PROTOCOL_VERSION } = require('./catalog');
 
-const MODES = ['pve', 'challenge', 'expedition'];
+const MODES = ['pve', 'challenge', 'expedition', 'challenge_ladder'];
 const COMMANDS = ['select_node', 'play_card', 'end_turn', 'choose_reward', 'abandon'];
 const TERMINAL_PHASES = new Set(['completed', 'defeated', 'abandoned']);
 const SAFE_REF = /^[A-Za-z0-9._:-]{1,128}$/;
@@ -21,7 +21,8 @@ function clampInt(value, min = 0, max = Number.MAX_SAFE_INTEGER) {
 }
 
 function getScenario(content, mode) {
-    const scenario = content && content.scenarios && content.scenarios[mode];
+    const scenarioKey = mode === 'challenge_ladder' ? 'challenge' : mode;
+    const scenario = content && content.scenarios && content.scenarios[scenarioKey];
     if (!scenario || !MODES.includes(mode)) {
         throw makeRuleError('unsupported_run_mode', '权威试炼模式不受支持', 400);
     }

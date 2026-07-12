@@ -16,6 +16,7 @@ const pvpRoutes = require('./routes/pvp');
 const pvpLiveRoutes = require('./routes/pvp-live');
 const progressionRoutes = require('./routes/progression');
 const seasonOpsRoutes = require('./routes/season-ops');
+const challengeLadderRoutes = require('./routes/challenge-ladder');
 
 const app = express();
 const PORT = process.env.PORT || 9000;
@@ -35,6 +36,7 @@ app.use('/api/pvp/live', pvpLiveRoutes);
 app.use('/api/pvp', pvpRoutes);
 app.use('/api/progression', progressionRoutes);
 app.use('/api/season-ops', seasonOpsRoutes);
+app.use('/api/challenge-ladder', challengeLadderRoutes);
 
 const getHealthPayload = async () => {
     const schemaStatus = await getSchemaStatus();
@@ -127,6 +129,7 @@ const startServer = async () => {
             console.log(`- GET/POST /api/pvp/*`);
             console.log(`- GET/POST /api/progression/*`);
             console.log(`- GET/POST /api/season-ops/*`);
+            console.log(`- GET/POST /api/challenge-ladder/*`);
         });
         attachLivePvpWebSocket(server, { livePvpStore: pvpLiveRoutes.__livePvpStore });
     } catch (err) {

@@ -156,6 +156,14 @@ const authoritativeRunsPlatformChecks = read('tests/sanity_authoritative_runs_pl
 const authoritativeRunsClientChecks = read('tests/sanity_authoritative_runs_client_checks.mjs');
 const authoritativeRunsUiChecks = read('tests/sanity_authoritative_runs_ui_checks.mjs');
 const authoritativeRunsDocumentation = read('docs/backend_authoritative_runs_v2.md');
+const challengeLadderCatalog = read('server/challenge-ladder/catalog.js');
+const challengeLadderBootstrap = read('server/challenge-ladder/bootstrap.js');
+const challengeLadderService = read('server/challenge-ladder/service.js');
+const challengeLadderRoutes = read('server/routes/challenge-ladder.js');
+const challengeLadderClient = read('js/services/challenge-ladder-service.js');
+const challengeLadderClientChecks = read('tests/sanity_challenge_ladder_client_checks.mjs');
+const challengeLadderPlatformChecks = read('tests/sanity_challenge_ladder_platform_checks.cjs');
+const challengeLadderDocumentation = read('docs/backend_authoritative_challenge_ladder_v1.md');
 const shopManager = read('js/managers/ShopManager.js');
 const coreUtils = read('js/core/utils.js');
 const gameSource = read('js/game.js');
@@ -386,7 +394,7 @@ const waitingReportSource = pvpLiveStore.slice(
   'receipt?.idempotent',
   'server_verified must only upgrade an observed event',
   'a checkpoint source must not move across tickets',
-  'older databases should advance through verified runs to authoritative runs v6 on restart',
+  'older databases should advance through verified runs to challenge ladder v7 on restart',
 ].forEach((needle) => {
   assert.ok(
     verifiedRunsPlatformChecks.includes(needle) || verifiedRunsDocumentation.includes(needle),
@@ -428,6 +436,13 @@ const waitingReportSource = pvpLiveStore.slice(
 });
 
 [
+  'sanity_challenge_ladder_client_checks.mjs',
+  'sanity_challenge_ladder_platform_checks.cjs',
+].forEach((needle) => {
+  assert.ok(runNodeChecks.includes(needle), `node gate should execute challenge ladder check: ${needle}`);
+});
+
+[
   [authoritativeRunsCatalog, "CONTENT_VERSION = 'authoritative-trials-v1'"],
   [authoritativeRunsCatalog, "PROTOCOL_VERSION = 'authoritative-run-v2'"],
   [authoritativeRunsEngine, 'function createInitialState'],
@@ -456,6 +471,24 @@ const waitingReportSource = pvpLiveStore.slice(
 });
 
 [
+  [challengeLadderCatalog, "PROTOCOL_VERSION = 'authoritative-challenge-ladder-v1'"],
+  [challengeLadderCatalog, 'ATTEMPT_LIMIT = 3'],
+  [challengeLadderBootstrap, 'challenge_ladder_attempts'],
+  [challengeLadderBootstrap, 'UNIQUE(user_id, mutation_id)'],
+  [challengeLadderService, "activity_mode || '') !== 'challenge_ladder'"],
+  [authoritativeRunsService, 'challenge_ladder_start_required'],
+  [challengeLadderService, 'fullReplayPassed !== true'],
+  [challengeLadderRoutes, "router.get('/ops/overview', requireOpsToken, authenticate"],
+  [challengeLadderClient, "DEFAULT_PROTOCOL_VERSION = 'authoritative-challenge-ladder-v1'"],
+  [challengeLadderClientChecks, 'account churn should suppress the stale ladder response'],
+  [challengeLadderPlatformChecks, 'same attempt slot across accounts should share one ladder seed fingerprint'],
+  [challengeLadderPlatformChecks, 'cross-process reward claims with distinct mutations should mint one ledger entry'],
+  [challengeLadderDocumentation, '离线练习，不计正式榜'],
+].forEach(([source, needle]) => {
+  assert.ok(source.includes(needle), `challenge ladder V1 should pin release marker: ${needle}`);
+});
+
+[
   'progressionRunOwnerUserId',
   'currentSaveSlot',
   'seedSignature',
@@ -475,6 +508,7 @@ const waitingReportSource = pvpLiveStore.slice(
   '0004_cloud_state_v2',
   '0005_season_ops_economy',
   '0006_authoritative_runs_v2',
+  '0007_authoritative_challenge_ladder',
   'cloud_state_revisions',
   'cloud_state_heads',
   'cloud_state_ops_counters',
@@ -495,12 +529,21 @@ const waitingReportSource = pvpLiveStore.slice(
   'progression_authoritative_run_actions',
   'progression_authoritative_run_snapshots',
   'progression_authoritative_run_receipts',
+  'challenge_ladder_rotations',
+  'challenge_ladder_attempts',
+  'challenge_ladder_results',
+  'challenge_ladder_entries',
+  'challenge_ladder_reward_claims',
+  'challenge_ladder_mutations',
+  'challenge_ladder_ops_events',
+  'challenge_ladder_ops_counters',
 ].forEach((needle) => {
   assert.ok(
     schemaStatusSource.includes(needle)
       || pvpLiveDatabase.includes(needle)
       || cloudStateBootstrap.includes(needle)
-      || authoritativeRunsBootstrap.includes(needle),
+      || authoritativeRunsBootstrap.includes(needle)
+      || challengeLadderBootstrap.includes(needle),
     `progression schema should pin migration/table marker: ${needle}`,
   );
 });
@@ -916,13 +959,20 @@ assert.strictEqual(
 );
 
 [
-  'real backend boots schema V6',
+  'real backend boots schema V7',
+  'challenge ladder GET current returns initial allowance before any formal run',
+  'challenge hub global UI shows formal attempts and official ladder copy before submission',
+  'global formal surface uses the server rotation and excludes legacy local rewards',
+  'formal challenge ladder attempt binds a server-authoritative run',
   'full browser reload resumes the same server run',
+  'settlement auto-submits the challenge ladder result with a full replay receipt',
   'settlement receipt confirms full genesis replay',
-  'real UI completes and settles all three authoritative modes',
-  'all modes mint exactly one receipt and event per settled run',
-  'database persists one receipt and one authoritative progression event',
+  'challenge ladder GET current after submission returns personal best leaderboard and my rank',
+  'database persists settled authoritative receipt plus ladder result and leaderboard entry',
+  'real UI completes and settles all three base authoritative modes alongside challenge ladder',
+  'all base modes and challenge ladder mint exactly one receipt and event per settled run',
   'ops overview reports settlement through redacted references',
+  'challenge ladder ops overview reports redacted attempt result and claim aggregates',
   'real settled mobile view has no horizontal overflow',
 ].forEach((needle) => {
   assert.ok(browserAuthoritativeRunsRealSmoke.includes(needle), `authoritative runs real browser gate should pin marker: ${needle}`);

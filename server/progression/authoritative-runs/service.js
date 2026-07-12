@@ -37,6 +37,8 @@ const RETENTION_MAX_DAYS = 365;
 const SAFE_ID = /^[A-Za-z0-9._:-]{8,128}$/;
 const ACTIVE_RUN_STATUSES = ['active', 'completed'];
 const RETAINABLE_STATUSES = ['settled', 'defeated', 'abandoned', 'expired'];
+const CHALLENGE_LADDER_MODE = 'challenge_ladder';
+const INTERNAL_SEED = /^[a-f0-9]{64}$/;
 
 function openDb() {
     const connection = new sqlite3.Database(dbPath);
@@ -689,10 +691,24 @@ async function formatRun(connection, run, state, content, { idempotent = false, 
     };
 }
 
-async function issueAuthoritativeRun(userId, rawRequest, now = Date.now()) {
+async function issueAuthoritativeRun(userId, rawRequest, now = Date.now(), internalOptions = {}) {
     const identity = String(userId || '').trim();
     if (!identity) throw makeError(401, 'missing_user', '登录账号缺失');
     const request = normalizeStartRequest(rawRequest);
+    const binding = internalOptions && internalOptions.binding && typeof internalOptions.binding === 'object'
+        ? internalOptions.binding
+        : null;
+    const boundSeedHex = String(internalOptions && internalOptions.seedHex || '').trim().toLowerCase();
+    if (request.mode === CHALLENGE_LADDER_MODE) {
+        if (!binding || String(binding.type || '') !== CHALLENGE_LADDER_MODE) {
+            throw makeError(403, 'challenge_ladder_start_required', '众生试炼正式 run 必须从权威赛道发车');
+        }
+        if (!INTERNAL_SEED.test(boundSeedHex)) {
+            throw makeError(500, 'challenge_ladder_seed_invalid', '众生试炼服务端种子无效');
+        }
+    } else if (boundSeedHex) {
+        throw makeError(500, 'unexpected_authoritative_seed', '普通权威 run 不接受外部种子');
+    }
     const startedAt = Date.now();
     return withWriteTransaction(async connection => {
         const existing = await dbGet(
@@ -753,7 +769,9 @@ async function issueAuthoritativeRun(userId, rawRequest, now = Date.now()) {
             throw makeError(503, 'authoritative_catalog_unavailable', '权威内容目录暂不可用');
         }
         const runId = `arun-${crypto.randomUUID()}`;
-        const seedHex = crypto.randomBytes(32).toString('hex');
+        const seedHex = request.mode === CHALLENGE_LADDER_MODE
+            ? boundSeedHex
+            : crypto.randomBytes(32).toString('hex');
         const state = createInitialState({ runId, userId: identity, mode: request.mode, seedHex, content });
         const stateJson = stableStringify(state);
         if (Buffer.byteLength(stateJson, 'utf8') > MAX_STATE_BYTES) {

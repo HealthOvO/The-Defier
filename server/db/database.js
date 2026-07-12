@@ -9,6 +9,7 @@ const {
 const { bootstrapCloudStateSchema } = require('../cloud-state/bootstrap');
 const { bootstrapSeasonOpsSchema } = require('../season-ops/bootstrap');
 const { bootstrapAuthoritativeRunsSchema } = require('../progression/authoritative-runs/bootstrap');
+const { bootstrapChallengeLadderSchema } = require('../challenge-ladder/bootstrap');
 
 const dbPath = process.env.DEFIER_DB_PATH
     ? path.resolve(process.env.DEFIER_DB_PATH)
@@ -758,6 +759,7 @@ const initDb = () => {
                         await bootstrapCloudStateSchema(db);
                         await bootstrapSeasonOpsSchema(db);
                         await bootstrapAuthoritativeRunsSchema(db);
+                        await bootstrapChallengeLadderSchema(db);
                         recordCurrentSchemaMigration(db, (migrationErr) => {
                             if (migrationErr) fail(migrationErr);
                             else done();

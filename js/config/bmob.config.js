@@ -37,6 +37,7 @@
         savePathPrefix: '/api/saves',
         userPathPrefix: '/api/user',
         ghostPathPrefix: '/api/ghosts',
-        seasonOpsPathPrefix: '/api/season-ops'
+        seasonOpsPathPrefix: '/api/season-ops',
+        challengeLadderPathPrefix: '/api/challenge-ladder'
     };
 })();
