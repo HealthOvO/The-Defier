@@ -20,6 +20,8 @@ const opsToken = 'authoritative-runs-browser-ops-token';
 const unique = `${Date.now().toString(36)}${process.pid.toString(36)}`.slice(-12);
 const username = `ars102${unique}`.slice(0, 20);
 const password = `pwd_${unique}_authoritative`;
+const switchUsername = `ars104b${unique}`.slice(0, 20);
+const switchPassword = `pwd_${unique}_rift_switch`;
 const findings = [];
 const consoleErrors = [];
 let browser = null;
@@ -130,6 +132,9 @@ async function readPanel(page) {
     const challengeLadderState = panel?.challengeLadderService?.getState?.()
       || panel?.challengeLadderState
       || null;
+    const worldRiftState = panel?.worldRiftService?.getState?.()
+      || panel?.worldRiftState
+      || null;
     return {
       projection,
       status: panel?.getStatus?.() || '',
@@ -139,6 +144,7 @@ async function readPanel(page) {
       error: panel?.serviceState?.lastError || null,
       currentMode: panel?.getCurrentMode?.() || '',
       challengeLadderState,
+      worldRiftState,
     };
   });
 }
@@ -185,6 +191,10 @@ async function readChallengeHub(page) {
     authoritativeRewardCount: document.querySelectorAll('#challenge-hub-rewards [data-authoritative-milestone]').length,
     legacyClaimCount: document.querySelectorAll('#challenge-hub-rewards [data-challenge-action="claim-milestone"]').length,
     launchCta: document.querySelector('[data-challenge-action="open-authoritative-ladder"]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+    worldRiftRankRowCount: document.querySelectorAll('[data-world-rift-rank]').length,
+    worldRiftRewardCount: document.querySelectorAll('#challenge-hub-rewards [data-world-rift-milestone]').length,
+    worldRiftStateVersion: Number(document.querySelector('[data-world-rift-summary]')?.dataset.worldRiftStateVersion || 0),
+    worldRiftLaunchCta: document.querySelector('[data-challenge-action="open-authoritative-world-rift"]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
   }));
 }
 
@@ -230,6 +240,49 @@ async function openLadderFromChallengeHub(page) {
   );
 }
 
+async function openChallengeHubRift(page, expectedRemainingAttempts = null) {
+  await page.evaluate(() => {
+    for (const id of ['save-slots-modal', 'auth-modal', 'generic-confirm-modal', 'save-conflict-modal']) {
+      document.getElementById(id)?.classList.remove('active');
+    }
+    window.game?.showChallengeHub?.('rift');
+  });
+  await page.waitForSelector('#challenge-screen.active [data-world-rift-summary]', { timeout: 15000 });
+  await page.waitForFunction(
+    expected => {
+      const tab = window.game?.challengeHubState?.tab || '';
+      const summaryText = document.getElementById('challenge-hub-summary')?.textContent?.replace(/\s+/g, ' ').trim() || '';
+      const rankingText = document.getElementById('challenge-hub-ranking')?.textContent?.replace(/\s+/g, ' ').trim() || '';
+      const launchText = document.getElementById('challenge-hub-launch')?.textContent?.replace(/\s+/g, ' ').trim() || '';
+      if (window.game?.currentScreen !== 'challenge-screen' || tab !== 'rift') return false;
+      if (!/真实共斗榜/.test(rankingText) || !/权威共斗|裂隙出征|裂隙余响/.test(launchText)) return false;
+      if (expected === null) return /剩余正式次数/.test(summaryText);
+      return summaryText.includes(`${expected}/5`);
+    },
+    expectedRemainingAttempts,
+    { timeout: 20000 },
+  );
+  await page.waitForTimeout(400);
+  return readChallengeHub(page);
+}
+
+async function openRiftFromChallengeHub(page) {
+  await page.locator('[data-challenge-action="open-authoritative-world-rift"]').click({ force: true });
+  await page.waitForSelector('#season-ops-screen.active .season-ops-authoritative-panel', { timeout: 15000 });
+  return waitForPanel(
+    page,
+    () => {
+      const panel = window.game?.seasonOpsView?.authoritativeRunPanel;
+      const state = panel?.worldRiftService?.getState?.() || panel?.worldRiftState || {};
+      return panel?.getCurrentMode?.() === 'world_rift'
+        && !!state?.current
+        && !panel?.isBusy?.();
+    },
+    null,
+    20000,
+  );
+}
+
 async function prepareLoggedInPage(page) {
   await page.goto(appUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
   await page.waitForFunction(
@@ -257,6 +310,87 @@ async function prepareLoggedInPage(page) {
   }));
   if (!login.success) throw new Error(`real backend login failed: ${JSON.stringify(login)}`);
   await openAuthoritativeTab(page);
+}
+
+async function exerciseWorldRiftAccountSwitch(page, { runId, version }) {
+  const routePattern = '**/api/world-rift/current';
+  let held = false;
+  let resolveIntercepted;
+  let releaseHeld;
+  const intercepted = new Promise(resolve => { resolveIntercepted = resolve; });
+  const releaseGate = new Promise(resolve => { releaseHeld = resolve; });
+  const routeHandler = async route => {
+    if (!held) {
+      held = true;
+      resolveIntercepted();
+      await releaseGate;
+    }
+    await route.continue();
+  };
+  await page.route(routePattern, routeHandler);
+  let staleRefresh = null;
+  try {
+    staleRefresh = page.evaluate(() => window.game?.seasonOpsView?.authoritativeRunPanel?.refreshProjection?.());
+    await Promise.race([
+      intercepted,
+      new Promise((_, reject) => setTimeout(() => reject(new Error('world-rift current interception timed out')), 10000)),
+    ]);
+    const switched = await page.evaluate(async credentials => {
+      const { AuthService, BackendClient } = window.__THE_DEFIER_SERVICES__;
+      const registered = await AuthService.register(credentials.username, credentials.password);
+      await window.game?.seasonOpsView?.handleAuthStateChanged?.();
+      const user = BackendClient.getCurrentUser();
+      return {
+        success: registered?.success === true,
+        userId: user?.objectId || user?.id || '',
+        username: user?.username || '',
+      };
+    }, { username: switchUsername, password: switchPassword });
+    releaseHeld();
+    const staleResult = await staleRefresh;
+    await page.waitForFunction(
+      ({ expectedUsername, oldRunId }) => {
+        const { BackendClient } = window.__THE_DEFIER_SERVICES__ || {};
+        const user = BackendClient?.getCurrentUser?.();
+        const panel = window.game?.seasonOpsView?.authoritativeRunPanel;
+        return user?.username === expectedUsername
+          && !panel?.getCurrentProjection?.()
+          && !JSON.stringify(panel?.worldRiftService?.getState?.() || {}).includes(oldRunId)
+          && !panel?.isBusy?.();
+      },
+      { expectedUsername: switchUsername, oldRunId: runId },
+      { timeout: 20000 },
+    );
+    const switchedPanel = await readPanel(page);
+    const restored = await page.evaluate(async credentials => {
+      const { AuthService, BackendClient } = window.__THE_DEFIER_SERVICES__;
+      const authenticated = await AuthService.login(credentials.username, credentials.password);
+      await window.game?.seasonOpsView?.handleAuthStateChanged?.();
+      const user = BackendClient.getCurrentUser();
+      return {
+        success: authenticated?.success === true,
+        userId: user?.objectId || user?.id || '',
+        username: user?.username || '',
+      };
+    }, { username, password });
+    const resumedPanel = await waitForPanel(
+      page,
+      expected => {
+        const candidate = window.game?.seasonOpsView?.authoritativeRunPanel;
+        const projection = candidate?.getCurrentProjection?.();
+        return candidate?.getCurrentMode?.() === 'world_rift'
+          && projection?.runId === expected.runId
+          && Number(projection.version) === expected.version
+          && !candidate?.isBusy?.();
+      },
+      { runId, version },
+      25000,
+    );
+    return { switched, restored, staleResult, switchedPanel, resumedPanel };
+  } finally {
+    if (releaseHeld) releaseHeld();
+    await page.unroute(routePattern, routeHandler);
+  }
 }
 
 function chooseDecision(projection) {
@@ -326,7 +460,8 @@ async function clickDecision(page, decision, before) {
 
 async function readLayout(page) {
   return page.evaluate(() => {
-    const root = document.getElementById('season-ops-screen');
+    const root = document.querySelector('#season-ops-screen.active, #challenge-screen.active')
+      || document.getElementById('season-ops-screen');
     const visibleButtons = [...root.querySelectorAll('button')].filter(button => {
       const rect = button.getBoundingClientRect();
       const style = getComputedStyle(button);
@@ -405,7 +540,7 @@ try {
   apiUrl = `http://127.0.0.1:${port}`;
   backend = startBackend();
   const health = await waitForHealth();
-  add('real backend boots schema V7', health?.schema?.version === 7 && health?.schema?.currentMigrationId === '0007_authoritative_challenge_ladder', JSON.stringify(health?.schema || {}));
+  add('real backend boots schema V8', health?.schema?.version === 8 && health?.schema?.currentMigrationId === '0008_authoritative_world_rift', JSON.stringify(health?.schema || {}));
 
   const launchArgs = [];
   if (new URL(appUrl).protocol === 'https:') {
@@ -685,11 +820,234 @@ try {
     && /继续权威众生试炼|进入权威众生试炼/.test(challengeHubAfter.launchText), JSON.stringify(challengeHubAfter));
   await safeAuditScreenshot(page, path.join(outDir, 'challenge-ladder-hub-after.png'), 'browser_authoritative_runs_real_backend_smoke', { timeout: 9000 });
 
-  await openLadderFromChallengeHub(page);
+  const riftCurrentBefore = await page.evaluate(async () => {
+    const { BackendClient } = window.__THE_DEFIER_SERVICES__;
+    const user = BackendClient.getCurrentUser();
+    return BackendClient.getWorldRiftCurrent({
+      expectedUserId: user?.objectId || user?.id || '',
+    });
+  });
+  add('world rift GET current returns shared boss and five formal attempts', riftCurrentBefore?.success === true
+    && riftCurrentBefore?.protocolVersion === 'authoritative-world-rift-v1'
+    && Number(riftCurrentBefore?.allowance?.attemptLimit) === 5
+    && Number(riftCurrentBefore?.allowance?.usedAttempts) === 0
+    && Number(riftCurrentBefore?.allowance?.remainingAttempts) === 5
+    && Number(riftCurrentBefore?.world?.totalHp) === 10000
+    && Number(riftCurrentBefore?.world?.appliedDamage) === 0
+    && Array.isArray(riftCurrentBefore?.leaderboard?.entries)
+    && riftCurrentBefore.leaderboard.entries.length === 0, JSON.stringify(riftCurrentBefore));
+
+  const riftHubBefore = await openChallengeHubRift(page, 5);
+  add('world rift hub renders real shared state without simulated participants', riftHubBefore.currentScreen === 'challenge-screen'
+    && riftHubBefore.activeTab === 'rift'
+    && /天穹裂隙/.test(riftHubBefore.title)
+    && /真实共斗榜/.test(riftHubBefore.rankingText)
+    && /5\/5/.test(riftHubBefore.summaryText)
+    && /10000\/10000/.test(riftHubBefore.summaryText)
+    && /无末刀奖励/.test(riftHubBefore.summaryText)
+    && /固定牌组与统一种子/.test(riftHubBefore.summaryText)
+    && riftHubBefore.worldRiftRewardCount === riftCurrentBefore.milestones.length
+    && riftHubBefore.worldRiftRankRowCount === 0
+    && /进入权威共斗/.test(riftHubBefore.launchText), JSON.stringify(riftHubBefore));
+  await safeAuditScreenshot(page, path.join(outDir, 'world-rift-hub-before.png'), 'browser_authoritative_runs_real_backend_smoke', { timeout: 9000 });
+
+  panel = await openRiftFromChallengeHub(page);
+  add('world rift CTA opens the bound authoritative mode', panel.currentMode === 'world_rift'
+    && !panel.projection
+    && Number(panel.worldRiftState?.current?.allowance?.remainingAttempts) === 5, JSON.stringify({
+      currentMode: panel.currentMode,
+      worldRiftState: panel.worldRiftState?.current || null,
+    }));
+
+  await page.waitForSelector('[data-season-ops-action="authoritative-begin"]');
+  await page.locator('[data-season-ops-action="authoritative-begin"]').click();
+  panel = await waitForPanel(
+    page,
+    () => {
+      const candidate = window.game?.seasonOpsView?.authoritativeRunPanel;
+      const projection = candidate?.getCurrentProjection?.();
+      return candidate?.getCurrentMode?.() === 'world_rift'
+        && projection?.mode === 'world_rift'
+        && projection?.phase === 'route';
+    },
+  );
+  const riftRunId = panel.projection.runId;
+  add('formal world rift attempt binds a server-authoritative shared seed', /^arun-/.test(riftRunId)
+    && panel.runMeta?.trustTier === 'server_authoritative'
+    && panel.worldRiftState?.attempt?.runId === riftRunId
+    && Number(panel.worldRiftState?.attempt?.attemptIndex) === 1
+    && Number(panel.worldRiftState?.attempt?.seedSlot) === 1
+    && !/"(?:seed|rng|drawPile)"/.test(JSON.stringify(panel.projection)), JSON.stringify({
+      runMeta: panel.runMeta,
+      attempt: panel.worldRiftState?.attempt,
+    }));
+  await safeAuditScreenshot(page, path.join(outDir, 'world-rift-route-desktop.png'), 'browser_authoritative_runs_real_backend_smoke', { timeout: 9000 });
+
+  let riftActionCount = 0;
+  let riftReloadChecked = false;
+  let riftAccountSwitchChecked = false;
+  while (!['completed', 'defeated', 'abandoned'].includes(panel.projection?.phase) && riftActionCount < 128) {
+    const before = panel;
+    const decision = chooseDecision(before.projection);
+    if (!decision) throw new Error(`no playable world-rift command: ${JSON.stringify(before)}`);
+    panel = await clickDecision(page, decision, before);
+    riftActionCount += 1;
+
+    if (!riftReloadChecked && riftActionCount >= 8 && !['completed', 'defeated', 'abandoned'].includes(panel.projection.phase)) {
+      const versionBeforeReload = panel.projection.version;
+      await page.reload({ waitUntil: 'domcontentloaded', timeout: 60000 });
+      await page.waitForFunction(
+        () => !!window.game && !!window.__THE_DEFIER_SERVICES__?.BackendClient?.getCurrentUser?.(),
+        null,
+        { timeout: 30000 },
+      );
+      await openAuthoritativeTab(page);
+      await selectAuthoritativeMode(page, 'world_rift');
+      panel = await waitForPanel(
+        page,
+        expected => {
+          const candidate = window.game?.seasonOpsView?.authoritativeRunPanel;
+          const projection = candidate?.getCurrentProjection?.();
+          return candidate?.getCurrentMode?.() === 'world_rift'
+            && projection?.runId === expected.runId
+            && Number(projection.version) === expected.version
+            && !candidate?.isBusy?.();
+        },
+        { runId: riftRunId, version: versionBeforeReload },
+        20000,
+      );
+      riftReloadChecked = true;
+      add('full browser reload resumes the same world rift server run', panel.projection.runId === riftRunId
+        && Number(panel.projection.version) === Number(versionBeforeReload));
+      await safeAuditScreenshot(page, path.join(outDir, 'world-rift-resumed-desktop.png'), 'browser_authoritative_runs_real_backend_smoke', { timeout: 9000 });
+    }
+
+    if (riftReloadChecked && !riftAccountSwitchChecked && riftActionCount >= 12
+      && !['completed', 'defeated', 'abandoned'].includes(panel.projection.phase)) {
+      const versionBeforeSwitch = panel.projection.version;
+      const accountSwitch = await exerciseWorldRiftAccountSwitch(page, {
+        runId: riftRunId,
+        version: versionBeforeSwitch,
+      });
+      const switchedStateJson = JSON.stringify(accountSwitch.switchedPanel || {});
+      add('world rift account switch discards an in-flight old-account refresh', accountSwitch.switched?.success === true
+        && accountSwitch.switched?.username === switchUsername
+        && !accountSwitch.switchedPanel?.projection
+        && accountSwitch.switchedPanel?.worldRiftState?.expectedUserId === accountSwitch.switched?.userId
+        && !switchedStateJson.includes(riftRunId), JSON.stringify({
+          switched: accountSwitch.switched,
+          staleResult: accountSwitch.staleResult,
+          switchedPanel: accountSwitch.switchedPanel,
+        }));
+      panel = accountSwitch.resumedPanel;
+      add('switching back resumes the same world rift server run', accountSwitch.restored?.success === true
+        && accountSwitch.restored?.username === username
+        && panel.projection?.runId === riftRunId
+        && Number(panel.projection?.version) === Number(versionBeforeSwitch), JSON.stringify({
+          restored: accountSwitch.restored,
+          projection: panel.projection,
+        }));
+      riftAccountSwitchChecked = true;
+    }
+  }
+  add('real browser strategy completes the formal world rift run', panel.projection?.phase === 'completed', `${panel.projection?.phase || 'missing'} after ${riftActionCount} actions`);
+  if (panel.projection?.phase !== 'completed') throw new Error(`world rift run did not complete: ${JSON.stringify(panel)}`);
+  await page.locator('[data-season-ops-action="authoritative-settle"]').click();
+  panel = await waitForPanel(
+    page,
+    expectedRunId => {
+      const candidate = window.game?.seasonOpsView?.authoritativeRunPanel;
+      const state = candidate?.worldRiftService?.getState?.() || candidate?.worldRiftState || {};
+      return candidate?.lastRunMeta?.runId === expectedRunId
+        && candidate?.lastRunMeta?.status === 'settled'
+        && candidate?.lastReceipt?.integrity?.fullReplayPassed === true
+        && state?.contribution?.runId === expectedRunId
+        && Number(state?.current?.allowance?.usedAttempts) >= 1
+        && Number(state?.current?.allowance?.remainingAttempts) === 4
+        && Number(state?.world?.stateVersion || state?.current?.world?.stateVersion) >= 1
+        && !candidate?.isBusy?.();
+    },
+    riftRunId,
+    25000,
+  );
+  add('settlement atomically projects world rift contribution and shared state', panel.status === 'settled'
+    && panel.receipt?.integrity?.fullReplayPassed === true
+    && panel.worldRiftState?.contribution?.runId === riftRunId
+    && Number(panel.worldRiftState?.contribution?.contribution) > 0
+    && Number(panel.worldRiftState?.contribution?.appliedDamage) > 0
+    && Number(panel.worldRiftState?.world?.stateVersion || panel.worldRiftState?.current?.world?.stateVersion) === 1, JSON.stringify({
+      contribution: panel.worldRiftState?.contribution,
+      world: panel.worldRiftState?.world || panel.worldRiftState?.current?.world,
+    }));
+  await safeAuditScreenshot(page, path.join(outDir, 'world-rift-settled-desktop.png'), 'browser_authoritative_runs_real_backend_smoke', { timeout: 9000 });
+
+  const riftCurrentAfter = await page.evaluate(async () => {
+    const { BackendClient } = window.__THE_DEFIER_SERVICES__;
+    const user = BackendClient.getCurrentUser();
+    return BackendClient.getWorldRiftCurrent({
+      expectedUserId: user?.objectId || user?.id || '',
+    });
+  });
+  const riftHubAfter = await openChallengeHubRift(page, 4);
+  add('world rift current and hub refresh after contribution', riftCurrentAfter?.success === true
+    && Number(riftCurrentAfter?.allowance?.usedAttempts) === 1
+    && Number(riftCurrentAfter?.allowance?.remainingAttempts) === 4
+    && Number(riftCurrentAfter?.world?.appliedDamage) > 0
+    && Number(riftCurrentAfter?.world?.stateVersion) === 1
+    && Number(riftCurrentAfter?.personal?.completedAttempts) === 1
+    && Array.isArray(riftCurrentAfter?.leaderboard?.entries)
+    && riftCurrentAfter.leaderboard.entries.length === 1
+    && riftHubAfter.worldRiftRankRowCount === 1
+    && riftHubAfter.rankingText.includes(username)
+    && /4\/5/.test(riftHubAfter.summaryText), JSON.stringify({ riftCurrentAfter, riftHubAfter }));
+  await safeAuditScreenshot(page, path.join(outDir, 'world-rift-hub-after.png'), 'browser_authoritative_runs_real_backend_smoke', { timeout: 9000 });
+
+  const persistedRift = await dbGet(
+    `SELECT ar.status AS run_status,
+            ar.activity_mode,
+            a.status AS attempt_status,
+            a.attempt_index,
+            a.seed_slot,
+            c.contribution_id,
+            c.contribution,
+            c.applied_damage,
+            c.state_version,
+            e.ranked_contribution,
+            e.completed_attempts,
+            s.applied_damage AS world_applied_damage,
+            s.total_contribution AS world_total_contribution,
+            s.state_version AS world_state_version,
+            (SELECT COUNT(*) FROM progression_authoritative_run_receipts WHERE run_id = ?) AS receipt_count,
+            (SELECT COUNT(*) FROM world_rift_mutations WHERE user_id = a.user_id AND request_type = 'submit') AS submit_mutation_count
+     FROM progression_authoritative_runs ar
+     JOIN world_rift_attempts a ON a.run_id = ar.run_id
+     JOIN world_rift_contributions c ON c.run_id = ar.run_id
+     JOIN world_rift_entries e ON e.rotation_id = a.rotation_id AND e.user_id = a.user_id
+     JOIN world_rift_states s ON s.rotation_id = a.rotation_id
+     WHERE ar.run_id = ?`,
+    [riftRunId, riftRunId],
+  );
+  add('database persists one world-rift contribution and shared-state increment', persistedRift?.run_status === 'settled'
+    && persistedRift?.activity_mode === 'world_rift'
+    && persistedRift?.attempt_status === 'submitted'
+    && Number(persistedRift?.attempt_index) === 1
+    && Number(persistedRift?.seed_slot) === 1
+    && !!persistedRift?.contribution_id
+    && Number(persistedRift?.contribution) > 0
+    && Number(persistedRift?.applied_damage) === Number(persistedRift?.world_applied_damage)
+    && Number(persistedRift?.contribution) === Number(persistedRift?.world_total_contribution)
+    && Number(persistedRift?.state_version) === 1
+    && Number(persistedRift?.world_state_version) === 1
+    && Number(persistedRift?.ranked_contribution) === Number(persistedRift?.contribution)
+    && Number(persistedRift?.completed_attempts) === 1
+    && Number(persistedRift?.receipt_count) === 1
+    && Number(persistedRift?.submit_mutation_count) === 1, JSON.stringify(persistedRift));
+
+  await openAuthoritativeTab(page);
   const pveResult = await completeAdditionalMode(page, 'pve');
   const challengeResult = await completeAdditionalMode(page, 'challenge');
   const expeditionResult = await completeAdditionalMode(page, 'expedition');
-  add('real UI completes and settles all three base authoritative modes alongside challenge ladder', pveResult.replayActionCount === pveResult.actionCount
+  add('real UI completes and settles all three base authoritative modes alongside challenge ladder and world rift', pveResult.replayActionCount === pveResult.actionCount
     && challengeResult.replayActionCount === challengeResult.actionCount
     && expeditionResult.replayActionCount === expeditionResult.actionCount, JSON.stringify({ pveResult, challengeResult, expeditionResult }));
 
@@ -700,14 +1058,16 @@ try {
         (SELECT COUNT(*) FROM progression_authoritative_runs WHERE activity_mode = 'pve' AND status = 'settled') AS pve_settled,
         (SELECT COUNT(*) FROM progression_authoritative_runs WHERE activity_mode = 'challenge' AND status = 'settled') AS challenge_settled,
         (SELECT COUNT(*) FROM progression_authoritative_runs WHERE activity_mode = 'expedition' AND status = 'settled') AS expedition_settled,
-        (SELECT COUNT(*) FROM progression_authoritative_runs WHERE activity_mode = 'challenge_ladder' AND status = 'settled') AS ladder_settled`,
+        (SELECT COUNT(*) FROM progression_authoritative_runs WHERE activity_mode = 'challenge_ladder' AND status = 'settled') AS ladder_settled,
+        (SELECT COUNT(*) FROM progression_authoritative_runs WHERE activity_mode = 'world_rift' AND status = 'settled') AS world_rift_settled`,
   );
-  add('all base modes and challenge ladder mint exactly one receipt and event per settled run', Number(aggregate?.receipt_count) === 4
-    && Number(aggregate?.event_count) === 4
+  add('all base modes challenge ladder and world rift mint exactly one receipt and event per settled run', Number(aggregate?.receipt_count) === 5
+    && Number(aggregate?.event_count) === 5
     && Number(aggregate?.pve_settled) === 1
     && Number(aggregate?.challenge_settled) === 1
     && Number(aggregate?.expedition_settled) === 1
-    && Number(aggregate?.ladder_settled) === 1, JSON.stringify(aggregate));
+    && Number(aggregate?.ladder_settled) === 1
+    && Number(aggregate?.world_rift_settled) === 1, JSON.stringify(aggregate));
 
   const opsResponse = await fetch(`${apiUrl}/api/progression/ops/authoritative-runs`, {
     headers: { 'x-defier-ops-token': opsToken },
@@ -716,12 +1076,13 @@ try {
   const opsJson = JSON.stringify(ops);
   add('ops overview reports settlement through redacted references', opsResponse.ok
     && ops?.success === true
-    && ops?.totals?.receipts === 4
-    && ops?.byStatus?.settled === 4
+    && ops?.totals?.receipts === 5
+    && ops?.byStatus?.settled === 5
     && ops?.byMode?.pve >= 1
     && ops?.byMode?.challenge >= 1
     && ops?.byMode?.expedition >= 1
     && ops?.byMode?.challenge_ladder >= 1
+    && ops?.byMode?.world_rift >= 1
     && !opsJson.includes(username)
     && !opsJson.includes(runId), JSON.stringify(ops));
 
@@ -742,6 +1103,23 @@ try {
     && !ladderOpsJson.includes(username)
     && !ladderOpsJson.includes(runId), JSON.stringify(ladderOps));
 
+  const worldRiftOpsResponse = await fetch(`${apiUrl}/api/world-rift/ops/overview`, {
+    headers: {
+      Authorization: `Bearer ${sessionToken}`,
+      'x-defier-ops-token': opsToken,
+    },
+  });
+  const worldRiftOps = await worldRiftOpsResponse.json();
+  const worldRiftOpsJson = JSON.stringify(worldRiftOps);
+  add('world rift ops overview is redacted', worldRiftOpsResponse.ok
+    && worldRiftOps?.success === true
+    && Number(worldRiftOps?.totals?.attempts) === 1
+    && Number(worldRiftOps?.totals?.contributions) === 1
+    && Number(worldRiftOps?.attemptStates?.submitted) === 1
+    && Number(worldRiftOps?.currentWorld?.stateVersion) === 1
+    && !worldRiftOpsJson.includes(username)
+    && !worldRiftOpsJson.includes(riftRunId), JSON.stringify(worldRiftOps));
+
   await openChallengeHubGlobal(page, 2);
   await openLadderFromChallengeHub(page);
 
@@ -752,6 +1130,13 @@ try {
   add('real settled mobile controls meet touch target', mobileLayout.undersized.length === 0, JSON.stringify(mobileLayout.undersized));
   await page.locator('[data-season-ops-action="authoritative-begin"]').scrollIntoViewIfNeeded();
   await safeAuditScreenshot(page, path.join(outDir, 'challenge-ladder-settled-mobile.png'), 'browser_authoritative_runs_real_backend_smoke', { timeout: 9000 });
+  const riftMobileHub = await openChallengeHubRift(page, 4);
+  const riftMobileLayout = await readLayout(page);
+  add('real world rift mobile view has no horizontal overflow', riftMobileHub.activeTab === 'rift'
+    && riftMobileLayout.documentScrollWidth === 390
+    && riftMobileLayout.rootScrollWidth === riftMobileLayout.rootClientWidth, JSON.stringify(riftMobileLayout));
+  add('real world rift mobile controls meet touch target', riftMobileLayout.undersized.length === 0, JSON.stringify(riftMobileLayout.undersized));
+  await safeAuditScreenshot(page, path.join(outDir, 'world-rift-hub-mobile.png'), 'browser_authoritative_runs_real_backend_smoke', { timeout: 9000 });
   add('real browser console errors are empty', consoleErrors.length === 0, consoleErrors.join('\n'));
 } catch (error) {
   add('authoritative real-backend browser runtime', false, error?.stack || error);

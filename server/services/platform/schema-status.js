@@ -112,6 +112,22 @@ const SCHEMA_MIGRATIONS = [
             'challenge_ladder_ops_events',
             'challenge_ladder_ops_counters'
         ]
+    }),
+    makeMigration({
+        id: '0008_authoritative_world_rift',
+        version: 8,
+        description: 'Authoritative asynchronous world-rift rotations, shared state, contributions, rewards, and ops telemetry',
+        resources: [
+            'world_rift_rotations',
+            'world_rift_states',
+            'world_rift_attempts',
+            'world_rift_contributions',
+            'world_rift_entries',
+            'world_rift_reward_claims',
+            'world_rift_mutations',
+            'world_rift_ops_events',
+            'world_rift_ops_counters'
+        ]
     })
 ];
 const CURRENT_MIGRATION = SCHEMA_MIGRATIONS[SCHEMA_MIGRATIONS.length - 1];

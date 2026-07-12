@@ -164,6 +164,15 @@ const challengeLadderClient = read('js/services/challenge-ladder-service.js');
 const challengeLadderClientChecks = read('tests/sanity_challenge_ladder_client_checks.mjs');
 const challengeLadderPlatformChecks = read('tests/sanity_challenge_ladder_platform_checks.cjs');
 const challengeLadderDocumentation = read('docs/backend_authoritative_challenge_ladder_v1.md');
+const worldRiftCatalog = read('server/world-rift/catalog.js');
+const worldRiftBootstrap = read('server/world-rift/bootstrap.js');
+const worldRiftService = read('server/world-rift/service.js');
+const worldRiftRoutes = read('server/routes/world-rift.js');
+const worldRiftClient = read('js/services/world-rift-service.js');
+const worldRiftClientChecks = read('tests/sanity_world_rift_client_checks.mjs');
+const worldRiftUiChecks = read('tests/sanity_world_rift_ui_checks.mjs');
+const worldRiftPlatformChecks = read('tests/sanity_world_rift_platform_checks.cjs');
+const worldRiftDocumentation = read('docs/backend_authoritative_world_rift_v1.md');
 const shopManager = read('js/managers/ShopManager.js');
 const coreUtils = read('js/core/utils.js');
 const gameSource = read('js/game.js');
@@ -394,7 +403,7 @@ const waitingReportSource = pvpLiveStore.slice(
   'receipt?.idempotent',
   'server_verified must only upgrade an observed event',
   'a checkpoint source must not move across tickets',
-  'older databases should advance through verified runs to challenge ladder v7 on restart',
+  'older databases should advance through verified runs to world rift v8 on restart',
 ].forEach((needle) => {
   assert.ok(
     verifiedRunsPlatformChecks.includes(needle) || verifiedRunsDocumentation.includes(needle),
@@ -443,6 +452,14 @@ const waitingReportSource = pvpLiveStore.slice(
 });
 
 [
+  'sanity_world_rift_client_checks.mjs',
+  'sanity_world_rift_ui_checks.mjs',
+  'sanity_world_rift_platform_checks.cjs',
+].forEach((needle) => {
+  assert.ok(runNodeChecks.includes(needle), `node gate should execute world rift check: ${needle}`);
+});
+
+[
   [authoritativeRunsCatalog, "CONTENT_VERSION = 'authoritative-trials-v1'"],
   [authoritativeRunsCatalog, "PROTOCOL_VERSION = 'authoritative-run-v2'"],
   [authoritativeRunsEngine, 'function createInitialState'],
@@ -478,7 +495,7 @@ const waitingReportSource = pvpLiveStore.slice(
   [challengeLadderService, "activity_mode || '') !== 'challenge_ladder'"],
   [authoritativeRunsService, 'challenge_ladder_start_required'],
   [challengeLadderService, 'fullReplayPassed !== true'],
-  [challengeLadderRoutes, "router.get('/ops/overview', requireOpsToken, authenticate"],
+  [challengeLadderRoutes, "router.get('/ops/overview', authenticate, requireOpsToken"],
   [challengeLadderClient, "DEFAULT_PROTOCOL_VERSION = 'authoritative-challenge-ladder-v1'"],
   [challengeLadderClientChecks, 'account churn should suppress the stale ladder response'],
   [challengeLadderPlatformChecks, 'same attempt slot across accounts should share one ladder seed fingerprint'],
@@ -486,6 +503,34 @@ const waitingReportSource = pvpLiveStore.slice(
   [challengeLadderDocumentation, '离线练习，不计正式榜'],
 ].forEach(([source, needle]) => {
   assert.ok(source.includes(needle), `challenge ladder V1 should pin release marker: ${needle}`);
+});
+
+[
+  [worldRiftCatalog, "PROTOCOL_VERSION = 'authoritative-world-rift-v1'"],
+  [worldRiftCatalog, 'ATTEMPT_LIMIT = 5'],
+  [worldRiftCatalog, 'CLAIM_WINDOW_MS = 7 * 24 * 60 * 60 * 1000'],
+  [worldRiftBootstrap, 'world_rift_states'],
+  [worldRiftBootstrap, 'UNIQUE(user_id, mutation_id)'],
+  [worldRiftService, "activity_mode || '') !== 'world_rift'"],
+  [worldRiftService, 'fullReplayPassed !== true'],
+  [worldRiftService, 'r.grace_ends_at > ?'],
+  [authoritativeRunsService, 'world_rift_start_required'],
+  [worldRiftRoutes, "router.get('/ops/overview', authenticate, requireOpsToken"],
+  [worldRiftClient, "DEFAULT_PROTOCOL_VERSION = 'authoritative-world-rift-v1'"],
+  [worldRiftClientChecks, 'account churn should suppress the stale world-rift response'],
+  [worldRiftUiChecks, 'World rift UI checks passed.'],
+  [challengeHub, 'role="progressbar"'],
+  [worldRiftPlatformChecks, 'two concurrent contributions must each be recorded exactly once'],
+  [worldRiftPlatformChecks, 'claim-only rotations must not expose or auto-project stale authoritative attempts after settlement grace'],
+  [worldRiftPlatformChecks, 'start requests queued across endsAt must be rejected after the write lock is acquired'],
+  [worldRiftPlatformChecks, 'contribution requests queued across graceEndsAt must not commit late world state'],
+  [worldRiftPlatformChecks, 'reward claims queued across claimEndsAt must not mint late ledger entries'],
+  [worldRiftPlatformChecks, 'unauthenticated callers must not get an ops-token validity oracle'],
+  [worldRiftPlatformChecks, 'echo submissions must not change cleared world damage'],
+  [authoritativeRunsMigrationChecks, 'v7 to v8 restart must preserve live authoritative-run data while adding world-rift tables'],
+  [worldRiftDocumentation, '没有末刀奖励'],
+].forEach(([source, needle]) => {
+  assert.ok(source.includes(needle), `world rift V1 should pin release marker: ${needle}`);
 });
 
 [
@@ -509,6 +554,7 @@ const waitingReportSource = pvpLiveStore.slice(
   '0005_season_ops_economy',
   '0006_authoritative_runs_v2',
   '0007_authoritative_challenge_ladder',
+  '0008_authoritative_world_rift',
   'cloud_state_revisions',
   'cloud_state_heads',
   'cloud_state_ops_counters',
@@ -537,13 +583,23 @@ const waitingReportSource = pvpLiveStore.slice(
   'challenge_ladder_mutations',
   'challenge_ladder_ops_events',
   'challenge_ladder_ops_counters',
+  'world_rift_rotations',
+  'world_rift_states',
+  'world_rift_attempts',
+  'world_rift_contributions',
+  'world_rift_entries',
+  'world_rift_reward_claims',
+  'world_rift_mutations',
+  'world_rift_ops_events',
+  'world_rift_ops_counters',
 ].forEach((needle) => {
   assert.ok(
     schemaStatusSource.includes(needle)
       || pvpLiveDatabase.includes(needle)
       || cloudStateBootstrap.includes(needle)
       || authoritativeRunsBootstrap.includes(needle)
-      || challengeLadderBootstrap.includes(needle),
+      || challengeLadderBootstrap.includes(needle)
+      || worldRiftBootstrap.includes(needle),
     `progression schema should pin migration/table marker: ${needle}`,
   );
 });
@@ -959,7 +1015,7 @@ assert.strictEqual(
 );
 
 [
-  'real backend boots schema V7',
+  'real backend boots schema V8',
   'challenge ladder GET current returns initial allowance before any formal run',
   'challenge hub global UI shows formal attempts and official ladder copy before submission',
   'global formal surface uses the server rotation and excludes legacy local rewards',
@@ -969,8 +1025,20 @@ assert.strictEqual(
   'settlement receipt confirms full genesis replay',
   'challenge ladder GET current after submission returns personal best leaderboard and my rank',
   'database persists settled authoritative receipt plus ladder result and leaderboard entry',
-  'real UI completes and settles all three base authoritative modes alongside challenge ladder',
-  'all base modes and challenge ladder mint exactly one receipt and event per settled run',
+  'real UI completes and settles all three base authoritative modes alongside challenge ladder and world rift',
+  'all base modes challenge ladder and world rift mint exactly one receipt and event per settled run',
+  'world rift GET current returns shared boss and five formal attempts',
+  'world rift hub renders real shared state without simulated participants',
+  'formal world rift attempt binds a server-authoritative shared seed',
+  'full browser reload resumes the same world rift server run',
+  'world rift account switch discards an in-flight old-account refresh',
+  'switching back resumes the same world rift server run',
+  'settlement atomically projects world rift contribution and shared state',
+  'world rift current and hub refresh after contribution',
+  'database persists one world-rift contribution and shared-state increment',
+  'world rift ops overview is redacted',
+  'real world rift mobile view has no horizontal overflow',
+  'real world rift mobile controls meet touch target',
   'ops overview reports settlement through redacted references',
   'challenge ladder ops overview reports redacted attempt result and claim aggregates',
   'real settled mobile view has no horizontal overflow',

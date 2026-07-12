@@ -489,4 +489,74 @@ await ladderPanel.refreshProjection();
 assert.equal(ladderCalls.current, ladderCurrentCallsBeforeRecovery + 1, "ladder recovery must trigger current auto-projection before reloading the run");
 ladderPanel.destroy();
 
+const riftRunService = createServiceStub();
+riftRunService.__setCurrentHandler(async () => ({ success: true, run: null }));
+riftRunService.__setSettleHandler(async () => ({
+  success: true,
+  run: createRunEnvelope({
+    mode: "world_rift",
+    phase: "completed",
+    status: "settled",
+    settledAt: Date.UTC(2026, 6, 11, 10, 0)
+  })
+}));
+const riftCalls = { current: 0, start: 0, submit: 0 };
+const riftState = {
+  current: {
+    rotation: { rotationId: "rift-2026-w28", title: "天穹灾潮", attemptLimit: 5, totalHp: 10000 },
+    allowance: { attemptLimit: 5, usedAttempts: 1, remainingAttempts: 4 },
+    world: { currentPhaseIndex: 1, phaseTitle: "噬界核心", totalHp: 10000, appliedDamage: 3200, remainingHp: 6800, stateVersion: 8 },
+    personal: { rankedContribution: 1870 },
+    resumableAttempt: null
+  },
+  world: null,
+  contribution: null,
+  leaderboard: { myRank: { rank: 6 }, entries: [] },
+  attempt: null,
+  pending: null,
+  lastError: null
+};
+const worldRiftService = {
+  getState: () => JSON.parse(JSON.stringify(riftState)),
+  subscribe: () => noop,
+  current: async () => {
+    riftCalls.current += 1;
+    return { success: true, ...riftState.current };
+  },
+  start: async () => {
+    riftCalls.start += 1;
+    return {
+      success: true,
+      run: createRunEnvelope({ mode: "world_rift", phase: "route", status: "active" })
+    };
+  },
+  submit: async () => {
+    riftCalls.submit += 1;
+    return { success: true, contribution: { contribution: 1870, appliedDamage: 1870, stateVersion: 9 } };
+  }
+};
+const riftPanel = new AuthoritativeRunPanel({
+  service: riftRunService,
+  worldRiftService,
+  getCurrentUserId: () => "ui-user-rift",
+  requestRender: noop
+});
+await riftPanel.selectMode("world_rift");
+html = riftPanel.render();
+assert.match(html, /天穹裂隙/);
+assert.match(html, /正式次数 4\/5/);
+assert.match(html, /噬界核心 · 剩余 6800\/10000/);
+assert.match(html, /最佳三次 1870/);
+await riftPanel.beginRun();
+assert.equal(riftCalls.start, 1, "world rift must start through the shared-world quota service");
+assert.equal(riftRunService.__getBeginCalls().length, 0, "world rift must not bypass quota through generic authoritative start");
+const riftSettlement = await riftPanel.settleRun();
+assert.equal(riftRunService.__getSettleCalls().length, 1);
+assert.equal(riftCalls.submit, 1, "settled world-rift run must be projected into shared world state");
+assert.equal(riftSettlement.riftSubmission.success, true);
+const riftCurrentCallsBeforeRecovery = riftCalls.current;
+await riftPanel.refreshProjection();
+assert.equal(riftCalls.current, riftCurrentCallsBeforeRecovery + 1, "world-rift recovery must auto-project before reloading the run");
+riftPanel.destroy();
+
 console.log("Authoritative runs UI checks passed.");

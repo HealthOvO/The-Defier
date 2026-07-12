@@ -1,5 +1,22 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-07-12: V10-S104 异步协作世界裂隙 V1
+  - 本轮完成
+    - 新增观星台“天穹裂隙”正式共斗：UTC 周轮换、三阶段 10000 点全服生命、每账号 5 次正式出征、同槽位同服务端种子、最佳 3 次贡献计榜；没有假玩家、末刀、首杀或战力奖励。
+    - 正式出征复用权威战局 V2 的固定牌组、完整动作链和 genesis 重放；只有 `server_authoritative + server_replayed + fullReplayPassed` 回执能投影贡献，直接调用通用 `world_rift` 发车入口会被拒绝。
+    - SQLite 升级到 V8 `0008_authoritative_world_rift`，新增轮换、共享状态、尝试、贡献、榜单、领奖、幂等回执和脱敏运维表；共享血量推进、跨阶段溢出、击破后余响、里程碑与榜单都在写事务中原子结算。
+    - 奖励只发外观用途荣誉；个人 1500/4500/8000 与全服三阶段里程碑独立计算，上一轮在 7 日窗口内继续可领，重复和跨进程并发领取只写一条 claim 与一条经济流水。
+    - 客户端新增稳定重试 ID、部分回执恢复、账号切换抑制、裂隙挑战中心、权威战局上下文与桌面/移动布局；全服状态、榜单和阶段生命均来自真实后端，不使用本地模拟参与者。
+    - 双路 `gpt-5.4` 挑战者复审发现并修复 5 类边界：写锁排队跨过发车/结算/领奖截止仍可能提交、ops token 在 JWT 前校验形成有效性侧信道、裂隙真实浏览器恢复与切号证据不足、进度条缺少数值 ARIA、移动触控断言未被结构门禁锁定；并补齐 V7 到 V8 保留旧权威战局的重启迁移回归。
+  - 已验证
+    - 完整 Node 门禁：`npm run test:node`。
+    - 本地生产构建：`npm run build:pages`。
+    - 裂隙平台定向回归：`node tests/sanity_world_rift_platform_checks.cjs`，覆盖双进程无丢更新、重复投影、跨阶段溢出、余响、并发领奖、三个跨截止写锁竞态与运维脱敏。
+    - 迁移与复用回归：`node tests/sanity_authoritative_runs_migration_checks.cjs`、`node tests/sanity_authoritative_runs_platform_checks.cjs`、`node tests/sanity_challenge_ladder_platform_checks.cjs`。
+    - 真实后端浏览器：`node tests/browser_authoritative_runs_real_backend_smoke.mjs http://127.0.0.1:4174 output/browser-authoritative-runs-real-backend-smoke-s104-3`，41/41 findings、0 failed、0 console error；覆盖整页重载恢复、在途切号抑制、切回同一 run、完整结算、数据库事实、桌面与 390px 移动端。
+  - 当前结论
+    - 本轮只在独立 worktree 和开发分支完成设计、开发、测试、提交与推送；未执行 SSH、rsync、systemd、Nginx、生产数据库写入或线上部署，也不合并 `main`。
+
 - 2026-07-11: V10-S102 全游戏服务端权威运行与反作弊平台 V2
   - 本轮完成
     - 新增独立的“权威试炼”可玩切片，在赛季司内覆盖 PVE、挑战、远征三种服务器裁定场景；浏览器只提交择路、出牌、结束回合、选奖励、放弃与结算命令，不再自述伤害、随机数、敌方行动、奖励或最终得分。

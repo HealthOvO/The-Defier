@@ -20119,6 +20119,22 @@ body {
     line-height: 1.6;
 }
 
+.world-rift-progress-track {
+    height: 10px;
+    overflow: hidden;
+    border: 1px solid rgba(255, 222, 163, 0.18);
+    border-radius: 5px;
+    background: rgba(5, 11, 25, 0.9);
+}
+
+.world-rift-progress-track > span {
+    display: block;
+    width: 0;
+    height: 100%;
+    background: linear-gradient(90deg, #4aa6a0, #e0b467);
+    transition: width 180ms ease-out;
+}
+
 .challenge-danger-grid {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));

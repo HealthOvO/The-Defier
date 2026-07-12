@@ -346,8 +346,8 @@ async function main() {
 
     const version = await request('/api/version');
     assert.strictEqual(version.status, 200, JSON.stringify(version.payload));
-    assert.strictEqual(version.payload?.schema?.version, 7);
-    assert.strictEqual(version.payload?.schema?.currentMigrationId, '0007_authoritative_challenge_ladder');
+    assert.strictEqual(version.payload?.schema?.version, 8);
+    assert.strictEqual(version.payload?.schema?.currentMigrationId, '0008_authoritative_world_rift');
     assert.deepStrictEqual(
       version.payload?.schema?.appliedMigrations?.map(entry => entry.id),
       [
@@ -357,7 +357,8 @@ async function main() {
         '0004_cloud_state_v2',
         '0005_season_ops_economy',
         '0006_authoritative_runs_v2',
-        '0007_authoritative_challenge_ladder'
+        '0007_authoritative_challenge_ladder',
+        '0008_authoritative_world_rift'
       ]
     );
 

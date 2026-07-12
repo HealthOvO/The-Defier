@@ -39,8 +39,8 @@ const JWT_SECRET = 'challenge-ladder-platform-jwt-secret-32';
 const HMAC_SECRET = 'challenge-ladder-platform-hmac-secret-32';
 const OPS_TOKEN = 'challenge-ladder-platform-ops-token-32';
 const PROTOCOL_VERSION = 'authoritative-challenge-ladder-v1';
-const EXPECTED_SCHEMA_VERSION = 7;
-const EXPECTED_MIGRATION_ID = '0007_authoritative_challenge_ladder';
+const EXPECTED_SCHEMA_VERSION = 8;
+const EXPECTED_MIGRATION_ID = '0008_authoritative_world_rift';
 const EXPECTED_TABLES = [
   'challenge_ladder_rotations',
   'challenge_ladder_attempts',
@@ -505,9 +505,9 @@ async function runFutureFlowCoverage() {
   assert.strictEqual(unauthenticatedCurrent.status, 401, 'challenge ladder current should require JWT');
 
   const opsHidden = await getChallengeOpsOverview();
-  assert.strictEqual(opsHidden.status, 404, 'ops overview should stay hidden without ops token');
+  assert.strictEqual(opsHidden.status, 401, 'ops overview should authenticate the actor before checking the ops token');
   const opsDenied = await getChallengeOpsOverview({ opsToken: 'wrong-token' });
-  assert.strictEqual(opsDenied.status, 403, 'wrong ops token should be rejected');
+  assert.strictEqual(opsDenied.status, 401, 'unauthenticated callers must not get an ops-token validity oracle');
   const opsNeedsIdentity = await getChallengeOpsOverview({ opsToken: OPS_TOKEN });
   assert.strictEqual(opsNeedsIdentity.status, 401, 'valid ops token must still require a JWT actor');
 

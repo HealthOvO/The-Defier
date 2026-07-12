@@ -1,7 +1,7 @@
 import { BackendClient } from "./backend-client.js";
 
 const SAFE_ID = /^[A-Za-z0-9._:-]{8,128}$/;
-const MODES = new Set(['pve', 'challenge', 'expedition', 'challenge_ladder']);
+const MODES = new Set(['pve', 'challenge', 'expedition', 'challenge_ladder', 'world_rift']);
 const TERMINAL_PHASE_RANK = Object.freeze({
   route: 1,
   battle: 2,

@@ -38,7 +38,25 @@ const SAFE_ID = /^[A-Za-z0-9._:-]{8,128}$/;
 const ACTIVE_RUN_STATUSES = ['active', 'completed'];
 const RETAINABLE_STATUSES = ['settled', 'defeated', 'abandoned', 'expired'];
 const CHALLENGE_LADDER_MODE = 'challenge_ladder';
+const WORLD_RIFT_MODE = 'world_rift';
 const INTERNAL_SEED = /^[a-f0-9]{64}$/;
+
+const BOUND_MODE_META = Object.freeze({
+    [CHALLENGE_LADDER_MODE]: {
+        bindingType: CHALLENGE_LADDER_MODE,
+        startReason: 'challenge_ladder_start_required',
+        startMessage: '众生试炼正式 run 必须从权威赛道发车',
+        seedReason: 'challenge_ladder_seed_invalid',
+        seedMessage: '众生试炼服务端种子无效'
+    },
+    [WORLD_RIFT_MODE]: {
+        bindingType: WORLD_RIFT_MODE,
+        startReason: 'world_rift_start_required',
+        startMessage: '天穹裂隙正式 run 必须从裂隙服务发车',
+        seedReason: 'world_rift_seed_invalid',
+        seedMessage: '天穹裂隙服务端种子无效'
+    }
+});
 
 function openDb() {
     const connection = new sqlite3.Database(dbPath);
@@ -691,26 +709,41 @@ async function formatRun(connection, run, state, content, { idempotent = false, 
     };
 }
 
-async function issueAuthoritativeRun(userId, rawRequest, now = Date.now(), internalOptions = {}) {
+async function issueAuthoritativeRun(userId, rawRequest, nowInput, internalOptions = {}) {
     const identity = String(userId || '').trim();
     if (!identity) throw makeError(401, 'missing_user', '登录账号缺失');
+    const fixedNow = Number.isFinite(Number(nowInput)) ? clampInt(nowInput) : null;
+    const externalNowProvider = internalOptions && typeof internalOptions.nowProvider === 'function'
+        ? internalOptions.nowProvider
+        : null;
+    const nowProvider = () => {
+        const candidate = externalNowProvider ? externalNowProvider() : fixedNow;
+        return candidate !== null && candidate !== undefined && Number.isFinite(Number(candidate))
+            ? clampInt(candidate)
+            : Date.now();
+    };
+    const startDeadline = clampInt(internalOptions && internalOptions.startDeadline);
+    const startDeadlineReason = String(internalOptions && internalOptions.startDeadlineReason || 'authoritative_start_window_closed');
+    const startDeadlineMessage = String(internalOptions && internalOptions.startDeadlineMessage || '权威发车窗口已关闭');
     const request = normalizeStartRequest(rawRequest);
     const binding = internalOptions && internalOptions.binding && typeof internalOptions.binding === 'object'
         ? internalOptions.binding
         : null;
     const boundSeedHex = String(internalOptions && internalOptions.seedHex || '').trim().toLowerCase();
-    if (request.mode === CHALLENGE_LADDER_MODE) {
-        if (!binding || String(binding.type || '') !== CHALLENGE_LADDER_MODE) {
-            throw makeError(403, 'challenge_ladder_start_required', '众生试炼正式 run 必须从权威赛道发车');
+    const boundMode = BOUND_MODE_META[request.mode] || null;
+    if (boundMode) {
+        if (!binding || String(binding.type || '') !== boundMode.bindingType) {
+            throw makeError(403, boundMode.startReason, boundMode.startMessage);
         }
         if (!INTERNAL_SEED.test(boundSeedHex)) {
-            throw makeError(500, 'challenge_ladder_seed_invalid', '众生试炼服务端种子无效');
+            throw makeError(500, boundMode.seedReason, boundMode.seedMessage);
         }
     } else if (boundSeedHex) {
         throw makeError(500, 'unexpected_authoritative_seed', '普通权威 run 不接受外部种子');
     }
     const startedAt = Date.now();
     return withWriteTransaction(async connection => {
+        const transactionNow = nowProvider();
         const existing = await dbGet(
             connection,
             `SELECT * FROM progression_authoritative_runs
@@ -722,8 +755,8 @@ async function issueAuthoritativeRun(userId, rawRequest, now = Date.now(), inter
                 || String(existing.content_version || '') !== request.contentVersion) {
                 throw makeError(409, 'client_run_conflict', '相同客户端 run id 已绑定其他权威上下文');
             }
-            const ensured = await ensureRunState(connection, existing, now);
-            const expired = await expireRunIfNeeded(connection, ensured.run, now);
+            const ensured = await ensureRunState(connection, existing, transactionNow);
+            const expired = await expireRunIfNeeded(connection, ensured.run, transactionNow);
             const run = expired || ensured.run;
             return {
                 success: true,
@@ -736,9 +769,9 @@ async function issueAuthoritativeRun(userId, rawRequest, now = Date.now(), inter
             connection,
             `SELECT * FROM progression_authoritative_runs
              WHERE user_id = ? AND activity_mode = ? AND status = 'active' AND expires_at <= ?`,
-            [identity, request.mode, now]
+            [identity, request.mode, transactionNow]
         );
-        for (const row of expiring) await expireRunIfNeeded(connection, row, now);
+        for (const row of expiring) await expireRunIfNeeded(connection, row, transactionNow);
 
         const current = await dbGet(
             connection,
@@ -748,12 +781,16 @@ async function issueAuthoritativeRun(userId, rawRequest, now = Date.now(), inter
             [identity, request.mode]
         );
         if (current) {
-            const ensured = await ensureRunState(connection, current, now);
+            const ensured = await ensureRunState(connection, current, transactionNow);
             return {
                 success: true,
                 reportVersion: `${REPORT_VERSION}-start`,
                 run: await formatRun(connection, ensured.run, ensured.state, ensured.content, { resumedExisting: true })
             };
+        }
+
+        if (startDeadline > 0 && transactionNow >= startDeadline) {
+            throw makeError(409, startDeadlineReason, startDeadlineMessage);
         }
 
         const catalog = await dbGet(
@@ -769,7 +806,7 @@ async function issueAuthoritativeRun(userId, rawRequest, now = Date.now(), inter
             throw makeError(503, 'authoritative_catalog_unavailable', '权威内容目录暂不可用');
         }
         const runId = `arun-${crypto.randomUUID()}`;
-        const seedHex = request.mode === CHALLENGE_LADDER_MODE
+        const seedHex = boundMode
             ? boundSeedHex
             : crypto.randomBytes(32).toString('hex');
         const state = createInitialState({ runId, userId: identity, mode: request.mode, seedHex, content });
@@ -785,7 +822,7 @@ async function issueAuthoritativeRun(userId, rawRequest, now = Date.now(), inter
             contentHash: CONTENT_HASH,
             stateHash
         });
-        const expiresAt = now + RUN_TTL_MS;
+        const expiresAt = transactionNow + RUN_TTL_MS;
         await dbRun(
             connection,
             `INSERT INTO progression_authoritative_runs
@@ -806,9 +843,9 @@ async function issueAuthoritativeRun(userId, rawRequest, now = Date.now(), inter
                 stateJson,
                 stateHash,
                 chainHead,
-                now,
+                transactionNow,
                 expiresAt,
-                now
+                transactionNow
             ]
         );
         await dbRun(
@@ -816,10 +853,13 @@ async function issueAuthoritativeRun(userId, rawRequest, now = Date.now(), inter
             `INSERT INTO progression_authoritative_run_snapshots
                 (snapshot_id, run_id, sequence, state_json, state_hash, chain_head, created_at)
              VALUES (?, ?, 0, ?, ?, ?, ?)`,
-            [deterministicId('arsnap', [runId, 0]), runId, stateJson, stateHash, chainHead, now]
+            [deterministicId('arsnap', [runId, 0]), runId, stateJson, stateHash, chainHead, transactionNow]
         );
         const run = await loadOwnedRun(connection, identity, runId);
-        await recordOpsEvent(connection, 'run_started', run, { status: 'active', actionCount: 0 }, Date.now() - startedAt, now);
+        await recordOpsEvent(connection, 'run_started', run, { status: 'active', actionCount: 0 }, Date.now() - startedAt, transactionNow);
+        if (startDeadline > 0 && nowProvider() >= startDeadline) {
+            throw makeError(409, startDeadlineReason, startDeadlineMessage);
+        }
         return {
             success: true,
             reportVersion: `${REPORT_VERSION}-start`,

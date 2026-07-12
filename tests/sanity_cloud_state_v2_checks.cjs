@@ -282,10 +282,11 @@ async function main() {
 
     const version = await request('/api/version');
     assert.strictEqual(version.status, 200, JSON.stringify(version.payload));
-    assert.strictEqual(version.payload?.schema?.version, 7, 'schema version should advance through challenge ladder v7');
-    assert.strictEqual(version.payload?.schema?.currentMigrationId, '0007_authoritative_challenge_ladder');
+    assert.strictEqual(version.payload?.schema?.version, 8, 'schema version should advance through world rift v8');
+    assert.strictEqual(version.payload?.schema?.currentMigrationId, '0008_authoritative_world_rift');
     assert(version.payload?.schema?.appliedMigrations?.some(item => item.id === '0004_cloud_state_v2'), 'applied migrations should include v4');
     assert(version.payload?.schema?.appliedMigrations?.some(item => item.id === '0007_authoritative_challenge_ladder'), 'applied migrations should include v7');
+    assert(version.payload?.schema?.appliedMigrations?.some(item => item.id === '0008_authoritative_world_rift'), 'applied migrations should include v8');
 
     const legacyHeads = await dbAll(
       `SELECT user_id, entity_key, head_revision_id

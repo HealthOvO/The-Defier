@@ -211,12 +211,13 @@ localStorage.setItem('theDefierServerConfig', JSON.stringify({
 
 ## 当前迁移提示
 
-1. 当前 Schema 版本为 `7`；启动顺序为 `0001_startup_schema`、`0002_progression_platform`、`0003_verified_runs`、`0004_cloud_state_v2`、`0005_season_ops_economy`、`0006_authoritative_runs_v2`、`0007_authoritative_challenge_ladder`。
+1. 当前 Schema 版本为 `8`；启动顺序为 `0001_startup_schema`、`0002_progression_platform`、`0003_verified_runs`、`0004_cloud_state_v2`、`0005_season_ops_economy`、`0006_authoritative_runs_v2`、`0007_authoritative_challenge_ladder`、`0008_authoritative_world_rift`。
 2. `0004_cloud_state_v2` 以事务方式幂等回填旧槽位和账号全局数据；旧数据不会因超过 V2 新写入上限而阻断启动。
 3. `0005_season_ops_economy` 优先按服务端战斗状态 `setup.battleStartedAt` 回填 `match_started_at` 并重放赛季有效时间窗内的 live PVP 正式结算；仅在旧状态缺失时回退到房间创建时间，不能把历史异步 PVP、练习局或赛季外对局写入新榜。
 4. 旧 `pvp_ranks` 保持累计段位兼容，正式赛季榜从 1000 独立起算；升级不会用旧累计分污染赛季榜，也不会在首场新结算时清零旧客户端段位。
 5. 最终 snapshot 至少等待赛季结束一小时，并在同一写事务内确认没有赛季内开战且尚未结算/作废的正式对局；仅经过固定时间但仍有 unresolved match 时返回 `season_snapshot_matches_pending`。已存在最终 snapshot 的赛季保持冻结：运行时迟到结算与启动回放只写 `post_snapshot_noop` 逐场审计，不更新 `pvp_season_ladders`。
 6. `0006_authoritative_runs_v2` 追加不可变内容目录、run、动作日志、快照、回执和运维表；启动时内容哈希漂移会 fail closed，不会改写已存在的版本。
 7. `0007_authoritative_challenge_ladder` 追加权威挑战轮转、尝试、结算结果、榜单、奖励领取、幂等 mutation 和运维表；它建立在前序迁移之上，但不会改写 `0006_authoritative_runs_v2` 已记录的版本语义。
-8. 旧客户端继续使用时间戳兼容写入，新客户端必须使用完整业务体签名、revision/CAS 和 mutationId，失败时不得降级旧协议。
-9. 云状态只管理四个存档槽和账号全局数据；PVP、长期进度、可信运行、权威试炼、权威挑战榜与赛季经济继续由各自服务端域负责。
+8. `0008_authoritative_world_rift` 追加裂隙轮换、全服共享状态、权威出征、不可变贡献、最佳三次榜单、奖励、幂等 mutation 和运维表；升级不会回填本地挑战或伪造全服贡献。
+9. 旧客户端继续使用时间戳兼容写入，新客户端必须使用完整业务体签名、revision/CAS 和 mutationId，失败时不得降级旧协议。
+10. 云状态只管理四个存档槽和账号全局数据；PVP、长期进度、可信运行、权威试炼、权威挑战榜、世界裂隙与赛季经济继续由各自服务端域负责。

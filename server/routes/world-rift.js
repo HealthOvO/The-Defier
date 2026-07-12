@@ -3,12 +3,12 @@ const express = require('express');
 const { authenticate } = require('../middleware/auth');
 const { verifyRequestIntegrity } = require('../utils/hmac');
 const {
-    claimChallengeLadderReward,
-    getChallengeLadderOpsOverview,
-    getCurrentChallengeLadder,
-    startChallengeLadderAttempt,
-    submitChallengeLadderResult
-} = require('../challenge-ladder/service');
+    claimWorldRiftReward,
+    getCurrentWorldRift,
+    getWorldRiftOpsOverview,
+    startWorldRiftAttempt,
+    submitWorldRiftContribution
+} = require('../world-rift/service');
 
 const router = express.Router();
 
@@ -69,19 +69,19 @@ function requireOpsToken(req, res, next) {
 }
 
 router.get('/current', authenticate, asyncHandler(async (req, res) => {
-    res.json(await getCurrentChallengeLadder(req.user.id));
+    res.json(await getCurrentWorldRift(req.user.id));
 }));
 
 router.post('/attempts', authenticate, asyncHandler(async (req, res) => {
     const payload = getSignedBusinessPayload(req.body);
-    if (!requireSignedPayload(req, res, payload, 'POST /api/challenge-ladder/attempts')) return;
-    res.json(await startChallengeLadderAttempt(req.user.id, payload));
+    if (!requireSignedPayload(req, res, payload, 'POST /api/world-rift/attempts')) return;
+    res.json(await startWorldRiftAttempt(req.user.id, payload));
 }));
 
-router.post('/results', authenticate, asyncHandler(async (req, res) => {
+router.post('/contributions', authenticate, asyncHandler(async (req, res) => {
     const payload = getSignedBusinessPayload(req.body);
-    if (!requireSignedPayload(req, res, payload, 'POST /api/challenge-ladder/results')) return;
-    res.json(await submitChallengeLadderResult(req.user.id, payload));
+    if (!requireSignedPayload(req, res, payload, 'POST /api/world-rift/contributions')) return;
+    res.json(await submitWorldRiftContribution(req.user.id, payload));
 }));
 
 router.post('/rewards/:milestoneId/claim', authenticate, asyncHandler(async (req, res) => {
@@ -94,22 +94,22 @@ router.post('/rewards/:milestoneId/claim', authenticate, asyncHandler(async (req
             message: '里程碑与请求路径不一致'
         });
     }
-    if (!requireSignedPayload(req, res, payload, 'POST /api/challenge-ladder/rewards/:milestoneId/claim')) return;
-    res.json(await claimChallengeLadderReward(req.user.id, milestoneId, payload));
+    if (!requireSignedPayload(req, res, payload, 'POST /api/world-rift/rewards/:milestoneId/claim')) return;
+    res.json(await claimWorldRiftReward(req.user.id, milestoneId, payload));
 }));
 
 router.get('/ops/overview', authenticate, requireOpsToken, asyncHandler(async (req, res) => {
-    res.json(await getChallengeLadderOpsOverview());
+    res.json(await getWorldRiftOpsOverview());
 }));
 
 router.use((error, req, res, next) => {
     if (res.headersSent) return next(error);
     const status = Number(error && error.statusCode) || 500;
-    if (status >= 500) console.error('[ChallengeLadder] Route failed:', error);
+    if (status >= 500) console.error('[WorldRift] Route failed:', error);
     res.status(status).json({
         success: false,
-        reason: error && error.reason || 'challenge_ladder_error',
-        message: status >= 500 ? '众生试炼服务暂时不可用' : error.message,
+        reason: error && error.reason || 'world_rift_error',
+        message: status >= 500 ? '天穹裂隙服务暂时不可用' : error.message,
         details: status < 500 && error && error.details || undefined,
         requestId: req.requestId
     });

@@ -2,6 +2,7 @@ import { CHALLENGE_RULES } from "../data/challenge_rules.js";
 import { PVPService } from "../services/pvp-service.js";
 import { ProgressionService } from "../services/progression-service.js";
 import { ChallengeLadderService } from "../services/challenge-ladder-service.js";
+import { WorldRiftService } from "../services/world-rift-service.js";
 import { GameMap } from "./map.js";
 import { Utils } from "./utils.js";
 import { CHARACTERS } from "../data/index.js";
@@ -30,6 +31,12 @@ const challengeHubMethods = Object.create(null);
       title: '观星台 · 众生试炼',
       subtitle: '在统一规则下积累跨周样本，争夺本周最高试炼分与档案席位。',
       label: '众生试炼',
+      accentClass: 'global'
+    },
+    rift: {
+      title: '观星台 · 天穹裂隙',
+      subtitle: '真实全服共同推进三阶段首领；每周五次正式出征，最佳三次进入贡献榜。',
+      label: '天穹裂隙',
       accentClass: 'global'
     }
   };
@@ -375,7 +382,7 @@ const challengeHubMethods = Object.create(null);
     const verificationArchiveFilters = source.verificationArchiveFilters && typeof source.verificationArchiveFilters === 'object' ? source.verificationArchiveFilters : {};
     const archivePresets = source.archivePresets && typeof source.archivePresets === 'object' ? source.archivePresets : {};
     return {
-      tab: ['daily', 'weekly', 'global'].includes(source.tab) ? source.tab : 'daily',
+      tab: ['daily', 'weekly', 'global', 'rift'].includes(source.tab) ? source.tab : 'daily',
       archiveFilters: {
         daily: normalizeChallengeArchiveFilterState(archiveFilters.daily),
         weekly: normalizeChallengeArchiveFilterState(archiveFilters.weekly),
@@ -2548,6 +2555,247 @@ const challengeHubMethods = Object.create(null);
     await this.refreshChallengeLadder();
     return result;
   };
+  challengeHubMethods.getWorldRiftViewModel = function () {
+    const userId = typeof this.getCurrentProgressionUserId === 'function'
+      ? String(this.getCurrentProgressionUserId() || '').trim()
+      : '';
+    const service = typeof WorldRiftService !== 'undefined' ? WorldRiftService : null;
+    const state = service && typeof service.getState === 'function' ? service.getState() : {};
+    const current = state.current && typeof state.current === 'object' ? state.current : null;
+    const rotation = current?.rotation && typeof current.rotation === 'object' ? current.rotation : current;
+    const world = current?.world && typeof current.world === 'object'
+      ? current.world
+      : current?.worldState && typeof current.worldState === 'object'
+        ? current.worldState
+        : state.world && typeof state.world === 'object'
+          ? state.world
+          : null;
+    const leaderboardEnvelope = current?.leaderboard || state.leaderboard || null;
+    const leaderboardSource = Array.isArray(leaderboardEnvelope)
+      ? leaderboardEnvelope
+      : Array.isArray(leaderboardEnvelope?.entries)
+        ? leaderboardEnvelope.entries
+        : Array.isArray(current?.entries)
+          ? current.entries
+          : [];
+    const milestones = Array.isArray(current?.milestones)
+      ? current.milestones
+      : [
+        ...(Array.isArray(current?.personalMilestones) ? current.personalMilestones : []),
+        ...(Array.isArray(current?.globalMilestones) ? current.globalMilestones : [])
+      ];
+    const attemptLimit = clampInt(current?.allowance?.attemptLimit ?? current?.attemptLimit ?? rotation?.attemptLimit, 5);
+    const usedAttempts = clampInt(current?.allowance?.usedAttempts ?? current?.attemptsUsed ?? current?.attempts?.used, 0);
+    const remainingAttempts = clampInt(
+      current?.allowance?.remainingAttempts ?? current?.remainingAttempts ?? current?.attempts?.remaining ?? Math.max(0, attemptLimit - usedAttempts),
+      0
+    );
+    const personal = current?.personal || current?.personalContribution || current?.entry || current?.self
+      || state.contribution || leaderboardEnvelope?.self || null;
+    const myRank = leaderboardEnvelope?.myRank || current?.myRank || null;
+    const phase = !userId
+      ? 'login_required'
+      : state.pending
+        ? 'loading'
+        : current
+          ? ((rotation?.status || rotation?.state) === 'closed' ? 'archived' : (rotation?.status || rotation?.state) === 'grace' ? 'grace' : 'ready')
+          : state.lastError
+            ? 'error'
+            : 'idle';
+    return {
+      phase,
+      userId,
+      current,
+      rotation: rotation || null,
+      world,
+      attemptLimit,
+      usedAttempts,
+      remainingAttempts,
+      personal,
+      myRank,
+      previousClaim: current?.previousClaim || current?.previousGrace || state.previousClaim || null,
+      recoverableAttempt: current?.resumableAttempt || current?.recoverableAttempt || current?.currentAttempt || state.attempt || null,
+      leaderboard: leaderboardSource,
+      milestones,
+      error: state.lastError || null,
+      pending: state.pending || null
+    };
+  };
+  challengeHubMethods.refreshWorldRift = async function () {
+    const view = this.getWorldRiftViewModel();
+    const service = typeof WorldRiftService !== 'undefined' ? WorldRiftService : null;
+    if (!view.userId || !service || typeof service.current !== 'function') {
+      return { success: false, reason: 'not_logged_in' };
+    }
+    const state = service.getState();
+    if (state.pending) return { success: true, skipped: true };
+    const result = await service.current({ expectedUserId: view.userId });
+    if (this.currentScreen === 'challenge-screen' && this.challengeHubState?.tab === 'rift') {
+      this.initWorldRiftHub();
+    }
+    return result;
+  };
+  challengeHubMethods.claimWorldRiftMilestone = async function (milestoneId = '', rotationId = '') {
+    const view = this.getWorldRiftViewModel();
+    const resolvedRotationId = String(rotationId || view.rotation?.rotationId || view.rotation?.id || '').trim();
+    const service = typeof WorldRiftService !== 'undefined' ? WorldRiftService : null;
+    if (!milestoneId || !resolvedRotationId || !view.userId || !service || typeof service.claim !== 'function') {
+      return { success: false, reason: 'world_rift_claim_unavailable' };
+    }
+    const result = await service.claim({
+      milestoneId,
+      rotationId: resolvedRotationId,
+      expectedUserId: view.userId
+    });
+    if (!result || result.success === false) {
+      if (typeof Utils !== 'undefined' && Utils && typeof Utils.showBattleLog === 'function') {
+        Utils.showBattleLog(result?.message || '天穹裂隙奖励领取失败，请稍后重试。', { category: 'system', duration: 2600 });
+      }
+    }
+    await this.refreshWorldRift();
+    return result;
+  };
+  challengeHubMethods.initWorldRiftHub = function () {
+    if (typeof document === 'undefined') return;
+    const view = this.getWorldRiftViewModel();
+    const rotation = view.rotation || {};
+    const world = view.world || {};
+    const totalHp = clampInt(world.totalHp ?? rotation.totalHp, 10000);
+    const appliedDamage = clampInt(world.appliedDamage ?? world.damage, 0, totalHp);
+    const remainingHp = clampInt(world.remainingHp ?? Math.max(0, totalHp - appliedDamage), 0, totalHp);
+    const progressPercent = totalHp > 0 ? Math.min(100, Math.round(appliedDamage / totalHp * 100)) : 0;
+    const rawPhaseIndex = clampInt(world.currentPhaseIndex ?? world.phaseIndex, 1, 3);
+    const phaseIndex = clampInt(rawPhaseIndex - 1, 0, 2);
+    const phases = Array.isArray(rotation.phases) ? rotation.phases : Array.isArray(world.phases) ? world.phases : [];
+    const currentPhase = world.currentPhase && typeof world.currentPhase === 'object' ? world.currentPhase : phases[phaseIndex] || {};
+    const cleared = !!(world.cleared || world.status === 'cleared' || remainingHp === 0);
+    const phaseTitle = String(currentPhase.title || currentPhase.name || (cleared ? '裂隙余响' : `第 ${phaseIndex + 1} 阶段`));
+    const personalTotal = clampInt(view.personal?.totalContribution ?? view.personal?.contributionTotal, 0);
+    const rankedContribution = clampInt(view.personal?.rankedContribution ?? view.personal?.rankScore ?? view.personal?.score, 0);
+    const selfRank = clampInt(view.myRank?.rank ?? view.personal?.rank, 0);
+    const titleEl = document.getElementById('challenge-hub-title');
+    const subtitleEl = document.getElementById('challenge-hub-subtitle');
+    const summaryEl = document.getElementById('challenge-hub-summary');
+    const rulesEl = document.getElementById('challenge-hub-rules');
+    const rewardsEl = document.getElementById('challenge-hub-rewards');
+    const recordsEl = document.getElementById('challenge-hub-records');
+    const sideEl = document.getElementById('challenge-hub-side');
+    const rankingEl = document.getElementById('challenge-hub-ranking');
+    const launchEl = document.getElementById('challenge-hub-launch');
+    if (titleEl) titleEl.textContent = '观星台 · 天穹裂隙';
+    if (subtitleEl) subtitleEl.textContent = '真实全服共同推进三阶段首领；每周五次正式出征，最佳三次进入贡献榜。';
+    document.querySelectorAll('#challenge-screen [data-challenge-tab]').forEach(button => {
+      button.classList.toggle('active', button.dataset.challengeTab === 'rift');
+    });
+    const phaseMessage = view.phase === 'login_required'
+      ? '登录后读取真实全服首领、正式额度、贡献榜和奖励资格。'
+      : view.phase === 'loading'
+        ? '正在读取服务端世界状态。'
+        : view.phase === 'error'
+          ? view.error?.message || '天穹裂隙读取失败，可刷新后重试。'
+          : cleared
+            ? '三阶段首领已经击破。剩余正式次数仍可投入余响，继续累积个人贡献和榜单成绩。'
+            : rotation.description || '所有有效完整重放都会原子推进真实全服首领。';
+    if (summaryEl) {
+      summaryEl.innerHTML = `
+        <article class="challenge-focus-card global" data-world-rift-summary data-world-rift-state-version="${clampInt(world.stateVersion, 0)}">
+          <div class="challenge-focus-head">
+            <span class="challenge-focus-icon">裂</span>
+            <div>
+              <span class="challenge-kicker">异步共斗 · ${escapeHtml(rotation.rotationId || '等待服务器')}</span>
+              <h3>${escapeHtml(rotation.title || '天穹裂隙')}</h3>
+            </div>
+          </div>
+          <p class="challenge-focus-intro">${escapeHtml(phaseMessage)}</p>
+          <div class="challenge-focus-meta">
+            <div class="challenge-meta-chip"><strong>${view.remainingAttempts}/${view.attemptLimit}</strong><span>剩余正式次数</span></div>
+            <div class="challenge-meta-chip"><strong>${escapeHtml(phaseTitle)}</strong><span>当前全服阶段</span></div>
+            <div class="challenge-meta-chip"><strong>${remainingHp}/${totalHp}</strong><span>全服剩余生命</span></div>
+            <div class="challenge-meta-chip"><strong>${rankedContribution}${selfRank > 0 ? ` · #${selfRank}` : ''}</strong><span>最佳三次贡献</span></div>
+          </div>
+          <div class="challenge-danger-band">
+            <div class="challenge-danger-head"><strong>${escapeHtml(cleared ? '裂隙余响' : phaseTitle)}</strong><span>${progressPercent}%</span></div>
+            <div class="world-rift-progress-track" role="progressbar" aria-label="全服裂隙进度" aria-valuemin="0" aria-valuemax="${totalHp}" aria-valuenow="${appliedDamage}"><span style="width:${progressPercent}%"></span></div>
+            <p class="challenge-danger-summary">全服已推进 ${appliedDamage}/${totalHp}；溢出会穿透到下一阶段，击破后贡献转入余响。</p>
+            <div class="challenge-danger-foot"><span>无末刀奖励</span><span>状态版本 ${clampInt(world.stateVersion, 0)}</span></div>
+          </div>
+          <div class="challenge-tag-strip">
+            <span class="challenge-tag">server_authoritative</span>
+            <span class="challenge-tag">每周 ${view.attemptLimit} 次</span>
+            <span class="challenge-tag">最佳 3 次计榜</span>
+            <span class="challenge-tag">固定牌组与统一种子</span>
+          </div>
+        </article>`;
+    }
+    if (rulesEl) {
+      const formula = String(rotation.contributionFormula?.formulaText || rotation.contribution?.formulaText || rotation.scoring?.formulaText || 'contribution = clamp(300 + score * 2 + 生存加成 + 节奏加成, 300, 2400)');
+      const rules = [
+        `轮换窗口：${rotation.rotationId || '等待服务器'} · UTC 周轮换`,
+        `正式额度：每账号每轮 ${view.attemptLimit} 次，发车即消耗；失败、放弃和过期不返还`,
+        '统一命盘：第 N 次出征对所有账号使用相同的第 N 号服务端种子',
+        `贡献公式：${formula}`,
+        '世界推进：贡献可跨阶段溢出；击破后进入余响，不产生负生命',
+        '榜单规则：贡献最高三次之和，再比较最佳单次、血量与回合；不使用提交时间',
+        '奖励边界：个人与全服里程碑只发外观用途荣誉；没有末刀、首杀或战力奖励'
+      ];
+      rulesEl.innerHTML = rules.map(line => `<article class="challenge-rule-card"><span class="challenge-rule-bullet">✦</span><p>${escapeHtml(line)}</p></article>`).join('');
+    }
+    if (rewardsEl) {
+      const groups = [
+        { label: '本周裂隙', rotation, world, personal: view.personal, milestones: view.milestones },
+        ...(view.previousClaim ? [{
+          label: '上轮待领',
+          rotation: view.previousClaim.rotation || {},
+          world: view.previousClaim.world || {},
+          personal: view.previousClaim.personal || {},
+          milestones: Array.isArray(view.previousClaim.milestones) ? view.previousClaim.milestones : []
+        }] : [])
+      ];
+      const cards = groups.flatMap(group => group.milestones.map(item => {
+        const milestoneId = String(item.milestoneId || item.id || '');
+        const rotationId = String(group.rotation.rotationId || group.rotation.id || '');
+        const claimed = !!item.claimed;
+        const claimable = !!(item.claimable || item.ready || item.eligible) && !claimed;
+        const target = clampInt(item.targetContribution ?? item.targetAppliedDamage ?? item.targetDamage ?? item.target, 0);
+        const milestoneType = String(item.milestoneType || item.kind || item.type || '');
+        const groupAppliedDamage = clampInt(group.world?.appliedDamage ?? group.world?.damage, 0);
+        const groupPersonalTotal = clampInt(group.personal?.totalContribution ?? group.personal?.contributionTotal, 0);
+        const current = clampInt(item.currentContribution ?? item.progress ?? (milestoneType.includes('global') ? groupAppliedDamage : groupPersonalTotal), 0);
+        const amount = clampInt(item.reward?.amount ?? item.amount ?? item.renown, 0);
+        const requirement = target > 0 ? `${Math.min(current, target)}/${target}` : claimable || claimed ? '已解锁' : '未解锁';
+        return `
+          <article class="challenge-reward-card ${claimed ? 'claimed' : claimable ? 'ready' : 'locked'}" data-world-rift-milestone="${escapeHtml(milestoneId)}">
+            <div class="challenge-reward-top"><div><strong>${escapeHtml(item.title || item.label || milestoneId)}</strong><p>${escapeHtml(`${group.label} · ${amount} 荣誉（仅外观）`)}</p></div><span class="challenge-reward-progress">${escapeHtml(requirement)}</span></div>
+            <button type="button" class="collection-inline-btn" data-challenge-action="claim-world-rift-milestone" data-rotation-id="${escapeHtml(rotationId)}" data-milestone-id="${escapeHtml(milestoneId)}" ${claimable ? '' : 'disabled'}>${claimed ? '已领取' : claimable ? `领取 ${amount} 荣誉` : '未达成'}</button>
+          </article>`;
+      }));
+      rewardsEl.innerHTML = cards.join('') || '<div class="codex-empty-state">登录并完成一次正式贡献后，可读取个人与全服里程碑。</div>';
+    }
+    if (recordsEl) {
+      const completedAttempts = clampInt(view.personal?.completedAttempts, 0);
+      recordsEl.innerHTML = view.personal ? `
+        <article class="challenge-record-item"><div><strong>本周个人贡献</strong><span>全部有效贡献 ${personalTotal} · 最佳三次 ${rankedContribution}</span></div><span>${completedAttempts}/${view.attemptLimit} 次</span></article>
+        <div class="challenge-inline-note">正式事实只来自服务端完整重放。这里不显示本地模拟首领、离线贡献或伪造参与人数。</div>
+      ` : '<div class="codex-empty-state">尚无正式贡献。完成第一条权威裂隙战局后会在这里留下真实记录。</div>';
+    }
+    if (sideEl) {
+      sideEl.innerHTML = `
+        <section class="codex-side-card"><span class="codex-side-kicker">全服当前战线</span><h3>${escapeHtml(phaseTitle)}</h3><p>${escapeHtml(cleared ? '首领已击破，余响期间仍可完成个人里程碑和贡献榜。' : currentPhase.description || '所有玩家的有效贡献都会穿透阶段并保留完整事实。')}</p><div class="challenge-record-tags"><span class="challenge-tag">剩余 ${remainingHp}</span><span class="challenge-tag">推进 ${progressPercent}%</span><span class="challenge-tag">版本 ${clampInt(world.stateVersion, 0)}</span></div></section>
+        <section class="codex-side-card"><span class="codex-side-kicker">公平合同</span><h3>同槽位同种子</h3><p>固定服务器牌组，不读取命环成长。每人相同次数，最佳三次计榜，末刀不额外发奖。</p></section>`;
+    }
+    if (rankingEl) {
+      const rows = view.leaderboard.slice(0, 20).map((item, index) => `
+        <div class="challenge-rank-row ${item.isSelf || item.highlight ? 'highlight' : ''}" data-world-rift-rank="${clampInt(item.rank, index + 1)}"><span>#${clampInt(item.rank, index + 1)}</span><strong>${escapeHtml(item.userName || item.username || item.displayName || '无名修士')}</strong><span>${clampInt(item.rankedContribution ?? item.rankScore ?? item.score, 0)}</span></div>`).join('');
+      const empty = view.phase === 'login_required' ? '登录后读取真实贡献榜。' : view.phase === 'error' ? view.error?.message || '贡献榜读取失败。' : '本周尚无正式贡献。';
+      rankingEl.innerHTML = `<section class="codex-side-card"><span class="codex-side-kicker">真实共斗榜</span><h3>最佳三次贡献</h3><p>排序不使用提交时间，不奖励抢跑或末刀。</p><div class="challenge-leaderboard">${rows || `<div class="challenge-record-empty">${escapeHtml(empty)}</div>`}</div><button type="button" class="collection-inline-btn secondary" data-challenge-action="refresh-world-rift" ${view.phase === 'loading' ? 'disabled' : ''}>${view.phase === 'loading' ? '读取中...' : '刷新世界状态'}</button></section>`;
+    }
+    if (launchEl) {
+      launchEl.innerHTML = `
+        <button type="button" class="menu-btn primary challenge-launch-btn" data-challenge-action="open-authoritative-world-rift">${view.recoverableAttempt ? '继续裂隙出征' : cleared ? '进入裂隙余响' : '进入权威共斗'}</button>
+        <p class="collection-muted">发车会消耗一次正式额度；断线后恢复同一 run，不会重抽种子或重复推进世界状态。</p>`;
+    }
+    this.bindChallengeHubDelegates({ rewardsEl, recordsEl, sideEl, rankingEl, launchEl });
+  };
   challengeHubMethods.getSanctumOverviewData = function () {
     const data = typeof originalGetSanctumOverviewData === 'function' ? originalGetSanctumOverviewData.call(this) : null;
     if (!data || !Array.isArray(data.rooms)) return data;
@@ -2589,17 +2837,20 @@ const challengeHubMethods = Object.create(null);
   };
   challengeHubMethods.showChallengeHub = function (tab = 'daily') {
     this.ensureChallengeHubBootState();
-    this.challengeHubState.tab = ['daily', 'weekly', 'global'].includes(tab) ? tab : 'daily';
+    this.challengeHubState.tab = ['daily', 'weekly', 'global', 'rift'].includes(tab) ? tab : 'daily';
     this.persistChallengeHubState();
     this.showScreen('challenge-screen');
     this.initChallengeHub();
     if (this.challengeHubState.tab === 'global') {
       Promise.resolve(this.refreshChallengeLadder()).catch(() => {});
     }
+    if (this.challengeHubState.tab === 'rift') {
+      Promise.resolve(this.refreshWorldRift()).catch(() => {});
+    }
   };
   challengeHubMethods.switchChallengeTab = function (tab = 'daily') {
     this.ensureChallengeHubBootState();
-    this.challengeHubState.tab = ['daily', 'weekly', 'global'].includes(tab) ? tab : 'daily';
+    this.challengeHubState.tab = ['daily', 'weekly', 'global', 'rift'].includes(tab) ? tab : 'daily';
     this.persistChallengeHubState();
     if (this.currentScreen !== 'challenge-screen') {
       this.showChallengeHub(this.challengeHubState.tab);
@@ -2609,11 +2860,18 @@ const challengeHubMethods = Object.create(null);
     if (this.challengeHubState.tab === 'global') {
       Promise.resolve(this.refreshChallengeLadder()).catch(() => {});
     }
+    if (this.challengeHubState.tab === 'rift') {
+      Promise.resolve(this.refreshWorldRift()).catch(() => {});
+    }
   };
   challengeHubMethods.initChallengeHub = function () {
     if (typeof document === 'undefined') return;
     this.ensureChallengeHubBootState();
     const tab = this.challengeHubState.tab || 'daily';
+    if (tab === 'rift') {
+      this.initWorldRiftHub();
+      return;
+    }
     const bundle = this.buildChallengeBundle(tab);
     if (!bundle || !bundle.rule) return;
     const isAuthoritativeGlobal = bundle.mode === 'global';
@@ -3449,6 +3707,12 @@ const challengeHubMethods = Object.create(null);
     };
     bindRootClick(rewardsEl, button => {
       const action = String(button.dataset.challengeAction || '');
+      if (action === 'claim-world-rift-milestone') {
+        const milestoneId = String(button.dataset.milestoneId || '');
+        const rotationId = String(button.dataset.rotationId || '');
+        Promise.resolve(this.claimWorldRiftMilestone(milestoneId, rotationId)).catch(() => {});
+        return;
+      }
       if (action === 'claim-authoritative-milestone') {
         const milestoneId = String(button.dataset.milestoneId || '');
         const rotationId = String(button.dataset.rotationId || '');
@@ -3541,6 +3805,16 @@ const challengeHubMethods = Object.create(null);
     }, '__challengeSideDelegatesBound');
     bindRootClick(rankingEl, async button => {
       const action = String(button.dataset.challengeAction || '');
+      if (action === 'refresh-world-rift') {
+        await this.refreshWorldRift();
+        return;
+      }
+      if (action === 'claim-world-rift-milestone') {
+        const milestoneId = String(button.dataset.milestoneId || '');
+        const rotationId = String(button.dataset.rotationId || '');
+        await this.claimWorldRiftMilestone(milestoneId, rotationId);
+        return;
+      }
       if (action === 'refresh-authoritative-ladder') {
         await this.refreshChallengeLadder();
         return;
@@ -3553,6 +3827,10 @@ const challengeHubMethods = Object.create(null);
     }, '__challengeLadderDelegatesBound');
     bindRootClick(launchEl, button => {
       const action = String(button.dataset.challengeAction || '');
+      if (action === 'open-authoritative-world-rift') {
+        Promise.resolve(this.openAuthoritativeWorldRift()).catch(() => {});
+        return;
+      }
       if (action === 'open-authoritative-ladder') {
         Promise.resolve(this.openAuthoritativeChallengeLadder()).catch(() => {});
         return;
@@ -3601,6 +3879,14 @@ const challengeHubMethods = Object.create(null);
     const panel = this.seasonOpsView?.authoritativeRunPanel;
     if (!panel || typeof panel.selectMode !== 'function') return false;
     await panel.selectMode('challenge_ladder');
+    return true;
+  };
+  challengeHubMethods.openAuthoritativeWorldRift = async function () {
+    if (typeof this.showSeasonOps !== 'function') return false;
+    await this.showSeasonOps('authoritative');
+    const panel = this.seasonOpsView?.authoritativeRunPanel;
+    if (!panel || typeof panel.selectMode !== 'function') return false;
+    await panel.selectMode('world_rift');
     return true;
   };
   challengeHubMethods.beginChallengeStart = function (mode = 'daily') {

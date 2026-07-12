@@ -2,7 +2,7 @@ export const SESSION_STORAGE_KEY = 'theDefierServerSession';
 export const CLOUD_STATE_PROTOCOL_VERSION = 'cloud-state-v2';
 const AUTHORITATIVE_RUN_SAFE_ID = /^[A-Za-z0-9._:-]{8,128}$/;
 const AUTHORITATIVE_RUN_ENTITY_ID = /^[A-Za-z0-9._:-]{1,128}$/;
-const AUTHORITATIVE_RUN_MODES = new Set(['pve', 'challenge', 'expedition', 'challenge_ladder']);
+const AUTHORITATIVE_RUN_MODES = new Set(['pve', 'challenge', 'expedition', 'challenge_ladder', 'world_rift']);
 const AUTHORITATIVE_RUN_COMMANDS = new Set(['select_node', 'play_card', 'end_turn', 'choose_reward', 'abandon']);
 const AUTHORITATIVE_RUN_CONTENT_VERSION = 'authoritative-trials-v1';
 export const BackendClient = {
@@ -58,7 +58,8 @@ export const BackendClient = {
       pvpPathPrefix: typeof config.pvpPathPrefix === 'string' ? config.pvpPathPrefix.trim() : '/api/pvp',
       progressionPathPrefix: typeof config.progressionPathPrefix === 'string' ? config.progressionPathPrefix.trim() : '/api/progression',
       seasonOpsPathPrefix: typeof config.seasonOpsPathPrefix === 'string' ? config.seasonOpsPathPrefix.trim() : '/api/season-ops',
-      challengeLadderPathPrefix: typeof config.challengeLadderPathPrefix === 'string' ? config.challengeLadderPathPrefix.trim() : '/api/challenge-ladder'
+      challengeLadderPathPrefix: typeof config.challengeLadderPathPrefix === 'string' ? config.challengeLadderPathPrefix.trim() : '/api/challenge-ladder',
+      worldRiftPathPrefix: typeof config.worldRiftPathPrefix === 'string' ? config.worldRiftPathPrefix.trim() : '/api/world-rift'
     };
   },
   cloneData(data) {
@@ -1162,6 +1163,12 @@ export const BackendClient = {
     return config && typeof config.challengeLadderPathPrefix === 'string' && config.challengeLadderPathPrefix.trim()
       ? config.challengeLadderPathPrefix.trim().replace(/\/+$/, '')
       : '/api/challenge-ladder';
+  },
+  getWorldRiftPathPrefix() {
+    const config = this.getServerConfig();
+    return config && typeof config.worldRiftPathPrefix === 'string' && config.worldRiftPathPrefix.trim()
+      ? config.worldRiftPathPrefix.trim().replace(/\/+$/, '')
+      : '/api/world-rift';
   },
   cloneUnsignedRequestPayload(payload) {
     const cloned = payload && typeof payload === 'object' && !Array.isArray(payload)
@@ -2971,6 +2978,208 @@ export const BackendClient = {
         reason: error && error.reason || undefined,
         mutationId,
         message: error.message || '众生试炼领奖失败'
+      };
+    }
+  },
+  async getWorldRiftCurrent(options = {}) {
+    const expectedUserId = String(options.expectedUserId || this.getCurrentUser()?.objectId || this.getCurrentUser()?.id || '').trim();
+    const session = this.captureProgressionSessionSnapshot({ expectedUserId }, '登录账号已变化，请刷新天穹裂隙后重试');
+    if (!session || !session.success) return session;
+    try {
+      const result = await this.requestServer(`${this.getWorldRiftPathPrefix()}/current`, {
+        method: 'GET',
+        authToken: session.sessionToken
+      });
+      const currentUserId = String(this.getCurrentUser()?.objectId || this.getCurrentUser()?.id || '').trim();
+      if (!expectedUserId || currentUserId !== expectedUserId) {
+        return {
+          success: false,
+          reason: 'world_rift_account_changed',
+          message: '登录账号已变化，旧裂隙数据未应用'
+        };
+      }
+      return result && typeof result === 'object' ? result : {
+        success: false,
+        reason: 'world_rift_invalid_response',
+        message: '天穹裂隙状态返回异常'
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error,
+        reason: error && error.reason || undefined,
+        message: error.message || '天穹裂隙状态读取失败'
+      };
+    }
+  },
+  async startWorldRiftAttempt(request = {}, options = {}) {
+    const expectedUserId = String(options.expectedUserId || this.getCurrentUser()?.objectId || this.getCurrentUser()?.id || '').trim();
+    const session = this.captureProgressionSessionSnapshot({ expectedUserId }, '登录账号已变化，请重新进入天穹裂隙');
+    if (!session || !session.success) return session;
+    const rotationId = this.normalizeAuthoritativeRunSafeId(request.rotationId);
+    const clientAttemptId = this.normalizeAuthoritativeRunSafeId(request.clientAttemptId)
+      || this.createAuthoritativeRunRequestId('rift-attempt');
+    const mutationId = this.normalizeAuthoritativeRunSafeId(request.mutationId)
+      || this.createAuthoritativeRunRequestId('rift-start');
+    if (!rotationId) return {
+      success: false,
+      reason: 'world_rift_rotation_required',
+      clientAttemptId,
+      mutationId,
+      message: '天穹裂隙轮换标识缺失'
+    };
+    const payload = {
+      protocolVersion: 'authoritative-world-rift-v1',
+      rotationId,
+      clientAttemptId,
+      mutationId
+    };
+    const integrity = await this.createRequiredSessionIntegrityFields(
+      payload,
+      session.sessionToken,
+      '当前环境不支持天穹裂隙签名，请刷新后重试',
+      'world_rift_signature_required'
+    );
+    if (!integrity || !integrity.success) return { ...integrity, clientAttemptId, mutationId };
+    try {
+      const result = await this.requestServer(`${this.getWorldRiftPathPrefix()}/attempts`, {
+        method: 'POST',
+        authToken: session.sessionToken,
+        data: { ...payload, ...integrity.integrity }
+      });
+      const currentUserId = String(this.getCurrentUser()?.objectId || this.getCurrentUser()?.id || '').trim();
+      if (!expectedUserId || currentUserId !== expectedUserId) {
+        return {
+          success: false,
+          reason: 'world_rift_account_changed',
+          clientAttemptId,
+          mutationId,
+          message: '登录账号已变化，裂隙发车回执未应用；原账号可刷新恢复'
+        };
+      }
+      return {
+        ...(result && typeof result === 'object' ? result : { success: false, message: '天穹裂隙发车返回异常' }),
+        clientAttemptId,
+        mutationId
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error,
+        reason: error && error.reason || undefined,
+        clientAttemptId,
+        mutationId,
+        message: error.message || '天穹裂隙发车失败'
+      };
+    }
+  },
+  async submitWorldRiftContribution(request = {}, options = {}) {
+    const safeRunId = this.normalizeAuthoritativeRunSafeId(request.runId);
+    const mutationId = this.normalizeAuthoritativeRunSafeId(request.mutationId)
+      || this.createAuthoritativeRunRequestId('rift-submit');
+    if (!safeRunId) return {
+      success: false,
+      reason: 'world_rift_run_required',
+      mutationId,
+      message: '天穹裂隙权威 run 缺失'
+    };
+    const expectedUserId = String(options.expectedUserId || this.getCurrentUser()?.objectId || this.getCurrentUser()?.id || '').trim();
+    const session = this.captureProgressionSessionSnapshot({ expectedUserId }, '登录账号已变化，请刷新天穹裂隙后重试');
+    if (!session || !session.success) return { ...session, mutationId };
+    const payload = {
+      protocolVersion: 'authoritative-world-rift-v1',
+      runId: safeRunId,
+      mutationId
+    };
+    const integrity = await this.createRequiredSessionIntegrityFields(
+      payload,
+      session.sessionToken,
+      '当前环境不支持天穹裂隙结算签名，请刷新后重试',
+      'world_rift_signature_required'
+    );
+    if (!integrity || !integrity.success) return { ...integrity, mutationId };
+    try {
+      const result = await this.requestServer(`${this.getWorldRiftPathPrefix()}/contributions`, {
+        method: 'POST',
+        authToken: session.sessionToken,
+        data: { ...payload, ...integrity.integrity }
+      });
+      const currentUserId = String(this.getCurrentUser()?.objectId || this.getCurrentUser()?.id || '').trim();
+      if (!expectedUserId || currentUserId !== expectedUserId) {
+        return {
+          success: false,
+          reason: 'world_rift_account_changed',
+          mutationId,
+          message: '登录账号已变化，贡献回执未应用；原账号可刷新恢复'
+        };
+      }
+      return {
+        ...(result && typeof result === 'object' ? result : { success: false, message: '天穹裂隙贡献返回异常' }),
+        mutationId
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error,
+        reason: error && error.reason || undefined,
+        mutationId,
+        message: error.message || '天穹裂隙贡献提交失败'
+      };
+    }
+  },
+  async claimWorldRiftReward(milestoneId = '', request = {}, options = {}) {
+    const safeMilestoneId = this.normalizeAuthoritativeRunEntityId(milestoneId);
+    const safeRotationId = this.normalizeAuthoritativeRunSafeId(request.rotationId);
+    const mutationId = this.normalizeAuthoritativeRunSafeId(request.mutationId)
+      || this.createAuthoritativeRunRequestId('rift-claim');
+    if (!safeMilestoneId || !safeRotationId) return {
+      success: false,
+      reason: 'world_rift_reward_required',
+      mutationId,
+      message: '天穹裂隙奖励或轮换标识缺失'
+    };
+    const expectedUserId = String(options.expectedUserId || this.getCurrentUser()?.objectId || this.getCurrentUser()?.id || '').trim();
+    const session = this.captureProgressionSessionSnapshot({ expectedUserId }, '登录账号已变化，请刷新天穹裂隙后重试');
+    if (!session || !session.success) return { ...session, mutationId };
+    const payload = {
+      protocolVersion: 'authoritative-world-rift-v1',
+      rotationId: safeRotationId,
+      milestoneId: safeMilestoneId,
+      mutationId
+    };
+    const integrity = await this.createRequiredSessionIntegrityFields(
+      payload,
+      session.sessionToken,
+      '当前环境不支持天穹裂隙领奖签名，请刷新后重试',
+      'world_rift_signature_required'
+    );
+    if (!integrity || !integrity.success) return { ...integrity, mutationId };
+    try {
+      const result = await this.requestServer(`${this.getWorldRiftPathPrefix()}/rewards/${encodeURIComponent(safeMilestoneId)}/claim`, {
+        method: 'POST',
+        authToken: session.sessionToken,
+        data: { ...payload, ...integrity.integrity }
+      });
+      const currentUserId = String(this.getCurrentUser()?.objectId || this.getCurrentUser()?.id || '').trim();
+      if (!expectedUserId || currentUserId !== expectedUserId) {
+        return {
+          success: false,
+          reason: 'world_rift_account_changed',
+          mutationId,
+          message: '登录账号已变化，裂隙领奖回执未应用；原账号可刷新账本确认'
+        };
+      }
+      return {
+        ...(result && typeof result === 'object' ? result : { success: false, message: '天穹裂隙领奖返回异常' }),
+        mutationId
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error,
+        reason: error && error.reason || undefined,
+        mutationId,
+        message: error.message || '天穹裂隙领奖失败'
       };
     }
   },
