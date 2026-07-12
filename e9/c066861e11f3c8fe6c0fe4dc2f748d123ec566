@@ -1,0 +1,103 @@
+css/season-ops.css
+  s_bae69f1b7fab46::t_a683fd2e3c2f6b 786
+docs/backend_authoritative_challenge_ladder_v1.md
+  s_bae69f1b7fab46::t_1626a1d10570c3 1-267
+docs/backend_migration_guide.md
+  s_bae69f1b7fab46::t_5021e5f5e093ce 214,220-222
+docs/backend_progression_platform_v1.md
+  s_bae69f1b7fab46::t_4f82073823bb2e 83,91,128-135
+js/config/bmob.config.example.js
+  s_bae69f1b7fab46::t_fea704e4c6177d 22-23
+js/config/bmob.config.js
+  s_bae69f1b7fab46::t_12cff2579f8b43 40-41
+js/core/challenge_hub.js
+  s_bae69f1b7fab46::t_2e2e57f58f478b 4,2224-2227,2238-2240,2242,2244,2246-2247,2447-2530,2532-2540,2542-2549,2596-2598,2609-2611,2619,2629-2632,2646,2678-2734,2784,2787-2803,2812-2854,2870,2978,2981,3141-3186,3279,3282-3298,3301-3309,3311,3313,3324-3331,3342,3427,3451-3458,3542-3553,3555-3560,3598-3605,4214
+js/services/authoritative-run-service.js
+  s_bae69f1b7fab46::t_8923c3798e99ae 4
+js/services/backend-client.js
+  s_bae69f1b7fab46::t_7a05fa839645b2 5,60-61,1160-1165,2779-2976
+js/services/challenge-ladder-service.js
+  s_bae69f1b7fab46::t_05ea903156203b 1-644
+js/views/AuthoritativeRunPanel.js
+  s_bae69f1b7fab46::t_448bc0fbd25af8 2,5,32-37,159,166,177-179,186-191,196,200-203,283-287,300-305,318-323,337-356,387-400,420-426,604-606,659,670-672,674,682,695-722,764
+server/app.js
+  s_bae69f1b7fab46::t_5d0d148f205bd2 19,39,132
+server/challenge-ladder/bootstrap.js
+  s_bae69f1b7fab46::t_1707594821d981 1-325
+server/challenge-ladder/catalog.js
+  s_55c26764db1b6b::t_4fba95365de6dd 1-184
+server/challenge-ladder/service.js
+  s_bae69f1b7fab46::t_f2b3cfb03f224b 1-1724
+server/db/database.js
+  s_bae69f1b7fab46::t_2c735e080d042d 12,762
+server/progression/authoritative-runs/engine.js
+  s_50a3016de67393::t_7806295a5df6c6 5,24-25
+server/progression/authoritative-runs/service.js
+  s_50a3016de67393::t_e2b8b1b3929976 40-41,694,698-711,772-774
+server/routes/challenge-ladder.js
+  s_bae69f1b7fab46::t_1709cd7b5989f1 1-118
+server/services/platform/schema-status.js
+  s_bae69f1b7fab46::t_8ad45b639f488a 100-114
+tests/backend_platform_checks.cjs
+  s_bae69f1b7fab46::t_7f34d2399b4fcc 108-109,135-138,150,188-192
+tests/run_node_checks.sh
+  s_bae69f1b7fab46::t_76356bc4637a6b 37-38
+tests/sanity_authoritative_runs_engine_checks.cjs
+  s_bae69f1b7fab46::t_4b322d11124c28 159,174-198
+tests/sanity_authoritative_runs_migration_checks.cjs
+  s_bae69f1b7fab46::t_7d5d45742fe381 243-244,253-254,436-449,458-464,499-505
+tests/sanity_authoritative_runs_platform_checks.cjs
+  s_bae69f1b7fab46::t_490354f446f56c 349-350,359-360
+tests/sanity_authoritative_runs_ui_checks.mjs
+  s_bae69f1b7fab46::t_c169fac3b4a9a9 21,24,61-64,82-84,90-92,424-491
+tests/sanity_challenge_ladder_client_checks.mjs
+  s_bae69f1b7fab46::t_e926bd8f0a9969 1-303
+tests/sanity_challenge_ladder_platform_checks.cjs
+  s_bae69f1b7fab46::t_630d8b2c2d7a5e 1-848
+tests/sanity_cloud_state_v2_checks.cjs
+  s_bae69f1b7fab46::t_67d8226669dbfa 285-286,288
+tests/sanity_progression_platform_checks.cjs
+  s_bae69f1b7fab46::t_ca9b4fae05eb38 181-182,185
+tests/sanity_release_gate_coverage_checks.cjs
+  s_bae69f1b7fab46::t_d81153323d5e2c 159-166,397,438-444,473-490,511,532-539,545-546,962-966,968,970-973,975
+tests/sanity_season_ops_platform_checks.cjs
+  s_bae69f1b7fab46::t_68fcd2ff95f80d 107-108,207-208
+tests/sanity_verified_runs_platform_checks.cjs
+  s_bae69f1b7fab46::t_3e09068a22db84 163-164,167,186,189
+tests/sanity_weekly_challenge_checks.cjs
+  s_bae69f1b7fab46::t_732cb718941a9c 120-159,268-277
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "e9c066861e11f3c8fe6c0fe4dc2f748d123ec566",
+  "prompts": {},
+  "sessions": {
+    "s_50a3016de67393": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f54b0-9c09-7991-80b9-0a250b79e1a0",
+        "model": "unknown"
+      },
+      "human_author": "AI Agent <bot@example.com>"
+    },
+    "s_55c26764db1b6b": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f54b0-9b05-7053-8652-71afa1a24db8",
+        "model": "unknown"
+      },
+      "human_author": "AI Agent <bot@example.com>"
+    },
+    "s_bae69f1b7fab46": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ed4f6-e7ac-73e0-a29e-119f3eddb407",
+        "model": "unknown"
+      },
+      "human_author": "AI Agent <bot@example.com>"
+    }
+  },
+  "attestation_metadata": {},
+  "remote_transcripts": {}
+}
