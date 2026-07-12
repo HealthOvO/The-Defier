@@ -1,0 +1,49 @@
+css/frontend-upgrade.css
+  s_ca5652313828d6::t_17dd54b18329ad 2646-2707,2777-2812,3315-3503
+index.html
+  s_ca5652313828d6::t_0ac6beb51a92a7 313,316-317,319,321,343-345,348,350,365,367,370-375,377-382,384-392,394,420,425-428,432
+js/core/battle.js
+  s_ca5652313828d6::t_5b0a6bb2a62001 32,761
+js/game.js
+  s_ca5652313828d6::t_764db830b01780 8734-8738
+js/views/MapView.js
+  s_ca5652313828d6::t_06a7cdf8299e8e 155,168
+tests/browser_feature_audit.mjs
+  s_ca5652313828d6::t_d92940dab55d20 4487-4644
+tests/browser_pvp_live_real_backend_smoke.mjs
+  s_ca5652313828d6::t_d972243140da79 3834
+tests/sanity_pvp_live_ui_contract_checks.cjs
+  s_ca5652313828d6::t_04e6f30aea976d 923-927,932-950,953
+tests/sanity_pvp_live_ui_runtime_checks.mjs
+  s_51e07db5e425be::t_4fc80f2ae8185c 73-80,1451,1522,1538,1542-1612
+tests/sanity_pvp_trusted_control_surface_checks.cjs
+  s_ca5652313828d6::t_33cac5e9c2b472 61-62
+tests/sanity_release_gate_coverage_checks.cjs
+  s_ca5652313828d6::t_5a5da4c24b8a11 1606,1625-1626
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "b45c40f073b1bf5f71158696b951992c9290c79f",
+  "prompts": {},
+  "sessions": {
+    "s_51e07db5e425be": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f55af-6032-7150-95eb-13f6b7452bd8",
+        "model": "unknown"
+      },
+      "human_author": "AI Agent <bot@example.com>"
+    },
+    "s_ca5652313828d6": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f3fed-94d5-77b2-9af0-61333559ff38",
+        "model": "unknown"
+      },
+      "human_author": "AI Agent <bot@example.com>"
+    }
+  },
+  "attestation_metadata": {},
+  "remote_transcripts": {}
+}
