@@ -1,0 +1,33 @@
+css/frontend-upgrade.css
+  s_ca5652313828d6::t_aba7f84231e50f 2641-2647,2653,3511-3622
+js/core/battle.js
+  s_ca5652313828d6::t_fef5e9cf264ddf 6010,6047-6060,6201-6208
+js/core/expedition_hub.js
+  s_ca5652313828d6::t_23fcccac09537b 4355,4363-4373,4375-4377
+js/views/MapView.js
+  s_ca5652313828d6::t_c1abc3cf84e83f 91-92,195-196,215-226,231-240,242,257,261,264-288,325-326,338-339,408-417,427
+js/views/SystemView.js
+  s_ca5652313828d6::t_4a812c113497fb 19,117
+tests/browser_frontend_layout_audit.mjs
+  s_ca5652313828d6::t_7563fc204fc554 38,542-545,568-572,585,588-589,599-603,608-614,620-623,3097-3099,3134,3139,3142-3146,3180,3201-3211,3227,3243-3248,3292-3295,3868,3927-3958,3994,4011,4013-4016,4055
+tests/browser_mobile_layout_audit.mjs
+  s_ca5652313828d6::t_09b09229c2eaee 111-120,123,125,138-142,150,158-180,202-234,247-256,262-276,281,285,287-289,325-338,341,346-350,352,370-371,398-408,559-563,567-568,573-635
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "cdb1a3371a1d2b702b856ba4ee4d42d046998232",
+  "prompts": {},
+  "sessions": {
+    "s_ca5652313828d6": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f3fed-94d5-77b2-9af0-61333559ff38",
+        "model": "unknown"
+      },
+      "human_author": "AI Agent <bot@example.com>"
+    }
+  },
+  "attestation_metadata": {},
+  "remote_transcripts": {}
+}
