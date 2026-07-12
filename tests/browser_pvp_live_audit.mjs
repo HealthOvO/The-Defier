@@ -36,6 +36,20 @@ function sanitizeAuditDetail(detail = '') {
   }
 }
 
+function installOfflineRuntimeConfig() {
+  window.__THE_DEFIER_CONFIG__ = {
+    ...(window.__THE_DEFIER_CONFIG__ || {}),
+    server: {
+      baseUrl: '',
+      authPathPrefix: '/api/auth',
+      savePathPrefix: '/api/saves',
+      userPathPrefix: '/api/user',
+      ghostPathPrefix: '/api/ghosts',
+      seasonOpsPathPrefix: '/api/season-ops',
+    },
+  };
+}
+
 function add(name, pass, detail = '') {
   findings.push({ name, pass, detail: sanitizeAuditDetail(detail) });
 }
@@ -91,6 +105,7 @@ async function clickVisiblePostReviewAction(page, actionId) {
     consoleErrors.push(String(err));
   });
 
+  await page.addInitScript(installOfflineRuntimeConfig);
   await page.addInitScript(() => {
     const sessionToken = 'browser-pvp-live-audit-session-token';
     localStorage.setItem('theDefierServerSession', JSON.stringify({
@@ -7273,6 +7288,7 @@ async function clickVisiblePostReviewAction(page, actionId) {
   mobilePage.on('pageerror', (err) => {
     consoleErrors.push(String(err));
   });
+  await mobilePage.addInitScript(installOfflineRuntimeConfig);
   await mobilePage.goto(url, { waitUntil: 'domcontentloaded' });
   await mobilePage.waitForTimeout(1200);
   const mobileAuthActive = await mobilePage.evaluate(() => !!document.getElementById('auth-modal')?.classList.contains('active'));
