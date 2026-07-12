@@ -753,7 +753,7 @@ export function createPvpLiveSession({
     lastError: { reason, message: message || reason }
   });
 
-  const publishInviteWaiting = (result, message = '好友约战已创建，分享邀请码等待对手加入；不写正式积分。') => publish({
+  const publishInviteWaiting = (result, message = '好友房间已创建，分享房间码等待对手加入；不写正式积分。') => publish({
     phase: 'waiting_invite',
     queueTicket: '',
     inviteCode: result && result.inviteCode || state.inviteCode || '',
@@ -783,7 +783,7 @@ export function createPvpLiveSession({
     rematchReport: null,
     lastError: {
       reason: 'invite_expired',
-      message: result && result.message || '好友约战邀请码已过期'
+      message: result && result.message || '好友房间已过期，请重新创建。'
     }
   });
 
@@ -1774,7 +1774,7 @@ export function createPvpLiveSession({
         phase: 'idle',
         lastError: {
           reason: result && result.reason || 'invite_create_failed',
-          message: result && result.message || '实时论道邀请创建失败'
+          message: result && result.message || '好友房间创建失败'
         }
       });
     }
@@ -1799,7 +1799,7 @@ export function createPvpLiveSession({
     if (result.status === 'waiting_invite') {
       return publishInviteWaiting(result);
     }
-    return fail(result.reason || 'invite_unavailable', result.message || '实时论道邀请暂不可用', state.phase);
+    return fail(result.reason || 'invite_unavailable', result.message || '好友房间暂不可用', state.phase);
   }
 
   async function resumeCurrentInvite() {
@@ -1827,10 +1827,10 @@ export function createPvpLiveSession({
           lastEvents: []
         });
       }
-      return fail(result && result.reason || 'invite_resume_failed', result && result.message || '实时论道邀请状态读取失败', state.phase);
+      return fail(result && result.reason || 'invite_resume_failed', result && result.message || '好友房间状态读取失败', state.phase);
     }
     if (result.status === 'waiting_invite') {
-      return publishInviteWaiting(result, '已恢复等待中的好友约战，分享邀请码等待对手加入；不写正式积分。');
+      return publishInviteWaiting(result, '已恢复等待中的好友房间，分享房间码等待对手加入；不写正式积分。');
     }
     return getState();
   }
@@ -1842,7 +1842,7 @@ export function createPvpLiveSession({
         inviteInbox: Array.isArray(state.inviteInbox) ? state.inviteInbox : [],
         lastError: {
           reason: 'invite_inbox_failed',
-          message: result && result.message || '邀请收件箱暂时不可用'
+          message: result && result.message || '邀请列表暂时不可用'
         }
       });
     }
@@ -1855,12 +1855,12 @@ export function createPvpLiveSession({
   async function joinInvite(inviteCode = '', options = {}) {
     const code = String(inviteCode || '').trim();
     if (!code) {
-      return fail('missing_invite_code', '缺少实时论道邀请码', state.phase);
+      return fail('missing_invite_code', '请输入房间码', state.phase);
     }
     const result = await callLive('joinInvite', code, options);
     if (!result || result.success === false) {
       const reason = result && result.reason || 'invite_join_failed';
-      const message = result && result.message || '实时论道邀请加入失败';
+      const message = result && result.message || '加入好友房间失败';
       if (shouldPruneInviteInbox(reason)) {
         const inviteInbox = (Array.isArray(state.inviteInbox) ? state.inviteInbox : [])
           .filter(invite => String(invite && (invite.inviteCode || invite.inviteReport && invite.inviteReport.inviteCode) || '').trim() !== code);
@@ -1889,20 +1889,20 @@ export function createPvpLiveSession({
         lastError: null
       });
     }
-    return fail(result.reason || 'invite_join_unavailable', result.message || '实时论道邀请暂不可加入', state.phase);
+    return fail(result.reason || 'invite_join_unavailable', result.message || '好友房间暂不可加入', state.phase);
   }
 
   async function cancelInvite(inviteCode = '') {
     const code = String(inviteCode || state.inviteCode || '').trim();
     if (!code) {
-      return fail('missing_invite_code', '缺少实时论道邀请码', state.phase);
+      return fail('missing_invite_code', '请输入房间码', state.phase);
     }
     const result = await callLive('cancelInvite', code);
     if (!result || result.success === false) {
       if (result && result.reason === 'invite_expired') {
         return publishInviteExpired(result);
       }
-      return fail(result && result.reason || 'invite_cancel_failed', result && result.message || '实时论道邀请取消失败', state.phase);
+      return fail(result && result.reason || 'invite_cancel_failed', result && result.message || '取消好友房间失败', state.phase);
     }
     if (result.status === 'cancelled') {
       return publish({
@@ -1919,11 +1919,11 @@ export function createPvpLiveSession({
         lastEvents: [],
         lastError: {
           reason: 'invite_cancelled',
-          message: '好友约战已取消，可以重新创建约战或进入公共匹配。'
+          message: '好友房间已取消，可以重新创建房间或开始真人匹配。'
         }
       });
     }
-    return fail(result.reason || 'invite_cancel_unavailable', result.message || '实时论道邀请暂不可取消', state.phase);
+    return fail(result.reason || 'invite_cancel_unavailable', result.message || '好友房间暂不可取消', state.phase);
   }
 
   async function pollInvite() {
@@ -1971,13 +1971,13 @@ export function createPvpLiveSession({
         lastEvents: resultView && Array.isArray(resultView.recentEvents) ? resultView.recentEvents.slice(-8) : [],
         lastError: {
           reason: 'invite_recovered_current_match',
-          message: '已恢复当前实时论道，好友约战等待态已结束。'
+          message: '已恢复当前真人对局，好友房间等待已结束。'
         }
       });
     }
     if (!result || result.success === false) {
       if (!isNoCurrentMatch(result)) {
-        return fail(result && result.reason || 'invite_poll_failed', result && result.message || '实时论道邀请状态读取失败', 'waiting_invite');
+        return fail(result && result.reason || 'invite_poll_failed', result && result.message || '好友房间状态读取失败', 'waiting_invite');
       }
     }
     const inviteResult = await callLive('getCurrentInvite');
@@ -1998,11 +1998,11 @@ export function createPvpLiveSession({
           rematchReport: null,
           lastError: {
             reason: 'invite_not_found',
-            message: '好友约战已结束或失效，可以重新创建约战或进入公共匹配。'
+            message: '好友房间已结束或失效，可以重新创建房间或开始真人匹配。'
           }
         });
       }
-      return fail(inviteResult && inviteResult.reason || 'invite_poll_failed', inviteResult && inviteResult.message || '实时论道邀请状态读取失败', 'waiting_invite');
+      return fail(inviteResult && inviteResult.reason || 'invite_poll_failed', inviteResult && inviteResult.message || '好友房间状态读取失败', 'waiting_invite');
     }
     if (inviteResult.status === 'waiting_invite') {
       return publishInviteWaiting(inviteResult);

@@ -2643,6 +2643,68 @@ body:has(.modal-overlay.active) .battle-log-panel {
     line-height: 1.45;
 }
 
+@media (min-width: 1101px) {
+    #map-screen .map-screen-v3.show-map-intel .map-canvas-header {
+        display: none;
+    }
+
+    #map-screen .map-screen-v3:not(.show-map-intel) .map-scroll-container {
+        display: grid;
+        grid-template-columns: minmax(640px, 1040px) minmax(280px, 340px);
+        grid-auto-rows: min-content;
+        align-items: start;
+        justify-content: center;
+        column-gap: 18px;
+    }
+
+    #map-screen .map-screen-v3:not(.show-map-intel) .map-content-wrapper {
+        grid-column: 1;
+        grid-row: 1;
+        width: 100%;
+        margin: 0;
+    }
+
+    #map-screen .map-screen-v3:not(.show-map-intel) .map-canvas-header {
+        grid-column: 2;
+        grid-row: 1;
+        top: 12px;
+        width: 100%;
+        max-width: 340px;
+        margin: 0;
+        align-self: start;
+        pointer-events: auto;
+    }
+
+    #map-screen .map-screen-v3:not(.show-map-intel) .map-canvas-title-row {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+        align-items: start;
+    }
+
+    #map-screen .map-screen-v3:not(.show-map-intel) .map-canvas-stage {
+        justify-self: start;
+    }
+
+    #map-screen .map-screen-v3:not(.show-map-intel) .map-core-loop-brief {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    #map-screen .map-screen-v3:not(.show-map-intel) .map-core-loop-focus {
+        grid-column: 1 / -1;
+    }
+
+    #map-screen .map-screen-v3:not(.show-map-intel) .map-core-loop-chip {
+        align-items: flex-start;
+    }
+
+    #map-screen .map-screen-v3:not(.show-map-intel) .map-core-loop-value {
+        white-space: normal;
+        overflow: visible;
+        text-overflow: clip;
+    }
+}
+
 #map-screen .map-screen-v3.show-map-intel {
     grid-template-columns: minmax(560px, 1fr) minmax(400px, 460px);
 }
@@ -2710,6 +2772,42 @@ body:has(.modal-overlay.active) .battle-log-panel {
     overflow-x: hidden;
     overflow-y: auto;
     scrollbar-width: thin;
+}
+
+#battle-screen #battle-command-panel:has(#battle-tactical-advisor.collapsed) .battle-system-strip {
+    display: none;
+}
+
+@media (min-width: 769px) {
+    #battle-screen .hand-cards {
+        flex: 1 1 auto;
+        min-width: 0;
+        max-width: none;
+    }
+
+    #battle-screen .deck-pile,
+    #battle-screen .discard-pile {
+        flex: 0 0 75px;
+    }
+
+    #battle-screen .resources-container {
+        flex-direction: row;
+        align-items: center;
+        gap: 12px;
+        margin-left: 16px;
+    }
+
+    #battle-screen .resources-container .resource-item {
+        flex-direction: row;
+        align-items: center;
+        gap: 7px;
+    }
+
+    #battle-screen .energy-orbs,
+    #battle-screen .candy-orbs {
+        flex-wrap: nowrap;
+        max-width: none;
+    }
 }
 
 #battle-screen #active-skill-btn {
@@ -3212,5 +3310,194 @@ body:has(.modal-overlay.active) .battle-log-panel {
 
     #character-select .fate-ring-info-panel {
         padding: 12px 14px;
+    }
+}
+
+/* Live PVP lobby: player actions first, technical diagnostics out of the lobby. */
+#pvp-screen .pvp-live-meta-grid {
+    display: none;
+}
+
+#pvp-screen .pvp-live-secondary-grid {
+    width: calc(100% - 36px);
+    margin: 0 18px;
+    grid-template-columns: minmax(0, 1.45fr) minmax(300px, 0.75fr);
+    align-items: stretch;
+}
+
+#pvp-screen .pvp-live-secondary-grid .pvp-live-loadout-selector,
+#pvp-screen .pvp-live-secondary-grid .pvp-live-invite-panel {
+    border-radius: 8px;
+    background: rgba(7, 13, 28, 0.78);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035);
+}
+
+#pvp-screen .pvp-live-secondary-grid .pvp-live-loadout-selector {
+    order: 1;
+    border-color: rgba(207, 170, 112, 0.34);
+}
+
+#pvp-screen .pvp-live-secondary-grid .pvp-live-invite-panel {
+    order: 2;
+}
+
+#pvp-screen .pvp-live-secondary-grid .pvp-live-post-review {
+    order: 3;
+}
+
+#pvp-screen .pvp-live-invite-controls {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+
+#pvp-screen .pvp-live-invite-controls .pvp-live-invite-input {
+    grid-column: span 3;
+}
+
+#pvp-screen .pvp-live-invite-controls .challenge-btn {
+    grid-column: span 2;
+    min-width: 0;
+    width: 100%;
+    height: 44px;
+    min-height: 44px;
+    padding: 6px 8px;
+    font-size: 0.82rem;
+    line-height: 1.15;
+}
+
+#pvp-screen .pvp-live-account-line {
+    display: grid;
+    grid-template-columns: max-content minmax(0, 1fr);
+    align-items: center;
+    gap: 8px 12px;
+}
+
+#pvp-screen .pvp-live-account-status {
+    color: #f2c66f;
+    font-size: 0.84rem;
+    white-space: nowrap;
+}
+
+#pvp-screen [data-live-auth-state="authenticated"] .pvp-live-account-status {
+    color: #69d3ac;
+}
+
+#pvp-screen #tab-live[data-live-phase="idle"] > .pvp-live-footer {
+    order: -3;
+    border-color: rgba(207, 170, 112, 0.42);
+    background: rgba(12, 20, 38, 0.97);
+}
+
+#pvp-screen #tab-live[data-live-phase="idle"] > .pvp-live-secondary-grid {
+    order: -2;
+}
+
+#pvp-screen #tab-live[data-live-phase="idle"] > .pvp-live-status-card {
+    order: -1;
+    padding: 12px 16px;
+    border-radius: 8px;
+    border-color: rgba(126, 177, 255, 0.18);
+    background: rgba(8, 16, 34, 0.72);
+    box-shadow: none;
+}
+
+#pvp-screen #tab-live[data-live-phase="idle"] > .pvp-live-board {
+    display: none;
+}
+
+#pvp-screen #tab-live[data-live-phase="idle"] .pvp-live-trust-grid > [data-live-trust-item] {
+    display: none;
+}
+
+#pvp-screen #tab-live[data-live-phase="idle"] .pvp-live-trust-grid > [data-live-trust-item="match-quality"],
+#pvp-screen #tab-live[data-live-phase="idle"] .pvp-live-trust-grid > [data-live-trust-item="mode-boundary"] {
+    display: block;
+    min-height: 0;
+    margin: 0;
+    padding: 7px 10px;
+}
+
+#pvp-screen #tab-live[data-live-phase="idle"] .pvp-live-trust-grid {
+    grid-template-columns: minmax(0, 0.7fr) minmax(0, 1.3fr);
+    gap: 8px;
+    margin-top: 10px;
+}
+
+#pvp-screen #tab-live[data-live-phase="idle"] .pvp-live-trust-grid > [data-live-trust-item="match-quality"] {
+    grid-column: 1;
+}
+
+#pvp-screen #tab-live[data-live-phase="idle"] .pvp-live-trust-grid > [data-live-trust-item="mode-boundary"] {
+    grid-column: 2;
+}
+
+#pvp-screen #tab-live[data-live-phase="idle"] .pvp-live-social-panel,
+#pvp-screen #tab-live[data-live-phase="idle"] .pvp-live-first-guide,
+#pvp-screen #tab-live[data-live-phase="idle"] .pvp-live-waiting-report,
+#pvp-screen #tab-live[data-live-phase="idle"] .pvp-live-replay-share-viewer {
+    display: none;
+}
+
+#pvp-screen #tab-live[data-live-phase="idle"] .pvp-risk-header {
+    margin-top: 5px;
+    align-items: center;
+}
+
+#pvp-screen #tab-live[data-live-phase="idle"] .pvp-risk-title {
+    font-size: 1.05rem;
+}
+
+#pvp-screen #tab-live[data-live-phase="idle"] .pvp-risk-dri {
+    min-width: 76px;
+    padding: 6px 10px;
+    border-radius: 8px;
+    font-size: 0.78rem;
+}
+
+#pvp-screen #tab-live[data-live-phase="idle"] [data-live-action="join-queue"] {
+    border-color: rgba(245, 206, 119, 0.9);
+    background: linear-gradient(180deg, rgba(150, 31, 31, 0.96), rgba(92, 13, 18, 0.98));
+    color: #fff1cc;
+    box-shadow: 0 0 20px rgba(205, 55, 48, 0.26);
+}
+
+@media (max-width: 1024px) {
+    #pvp-screen .pvp-live-secondary-grid {
+        width: calc(100% - 20px);
+        margin: 0 10px;
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+
+@media (max-width: 768px) {
+    #map-screen .map-node-v3 .node-tooltip {
+        display: none;
+    }
+
+    #pvp-screen .pvp-live-secondary-grid {
+        width: 100%;
+        margin: 0;
+    }
+
+    #pvp-screen .pvp-live-account-line {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 3px;
+    }
+
+    #pvp-screen #tab-live[data-live-phase="idle"] .pvp-live-trust-grid {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    #pvp-screen #tab-live[data-live-phase="idle"] .pvp-live-trust-grid > [data-live-trust-item="match-quality"],
+    #pvp-screen #tab-live[data-live-phase="idle"] .pvp-live-trust-grid > [data-live-trust-item="mode-boundary"] {
+        grid-column: 1;
+    }
+
+    #pvp-screen .pvp-live-invite-controls {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    #pvp-screen .pvp-live-invite-controls .pvp-live-invite-input,
+    #pvp-screen .pvp-live-invite-controls .challenge-btn {
+        grid-column: 1;
     }
 }

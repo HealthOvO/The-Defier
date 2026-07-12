@@ -10,6 +10,7 @@ const findings = [];
 const consoleErrors = [];
 const visibleProtocolPattern = /connection_timeout|turn_timeout|ready_timeout|ranked_authoritative|swap_sides|forfeit_disconnect/;
 const hiddenAuditDetailKeyPattern = /^(cardInstanceId|cardInstanceIds|cardId|cardIds|instanceId|instanceIds|hand|deck|loadoutSnapshot|loadoutHash|rewardId|rating|elo|token|accessToken|jwt)$/i;
+const forbiddenIdlePlayerCopyPattern = /\/api\/pvp\/live|服务端版本|等待实时通道|等待心跳|本地偏好|\bIDLE\b/i;
 
 function sanitizeAuditDetailValue(value) {
   if (Array.isArray(value)) {
@@ -40,7 +41,7 @@ function installOfflineRuntimeConfig() {
   window.__THE_DEFIER_CONFIG__ = {
     ...(window.__THE_DEFIER_CONFIG__ || {}),
     server: {
-      baseUrl: '',
+      baseUrl: window.location.origin,
       authPathPrefix: '/api/auth',
       savePathPrefix: '/api/saves',
       userPathPrefix: '/api/user',
@@ -104,6 +105,11 @@ async function clickVisiblePostReviewAction(page, actionId) {
   page.on('pageerror', (err) => {
     consoleErrors.push(String(err));
   });
+  await page.route('**/api/**', (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ success: true, data: null }),
+  }));
 
   await page.addInitScript(installOfflineRuntimeConfig);
   await page.addInitScript(() => {
@@ -1709,14 +1715,144 @@ async function clickVisiblePostReviewAction(page, actionId) {
       && !defaultEntryProbe.rankingTabActive
       && !defaultEntryProbe.rankingPaneActive
       && /真人排位/.test(defaultEntryProbe.boundaryText)
-      && /问道练习/.test(defaultEntryProbe.boundaryText)
-      && /好友约战/.test(defaultEntryProbe.boundaryText)
-      && /镜像练习/.test(defaultEntryProbe.boundaryText)
-      && /不是真人排位/.test(defaultEntryProbe.boundaryText)
+      && /好友对局/.test(defaultEntryProbe.boundaryText)
+      && /练习模式/.test(defaultEntryProbe.boundaryText)
+      && /不计分/.test(defaultEntryProbe.boundaryText)
       && defaultEntryProbe.joinVisible,
     JSON.stringify(defaultEntryProbe),
   );
 
+  const idleAuthenticatedProbe = await page.evaluate(() => {
+    const readText = (selector) => document.querySelector(selector)?.textContent?.replace(/\s+/g, ' ').trim() || '';
+    const root = document.querySelector('[data-live-pvp-root]');
+    return {
+      authState: root?.getAttribute('data-live-auth-state') || '',
+      accountStatus: readText('[data-live-account-status]'),
+      joinText: readText('[data-live-action="join-queue"]'),
+      visibleText: [
+        readText('[data-live-account-status]'),
+        readText('[data-live-summary]'),
+        readText('[data-live-match-quality]'),
+        readText('[data-live-mode-boundary]'),
+        readText('[data-live-connection-status]'),
+        readText('[data-live-realtime-status]'),
+        readText('[data-live-social-status]'),
+        readText('[data-live-action="join-queue"]'),
+      ].join(' ').trim(),
+    };
+  });
+  add(
+    'live idle auth contract shows authenticated queue CTA without protocol or debug copy',
+    idleAuthenticatedProbe.authState === 'authenticated'
+      && /已就绪/.test(idleAuthenticatedProbe.accountStatus)
+      && idleAuthenticatedProbe.joinText === '开始匹配'
+      && !forbiddenIdlePlayerCopyPattern.test(idleAuthenticatedProbe.visibleText),
+    JSON.stringify(idleAuthenticatedProbe),
+  );
+
+  const guestIdleProbe = await page.evaluate(async () => {
+    const readText = (selector) => document.querySelector(selector)?.textContent?.replace(/\s+/g, ' ').trim() || '';
+    const originalShowLoginModal = window.game?.showLoginModal;
+    let loginModalCalls = 0;
+    if (window.game) {
+      window.game.showLoginModal = () => {
+        loginModalCalls += 1;
+        return null;
+      };
+    }
+    localStorage.removeItem('theDefierServerSession');
+    await window.PVPScene.handleAuthStateChanged();
+    await new Promise(resolve => setTimeout(resolve, 180));
+    window.__livePvpAuditCalls = [];
+    document.querySelector('[data-live-action="join-queue"]')?.click();
+    await new Promise(resolve => setTimeout(resolve, 180));
+    const result = {
+      authState: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-auth-state') || '',
+      accountStatus: readText('[data-live-account-status]'),
+      joinText: readText('[data-live-action="join-queue"]'),
+      lastError: readText('[data-live-last-error]'),
+      visibleText: [
+        readText('[data-live-account-status]'),
+        readText('[data-live-summary]'),
+        readText('[data-live-match-quality]'),
+        readText('[data-live-mode-boundary]'),
+        readText('[data-live-connection-status]'),
+        readText('[data-live-realtime-status]'),
+        readText('[data-live-social-status]'),
+        readText('[data-live-action="join-queue"]'),
+      ].join(' ').trim(),
+      calls: window.__livePvpAuditCalls.slice(),
+      loginModalCalls,
+    };
+    if (window.game && typeof originalShowLoginModal === 'function') {
+      window.game.showLoginModal = originalShowLoginModal;
+    }
+    return result;
+  });
+  add(
+    'live guest idle contract blocks queue request and keeps login CTA',
+    guestIdleProbe.authState === 'guest'
+      && guestIdleProbe.accountStatus === '尚未登录'
+      && guestIdleProbe.joinText === '登录后匹配'
+      && /当前不会发送匹配请求/.test(guestIdleProbe.lastError)
+      && guestIdleProbe.calls.every(call => call.method !== 'joinQueue')
+      && guestIdleProbe.loginModalCalls === 1
+      && !forbiddenIdlePlayerCopyPattern.test(guestIdleProbe.visibleText),
+    JSON.stringify(guestIdleProbe),
+  );
+
+  const authRefreshProbe = await page.evaluate(async () => {
+    const readText = (selector) => document.querySelector(selector)?.textContent?.replace(/\s+/g, ' ').trim() || '';
+    const originalGetCurrentMatch = window.PVPService.live.getCurrentMatch;
+    window.__livePvpAuditCalls = [];
+    window.PVPService.live.getCurrentMatch = async () => {
+      window.__livePvpAuditCalls.push({ method: 'getCurrentMatch', authStateRefresh: true });
+      return {
+        success: false,
+        code: '404',
+        reason: 'no_current_match',
+        message: '当前没有进行中的实时论道',
+      };
+    };
+    const sessionToken = 'browser-pvp-live-audit-session-token';
+    localStorage.setItem('theDefierServerSession', JSON.stringify({
+      token: sessionToken,
+      user: {
+        objectId: 'browser-pvp-live-audit-user',
+        username: '真人论道审计员',
+        sessionToken,
+      }
+    }));
+    await window.PVPScene.handleAuthStateChanged();
+    await new Promise(resolve => setTimeout(resolve, 180));
+    const result = {
+      authState: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-auth-state') || '',
+      accountStatus: readText('[data-live-account-status]'),
+      joinText: readText('[data-live-action="join-queue"]'),
+      visibleText: [
+        readText('[data-live-account-status]'),
+        readText('[data-live-summary]'),
+        readText('[data-live-match-quality]'),
+        readText('[data-live-mode-boundary]'),
+        readText('[data-live-connection-status]'),
+        readText('[data-live-realtime-status]'),
+        readText('[data-live-social-status]'),
+        readText('[data-live-action="join-queue"]'),
+      ].join(' ').trim(),
+      calls: window.__livePvpAuditCalls.slice(),
+    };
+    window.PVPService.live.getCurrentMatch = originalGetCurrentMatch;
+    return result;
+  });
+  add(
+    'live auth state change refreshes the idle live session',
+    authRefreshProbe.authState === 'authenticated'
+      && /已就绪/.test(authRefreshProbe.accountStatus)
+      && authRefreshProbe.joinText === '开始匹配'
+      && authRefreshProbe.calls.some(call => call.method === 'getCurrentMatch' && call.authStateRefresh === true)
+      && !forbiddenIdlePlayerCopyPattern.test(authRefreshProbe.visibleText),
+    JSON.stringify(authRefreshProbe),
+  );
   await page.setViewportSize({ width: 1180, height: 760 });
   await page.evaluate(() => window.game?.showScreen?.('pvp-screen'));
   await page.waitForTimeout(250);
@@ -1902,7 +2038,7 @@ async function clickVisiblePostReviewAction(page, actionId) {
       && mediumEntryProbe.statusCard?.right <= mediumEntryProbe.viewportWidth + 2
       && mediumEntryProbe.scrollWidth <= mediumEntryProbe.viewportWidth + 2
       && mediumEntryProbe.headingChipOverlap === false
-      && /镜像练习/.test(mediumEntryProbe.boundaryText)
+      && /真人排位.*好友对局.*练习模式.*不计分/.test(mediumEntryProbe.boundaryText)
       && mediumEntryProbe.boundaryScrollWidth <= mediumEntryProbe.boundaryClientWidth + 2
       && mediumEntryProbe.boundaryWhiteSpace !== 'nowrap'
 	      && mediumEntryProbe.actionCount >= 1
@@ -1916,10 +2052,10 @@ async function clickVisiblePostReviewAction(page, actionId) {
 	    !!mediumEntryProbe.trustGrid
 	      && mediumEntryProbe.trustGrid.left >= 0
 	      && mediumEntryProbe.trustGrid.right <= mediumEntryProbe.viewportWidth + 2
-	      && ['match-quality', 'mode-boundary', 'connection', 'realtime'].every((item) =>
+	      && ['match-quality', 'mode-boundary'].every((item) =>
 	        mediumEntryProbe.trustItems.some((probe) => probe.item === item)
 	      )
-	      && ['turn-timer', 'fairness', 'action-receipt', 'momentum', 'intent'].every((item) =>
+	      && ['turn-timer', 'connection', 'realtime', 'fairness', 'action-receipt', 'momentum', 'intent'].every((item) =>
 	        !mediumEntryProbe.trustItems.some((probe) => probe.item === item)
 	      )
 	      && mediumEntryProbe.trustItems.every((probe) =>
@@ -2586,9 +2722,9 @@ async function clickVisiblePostReviewAction(page, actionId) {
       && matchedProbe.opponentHandLeaked === 0
       && matchedProbe.presetDisabled.every(value => value === true)
       && /准备倒计时/.test(matchedProbe.turnTimer)
-      && /连接：我方在线 · 对方在线/.test(matchedProbe.connectionStatus)
-      && /^传输：/.test(matchedProbe.realtimeStatus)
-      && /传输：实时通道已连接/.test(matchedProbe.realtimeStatus)
+      && /联机：我方在线 · 对方在线/.test(matchedProbe.connectionStatus)
+      && /^同步：/.test(matchedProbe.realtimeStatus)
+      && /同步：已连接/.test(matchedProbe.realtimeStatus)
       && matchedProbe.realtimeDataset === 'connected'
       && matchedProbe.payload?.turnTimer?.reportVersion === 'pvp-live-turn-timer-v1'
       && matchedProbe.payload?.turnTimer?.phase === 'setup'
@@ -3416,7 +3552,7 @@ async function clickVisiblePostReviewAction(page, actionId) {
     for (let attempt = 0; attempt < 10; attempt += 1) {
       const realtimeState = document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-realtime-state') || '';
       const realtimeStatus = document.querySelector('[data-live-realtime-status]')?.textContent || '';
-      if (realtimeState === 'connected' && /实时通道已连接/.test(realtimeStatus)) break;
+	      if (realtimeState === 'connected' && /同步：已连接/.test(realtimeStatus)) break;
       await delay(50);
     }
 
@@ -3457,9 +3593,9 @@ async function clickVisiblePostReviewAction(page, actionId) {
       && foregroundResumeProbe.hiddenCounters.sendLiveHeartbeat === 0
       && foregroundResumeProbe.counters.sendLiveHeartbeat === 1
       && foregroundResumeProbe.counters.resumeRealtime === 1
-      && /连接：我方在线 · 对方在线/.test(foregroundResumeProbe.connectionStatus)
+      && /联机：我方在线 · 对方在线/.test(foregroundResumeProbe.connectionStatus)
       && foregroundResumeProbe.realtimeState === 'connected'
-      && /传输：实时通道已连接/.test(foregroundResumeProbe.realtimeStatus)
+      && /同步：已连接/.test(foregroundResumeProbe.realtimeStatus)
       && foregroundResumeProbe.payload?.connectionReport?.opponent?.status === 'online'
       && foregroundResumeProbe.payload?.realtimeStatus === 'connected'
       && foregroundResumeProbe.payload?.realtimeReport?.connectionId === 'audit-live-ws-1'
@@ -4906,7 +5042,7 @@ async function clickVisiblePostReviewAction(page, actionId) {
       && /抱拳/.test(ownEmoteProbe.events)
       && /B · 思考/.test(opponentEmoteProbe.events)
       && /已静音/.test(mutedEmoteProbe.status)
-      && /本地偏好/.test(mutedEmoteProbe.status)
+      && /对手表情/.test(mutedEmoteProbe.status)
       && mutedEmoteProbe.payload?.muted === true
       && mutedEmoteProbe.payload?.preferenceScope === 'local_only'
       && mutedEmoteProbe.payload?.sourceVisibility === 'local_preference'
@@ -4920,7 +5056,7 @@ async function clickVisiblePostReviewAction(page, actionId) {
     /"socialMuted":true/.test(mutedPersistProbe.storage)
       && mutedPersistProbe.liveSocialMuted === true
       && /已静音/.test(mutedPersistProbe.status)
-      && /本地偏好/.test(mutedPersistProbe.status)
+      && /对手表情/.test(mutedPersistProbe.status)
       && mutedPersistProbe.payload?.muted === true
       && mutedPersistProbe.payload?.preferenceScope === 'local_only'
       && mutedPersistProbe.payload?.sourceVisibility === 'local_preference'
@@ -6470,7 +6606,8 @@ async function clickVisiblePostReviewAction(page, actionId) {
     'live UI private invite creation shows share code without entering public queue',
     inviteCreateProbe.phase === 'waiting_invite'
       && /TDAB12/.test(inviteCreateProbe.inviteCode)
-      && /好友约战|邀请|约战/.test(inviteCreateProbe.inviteReport)
+      && /好友对局|房间码|邀请/.test(inviteCreateProbe.inviteReport)
+      && !/好友约战|友谊约战|收到的约战|邀请码/.test(inviteCreateProbe.inviteReport)
       && /乙/.test(inviteCreateProbe.inviteReport)
       && /不写正式积分/.test(inviteCreateProbe.inviteReport)
       && inviteCreateProbe.snapshot?.inviteCode === 'TDAB12'
@@ -6496,7 +6633,8 @@ async function clickVisiblePostReviewAction(page, actionId) {
     'live UI private invite cancel returns to idle without public queue',
     inviteCancelProbe.phase === 'idle'
       && /--/.test(inviteCancelProbe.inviteCode)
-      && /已取消|约战/.test(inviteCancelProbe.lastError)
+      && /好友房间已取消/.test(inviteCancelProbe.lastError)
+      && !/好友约战|友谊约战|收到的约战|邀请码/.test(inviteCancelProbe.lastError)
       && inviteCancelProbe.snapshot?.inviteCode === ''
       && inviteCancelProbe.snapshot?.inviteReport === null
       && inviteCancelProbe.calls.some(call => call.method === 'cancelInvite' && call.inviteCode === 'TDAB12')
@@ -6583,6 +6721,8 @@ async function clickVisiblePostReviewAction(page, actionId) {
     inviteInboxAutoRefreshProbe.phase === 'idle'
       && /甲/.test(inviteInboxAutoRefreshProbe.inbox)
       && /TDIN42/.test(inviteInboxAutoRefreshProbe.inbox)
+      && /好友对局|房间码/.test(inviteInboxAutoRefreshProbe.inbox)
+      && !/好友约战|友谊约战|收到的约战|邀请码/.test(inviteInboxAutoRefreshProbe.inbox)
       && inviteInboxAutoRefreshProbe.snapshot?.inviteInbox?.length === 1
       && inviteInboxAutoRefreshProbe.calls.filter(call => call.method === 'getInviteInbox').length >= 2
       && !/findOpponent|reportMatchResult|GhostEnemy|startPVPBattle|didWin|matchTicket/.test(JSON.stringify(inviteInboxAutoRefreshProbe.calls)),
@@ -6614,6 +6754,8 @@ async function clickVisiblePostReviewAction(page, actionId) {
       && /甲/.test(inviteInboxProbe.inbox)
       && /TDIN42/.test(inviteInboxProbe.inbox)
       && /不写正式积分/.test(inviteInboxProbe.inbox)
+      && /好友对局|房间码/.test(inviteInboxProbe.inbox)
+      && !/好友约战|友谊约战|收到的约战|邀请码/.test(inviteInboxProbe.inbox)
       && inviteInboxProbe.inboxButtons.includes('TDIN42')
       && inviteInboxProbe.snapshot?.inviteInbox?.length === 1
       && inviteInboxProbe.calls.some(call => call.method === 'getInviteInbox' && call.mode === 'pending')
@@ -7136,8 +7278,8 @@ async function clickVisiblePostReviewAction(page, actionId) {
     'live UI renders ready_timeout invalidated as no-score terminal state',
     invalidatedProbe.phase === 'invalidated'
       && /无效局/.test(invalidatedProbe.label)
-      && /VOID/.test(invalidatedProbe.chip)
-      && /不计正式积分/.test(`${invalidatedProbe.summary} ${invalidatedProbe.hint}`)
+      && /已取消/.test(invalidatedProbe.chip)
+      && /不计入战绩|不会计入战绩|不计正式积分/.test(`${invalidatedProbe.summary} ${invalidatedProbe.hint}`)
       && /不计正式积分/.test(invalidatedProbe.firstGuide)
       && /无效局/.test(invalidatedProbe.events)
       && /准备超时/.test(invalidatedProbe.events)
@@ -7288,7 +7430,24 @@ async function clickVisiblePostReviewAction(page, actionId) {
   mobilePage.on('pageerror', (err) => {
     consoleErrors.push(String(err));
   });
+  await mobilePage.route('**/api/**', (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ success: true, data: null }),
+  }));
   await mobilePage.addInitScript(installOfflineRuntimeConfig);
+  await mobilePage.addInitScript(() => {
+    const sessionToken = 'browser-pvp-live-mobile-audit-session-token';
+    localStorage.setItem('theDefierServerSession', JSON.stringify({
+      token: sessionToken,
+      user: {
+        objectId: 'browser-pvp-live-mobile-audit-user',
+        username: '移动端真人论道审计员',
+        sessionToken,
+      },
+    }));
+    sessionStorage.setItem('currentSaveSlot', '0');
+  });
   await mobilePage.goto(url, { waitUntil: 'domcontentloaded' });
   await mobilePage.waitForTimeout(1200);
   const mobileAuthActive = await mobilePage.evaluate(() => !!document.getElementById('auth-modal')?.classList.contains('active'));
@@ -7643,10 +7802,9 @@ async function clickVisiblePostReviewAction(page, actionId) {
       && !mobileDefaultEntryProbe.rankingTabActive
       && !mobileDefaultEntryProbe.rankingPaneActive
       && /真人排位/.test(mobileDefaultEntryProbe.boundaryText)
-      && /问道练习/.test(mobileDefaultEntryProbe.boundaryText)
-      && /好友约战/.test(mobileDefaultEntryProbe.boundaryText)
-      && /镜像练习/.test(mobileDefaultEntryProbe.boundaryText)
-      && /不是真人排位/.test(mobileDefaultEntryProbe.boundaryText)
+      && /好友对局/.test(mobileDefaultEntryProbe.boundaryText)
+      && /练习模式/.test(mobileDefaultEntryProbe.boundaryText)
+      && /不计分/.test(mobileDefaultEntryProbe.boundaryText)
       && mobileDefaultEntryProbe.joinVisible,
     JSON.stringify(mobileDefaultEntryProbe),
   );

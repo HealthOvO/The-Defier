@@ -22,6 +22,7 @@ export const PVPScene = {
   // 匹配锁，防止重复请求导致状态竞争
   matchingTimeoutMs: 8000,
   liveSession: null,
+  liveSessionUserScope: '',
   livePollTimer: null,
   liveQueueCooldownTimer: null,
   liveQueueCooldownTickMs: 1000,
@@ -516,13 +517,60 @@ export const PVPScene = {
   },
   getLiveSession() {
     this.ensureLiveLifecycleBindings();
+    const userScope = this.getLiveUserScope();
+    if (this.liveSession && this.liveSessionUserScope !== userScope) {
+      if (typeof this.liveSession.disconnectRealtime === 'function') {
+        this.liveSession.disconnectRealtime();
+      }
+      if (this.livePollTimer && typeof window !== 'undefined') window.clearInterval(this.livePollTimer);
+      if (this.liveHeartbeatTimer && typeof window !== 'undefined') window.clearInterval(this.liveHeartbeatTimer);
+      this.livePollTimer = null;
+      this.liveHeartbeatTimer = null;
+      this.liveHeartbeatIntervalMs = 0;
+      this.liveSession = null;
+      this.liveInlineHint = '';
+    }
     if (!this.liveSession) {
       this.liveSession = createPvpLiveSession({
         liveService: PVPService && PVPService.live ? PVPService.live : null,
         onChange: () => this.queueLiveRealtimeRender()
       });
+      this.liveSessionUserScope = userScope;
     }
     return this.liveSession;
+  },
+  getLiveAuthUser() {
+    try {
+      return PVPService && typeof PVPService.getCurrentUserSafe === 'function'
+        ? PVPService.getCurrentUserSafe()
+        : null;
+    } catch (error) {
+      return null;
+    }
+  },
+  getLiveUserScope() {
+    const user = this.getLiveAuthUser();
+    return String(user && (user.objectId || user.id || user.userId || user.username) || 'guest').trim() || 'guest';
+  },
+  isLiveAuthenticated() {
+    return this.getLiveUserScope() !== 'guest';
+  },
+  ensureLiveAuthenticated({ openLogin = true } = {}) {
+    if (this.isLiveAuthenticated()) return true;
+    this.liveInlineHint = '登录后即可参加真人排位，当前不会发送匹配请求。';
+    this.renderLivePanel();
+    const gameRef = this.getGameRef();
+    if (openLogin && gameRef && typeof gameRef.showLoginModal === 'function') {
+      gameRef.showLoginModal();
+    }
+    return false;
+  },
+  async handleAuthStateChanged() {
+    this.getLiveSession();
+    this.liveInlineHint = '';
+    if (this.activeTab === 'live') {
+      await this.loadLivePanel();
+    }
   },
   ensureLiveLifecycleBindings() {
     if (this.liveLifecycleBound) return;
@@ -535,6 +583,13 @@ export const PVPScene = {
     if (win && typeof win.addEventListener === 'function') {
       win.addEventListener('pageshow', onForegroundSignal);
       win.addEventListener('focus', onForegroundSignal);
+      win.addEventListener('storage', (event) => {
+        if (!event || event.key === 'theDefierServerSession') {
+          this.handleAuthStateChanged().catch(error => {
+            console.warn('[PVP Live] auth state refresh failed', error);
+          });
+        }
+      });
     }
     this.liveLifecycleBound = true;
   },
@@ -828,7 +883,7 @@ export const PVPScene = {
       strict_rating: '近分匹配',
       expanded_100_199: '长等待扩圈',
       accepted_200_399: '双方确认宽分差',
-      friend_invite: '好友约战'
+      friend_invite: '好友对局'
     };
     return labels[key] || '规则匹配';
   },
@@ -1328,7 +1383,7 @@ export const PVPScene = {
   },
   formatLiveConnectionStatus(view) {
     const tempo = this.getLiveConnectionTempo(view);
-    return tempo ? tempo.statusLine : '连接：等待心跳';
+    return tempo ? tempo.statusLine.replace(/^连接：/, '联机：') : '联机：等待对局';
   },
   renderLiveConnectionTempo(view, state = null) {
     const tempo = this.getLiveConnectionTempo(view, state);
@@ -1436,20 +1491,20 @@ export const PVPScene = {
   formatLiveRealtimeStatus(state) {
     const status = String(state && state.realtimeStatus || 'idle');
     const labels = {
-      idle: '等待实时通道',
-      unavailable: '实时通道不可用，使用 HTTP 心跳',
-      connecting: '正在连接实时通道',
-      connected: '实时通道已连接',
-      reconnecting: '实时通道正在重连',
-      closed: '实时通道已关闭',
-      error: '实时通道异常'
+      idle: '等待对局',
+      unavailable: '网络波动，已切换稳定模式',
+      connecting: '正在连接',
+      connected: '已连接',
+      reconnecting: '正在重新连接',
+      closed: '连接已结束',
+      error: '连接异常'
     };
     const label = labels[status] || status;
     const lastSyncAt = Math.max(0, Math.floor(Number(state && state.lastRealtimeSyncAt) || 0));
     const syncText = lastSyncAt > 0 ? ` · 最近同步 ${new Date(lastSyncAt).toLocaleTimeString()}` : '';
     const reason = String(state && state.lastError && state.lastError.reason || '');
     const reasonText = reason && (status === 'reconnecting' || status === 'error' || status === 'unavailable') ? ` · ${reason}` : '';
-    return `传输：${label}${syncText}${reasonText}`;
+    return `同步：${label}${syncText}${reasonText}`;
   },
   getLiveOpeningSafeguardReport(view) {
     const report = view && view.openingSafeguardReport && typeof view.openingSafeguardReport === 'object' ? view.openingSafeguardReport : null;
@@ -2720,7 +2775,7 @@ export const PVPScene = {
       remainingMs,
       remainingSeconds,
       retryAt,
-      buttonText: cooldownActive ? `${remainingSeconds}s 后重试` : '入队',
+      buttonText: cooldownActive ? `${remainingSeconds}s 后重试` : '开始匹配',
       hint: cooldownActive
         ? `${sourceLabel}触发真人排位短暂冷却，剩余 ${remainingSeconds} 秒；可先进入问道练习，练习不写正式积分。`
         : `${sourceLabel}已结束，可以重新进入真人排位。`
@@ -3058,7 +3113,7 @@ export const PVPScene = {
   },
   renderLiveInviteReport(report) {
     const source = report && typeof report === 'object' ? report : null;
-    if (!source) return '约战不写正式积分，只和输入邀请码的真人匹配。';
+    if (!source) return '好友对局不计排位积分，输入房间码后加入。';
     const code = String(source.inviteCode || '').trim() || '--';
     const status = String(source.status || 'waiting');
     const hostName = source.host && source.host.displayName ? source.host.displayName : '邀请者';
@@ -3066,11 +3121,22 @@ export const PVPScene = {
     const statusLabel = status === 'matched' ? '已成局' : status === 'cancelled' ? '已取消' : '等待好友加入';
     const impact = source.rankedImpact === 'none' ? '不写正式积分' : String(source.rankedImpact || '友谊局');
     const targetLabel = targetName ? ` · 指定 ${this.escapeHtml(targetName)}` : '';
-    return `${statusLabel} · ${impact} · 房主 ${this.escapeHtml(hostName)}${targetLabel} · 邀请码 ${this.escapeHtml(code)}`;
+    return `${statusLabel} · ${impact} · 房主 ${this.escapeHtml(hostName)}${targetLabel} · 房间码 ${this.escapeHtml(code)}`;
+  },
+  formatLivePlayerMessage(message = '') {
+    return String(message || '')
+      .replace(/好友约战邀请码/g, '好友房间码')
+      .replace(/好友约战/g, '好友房间')
+      .replace(/友谊约战/g, '好友对局')
+      .replace(/收到的约战/g, '收到的邀请')
+      .replace(/实时论道邀请码/g, '房间码')
+      .replace(/分享邀请码/g, '分享房间码')
+      .replace(/重新创建约战/g, '重新创建房间')
+      .replace(/进入公共匹配/g, '开始真人匹配');
   },
   renderLiveInviteInbox(invites = []) {
     const list = Array.isArray(invites) ? invites : [];
-    if (list.length === 0) return '收到的约战：暂无';
+    if (list.length === 0) return '收到的邀请：暂无';
     return list.slice(0, 4).map(invite => {
       const report = invite && invite.inviteReport ? invite.inviteReport : {};
       const code = String(invite && invite.inviteCode || report.inviteCode || '').trim();
@@ -3080,11 +3146,11 @@ export const PVPScene = {
       const expiresLabel = expiresAt ? ` · ${Math.max(0, Math.ceil((expiresAt - Date.now()) / 60000))} 分钟内有效` : '';
       return `
         <div class="pvp-live-invite-inbox-item">
-          <span>${this.escapeHtml(hostName)} 邀请你友谊约战 · ${this.escapeHtml(code)} · 不写正式积分${this.escapeHtml(expiresLabel)}</span>
+          <span>${this.escapeHtml(hostName)} 邀请你加入好友对局 · 房间码 ${this.escapeHtml(code)} · 不写正式积分${this.escapeHtml(expiresLabel)}</span>
           <button class="challenge-btn secondary" data-live-inbox-join="${this.escapeHtml(code)}" onclick="PVPScene.joinLiveInboxInvite('${this.escapeHtml(code)}')">加入</button>
         </div>
       `;
-    }).filter(Boolean).join('') || '收到的约战：暂无';
+    }).filter(Boolean).join('') || '收到的邀请：暂无';
   },
   getLivePostMatchReview(view) {
     const report = view && view.postMatchReview && typeof view.postMatchReview === 'object' ? view.postMatchReview : null;
@@ -3310,7 +3376,7 @@ export const PVPScene = {
       settledAt: Math.max(0, Math.floor(Number(report.settledAt) || 0)),
       summaryLine: String(report.summaryLine || `正式积分 ${deltaText} · 当前 ${scoreAfter} · 天道币 +${coinsAwarded}`),
       reasonLines,
-      boundary: String(report.boundary || '本报告来自服务端权威 live ranked 结算；好友约战、问道练习和无效局不会生成正式结算报告。'),
+      boundary: String(report.boundary || '本报告只来自真人排位结算；好友对局、问道练习和无效局不会生成正式结算报告。'),
       seasonHonorReport: this.getLiveSeasonHonorReport(report.seasonHonorReport)
     };
   },
@@ -5251,8 +5317,8 @@ export const PVPScene = {
     const hint = root ? root.querySelector('[data-live-last-error]') : null;
     if (hint) {
       hint.textContent = this.liveSocialMuted
-        ? '已静音对手表情；本地偏好已保存，只影响本机显示，不改变权威事件。'
-        : '已恢复表情显示；本地偏好已保存，仍只允许预设表情，无自由文本。';
+        ? '已静音对手表情，只影响你的本机显示。'
+        : '已恢复对局表情。';
     }
   },
   renderLiveLoadoutPresets(phase = 'idle') {
@@ -5473,6 +5539,10 @@ export const PVPScene = {
   },
   async loadLivePanel() {
     const session = this.getLiveSession();
+    if (!this.isLiveAuthenticated()) {
+      this.renderLivePanel();
+      return;
+    }
     const liveState = session.getState();
     if (liveState.phase === 'idle' && !liveState.queueTicket && !liveState.matchId) {
       await this.resumeLiveMatch();
@@ -5505,15 +5575,15 @@ export const PVPScene = {
   },
   getLivePhaseLabel(phase) {
     const labels = {
-      idle: '未入队',
-      queueing: '入队中',
-      waiting: '等待真人',
+      idle: '等待挑战',
+      queueing: '正在匹配',
+      waiting: '寻找对手',
       waiting_invite: '等待好友加入',
       waiting_rematch: '等待再战确认',
-      matched: '已匹配',
+      matched: '对手已就位',
       setup: '准备调息',
       active: '对局中',
-      sync_required: '需要同步权威状态',
+      sync_required: '正在恢复对局',
       finished: '对局结束',
       invalidated: '无效局'
     };
@@ -5540,19 +5610,42 @@ export const PVPScene = {
       const el = root.querySelector(selector);
       if (el) el.textContent = value;
     };
+    const liveUser = this.getLiveAuthUser();
+    const liveAuthenticated = this.isLiveAuthenticated();
+    root.setAttribute('data-live-auth-state', liveAuthenticated ? 'authenticated' : 'guest');
+    setText('[data-live-account-status]', liveAuthenticated
+      ? `${liveUser.username || liveUser.name || '道友'} · 已就绪`
+      : '尚未登录');
     const statusText = this.getLivePhaseLabel(phase);
     const modeLabel = phase === 'waiting_rematch' || view && view.mode === 'friendly' ? '友谊再战' : '真人排位';
     setText('[data-live-phase-label]', statusText);
-    setText('[data-live-status-chip]', phase === 'finished' ? 'FIN' : phase === 'invalidated' ? 'VOID' : phase === 'active' ? 'LIVE' : phase.toUpperCase());
+    const statusChipLabels = {
+      idle: '待命',
+      queueing: '匹配中',
+      waiting: '寻敌中',
+      waiting_invite: '等好友',
+      waiting_rematch: '再战中',
+      matched: '已匹配',
+      setup: '备战',
+      active: '对局中',
+      sync_required: '恢复中',
+      finished: '已结束',
+      invalidated: '已取消'
+    };
+    setText('[data-live-status-chip]', statusChipLabels[phase] || '实时');
     setText('[data-live-summary]', view && phase === 'setup'
-      ? `${modeLabel} · 准备阶段 · 调息上限 ${view.setup && view.setup.mulliganLimit !== undefined ? view.setup.mulliganLimit : 2} 张 · 服务端版本 ${view.stateVersion || '--'}`
+      ? `${modeLabel} · 准备阶段 · 最多调息 ${view.setup && view.setup.mulliganLimit !== undefined ? view.setup.mulliganLimit : 2} 张手牌`
       : phase === 'waiting_invite'
-        ? `好友约战 · 分享邀请码等待对手加入 · 不写正式积分`
+        ? '好友对局 · 分享房间码，等待对手加入'
       : view && phase === 'waiting_rematch'
-        ? `${modeLabel} · 等待本局对手确认 · 不写正式积分 · 服务端版本 ${view.stateVersion || '--'}`
+        ? `${modeLabel} · 等待本局对手确认`
       : view && phase === 'invalidated'
-        ? `${modeLabel} · 准备超时或无效局 · 不计正式积分 · 服务端版本 ${view.stateVersion || '--'}`
-      : view ? `${modeLabel} · 第 ${view.roundIndex || 1} 轮 · 第 ${view.turnIndex || 1} 手 · 服务端版本 ${view.stateVersion || '--'}` : '排队、行动与终局都走 /api/pvp/live，不接旧残影结算。');
+        ? `${modeLabel} · 本局已取消，不计入战绩`
+      : view
+        ? `${modeLabel} · 第 ${view.roundIndex || 1} 轮 · 第 ${view.turnIndex || 1} 手`
+        : liveAuthenticated
+          ? '选择斗法谱，匹配实力接近的真人对手。'
+          : '登录后即可参加真人排位。');
     setText('[data-live-queue-ticket]', state.queueTicket || '--');
     setText('[data-live-invite-code]', state.inviteCode || '--');
     setText('[data-live-match-id]', state.matchId || '--');
@@ -5647,8 +5740,8 @@ export const PVPScene = {
       actionWindowReceiptEl.innerHTML = this.renderLiveActionWindowReceipt(windowReceipt || view, phase);
     }
     setText('[data-live-social-status]', this.liveSocialMuted
-      ? '社交：已静音对手表情 · 本地偏好 · 不写正式积分'
-      : '社交：预设表情 · 无自由文本 · 本地偏好');
+      ? '对手表情已静音'
+      : '对局表情已开启');
     const guideEl = root.querySelector('[data-live-first-guide]');
     if (guideEl) guideEl.innerHTML = this.renderLiveFirstMatchGuide(view);
     const waitingReportEl = root.querySelector('[data-live-waiting-report]');
@@ -5776,7 +5869,28 @@ export const PVPScene = {
     }
 
     const queueCooldownCountdown = this.getLiveQueueCooldownCountdown(state);
-    const errorText = this.liveInlineHint || (queueCooldownCountdown ? queueCooldownCountdown.hint : state.lastError ? `${state.lastError.message || state.lastError.reason}` : phase === 'invalidated' ? '本局在开战前无效，不写正式积分；可以重新匹配或先练习斗法谱。' : phase === 'setup' ? '准备阶段只能调息或确认准备，不能提前出牌。' : phase === 'waiting_rematch' ? '已发起低压力再战，等待本局对手确认；不写正式积分。' : phase === 'waiting' ? '等待真实玩家加入；不会自动切换残影。' : '实时论道不会自动匹配残影；没有真人时可取消排队。');
+    const rawErrorText = state.lastError ? `${state.lastError.message || state.lastError.reason}` : '';
+    const playerErrorText = this.formatLivePlayerMessage(rawErrorText);
+    const safeErrorText = /未登录|token|登录失效|登录过期/i.test(rawErrorText)
+      ? '登录状态已失效，请重新登录后匹配。'
+      : /\/api\/|https?:|websocket|服务端|endpoint/i.test(rawErrorText)
+        ? '联机暂时不可用，请稍后重试。'
+        : playerErrorText;
+    const errorText = this.formatLivePlayerMessage(this.liveInlineHint) || (queueCooldownCountdown
+      ? queueCooldownCountdown.hint
+      : safeErrorText
+        ? safeErrorText
+        : phase === 'invalidated'
+          ? '本局未开始，因此不会计入战绩；可以重新匹配或先练习斗法谱。'
+          : phase === 'setup'
+            ? '选择要调息的手牌，准备好后确认出战。'
+            : phase === 'waiting_rematch'
+              ? '再战邀请已发出，正在等待对手确认。'
+              : phase === 'waiting'
+                ? '正在寻找实力接近的真人对手，你可以随时取消。'
+                : liveAuthenticated
+                  ? '选择斗法谱后开始匹配。'
+                  : '登录后可参加真人排位；天道榜与练习模式仍可浏览。');
     setText('[data-live-last-error]', errorText);
     this.updateLiveButtons(phase, !!view && view.currentSeat === state.seatId, self);
     this.syncLiveQueueCooldownTicker(phase, state);
@@ -5826,7 +5940,11 @@ export const PVPScene = {
     setDisabled('cancel-rematch', phase !== 'waiting_rematch' || intentLocked);
     setDisabled('practice-live', !(entrySafeguardBlocked && this.hasLiveEntrySafeguardAction(state, 'practice')) && !(phase === 'waiting' && (this.getLiveWaitingReport(state)?.longWait || this.getLiveWaitingQualitySafeguard(state))));
     setDisabled('refresh-match', !connectionSubmitBlocked && (phase === 'queueing' || phase === 'idle' || phase === 'finished' || phase === 'invalidated'));
-    setButtonText('join-queue', queueCooldownBlocked ? queueCooldownCountdown && queueCooldownCountdown.buttonText || '稍后重试' : entrySafeguardBlocked && this.hasLiveEntrySafeguardAction(state, 'retry_connection_check') ? '重试检测' : '入队');
+    setButtonText('join-queue', queueCooldownBlocked
+      ? queueCooldownCountdown && queueCooldownCountdown.buttonText || '稍后重试'
+      : entrySafeguardBlocked && this.hasLiveEntrySafeguardAction(state, 'retry_connection_check')
+        ? '重试检测'
+        : this.isLiveAuthenticated() ? '开始匹配' : '登录后匹配');
     setButtonText('end-turn', endTurnConfirmArmed ? '确认结束' : '结束回合');
     setButtonText('surrender', surrenderConfirmArmed ? '确认认输' : '认输');
     setDisabled('confirm-mulligan', connectionSubmitBlocked || intentLocked || !(phase === 'setup' && self && !self.mulliganUsed));
@@ -6323,6 +6441,9 @@ export const PVPScene = {
     return `live-ui-${type}-${Date.now().toString(36)}-${this.liveIntentSeq}`;
   },
   async joinLiveQueue(options = {}) {
+    if (!this.ensureLiveAuthenticated()) {
+      return { success: false, reason: 'auth_required', message: '登录后即可参加真人排位' };
+    }
     this.liveInlineHint = '';
     this.liveDrillScenario = null;
     const session = this.getLiveSession();
@@ -6371,6 +6492,9 @@ export const PVPScene = {
     this.startLivePolling();
   },
   async createLiveInvite() {
+    if (!this.ensureLiveAuthenticated()) {
+      return { success: false, reason: 'auth_required', message: '登录后即可创建好友房间' };
+    }
     this.liveInlineHint = '';
     const session = this.getLiveSession();
     const gameRef = this.getGameRef();
@@ -6394,6 +6518,9 @@ export const PVPScene = {
     }
   },
   async joinLiveInvite() {
+    if (!this.ensureLiveAuthenticated()) {
+      return { success: false, reason: 'auth_required', message: '登录后即可加入好友房间' };
+    }
     this.liveInlineHint = '';
     const session = this.getLiveSession();
     const root = document.querySelector('[data-live-pvp-root]');
@@ -6416,6 +6543,9 @@ export const PVPScene = {
     if (this.shouldLivePoll(state)) this.startLivePolling();
   },
   async joinLiveInboxInvite(inviteCode = '') {
+    if (!this.ensureLiveAuthenticated()) {
+      return { success: false, reason: 'auth_required', message: '登录后即可加入好友房间' };
+    }
     this.liveInlineHint = '';
     const code = String(inviteCode || '').trim();
     if (!code) return;

@@ -4484,6 +4484,164 @@ async function safeScreenshot(page, outPath) {
     JSON.stringify(advisorHierarchyProbe || null)
   );
 
+  const battleHandLayoutProbe = await page.evaluate(async () => {
+    if (!window.game || typeof game.startDebugBattle !== 'function') {
+      return { ok: false, reason: 'no_debug_battle' };
+    }
+
+    const waitForPaint = () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    const makeCard = (id, name, type, cost, icon, description) => ({
+      id,
+      name,
+      type,
+      rarity: 'common',
+      cost,
+      icon,
+      description,
+      effects: [{ type: type === 'defense' ? 'block' : 'damage', value: type === 'defense' ? 7 : 8, target: type === 'defense' ? 'self' : 'enemy' }]
+    });
+    const rectToObj = (rect) => rect ? ({
+      left: Number(rect.left.toFixed(1)),
+      right: Number(rect.right.toFixed(1)),
+      top: Number(rect.top.toFixed(1)),
+      bottom: Number(rect.bottom.toFixed(1)),
+      width: Number(rect.width.toFixed(1)),
+      height: Number(rect.height.toFixed(1)),
+      centerX: Number((rect.left + rect.width / 2).toFixed(1)),
+      centerY: Number((rect.top + rect.height / 2).toFixed(1))
+    }) : null;
+    const isVisible = (element) => {
+      if (!element || element.hidden) return false;
+      const style = getComputedStyle(element);
+      const rect = element.getBoundingClientRect();
+      return style.display !== 'none'
+        && style.visibility !== 'hidden'
+        && Number(style.opacity || '1') > 0
+        && rect.width > 0
+        && rect.height > 0;
+    };
+    const sameRow = (a, b) => {
+      if (!a || !b) return false;
+      const tolerance = Math.max(12, Math.min(a.height, b.height) * 0.55);
+      return Math.abs(a.centerY - b.centerY) <= tolerance;
+    };
+
+    game.startDebugBattle(1, 'boss');
+    const battle = game.battle;
+    const player = game.player;
+    if (!battle || !player || typeof battle.updateBattleUI !== 'function') {
+      return { ok: false, reason: 'no_battle' };
+    }
+
+    player.hand = [
+      makeCard('audit_layout_1', '裂光斩', 'attack', 1, '⚔️', '造成伤害。'),
+      makeCard('audit_layout_2', '归元护体', 'defense', 1, '🛡️', '获得护盾。'),
+      makeCard('audit_layout_3', '破势连击', 'attack', 2, '🪓', '造成多段伤害。'),
+      makeCard('audit_layout_4', '净息回环', 'law', 1, '🫧', '净化并回复。'),
+      makeCard('audit_layout_5', '焚脉', 'attack', 1, '🔥', '附加灼烧。'),
+      makeCard('audit_layout_6', '守心诀', 'defense', 1, '🧘', '强化防御。'),
+    ];
+    player.deck = Array.from({ length: 10 }, (_, index) => makeCard(`audit_deck_${index}`, `牌库样本 ${index + 1}`, 'attack', 1, '🃏', '牌库布局样本。'));
+    player.discardPile = [
+      makeCard('audit_discard_1', '弃牌回响', 'attack', 1, '🪞', '弃牌布局样本。'),
+      makeCard('audit_discard_2', '弃牌烙印', 'law', 0, '📜', '弃牌布局样本。'),
+    ];
+    player.currentEnergy = Math.max(Number(player.baseEnergy) || 3, 4);
+    player.maxMilkCandy = Math.max(Number(player.maxMilkCandy) || 0, 3);
+    player.milkCandy = Math.max(Number(player.milkCandy) || 0, 2);
+    if (battle.player) {
+      battle.player.hand = player.hand;
+      battle.player.deck = player.deck;
+      battle.player.discardPile = player.discardPile;
+    }
+    battle.tacticalAdvisorCollapsed = true;
+    battle.tacticalAdvisorHoverExpanded = false;
+    battle.tacticalAdvisorHoverLocked = false;
+    battle.updateBattleUI();
+    await waitForPaint();
+
+    const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 0;
+    const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
+    const handArea = document.querySelector('#battle-screen .hand-area');
+    const handCards = document.getElementById('hand-cards');
+    const deckPile = document.getElementById('deck-pile');
+    const discardPile = document.getElementById('discard-pile');
+    const resourcesContainer = document.querySelector('#battle-screen .resources-container');
+    const energyDisplay = resourcesContainer?.querySelector('.energy-display');
+    const candyDisplay = resourcesContainer?.querySelector('.milk-candy-display, .candy-display');
+    const commandPanel = document.getElementById('battle-command-panel');
+    const advisor = document.getElementById('battle-tactical-advisor');
+    const systemStrip = commandPanel?.querySelector('.battle-system-strip');
+
+    const handAreaRect = rectToObj(handArea?.getBoundingClientRect());
+    const handCardsRect = rectToObj(handCards?.getBoundingClientRect());
+    const deckRect = rectToObj(deckPile?.getBoundingClientRect());
+    const discardRect = rectToObj(discardPile?.getBoundingClientRect());
+    const resourcesRect = rectToObj(resourcesContainer?.getBoundingClientRect());
+    const energyRect = rectToObj(energyDisplay?.getBoundingClientRect());
+    const candyRect = rectToObj(candyDisplay?.getBoundingClientRect());
+    const commandRect = rectToObj(commandPanel?.getBoundingClientRect());
+    const advisorRect = rectToObj(advisor?.getBoundingClientRect());
+
+    const handOrderOk = !!deckRect
+      && !!handCardsRect
+      && !!discardRect
+      && deckRect.centerX < handCardsRect.centerX
+      && handCardsRect.centerX < discardRect.centerX
+      && deckRect.left >= handAreaRect.left - 2
+      && Math.abs(deckRect.left - handAreaRect.left) <= 20
+      && Math.abs(discardRect.right - handAreaRect.right) <= 20
+      && sameRow(deckRect, handCardsRect)
+      && sameRow(discardRect, handCardsRect);
+    const sharedResourceBeltOk = !!resourcesRect
+      && !!energyRect
+      && !!candyRect
+      && sameRow(energyRect, candyRect)
+      && energyRect.centerX < candyRect.centerX
+      && energyRect.left >= resourcesRect.left - 2
+      && candyRect.right <= resourcesRect.right + 2;
+    const collapsedAdvisorOk = !!advisor
+      && advisor.classList.contains('collapsed')
+      && advisor.getAttribute('aria-hidden') === 'true'
+      && (!systemStrip || !isVisible(systemStrip))
+      && !!commandRect
+      && !!advisorRect
+      && advisorRect.height < commandRect.height;
+
+    return {
+      ok: viewportWidth >= 1101
+        && handOrderOk
+        && sharedResourceBeltOk
+        && collapsedAdvisorOk
+        && !!handAreaRect
+        && handAreaRect.bottom <= viewportHeight + 2,
+      viewportWidth,
+      viewportHeight,
+      handOrderOk,
+      sharedResourceBeltOk,
+      collapsedAdvisorOk,
+      handAreaRect,
+      handCardsRect,
+      deckRect,
+      discardRect,
+      resourcesRect,
+      energyRect,
+      candyRect,
+      commandRect,
+      advisorRect,
+      advisorClass: advisor?.className || '',
+      systemStripVisible: !!systemStrip && isVisible(systemStrip),
+      cardCount: document.querySelectorAll('#hand-cards .card').length,
+      deckCount: Number(document.getElementById('deck-count')?.textContent || 0),
+      discardCount: Number(document.getElementById('discard-count')?.textContent || 0),
+    };
+  });
+  add(
+    'desktop battle keeps deck left discard right shared resource belt and hides system strip when advisor is collapsed',
+    !!battleHandLayoutProbe && !!battleHandLayoutProbe.ok,
+    JSON.stringify(battleHandLayoutProbe || null)
+  );
+
   await safeScreenshot(page, path.join(outDir, 'feature-audit.png'));
 
   const report = {

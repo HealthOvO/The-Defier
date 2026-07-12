@@ -8731,6 +8731,11 @@ export class Game {
           console.warn('Season ops auth refresh failed:', error);
         });
       }
+      if (PVPScene && typeof PVPScene.handleAuthStateChanged === 'function') {
+        PVPScene.handleAuthStateChanged().catch(error => {
+          console.warn('PVP auth refresh failed:', error);
+        });
+      }
       const globalSyncPromise = this.syncGlobalProgressFromCloud(successMsg.includes('注册') ? 'register' : 'login');
 
       // 登录成功后，获取云端存档列表并展示选择界面

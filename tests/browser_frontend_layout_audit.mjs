@@ -3111,6 +3111,171 @@ async function inspectBattleLogStress(page, rootSelector, scenarioId) {
   }, { rootSelector, scenarioId });
 }
 
+async function inspectMapChapterSummaryLayout(page, scenarioId) {
+  if (!['map-screen', 'map-screen-tools', 'map-screen-intel-toggle'].includes(scenarioId)) {
+    return { ok: true, skipped: true };
+  }
+
+  return page.evaluate(() => {
+    const viewport = { width: window.innerWidth, height: window.innerHeight };
+    const root = document.getElementById('map-screen');
+    const shell = root?.querySelector('.map-screen-v3');
+    const scroller = root?.querySelector('#map-scroll-container');
+    const closeMapIntel = () => {
+      if (!root || !shell) return false;
+      shell.classList.remove('show-map-intel');
+      const intelButton = root.querySelector('[data-map-action="toggle-map-intel"]');
+      const intelDrawer = root.querySelector('#map-intel-drawer');
+      const detailPanels = root.querySelector('#map-detail-panels');
+      const expeditionPanels = root.querySelector('#map-expedition-panels');
+      if (intelButton) intelButton.setAttribute('aria-expanded', 'false');
+      if (intelDrawer) intelDrawer.setAttribute('aria-hidden', 'true');
+      if (detailPanels) detailPanels.setAttribute('aria-hidden', 'true');
+      if (expeditionPanels) expeditionPanels.setAttribute('aria-hidden', 'true');
+      if (window.game?.mapView && typeof window.game.mapView.syncMapChrome === 'function') {
+        window.game.mapView.syncMapChrome(root);
+      }
+      return !shell.classList.contains('show-map-intel');
+    };
+    const summary = scroller?.querySelector('.map-canvas-header');
+    const canvas = scroller?.querySelector('#map-content-wrapper');
+    const rectObj = (rect) => rect ? ({
+      left: Math.round(rect.left * 10) / 10,
+      top: Math.round(rect.top * 10) / 10,
+      right: Math.round(rect.right * 10) / 10,
+      bottom: Math.round(rect.bottom * 10) / 10,
+      width: Math.round(rect.width * 10) / 10,
+      height: Math.round(rect.height * 10) / 10,
+      centerX: Math.round((rect.left + rect.width / 2) * 10) / 10,
+      centerY: Math.round((rect.top + rect.height / 2) * 10) / 10,
+    }) : null;
+    const isVisible = (element) => {
+      if (!element || !(element instanceof Element)) return false;
+      const style = getComputedStyle(element);
+      const rect = element.getBoundingClientRect();
+      return style.display !== 'none'
+        && style.visibility !== 'hidden'
+        && Number(style.opacity || '1') > 0
+        && rect.width > 0
+        && rect.height > 0;
+    };
+    const overlapArea = (a, b) => {
+      if (!a || !b) return 0;
+      const width = Math.max(0, Math.min(a.right, b.right) - Math.max(a.left, b.left));
+      const height = Math.max(0, Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top));
+      return Math.round(width * height * 10) / 10;
+    };
+    const initialIntelOpen = !!shell?.classList.contains('show-map-intel');
+    const summaryHiddenWithInitialIntel = !initialIntelOpen || !isVisible(summary);
+    const intelClosed = closeMapIntel();
+
+    if (!root || !shell || !scroller || !summary || !canvas) {
+      return {
+        ok: false,
+        skipped: false,
+        issues: [{ type: 'missing-map-chapter-summary-shell' }],
+      };
+    }
+    if (!intelClosed || shell.classList.contains('show-map-intel')) {
+      return {
+        ok: false,
+        skipped: false,
+        issues: [{ type: 'map-intel-did-not-close-before-summary-layout-check' }],
+        viewport,
+      };
+    }
+
+    const summaryRect = rectObj(summary.getBoundingClientRect());
+    const canvasRect = rectObj(canvas.getBoundingClientRect());
+    const scrollerRect = rectObj(scroller.getBoundingClientRect());
+    const documentScrollWidth = document.documentElement.scrollWidth;
+    const rootScrollWidth = root.scrollWidth;
+    const scrollerScrollWidth = scroller.scrollWidth;
+    const overflowingChildren = Array.from(scroller.querySelectorAll('*')).map((element) => {
+      const rect = element.getBoundingClientRect();
+      return {
+        selector: element.id ? `#${element.id}` : `.${Array.from(element.classList || []).slice(0, 3).join('.')}`,
+        left: Math.round(rect.left * 10) / 10,
+        right: Math.round(rect.right * 10) / 10,
+        width: Math.round(rect.width * 10) / 10,
+      };
+    }).filter(item => item.left < scrollerRect.left - 2 || item.right > scrollerRect.right + 2).slice(0, 20);
+    const noHorizontalOverflow = documentScrollWidth <= viewport.width + 2
+      && rootScrollWidth <= root.clientWidth + 2
+      && scrollerScrollWidth <= scroller.clientWidth + 2;
+    const wideDesktop = viewport.width >= 1101;
+    const rightOfCanvas = !!summaryRect && !!canvasRect
+      && summaryRect.left >= canvasRect.right - 6
+      && summaryRect.centerX > canvasRect.centerX;
+    const aboveCanvas = !!summaryRect && !!canvasRect
+      && summaryRect.bottom <= canvasRect.top + 8
+      && summaryRect.centerY < canvasRect.centerY;
+    const overlap = overlapArea(summaryRect, canvasRect);
+    const issues = [];
+
+    if (wideDesktop && initialIntelOpen && !summaryHiddenWithInitialIntel) {
+      issues.push({ type: 'map-summary-duplicates-open-intel-on-wide-desktop' });
+    }
+    if (!isVisible(summary) || !isVisible(canvas)) {
+      issues.push({ type: 'map-summary-or-canvas-hidden', summaryVisible: isVisible(summary), canvasVisible: isVisible(canvas) });
+    }
+    if (!noHorizontalOverflow) {
+      issues.push({
+        type: 'map-summary-layout-horizontal-overflow',
+        documentScrollWidth,
+        rootScrollWidth,
+        scrollerScrollWidth,
+        viewportWidth: viewport.width,
+        rootClientWidth: root.clientWidth,
+        scrollerClientWidth: scroller.clientWidth,
+      });
+    }
+    if (wideDesktop) {
+      if (!rightOfCanvas || overlap > 16) {
+        issues.push({
+          type: 'map-summary-not-right-of-canvas-on-wide-desktop',
+          summaryRect,
+          canvasRect,
+          overlap,
+          viewportWidth: viewport.width,
+        });
+      }
+    } else if (!aboveCanvas) {
+      issues.push({
+        type: 'map-summary-not-above-canvas-on-narrow-layout',
+        summaryRect,
+        canvasRect,
+        overlap,
+        viewportWidth: viewport.width,
+      });
+    }
+
+    return {
+      ok: issues.length === 0,
+      skipped: false,
+      viewport,
+      wideDesktop,
+      noHorizontalOverflow,
+      rightOfCanvas,
+      aboveCanvas,
+      overlap,
+      summaryRect,
+      canvasRect,
+      scrollerRect,
+      documentScrollWidth,
+      rootScrollWidth,
+      scrollerScrollWidth,
+      overflowingChildren,
+      shellClass: shell.className,
+      intelClosed,
+      initialIntelOpen,
+      summaryHiddenWithInitialIntel,
+      nodeCount: scroller.querySelectorAll('.map-node-v3').length,
+      issues,
+    };
+  });
+}
+
 async function inspectPvpTabMobileSurface(page, scenarioId) {
   if (scenarioId !== 'pvp-screen') {
     return { ok: true, skipped: true };
@@ -4061,6 +4226,7 @@ async function inspectBattleOverlaySwitchGuard(page) {
       const rootSelector = prepareResult?.rootSelector || scenario.root;
       const result = await inspectLayout(page, rootSelector, scenario.id);
       const overlayStress = await inspectBattleLogStress(page, rootSelector, scenario.id);
+      const mapChapterSummaryLayout = await inspectMapChapterSummaryLayout(page, scenario.id);
       const pvpTabMobileSurface = await inspectPvpTabMobileSurface(page, scenario.id);
       const pvpDesktopShopSurface = await inspectPvpDesktopShopSurface(page, scenario.id);
       const settingsModalLayering = await inspectSettingsModalLayering(page, scenario.id);
@@ -4084,6 +4250,7 @@ async function inspectBattleOverlaySwitchGuard(page) {
         screenshot: screenshotCaptured ? path.relative(process.cwd(), screenshotPath).replace(/\\/g, '/') : null,
         screenshotMode,
         overlayStress,
+        mapChapterSummaryLayout,
         pvpTabMobileSurface,
         pvpDesktopShopSurface,
         settingsModalLayering,
@@ -4102,6 +4269,7 @@ async function inspectBattleOverlaySwitchGuard(page) {
         && realBattleResolverOk
         && !!result?.ok
         && !!overlayStress?.ok
+        && !!mapChapterSummaryLayout?.ok
         && !!pvpTabMobileSurface?.ok
         && !!pvpDesktopShopSurface?.ok
         && !!settingsModalLayering?.ok

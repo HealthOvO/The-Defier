@@ -70,6 +70,14 @@ globalThis.window.localStorage = globalThis.localStorage;
 const { PVPScene } = await import('../js/scenes/pvp-scene.js');
 const { PVPService } = await import('../js/services/pvp-service.js');
 const originalRenderLivePanel = PVPScene.renderLivePanel;
+const originalGetLiveSession = PVPScene.getLiveSession.bind(PVPScene);
+const originalGetLiveAuthUser = PVPScene.getLiveAuthUser.bind(PVPScene);
+const originalGetGameRef = PVPScene.getGameRef.bind(PVPScene);
+
+PVPScene.getLiveAuthUser = () => ({
+  objectId: 'live-ui-runtime-user',
+  username: '真人审计员'
+});
 
 PVPScene.getLiveSession = () => ({
   getState: () => ({
@@ -1440,7 +1448,7 @@ assert.equal(liveButtons.get('join-queue').textContent, '重试检测', 'blocked
 assert.equal(liveButtons.get('practice-live').disabled, false, 'blocked entry safeguard should enable no-score practice');
 entrySafeguardState = { phase: 'idle', queueTicket: '', matchId: '', lastError: null, stateView: null, lastEvents: [] };
 PVPScene.updateLiveButtons('idle', false, null);
-assert.equal(liveButtons.get('join-queue').textContent, '入队', 'healthy idle live entry should restore normal queue copy');
+assert.equal(liveButtons.get('join-queue').textContent, '开始匹配', 'healthy idle live entry should restore formal live queue copy for logged-in players');
 assert.equal(liveButtons.get('practice-live').disabled, true, 'healthy idle live entry should not expose practice without a blocked safeguard action');
 documentStub.querySelector = oldDocumentQuerySelector;
 
@@ -1511,7 +1519,7 @@ expiredQueueCooldownState.lastError.matchmakingGuard.cooldownRemainingMs = 0;
 PVPScene.getLiveSession = () => ({ getState: () => expiredQueueCooldownState });
 const expiredQueueCooldownCountdown = PVPScene.getLiveQueueCooldownCountdown(expiredQueueCooldownState);
 assert.equal(expiredQueueCooldownCountdown?.remainingSeconds, 0, 'expired queue cooldown countdown should not keep showing one more second');
-assert.equal(expiredQueueCooldownCountdown?.buttonText, '入队', 'expired queue cooldown countdown should restore normal queue copy');
+assert.equal(expiredQueueCooldownCountdown?.buttonText, '开始匹配', 'expired queue cooldown countdown should restore formal live queue copy for logged-in players');
 assert.match(expiredQueueCooldownCountdown?.hint || '', /冷却已结束/, 'expired queue cooldown should tell the player they can queue again');
 assert.equal(PVPScene.isLiveEntrySafeguardBlocked(expiredQueueCooldownState), false, 'expired queue cooldown should not keep live entry safeguard blocked');
 const expiredQueueCooldownButtons = new Map([
@@ -1527,9 +1535,80 @@ const expiredQueueCooldownRootStub = {
 };
 documentStub.querySelector = (selector) => selector === '[data-live-pvp-root]' ? expiredQueueCooldownRootStub : null;
 PVPScene.updateLiveButtons('idle', false, null);
-assert.equal(expiredQueueCooldownButtons.get('join-queue').textContent, '入队', 'expired queue cooldown should relabel retry button back to queue');
+assert.equal(expiredQueueCooldownButtons.get('join-queue').textContent, '开始匹配', 'expired queue cooldown should relabel retry button back to formal live queue copy');
 assert.equal(expiredQueueCooldownButtons.get('practice-live').disabled, true, 'expired queue cooldown should hide the cooldown-only no-score practice action');
 documentStub.querySelector = oldDocumentQuerySelector;
+
+let guestJoinQueueCalls = 0;
+let guestLoginModalCalls = 0;
+PVPScene.getLiveAuthUser = () => null;
+PVPScene.getGameRef = () => ({
+  player: { name: '游客审计员' },
+  showLoginModal() {
+    guestLoginModalCalls += 1;
+  }
+});
+PVPScene.getLiveSession = () => ({
+  getState: () => ({
+    phase: 'idle',
+    queueTicket: '',
+    matchId: '',
+    seatId: '',
+    stateView: null,
+    lastError: null,
+    lastEvents: [],
+    realtimeStatus: 'idle'
+  }),
+  async joinQueue() {
+    guestJoinQueueCalls += 1;
+    return { success: true };
+  }
+});
+const guestQueueResult = await PVPScene.joinLiveQueue();
+assert.equal(guestQueueResult?.success, false, 'guest live queue should fail locally before any network request');
+assert.equal(guestQueueResult?.reason, 'auth_required', 'guest live queue should expose a stable auth-required reason');
+assert.equal(guestJoinQueueCalls, 0, 'guest live queue should not call the live queue service');
+assert.equal(guestLoginModalCalls, 1, 'guest live queue should open the login modal exactly once');
+assert.match(PVPScene.liveInlineHint, /当前不会发送匹配请求/, 'guest live queue should explain that no match request was sent');
+PVPScene.getGameRef = originalGetGameRef;
+PVPScene.getLiveAuthUser = () => ({
+  objectId: 'live-ui-runtime-user',
+  username: '真人审计员'
+});
+PVPScene.getLiveSession = originalGetLiveSession;
+
+const originalLoadLivePanel = PVPScene.loadLivePanel;
+const originalLiveService = PVPService.live;
+let authScopeUser = { objectId: 'auth-swap-user-a', username: '甲' };
+let authRefreshLoadCalls = 0;
+PVPScene.activeTab = 'live';
+PVPScene.getLiveAuthUser = () => authScopeUser;
+PVPScene.liveSession = null;
+PVPScene.liveSessionUserScope = '';
+PVPScene.loadLivePanel = async () => {
+  authRefreshLoadCalls += 1;
+};
+PVPService.live = {};
+const firstAuthScopedSession = originalGetLiveSession();
+let authScopedDisconnectCalls = 0;
+firstAuthScopedSession.disconnectRealtime = () => {
+  authScopedDisconnectCalls += 1;
+};
+authScopeUser = { objectId: 'auth-swap-user-b', username: '乙' };
+const secondAuthScopedSession = originalGetLiveSession();
+assert.notEqual(secondAuthScopedSession, firstAuthScopedSession, 'live auth scope changes should swap to a fresh live session');
+assert.equal(authScopedDisconnectCalls, 1, 'live auth scope changes should disconnect the previous live session exactly once');
+assert.equal(PVPScene.liveSessionUserScope, 'auth-swap-user-b', 'live auth scope changes should update the cached session scope');
+await PVPScene.handleAuthStateChanged();
+assert.equal(authRefreshLoadCalls, 1, 'live auth state changes should reload the live panel when the live tab is active');
+PVPScene.loadLivePanel = originalLoadLivePanel;
+PVPService.live = originalLiveService;
+PVPScene.liveSession = null;
+PVPScene.liveSessionUserScope = '';
+PVPScene.getLiveAuthUser = () => ({
+  objectId: 'live-ui-runtime-user',
+  username: '真人审计员'
+});
 
 scheduledIntervals.length = 0;
 clearedTimers.length = 0;

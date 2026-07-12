@@ -271,7 +271,6 @@ const liveBrowserAudit = read('tests/browser_pvp_live_audit.mjs');
   "sourceVisibility: 'local_preference'",
   "rankedImpact: 'none'",
   "persistence: 'local_storage'",
-  '本地偏好',
 ].forEach((needle) => {
   assert.ok(scene.includes(needle), `PVPScene should expose live UI marker: ${needle}`);
 });
@@ -921,17 +920,37 @@ assert.ok(!/\.pvp-live-first-guide\s*\{[\s\S]*?max-height:\s*60px[\s\S]*?overflo
 
 [
   'data-live-mode-boundary',
-  '真人排位：入队后由服务端写正式结果',
-  '问道练习：不写分',
-  '好友约战：邀请码真人局',
-  '镜像练习：天道榜练习，不是真人排位',
+  '真人排位会记录胜负与积分；好友对局和练习模式不计分。',
+  'data-live-account-status',
+  '尚未登录',
+  'data-live-action="join-queue"',
+  '登录后匹配',
 ].forEach((needle) => {
   assert.ok(html.includes(needle), `live PVP default entry should explain mode boundary: ${needle}`);
 });
 
 [
+  "root.setAttribute('data-live-auth-state', liveAuthenticated ? 'authenticated' : 'guest')",
+  "setText('[data-live-account-status]', liveAuthenticated",
+  "this.isLiveAuthenticated() ? '开始匹配' : '登录后匹配'",
+  "this.liveInlineHint = '登录后即可参加真人排位，当前不会发送匹配请求。';",
+  'async handleAuthStateChanged()',
+  'await this.loadLivePanel();',
+].forEach((needle) => {
+  assert.ok(scene.includes(needle), `PVPScene should keep live auth/session contract: ${needle}`);
+});
+
+[
+  'live idle auth contract shows authenticated queue CTA without protocol or debug copy',
+  'live guest idle contract blocks queue request and keeps login CTA',
+  'live auth state change refreshes the idle live session',
+].forEach((needle) => {
+  assert.ok(liveBrowserAudit.includes(needle), `browser live audit should cover auth/session idle contract: ${needle}`);
+});
+
+[
   "invalidated: '无效局'",
-  "phase === 'invalidated' ? 'VOID'",
+  '本局未开始，因此不会计入战绩；可以重新匹配或先练习斗法谱。',
   '不计正式积分',
 ].forEach((needle) => {
   assert.ok(scene.includes(needle), `PVPScene should render invalidated live match marker: ${needle}`);

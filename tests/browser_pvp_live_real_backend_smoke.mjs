@@ -3831,7 +3831,7 @@ async function writeReport() {
         && !/sync_required|conflicting_state_version/i.test(JSON.stringify(realSocialSubmitProbe))
         && /B · (思考|thinking)/.test(realSocialUnmutedProbe.events)
         && /已静音/.test(realSocialMutedProbe.status)
-        && /本地偏好/.test(realSocialMutedProbe.status)
+        && /对手表情/.test(realSocialMutedProbe.status)
         && !/B · (思考|thinking)/.test(realSocialMutedProbe.events)
         && /"socialMuted":true/.test(realSocialMutedProbe.storage)
         && realSocialMutedProbe.liveSocialMuted === true

@@ -29,7 +29,7 @@ export class Battle {
     this.encounterRewardConsumed = false;
     this.squadRewardConsumed = false;
     this.commandState = this.createDefaultBattleCommandState();
-    this.tacticalAdvisorCollapsed = false;
+    this.tacticalAdvisorCollapsed = true;
     this.tacticalAdvisorHoverExpanded = false;
     this.tacticalAdvisorHoverLocked = false;
     this.activeSquadEcology = null;
@@ -758,7 +758,7 @@ export class Battle {
     this.encounterRewardConsumed = false;
     this.squadRewardConsumed = false;
     this.commandState = this.createDefaultBattleCommandState();
-    this.tacticalAdvisorCollapsed = false;
+    this.tacticalAdvisorCollapsed = true;
     this.activeSquadEcology = null;
     this.turnAdvisorTelemetry = null;
     if (this.advisorFocusTimer) {

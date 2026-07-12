@@ -152,7 +152,7 @@ export class MapView {
                 </aside>
 
                 <div class="map-scroll-container" id="map-scroll-container">
-                    <div class="map-canvas-header">
+                    <aside class="map-canvas-header" data-map-chapter-summary="true" aria-label="当前关卡">
                         <div class="map-canvas-kicker">当前关卡</div>
                         <div class="map-canvas-title-row">
                             <div class="map-canvas-title">${mapHeadline}</div>
@@ -165,7 +165,7 @@ export class MapView {
                             <span class="map-legend-chip completed">已完成</span>
                             <span class="map-legend-chip locked">未解锁</span>
                         </div>
-                    </div>
+                    </aside>
                     <div class="map-content-wrapper" id="map-content-wrapper">
                         <!-- SVG Layer -->
                         <svg class="map-connections-svg" id="map-svg-layer"></svg>
