@@ -1,0 +1,39 @@
+css/frontend-upgrade.css
+  s_ca5652313828d6::t_b79374260bc808 15-19
+index.html
+  s_bae69f1b7fab46::t_dc15f515dc4aa1 9-73,112,121,129,137,148,154,160,166,172,178,184,190,214
+js/game.js
+  s_bae69f1b7fab46::t_37042e457bfad9 9424
+tests/browser_automation_boot_audit.mjs
+  s_ca5652313828d6::t_376b54d13b44ca 30-107,331-351,360-362
+tests/sanity_frontend_design_system_checks.cjs
+  s_bae69f1b7fab46::t_5e857fc951ef85 11,18,65-97
+tests/sanity_release_gate_coverage_checks.cjs
+  s_bae69f1b7fab46::t_4b3ca5d21faf3d 603-618
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "af38d793fcb26b7583f1c5d5a4e4553562260ff4",
+  "prompts": {},
+  "sessions": {
+    "s_bae69f1b7fab46": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ed4f6-e7ac-73e0-a29e-119f3eddb407",
+        "model": "unknown"
+      },
+      "human_author": "AI Agent <bot@example.com>"
+    },
+    "s_ca5652313828d6": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f3fed-94d5-77b2-9af0-61333559ff38",
+        "model": "unknown"
+      },
+      "human_author": "AI Agent <bot@example.com>"
+    }
+  },
+  "attestation_metadata": {},
+  "remote_transcripts": {}
+}
