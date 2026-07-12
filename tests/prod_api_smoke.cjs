@@ -295,6 +295,11 @@ async function finishRankedMatchWithRealLethal({ matchId, participantsBySeat }) 
       return { terminal: latest, finishEvents, steps: step };
     }
     assert.strictEqual(scoutView?.status, 'active', `prod live ranked real-card lethal should stay active before terminal: ${JSON.stringify(scoutView)}`);
+    await Promise.all(seatIds.map((seatId) => submitLiveHeartbeat(
+      matchId,
+      participantsBySeat[seatId],
+      `prod live ranked lethal keepalive ${seatId} step ${step}`,
+    )));
     const currentSeat = scoutView.currentSeat === 'B' ? 'B' : 'A';
     const actor = participantsBySeat[currentSeat];
     assert(actor, `prod live ranked current seat should have participant token: ${currentSeat}`);
