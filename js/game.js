@@ -9421,6 +9421,7 @@ function initializeGameInstance() {
       }
     }
     console.log('Game Initialized:', game);
+    window.dispatchEvent(new Event('the-defier:runtime-ready'));
   } catch (error) {
     console.error('Game Initialization Failed:', error);
     if (typeof Utils !== 'undefined' && Utils && typeof Utils.showBattleLog === 'function') {

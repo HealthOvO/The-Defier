@@ -8,12 +8,14 @@ const read = (relativePath) => fs.readFileSync(path.join(root, relativePath), 'u
 const designSystemCss = read('css/design-system.css');
 const frontendUpgradeCss = read('css/frontend-upgrade.css');
 const indexHtml = read('index.html');
+const gameSource = read('js/game.js');
 const mapView = read('js/views/MapView.js');
 const battleRuntime = read('js/core/battle.js');
 const characterSelectView = read('js/views/CharacterSelectView.js');
 const rewardView = read('js/views/RewardView.js');
 const systemView = read('js/views/SystemView.js');
 const uiGalleryAudit = read('tests/browser_ui_gallery_audit.mjs');
+const automationBootAudit = read('tests/browser_automation_boot_audit.mjs');
 const releaseCoverageChecks = read('tests/sanity_release_gate_coverage_checks.cjs');
 const runNodeChecks = read('tests/run_node_checks.sh');
 
@@ -59,6 +61,39 @@ assert.ok(characterSelectView.includes("?.setAttribute('aria-pressed'"), 'charac
 assert.ok(characterSelectView.includes('details class="char-story-panel"'), 'selected character detail should use progressive disclosure');
 assert.ok(rewardView.includes('reward-popup-content'), 'reward popup sizing should be CSS-owned');
 assert.ok(systemView.includes('system-prompt-content'), 'system prompt sizing should be CSS-owned');
+
+[
+  '__THE_DEFIER_BOOT_CLICK_STATE__',
+  '__THE_DEFIER_BOOT__',
+  'the-defier:runtime-ready',
+  'pendingActionId',
+  "event.target.closest('[data-boot-action]')",
+  'data-boot-click-queued',
+].forEach((needle) => {
+  assert.ok(indexHtml.includes(needle), `explicit main-menu boot dispatcher should expose marker: ${needle}`);
+});
+[
+  'id="new-game-btn" data-boot-action="new-game"',
+  'id="pvp-btn" data-boot-action="open-pvp"',
+  "'open-pvp': () =>",
+].forEach((needle) => {
+  assert.ok(indexHtml.includes(needle), `main-menu boot action should be wired explicitly: ${needle}`);
+});
+assert.ok(gameSource.includes("window.dispatchEvent(new Event('the-defier:runtime-ready'))"), 'Game initialization should release queued cold-start clicks');
+assert.ok(frontendUpgradeCss.includes('[data-boot-click-queued="true"]'), 'queued cold-start actions should expose visible busy feedback');
+[
+  'cold-start ${label} action queues before runtime and runs after Game initialization',
+  "scenarioId: 'cold-start-new-game-action'",
+  "scenarioId: 'cold-start-pvp-action'",
+  "actionId: 'open-pvp'",
+  "page.route('**/assets/index-*.js'",
+  "page.route('**/js/main.js*'",
+  'queuedProbe.interceptedClicks === 1',
+  'replayProbe.replayedClicks === 1',
+  'game is not defined|PVPScene is not defined',
+].forEach((needle) => {
+  assert.ok(automationBootAudit.includes(needle), `automation boot audit should cover cold-start click marker: ${needle}`);
+});
 
 [
   '.fd-surface',

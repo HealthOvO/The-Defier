@@ -27,6 +27,84 @@ async function safeScreenshot(page, outPath) {
   }
 }
 
+async function runColdStartClickScenario(browser, scenario) {
+  const { scenarioId, triggerSelector, actionId, label, verifyOutcome } = scenario;
+  const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+  const scenarioErrors = [];
+  let delayedRuntimeRequests = 0;
+  page.on('console', (msg) => {
+    if (msg.type() !== 'error') return;
+    const message = String(msg.text() || '');
+    scenarioErrors.push(message);
+    recordConsoleError(message, scenarioId);
+  });
+  page.on('pageerror', (err) => {
+    const message = String(err);
+    scenarioErrors.push(message);
+    recordConsoleError(message, scenarioId);
+  });
+  const delayRuntimeRequest = async (route) => {
+    delayedRuntimeRequests += 1;
+    await new Promise((resolve) => setTimeout(resolve, 2500));
+    await route.continue();
+  };
+  await page.route('**/assets/index-*.js', delayRuntimeRequest);
+  await page.route('**/js/main.js*', delayRuntimeRequest);
+
+  await page.goto(baseUrl, { waitUntil: 'commit' });
+  await page.locator(triggerSelector).waitFor({ state: 'visible', timeout: 5000 });
+  await page.click(triggerSelector, { timeout: 3000 });
+  const queuedProbe = await page.evaluate(({ selector, expectedActionId }) => ({
+    ready: document.documentElement.getAttribute('data-runtime-ready') === 'true',
+    interceptedClicks: window.__THE_DEFIER_BOOT_CLICK_STATE__?.interceptedClicks || 0,
+    replayedClicks: window.__THE_DEFIER_BOOT_CLICK_STATE__?.replayedClicks || 0,
+    pendingActionId: window.__THE_DEFIER_BOOT_CLICK_STATE__?.pendingActionId || '',
+    queued: document.querySelector(selector)?.getAttribute('data-boot-click-queued') === 'true',
+    busy: document.querySelector(selector)?.getAttribute('aria-busy') === 'true',
+    actionMatches: document.querySelector(selector)?.dataset.bootAction === expectedActionId,
+  }), { selector: triggerSelector, expectedActionId: actionId });
+  await page.waitForFunction(() => (
+    document.documentElement.getAttribute('data-runtime-ready') === 'true'
+      && window.__THE_DEFIER_BOOT_CLICK_STATE__?.replayedClicks === 1
+  ), null, { timeout: 12000 });
+  const replayProbe = await page.evaluate((selector) => ({
+    ready: document.documentElement.getAttribute('data-runtime-ready') === 'true',
+    gameReady: !!window.game,
+    pvpSceneReady: !!window.PVPScene,
+    interceptedClicks: window.__THE_DEFIER_BOOT_CLICK_STATE__?.interceptedClicks || 0,
+    replayedClicks: window.__THE_DEFIER_BOOT_CLICK_STATE__?.replayedClicks || 0,
+    pendingActionId: window.__THE_DEFIER_BOOT_CLICK_STATE__?.pendingActionId || '',
+    queued: document.querySelector(selector)?.hasAttribute('data-boot-click-queued') || false,
+    busy: document.querySelector(selector)?.hasAttribute('aria-busy') || false,
+    currentScreen: window.game?.currentScreen || '',
+    loginPromptActive: !!document.getElementById('generic-confirm-modal')?.classList.contains('active'),
+    saveSlotsActive: !!document.getElementById('save-slots-modal')?.classList.contains('active'),
+  }), triggerSelector);
+  add(
+    `cold-start ${label} action queues before runtime and runs after Game initialization`,
+    delayedRuntimeRequests === 1
+      && queuedProbe.ready === false
+      && queuedProbe.interceptedClicks === 1
+      && queuedProbe.replayedClicks === 0
+      && queuedProbe.pendingActionId === actionId
+      && queuedProbe.actionMatches
+      && queuedProbe.queued
+      && queuedProbe.busy
+      && replayProbe.ready
+      && replayProbe.gameReady
+      && replayProbe.interceptedClicks === 1
+      && replayProbe.replayedClicks === 1
+      && replayProbe.pendingActionId === ''
+      && !replayProbe.queued
+      && !replayProbe.busy
+      && verifyOutcome(replayProbe)
+      && !scenarioErrors.some((message) => /game is not defined|PVPScene is not defined/.test(message)),
+    JSON.stringify({ delayedRuntimeRequests, queuedProbe, replayProbe, scenarioErrors }),
+  );
+  await safeScreenshot(page, path.join(outDir, `${scenarioId}.png`));
+  await page.close();
+}
+
 async function runScenario(browser, scenario) {
   const page = await browser.newPage({ viewport: scenario.viewport || { width: 1440, height: 900 } });
   page.on('console', (msg) => {
@@ -250,6 +328,27 @@ const scenarios = [
   }
 ];
 
+const coldStartScenarios = [
+  {
+    scenarioId: 'cold-start-new-game-action',
+    triggerSelector: '#new-game-btn',
+    actionId: 'new-game',
+    label: 'new game',
+    verifyOutcome: (probe) => (
+      probe.loginPromptActive
+      || probe.saveSlotsActive
+      || probe.currentScreen === 'character-selection-screen'
+    ),
+  },
+  {
+    scenarioId: 'cold-start-pvp-action',
+    triggerSelector: '#pvp-btn',
+    actionId: 'open-pvp',
+    label: 'PVP',
+    verifyOutcome: (probe) => probe.pvpSceneReady && probe.currentScreen === 'pvp-screen',
+  },
+];
+
 (async () => {
   const executablePath = process.env.PLAYWRIGHT_EXECUTABLE_PATH || undefined;
   const browser = await chromium.launch({
@@ -258,6 +357,9 @@ const scenarios = [
     args: ['--use-gl=angle', '--use-angle=swiftshader']
   });
 
+  for (const scenario of coldStartScenarios) {
+    await runColdStartClickScenario(browser, scenario);
+  }
   for (const scenario of scenarios) {
     await runScenario(browser, scenario);
   }

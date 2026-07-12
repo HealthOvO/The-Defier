@@ -12,6 +12,11 @@
     box-shadow: var(--fd-shadow-panel);
 }
 
+[data-boot-click-queued="true"] {
+    cursor: progress !important;
+    filter: saturate(0.78) brightness(0.92);
+}
+
 /* Keep archive summaries in their own rail on landscape tablets. */
 @media (min-width: 769px) and (max-width: 1100px) {
     #collection .codex-layout,

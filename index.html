@@ -6,6 +6,71 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>The Defier - 逆命者</title>
     <meta name="description" content="一款基于东方仙侠的卡牌Roguelike游戏，逆天改命，盗取法则，成为真正的逆命者！">
+    <script>
+        (() => {
+            const state = {
+                ready: false,
+                interceptedClicks: 0,
+                replayedClicks: 0,
+                pendingActionId: null,
+            };
+            const actions = {
+                'continue-game': () => window.game.continueGame(),
+                'new-game': () => window.game.openSaveSlotsWithSync(),
+                'open-pvp': () => {
+                    window.game.showScreen('pvp-screen');
+                    window.PVPScene.onShow();
+                },
+                'open-login': () => window.game.showLoginModal(),
+                'open-player-info': () => window.game.showPlayerInfo(),
+                'open-collection': () => window.game.showCollection(),
+                'open-challenges': () => window.game.showChallengeHub('daily'),
+                'open-season': () => window.game.showSeasonOps('contracts'),
+                'open-achievements': () => window.game.showAchievements(),
+                'open-legacy': () => window.game.showLegacyScreen(),
+                'open-treasures': () => window.game.showTreasureCompendium(),
+                'open-guide': () => window.game.showGameIntro(),
+                'enable-cheat': () => window.game.cheat(),
+            };
+            const runAction = (actionId) => actions[actionId]?.();
+            const invoke = (actionId, target) => {
+                if (!Object.hasOwn(actions, actionId)) return;
+                if (state.ready) {
+                    runAction(actionId);
+                    return;
+                }
+                state.interceptedClicks += 1;
+                if (state.pendingActionId) return;
+                state.pendingActionId = actionId;
+                target?.setAttribute('aria-busy', 'true');
+                target?.setAttribute('data-boot-click-queued', 'true');
+            };
+            const handleActionClick = (event) => {
+                if (!(event.target instanceof Element)) return;
+                const target = event.target.closest('[data-boot-action]');
+                if (!target) return;
+                event.preventDefault();
+                invoke(target.dataset.bootAction, target);
+            };
+
+            window.__THE_DEFIER_BOOT_CLICK_STATE__ = state;
+            window.__THE_DEFIER_BOOT__ = { invoke };
+            document.addEventListener('click', handleActionClick);
+            window.addEventListener('the-defier:runtime-ready', () => {
+                state.ready = true;
+                document.documentElement.setAttribute('data-runtime-ready', 'true');
+                const pendingActionId = state.pendingActionId;
+                state.pendingActionId = null;
+                document.querySelector('[data-boot-click-queued="true"]')?.removeAttribute('aria-busy');
+                document.querySelector('[data-boot-click-queued="true"]')?.removeAttribute('data-boot-click-queued');
+                if (!pendingActionId) return;
+                window.setTimeout(() => {
+                    state.replayedClicks += 1;
+                    runAction(pendingActionId);
+                }, 0);
+            }, { once: true });
+        })();
+    </script>
     <link rel="icon" type="image/webp" href="assets/images/logo-v2.webp">
     <link rel="stylesheet" href="css/style.css">
     <link rel="stylesheet" href="css/design-system.css">
@@ -44,7 +109,7 @@
 
             <div class="menu-buttons">
                 <!-- Talisman Style Buttons -->
-                <button class="talisman-btn primary" id="continue-game-btn" onclick="game.continueGame()"
+                <button class="talisman-btn primary" id="continue-game-btn" data-boot-action="continue-game"
                     style="display: none;">
                     <div class="talisman-paper"></div>
                     <div class="talisman-content">
@@ -53,7 +118,7 @@
                     </div>
                 </button>
 
-                <button class="talisman-btn primary" id="new-game-btn" onclick="game.openSaveSlotsWithSync()">
+                <button class="talisman-btn primary" id="new-game-btn" data-boot-action="new-game">
                     <div class="talisman-paper"></div>
                     <div class="talisman-content">
                         <span class="btn-icon">⚔️</span>
@@ -61,7 +126,7 @@
                     </div>
                 </button>
 
-                <button class="talisman-btn" id="pvp-btn" onclick="game.showScreen('pvp-screen'); PVPScene.onShow()">
+                <button class="talisman-btn" id="pvp-btn" data-boot-action="open-pvp">
                     <div class="talisman-paper"></div>
                     <div class="talisman-content">
                         <span class="btn-icon">🌩️</span>
@@ -69,7 +134,7 @@
                     </div>
                 </button>
 
-                <button class="talisman-btn secondary" id="login-btn" onclick="game.showLoginModal()">
+                <button class="talisman-btn secondary" id="login-btn" data-boot-action="open-login">
                     <div class="talisman-paper"></div>
                     <div class="talisman-content">
                         <span class="btn-icon">☁️</span>
@@ -80,49 +145,49 @@
 
             <div class="menu-utilities">
                 <div class="util-btn-wrapper">
-                    <button class="util-btn" onclick="game.showPlayerInfo()" aria-label="角色信息" title="角色信息">
+                    <button class="util-btn" data-boot-action="open-player-info" aria-label="角色信息" title="角色信息">
                         <span class="btn-icon">🧙</span>
                     </button>
                     <span class="util-label">角色信息</span>
                 </div>
                 <div class="util-btn-wrapper">
-                    <button class="util-btn" onclick="game.showCollection()" aria-label="法则图鉴" title="法则图鉴">
+                    <button class="util-btn" data-boot-action="open-collection" aria-label="法则图鉴" title="法则图鉴">
                         <span class="btn-icon">📚</span>
                     </button>
                     <span class="util-label">法则图鉴</span>
                 </div>
                 <div class="util-btn-wrapper">
-                    <button class="util-btn" onclick="game.showChallengeHub('daily')" aria-label="挑战观察站" title="挑战观察站">
+                    <button class="util-btn" data-boot-action="open-challenges" aria-label="挑战观察站" title="挑战观察站">
                         <span class="btn-icon">🔭</span>
                     </button>
                     <span class="util-label">挑战观察站</span>
                 </div>
                 <div class="util-btn-wrapper">
-                    <button class="util-btn" onclick="game.showSeasonOps('contracts')" aria-label="赛季司" title="赛季司">
+                    <button class="util-btn" data-boot-action="open-season" aria-label="赛季司" title="赛季司">
                         <span class="btn-icon">📜</span>
                     </button>
                     <span class="util-label">赛季司</span>
                 </div>
                 <div class="util-btn-wrapper">
-                    <button class="util-btn" onclick="game.showAchievements()" aria-label="成就殿堂" title="成就殿堂">
+                    <button class="util-btn" data-boot-action="open-achievements" aria-label="成就殿堂" title="成就殿堂">
                         <span class="btn-icon">🏆</span>
                     </button>
                     <span class="util-label">成就殿堂</span>
                 </div>
                 <div class="util-btn-wrapper">
-                    <button class="util-btn" onclick="game.showLegacyScreen()" aria-label="传承殿" title="传承殿">
+                    <button class="util-btn" data-boot-action="open-legacy" aria-label="传承殿" title="传承殿">
                         <span class="btn-icon">🕯️</span>
                     </button>
                     <span class="util-label">传承殿</span>
                 </div>
                 <div class="util-btn-wrapper">
-                    <button class="util-btn" onclick="game.showTreasureCompendium()" aria-label="法宝图鉴" title="法宝图鉴">
+                    <button class="util-btn" data-boot-action="open-treasures" aria-label="法宝图鉴" title="法宝图鉴">
                         <span class="btn-icon">🎒</span>
                     </button>
                     <span class="util-label">法宝图鉴</span>
                 </div>
                 <div class="util-btn-wrapper">
-                    <button class="util-btn" onclick="game.showGameIntro()" aria-label="游戏指南" title="游戏指南">
+                    <button class="util-btn" data-boot-action="open-guide" aria-label="游戏指南" title="游戏指南">
                         <span class="btn-icon">📖</span>
                     </button>
                     <span class="util-label">游戏指南</span>
@@ -146,7 +211,7 @@
                 </article>
             </div>
             <div style="text-align:center; margin-top:20px;">
-                <button class="menu-btn small cheat-btn" onclick="game.cheat()"
+                <button class="menu-btn small cheat-btn" data-boot-action="enable-cheat"
                     style="display: none; width: auto; padding: 5px 15px;">🛠️ 作弊</button>
             </div>
             <div class="version-info">V10 真 PVP · 实时后端闭环 · 权威试炼 · 玩家指南更新 · 主菜单场景图 · 角色立绘 · 移动端适配 · 命途任务 · 章节考试 · DRI读题 · 洞府议程 · 挑战观察站 · PVP复盘</div>

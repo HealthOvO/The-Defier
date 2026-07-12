@@ -601,6 +601,22 @@ const browserAutomationBootAudit = read('tests/browser_automation_boot_audit.mjs
 });
 
 [
+  'runColdStartClickScenario',
+  'cold-start ${label} action queues before runtime and runs after Game initialization',
+  "scenarioId: 'cold-start-new-game-action'",
+  "scenarioId: 'cold-start-pvp-action'",
+  "actionId: 'open-pvp'",
+  "page.route('**/assets/index-*.js'",
+  'queuedProbe.interceptedClicks === 1',
+  'replayProbe.replayedClicks === 1',
+].forEach((needle) => {
+  assert.ok(
+    browserAutomationBootAudit.includes(needle),
+    `automation boot browser audit should cover cold-start click replay marker: ${needle}`,
+  );
+});
+
+[
   "id: 'endless-paranoia-modal'",
   'activateEndlessParanoiaModal',
   'showEndlessParanoiaSelection(26)',
