@@ -548,6 +548,8 @@ const waitingReportSource = pvpLiveStore.slice(
   'prod live ranked heartbeat recovery should keep active ranked match',
   'prod live ranked heartbeat recovery should keep terminal review hidden',
   'prod live ranked lethal keepalive',
+  'prod live ranked lethal post-keepalive refresh',
+  'recoverable authoritative race',
   'prod live ranked real card lethal should finish authoritative match',
   'prod live ranked lethal should not use surrender shortcut',
   'prod live ranked replay should record lethal finish reason',

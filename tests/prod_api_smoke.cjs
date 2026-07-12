@@ -290,7 +290,7 @@ async function finishRankedMatchWithRealLethal({ matchId, participantsBySeat }) 
   let latest = await readLiveMatchForSeat(matchId, participantsBySeat[seatIds[0]], 'prod live ranked lethal scout');
   const finishEvents = [];
   for (let step = 0; step < 40; step += 1) {
-    const scoutView = latest.payload.stateView;
+    let scoutView = latest.payload.stateView;
     if (scoutView?.status === 'finished') {
       return { terminal: latest, finishEvents, steps: step };
     }
@@ -300,6 +300,16 @@ async function finishRankedMatchWithRealLethal({ matchId, participantsBySeat }) 
       participantsBySeat[seatId],
       `prod live ranked lethal keepalive ${seatId} step ${step}`,
     )));
+    latest = await readLiveMatchForSeat(
+      matchId,
+      participantsBySeat[seatIds[0]],
+      `prod live ranked lethal post-keepalive refresh step ${step}`,
+    );
+    scoutView = latest.payload.stateView;
+    if (scoutView?.status === 'finished') {
+      return { terminal: latest, finishEvents, steps: step };
+    }
+    assert.strictEqual(scoutView?.status, 'active', `prod live ranked refreshed real-card lethal should stay active before terminal: ${JSON.stringify(scoutView)}`);
     const currentSeat = scoutView.currentSeat === 'B' ? 'B' : 'A';
     const actor = participantsBySeat[currentSeat];
     assert(actor, `prod live ranked current seat should have participant token: ${currentSeat}`);
@@ -327,8 +337,17 @@ async function finishRankedMatchWithRealLethal({ matchId, participantsBySeat }) 
         };
     const action = await submitLiveIntent(matchId, actor.sessionToken, intent);
     requireOk(`prod live ranked real ${intent.intentType} ${currentSeat}`, action);
-    assert.strictEqual(action.payload.result, 'accepted', `prod live ranked real ${intent.intentType} should be accepted: ${JSON.stringify(action.payload)}`);
     if (Array.isArray(action.payload.events)) finishEvents.push(...action.payload.events);
+    if (action.payload.result !== 'accepted') {
+      const retryableReasons = ['not_current_turn', 'stale_state_version', 'conflicting_state_version'];
+      assert.ok(
+        retryableReasons.includes(String(action.payload.reason || ''))
+          && action.payload.stateView?.status === 'active',
+        `prod live ranked real ${intent.intentType} should be accepted or return a recoverable authoritative race: ${JSON.stringify(action.payload)}`,
+      );
+      latest = action;
+      continue;
+    }
     if (action.payload.stateView?.status === 'finished') {
       const review = action.payload.stateView?.postMatchReview;
       assert.strictEqual(review?.finishReason, 'lethal', `prod live ranked real card lethal should finish authoritative match: ${JSON.stringify(review)}`);
