@@ -2638,12 +2638,19 @@ body:has(.modal-overlay.active) .battle-log-panel {
     pointer-events: none;
 }
 
+@media (max-width: 979px) {
+    #map-screen .map-canvas-header {
+        position: relative;
+        top: auto;
+    }
+}
+
 #map-screen .map-canvas-subtitle {
     font-size: 0.84rem;
     line-height: 1.45;
 }
 
-@media (min-width: 1101px) {
+@media (min-width: 980px) {
     #map-screen .map-screen-v3.show-map-intel .map-canvas-header {
         display: none;
     }
@@ -3499,5 +3506,117 @@ body:has(.modal-overlay.active) .battle-log-panel {
     #pvp-screen .pvp-live-invite-controls .pvp-live-invite-input,
     #pvp-screen .pvp-live-invite-controls .challenge-btn {
         grid-column: 1;
+    }
+}
+
+/* Production interaction and narrow-battle follow-up. */
+#map-screen .map-node-v3:focus-visible,
+#battle-screen #hand-cards .card:focus-visible {
+    outline: 3px solid rgba(126, 205, 255, 0.96);
+    outline-offset: 4px;
+}
+
+@media (max-width: 768px) {
+    #map-screen .map-content-wrapper {
+        padding-bottom: clamp(140px, 18dvh, 168px);
+    }
+
+    #battle-screen .battle-container:has(#boss-act-panel:not([hidden])) {
+        --battle-control-space: clamp(242px, 28dvh, 250px);
+    }
+
+    #battle-screen .battle-control-rail > #battle-environment {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        max-height: none;
+        gap: 5px;
+        overflow: visible;
+        white-space: normal;
+    }
+
+    #battle-screen .battle-control-rail > #battle-environment > * {
+        min-width: 0;
+        max-width: 100%;
+        overflow: hidden;
+        border-radius: 7px;
+    }
+
+    #battle-screen .battle-control-rail > #battle-environment .chapter-rule-name {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    #battle-screen .battle-control-rail > #battle-environment .chapter-rule-stage,
+    #battle-screen .battle-control-rail > #battle-environment .env-main,
+    #battle-screen .battle-control-rail > #battle-environment .encounter-theme-chip,
+    #battle-screen .battle-control-rail > #battle-environment .squad-formation-chip {
+        display: none;
+    }
+
+    #battle-screen #battle-command-panel:has(#battle-tactical-advisor.collapsed) {
+        max-height: 76px;
+        overflow: hidden;
+    }
+
+    #battle-screen #battle-command-panel:has(#battle-tactical-advisor.collapsed) .battle-command-list,
+    #battle-screen #battle-command-panel:has(#battle-tactical-advisor.collapsed) .battle-system-strip {
+        display: none;
+    }
+
+    #battle-screen #battle-command-panel:has(#battle-tactical-advisor:not(.collapsed)) {
+        max-height: 158px;
+        overflow-x: hidden;
+        overflow-y: auto;
+    }
+
+    #battle-screen .battle-control-rail:has(#battle-tactical-advisor:not(.collapsed)) > #battle-environment,
+    #battle-screen .battle-control-rail:has(#battle-tactical-advisor:not(.collapsed)) > #legacy-mission-tracker,
+    #battle-screen .battle-control-rail:has(#battle-tactical-advisor:not(.collapsed)) > #boss-act-panel {
+        display: none !important;
+    }
+
+    #battle-screen .resources-container {
+        top: -58px;
+        left: 50%;
+        width: max-content;
+        max-width: calc(100vw - 112px);
+        flex-direction: row;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        margin: 0;
+        transform: translateX(-50%);
+    }
+
+    #battle-screen .resources-container .resource-item,
+    #battle-screen .resources-container .energy-display,
+    #battle-screen .resources-container .candy-display,
+    #battle-screen .resources-container #candy-container {
+        flex-direction: row;
+        align-items: center;
+        gap: 4px;
+        margin: 0;
+    }
+
+    #battle-screen .energy-orbs,
+    #battle-screen .candy-orbs {
+        max-width: none;
+        flex-wrap: nowrap;
+        gap: 3px;
+    }
+
+    #battle-screen .energy-orb,
+    #battle-screen .candy-orb {
+        width: 24px;
+        height: 24px;
+        font-size: 19px;
+    }
+
+    #battle-screen .energy-text,
+    #battle-screen .candy-text {
+        flex: 0 0 auto;
+        font-size: 0.72rem;
     }
 }

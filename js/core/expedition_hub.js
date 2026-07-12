@@ -4352,6 +4352,7 @@ const expeditionHubMethods = Object.create(null);
 	      container = document.createElement('div');
 	      container.id = 'map-expedition-panels';
 	      container.className = 'map-expedition-panels';
+	      container.setAttribute('aria-hidden', 'true');
       const header = shell.querySelector('.map-v3-header');
       if (header && header.parentNode) {
         header.insertAdjacentElement('afterend', container);
@@ -4359,23 +4360,21 @@ const expeditionHubMethods = Object.create(null);
 	        shell.prepend(container);
 	      }
 	    }
-	    if (!shell.classList.contains('show-map-intel') && shell.dataset.mapIntelUserToggled !== 'true') {
-	      shell.classList.add('show-map-intel');
-	      const intelButton = shell.querySelector('[data-map-action="toggle-map-intel"]');
-	      const intelDrawer = shell.querySelector('#map-intel-drawer');
-	      const detailPanels = shell.querySelector('#map-detail-panels');
-	      if (intelButton) {
-	        intelButton.textContent = '收起情报';
-	        intelButton.setAttribute('aria-expanded', 'true');
-	      }
-	      if (detailPanels) {
-	        detailPanels.setAttribute('aria-hidden', 'false');
-	      }
-	      if (intelDrawer) {
-	        intelDrawer.setAttribute('aria-hidden', 'false');
-	      }
-	      container.setAttribute('aria-hidden', 'false');
+	    const shouldAutoOpenIntel = typeof window === 'undefined' || window.innerWidth >= 980;
+	    if (shell.dataset.mapIntelUserToggled !== 'true') {
+	      shell.classList.toggle('show-map-intel', shouldAutoOpenIntel);
 	    }
+	    const intelOpen = shell.classList.contains('show-map-intel');
+	    const intelButton = shell.querySelector('[data-map-action="toggle-map-intel"]');
+	    const intelDrawer = shell.querySelector('#map-intel-drawer');
+	    const detailPanels = shell.querySelector('#map-detail-panels');
+	    if (intelButton) {
+	      intelButton.textContent = intelOpen ? '收起情报' : '关卡情报';
+	      intelButton.setAttribute('aria-expanded', intelOpen ? 'true' : 'false');
+	    }
+	    if (detailPanels) detailPanels.setAttribute('aria-hidden', intelOpen ? 'false' : 'true');
+	    if (intelDrawer) intelDrawer.setAttribute('aria-hidden', intelOpen ? 'false' : 'true');
+	    container.setAttribute('aria-hidden', intelOpen ? 'false' : 'true');
 	    const selectedBranch = state.branchOptions.find(entry => entry.id === state.selectedBranchId) || null;
     const activeBounties = this.getActiveExpeditionBounties(state);
     const ending = this.determineExpeditionEnding(state);

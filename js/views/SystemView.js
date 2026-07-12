@@ -16,6 +16,7 @@ export class SystemView {
     const tips = ['新手提示：先看敌方意图，再决定是进攻还是防御。', '新手提示：打完牌后，点击“结束回合”推进战斗。', '新手提示：按 L 可以打开战斗记录，复盘每次触发。'];
     tips.forEach((msg, idx) => {
       setTimeout(() => {
+        if (this.game.currentScreen !== 'battle-screen') return;
         Utils.showBattleLog(msg, {
           category: 'system',
           duration: 2800
@@ -113,6 +114,7 @@ export class SystemView {
           if (!this.game.guideState.battleLogHintSeen) {
             this.game.markGuideSeen('battleLogHintSeen');
             setTimeout(() => {
+              if (this.game.currentScreen !== 'battle-screen') return;
               Utils.showBattleLog('提示：按 L 可查看战斗记录面板。', {
                 category: 'system',
                 duration: 2600

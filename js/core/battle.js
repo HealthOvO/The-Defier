@@ -6007,7 +6007,7 @@ export class Battle {
       });
 
       // 检查是否可用
-      let playable = true;
+      let playable = !card.unplayable;
       if (card.condition) {
         if (card.condition.type === 'hp' && this.player.currentHp < card.condition.min) {
           playable = false;
@@ -6044,6 +6044,20 @@ export class Battle {
       if (this.selectedCard === index) {
         cardEl.classList.add('selected');
       }
+      const costLabel = card.consumeCandy
+        ? '消耗 1 颗奶糖'
+        : `消耗 ${effectiveCost} 点灵力`;
+      const cardLabel = [
+        card.name || '未命名卡牌',
+        costLabel,
+        card.description || '',
+        playable ? '可打出' : '当前不可打出'
+      ].filter(Boolean).join('，');
+      cardEl.setAttribute('role', 'button');
+      cardEl.setAttribute('aria-label', cardLabel);
+      cardEl.setAttribute('aria-disabled', playable ? 'false' : 'true');
+      cardEl.setAttribute('aria-pressed', this.selectedCard === index ? 'true' : 'false');
+      cardEl.tabIndex = playable ? 0 : -1;
       handContainer.appendChild(cardEl);
     });
     this.bindCardEvents();
@@ -6183,6 +6197,14 @@ export class Battle {
       if (Number.isNaN(index)) return;
       e.stopPropagation();
       this.onCardClick(index);
+    });
+    handContainer.addEventListener('keydown', e => {
+      if (e.repeat || !['Enter', ' ', 'Spacebar'].includes(e.key)) return;
+      const cardEl = e.target.closest('.card');
+      if (!cardEl || !handContainer.contains(cardEl) || cardEl.getAttribute('aria-disabled') === 'true') return;
+      e.preventDefault();
+      e.stopPropagation();
+      cardEl.click();
     });
     handContainer.addEventListener('touchstart', e => {
       const cardEl = e.target.closest('.card');

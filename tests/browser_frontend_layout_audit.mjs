@@ -35,6 +35,7 @@ const viewports = filterAuditItems([
   { id: 'mobile-390', width: 390, height: 844, isMobile: true },
   { id: 'mobile-412', width: 412, height: 915, isMobile: true },
   { id: 'tablet-portrait-768', width: 768, height: 1024, isMobile: true },
+  { id: 'tablet-compact-900', width: 900, height: 900, isMobile: true },
   { id: 'tablet-landscape-1024', width: 1024, height: 768, isMobile: true },
 ], process.env.FRONTEND_LAYOUT_VIEWPORTS);
 
@@ -536,11 +537,11 @@ async function prepareScenario(page, scenarioId) {
         const scroller = document.querySelector('#map-scroll-container');
         if (scroller) {
           scroller.style.scrollBehavior = 'auto';
-          if (typeof scroller.scrollTo === 'function') {
-            scroller.scrollTo({ top: 0, left: 0, behavior: 'instant' });
-          }
-          scroller.scrollTop = 0;
           scroller.scrollLeft = 0;
+        }
+        const mapView = window.game?.map?.mapView || window.game?.mapView;
+        if (mapView && typeof mapView.scrollCurrentMapRowIntoView === 'function') {
+          mapView.scrollCurrentMapRowIntoView({ behavior: 'auto' });
         }
       };
       for (const delayMs of [140, 120, 180, 240]) {
@@ -564,15 +565,11 @@ async function prepareScenario(page, scenarioId) {
     const showMapToolsProbe = async () => {
       await showMapProbe();
       const shell = document.querySelector('#map-screen .map-screen-v3');
-      if (shell) {
-        shell.classList.add('show-map-tools');
-        const toolsButton = shell.querySelector('[data-map-action="toggle-map-tools"]');
-        const footer = shell.querySelector('#map-footer');
-        if (toolsButton) {
-          toolsButton.textContent = '收起工具';
-          toolsButton.setAttribute('aria-expanded', 'true');
-        }
-        if (footer) footer.setAttribute('aria-hidden', 'false');
+      const toolsButton = shell?.querySelector('[data-map-action="toggle-map-tools"]');
+      if (toolsButton && typeof toolsButton.click === 'function') {
+        toolsButton.click();
+        await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+        await new Promise((resolve) => setTimeout(resolve, 240));
       }
     };
 
@@ -585,9 +582,11 @@ async function prepareScenario(page, scenarioId) {
       await settleMapViewport();
       const container = document.getElementById('map-screen');
       const shell = container?.querySelector('.map-screen-v3');
+      const expectedDefaultOpen = window.innerWidth >= 980;
       if (shell) {
         delete shell.dataset.mapIntelUserToggled;
-        shell.classList.remove('show-map-intel', 'show-map-tools');
+        shell.classList.remove('show-map-tools');
+        shell.classList.toggle('show-map-intel', !expectedDefaultOpen);
         if (window.game?.mapView && typeof game.mapView.syncMapChrome === 'function') {
           game.mapView.syncMapChrome(container);
         }
@@ -597,17 +596,31 @@ async function prepareScenario(page, scenarioId) {
       }
       const panels = container?.querySelector('#map-expedition-panels');
       const button = container?.querySelector('[data-map-action="toggle-map-intel"]');
+      const defaultOpen = !!shell?.classList.contains('show-map-intel');
+      const defaultStateMatchesViewport = defaultOpen === expectedDefaultOpen;
+      if (!defaultOpen && button && typeof button.click === 'function') {
+        button.click();
+      }
       const panelVisible = !!panels
         && getComputedStyle(panels).display !== 'none'
         && panels.getAttribute('aria-hidden') === 'false';
       return {
-        ok: !!container && !!shell && !!panels && !!button && shell.classList.contains('show-map-intel') && panelVisible,
+        ok: !!container
+          && !!shell
+          && !!panels
+          && !!button
+          && defaultStateMatchesViewport
+          && shell.classList.contains('show-map-intel')
+          && panelVisible,
         rootSelector: '#map-screen',
         shellClass: shell?.className || '',
         panelHidden: panels?.getAttribute('aria-hidden') || '',
         panelCount: panels?.querySelectorAll('.expedition-panel-card, .expedition-overview-card, .expedition-choice-card').length || 0,
         buttonExpanded: button?.getAttribute('aria-expanded') || '',
-        userToggled: shell?.dataset?.mapIntelUserToggled || ''
+        userToggled: shell?.dataset?.mapIntelUserToggled || '',
+        expectedDefaultOpen,
+        defaultOpen,
+        defaultStateMatchesViewport
       };
     };
 
@@ -3081,7 +3094,9 @@ async function inspectBattleLogStress(page, rootSelector, scenarioId) {
     const targetSelector = scenarioId === 'battle-screen'
       ? '#hand-cards,.hand-area,#deck-pile,#discard-pile,#end-turn-btn,#battle-command-panel'
       : 'button,a[href],input,select,textarea,[role="button"]';
-    const targets = Array.from(root.querySelectorAll(targetSelector)).filter(isVisible);
+    const targets = Array.from(root.querySelectorAll(targetSelector))
+      .filter(isVisible)
+      .filter(target => target.getAttribute('aria-disabled') !== 'true' && !target.disabled);
 
     for (const target of targets) {
       const targetRect = target.getBoundingClientRect();
@@ -3116,24 +3131,19 @@ async function inspectMapChapterSummaryLayout(page, scenarioId) {
     return { ok: true, skipped: true };
   }
 
-  return page.evaluate(() => {
+  return page.evaluate(async () => {
     const viewport = { width: window.innerWidth, height: window.innerHeight };
     const root = document.getElementById('map-screen');
     const shell = root?.querySelector('.map-screen-v3');
     const scroller = root?.querySelector('#map-scroll-container');
-    const closeMapIntel = () => {
+    const closeMapIntel = async () => {
       if (!root || !shell) return false;
-      shell.classList.remove('show-map-intel');
       const intelButton = root.querySelector('[data-map-action="toggle-map-intel"]');
-      const intelDrawer = root.querySelector('#map-intel-drawer');
-      const detailPanels = root.querySelector('#map-detail-panels');
-      const expeditionPanels = root.querySelector('#map-expedition-panels');
-      if (intelButton) intelButton.setAttribute('aria-expanded', 'false');
-      if (intelDrawer) intelDrawer.setAttribute('aria-hidden', 'true');
-      if (detailPanels) detailPanels.setAttribute('aria-hidden', 'true');
-      if (expeditionPanels) expeditionPanels.setAttribute('aria-hidden', 'true');
-      if (window.game?.mapView && typeof window.game.mapView.syncMapChrome === 'function') {
-        window.game.mapView.syncMapChrome(root);
+      if (shell.classList.contains('show-map-intel')) {
+        if (!intelButton || typeof intelButton.click !== 'function') return false;
+        intelButton.click();
+        await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+        await new Promise((resolve) => setTimeout(resolve, 240));
       }
       return !shell.classList.contains('show-map-intel');
     };
@@ -3167,7 +3177,7 @@ async function inspectMapChapterSummaryLayout(page, scenarioId) {
     };
     const initialIntelOpen = !!shell?.classList.contains('show-map-intel');
     const summaryHiddenWithInitialIntel = !initialIntelOpen || !isVisible(summary);
-    const intelClosed = closeMapIntel();
+    const intelClosed = await closeMapIntel();
 
     if (!root || !shell || !scroller || !summary || !canvas) {
       return {
@@ -3188,6 +3198,17 @@ async function inspectMapChapterSummaryLayout(page, scenarioId) {
     const summaryRect = rectObj(summary.getBoundingClientRect());
     const canvasRect = rectObj(canvas.getBoundingClientRect());
     const scrollerRect = rectObj(scroller.getBoundingClientRect());
+    const currentRows = Array.from(scroller.querySelectorAll('.node-row-v3[data-current-route="true"]'));
+    const currentRow = currentRows[0] || null;
+    const currentRowRect = rectObj(currentRow?.getBoundingClientRect());
+    const currentRowCenterVisible = !!currentRowRect
+      && !!scrollerRect
+      && currentRowRect.centerY >= scrollerRect.top - 2
+      && currentRowRect.centerY <= scrollerRect.bottom + 2;
+    const currentRowFullyVisible = !!currentRowRect
+      && !!scrollerRect
+      && currentRowRect.top >= scrollerRect.top + 8
+      && currentRowRect.bottom <= scrollerRect.bottom - 8;
     const documentScrollWidth = document.documentElement.scrollWidth;
     const rootScrollWidth = root.scrollWidth;
     const scrollerScrollWidth = scroller.scrollWidth;
@@ -3203,7 +3224,7 @@ async function inspectMapChapterSummaryLayout(page, scenarioId) {
     const noHorizontalOverflow = documentScrollWidth <= viewport.width + 2
       && rootScrollWidth <= root.clientWidth + 2
       && scrollerScrollWidth <= scroller.clientWidth + 2;
-    const wideDesktop = viewport.width >= 1101;
+    const wideDesktop = viewport.width >= 980;
     const rightOfCanvas = !!summaryRect && !!canvasRect
       && summaryRect.left >= canvasRect.right - 6
       && summaryRect.centerX > canvasRect.centerX;
@@ -3218,6 +3239,12 @@ async function inspectMapChapterSummaryLayout(page, scenarioId) {
     }
     if (!isVisible(summary) || !isVisible(canvas)) {
       issues.push({ type: 'map-summary-or-canvas-hidden', summaryVisible: isVisible(summary), canvasVisible: isVisible(canvas) });
+    }
+    if (currentRows.length !== 1) {
+      issues.push({ type: 'map-current-route-row-count-invalid', currentRowCount: currentRows.length });
+    }
+    if (!currentRowFullyVisible) {
+      issues.push({ type: 'map-current-row-not-fully-visible-after-map-settle', currentRowRect, scrollerRect, initialIntelOpen });
     }
     if (!noHorizontalOverflow) {
       issues.push({
@@ -3262,6 +3289,10 @@ async function inspectMapChapterSummaryLayout(page, scenarioId) {
       summaryRect,
       canvasRect,
       scrollerRect,
+      currentRowRect,
+      currentRowCenterVisible,
+      currentRowFullyVisible,
+      currentRowCount: currentRows.length,
       documentScrollWidth,
       rootScrollWidth,
       scrollerScrollWidth,
@@ -3834,7 +3865,7 @@ async function inspectMapNodeClickability(page, scenarioId) {
     return { ok: true, skipped: true };
   }
 
-  const selector = '#map-screen .map-node-v3.available:not(.completed):not(.locked), #map-screen .map-node-v3.current:not(.completed):not(.locked), #map-screen .map-node-v3:not(.completed):not(.locked)';
+  const selector = '#map-screen .node-row-v3[data-current-route="true"] .map-node-v3[aria-disabled="false"]';
   try {
     const shouldCloseMobileIntel = await page.evaluate(() => window.innerWidth <= 768
       && !!document.querySelector('#map-screen .map-screen-v3.show-map-intel'));
@@ -3893,6 +3924,38 @@ async function inspectMapNodeClickability(page, scenarioId) {
         const classes = Array.from(el.classList || []).slice(0, 3).join('.');
         return `${el.tagName.toLowerCase()}${classes ? `.${classes}` : ''}`;
       };
+      const routeRows = Array.from(document.querySelectorAll('#map-screen .node-row-v3[data-current-route="true"]'));
+      const actionableNodes = routeRows.flatMap(row => Array.from(row.querySelectorAll('.map-node-v3[aria-disabled="false"]')));
+      const invalidActionableNode = actionableNodes.find(candidate => candidate.getAttribute('role') !== 'button'
+        || candidate.tabIndex !== 0
+        || (candidate.getAttribute('aria-label') || '').length < 4
+        || candidate.hasAttribute('aria-current'));
+      const semantics = {
+        role: node.getAttribute('role') || '',
+        tabIndex: node.tabIndex,
+        ariaLabel: node.getAttribute('aria-label') || '',
+        ariaDisabled: node.getAttribute('aria-disabled') || '',
+        ariaCurrent: node.getAttribute('aria-current') || '',
+        routeRowCount: routeRows.length,
+        actionableNodeCount: actionableNodes.length,
+      };
+      if (routeRows.length !== 1
+        || actionableNodes.length === 0
+        || invalidActionableNode
+        || semantics.role !== 'button'
+        || semantics.tabIndex !== 0
+        || semantics.ariaDisabled !== 'false'
+        || semantics.ariaLabel.length < 4
+        || semantics.ariaCurrent) {
+        return {
+          ok: false,
+          issue: {
+            type: 'map-node-missing-keyboard-semantics',
+            node: selectorFor(node),
+            semantics,
+          },
+        };
+      }
       if (point.x < 0 || point.x > viewport.width || point.y < 0 || point.y > viewport.height) {
         return {
           ok: false,
@@ -3928,6 +3991,7 @@ async function inspectMapNodeClickability(page, scenarioId) {
         nodeId: String(node.dataset.nodeId || ''),
         node: selectorFor(node),
         top: selectorFor(top),
+        semantics,
       };
     }, selector);
     if (!target.ok) {
@@ -3944,8 +4008,12 @@ async function inspectMapNodeClickability(page, scenarioId) {
       eventOpen: !!document.querySelector('#event-modal.active'),
       battleActive: !!document.querySelector('#battle-screen.active'),
     }));
+    const activation = scenarioId === 'map-screen' ? 'keyboard-enter' : 'pointer';
     const viewport = page.viewportSize();
-    if (viewport && viewport.width <= 768) {
+    if (activation === 'keyboard-enter') {
+      await locator.focus();
+      await page.keyboard.press('Enter');
+    } else if (viewport && viewport.width <= 768) {
       await page.touchscreen.tap(target.point.x, target.point.y);
     } else {
       await page.mouse.click(target.point.x, target.point.y);
@@ -3984,6 +4052,7 @@ async function inspectMapNodeClickability(page, scenarioId) {
       target,
       before,
       after,
+      activation,
       closedMobileIntelForClick: shouldCloseMobileIntel,
     };
   } catch (error) {

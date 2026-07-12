@@ -88,6 +88,8 @@ export class MapView {
     if (existingMap && existingMap.dataset.mapKey === mapKey && existingMap.dataset.nodeSignature === nodeLayoutSignature) {
       console.log('[Debug] Updating existing map in-place');
       this.map.updateMapState();
+      requestAnimationFrame(() => this.scrollCurrentMapRowIntoView({ behavior: 'auto' }));
+      setTimeout(() => this.scrollCurrentMapRowIntoView({ behavior: 'auto' }), 120);
       return;
     }
     console.log('[Debug] Full map rebuild for realm:', currentRealm);
@@ -190,6 +192,8 @@ export class MapView {
   }
 
   getCurrentMapRowElement() {
+    const routeRow = document.querySelector('#map-content-wrapper .node-row-v3[data-current-route="true"]');
+    if (routeRow) return routeRow;
     let currentRow = null;
     try {
       currentRow = document.querySelector('.node-row-v3:has(.map-node-v3.current)');
@@ -208,13 +212,34 @@ export class MapView {
     return currentRow;
   }
 
+  syncCurrentMapRouteRow() {
+    const rows = Array.from(document.querySelectorAll('#map-content-wrapper .node-row-v3'));
+    const currentRowIndex = Array.isArray(this.map?.nodes)
+      ? this.map.nodes.findIndex(row => Array.isArray(row) && row.some(node => node?.accessible && !node?.completed))
+      : -1;
+    rows.forEach(row => {
+      const isCurrentRoute = Number(row.dataset.rowIndex) === currentRowIndex;
+      if (isCurrentRoute) row.dataset.currentRoute = 'true';
+      else delete row.dataset.currentRoute;
+    });
+  }
+
   scrollCurrentMapRowIntoView(options = {}) {
     const wrapper = document.getElementById('map-scroll-container');
     const currentRow = this.getCurrentMapRowElement();
     if (!wrapper || !currentRow) return;
-    const scrollPos = currentRow.offsetTop - wrapper.clientHeight / 2 + currentRow.clientHeight / 2;
+    const wrapperRect = wrapper.getBoundingClientRect();
+    const rowRect = currentRow.getBoundingClientRect();
+    const viewportInset = 16;
+    let scrollPos = wrapper.scrollTop;
+    if (rowRect.top < wrapperRect.top + viewportInset) {
+      scrollPos -= wrapperRect.top + viewportInset - rowRect.top;
+    } else if (rowRect.bottom > wrapperRect.bottom - viewportInset) {
+      scrollPos += rowRect.bottom - (wrapperRect.bottom - viewportInset);
+    }
+    const maxScrollTop = Math.max(0, wrapper.scrollHeight - wrapper.clientHeight);
     wrapper.scrollTo({
-      top: Math.max(0, scrollPos),
+      top: Math.min(maxScrollTop, Math.max(0, scrollPos)),
       behavior: options.behavior || 'auto'
     });
   }
@@ -229,11 +254,38 @@ export class MapView {
           if (node.completed) el.classList.add('completed');
           else if (!node.accessible) el.classList.add('locked');
           else el.classList.add('current');
+          this.syncMapNodeAccessibility(node, el, node.riskProfile || null);
         }
       });
     });
+    this.syncCurrentMapRouteRow();
     this.map.drawConnections();
   }
+
+  getMapNodeAccessibilityLabel(node, riskProfile = null) {
+    const typeLabel = typeof this.map?.getNodeTypeLabel === 'function'
+      ? this.map.getNodeTypeLabel(node?.type)
+      : '地图节点';
+    const stateLabel = node?.completed ? '已完成' : node?.accessible ? '可进入' : '未解锁';
+    const riskLabel = riskProfile && Number.isFinite(Number(riskProfile.index))
+      ? `风险 DRI ${Math.max(0, Math.round(Number(riskProfile.index)))}${riskProfile.tierLabel ? `，${riskProfile.tierLabel}` : ''}`
+      : '';
+    const hint = typeof this.map?.getNodeTooltip === 'function'
+      ? this.map.getNodeTooltip(node?.type)
+      : '';
+    return [typeLabel, stateLabel, riskLabel, hint].filter(Boolean).join('，');
+  }
+
+  syncMapNodeAccessibility(node, nodeEl, riskProfile = null) {
+    if (!nodeEl) return;
+    const actionable = !!node?.accessible && !node?.completed;
+    nodeEl.setAttribute('role', 'button');
+    nodeEl.setAttribute('aria-label', this.getMapNodeAccessibilityLabel(node, riskProfile));
+    nodeEl.setAttribute('aria-disabled', actionable ? 'false' : 'true');
+    nodeEl.tabIndex = actionable ? 0 : -1;
+    nodeEl.removeAttribute('aria-current');
+  }
+
   bindMapDelegates(container) {
     if (!container || container.__mapDelegatesBound) return;
     container.addEventListener('click', event => {
@@ -270,10 +322,8 @@ export class MapView {
           shell.classList.remove('show-map-tools');
         }
         this.syncMapChrome(container);
-        if (shell.classList.contains('show-map-intel')) {
-          requestAnimationFrame(() => this.scrollCurrentMapRowIntoView({ behavior: 'auto' }));
-          setTimeout(() => this.scrollCurrentMapRowIntoView({ behavior: 'auto' }), 220);
-        }
+        requestAnimationFrame(() => this.scrollCurrentMapRowIntoView({ behavior: 'auto' }));
+        setTimeout(() => this.scrollCurrentMapRowIntoView({ behavior: 'auto' }), 220);
         return;
       }
       if (action === 'toggle-map-tools') {
@@ -285,6 +335,8 @@ export class MapView {
           shell.classList.remove('show-map-intel');
         }
         this.syncMapChrome(container);
+        requestAnimationFrame(() => this.scrollCurrentMapRowIntoView({ behavior: 'auto' }));
+        setTimeout(() => this.scrollCurrentMapRowIntoView({ behavior: 'auto' }), 220);
       }
     });
     container.__mapDelegatesBound = true;
@@ -353,7 +405,16 @@ export class MapView {
                     ${riskProfile && ['high', 'extreme'].includes(riskProfile.tierId) && node.accessible && !node.completed ? `<div class="node-risk-badge tier-${riskProfile.tierId}">DRI ${riskProfile.index}</div>` : ''}
                     <div class="node-tooltip">${this.map.buildNodeTooltipHtml(node, chapter)}</div>
                 `;
-        nodeEl.addEventListener('click', () => this.map.onNodeClick(node));
+        this.syncMapNodeAccessibility(node, nodeEl, riskProfile);
+        nodeEl.addEventListener('click', () => {
+          if (!node.accessible || node.completed) return;
+          this.map.onNodeClick(node);
+        });
+        nodeEl.addEventListener('keydown', event => {
+          if (!['Enter', ' '].includes(event.key) || !node.accessible || node.completed) return;
+          event.preventDefault();
+          nodeEl.click();
+        });
         if (node.completed) nodeEl.classList.add('completed');else if (!node.accessible) nodeEl.classList.add('locked');else {
           nodeEl.classList.add('current');
         }
@@ -363,6 +424,7 @@ export class MapView {
       });
       wrapper.appendChild(rowEl);
     });
+    this.syncCurrentMapRouteRow();
 
     // Draw Lines after DOM update and potential reflow
     // Use timeout to ensure geometry is final

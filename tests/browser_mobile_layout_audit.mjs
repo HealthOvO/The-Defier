@@ -108,9 +108,21 @@ function add(name, pass, detail = '') {
         b.bottom <= a.top + margin
       );
     };
+    const isVisible = (el) => {
+      if (!el || el.hidden) return false;
+      const style = getComputedStyle(el);
+      const rect = el.getBoundingClientRect();
+      return style.display !== 'none'
+        && style.visibility !== 'hidden'
+        && Number(style.opacity || '1') > 0
+        && rect.width > 0
+        && rect.height > 0;
+    };
 
     const controlRail = document.querySelector('#battle-screen .battle-control-rail');
+    const environment = document.getElementById('battle-environment');
     const command = document.getElementById('battle-command-panel');
+    const commandList = command?.querySelector('.battle-command-list');
     const boss = document.getElementById('boss-act-panel');
     const hand = document.getElementById('hand-cards');
     const handArea = document.querySelector('#battle-screen .hand-area');
@@ -123,6 +135,11 @@ function add(name, pass, detail = '') {
     const spiritChipRect = rectObj(spiritChip);
     const advisor = document.querySelector('#battle-command-panel .battle-tactical-advisor');
     const toggleBtn = document.querySelector('#battle-command-panel .battle-advisor-toggle');
+    const resources = document.querySelector('#battle-screen .resources-container');
+    const energyDisplay = resources?.querySelector('.energy-display');
+    const candyDisplay = resources?.querySelector('.candy-display, #candy-container');
+    const energyOrbs = resources?.querySelector('#energy-orbs');
+    const candyOrbs = resources?.querySelector('#candy-orbs');
     const battleLoopRail = document.querySelector('#battle-command-panel [data-core-loop-rail="battle"]');
     const battleLoopRailRect = rectObj(battleLoopRail);
     const battleLoopText = battleLoopRail?.textContent?.replace(/\s+/g, ' ').trim() || '';
@@ -130,6 +147,7 @@ function add(name, pass, detail = '') {
     const handCards = Array.from(document.querySelectorAll('#hand-cards .card')).slice(0, 3);
     const handCardRects = handCards.map((el) => rectObj(el));
     const bossVisible = !!boss && getComputedStyle(boss).display !== 'none' && boss.getBoundingClientRect().height > 0;
+    const collapsedBossRect = rectObj(boss);
     const visibleRuleLines = Array.from(document.querySelectorAll('#boss-act-panel .boss-act-line')).filter((el) => getComputedStyle(el).display !== 'none').length;
     const enemyMetaHeight = metaStrips.reduce((sum, el) => sum + el.getBoundingClientRect().height, 0);
     const enemyGapToHand = enemy && hand ? hand.getBoundingClientRect().top - enemy.getBoundingClientRect().bottom : 0;
@@ -137,6 +155,29 @@ function add(name, pass, detail = '') {
     const endTurnGapToHand = endTurn && hand ? hand.getBoundingClientRect().top - endTurn.getBoundingClientRect().bottom : 0;
     const advisorCollapsedInitially = !!advisor && advisor.classList.contains('collapsed');
     const collapsedHeight = advisor ? advisor.getBoundingClientRect().height : 0;
+    const collapsedCommandRect = rectObj(command);
+    const environmentRect = rectObj(environment);
+    const environmentFits = !!environment
+      && environment.scrollWidth <= environment.clientWidth + 2
+      && environment.scrollHeight <= environment.clientHeight + 2;
+    const commandListHiddenCollapsed = !isVisible(commandList);
+    const commandContentFitsCollapsed = !!command
+      && command.scrollHeight <= command.clientHeight + 2;
+    const resourcesRect = rectObj(resources);
+    const energyRect = rectObj(energyDisplay);
+    const candyRect = rectObj(candyDisplay);
+    const resourceRowOk = !!resourcesRect
+      && !!energyRect
+      && !!candyRect
+      && Math.abs((energyRect.top + energyRect.height / 2) - (candyRect.top + candyRect.height / 2)) <= 8
+      && energyRect.left >= resourcesRect.left - 2
+      && candyRect.right <= resourcesRect.right + 2
+      && resourcesRect.left >= 0
+      && resourcesRect.right <= window.innerWidth;
+    const resourceOrbsNoWrap = !!energyOrbs
+      && !!candyOrbs
+      && getComputedStyle(energyOrbs).flexWrap === 'nowrap'
+      && getComputedStyle(candyOrbs).flexWrap === 'nowrap';
     const controlRailRect = rectObj(controlRail);
     const visibleRailChildren = controlRail
       ? Array.from(controlRail.children).filter((el) => {
@@ -158,6 +199,39 @@ function add(name, pass, detail = '') {
       return !!hit && (hit === el || el.contains(hit));
     };
     const firstHandCard = handCards[0] || null;
+    const semanticCards = Array.from(document.querySelectorAll('#hand-cards .card')).map((card) => ({
+      index: Number(card.dataset.index),
+      role: card.getAttribute('role') || '',
+      tabIndex: card.tabIndex,
+      ariaLabel: card.getAttribute('aria-label') || '',
+      ariaDisabled: card.getAttribute('aria-disabled') || '',
+    }));
+    const firstPlayableCard = document.querySelector('#hand-cards .card[aria-disabled="false"]');
+    let keyboardActivationIndex = null;
+    let keyboardDefaultPrevented = false;
+    if (firstPlayableCard && window.game?.battle) {
+      const originalOnCardClick = game.battle.onCardClick;
+      game.battle.onCardClick = (index) => {
+        keyboardActivationIndex = index;
+      };
+      firstPlayableCard.focus();
+      const keyboardEvent = new KeyboardEvent('keydown', {
+        key: 'Enter',
+        bubbles: true,
+        cancelable: true,
+      });
+      firstPlayableCard.dispatchEvent(keyboardEvent);
+      keyboardDefaultPrevented = keyboardEvent.defaultPrevented;
+      game.battle.onCardClick = originalOnCardClick;
+    }
+    const cardSemanticsOk = semanticCards.length > 0
+      && semanticCards.every((card) => card.role === 'button'
+        && card.ariaLabel.length >= 4
+        && ['true', 'false'].includes(card.ariaDisabled)
+        && (card.ariaDisabled === 'false' ? card.tabIndex === 0 : card.tabIndex === -1))
+      && !!firstPlayableCard
+      && keyboardActivationIndex === Number(firstPlayableCard.dataset.index)
+      && keyboardDefaultPrevented;
     const toggleTopHit = isTopHit(toggleBtn);
     const firstHandCardTopHit = isTopHit(firstHandCard);
     let expandedHeight = collapsedHeight;
@@ -170,20 +244,49 @@ function add(name, pass, detail = '') {
       advisorExpandedAfterToggle = !!advisorAfterToggle && !advisorAfterToggle.classList.contains('collapsed');
     }
     const expandedRailRect = rectObj(controlRail);
+    const expandedCommandRect = rectObj(command);
+    const bossHiddenWhileAdvisorExpanded = !isVisible(boss);
+    const restoreToggle = document.querySelector('#battle-command-panel .battle-advisor-toggle');
+    if (restoreToggle && typeof restoreToggle.click === 'function') {
+      restoreToggle.click();
+      if (window.game?.battle && typeof game.battle.updateBattleUI === 'function') game.battle.updateBattleUI();
+    }
+    const advisorAfterRestore = document.querySelector('#battle-command-panel .battle-tactical-advisor');
+    const advisorCollapsedAfterRestore = !!advisorAfterRestore && advisorAfterRestore.classList.contains('collapsed');
+    const contextRestoredAfterCollapse = isVisible(environment) && (!bossVisible || isVisible(boss));
 
     return {
       viewport: { width: window.innerWidth, height: window.innerHeight },
       controlRail: controlRailRect,
       expandedRail: expandedRailRect,
+      environment: environmentRect,
+      environmentFits,
+      collapsedCommand: collapsedCommandRect,
+      expandedCommand: expandedCommandRect,
+      commandListHiddenCollapsed,
+      commandContentFitsCollapsed,
+      resources: resourcesRect,
+      energy: energyRect,
+      candy: candyRect,
+      resourceRowOk,
+      resourceOrbsNoWrap,
+      semanticCards,
+      cardSemanticsOk,
+      keyboardActivationIndex,
+      keyboardDefaultPrevented,
       railChildRects,
       railChildrenOverlap,
       toggleTopHit,
       firstHandCardTopHit,
-      command: rectObj(command),
+      command: expandedCommandRect,
       battleLoopRail: battleLoopRailRect,
       battleLoopText,
       boss: rectObj(boss),
+      collapsedBoss: collapsedBossRect,
       bossVisible,
+      bossHiddenWhileAdvisorExpanded,
+      advisorCollapsedAfterRestore,
+      contextRestoredAfterCollapse,
       hand: rectObj(hand),
       handArea: rectObj(handArea),
       playerArea: rectObj(playerArea),
@@ -219,21 +322,34 @@ function add(name, pass, detail = '') {
         controlRailRect.bottom <= rectObj(document.querySelector('.enemy') || enemy).top - 12 &&
         !railChildrenOverlap &&
         railChildRects.every((entry) => entry.rect.left >= controlRailRect.left - 1 && entry.rect.right <= controlRailRect.right + 1) &&
-        rectObj(command).height <= 98 &&
-        rectObj(command).top >= controlRailRect.top - 1 &&
-        rectObj(command).bottom <= controlRailRect.bottom + 1 &&
+        !!environmentRect &&
+        environmentFits &&
+        commandListHiddenCollapsed &&
+        commandContentFitsCollapsed &&
+        resourceRowOk &&
+        resourceOrbsNoWrap &&
+        cardSemanticsOk &&
+        !!collapsedCommandRect &&
+        collapsedCommandRect.height <= 78 &&
+        collapsedCommandRect.top >= controlRailRect.top - 1 &&
+        collapsedCommandRect.bottom <= controlRailRect.bottom + 1 &&
+        !!expandedCommandRect &&
+        expandedCommandRect.height <= 160 &&
+        expandedCommandRect.bottom <= expandedRailRect.bottom + 1 &&
         battleLoopRailRect.left >= 0 &&
         battleLoopRailRect.right <= window.innerWidth &&
-        battleLoopRailRect.bottom <= rectObj(command).bottom + 2 &&
+        battleLoopRailRect.bottom <= collapsedCommandRect.bottom + 2 &&
         !overlaps(battleLoopRailRect, rectObj(endTurn), 2) &&
         spiritChipRect.right <= window.innerWidth - 6 &&
         spiritChipRect.top >= rectObj(command).top - 2 &&
         (!bossVisible || (
-          rectObj(boss).height <= 52 &&
-          rectObj(boss).top >= controlRailRect.top - 1 &&
-          rectObj(boss).bottom <= controlRailRect.bottom + 1
+          !!collapsedBossRect &&
+          collapsedBossRect.height <= 52 &&
+          collapsedBossRect.top >= controlRailRect.top - 1 &&
+          collapsedBossRect.bottom <= controlRailRect.bottom + 1 &&
+          bossHiddenWhileAdvisorExpanded
         )) &&
-        rectObj(endTurn).top >= rectObj(boss).top &&
+        rectObj(endTurn).top >= (collapsedBossRect?.top || 0) &&
         rectObj(endTurn).bottom <= rectObj(hand).top + 28 &&
         rectObj(document.querySelector('.enemy') || enemy).top > controlRailRect.bottom + 12 &&
         metaStrips.length >= 2 &&
@@ -251,6 +367,8 @@ function add(name, pass, detail = '') {
         !!advisor &&
         advisorCollapsedInitially &&
         advisorExpandedAfterToggle &&
+        advisorCollapsedAfterRestore &&
+        contextRestoredAfterCollapse &&
         expandedHeight >= collapsedHeight + 20 &&
         !!expandedRailRect &&
         expandedRailRect.bottom <= rectObj(document.querySelector('.enemy') || enemy).top - 12 &&
@@ -274,6 +392,17 @@ function add(name, pass, detail = '') {
       && probe.battleLoopRail.right <= probe.viewport.width
       && probe.endTurn
       && probe.handCardRects.every((rect) => rect && (rect.top >= probe.battleLoopRail.bottom || rect.left >= probe.battleLoopRail.right || rect.right <= probe.battleLoopRail.left)),
+    JSON.stringify(probe || null)
+  );
+
+  add(
+    'mobile battle folds secondary commands, keeps chapter context and resources contained, and supports keyboard cards',
+    !!probe?.environmentFits
+      && !!probe?.commandListHiddenCollapsed
+      && !!probe?.commandContentFitsCollapsed
+      && !!probe?.resourceRowOk
+      && !!probe?.resourceOrbsNoWrap
+      && !!probe?.cardSemanticsOk,
     JSON.stringify(probe || null)
   );
 
@@ -427,15 +556,83 @@ function add(name, pass, detail = '') {
         game.finalizeActiveChallengeRun({ completed: true, reason: 'goal_reached' });
       }
     }
+    if (typeof game.startRealm === 'function') {
+      game.startRealm(game.player?.realm || 1, false);
+    } else if (typeof game.showScreen === 'function') {
+      game.showScreen('map-screen');
+    }
     if (typeof game.initializeExpeditionForRealm === 'function') {
       game.initializeExpeditionForRealm(game.player?.realm || 1, true);
     }
-    if (typeof game.showScreen === 'function') {
-      game.showScreen('map-screen');
+    if (typeof game.renderExpeditionMapPanels === 'function') {
+      game.renderExpeditionMapPanels();
     }
     window.scrollTo(0, 0);
   });
   await page.waitForTimeout(1000);
+
+  const mobileMapDefaultProbe = await page.evaluate(() => {
+    const shell = document.querySelector('#map-screen .map-screen-v3');
+    const drawer = document.getElementById('map-intel-drawer');
+    const scroller = document.getElementById('map-scroll-container');
+    const currentRows = Array.from(document.querySelectorAll('#map-screen .node-row-v3[data-current-route="true"]'));
+    const currentRow = currentRows[0] || null;
+    const actionableNodes = currentRow
+      ? Array.from(currentRow.querySelectorAll('.map-node-v3[aria-disabled="false"]'))
+      : [];
+    const scrollerRect = scroller?.getBoundingClientRect();
+    const rowRect = currentRow?.getBoundingClientRect();
+    const rowCenterVisible = !!scrollerRect
+      && !!rowRect
+      && rowRect.top + rowRect.height / 2 >= scrollerRect.top
+      && rowRect.top + rowRect.height / 2 <= scrollerRect.bottom;
+    const rowFullyVisible = !!scrollerRect
+      && !!rowRect
+      && rowRect.top >= scrollerRect.top + 8
+      && rowRect.bottom <= scrollerRect.bottom - 8;
+    const semanticsValid = actionableNodes.length > 0 && actionableNodes.every(node => node.getAttribute('role') === 'button'
+      && node.getAttribute('aria-disabled') === 'false'
+      && node.tabIndex === 0
+      && (node.getAttribute('aria-label') || '').length >= 4
+      && !node.hasAttribute('aria-current'));
+    return {
+      open: !!shell?.classList.contains('show-map-intel'),
+      drawerHidden: drawer?.getAttribute('aria-hidden') === 'true',
+      scrollerVisible: !!scrollerRect && scrollerRect.width > 0 && scrollerRect.height > 0,
+      currentRowCount: currentRows.length,
+      actionableNodeCount: actionableNodes.length,
+      rowRect: rowRect ? {
+        top: rowRect.top,
+        bottom: rowRect.bottom,
+        height: rowRect.height,
+      } : null,
+      scrollerRect: scrollerRect ? {
+        top: scrollerRect.top,
+        bottom: scrollerRect.bottom,
+        height: scrollerRect.height,
+      } : null,
+      rowCenterVisible,
+      rowFullyVisible,
+      semanticsValid,
+      scrollTop: scroller?.scrollTop || 0,
+      ok: !!shell
+        && !shell.classList.contains('show-map-intel')
+        && drawer?.getAttribute('aria-hidden') === 'true'
+        && !!scrollerRect
+        && scrollerRect.width > 0
+        && scrollerRect.height > 0
+        && currentRows.length === 1
+        && rowFullyVisible
+        && semanticsValid,
+    };
+  });
+
+  add(
+    'mobile map starts with the route visible and keeps optional intel closed',
+    !!mobileMapDefaultProbe?.ok,
+    JSON.stringify(mobileMapDefaultProbe || null)
+  );
+
   await page.evaluate(() => {
     const intelToggle = document.querySelector('#map-screen [data-map-action="toggle-map-intel"]');
     const shell = document.querySelector('#map-screen .map-screen-v3');
