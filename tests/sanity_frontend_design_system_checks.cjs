@@ -90,6 +90,8 @@ assert.ok(frontendUpgradeCss.includes('[data-boot-click-queued="true"]'), 'queue
   "page.route('**/js/main.js*'",
   'queuedProbe.interceptedClicks === 1',
   'replayProbe.replayedClicks === 1',
+  'probe.pvpLivePaneActive',
+  '!probe.pvpRankingPaneActive',
   'game is not defined|PVPScene is not defined',
 ].forEach((needle) => {
   assert.ok(automationBootAudit.includes(needle), `automation boot audit should cover cold-start click marker: ${needle}`);

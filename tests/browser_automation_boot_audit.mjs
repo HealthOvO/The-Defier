@@ -53,6 +53,16 @@ async function runColdStartClickScenario(browser, scenario) {
 
   await page.goto(baseUrl, { waitUntil: 'commit' });
   await page.locator(triggerSelector).waitFor({ state: 'visible', timeout: 5000 });
+  if (actionId === 'open-pvp') {
+    await page.evaluate(() => {
+      document.getElementById('pvp-tab-live')?.classList.remove('active');
+      document.getElementById('pvp-tab-live')?.setAttribute('aria-selected', 'false');
+      document.getElementById('pvp-tab-ranking')?.classList.add('active');
+      document.getElementById('pvp-tab-ranking')?.setAttribute('aria-selected', 'true');
+      document.getElementById('tab-live')?.classList.remove('active');
+      document.getElementById('tab-ranking')?.classList.add('active');
+    });
+  }
   await page.click(triggerSelector, { timeout: 3000 });
   const queuedProbe = await page.evaluate(({ selector, expectedActionId }) => ({
     ready: document.documentElement.getAttribute('data-runtime-ready') === 'true',
@@ -79,6 +89,11 @@ async function runColdStartClickScenario(browser, scenario) {
     currentScreen: window.game?.currentScreen || '',
     loginPromptActive: !!document.getElementById('generic-confirm-modal')?.classList.contains('active'),
     saveSlotsActive: !!document.getElementById('save-slots-modal')?.classList.contains('active'),
+    pvpLiveTabActive: document.getElementById('pvp-tab-live')?.classList.contains('active') || false,
+    pvpLiveTabSelected: document.getElementById('pvp-tab-live')?.getAttribute('aria-selected') === 'true',
+    pvpLivePaneActive: document.getElementById('tab-live')?.classList.contains('active') || false,
+    pvpRankingTabActive: document.getElementById('pvp-tab-ranking')?.classList.contains('active') || false,
+    pvpRankingPaneActive: document.getElementById('tab-ranking')?.classList.contains('active') || false,
   }), triggerSelector);
   add(
     `cold-start ${label} action queues before runtime and runs after Game initialization`,
@@ -345,7 +360,15 @@ const coldStartScenarios = [
     triggerSelector: '#pvp-btn',
     actionId: 'open-pvp',
     label: 'PVP',
-    verifyOutcome: (probe) => probe.pvpSceneReady && probe.currentScreen === 'pvp-screen',
+    verifyOutcome: (probe) => (
+      probe.pvpSceneReady
+      && probe.currentScreen === 'pvp-screen'
+      && probe.pvpLiveTabActive
+      && probe.pvpLiveTabSelected
+      && probe.pvpLivePaneActive
+      && !probe.pvpRankingTabActive
+      && !probe.pvpRankingPaneActive
+    ),
   },
 ];
 

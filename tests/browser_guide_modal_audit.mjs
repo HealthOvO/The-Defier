@@ -80,7 +80,7 @@ async function safeScreenshot(page, outPath) {
 
   await page.goto(url, { waitUntil: 'domcontentloaded' });
   await page.waitForTimeout(1200);
-  await page.click("button[onclick='game.showGameIntro()']", { force: true });
+  await page.click('button[data-boot-action="open-guide"]', { force: true });
   await page.waitForTimeout(700);
 
   const desktopProbe = await page.evaluate(() => {

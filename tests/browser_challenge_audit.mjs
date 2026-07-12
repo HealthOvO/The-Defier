@@ -79,7 +79,7 @@ async function waitForChallengeHubReady(page, expectedTab = 'daily') {
   await page.waitForTimeout(250);
 
   await page.evaluate(() => {
-    document.querySelector('button[onclick="game.showChallengeHub(\'daily\')"]')?.click();
+    document.querySelector('button[data-boot-action="open-challenges"]')?.click();
   });
   await waitForChallengeHubReady(page, 'daily').catch(() => {});
 

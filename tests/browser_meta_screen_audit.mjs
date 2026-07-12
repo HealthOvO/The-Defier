@@ -2695,7 +2695,7 @@ function rectObj(rect) {
   await page.setViewportSize({ width: 1440, height: 960 });
   await page.goto(url, { waitUntil: 'domcontentloaded' });
   await page.waitForTimeout(1200);
-  await page.click('button[onclick="game.showAchievements()"]', { timeout: 5000, force: true });
+  await page.click('button[data-boot-action="open-achievements"]', { timeout: 5000, force: true });
   await page.waitForTimeout(400);
   const achievementsProbe = await page.evaluate(() => {
     const header = document.querySelector('#achievements-screen .screen-header');
@@ -2819,7 +2819,7 @@ function rectObj(rect) {
 
   await page.goto(url, { waitUntil: 'domcontentloaded' });
   await page.waitForTimeout(1200);
-  await page.click('button[onclick="game.showLegacyScreen()"]', { timeout: 5000, force: true });
+  await page.click('button[data-boot-action="open-legacy"]', { timeout: 5000, force: true });
   await page.waitForTimeout(450);
   const inheritanceProbe = await page.evaluate(() => {
     const header = document.querySelector('#inheritance-screen .screen-header');

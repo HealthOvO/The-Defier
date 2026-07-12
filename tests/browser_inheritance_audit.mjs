@@ -53,7 +53,7 @@ async function safeScreenshot(page, outPath) {
   await safeScreenshot(page, path.join(outDir, '00-main-menu.png'));
 
   // Open inheritance screen
-  await page.click('button[onclick="game.showLegacyScreen()"]', { timeout: 5000, force: true });
+  await page.click('button[data-boot-action="open-legacy"]', { timeout: 5000, force: true });
   await page.waitForTimeout(350);
   const inheritanceMode = await page.evaluate(() => JSON.parse(window.render_game_to_text()).mode);
   add('inheritance screen is reachable', inheritanceMode === 'inheritance-screen', `mode=${inheritanceMode}`);

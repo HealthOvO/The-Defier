@@ -63,7 +63,7 @@ async function showMainMenu(page) {
 
 async function openCollectionScreen(page) {
   try {
-    await page.locator("button[onclick=\"game.showCollection()\"], button[onclick=\"game.showScreen('collection')\"]").first().click({
+    await page.locator('button[data-boot-action="open-collection"]').first().click({
       timeout: 3000,
       force: true,
     });

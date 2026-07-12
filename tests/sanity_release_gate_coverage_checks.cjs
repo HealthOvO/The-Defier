@@ -609,6 +609,8 @@ const browserAutomationBootAudit = read('tests/browser_automation_boot_audit.mjs
   "page.route('**/assets/index-*.js'",
   'queuedProbe.interceptedClicks === 1',
   'replayProbe.replayedClicks === 1',
+  'probe.pvpLivePaneActive',
+  '!probe.pvpRankingPaneActive',
 ].forEach((needle) => {
   assert.ok(
     browserAutomationBootAudit.includes(needle),
