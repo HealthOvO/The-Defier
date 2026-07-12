@@ -521,10 +521,10 @@ export class SystemView {
       modal.setAttribute('aria-describedby', 'generic-confirm-message');
       modal.style.zIndex = '10000'; // 确保在最上层
       modal.innerHTML = `
-                <div class="modal-content" style="text-align: center; max-width: 400px; padding: 30px;">
+                <div class="modal-content system-prompt-content">
                     <h3 id="generic-confirm-title" style="color: var(--accent-gold); margin-bottom: 20px;">提示</h3>
                     <p id="generic-confirm-message" style="color: #ccc; margin-bottom: 30px; line-height: 1.6; font-size: 1.1rem; white-space: pre-line;"></p>
-                    <div style="display: flex; justify-content: center; gap: 20px;">
+                    <div class="system-prompt-actions">
                         <button id="generic-confirm-btn" class="menu-btn primary small" type="button">确定</button>
                         <button id="generic-cancel-btn" class="menu-btn small" type="button">取消</button>
                     </div>
@@ -633,10 +633,10 @@ export class SystemView {
       modal.className = 'modal';
       modal.style.zIndex = '10001'; // 比Confirm更高
       modal.innerHTML = `
-                <div class="modal-content" style="text-align: center; max-width: 400px; padding: 30px;">
+                <div class="modal-content system-prompt-content">
                     <h3 id="generic-alert-title" style="color: var(--accent-gold); margin-bottom: 20px;">提示</h3>
                     <p id="generic-alert-message" style="color: #ccc; margin-bottom: 30px; line-height: 1.6; font-size: 1.1rem; white-space: pre-line;"></p>
-                    <div style="display: flex; justify-content: center;">
+                    <div class="system-prompt-actions single">
                         <button id="generic-alert-btn" class="menu-btn primary small" style="min-width: 100px;">确定</button>
                     </div>
                 </div>

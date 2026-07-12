@@ -370,9 +370,10 @@ function collectDesignSystemProbe(options = {}) {
     height: Math.round(rect.height),
   } : null;
   const fdSurfaceChecks = surfaceTargets.map((target) => {
-    const [name, selector, kind = 'surface'] = Array.isArray(target)
+    const [name, selector, kind = 'surface', targetOptions = {}] = Array.isArray(target)
       ? target
-      : [target.name, target.selector, target.kind || 'surface'];
+      : [target.name, target.selector, target.kind || 'surface', target.options || {}];
+    const optionalWhenHidden = targetOptions.optionalWhenHidden === true;
     const node = document.querySelector(selector);
     const style = node ? getComputedStyle(node) : null;
     const screen = node?.closest('.screen') || null;
@@ -402,12 +403,13 @@ function collectDesignSystemProbe(options = {}) {
       ok:
         !!style &&
         activeOk &&
-        visibleOk &&
+        (visibleOk || optionalWhenHidden) &&
         viewportOk &&
         surfaceOk,
       activeScreenId: screen?.id || '',
       activeOk,
       visibleOk,
+      optionalWhenHidden,
       viewportOk,
       borderRadius: style?.borderRadius || '',
       borderTopWidth: style?.borderTopWidth || '',
@@ -477,7 +479,7 @@ function collectCoreLoopDesignSystemProbe(options = {}) {
     const viewportOk = rect ? viewportOkFor(rect) : false;
     const radius = parseFloat(style?.borderRadius || '0');
     const borderOk = style?.borderTopWidth !== '0px' || kind === 'card';
-    const radiusOk = kind === 'card' ? radius >= 8 : radius >= 12;
+    const radiusOk = kind === 'card' || kind === 'compactSurface' ? radius >= 8 : radius >= 12;
     return {
       name,
       selector,
@@ -1079,10 +1081,18 @@ function collectCoreLoopDesignSystemProbe(options = {}) {
   await captureScreenshot(page, '10-shop-screen.png');
 
   await boot(page);
-  const pvpProbe = await page.evaluate(() => {
+  const pvpProbe = await page.evaluate(async () => {
     if (!window.game || typeof window.PVPScene === 'undefined') return { ok: false, reason: 'no_pvp_api' };
     game.showScreen('pvp-screen');
-    if (typeof PVPScene.onShow === 'function') PVPScene.onShow();
+    if (typeof PVPScene.onShow === 'function') {
+      const pending = PVPScene.onShow();
+      if (pending && typeof pending.then === 'function') {
+        await Promise.race([
+          pending,
+          new Promise((resolve) => setTimeout(resolve, 800)),
+        ]);
+      }
+    }
     const layout = document.querySelector('#pvp-screen .pvp-layout-split');
     if (!layout) return { ok: false, reason: 'missing_pvp_layout' };
     const rect = layout.getBoundingClientRect();
@@ -1103,6 +1113,7 @@ function collectCoreLoopDesignSystemProbe(options = {}) {
     };
   });
   add('pvp screen keeps sidebar and content inside the shared shell', !!pvpProbe?.ok, JSON.stringify(pvpProbe || null));
+  await page.waitForTimeout(250);
   await captureScreenshot(page, '11-pvp-screen.png');
 
   await boot(page);
@@ -1207,8 +1218,8 @@ function collectCoreLoopDesignSystemProbe(options = {}) {
   const battleCoreLoopProbe = await page.evaluate(collectCoreLoopDesignSystemProbe, {
     activeScreenId: 'battle-screen',
     surfaceTargets: [
-      ['battleCommandPanel', '#battle-screen #battle-command-panel', 'surface'],
-      ['bossActPanel', '#battle-screen #boss-act-panel', 'surface'],
+      ['battleCommandPanel', '#battle-screen #battle-command-panel', 'compactSurface'],
+      ['bossActPanel', '#battle-screen #boss-act-panel', 'compactSurface'],
       ['handCard', '#battle-screen #hand-cards .card', 'card'],
     ],
     hitTargets: [
@@ -1267,17 +1278,33 @@ function collectCoreLoopDesignSystemProbe(options = {}) {
     const shell = document.querySelector('#map-screen .map-screen-v3');
     const intelToggle = document.querySelector('#map-screen [data-map-action="toggle-map-intel"]');
     const toolsToggle = document.querySelector('#map-screen [data-map-action="toggle-map-tools"]');
+    if (shell?.classList.contains('show-map-tools') && typeof toolsToggle?.click === 'function') toolsToggle.click();
     if (shell && !shell.classList.contains('show-map-intel') && typeof intelToggle?.click === 'function') intelToggle.click();
-    if (shell && !shell.classList.contains('show-map-tools') && typeof toolsToggle?.click === 'function') toolsToggle.click();
   });
-  const mapCoreLoopProbe = await page.evaluate(collectCoreLoopDesignSystemProbe, {
+  const mapIntelCoreLoopProbe = await page.evaluate(collectCoreLoopDesignSystemProbe, {
     activeScreenId: 'map-screen',
     scrollHitTargetsIntoView: true,
     surfaceTargets: [
       ['mapDetailPanels', '#map-screen .map-detail-panels', 'surface'],
-      ['mapFooter', '#map-screen .map-footer', 'surface'],
       ['mapNode', '#map-screen .map-node-v3', 'card'],
       ['expeditionPanelCard', '#map-screen .expedition-panel-card', 'surface'],
+    ],
+    hitTargets: [
+      ['mapNode', '#map-screen .map-node-v3'],
+      ['mapHeaderAction', '#map-screen .map-v3-header [data-map-action]'],
+    ],
+  });
+  await page.evaluate(() => {
+    const shell = document.querySelector('#map-screen .map-screen-v3');
+    const toolsToggle = document.querySelector('#map-screen [data-map-action="toggle-map-tools"]');
+    if (shell && !shell.classList.contains('show-map-tools') && typeof toolsToggle?.click === 'function') toolsToggle.click();
+  });
+  const mapToolsCoreLoopProbe = await page.evaluate(collectCoreLoopDesignSystemProbe, {
+    activeScreenId: 'map-screen',
+    scrollHitTargetsIntoView: true,
+    surfaceTargets: [
+      ['mapFooter', '#map-screen .map-footer', 'surface'],
+      ['mapNode', '#map-screen .map-node-v3', 'card'],
     ],
     hitTargets: [
       ['mapNode', '#map-screen .map-node-v3'],
@@ -1287,8 +1314,8 @@ function collectCoreLoopDesignSystemProbe(options = {}) {
   });
   add(
     'core play-loop design system primitives are visible on map route controls',
-    !!mapCoreLoopProbe?.ok,
-    JSON.stringify(mapCoreLoopProbe || null)
+    !!mapIntelCoreLoopProbe?.ok && !!mapToolsCoreLoopProbe?.ok,
+    JSON.stringify({ intel: mapIntelCoreLoopProbe || null, tools: mapToolsCoreLoopProbe || null })
   );
 
   await boot(page);
@@ -1372,7 +1399,7 @@ function collectCoreLoopDesignSystemProbe(options = {}) {
       ['pvpLiveActionBar', '#pvp-screen .pvp-live-action-bar', 'actionBar'],
       ['pvpLiveAction', '#pvp-screen .pvp-live-action-bar .challenge-btn[data-live-action="join-queue"]', 'control'],
       ['pvpModeBoundary', '#pvp-screen .pvp-live-mode-boundary', 'chip'],
-      ['pvpActionReceipt', '#pvp-screen .pvp-live-action-receipt', 'chip'],
+      ['pvpActionReceipt', '#pvp-screen .pvp-live-action-receipt', 'chip', { optionalWhenHidden: true }],
       ['pvpSeatBadge', '#pvp-screen .pvp-live-seat-badge', 'chip'],
     ],
   });

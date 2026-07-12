@@ -74,7 +74,10 @@ export class ShopView {
         cardEl.classList.add(`rarity-${item.card.rarity || 'common'}`);
         if (item.sold) cardEl.classList.add('sold');
         cardEl.style.cursor = 'zoom-in';
-        cardEl.addEventListener('click', () => {
+        cardEl.setAttribute('role', 'button');
+        cardEl.setAttribute('tabindex', '0');
+        cardEl.setAttribute('aria-label', `查看卡牌详情：${item.card.name || '未命名卡牌'}`);
+        const openCardDetail = () => {
           const fit = this.game.evaluateShopCardDeckFit(item.card);
           Utils.showCardDetail(item.card, {
             sectionLabel: '商店详情',
@@ -85,13 +88,21 @@ export class ShopView {
             extraSummaryRows: fit.summaryRows,
             closeLabel: '返回商店'
           });
+        };
+        cardEl.addEventListener('click', openCardDetail);
+        cardEl.addEventListener('keydown', event => {
+          if (event.key !== 'Enter' && event.key !== ' ') return;
+          event.preventDefault();
+          openCardDetail();
         });
-        const priceBtn = document.createElement('div');
+        const priceBtn = document.createElement('button');
+        priceBtn.type = 'button';
         priceBtn.className = `card-price ${this.game.canAffordShopItem(item) && !item.sold ? '' : 'cannot-afford'}`.trim();
         priceBtn.innerHTML = item.sold ? '已售出' : this.game.formatShopPrice(item);
         if (!item.sold) {
           priceBtn.addEventListener('click', () => this.game.buyItem('card', index));
-          priceBtn.style.cursor = 'pointer';
+        } else {
+          priceBtn.disabled = true;
         }
         wrapper.appendChild(cardEl);
         wrapper.appendChild(priceBtn);
@@ -117,6 +128,9 @@ export class ShopView {
       const fit = this.game.evaluateShopServiceFit(service);
       el.className = `shop-service currency-${currency}${service.riskLabel ? ' is-risky' : ''}`;
       el.id = `service-${service.id}`;
+      el.setAttribute('role', 'button');
+      el.setAttribute('tabindex', '0');
+      el.setAttribute('aria-label', `查看服务详情：${service.name || '未命名服务'}`);
       if (service.sold) el.style.opacity = '0.5';
       const tags = [service.tagLabel ? {
         value: service.tagLabel,
@@ -138,14 +152,23 @@ export class ShopView {
                     <div class="service-desc">${service.desc}</div>
                     <div class="service-fit-note">${fit.reason}</div>
                 </div>
-                <button class="buy-btn ${isAffordable && !service.sold ? '' : 'disabled'}">
+                <button type="button" class="buy-btn ${isAffordable && !service.sold ? '' : 'disabled'}">
                     <span class="price">${service.sold ? '已售出' : this.game.formatShopPrice(service)}</span>
                 </button>
             `;
       el.style.cursor = 'zoom-in';
+      const openServiceDetail = () => {
+        Utils.showShopServiceDetail(service, this.game.buildShopServiceDetailMeta(service, activeTab));
+      };
       el.addEventListener('click', event => {
         if (event.target && event.target.closest && event.target.closest('.buy-btn')) return;
-        Utils.showShopServiceDetail(service, this.game.buildShopServiceDetailMeta(service, activeTab));
+        openServiceDetail();
+      });
+      el.addEventListener('keydown', event => {
+        if (event.key !== 'Enter' && event.key !== ' ') return;
+        if (event.target && event.target.closest && event.target.closest('.buy-btn')) return;
+        event.preventDefault();
+        openServiceDetail();
       });
       if (!service.sold) {
         const btn = el.querySelector('.buy-btn');

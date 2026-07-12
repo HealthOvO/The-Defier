@@ -263,6 +263,7 @@ function recordConsoleError(text) {
     const actions = document.querySelector('.reward-actions');
     const summary = document.querySelector('.reward-summary-card');
     const expeditionPanel = document.getElementById('reward-expedition-meta');
+    const cardRail = document.getElementById('reward-cards');
     const cards = Array.from(document.querySelectorAll('#reward-cards .card'));
     const chapterArcNode = expeditionPanel?.querySelector('[data-season-board-chapter-arc-reward="true"]') || null;
     const laneRewardButton = expeditionPanel?.querySelector('[data-season-board-lane-reward-claim="true"]') || null;
@@ -273,7 +274,7 @@ function recordConsoleError(text) {
       : null;
 
     return {
-      ok: !!rewardScreen && !!main && !!side && !!actions && !!summary && !!expeditionPanel && cards.length >= 2,
+      ok: !!rewardScreen && !!main && !!side && !!actions && !!summary && !!expeditionPanel && !!cardRail && cards.length >= 2,
       rewardHeaderOutcome: rewardScreen?.dataset?.rewardHeaderOutcome || '',
       rewardNextActionSource: rewardScreen?.dataset?.rewardNextActionSource || '',
       viewportWidth: window.innerWidth,
@@ -285,11 +286,16 @@ function recordConsoleError(text) {
       sideClientWidth: side?.clientWidth || 0,
       panelScrollWidth: expeditionPanel?.scrollWidth || 0,
       panelClientWidth: expeditionPanel?.clientWidth || 0,
+      cardRailScrollWidth: cardRail?.scrollWidth || 0,
+      cardRailClientWidth: cardRail?.clientWidth || 0,
+      cardRailOverflowX: cardRail ? getComputedStyle(cardRail).overflowX : '',
+      cardRailScrollSnapType: cardRail ? getComputedStyle(cardRail).scrollSnapType : '',
       mainRect: toRect(main),
       sideRect: toRect(side),
       summaryRect: toRect(summary),
       actionsRect: toRect(actions),
       expeditionPanelRect: toRect(expeditionPanel),
+      cardRailRect: toRect(cardRail),
       chapterArcRect: toRect(chapterArcNode),
       laneRewardButtonRect: toRect(laneRewardButton),
       handoffButtonRect: toRect(handoffButton),
@@ -310,7 +316,7 @@ function recordConsoleError(text) {
   });
 
   add(
-    'reward mobile layout keeps expedition meta, season-board chips, and lane rewards inside one readable column',
+    'reward mobile layout keeps a contained snap card rail and one readable metadata flow',
     !!rewardProbe?.ok
       && ['settlement', 'locking_sheet'].includes(rewardProbe.rewardHeaderOutcome)
       && rewardProbe.rewardNextActionSource.length > 0
@@ -325,7 +331,16 @@ function recordConsoleError(text) {
       && rewardProbe.actionsRect?.left >= 0
       && rewardProbe.actionsRect?.right <= rewardProbe.viewportWidth + 2
       && rewardProbe.summaryRect?.bottom <= rewardProbe.actionsRect?.top + 32
-      && rewardProbe.cardRects.every((rect) => rect && rect.left >= rewardProbe.mainRect.left - 2 && rect.right <= rewardProbe.mainRect.right + 2)
+      && rewardProbe.cardRailRect?.left >= rewardProbe.mainRect.left - 2
+      && rewardProbe.cardRailRect?.right <= rewardProbe.mainRect.right + 2
+      && ['auto', 'scroll'].includes(rewardProbe.cardRailOverflowX)
+      && /x/.test(rewardProbe.cardRailScrollSnapType || '')
+      && rewardProbe.cardRailScrollWidth > rewardProbe.cardRailClientWidth + 4
+      && rewardProbe.cardRects[0]?.left >= rewardProbe.cardRailRect.left - 2
+      && rewardProbe.cardRects[0]?.right <= rewardProbe.cardRailRect.right + 2
+      && rewardProbe.cardRects[1]?.left < rewardProbe.cardRailRect.right
+      && rewardProbe.cardRects[1]?.right > rewardProbe.cardRailRect.right
+      && rewardProbe.cardRects.every((rect) => rect && rect.width <= rewardProbe.cardRailClientWidth + 2)
       && rewardProbe.cardRects.every((rect) => rect && rect.bottom <= rewardProbe.actionsRect.bottom + 2)
       && /赛季裁定|章节归卷/.test(rewardProbe.titleText || '')
       && /赛季裁定|章节归卷|命盘档案|命盘问真/.test(rewardProbe.narrativeText || '')

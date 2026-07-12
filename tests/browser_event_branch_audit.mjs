@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { chromium } from 'playwright';
+import { safeAuditScreenshot } from './helpers/safe_audit_screenshot.mjs';
 
 const url = process.argv[2] || 'http://127.0.0.1:4173';
 const outDir = process.argv[3] || 'output/web-event-branch-audit';
@@ -12,11 +13,12 @@ function add(name, pass, detail = '') {
 }
 
 async function safeScreenshot(page, outPath) {
-  try {
-    await page.screenshot({ path: outPath, fullPage: true, timeout: 5000 });
-  } catch (err) {
-    console.warn(`[browser_event_branch_audit] screenshot skipped: ${err?.message || err}`);
-  }
+  await safeAuditScreenshot(page, outPath, 'browser_event_branch_audit', {
+    fullPage: false,
+    preferCdp: true,
+    fallbackToPlaywright: false,
+    cdpTimeout: 6000,
+  });
 }
 
 async function clickEventChoice(page, selector) {

@@ -53,11 +53,15 @@ const releaseCoverage = read('tests/sanity_release_gate_coverage_checks.cjs');
 });
 
 [
-  'pvp live trusted control surface groups status, receipt, and command rail',
+  'pvp live trusted control surface keeps essential idle status and command rail readable',
   'data-live-trust-grid',
   'data-live-trust-item',
   'data-live-command-rail',
   'data-live-command-group',
+  "['match-quality', 'mode-boundary', 'connection', 'realtime']",
+  "['turn-timer', 'fairness', 'action-receipt', 'momentum', 'intent']",
+  '!mediumEntryProbe.trustItems.some',
+  "['flex', 'grid'].includes(mediumEntryProbe.commandRailDisplay)",
   'ariaLive',
 ].forEach((needle) => {
   assert.ok(liveBrowserAudit.includes(needle), `browser live PVP audit should prove trusted control surface: ${needle}`);

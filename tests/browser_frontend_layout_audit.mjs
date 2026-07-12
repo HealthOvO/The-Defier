@@ -18,14 +18,27 @@ const reportLogMode = String(
   process.env.FRONTEND_LAYOUT_REPORT_LOG || (process.env.CI ? 'summary' : 'full'),
 ).toLowerCase();
 
-const viewports = [
+function filterAuditItems(items, envValue) {
+  const requested = String(envValue || '')
+    .split(',')
+    .map((value) => value.trim())
+    .filter(Boolean);
+  if (requested.length === 0) return items;
+  const requestedIds = new Set(requested);
+  return items.filter((item) => requestedIds.has(item.id));
+}
+
+const viewports = filterAuditItems([
   { id: 'desktop', width: 1440, height: 960, isMobile: false },
   { id: 'short', width: 1366, height: 720, isMobile: false },
+  { id: 'mobile-375', width: 375, height: 812, isMobile: true },
   { id: 'mobile-390', width: 390, height: 844, isMobile: true },
   { id: 'mobile-412', width: 412, height: 915, isMobile: true },
-];
+  { id: 'tablet-portrait-768', width: 768, height: 1024, isMobile: true },
+  { id: 'tablet-landscape-1024', width: 1024, height: 768, isMobile: true },
+], process.env.FRONTEND_LAYOUT_VIEWPORTS);
 
-const scenarios = [
+const scenarios = filterAuditItems([
   { id: 'main-menu', root: '#main-menu', title: 'Main Menu' },
   { id: 'pvp-screen', root: '#pvp-screen', title: 'PVP Hub' },
   { id: 'character-selection-screen', root: '#character-selection-screen', title: 'Character Selection' },
@@ -78,7 +91,10 @@ const scenarios = [
   { id: 'alert-modal', root: '#generic-alert-modal', title: 'Alert Modal' },
   { id: 'treasure-bag-alert-modal', root: '#generic-alert-modal', title: 'Treasure Bag Alert Stack' },
   { id: 'purification-modal', root: '#purification-modal', title: 'Purification Modal' },
-];
+], process.env.FRONTEND_LAYOUT_SCENARIOS);
+
+if (viewports.length === 0) throw new Error('FRONTEND_LAYOUT_VIEWPORTS did not match any configured viewport');
+if (scenarios.length === 0) throw new Error('FRONTEND_LAYOUT_SCENARIOS did not match any configured scenario');
 
 const realBattleResolverScenarios = new Set([
   'horizon-barter-modal',
@@ -2292,6 +2308,12 @@ async function inspectLayout(page, rootSelector, scenarioId) {
         laneRewardTopHit: laneRewardHit.final.topHit,
         handoffInitiallyTopHit: handoffHit.initial.topHit,
         handoffTopHit: handoffHit.final.topHit,
+        laneRewardHitTargetOk: !!laneRewardHit.final.rect
+          && laneRewardHit.final.rect.height >= 44
+          && laneRewardHit.final.rect.width >= 96,
+        handoffHitTargetOk: !!handoffHit.final.rect
+          && handoffHit.final.rect.height >= 44
+          && handoffHit.final.rect.width >= 96,
         laneRewardRectFitsViewport: rectFitsViewport(laneRewardHit.final.rect),
         handoffRectFitsViewport: rectFitsViewport(handoffHit.final.rect),
         topAtLaneReward: laneRewardHit.final.topSelector,
@@ -2314,6 +2336,8 @@ async function inspectLayout(page, rootSelector, scenarioId) {
         || rewardExpeditionCtaProbe.handoffValue.length < 3
         || !rewardExpeditionCtaProbe.laneRewardTopHit
         || !rewardExpeditionCtaProbe.handoffTopHit
+        || !rewardExpeditionCtaProbe.laneRewardHitTargetOk
+        || !rewardExpeditionCtaProbe.handoffHitTargetOk
         || !rewardExpeditionCtaProbe.laneRewardRectFitsViewport
         || !rewardExpeditionCtaProbe.handoffRectFitsViewport
         || rewardExpeditionCtaProbe.panelScrollWidth > rewardExpeditionCtaProbe.panelClientWidth + 2
@@ -3645,8 +3669,30 @@ async function inspectMapNodeClickability(page, scenarioId) {
     return { ok: true, skipped: true };
   }
 
-  const selector = '#map-screen .map-node-v3.current, #map-screen .map-node-v3.available, #map-screen .map-node-v3:not(.locked)';
+  const selector = '#map-screen .map-node-v3.available:not(.completed):not(.locked), #map-screen .map-node-v3.current:not(.completed):not(.locked), #map-screen .map-node-v3:not(.completed):not(.locked)';
   try {
+    const shouldCloseMobileIntel = await page.evaluate(() => window.innerWidth <= 768
+      && !!document.querySelector('#map-screen .map-screen-v3.show-map-intel'));
+    if (shouldCloseMobileIntel) {
+      const intelToggle = page.locator('#map-screen [data-map-action="toggle-map-intel"]');
+      await intelToggle.waitFor({ state: 'visible', timeout: 3000 });
+      await intelToggle.click();
+      await waitForPaint(page);
+      const mobileIntelClosed = await page.evaluate(() => {
+        const shell = document.querySelector('#map-screen .map-screen-v3');
+        const drawer = document.getElementById('map-intel-drawer');
+        return !!shell
+          && !shell.classList.contains('show-map-intel')
+          && drawer?.getAttribute('aria-hidden') === 'true';
+      });
+      if (!mobileIntelClosed) {
+        return {
+          ok: false,
+          skipped: false,
+          issues: [{ type: 'map-mobile-intel-drawer-did-not-close-before-node-click' }],
+        };
+      }
+    }
     const locator = page.locator(selector).first();
     await locator.waitFor({ state: 'visible', timeout: 3000 });
     await page.evaluate((nodeSelector) => {
@@ -3714,6 +3760,7 @@ async function inspectMapNodeClickability(page, scenarioId) {
       return {
         ok: true,
         point,
+        nodeId: String(node.dataset.nodeId || ''),
         node: selectorFor(node),
         top: selectorFor(top),
       };
@@ -3727,11 +3774,13 @@ async function inspectMapNodeClickability(page, scenarioId) {
     }
     const before = await page.evaluate(() => ({
       mode: document.body?.dataset?.currentScreen || window.game?.currentScreen || '',
+      activeScreen: document.querySelector('[id$="-screen"].active')?.id || '',
+      currentNodeIndex: window.game?.map?.currentNodeIndex ?? null,
       eventOpen: !!document.querySelector('#event-modal.active'),
       battleActive: !!document.querySelector('#battle-screen.active'),
     }));
     const viewport = page.viewportSize();
-    if (viewport && viewport.width <= 520) {
+    if (viewport && viewport.width <= 768) {
       await page.touchscreen.tap(target.point.x, target.point.y);
     } else {
       await page.mouse.click(target.point.x, target.point.y);
@@ -3739,15 +3788,38 @@ async function inspectMapNodeClickability(page, scenarioId) {
     await waitForPaint(page);
     const after = await page.evaluate(() => ({
       mode: document.body?.dataset?.currentScreen || window.game?.currentScreen || '',
+      activeScreen: document.querySelector('[id$="-screen"].active')?.id || '',
+      currentNodeIndex: window.game?.map?.currentNodeIndex ?? null,
       eventOpen: !!document.querySelector('#event-modal.active'),
       battleActive: !!document.querySelector('#battle-screen.active'),
     }));
+    const selectedTarget = target.nodeId !== '' && String(after.currentNodeIndex) === target.nodeId;
+    const stateTransitioned = String(before.currentNodeIndex) !== String(after.currentNodeIndex)
+      || before.mode !== after.mode
+      || before.activeScreen !== after.activeScreen
+      || before.eventOpen !== after.eventOpen
+      || before.battleActive !== after.battleActive;
+    if (!selectedTarget || !stateTransitioned) {
+      return {
+        ok: false,
+        skipped: false,
+        issues: [{
+          type: 'map-node-click-no-state-transition',
+          target,
+          before,
+          after,
+          selectedTarget,
+          stateTransitioned,
+        }],
+      };
+    }
     return {
       ok: true,
       skipped: false,
       target,
       before,
       after,
+      closedMobileIntelForClick: shouldCloseMobileIntel,
     };
   } catch (error) {
     return {

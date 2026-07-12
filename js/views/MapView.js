@@ -115,11 +115,15 @@ export class MapView {
                                 </div>
                             </div>
                             <div class="map-header-actions">
-                                <button class="menu-btn small map-header-toggle" type="button" data-map-action="toggle-map-intel" aria-expanded="false" aria-controls="map-detail-panels map-expedition-panels">关卡情报</button>
+                                <button class="menu-btn small map-header-toggle" type="button" data-map-action="toggle-map-intel" aria-expanded="false" aria-controls="map-intel-drawer">关卡情报</button>
                                 <button class="menu-btn small map-header-toggle" type="button" data-map-action="toggle-map-tools" aria-expanded="false" aria-controls="map-footer">工具</button>
                             </div>
                         </div>
-                        <div id="map-detail-panels" class="map-detail-panels" aria-hidden="true">
+                    </div>
+                </div>
+
+                <aside id="map-intel-drawer" class="map-intel-drawer" aria-hidden="true">
+                    <div id="map-detail-panels" class="map-detail-panels" aria-hidden="true">
                         <div id="map-situation-overview" class="map-situation-overview" style="display:none;"></div>
                         <div id="map-chapter-risk-card" class="map-chapter-risk-card" style="display:none;"></div>
                         <div id="map-chapter-brief" class="map-chapter-brief" style="display:none;"></div>
@@ -143,26 +147,26 @@ export class MapView {
                             <div class="mission-progress">0/0</div>
                         </div>
                         <div id="map-run-path-flash" class="map-run-path-flash" style="display:none;"></div>
-                        </div>
                     </div>
-                </div>
+                    <div id="map-expedition-panels" class="map-expedition-panels" aria-hidden="true"></div>
+                </aside>
 
                 <div class="map-scroll-container" id="map-scroll-container">
-                    <div class="map-content-wrapper" id="map-content-wrapper">
-                        <div class="map-canvas-header">
-                            <div class="map-canvas-kicker">当前关卡</div>
-                            <div class="map-canvas-title-row">
-                                <div class="map-canvas-title">${mapHeadline}</div>
-                                <div class="map-canvas-stage">${displayRealmName}</div>
-                            </div>
-                            <div class="map-canvas-subtitle">${mapSubline}</div>
-                            ${this.renderMapCoreLoopBrief(displayRealmName)}
-                            <div class="map-canvas-legend" aria-hidden="true">
-                                <span class="map-legend-chip current">当前可进入</span>
-                                <span class="map-legend-chip completed">已完成</span>
-                                <span class="map-legend-chip locked">未解锁</span>
-                            </div>
+                    <div class="map-canvas-header">
+                        <div class="map-canvas-kicker">当前关卡</div>
+                        <div class="map-canvas-title-row">
+                            <div class="map-canvas-title">${mapHeadline}</div>
+                            <div class="map-canvas-stage">${displayRealmName}</div>
                         </div>
+                        <div class="map-canvas-subtitle">${mapSubline}</div>
+                        ${this.renderMapCoreLoopBrief(displayRealmName)}
+                        <div class="map-canvas-legend" aria-hidden="true">
+                            <span class="map-legend-chip current">当前可进入</span>
+                            <span class="map-legend-chip completed">已完成</span>
+                            <span class="map-legend-chip locked">未解锁</span>
+                        </div>
+                    </div>
+                    <div class="map-content-wrapper" id="map-content-wrapper">
                         <!-- SVG Layer -->
                         <svg class="map-connections-svg" id="map-svg-layer"></svg>
                     </div>
@@ -262,6 +266,9 @@ export class MapView {
         if (!shell) return;
         shell.dataset.mapIntelUserToggled = 'true';
         shell.classList.toggle('show-map-intel');
+        if (shell.classList.contains('show-map-intel')) {
+          shell.classList.remove('show-map-tools');
+        }
         this.syncMapChrome(container);
         if (shell.classList.contains('show-map-intel')) {
           requestAnimationFrame(() => this.scrollCurrentMapRowIntoView({ behavior: 'auto' }));
@@ -273,6 +280,10 @@ export class MapView {
         const shell = container.querySelector('.map-screen-v3');
         if (!shell) return;
         shell.classList.toggle('show-map-tools');
+        if (shell.classList.contains('show-map-tools')) {
+          shell.dataset.mapIntelUserToggled = 'true';
+          shell.classList.remove('show-map-intel');
+        }
         this.syncMapChrome(container);
       }
     });
@@ -287,6 +298,7 @@ export class MapView {
     const toolsOpen = shell.classList.contains('show-map-tools');
     const intelBtn = container.querySelector('[data-map-action="toggle-map-intel"]');
     const toolsBtn = container.querySelector('[data-map-action="toggle-map-tools"]');
+    const intelDrawer = container.querySelector('#map-intel-drawer');
     const detailPanels = container.querySelector('#map-detail-panels');
     const expeditionPanels = container.querySelector('#map-expedition-panels');
     const footer = container.querySelector('#map-footer');
@@ -300,6 +312,9 @@ export class MapView {
     }
     if (detailPanels) {
       detailPanels.setAttribute('aria-hidden', intelOpen ? 'false' : 'true');
+    }
+    if (intelDrawer) {
+      intelDrawer.setAttribute('aria-hidden', intelOpen ? 'false' : 'true');
     }
     if (expeditionPanels) {
       expeditionPanels.setAttribute('aria-hidden', intelOpen ? 'false' : 'true');

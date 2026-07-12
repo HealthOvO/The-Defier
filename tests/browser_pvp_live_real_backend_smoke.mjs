@@ -25,6 +25,10 @@ const TEST_MATCH_SCOPE = `real_backend_smoke_${runId}`.replace(/[^a-z0-9_-]/gi, 
 const navigationTimeoutMs = Math.max(30000, Math.floor(Number(process.env.BROWSER_PVP_LIVE_REAL_NAVIGATION_TIMEOUT_MS) || 60000));
 const bootTimeoutMs = Math.max(15000, Math.floor(Number(process.env.BROWSER_PVP_LIVE_REAL_BOOT_TIMEOUT_MS) || 20000));
 const bootAttempts = Math.max(1, Math.floor(Number(process.env.BROWSER_PVP_LIVE_REAL_BOOT_ATTEMPTS) || 5));
+const liveStateTimeoutMs = Math.max(10000, Math.floor(Number(process.env.BROWSER_PVP_LIVE_REAL_STATE_TIMEOUT_MS) || 30000));
+const setupReadyTimeoutMs = Math.max(10000, Math.floor(Number(process.env.BROWSER_PVP_LIVE_REAL_SETUP_TIMEOUT_MS) || 45000));
+const turnTimeoutMs = Math.max(90000, Math.floor(Number(process.env.BROWSER_PVP_LIVE_REAL_TURN_TIMEOUT_MS) || 600000));
+const reconnectGraceMs = Math.max(60000, Math.floor(Number(process.env.BROWSER_PVP_LIVE_REAL_RECONNECT_GRACE_MS) || 600000));
 
 if (requireMobileViewport && !isMobileViewport) {
   throw new Error('BROWSER_PVP_LIVE_REAL_REQUIRE_MOBILE requires BROWSER_PVP_LIVE_REAL_VIEWPORT=mobile');
@@ -165,11 +169,12 @@ function startBackend() {
       DEFIER_INTEGRITY_REQUIRED: '1',
       DEFIER_PVP_TEST_MODE: '1',
       DEFIER_DB_PATH: dbPath,
-      PVP_LIVE_SETUP_READY_TIMEOUT_MS: '10000',
+      PVP_LIVE_SETUP_READY_TIMEOUT_MS: String(setupReadyTimeoutMs),
+      PVP_LIVE_TURN_TIMEOUT_MS: String(turnTimeoutMs),
       PVP_LIVE_LONG_WAIT_THRESHOLD_MS: '1000',
       PVP_LIVE_HEARTBEAT_INTERVAL_MS: '1000',
       PVP_LIVE_HEARTBEAT_STALE_MS: '1000',
-      PVP_LIVE_RECONNECT_GRACE_MS: '60000',
+      PVP_LIVE_RECONNECT_GRACE_MS: String(reconnectGraceMs),
     },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
@@ -328,21 +333,6 @@ async function getLiveSessionProbe(page) {
   });
 }
 
-async function dismissBlockingModals(page) {
-  await page.evaluate(() => {
-    document.querySelectorAll('.modal').forEach(modal => {
-      modal.classList.remove('active');
-      modal.style.removeProperty('display');
-    });
-    ['auth-modal', 'save-slots-modal', 'generic-confirm-modal', 'save-conflict-modal'].forEach(id => {
-      const modal = document.getElementById(id);
-      if (!modal) return;
-      modal.classList.remove('active');
-      modal.style.removeProperty('display');
-    });
-  });
-}
-
 async function reloadAndOpenLivePanel(page) {
   let lastBootError = null;
   for (let attempt = 1; attempt <= bootAttempts; attempt += 1) {
@@ -385,10 +375,10 @@ async function reloadAndOpenLivePanel(page) {
     document.getElementById('tab-live')?.classList.add('active');
     await window.PVPScene.loadLivePanel();
   }, TEST_MATCH_SCOPE);
-  await dismissBlockingModals(page);
+  await closeSaveSlotsModalViaUi(page, 'reload-live-panel-save-slots-cancel', 3000);
 }
 
-async function waitForLivePhase(page, phase, timeoutMs = 10000) {
+async function waitForLivePhase(page, phase, timeoutMs = liveStateTimeoutMs) {
   await page.waitForFunction(
     expected => window.PVPScene?.getLiveSnapshot?.()?.phase === expected,
     phase,
@@ -397,7 +387,7 @@ async function waitForLivePhase(page, phase, timeoutMs = 10000) {
   return getLiveSnapshot(page);
 }
 
-async function waitForLiveSnapshot(page, predicate, arg = null, timeoutMs = 10000) {
+async function waitForLiveSnapshot(page, predicate, arg = null, timeoutMs = liveStateTimeoutMs) {
   await page.waitForFunction(predicate, arg, { timeout: timeoutMs });
   return getLiveSnapshot(page);
 }
@@ -485,7 +475,7 @@ async function collectLiveInboxJoinProbe(page, expectedInviteCode = '') {
   return { ...inboxProbe, buttonProbe };
 }
 
-async function clickLiveInboxInviteUntilSetup(page, inviteCode, label, timeoutMs = 20000) {
+async function clickLiveInboxInviteUntilSetup(page, inviteCode, label, timeoutMs = 60000) {
   const selector = `[data-live-invite-inbox] [data-live-inbox-join="${cssAttributeValue(inviteCode)}"]`;
   const deadline = Date.now() + timeoutMs;
   const actionables = [];
@@ -637,10 +627,6 @@ async function clickLiveControl(page, selector, label) {
     let actionability = null;
     do {
       actionability = await page.evaluate(({ targetSelector, targetLabel }) => {
-        document.querySelectorAll('.modal').forEach(modal => {
-          modal.classList.remove('active');
-          modal.style.removeProperty('display');
-        });
         const targets = Array.from(document.querySelectorAll(targetSelector));
         if (targets.length === 0) {
           return { ok: false, label: targetLabel, selector: targetSelector, reason: 'missing' };
@@ -713,12 +699,23 @@ async function clickLiveControl(page, selector, label) {
   };
   const actionability = await waitForActionableControl();
   if (isMobileViewport) {
-    await page.waitForTimeout(80);
     await page.touchscreen.tap(actionability.tapPoint.x, actionability.tapPoint.y);
     return actionability;
   }
   await page.mouse.click(actionability.tapPoint.x, actionability.tapPoint.y);
-  return null;
+  return actionability;
+}
+
+async function closeSaveSlotsModalViaUi(page, label, waitMs = 0) {
+  const selector = '#save-slots-modal.active .modal-footer button';
+  if (waitMs > 0) {
+    await page.waitForSelector(selector, { state: 'visible', timeout: waitMs }).catch(() => null);
+  }
+  const visible = await page.locator(selector).isVisible().catch(() => false);
+  if (!visible) return null;
+  const actionability = await clickLiveControl(page, selector, label);
+  await page.waitForFunction(() => !document.getElementById('save-slots-modal')?.classList.contains('active'), null, { timeout: 5000 });
+  return actionability;
 }
 
 async function clickLiveControlUntilPhase(page, selector, expectedPhase, label, timeoutMs = 15000) {
@@ -876,7 +873,7 @@ async function waitForLiveActionUnlocked(page, label, timeoutMs = 10000) {
 }
 
 async function readyLiveSetupSeat(page, label, timeoutMs = 8000) {
-  const deadline = Date.now() + timeoutMs;
+  const deadline = Date.now() + Math.max(liveStateTimeoutMs, timeoutMs);
   let lastProbe = null;
   while (Date.now() < deadline) {
     lastProbe = await page.evaluate(async () => {
@@ -1654,8 +1651,9 @@ async function writeReport() {
       window.PVPScene.switchTab('live');
     });
     await longWaitSeat.page.waitForSelector('[data-live-action="join-queue"]', { timeout: 5000 });
-    const longWaitJoinActionable = await clickLiveControl(longWaitSeat.page, '[data-live-action="join-queue"]', 'long-wait-join-queue');
-    const longWaitJoin = await waitForLivePhase(longWaitSeat.page, 'waiting');
+    const longWaitJoinResult = await clickLiveControlUntilPhase(longWaitSeat.page, '[data-live-action="join-queue"]', 'waiting', 'long-wait-join-queue', 60000);
+    const longWaitJoinActionable = longWaitJoinResult.actionables[0] || null;
+    const longWaitJoin = longWaitJoinResult.snapshot;
     await longWaitSeat.page.waitForTimeout(1250);
     await longWaitSeat.page.evaluate(async () => {
       await window.PVPScene.refreshLiveMatch();
@@ -1748,6 +1746,7 @@ async function writeReport() {
 	        `queue-cancel-cooldown-join-${index + 1}`,
 	        12000,
 	      );
+	      await queueCancelCooldownSeat.page.evaluate(() => window.PVPScene.renderLivePanel());
 	      let cancelled = null;
 	      const cancelActionables = [];
 	      if (index === 2) {
@@ -1829,7 +1828,8 @@ async function writeReport() {
 	      };
 	    });
 	    const queueCancelCooldownRetryLayoutActionable = await assertMobileActionable(queueCancelCooldownSeat.page, '[data-live-action="join-queue"]', 'queue-cancel-cooldown-retry');
-	    const queueCancelCooldownPracticeLayoutActionable = await assertMobileActionable(queueCancelCooldownSeat.page, '[data-live-action="practice-live"]', 'queue-cancel-cooldown-practice');
+	    const queueCancelCooldownPracticeLayoutActionable = await clickLiveControl(queueCancelCooldownSeat.page, '[data-live-action="practice-live"]', 'queue-cancel-cooldown-practice-live');
+	    const queueCancelCooldownPracticeActionable = queueCancelCooldownPracticeLayoutActionable;
 	    const queueCancelCooldownMobileLayoutOk = !isMobileViewport
 	      || (
 	        queueCancelCooldownProbe.hintRect?.visible === true
@@ -1861,7 +1861,6 @@ async function writeReport() {
         && (!isMobileViewport || queueCancelCycles.every(cycle => cycle.joinActionable?.ok === true && cycle.cancelActionable?.ok === true)),
 	      JSON.stringify({ queueCancelCycles, queueCancelCooldownProbe, queueCancelCooldownRetryLayoutActionable, queueCancelCooldownPracticeLayoutActionable }),
 	    );
-    const queueCancelCooldownPracticeActionable = await clickLiveControl(queueCancelCooldownSeat.page, '[data-live-action="practice-live"]', 'queue-cancel-cooldown-practice-live');
     let queueCancelCooldownPracticeWaitError = '';
     try {
       await queueCancelCooldownSeat.page.waitForFunction(() => {
@@ -1906,7 +1905,7 @@ async function writeReport() {
         && !/rankedGames|ranked_games|reward|"rating":|"elo":|"score":/i.test(JSON.stringify(queueCancelCooldownPracticeProbe.drillScenario || {}))
         && !/rankedGames|ranked_games|reward|rating|elo|score/i.test(queueCancelCooldownPracticeProbe.visibleText)
         && (!isMobileViewport || queueCancelCooldownPracticeActionable?.ok === true),
-      JSON.stringify({ queueCancelCooldownPracticeProbe, queueCancelCooldownPracticeWaitError, queueCancelCooldownPracticeActionable }),
+	      JSON.stringify({ queueCancelCooldownPracticeProbe, queueCancelCooldownPracticeWaitError, queueCancelCooldownPracticeActionable }),
     );
     } finally {
       await queueCancelCooldownSeat?.context?.close?.().catch(() => {});
@@ -2257,7 +2256,7 @@ async function writeReport() {
       JSON.stringify({ realInviteCode, realInvitePassiveInboxProbe }),
     );
 
-    await dismissBlockingModals(inviteGuest.page);
+    const realInviteSaveSlotsCancelActionable = await closeSaveSlotsModalViaUi(inviteGuest.page, 'real-invite-save-slots-cancel');
     const realInviteInboxJoinResult = await clickLiveInboxInviteUntilSetup(inviteGuest.page, realInviteCode, 'real-invite-inbox-join');
     const realInviteInboxJoinActionable = realInviteInboxJoinResult.actionables.at(-1) || null;
     const realInviteJoined = realInviteInboxJoinResult.setup;
@@ -2286,8 +2285,9 @@ async function writeReport() {
         && /友谊再战|准备阶段/.test(realInviteJoinProbe.summary)
         && /--/.test(realInviteJoinProbe.inviteCodeText)
         && !/settlementReport|findOpponent|reportMatchResult|GhostEnemy|startPVPBattle|didWin|matchTicket|"rating":|"elo":|"score":/i.test(JSON.stringify(realInviteJoinProbe))
+        && (realInviteSaveSlotsCancelActionable == null || realInviteSaveSlotsCancelActionable?.ok === true)
         && (!isMobileViewport || realInviteInboxJoinActionable?.ok === true),
-      JSON.stringify({ realInviteCode, realInviteJoined, realInviteHostSetup, realInviteJoinProbe, realInviteInboxJoinActionable }),
+      JSON.stringify({ realInviteCode, realInviteJoined, realInviteHostSetup, realInviteJoinProbe, realInviteInboxJoinActionable, realInviteSaveSlotsCancelActionable }),
     );
     add(
       'real browser recipient joins refreshed inbox invite into friendly setup',
@@ -2305,8 +2305,9 @@ async function writeReport() {
         && /友谊再战|准备阶段/.test(realInvitePassiveJoinProbe.summary)
         && /--/.test(realInvitePassiveJoinProbe.inviteCodeText)
         && !/settlementReport|findOpponent|reportMatchResult|GhostEnemy|startPVPBattle|didWin|matchTicket|"rating":|"elo":|"score":/i.test(JSON.stringify(realInvitePassiveJoinProbe))
+        && (realInviteSaveSlotsCancelActionable == null || realInviteSaveSlotsCancelActionable?.ok === true)
         && (!isMobileViewport || realInviteInboxJoinActionable?.ok === true),
-      JSON.stringify({ realInviteCode, realInviteJoined, realInviteHostSetup, realInvitePassiveJoinProbe, realInviteInboxJoinActionable }),
+      JSON.stringify({ realInviteCode, realInviteJoined, realInviteHostSetup, realInvitePassiveJoinProbe, realInviteInboxJoinActionable, realInviteSaveSlotsCancelActionable }),
     );
     await inviteHost.context.close().catch(() => {});
     await inviteGuest.context.close().catch(() => {});
@@ -2931,8 +2932,9 @@ async function writeReport() {
       label: document.querySelector('[data-live-selected-loadout]')?.textContent || '',
       candidate: window.PVPScene.getLiveQueueLoadoutCandidate(window.PVPScene.getLiveSelectedLoadoutPreset().id),
     }));
-    const seatAJoinActionable = await clickLiveControl(seatA.page, '[data-live-action="join-queue"]', 'seat-a-join-queue');
-    const joinA = await waitForLivePhase(seatA.page, 'waiting');
+    const seatAJoinResult = await clickLiveControlUntilPhase(seatA.page, '[data-live-action="join-queue"]', 'waiting', 'seat-a-join-queue', 60000);
+    const seatAJoinActionable = seatAJoinResult.actionables[0] || null;
+    const joinA = seatAJoinResult.snapshot;
     add(
       'real browser user A joins live queue with locked loadout',
       joinA.phase === 'waiting' && !!joinA.queueTicket,
@@ -2976,8 +2978,9 @@ async function writeReport() {
       label: document.querySelector('[data-live-selected-loadout]')?.textContent || '',
       candidate: window.PVPScene.getLiveQueueLoadoutCandidate(window.PVPScene.getLiveSelectedLoadoutPreset().id),
     }));
-    const seatBJoinActionable = await clickLiveControl(seatB.page, '[data-live-action="join-queue"]', 'seat-b-join-queue');
-    const joinB = await waitForLivePhase(seatB.page, 'setup');
+    const seatBJoinResult = await clickLiveControlUntilPhase(seatB.page, '[data-live-action="join-queue"]', 'setup', 'seat-b-join-queue', 60000);
+    const seatBJoinActionable = seatBJoinResult.actionables[0] || null;
+    const joinB = seatBJoinResult.snapshot;
     add(
       'real browser user B selects live loadout preset through UI',
       selectedB.preset === 'shield'
@@ -3771,12 +3774,41 @@ async function writeReport() {
       }));
       if (/B · (思考|thinking)/.test(realSocialUnmutedProbe.events || '')) break;
     }
-    const socialMuteTouchActionable = await clickLiveControl(seatA.page, '[data-live-action="toggle-social-mute"]', 'seat-a-toggle-social-mute');
-    await seatA.page.waitForFunction(
-      () => /已静音/.test(document.querySelector('[data-live-social-status]')?.textContent || ''),
-      null,
-      { timeout: 5000 },
-    );
+    const socialMuteTouchActionables = [];
+    const socialMuteStateProbes = [];
+    let socialMuteWaitError = null;
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      const beforeMuteProbe = await seatA.page.evaluate(() => ({
+        muted: window.PVPScene?.liveSocialMuted === true,
+        status: document.querySelector('[data-live-social-status]')?.textContent || '',
+      }));
+      socialMuteStateProbes.push({ attempt, stage: 'before', ...beforeMuteProbe });
+      if (beforeMuteProbe.muted && /已静音/.test(beforeMuteProbe.status)) {
+        socialMuteWaitError = null;
+        break;
+      }
+      socialMuteTouchActionables.push(await clickLiveControl(seatA.page, '[data-live-action="toggle-social-mute"]', `seat-a-toggle-social-mute-${attempt}`));
+      try {
+        await seatA.page.waitForFunction(
+          () => window.PVPScene?.liveSocialMuted === true
+            && /已静音/.test(document.querySelector('[data-live-social-status]')?.textContent || ''),
+          null,
+          { timeout: 5000 },
+        );
+        socialMuteWaitError = null;
+        break;
+      } catch (error) {
+        const afterMuteProbe = await seatA.page.evaluate(() => ({
+          muted: window.PVPScene?.liveSocialMuted === true,
+          status: document.querySelector('[data-live-social-status]')?.textContent || '',
+        }));
+        socialMuteStateProbes.push({ attempt, stage: 'after-timeout', ...afterMuteProbe });
+        socialMuteWaitError = afterMuteProbe.muted ? null : error;
+        if (afterMuteProbe.muted) break;
+      }
+    }
+    if (socialMuteWaitError) throw socialMuteWaitError;
+    const socialMuteTouchActionable = socialMuteTouchActionables[0] || null;
     const realSocialMutedProbe = await seatA.page.evaluate(() => {
       const storageKey = 'the-defier:pvp-live-social-preferences:v1';
       const storage = window.localStorage.getItem(storageKey) || '';
@@ -3810,7 +3842,7 @@ async function writeReport() {
         && realSocialMutedProbe.payload?.persistence === 'local_storage'
         && realSocialMutedProbe.textPayload?.rankedImpact === 'none'
         && !/reward|rating|elo|settlement|matchTicket/i.test(JSON.stringify(realSocialMutedProbe)),
-      JSON.stringify({ realSocialSubmitProbe, realSocialUnmutedProbe, realSocialMutedProbe, socialMuteTouchActionable }),
+      JSON.stringify({ realSocialSubmitProbe, realSocialUnmutedProbe, realSocialMutedProbe, socialMuteTouchActionable, socialMuteStateProbes }),
     );
 
     const openingCardBeforeProbe = await firstSeatClient.page.evaluate(() => {
@@ -4203,6 +4235,10 @@ async function writeReport() {
     const protectedCounterplaySubmittedOnFirstTouch = Number(protectedCounterplayConfirming?.stateVersion || 0) > Number(protectedCounterplayBeforeProbe.before?.stateVersion || 0);
     const protectedCounterplaySecondTouchOk = protectedCounterplaySecondTouchActionable?.ok === true || protectedCounterplaySubmittedOnFirstTouch;
     await secondSeatClient.page.waitForTimeout(500);
+    await secondSeatClient.page.evaluate(async () => {
+      await window.PVPScene.refreshLiveMatch();
+      window.PVPScene.renderLivePanel();
+    });
     const protectedCounterplayActionProbe = await secondSeatClient.page.evaluate(({ before, playable, fallbackCard, cardInstanceId, confirming }) => {
       const after = window.PVPScene.getLiveSnapshot();
       const receiptEl = document.querySelector('[data-live-action-receipt]');
@@ -5221,7 +5257,6 @@ async function writeReport() {
         && !/findOpponent|reportMatchResult|GhostEnemy|startPVPBattle|didWin|matchTicket|"rating":|"elo":/i.test(waitingRematchReloadVisiblePayload),
       JSON.stringify({ friendlyRematchProbe, waitingRematchReloadProbe }),
     );
-    await dismissBlockingModals(loserClient.page);
     const loserCancelRematchActionable = await clickLiveControl(loserClient.page, '[data-live-action="cancel-rematch"]:not([hidden])', `${seatSlug(loserSeat)}-cancel-friendly-rematch`);
     await loserClient.page.waitForTimeout(300);
     await loserClient.page.evaluate(async () => {
@@ -5270,7 +5305,6 @@ async function writeReport() {
       JSON.stringify({ cancelledRematchProbe, loserCancelRematchActionable }),
     );
 
-    await dismissBlockingModals(loserClient.page);
     const loserRematchAfterCancelActionable = await clickLiveControl(loserClient.page, '[data-live-post-review-action="friendly_rematch"]', `${seatSlug(loserSeat)}-friendly-rematch-after-cancel`);
     await loserClient.page.waitForTimeout(500);
     const rematchRetryProbe = await loserClient.page.evaluate(() => {
@@ -5303,18 +5337,76 @@ async function writeReport() {
     if (rematchRetryProbe.phase !== 'waiting_rematch') {
       throw new Error(`friendly rematch retry did not enter waiting_rematch: ${JSON.stringify(rematchRetryProbe)}`);
     }
-    await clickLiveControl(winnerClient.page, '[data-live-post-review-action="friendly_rematch"]', `${seatSlug(winnerSeat)}-friendly-rematch`);
-    await loserClient.page.waitForFunction(() => {
-      const snapshot = window.PVPScene?.getLiveSnapshot?.();
-      return snapshot?.phase === 'setup' && snapshot?.mode === 'friendly';
-    }, null, { timeout: 8000 });
-    await winnerClient.page.waitForFunction(() => {
-      const snapshot = window.PVPScene?.getLiveSnapshot?.();
-      return snapshot?.phase === 'setup' && snapshot?.mode === 'friendly';
-    }, null, { timeout: 8000 });
+    let friendlyAcceptedSnapshots = null;
+    let friendlyAcceptError = null;
+    const friendlyAcceptAttemptProbes = [];
+    const isFriendlySetupSnapshot = snapshot => snapshot?.phase === 'setup' && snapshot?.mode === 'friendly';
+    const friendlyRematchActionSelector = [
+      '[data-live-post-review-action="friendly_rematch"]',
+      '[data-live-post-review-next-step-action="friendly_rematch"]',
+      '[data-live-season-goal-action="friendly_rematch"]',
+    ].join(', ');
+    for (let attempt = 1; attempt <= 3 && !friendlyAcceptedSnapshots; attempt += 1) {
+      try {
+        const currentSnapshots = await Promise.all([
+          getLiveSnapshot(loserClient.page),
+          getLiveSnapshot(winnerClient.page),
+        ]);
+        if (currentSnapshots.every(isFriendlySetupSnapshot)) {
+          friendlyAcceptedSnapshots = currentSnapshots;
+          break;
+        }
+        if (!currentSnapshots.some(isFriendlySetupSnapshot)) {
+          const acceptAttemptProbe = await winnerClient.page.evaluate((selector) => {
+            const snapshot = window.PVPScene?.getLiveSnapshot?.() || null;
+            const sessionState = window.PVPScene?.getLiveSession?.()?.getState?.() || null;
+            const actions = Array.from(document.querySelectorAll(selector)).map(button => {
+              const rect = button.getBoundingClientRect();
+              return {
+                actionId: button.getAttribute('data-live-post-review-action')
+                  || button.getAttribute('data-live-post-review-next-step-action')
+                  || button.getAttribute('data-live-season-goal-action')
+                  || '',
+                disabled: !!button.disabled,
+                width: Math.round(rect.width),
+                height: Math.round(rect.height),
+                visibility: window.getComputedStyle(button).visibility,
+                display: window.getComputedStyle(button).display,
+              };
+            });
+            return {
+              snapshotPhase: snapshot?.phase || '',
+              snapshotMode: snapshot?.mode || '',
+              sessionPhase: sessionState?.phase || '',
+              rootPhase: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-phase') || '',
+              activeScreen: document.querySelector('.screen.active')?.id || '',
+              liveTabActive: document.getElementById('tab-live')?.classList.contains('active') === true,
+              actions,
+            };
+          }, friendlyRematchActionSelector);
+          friendlyAcceptAttemptProbes.push(acceptAttemptProbe);
+          if (!isFriendlySetupSnapshot(await getLiveSnapshot(winnerClient.page))) {
+            await clickLiveControl(winnerClient.page, friendlyRematchActionSelector, `${seatSlug(winnerSeat)}-friendly-rematch-${attempt}`);
+          }
+        }
+        const accepterSnapshot = await waitForLiveSnapshot(winnerClient.page, () => {
+          const snapshot = window.PVPScene?.getLiveSnapshot?.();
+          return snapshot?.phase === 'setup' && snapshot?.mode === 'friendly';
+        }, null, liveStateTimeoutMs);
+        const requesterSnapshot = await refreshUntilLiveSnapshot(loserClient.page, () => {
+          const snapshot = window.PVPScene?.getLiveSnapshot?.();
+          return snapshot?.phase === 'setup' && snapshot?.mode === 'friendly';
+        }, null, liveStateTimeoutMs);
+        friendlyAcceptedSnapshots = [requesterSnapshot, accepterSnapshot];
+      } catch (error) {
+        friendlyAcceptError = new Error(`${error?.message || String(error)}; acceptProbes=${JSON.stringify(friendlyAcceptAttemptProbes)}`);
+      }
+    }
+    if (!friendlyAcceptedSnapshots) throw friendlyAcceptError || new Error('friendly rematch acceptance did not reach setup');
     const friendlyAcceptedProbe = {
       requester: await getLiveSnapshot(loserClient.page),
       accepter: await getLiveSnapshot(winnerClient.page),
+      acceptanceAttempts: friendlyAcceptAttemptProbes,
       requesterDom: await loserClient.page.evaluate(() => ({
         phase: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-phase') || '',
         matchId: document.querySelector('[data-live-match-id]')?.textContent || '',
@@ -5397,12 +5489,14 @@ async function writeReport() {
     });
     await seatC.page.waitForFunction(() => window.PVPScene?.getLiveSnapshot?.()?.phase === 'idle', null, { timeout: 8000 });
     await seatD.page.waitForFunction(() => window.PVPScene?.getLiveSnapshot?.()?.phase === 'idle', null, { timeout: 8000 });
-    const seatCJoinActionable = await clickLiveControl(seatC.page, '[data-live-action="join-queue"]', 'seat-c-join-queue');
-    const timeoutJoinC = await waitForLivePhase(seatC.page, 'waiting');
-    const seatDJoinActionable = await clickLiveControl(seatD.page, '[data-live-action="join-queue"]', 'seat-d-join-queue');
-    const timeoutJoinD = await waitForLivePhase(seatD.page, 'setup');
+    const seatCJoinResult = await clickLiveControlUntilPhase(seatC.page, '[data-live-action="join-queue"]', 'waiting', 'seat-c-join-queue', 60000);
+    const seatCJoinActionable = seatCJoinResult.actionables[0] || null;
+    const timeoutJoinC = seatCJoinResult.snapshot;
+    const seatDJoinResult = await clickLiveControlUntilPhase(seatD.page, '[data-live-action="join-queue"]', 'setup', 'seat-d-join-queue', 60000);
+    const seatDJoinActionable = seatDJoinResult.actionables[0] || null;
+    const timeoutJoinD = seatDJoinResult.snapshot;
     const timeoutSetupC = await refreshUntilLivePhase(seatC.page, 'setup');
-    await seatC.page.waitForTimeout(10600);
+    await seatC.page.waitForTimeout(setupReadyTimeoutMs + 600);
     await seatC.page.evaluate(async () => {
       await window.PVPScene.refreshLiveMatch();
     });

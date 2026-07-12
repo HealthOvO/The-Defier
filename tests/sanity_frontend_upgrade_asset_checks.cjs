@@ -33,7 +33,7 @@ function assertSiteAssetIfPresent(relativePath) {
 }
 
 const keyAssets = [
-  'assets/images/logo.webp',
+  'assets/images/logo-v2.webp',
   'assets/images/ui/main-menu-hero.webp',
   'assets/images/characters/lin_feng.webp',
   'assets/images/characters/xiang_ye.webp',
@@ -61,7 +61,7 @@ const indexHtml = read('index.html');
 assert.ok(indexHtml.includes('css/frontend-upgrade.css'), 'index.html should include frontend-upgrade.css');
 assert.ok(indexHtml.includes('assets/images/ui/main-menu-hero.webp'), 'main menu should reference the generated hero asset');
 assert.ok(
-  indexHtml.includes('<link rel="icon" type="image/webp" href="assets/images/logo.webp">'),
+  indexHtml.includes('<link rel="icon" type="image/webp" href="assets/images/logo-v2.webp">'),
   'favicon metadata should declare the WebP logo MIME type',
 );
 

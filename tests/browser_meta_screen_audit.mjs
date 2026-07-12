@@ -2540,11 +2540,12 @@ function rectObj(rect) {
     const side = document.querySelector('.reward-side-column');
     const actions = document.querySelector('.reward-actions');
     const expeditionPanel = document.getElementById('reward-expedition-meta');
+    const cardRail = document.getElementById('reward-cards');
     const cards = Array.from(document.querySelectorAll('#reward-cards .card'));
     const verificationCard = document.querySelector('[data-season-board-verification-reward="true"]');
     const verificationFollowup = document.querySelector('[data-season-board-verification-followup="true"]');
     const rewardScreen = document.getElementById('reward-screen');
-    if (!main || !side || !actions || !expeditionPanel || cards.length < 2) return { ok: false, reason: 'missing_reward_mobile_nodes' };
+    if (!main || !side || !actions || !expeditionPanel || !cardRail || cards.length < 2) return { ok: false, reason: 'missing_reward_mobile_nodes' };
     const toRect = (el) => {
       const rect = el.getBoundingClientRect();
       return {
@@ -2559,7 +2560,9 @@ function rectObj(rect) {
     const mainRect = toRect(main);
     const sideRect = toRect(side);
     const actionsRect = toRect(actions);
+    const cardRailRect = toRect(cardRail);
     const cardRects = cards.map((card) => toRect(card));
+    const cardRailStyle = getComputedStyle(cardRail);
     const expeditionPanelRect = toRect(expeditionPanel);
     const verificationCardRect = verificationCard ? toRect(verificationCard) : null;
     const verificationFollowupRect = verificationFollowup ? toRect(verificationFollowup) : null;
@@ -2568,7 +2571,16 @@ function rectObj(rect) {
     return {
       ok:
         sideRect.top >= mainRect.bottom - 6 &&
-        cardRects.every((rect) => rect.left >= mainRect.left - 4 && rect.right <= mainRect.right + 4) &&
+        cardRailRect.left >= mainRect.left - 4 &&
+        cardRailRect.right <= mainRect.right + 4 &&
+        ['auto', 'scroll'].includes(cardRailStyle.overflowX) &&
+        /x/.test(cardRailStyle.scrollSnapType || '') &&
+        cardRail.scrollWidth > cardRail.clientWidth + 4 &&
+        cardRects[0].left >= cardRailRect.left - 2 &&
+        cardRects[0].right <= cardRailRect.right + 2 &&
+        cardRects[1].left < cardRailRect.right &&
+        cardRects[1].right > cardRailRect.right &&
+        cardRects.every((rect) => rect.width <= cardRail.clientWidth + 2) &&
         actionsRect.width <= sideRect.width + 2 &&
         rewardScreen?.dataset?.rewardNextActionSource === 'verification' &&
         expeditionPanel?.dataset?.seasonBoardVerificationVisible === 'true' &&
@@ -2584,6 +2596,11 @@ function rectObj(rect) {
       mainRect,
       sideRect,
       actionsRect,
+      cardRailRect,
+      cardRailScrollWidth: cardRail.scrollWidth,
+      cardRailClientWidth: cardRail.clientWidth,
+      cardRailOverflowX: cardRailStyle.overflowX,
+      cardRailScrollSnapType: cardRailStyle.scrollSnapType,
       cardRects,
       expeditionPanelRect,
       verificationCardRect,
@@ -2593,7 +2610,7 @@ function rectObj(rect) {
     };
   });
   add(
-    'reward screen stacks into a single readable column on mobile',
+    'reward screen keeps its snap card rail contained above the mobile metadata flow',
     !!rewardMobileProbe?.ok,
     JSON.stringify(rewardMobileProbe || null)
   );
