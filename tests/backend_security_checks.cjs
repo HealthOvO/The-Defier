@@ -150,8 +150,8 @@ async function assertServerStartupFails(env, expectedText) {
 }
 
 async function registerUser(prefix) {
-  const username = `${prefix}_${Date.now()}_${Math.floor(Math.random() * 100000)}`;
-  const password = 'pwd123';
+  const username = `${String(prefix || 'secure').slice(0, 8)}_${Date.now().toString(36)}_${Math.floor(Math.random() * 46656).toString(36)}`;
+  const password = 'pwd123456';
   const res = await request('/api/auth/register', {
     method: 'POST',
     body: { username, password }
@@ -167,7 +167,7 @@ async function registerUser(prefix) {
 async function registerFixedUsername(username) {
   return request('/api/auth/register', {
     method: 'POST',
-    body: { username, password: 'pwd123' }
+    body: { username, password: 'pwd123456' }
   });
 }
 
@@ -523,7 +523,7 @@ async function runOptionalIntegrityChecks() {
     });
     assert.strictEqual(badLogin.status, 401, 'bad login should return 401');
 
-    const duplicateName = `duplicate_${Date.now()}_${Math.floor(Math.random() * 100000)}`;
+    const duplicateName = `dup_${Date.now().toString(36)}_${Math.floor(Math.random() * 46656).toString(36)}`;
     const duplicateSettled = await Promise.all([
       registerFixedUsername(duplicateName),
       registerFixedUsername(duplicateName),

@@ -29,6 +29,10 @@ const {
     buildRotationSnapshot,
     buildRotationSnapshotForStart
 } = require('./catalog');
+const {
+    getRiftSquadDashboard,
+    linkContributionToActiveSquad
+} = require('../account-social/squad-service');
 
 const REPORT_VERSION = 'account-world-rift-v1';
 const OPS_REPORT_VERSION = 'world-rift-ops-v1';
@@ -1253,6 +1257,11 @@ async function projectAttemptContribution(connection, attempt, now = Date.now(),
             contributionRow.submitted_at
         ]
     );
+    await linkContributionToActiveSquad(connection, {
+        userId: syncedAttempt.user_id,
+        contributionRow,
+        now
+    });
     await dbRun(
         connection,
         `UPDATE world_rift_states
@@ -1608,6 +1617,12 @@ async function getCurrentWorldRift(userId, nowInput) {
         const claimMap = await loadMilestoneClaims(connection, identity, rotation.rotationId);
         const leaderboard = await getLeaderboard(connection, rotation.rotationId, identity);
         const previousRotation = await loadPreviousClaimRotation(connection, transactionNow);
+        const riftSquad = await getRiftSquadDashboard(identity, {
+            connection,
+            currentRotationId: rotation.rotationId,
+            previousRotationId: previousRotation && previousRotation.rotationId || '',
+            now: transactionNow
+        });
         let previousClaim = null;
         if (previousRotation && previousRotation.rotationId !== rotation.rotationId) {
             const previousEntry = await loadEntry(connection, identity, previousRotation.rotationId);
@@ -1631,6 +1646,7 @@ async function getCurrentWorldRift(userId, nowInput) {
             personalEntry,
             milestones: buildMilestoneView(rotation, buildWorldStateView(rotation, worldState, transactionNow), personalEntry, claimMap),
             leaderboard,
+            riftSquad,
             previousClaim,
             observedAt: transactionNow
         };
@@ -1654,6 +1670,7 @@ async function getCurrentWorldRift(userId, nowInput) {
         personal: formatPersonalEntry(state.personalEntry),
         milestones: state.milestones,
         leaderboard: state.leaderboard,
+        riftSquad: state.riftSquad,
         previousClaim: state.previousClaim ? {
             rotation: formatRotation(state.previousClaim.rotation, responseNow),
             world: buildWorldStateView(state.previousClaim.rotation, state.previousClaim.worldState, responseNow),

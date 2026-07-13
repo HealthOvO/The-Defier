@@ -1,9 +1,22 @@
 const assert = require('node:assert');
 const http = require('http');
+const os = require('os');
+const path = require('path');
+process.env.DEFIER_DB_PATH = path.join(os.tmpdir(), `the-defier-pvp-ws-${process.pid}-${Date.now()}.sqlite`);
 const express = require('../server/node_modules/express');
 const pvpLiveRoutes = require('../server/routes/pvp-live');
 const { generateToken } = require('../server/middleware/auth');
 const { attachLivePvpWebSocket, makeEventReplay } = require('../server/pvp-live/live-ws');
+const { db, initDb } = require('../server/db/database');
+
+function dbRun(sql, params = []) {
+  return new Promise((resolve, reject) => {
+    db.run(sql, params, function onRun(error) {
+      if (error) reject(error);
+      else resolve(this);
+    });
+  });
+}
 
 function listen(server) {
   return new Promise((resolve, reject) => {
@@ -840,6 +853,17 @@ async function runCrossProcessPassiveStateFanoutCheck() {
 }
 
 (async () => {
+  await initDb();
+  for (const id of [
+    'ws-sync-a', 'ws-sync-b', 'ws-heartbeat-b', 'ws-cross-a', 'ws-cross-b',
+    'ws-join-race-b', 'ws-passive-a', 'ws-passive-b', 'ws-user-a', 'ws-user-b'
+  ]) {
+    await dbRun(
+      `INSERT OR IGNORE INTO users (id, username, username_normalized, password_hash, created_at, global_updated_at, auth_version, password_changed_at, disabled_at)
+       VALUES (?, ?, ?, 'legacy-test-hash', ?, 0, 1, 0, 0)`,
+      [id, id, id, Date.now()]
+    );
+  }
   assertPublicArrayEventReplay();
   await runSyncRequiredBroadcastCheck();
   await runHeartbeatEventsReplayCheck();

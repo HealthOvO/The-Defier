@@ -1,8 +1,21 @@
 const assert = require('assert');
+const os = require('os');
+const path = require('path');
+process.env.DEFIER_DB_PATH = path.join(os.tmpdir(), `the-defier-pvp-replay-${process.pid}-${Date.now()}.sqlite`);
 const express = require('../server/node_modules/express');
 const pvpLiveRoutes = require('../server/routes/pvp-live');
 const { generateToken } = require('../server/middleware/auth');
 const { buildMatchReplay } = require('../server/pvp-live/replay');
+const { db, initDb } = require('../server/db/database');
+
+function dbRun(sql, params = []) {
+  return new Promise((resolve, reject) => {
+    db.run(sql, params, function onRun(error) {
+      if (error) reject(error);
+      else resolve(this);
+    });
+  });
+}
 
 function listen(app) {
   return new Promise((resolve, reject) => {
@@ -237,6 +250,18 @@ function assertPublicReplayShape(replay, visibilityLayer) {
 }
 
 (async () => {
+  await initDb();
+  for (const user of [
+    { id: 'replay-user-a', username: 'replay-a' },
+    { id: 'replay-user-b', username: 'replay-b' },
+    { id: 'replay-user-c', username: 'replay-c' }
+  ]) {
+    await dbRun(
+      `INSERT OR IGNORE INTO users (id, username, username_normalized, password_hash, created_at, global_updated_at, auth_version, password_changed_at, disabled_at)
+       VALUES (?, ?, ?, 'legacy-test-hash', ?, 0, 1, 0, 0)`,
+      [user.id, user.username, user.username, Date.now()]
+    );
+  }
   assertPublicReplayArraySanitizer();
   pvpLiveRoutes.__livePvpStore.reset();
   pvpLiveRoutes.__attachServices({

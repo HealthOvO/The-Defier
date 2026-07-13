@@ -2773,14 +2773,22 @@ const challengeHubMethods = Object.create(null);
     }
     if (recordsEl) {
       const completedAttempts = clampInt(view.personal?.completedAttempts, 0);
-      recordsEl.innerHTML = view.personal ? `
+      const hasFormalContribution = completedAttempts > 0 || personalTotal > 0 || rankedContribution > 0;
+      recordsEl.innerHTML = hasFormalContribution ? `
         <article class="challenge-record-item"><div><strong>本周个人贡献</strong><span>全部有效贡献 ${personalTotal} · 最佳三次 ${rankedContribution}</span></div><span>${completedAttempts}/${view.attemptLimit} 次</span></article>
         <div class="challenge-inline-note">正式事实只来自服务端完整重放。这里不显示本地模拟首领、离线贡献或伪造参与人数。</div>
       ` : '<div class="codex-empty-state">尚无正式贡献。完成第一条权威裂隙战局后会在这里留下真实记录。</div>';
     }
     if (sideEl) {
+      const squadDashboard = view.current?.riftSquad?.current || view.current?.riftSquad || null;
+      const squad = squadDashboard?.squad || null;
+      const squadCard = squad ? `
+        <section class="codex-side-card" data-world-rift-squad-summary><span class="codex-side-kicker">裂隙小队</span><h3>${clampInt(squad.cooperativeScore, 0)} / 9600 协作分</h3><p>${clampInt(squad.memberCount, 0)}/4 位成员，${clampInt(squad.contributingMembers, 0)} 位已有真实贡献。每人只取最佳一次，不增加伤害、次数或战力。</p><button type="button" class="collection-inline-btn" data-challenge-action="open-social-squad">管理小队</button></section>`
+        : `
+        <section class="codex-side-card" data-world-rift-squad-summary><span class="codex-side-kicker">裂隙小队</span><h3>本轮尚未组队</h3><p>可与至多三位道友汇总真实贡献；组队不会增加伤害、次数或战力。</p><button type="button" class="collection-inline-btn" data-challenge-action="open-social-squad">前往组队</button></section>`;
       sideEl.innerHTML = `
         <section class="codex-side-card"><span class="codex-side-kicker">全服当前战线</span><h3>${escapeHtml(phaseTitle)}</h3><p>${escapeHtml(cleared ? '首领已击破，余响期间仍可完成个人里程碑和贡献榜。' : currentPhase.description || '所有玩家的有效贡献都会穿透阶段并保留完整事实。')}</p><div class="challenge-record-tags"><span class="challenge-tag">剩余 ${remainingHp}</span><span class="challenge-tag">推进 ${progressPercent}%</span><span class="challenge-tag">版本 ${clampInt(world.stateVersion, 0)}</span></div></section>
+        ${squadCard}
         <section class="codex-side-card"><span class="codex-side-kicker">公平合同</span><h3>同槽位同种子</h3><p>固定服务器牌组，不读取命环成长。每人相同次数，最佳三次计榜，末刀不额外发奖。</p></section>`;
     }
     if (rankingEl) {
@@ -3801,6 +3809,10 @@ const challengeHubMethods = Object.create(null);
       }
       if (action === 'open-pvp-live-practice-return') {
         this.openPvpLivePracticeReturn();
+        return;
+      }
+      if (action === 'open-social-squad' && typeof this.showSocialHub === 'function') {
+        this.showSocialHub('squad');
       }
     }, '__challengeSideDelegatesBound');
     bindRootClick(rankingEl, async button => {

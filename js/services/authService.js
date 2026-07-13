@@ -319,6 +319,29 @@ export const AuthService = {
       PVPService.clearActiveMatch();
     }
   },
+  getSecurityOverview(options = {}) {
+    if (!this.isLoggedIn()) return Promise.resolve({ success: false, message: '未登录' });
+    return BackendClient.getAuthSecurity(options);
+  },
+  async changePassword(currentPassword, newPassword, options = {}) {
+    if (!this.isLoggedIn()) return { success: false, message: '未登录' };
+    const previousUserId = this.getUserIdentity(this.currentUser);
+    const result = await BackendClient.changePassword(currentPassword, newPassword, options);
+    if (result && result.success !== false && BackendClient.getCurrentUser()) {
+      this.activateUserContext(BackendClient.getCurrentUser(), previousUserId);
+    }
+    return result;
+  },
+  revokeSession(sessionId, options = {}) {
+    if (!this.isLoggedIn()) return Promise.resolve({ success: false, message: '未登录' });
+    return BackendClient.revokeAuthSession(sessionId, options);
+  },
+  async logoutAll(options = {}) {
+    if (!this.isLoggedIn()) return { success: false, message: '未登录' };
+    const result = await BackendClient.logoutAll(options);
+    if (result && result.success !== false) this.logout();
+    return result;
+  },
   // Cloud Save Methods
   async saveCloudData(gameData, slotIndex = 0, options = {}) {
     const slot = Number(slotIndex);

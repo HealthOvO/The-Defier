@@ -105,8 +105,8 @@ async function main() {
     assert.strictEqual(version.payload?.gitSha, 'platform-test-sha', '/api/version should prefer deployment git sha env');
     assert.match(version.payload?.packageLockDigest || '', /^[a-f0-9]{16,64}$/, '/api/version should expose root lockfile digest');
     assert.match(version.payload?.serverPackageLockDigest || '', /^[a-f0-9]{16,64}$/, '/api/version should expose server lockfile digest');
-    assert.strictEqual(version.payload?.schema?.version, 8, '/api/version should expose schema version');
-    assert.strictEqual(version.payload?.schema?.currentMigrationId, '0008_authoritative_world_rift', '/api/version should expose current migration id');
+    assert.strictEqual(version.payload?.schema?.version, 9, '/api/version should expose schema version');
+    assert.strictEqual(version.payload?.schema?.currentMigrationId, '0009_account_social_coop', '/api/version should expose current migration id');
     assert.ok(Array.isArray(version.payload?.schema?.appliedMigrations), '/api/version should expose applied migration list');
     assert.ok(
       version.payload.schema.appliedMigrations.some(item => item.id === '0001_startup_schema' && Number(item.appliedAt) > 0),
@@ -140,6 +140,10 @@ async function main() {
       version.payload.schema.appliedMigrations.some(item => item.id === '0008_authoritative_world_rift' && Number(item.appliedAt) > 0),
       '/api/version should include applied authoritative world rift schema migration'
     );
+    assert.ok(
+      version.payload.schema.appliedMigrations.some(item => item.id === '0009_account_social_coop' && Number(item.appliedAt) > 0),
+      '/api/version should include applied account and social schema migration'
+    );
     const rootVersion = await request('/version');
     assert.strictEqual(rootVersion.status, 200, `/version should return 200: ${JSON.stringify(rootVersion.payload)}`);
     assert.deepStrictEqual(rootVersion.payload?.schema, version.payload.schema, '/version and /api/version should share schema payload');
@@ -151,7 +155,7 @@ async function main() {
     assert.strictEqual(health.payload?.status, 'ok', '/api/health should keep status=ok');
     assert.strictEqual(health.payload?.message, 'The Defier Backend is running', '/api/health should preserve existing health message');
     assert.strictEqual(health.payload?.checks?.database, 'ok', '/api/health should report database status');
-    assert.strictEqual(health.payload?.schema?.currentMigrationId, '0008_authoritative_world_rift', '/api/health should expose current schema migration');
+    assert.strictEqual(health.payload?.schema?.currentMigrationId, '0009_account_social_coop', '/api/health should expose current schema migration');
     assert.strictEqual(health.payload?.version?.gitSha, 'platform-test-sha', '/api/health should include runtime version summary');
     const healthJson = JSON.stringify(health.payload);
     assert(!healthJson.includes(JWT_SECRET), '/api/health must not leak JWT secret');
@@ -199,6 +203,11 @@ async function main() {
     assert.strictEqual(Number(worldRiftMigration?.version), 8, 'authoritative world rift migration should record schema version 8');
     assert.match(worldRiftMigration?.checksum || '', /^[a-f0-9]{16,64}$/, 'authoritative world rift migration should record stable checksum');
     assert(Number(worldRiftMigration?.applied_at) > 0, 'authoritative world rift migration should record applied timestamp');
+    const accountSocialMigration = await dbGet('SELECT id, version, checksum, applied_at FROM schema_migrations WHERE id = ?', ['0009_account_social_coop']);
+    assert.strictEqual(accountSocialMigration?.id, '0009_account_social_coop', 'schema_migrations should record account and social migration');
+    assert.strictEqual(Number(accountSocialMigration?.version), 9, 'account and social migration should record schema version 9');
+    assert.match(accountSocialMigration?.checksum || '', /^[a-f0-9]{16,64}$/, 'account and social migration should record stable checksum');
+    assert(Number(accountSocialMigration?.applied_at) > 0, 'account and social migration should record applied timestamp');
 
     console.log('Backend platform checks passed.');
   } catch (error) {

@@ -49,6 +49,7 @@ const requiredBrowserReleaseAudits = [
   'frontend-layout',
   'backend-client',
   'auth-ui-cloud',
+  'account-social-real',
   'mobile',
   'reward-mobile',
   'meta',
@@ -403,7 +404,7 @@ const waitingReportSource = pvpLiveStore.slice(
   'receipt?.idempotent',
   'server_verified must only upgrade an observed event',
   'a checkpoint source must not move across tickets',
-  'older databases should advance through verified runs to world rift v8 on restart',
+  'older databases should advance through verified runs to account social v9 on restart',
 ].forEach((needle) => {
   assert.ok(
     verifiedRunsPlatformChecks.includes(needle) || verifiedRunsDocumentation.includes(needle),
@@ -555,6 +556,7 @@ const waitingReportSource = pvpLiveStore.slice(
   '0006_authoritative_runs_v2',
   '0007_authoritative_challenge_ladder',
   '0008_authoritative_world_rift',
+  '0009_account_social_coop',
   'cloud_state_revisions',
   'cloud_state_heads',
   'cloud_state_ops_counters',
@@ -969,6 +971,7 @@ const browserAutomationBootAudit = read('tests/browser_automation_boot_audit.mjs
   'node tests/browser_frontend_layout_audit.mjs "$BASE_URL" "$OUTPUT_ROOT/frontend-layout"',
   'node tests/browser_backend_client_smoke.mjs "$BASE_URL" "$OUTPUT_ROOT/backend-client"',
   'node tests/browser_auth_ui_cloud_smoke.mjs "$BASE_URL" "$OUTPUT_ROOT/auth-ui-cloud"',
+  'node tests/browser_account_social_real_backend_smoke.mjs "$BASE_URL" "$OUTPUT_ROOT/account-social-real"',
   'node tests/browser_mobile_layout_audit.mjs "$BASE_URL" "$OUTPUT_ROOT/mobile"',
   'node tests/browser_reward_meta_mobile_audit.mjs "$BASE_URL" "$OUTPUT_ROOT/reward-mobile"',
   'node tests/browser_meta_screen_audit.mjs "$BASE_URL" "$OUTPUT_ROOT/meta"',
@@ -1001,11 +1004,11 @@ const browserAutomationBootAudit = read('tests/browser_automation_boot_audit.mjs
 });
 
 const configuredBrowserReleaseAudits = [...browserReleaseScript.matchAll(/run_selected_audit\s+([^\s]+)/g)].map((match) => match[1]);
-assert.strictEqual(requiredBrowserReleaseAudits.length, 31, 'required browser release audit list should pin all 31 audits');
+assert.strictEqual(requiredBrowserReleaseAudits.length, 32, 'required browser release audit list should pin all 32 audits');
 assert.deepStrictEqual(
   configuredBrowserReleaseAudits,
   requiredBrowserReleaseAudits,
-  'browser release gate should keep the full explicit 31-audit coverage set in sync',
+  'browser release gate should keep the full explicit 32-audit coverage set in sync',
 );
 
 assert.strictEqual(
@@ -1015,7 +1018,7 @@ assert.strictEqual(
 );
 
 [
-  'real backend boots schema V8',
+  'real backend boots schema V9',
   'challenge ladder GET current returns initial allowance before any formal run',
   'challenge hub global UI shows formal attempts and official ladder copy before submission',
   'global formal surface uses the server rotation and excludes legacy local rewards',
@@ -1090,7 +1093,7 @@ assert.strictEqual(
 [
   'audits: frontend-layout,season-ops,authoritative-runs-real',
   'audits: expedition,events,vow-choice,guide,inheritance,pvp,pvp-live,pvp-live-real,pvp-live-mobile-real,pvp-mobile,pvp-mobile-result,challenge-mobile-flow',
-  "if: contains(matrix.audits, 'backend-client') || contains(matrix.audits, 'auth-ui-cloud') || contains(matrix.audits, 'pvp-live-real') || contains(matrix.audits, 'pvp-live-mobile-real') || contains(matrix.audits, 'authoritative-runs-real')",
+  "if: contains(matrix.audits, 'backend-client') || contains(matrix.audits, 'auth-ui-cloud') || contains(matrix.audits, 'account-social-real') || contains(matrix.audits, 'pvp-live-real') || contains(matrix.audits, 'pvp-live-mobile-real') || contains(matrix.audits, 'authoritative-runs-real')",
 ].forEach((needle) => {
   assert.ok(
     pagesWorkflow.includes(needle),
@@ -3162,18 +3165,20 @@ assert.ok(
   'connection_json',
   'pending friendly rematch request should be persisted before restart',
   'restarted pending rematch requester should read pending rematch status before opponent accepts',
-  'restarted pending rematch should create the friendly match instead of waiting again',
+  'both processes should converge on the durable matched rematch',
   'restarted pending rematch should keep original series id',
-  'accepted pending rematch should be cleared after friendly match creation',
+  'accepted pending rematch should retain a durable matched fact',
   'expired restarted pending rematch should expose stable expiry reason',
   'expired pending rematch should be cleared after status read',
   'pvp_live_rematch_requests',
   'pending private invite should be persisted before restart',
   'persisted targeted private invite should keep target user id',
   'restarted targeted private invite recipient should read inbox',
-  'restarted targeted private invite should appear in recipient inbox',
+  'released stale invite claim should return to the recipient inbox',
   'restarted private invite should create a live match',
   'restarted targeted private invite join should keep target report',
+  'illegal guest loadout must leave the durable invite unclaimed',
+  'invite join should recheck a block created after invite issuance',
   'restarted private invite should preserve host locked loadout hash',
   'accepted private invite should be cleared after match creation',
   'expired persisted private invite should expose stable expiry reason',

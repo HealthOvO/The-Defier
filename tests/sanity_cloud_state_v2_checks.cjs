@@ -237,8 +237,8 @@ function signLegacySave(saveData, token, saltPrefix = 'legacy-save') {
 }
 
 async function registerUser(prefix) {
-  const username = `${prefix}_${Date.now()}_${Math.floor(Math.random() * 100000)}`;
-  const password = 'pwd123';
+  const username = `${String(prefix || 'cloud').slice(0, 8)}_${Date.now().toString(36)}_${Math.floor(Math.random() * 46656).toString(36)}`;
+  const password = 'pwd123456';
   const registered = await request('/api/auth/register', {
     method: 'POST',
     body: { username, password }
@@ -282,11 +282,12 @@ async function main() {
 
     const version = await request('/api/version');
     assert.strictEqual(version.status, 200, JSON.stringify(version.payload));
-    assert.strictEqual(version.payload?.schema?.version, 8, 'schema version should advance through world rift v8');
-    assert.strictEqual(version.payload?.schema?.currentMigrationId, '0008_authoritative_world_rift');
+    assert.strictEqual(version.payload?.schema?.version, 9, 'schema version should advance through account social v9');
+    assert.strictEqual(version.payload?.schema?.currentMigrationId, '0009_account_social_coop');
     assert(version.payload?.schema?.appliedMigrations?.some(item => item.id === '0004_cloud_state_v2'), 'applied migrations should include v4');
     assert(version.payload?.schema?.appliedMigrations?.some(item => item.id === '0007_authoritative_challenge_ladder'), 'applied migrations should include v7');
     assert(version.payload?.schema?.appliedMigrations?.some(item => item.id === '0008_authoritative_world_rift'), 'applied migrations should include v8');
+    assert(version.payload?.schema?.appliedMigrations?.some(item => item.id === '0009_account_social_coop'), 'applied migrations should include v9');
 
     const legacyHeads = await dbAll(
       `SELECT user_id, entity_key, head_revision_id

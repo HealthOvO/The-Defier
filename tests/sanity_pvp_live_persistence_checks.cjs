@@ -231,12 +231,12 @@ async function insertRankedWaitingQueueRow({ queueTicket, userId, username, disp
   );
 }
 
-function startServer() {
+function startServer(port = PORT) {
   const child = spawn(process.execPath, ['server/app.js'], {
     cwd: ROOT_DIR,
     env: {
       ...process.env,
-      PORT: String(PORT),
+      PORT: String(port),
       JWT_SECRET,
       DEFIER_HMAC_SECRET: HMAC_SECRET,
       DEFIER_DB_PATH: DB_PATH,
@@ -267,8 +267,8 @@ async function stopServer(server) {
   });
 }
 
-async function request(pathname, { method = 'GET', token, body } = {}) {
-  const response = await fetch(`${BASE_URL}${pathname}`, {
+async function requestAt(baseUrl, pathname, { method = 'GET', token, body } = {}) {
+  const response = await fetch(`${baseUrl}${pathname}`, {
     method,
     headers: {
       'Content-Type': 'application/json',
@@ -286,12 +286,16 @@ async function request(pathname, { method = 'GET', token, body } = {}) {
   return { status: response.status, ok: response.ok, payload };
 }
 
-async function waitForHealth(server) {
+async function request(pathname, options = {}) {
+  return requestAt(BASE_URL, pathname, options);
+}
+
+async function waitForHealth(server, baseUrl = BASE_URL) {
   const deadline = Date.now() + 10000;
   let lastError = null;
   while (Date.now() < deadline) {
     try {
-      const health = await request('/health');
+      const health = await requestAt(baseUrl, '/health');
       if (health.status === 200) return;
     } catch (error) {
       lastError = error;
@@ -315,10 +319,10 @@ async function withServer(fn) {
 }
 
 async function registerUser(prefix) {
-  const username = `${prefix}_${Date.now()}_${Math.floor(Math.random() * 100000)}`;
+  const username = `${String(prefix || 'pvplive').slice(0, 8)}_${Date.now().toString(36)}_${Math.floor(Math.random() * 46656).toString(36)}`;
   const response = await request('/api/auth/register', {
     method: 'POST',
-    body: { username, password: 'pwd123' },
+    body: { username, password: 'pwd123456' },
   });
   assert.equal(response.status, 200, `register should succeed: ${JSON.stringify(response.payload)}`);
   return {
@@ -2483,37 +2487,69 @@ async function readyBoth({ matchId, tokenA, tokenB, stateVersionA, prefix }) {
   assert.equal(pendingRematchRow.series_id, rematchSeriesId, 'persisted pending rematch should keep series id');
   assert.ok(pendingRematchRow.players_json.includes(rematchUserA.userId), 'persisted pending rematch should keep requester player snapshot');
 
-  await withServer(async () => {
-    const recoveredPendingStatus = await request(`/api/pvp/live/matches/${encodeURIComponent(rematchSourceMatchId)}/rematch`, {
+  const rematchServerA = startServer(PORT);
+  const rematchServerB = startServer(PORT + 1);
+  const rematchBaseA = BASE_URL;
+  const rematchBaseB = `http://127.0.0.1:${PORT + 1}`;
+  let acceptedAfterRestart;
+  try {
+    await Promise.all([
+      waitForHealth(rematchServerA, rematchBaseA),
+      waitForHealth(rematchServerB, rematchBaseB),
+    ]);
+    const recoveredPendingStatus = await requestAt(rematchBaseA, `/api/pvp/live/matches/${encodeURIComponent(rematchSourceMatchId)}/rematch`, {
       token: rematchUserA.token,
     });
     assert.equal(recoveredPendingStatus.status, 200, 'restarted pending rematch requester should read pending rematch status before opponent accepts');
     assert.equal(recoveredPendingStatus.payload.status, 'waiting_rematch', 'restarted pending rematch status should remain waiting');
     assert.equal(recoveredPendingStatus.payload.friendlySeries?.seriesId, rematchSeriesId, 'restarted pending rematch status should keep original series id');
 
-    const acceptedAfterRestart = await request(`/api/pvp/live/matches/${encodeURIComponent(rematchSourceMatchId)}/rematch`, {
+    const acceptanceOptions = {
       method: 'POST',
       token: rematchUserB.token,
       body: { displayName: '约乙', loadout: makeLoadout('rematch-shield-next', ['pvp_guard', 'pvp_guard', 'pvp_strike', 'pvp_burst']) },
+    };
+    const concurrentAcceptances = await Promise.all([
+      requestAt(rematchBaseA, `/api/pvp/live/matches/${encodeURIComponent(rematchSourceMatchId)}/rematch`, acceptanceOptions),
+      requestAt(rematchBaseB, `/api/pvp/live/matches/${encodeURIComponent(rematchSourceMatchId)}/rematch`, acceptanceOptions),
+    ]);
+    concurrentAcceptances.forEach(response => {
+      assert.equal(response.status, 200, `cross-process rematch acceptance should stay recoverable: ${JSON.stringify(response.payload)}`);
+      assert.equal(response.payload.status, 'matched', 'both processes should converge on the durable matched rematch');
     });
-    assert.equal(acceptedAfterRestart.status, 200, 'restarted pending rematch should let the opponent accept');
-    assert.equal(acceptedAfterRestart.payload.status, 'matched', 'restarted pending rematch should create the friendly match instead of waiting again');
+    assert.equal(concurrentAcceptances[0].payload.matchId, concurrentAcceptances[1].payload.matchId, 'cross-process rematch accepts must converge on one match id');
+    acceptedAfterRestart = concurrentAcceptances[0];
     assert.equal(acceptedAfterRestart.payload.stateView.mode, 'friendly', 'restarted pending rematch should create friendly mode match');
     assert.equal(acceptedAfterRestart.payload.stateView.friendlySeries?.seriesId, rematchSeriesId, 'restarted pending rematch should keep original series id');
     assert.deepEqual(acceptedAfterRestart.payload.stateView.friendlySeries?.scoreBySourceSeat, { A: 1, B: 0 }, 'restarted pending rematch should preserve ranked source score');
 
-    const currentA = await request('/api/pvp/live/matches/current', {
+    const currentA = await requestAt(rematchBaseB, '/api/pvp/live/matches/current', {
       token: rematchUserA.token,
     });
     assert.equal(currentA.status, 200, 'restarted pending rematch requester should recover accepted friendly match through current');
     assert.equal(currentA.payload.matchId, acceptedAfterRestart.payload.matchId, 'restarted pending rematch requester current match should point to accepted friendly match');
-  });
+  } finally {
+    await Promise.all([stopServer(rematchServerA), stopServer(rematchServerB)]);
+  }
 
-  const clearedPendingRematchRow = await dbGet(
-    'SELECT source_match_id FROM pvp_live_rematch_requests WHERE source_match_id = ?',
+  const completedPendingRematchRow = await dbGet(
+    'SELECT source_match_id, status, matched_match_id FROM pvp_live_rematch_requests WHERE source_match_id = ?',
     [rematchSourceMatchId],
   );
-  assert.equal(clearedPendingRematchRow, null, 'accepted pending rematch should be cleared after friendly match creation');
+  assert.equal(completedPendingRematchRow?.status, 'matched', 'accepted pending rematch should retain a durable matched fact');
+  assert.equal(completedPendingRematchRow?.matched_match_id, acceptedAfterRestart.payload.matchId, 'durable rematch fact should point every process at the same match');
+  await dbRun(
+    `UPDATE pvp_live_rematch_requests
+     SET status = 'matching', claim_id = 'crashed-rematch-claim', claimed_at = ?, matched_match_id = ''
+     WHERE source_match_id = ?`,
+    [Date.now() - 31000, rematchSourceMatchId],
+  );
+  const crashRecoveryClaimed = await makeLivePvpPersistenceForTest().claimRematchRequest(rematchSourceMatchId, 'replacement-rematch-claim', Date.now());
+  assert.equal(crashRecoveryClaimed, false, 'stale rematch claim should recover the already persisted source match instead of claiming again');
+  const recoveredCrashRematch = await dbGet('SELECT status, matched_match_id FROM pvp_live_rematch_requests WHERE source_match_id = ?', [rematchSourceMatchId]);
+  assert.equal(recoveredCrashRematch?.status, 'matched', 'stale rematch crash window should be reconciled to matched');
+  assert.equal(recoveredCrashRematch?.matched_match_id, acceptedAfterRestart.payload.matchId, 'stale rematch crash recovery should preserve the one authoritative match id');
+  await dbRun('DELETE FROM pvp_live_rematch_requests WHERE source_match_id = ?', [rematchSourceMatchId]);
 
   await dbRun(
     `INSERT INTO pvp_live_rematch_requests
@@ -2547,6 +2583,13 @@ async function readyBoth({ matchId, tokenA, tokenB, stateVersionA, prefix }) {
   await withServer(async () => {
     inviteUserA = await registerUser('live_invite_restart_a');
     inviteUserB = await registerUser('live_invite_restart_b');
+    const [inviteUserLowId, inviteUserHighId] = [inviteUserA.userId, inviteUserB.userId].sort();
+    await dbRun(
+      `INSERT OR IGNORE INTO social_friendships
+        (friendship_id, user_low_id, user_high_id, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?)`,
+      [`friend-${Date.now().toString(36)}`, inviteUserLowId, inviteUserHighId, Date.now(), Date.now()],
+    );
     const inviteLoadoutA = makeLoadout('invite-sword', ['pvp_burst', 'pvp_strike', 'pvp_guard', 'pvp_strike']);
 
     const createdInvite = await request('/api/pvp/live/invites', {
@@ -2573,15 +2616,50 @@ async function readyBoth({ matchId, tokenA, tokenB, stateVersionA, prefix }) {
   assert.equal(pendingInviteRow.target_user_id, inviteUserB.userId, 'persisted targeted private invite should keep target user id');
   assert.equal(pendingInviteRow.target_user_name, inviteUserB.username.slice(0, 40), 'persisted targeted private invite should keep target username');
   assert.ok(pendingInviteRow.host_loadout_snapshot_json.includes(inviteLoadoutHash), 'persisted private invite should keep locked host loadout snapshot');
+  await dbRun(
+    `UPDATE pvp_live_invites
+     SET claimed_by_user_id = ?, claim_id = 'crashed-invite-claim', claimed_at = ?
+     WHERE invite_code = ?`,
+    [inviteUserB.userId, Date.now() - 31000, inviteCode],
+  );
 
   await withServer(async () => {
     const inviteInbox = await request('/api/pvp/live/invites/inbox', {
       token: inviteUserB.token,
     });
     assert.equal(inviteInbox.status, 200, 'restarted targeted private invite recipient should read inbox');
-    assert.equal(inviteInbox.payload.invites.length, 1, 'restarted targeted private invite should appear in recipient inbox');
-    assert.equal(inviteInbox.payload.invites[0].inviteCode, inviteCode, 'restarted targeted private invite inbox should keep invite code');
-    assert.equal(inviteInbox.payload.invites[0].inviteReport?.target?.displayName, inviteUserB.username.slice(0, 40), 'restarted targeted private invite inbox should keep target display name');
+    assert.equal(inviteInbox.payload.invites.length, 0, 'an in-flight durable claim should stay hidden until crash recovery runs');
+
+    const invalidJoin = await request(`/api/pvp/live/invites/${encodeURIComponent(inviteCode)}/join`, {
+      method: 'POST',
+      token: inviteUserB.token,
+      body: { displayName: '邀乙', loadout: { identitySlot: 'invalid', deck: [{ id: 'pvp_guard' }] } },
+    });
+    assert.equal(invalidJoin.status, 400, 'stale pre-match invite claim should recover before illegal guest loadout validation');
+    const inviteAfterInvalidLoadout = await dbGet('SELECT claimed_at FROM pvp_live_invites WHERE invite_code = ?', [inviteCode]);
+    assert.equal(Number(inviteAfterInvalidLoadout?.claimed_at), 0, 'illegal guest loadout must leave the durable invite unclaimed');
+    const recoveredInviteInbox = await request('/api/pvp/live/invites/inbox', { token: inviteUserB.token });
+    assert.equal(recoveredInviteInbox.payload.invites.length, 1, 'released stale invite claim should return to the recipient inbox');
+    assert.equal(recoveredInviteInbox.payload.invites[0].inviteCode, inviteCode, 'recovered targeted invite inbox should keep invite code');
+    assert.equal(recoveredInviteInbox.payload.invites[0].inviteReport?.target?.displayName, inviteUserB.username.slice(0, 40), 'recovered targeted invite inbox should keep target display name');
+
+    await dbRun(
+      `INSERT INTO social_relationship_controls
+        (owner_user_id, target_user_id, is_blocked, is_muted, created_at, updated_at)
+       VALUES (?, ?, 1, 0, ?, ?)
+       ON CONFLICT(owner_user_id, target_user_id) DO UPDATE SET is_blocked = 1, updated_at = excluded.updated_at`,
+      [inviteUserB.userId, inviteUserA.userId, Date.now(), Date.now()],
+    );
+    const blockedJoin = await request(`/api/pvp/live/invites/${encodeURIComponent(inviteCode)}/join`, {
+      method: 'POST',
+      token: inviteUserB.token,
+      body: { displayName: '邀乙', loadout: makeLoadout('invite-shield-blocked', ['pvp_guard', 'pvp_strike', 'pvp_burst', 'pvp_guard']) },
+    });
+    assert.equal(blockedJoin.status, 409, 'invite join should recheck a block created after invite issuance');
+    assert.equal(blockedJoin.payload.reason, 'target_unavailable');
+    const inviteAfterBlock = await dbGet('SELECT claimed_at FROM pvp_live_invites WHERE invite_code = ?', [inviteCode]);
+    assert.equal(Number(inviteAfterBlock?.claimed_at), 0, 'blocked join must leave the durable invite unclaimed');
+    await dbRun('DELETE FROM social_relationship_controls WHERE owner_user_id = ? AND target_user_id = ?', [inviteUserB.userId, inviteUserA.userId]);
 
     const joinedInvite = await request(`/api/pvp/live/invites/${encodeURIComponent(inviteCode)}/join`, {
       method: 'POST',

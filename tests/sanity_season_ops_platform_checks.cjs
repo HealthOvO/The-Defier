@@ -104,8 +104,8 @@ async function runConcurrentStartupCheck() {
   const second = startServer(PORT + 1);
   try {
     const [firstHealth, secondHealth] = await Promise.all([waitForHealth(first), waitForHealth(second)]);
-    assert.strictEqual(firstHealth.payload?.schema?.currentMigrationId, '0008_authoritative_world_rift');
-    assert.strictEqual(secondHealth.payload?.schema?.currentMigrationId, '0008_authoritative_world_rift');
+    assert.strictEqual(firstHealth.payload?.schema?.currentMigrationId, '0009_account_social_coop');
+    assert.strictEqual(secondHealth.payload?.schema?.currentMigrationId, '0009_account_social_coop');
   } finally {
     await Promise.all([stopServer(first), stopServer(second)]);
   }
@@ -143,7 +143,8 @@ async function signedRequest(pathname, token, data) {
 }
 
 async function registerAndLogin(username) {
-  const password = 'pwd123';
+  username = `${String(username || 'season').slice(0, 8)}-${Date.now().toString(36)}`;
+  const password = 'pwd123456';
   const registered = await request('/api/auth/register', {
     method: 'POST',
     body: { username, password },
@@ -204,8 +205,8 @@ async function seedWallet(userId, balance) {
 
 async function runApiChecks(server) {
   const health = await waitForHealth(server);
-  assert.strictEqual(health.payload?.schema?.version, 8, 'season ops should coexist with world rift schema v8');
-  assert.strictEqual(health.payload?.schema?.currentMigrationId, '0008_authoritative_world_rift');
+  assert.strictEqual(health.payload?.schema?.version, 9, 'season ops should coexist with account social schema v9');
+  assert.strictEqual(health.payload?.schema?.currentMigrationId, '0009_account_social_coop');
 
   const unauthenticated = await request('/api/season-ops/current');
   assert.strictEqual(unauthenticated.status, 401, 'season dashboard should require JWT');

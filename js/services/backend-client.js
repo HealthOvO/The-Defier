@@ -1,5 +1,9 @@
 export const SESSION_STORAGE_KEY = 'theDefierServerSession';
 export const CLOUD_STATE_PROTOCOL_VERSION = 'cloud-state-v2';
+export const ACCOUNT_SECURITY_PROTOCOL_VERSION = 'account-security-v1';
+export const SOCIAL_GRAPH_PROTOCOL_VERSION = 'social-graph-v1';
+export const WORLD_RIFT_SQUAD_PROTOCOL_VERSION = 'world-rift-squad-v1';
+const DEVICE_STORAGE_KEY = 'theDefierDeviceIdV1';
 const AUTHORITATIVE_RUN_SAFE_ID = /^[A-Za-z0-9._:-]{8,128}$/;
 const AUTHORITATIVE_RUN_ENTITY_ID = /^[A-Za-z0-9._:-]{1,128}$/;
 const AUTHORITATIVE_RUN_MODES = new Set(['pve', 'challenge', 'expedition', 'challenge_ladder', 'world_rift']);
@@ -59,7 +63,8 @@ export const BackendClient = {
       progressionPathPrefix: typeof config.progressionPathPrefix === 'string' ? config.progressionPathPrefix.trim() : '/api/progression',
       seasonOpsPathPrefix: typeof config.seasonOpsPathPrefix === 'string' ? config.seasonOpsPathPrefix.trim() : '/api/season-ops',
       challengeLadderPathPrefix: typeof config.challengeLadderPathPrefix === 'string' ? config.challengeLadderPathPrefix.trim() : '/api/challenge-ladder',
-      worldRiftPathPrefix: typeof config.worldRiftPathPrefix === 'string' ? config.worldRiftPathPrefix.trim() : '/api/world-rift'
+      worldRiftPathPrefix: typeof config.worldRiftPathPrefix === 'string' ? config.worldRiftPathPrefix.trim() : '/api/world-rift',
+      socialPathPrefix: typeof config.socialPathPrefix === 'string' ? config.socialPathPrefix.trim() : '/api/social'
     };
   },
   cloneData(data) {
@@ -97,6 +102,26 @@ export const BackendClient = {
     cryptoObj.getRandomValues(bytes);
     const random = Array.from(bytes).map(value => value.toString(16).padStart(2, '0')).join('');
     return `mutation-${Date.now().toString(36)}-${random}`;
+  },
+  getDeviceContext() {
+    let deviceId = '';
+    if (typeof localStorage !== 'undefined') {
+      deviceId = String(localStorage.getItem(DEVICE_STORAGE_KEY) || '').trim();
+      if (!/^[A-Za-z0-9._:-]{16,128}$/.test(deviceId)) {
+        const cryptoObj = this.getRuntimeCrypto();
+        deviceId = cryptoObj && typeof cryptoObj.randomUUID === 'function'
+          ? `web-${cryptoObj.randomUUID()}`
+          : `web-${this.createMutationId().replace(/^mutation-/, '')}`;
+        localStorage.setItem(DEVICE_STORAGE_KEY, deviceId);
+      }
+    }
+    const platform = typeof navigator !== 'undefined' && navigator.platform
+      ? String(navigator.platform).trim().slice(0, 32)
+      : 'Web';
+    return {
+      deviceId: deviceId || `web-${this.createMutationId().replace(/^mutation-/, '')}`,
+      deviceName: `${platform} 浏览器`.slice(0, 48)
+    };
   },
   normalizeAuthoritativeRunSafeId(value) {
     const text = String(value || '').trim();
@@ -148,7 +173,7 @@ export const BackendClient = {
   bytesToHex(bytes) {
     return Array.from(bytes || []).map(value => value.toString(16).padStart(2, '0')).join('');
   },
-  async signSessionPayload(dataStr, salt, token) {
+  async signSessionPayload(dataStr, salt, token, route = '') {
     const cryptoObj = this.getRuntimeCrypto();
     const Encoder = typeof TextEncoder !== 'undefined' ? TextEncoder : null;
     if (!cryptoObj || !cryptoObj.subtle || !Encoder || !token) return '';
@@ -160,7 +185,10 @@ export const BackendClient = {
       false,
       ['sign']
     );
-    const message = `session-v1\n${salt}\n${String(dataStr)}`;
+    const signedRoute = String(route || '').trim().replace(/\s+/g, ' ');
+    const message = signedRoute
+      ? `session-v2\n${signedRoute}\n${salt}\n${String(dataStr)}`
+      : `session-v1\n${salt}\n${String(dataStr)}`;
     const signature = await cryptoObj.subtle.sign('HMAC', key, encoder.encode(message));
     return this.bytesToHex(new Uint8Array(signature));
   },
@@ -172,12 +200,13 @@ export const BackendClient = {
     if (!sessionToken) return {};
     const dataStr = typeof data === 'string' ? data : JSON.stringify(data);
     const salt = this.createIntegritySalt();
-    const signature = await this.signSessionPayload(dataStr, salt, sessionToken);
+    const route = String(options.route || '').trim().replace(/\s+/g, ' ');
+    const signature = await this.signSessionPayload(dataStr, salt, sessionToken, route);
     if (!signature) return {};
     return {
       salt,
       signature,
-      signatureMode: 'session'
+      signatureMode: route ? 'session-v2' : 'session'
     };
   },
   normalizeRevisionId(value) {
@@ -440,7 +469,8 @@ export const BackendClient = {
         auth: false,
         data: {
           username,
-          password
+          password,
+          ...this.getDeviceContext()
         }
       });
       const user = this.normalizeUser(result && result.user ? result.user : result);
@@ -479,7 +509,8 @@ export const BackendClient = {
         auth: false,
         data: {
           username,
-          password
+          password,
+          ...this.getDeviceContext()
         }
       });
       const user = this.normalizeUser(result && result.user ? result.user : result);
@@ -505,9 +536,17 @@ export const BackendClient = {
       };
     }
   },
-  async logout() {
+  logout() {
+    const session = this.loadServerSession();
+    const revokeRequest = session && session.token
+      ? this.requestServer(`${this.getServerConfig().authPathPrefix}/logout`, {
+        method: 'POST',
+        authToken: session.token
+      }).catch(() => null)
+      : Promise.resolve(null);
     this.clearServerSession();
     this.currentUser = null;
+    return revokeRequest;
   },
   async saveCloudData(gameData, slotIndex = 0, options = {}) {
     const slot = Number(slotIndex);
@@ -1170,6 +1209,74 @@ export const BackendClient = {
       ? config.worldRiftPathPrefix.trim().replace(/\/+$/, '')
       : '/api/world-rift';
   },
+  getSocialPathPrefix() {
+    const config = this.getServerConfig();
+    return config && typeof config.socialPathPrefix === 'string' && config.socialPathPrefix.trim()
+      ? config.socialPathPrefix.trim().replace(/\/+$/, '')
+      : '/api/social';
+  },
+  async requestAccountBound(path, {
+    method = 'GET',
+    data,
+    protocolVersion = '',
+    signed = method !== 'GET',
+    authPrefix = false,
+    expectedUserId = ''
+  } = {}) {
+    const boundUserId = String(expectedUserId || this.getCurrentUser()?.objectId || this.getCurrentUser()?.id || '').trim();
+    const session = this.captureSignedSessionSnapshot({ expectedUserId: boundUserId }, '登录账号已变化，请刷新道友录后重试');
+    if (!session || !session.success) return session;
+    const source = data && typeof data === 'object' && !Array.isArray(data) ? this.cloneData(data) || {} : {};
+    const mutationId = String(source.mutationId || this.createMutationId()).trim();
+    delete source.mutationId;
+    delete source.protocolVersion;
+    const payload = signed ? {
+      protocolVersion,
+      mutationId,
+      ...source
+    } : source;
+    const prefix = authPrefix ? this.getServerConfig().authPathPrefix : this.getSocialPathPrefix();
+    const requestPath = `${prefix}${path}`;
+    const signedRoute = `${String(method || 'GET').toUpperCase()} ${requestPath.split('?')[0]}`;
+    if (signed) {
+      const integrity = await this.createRequiredSessionIntegrityFields(
+        payload,
+        session.sessionToken,
+        '当前环境不支持账号与道友操作签名，请刷新后重试',
+        'account_social_signature_required',
+        signedRoute
+      );
+      if (!integrity || !integrity.success) return integrity;
+      Object.assign(payload, integrity.integrity);
+    }
+    try {
+      const result = await this.requestServer(requestPath, {
+        method,
+        authToken: session.sessionToken,
+        data: method === 'GET' ? undefined : payload
+      });
+      const currentUserId = String(this.getCurrentUser()?.objectId || this.getCurrentUser()?.id || '').trim();
+      if (!boundUserId || currentUserId !== boundUserId) {
+        return {
+          success: false,
+          reason: 'account_social_account_changed',
+          message: '登录账号已变化，旧请求回执未应用'
+        };
+      }
+      return result && typeof result === 'object' ? result : {
+        success: false,
+        reason: 'account_social_invalid_response',
+        message: '账号与道友服务返回异常'
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error,
+        reason: error && error.reason || undefined,
+        message: error.message || '账号与道友服务暂时不可用'
+      };
+    }
+  },
   cloneUnsignedRequestPayload(payload) {
     const cloned = payload && typeof payload === 'object' && !Array.isArray(payload)
       ? this.cloneData(payload) || {}
@@ -1227,11 +1334,12 @@ export const BackendClient = {
       sessionToken
     };
   },
-  async createRequiredSessionIntegrityFields(data, sessionToken, failureMessage = '当前环境不支持验证跑图签名，请刷新后重试', failureReason = 'verified_run_signature_required') {
+  async createRequiredSessionIntegrityFields(data, sessionToken, failureMessage = '当前环境不支持验证跑图签名，请刷新后重试', failureReason = 'verified_run_signature_required', route = '') {
     const integrity = await this.createSessionIntegrityFields(data, {
-      sessionToken
+      sessionToken,
+      route
     });
-    if (!integrity || integrity.signatureMode !== 'session' || !integrity.salt || !integrity.signature) {
+    if (!integrity || !['session', 'session-v2'].includes(integrity.signatureMode) || !integrity.salt || !integrity.signature) {
       return {
         success: false,
         reason: failureReason,
@@ -2104,9 +2212,11 @@ export const BackendClient = {
     try {
       const displayName = typeof options.displayName === 'string' ? options.displayName.trim().slice(0, 40) : '';
       const targetUsername = typeof options.targetUsername === 'string' ? options.targetUsername.trim() : '';
+      const targetProfileId = typeof options.targetProfileId === 'string' ? options.targetProfileId.trim() : '';
       const data = {};
       if (displayName) data.displayName = displayName;
       if (targetUsername) data.targetUsername = targetUsername;
+      if (targetProfileId) data.targetProfileId = targetProfileId;
       if (options.loadout && typeof options.loadout === 'object' && !Array.isArray(options.loadout)) {
         data.loadout = this.cloneData(options.loadout);
       }
@@ -3235,5 +3345,138 @@ export const BackendClient = {
         message: error.message || 'PVP 商店购买失败'
       };
     }
+  },
+  async getAuthSecurity(options = {}) {
+    return this.requestAccountBound('/security', {
+      method: 'GET',
+      authPrefix: true,
+      signed: false,
+      expectedUserId: options.expectedUserId
+    });
+  },
+  async changePassword(currentPassword, newPassword, options = {}) {
+    const result = await this.requestAccountBound('/password/change', {
+      method: 'POST',
+      authPrefix: true,
+      protocolVersion: ACCOUNT_SECURITY_PROTOCOL_VERSION,
+      expectedUserId: options.expectedUserId,
+      data: {
+        mutationId: options.mutationId,
+        currentPassword,
+        newPassword,
+        ...this.getDeviceContext()
+      }
+    });
+    const user = this.normalizeUser(result && result.user ? result.user : null);
+    const token = String(result && (result.sessionToken || result.token) || '').trim();
+    if (result && result.success !== false && user && token) {
+      this.currentUser = user;
+      this.persistServerSession({ token, user });
+    }
+    return result;
+  },
+  async revokeAuthSession(sessionId, options = {}) {
+    return this.requestAccountBound(`/sessions/${encodeURIComponent(String(sessionId || '').trim())}/revoke`, {
+      method: 'POST',
+      authPrefix: true,
+      protocolVersion: ACCOUNT_SECURITY_PROTOCOL_VERSION,
+      expectedUserId: options.expectedUserId,
+      data: {
+        mutationId: options.mutationId,
+        targetSessionId: String(sessionId || '').trim()
+      }
+    });
+  },
+  async logoutAll(options = {}) {
+    const result = await this.requestAccountBound('/logout-all', {
+      method: 'POST',
+      authPrefix: true,
+      protocolVersion: ACCOUNT_SECURITY_PROTOCOL_VERSION,
+      expectedUserId: options.expectedUserId,
+      data: { mutationId: options.mutationId }
+    });
+    if (result && result.success !== false) this.clearServerSession();
+    return result;
+  },
+  async getSocialDashboard(options = {}) {
+    return this.requestAccountBound('/dashboard', {
+      method: 'GET',
+      signed: false,
+      expectedUserId: options.expectedUserId
+    });
+  },
+  async searchSocialProfile(username, options = {}) {
+    const query = new URLSearchParams({ username: String(username || '').trim() });
+    return this.requestAccountBound(`/search?${query.toString()}`, {
+      method: 'GET',
+      signed: false,
+      expectedUserId: options.expectedUserId
+    });
+  },
+  async writeSocial(path, data = {}, options = {}) {
+    return this.requestAccountBound(path, {
+      method: 'POST',
+      protocolVersion: options.protocolVersion || SOCIAL_GRAPH_PROTOCOL_VERSION,
+      expectedUserId: options.expectedUserId,
+      data: {
+        mutationId: options.mutationId,
+        ...data
+      }
+    });
+  },
+  async sendFriendRequest(username, options = {}) {
+    return this.writeSocial('/requests', { targetUsername: username }, options);
+  },
+  async acceptFriendRequest(requestId, options = {}) {
+    return this.writeSocial(`/requests/${encodeURIComponent(String(requestId || '').trim())}/accept`, { requestId: String(requestId || '').trim() }, options);
+  },
+  async declineFriendRequest(requestId, options = {}) {
+    return this.writeSocial(`/requests/${encodeURIComponent(String(requestId || '').trim())}/decline`, { requestId: String(requestId || '').trim() }, options);
+  },
+  async cancelFriendRequest(requestId, options = {}) {
+    return this.writeSocial(`/requests/${encodeURIComponent(String(requestId || '').trim())}/cancel`, { requestId: String(requestId || '').trim() }, options);
+  },
+  async removeFriend(profileId, options = {}) {
+    return this.writeSocial(`/friends/${encodeURIComponent(String(profileId || '').trim())}/remove`, { profileId: String(profileId || '').trim() }, options);
+  },
+  async setSocialControl(profileId, action, options = {}) {
+    return this.writeSocial(`/controls/${encodeURIComponent(String(profileId || '').trim())}/${encodeURIComponent(String(action || '').trim())}`, {
+      profileId: String(profileId || '').trim(),
+      action: String(action || '').trim()
+    }, options);
+  },
+  async updateSocialPreferences(preferences = {}, options = {}) {
+    return this.writeSocial('/preferences', preferences, options);
+  },
+  async heartbeatSocialPresence(activity = 'menu', options = {}) {
+    return this.writeSocial('/presence/heartbeat', { activity }, options);
+  },
+  async createRiftSquad(options = {}) {
+    return this.writeSocial('/rift-squads', { rotationId: options.rotationId }, { ...options, protocolVersion: WORLD_RIFT_SQUAD_PROTOCOL_VERSION });
+  },
+  async inviteRiftSquadFriend(profileId, options = {}) {
+    return this.writeSocial('/rift-squads/invites', {
+      squadId: options.squadId,
+      rotationId: options.rotationId,
+      targetProfileId: profileId
+    }, { ...options, protocolVersion: WORLD_RIFT_SQUAD_PROTOCOL_VERSION });
+  },
+  async acceptRiftSquadInvite(inviteId, options = {}) {
+    return this.writeSocial(`/rift-squads/invites/${encodeURIComponent(String(inviteId || '').trim())}/accept`, { inviteId: String(inviteId || '').trim() }, { ...options, protocolVersion: WORLD_RIFT_SQUAD_PROTOCOL_VERSION });
+  },
+  async declineRiftSquadInvite(inviteId, options = {}) {
+    return this.writeSocial(`/rift-squads/invites/${encodeURIComponent(String(inviteId || '').trim())}/decline`, { inviteId: String(inviteId || '').trim() }, { ...options, protocolVersion: WORLD_RIFT_SQUAD_PROTOCOL_VERSION });
+  },
+  async leaveRiftSquad(options = {}) {
+    return this.writeSocial('/rift-squads/leave', {
+      squadId: options.squadId,
+      rotationId: options.rotationId
+    }, { ...options, protocolVersion: WORLD_RIFT_SQUAD_PROTOCOL_VERSION });
+  },
+  async claimRiftSquadReward(milestoneId, options = {}) {
+    return this.writeSocial(`/rift-squads/rewards/${encodeURIComponent(String(milestoneId || '').trim())}/claim`, {
+      squadId: options.squadId,
+      rotationId: options.rotationId
+    }, { ...options, protocolVersion: WORLD_RIFT_SQUAD_PROTOCOL_VERSION });
   }
 };

@@ -209,9 +209,16 @@ localStorage.setItem('theDefierServerConfig', JSON.stringify({
 - `progression_authoritative_run_receipts` 保存一次性完整重放结算回执。
 - `progression_authoritative_run_ops_events/counters` 保存脱敏恢复、拒绝、结算、过期与清理事实。
 
+### account-social / world_rift_squad_*
+
+- `users.username_normalized/auth_version/password_changed_at/disabled_at` 以增量列兼容旧账号；历史规范名碰撞使用稳定 legacy 键隔离，不静默合并账号。
+- `auth_sessions` 保存可撤销设备会话；`auth_login_limits` 保存跨进程登录失败桶；`auth_security_mutations/events/counters` 保存幂等安全操作和脱敏审计。
+- `social_profiles/friend_requests/friendships/relationship_controls/presence` 保存公开 profileId、双向道友关系、单向屏蔽/静音、隐私和 TTL 在线状态；不存在、隐私拒绝和屏蔽目标对外统一不可用。
+- `world_rift_squads/members/invites/contributions/entries/reward_claims/mutations` 保存按轮换冻结的小队、成员快照、贡献归属、每成员最佳一次聚合和仅外观荣誉回执；不会增加个人次数、全服伤害或战力。
+
 ## 当前迁移提示
 
-1. 当前 Schema 版本为 `8`；启动顺序为 `0001_startup_schema`、`0002_progression_platform`、`0003_verified_runs`、`0004_cloud_state_v2`、`0005_season_ops_economy`、`0006_authoritative_runs_v2`、`0007_authoritative_challenge_ladder`、`0008_authoritative_world_rift`。
+1. 当前 Schema 版本为 `9`；启动顺序为 `0001_startup_schema`、`0002_progression_platform`、`0003_verified_runs`、`0004_cloud_state_v2`、`0005_season_ops_economy`、`0006_authoritative_runs_v2`、`0007_authoritative_challenge_ladder`、`0008_authoritative_world_rift`、`0009_account_social_coop`。
 2. `0004_cloud_state_v2` 以事务方式幂等回填旧槽位和账号全局数据；旧数据不会因超过 V2 新写入上限而阻断启动。
 3. `0005_season_ops_economy` 优先按服务端战斗状态 `setup.battleStartedAt` 回填 `match_started_at` 并重放赛季有效时间窗内的 live PVP 正式结算；仅在旧状态缺失时回退到房间创建时间，不能把历史异步 PVP、练习局或赛季外对局写入新榜。
 4. 旧 `pvp_ranks` 保持累计段位兼容，正式赛季榜从 1000 独立起算；升级不会用旧累计分污染赛季榜，也不会在首场新结算时清零旧客户端段位。
@@ -219,5 +226,6 @@ localStorage.setItem('theDefierServerConfig', JSON.stringify({
 6. `0006_authoritative_runs_v2` 追加不可变内容目录、run、动作日志、快照、回执和运维表；启动时内容哈希漂移会 fail closed，不会改写已存在的版本。
 7. `0007_authoritative_challenge_ladder` 追加权威挑战轮转、尝试、结算结果、榜单、奖励领取、幂等 mutation 和运维表；它建立在前序迁移之上，但不会改写 `0006_authoritative_runs_v2` 已记录的版本语义。
 8. `0008_authoritative_world_rift` 追加裂隙轮换、全服共享状态、权威出征、不可变贡献、最佳三次榜单、奖励、幂等 mutation 和运维表；升级不会回填本地挑战或伪造全服贡献。
-9. 旧客户端继续使用时间戳兼容写入，新客户端必须使用完整业务体签名、revision/CAS 和 mutationId，失败时不得降级旧协议。
-10. 云状态只管理四个存档槽和账号全局数据；PVP、长期进度、可信运行、权威试炼、权威挑战榜、世界裂隙与赛季经济继续由各自服务端域负责。
+9. `0009_account_social_coop` 追加账号规范名、持久会话、登录限频、道友图、有限在线状态和裂隙协作小队；旧短密码可继续登录，改密后全部旧票据立即失效，协作奖励只进入外观荣誉账本。
+10. 旧客户端继续使用时间戳兼容写入，新客户端必须使用完整业务体签名、revision/CAS 和 mutationId，失败时不得降级旧协议。
+11. 云状态只管理四个存档槽和账号全局数据；PVP、长期进度、可信运行、权威试炼、权威挑战榜、世界裂隙、道友关系与赛季经济继续由各自服务端域负责。

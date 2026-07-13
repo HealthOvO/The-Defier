@@ -39,8 +39,8 @@ const JWT_SECRET = 'world-rift-platform-jwt-secret-32';
 const HMAC_SECRET = 'world-rift-platform-hmac-secret-32';
 const OPS_TOKEN = 'world-rift-platform-ops-token-32';
 const PROTOCOL_VERSION = 'authoritative-world-rift-v1';
-const EXPECTED_SCHEMA_VERSION = 8;
-const EXPECTED_MIGRATION_ID = '0008_authoritative_world_rift';
+const EXPECTED_SCHEMA_VERSION = 9;
+const EXPECTED_MIGRATION_ID = '0009_account_social_coop';
 const EXPECTED_TABLES = [
   'world_rift_rotations',
   'world_rift_states',
@@ -191,7 +191,7 @@ async function signedRequestAt(baseUrl, pathname, { token, data, method = 'POST'
 }
 
 async function registerAndLogin(tag) {
-  const username = `${tag || nextId('user')}-${Date.now()}`;
+  const username = `${String(tag || 'rift').slice(0, 8)}-${Date.now().toString(36)}`;
   const password = 'pwd123456';
   const registered = await request('/api/auth/register', {
     method: 'POST',

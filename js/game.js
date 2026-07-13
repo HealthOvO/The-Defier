@@ -43,6 +43,7 @@ import { SeasonBoardManager } from "./managers/SeasonBoardManager.js";
 import { SanctumAgendaManager } from "./managers/SanctumAgendaManager.js";
 import { CampfireView } from "./views/CampfireView.js";
 import { SeasonOpsView } from "./views/SeasonOpsView.js";
+import { SocialView } from "./views/SocialView.js";
 import { attachRegisteredHubControllers } from "./runtime/hub-registry.js";
 /**
  * The Defier 4.2 - 逆命者
@@ -3856,6 +3857,7 @@ export class Game {
     if (!this.guideState || this.guideState.mainMenuIntroSeen) return;
     this.markGuideSeen('mainMenuIntroSeen');
     setTimeout(() => {
+      if (this.currentScreen !== 'main-menu') return;
       Utils.showBattleLog('新手提示：先点“新的轮回”进入选角，游客模式也可直接开局。', {
         category: 'system',
         duration: 3400
@@ -5286,6 +5288,16 @@ export class Game {
     this.showScreen('season-ops-screen');
     if (!this.seasonOpsView) this.seasonOpsView = new SeasonOpsView(this);
     return this.seasonOpsView.show({ tab });
+  }
+
+  showSocialHub(tab = 'friends') {
+    if (!AuthService.isLoggedIn()) {
+      this.showLoginModal();
+      return;
+    }
+    this.showScreen('social-screen');
+    if (!this.socialView) this.socialView = new SocialView(this);
+    return this.socialView.show(tab);
   }
 
   // 更新角色信息界面
@@ -8596,7 +8608,7 @@ export class Game {
     if (!usernameInput || !passwordInput || !messageEl) return;
     if (this.isAuthBusy) return;
     const username = usernameInput.value.trim();
-    const password = passwordInput.value.trim();
+    const password = passwordInput.value;
     if (!username || !password) {
       messageEl.innerText = '请输入账号和密码';
       return;
@@ -8836,7 +8848,7 @@ export class Game {
     }
   }
   async handleRegister() {
-    const username = document.getElementById('auth-username').value;
+    const username = document.getElementById('auth-username').value.trim();
     const password = document.getElementById('auth-password').value;
     const msg = document.getElementById('auth-message');
     if (!msg) return;
@@ -8850,18 +8862,10 @@ export class Game {
     try {
       const result = await AuthService.register(username, password);
       if (result.success) {
-        // Auto login logic reuse
-        const loginRes = await AuthService.login(username, password);
-        if (loginRes.success) {
-          // 使用统一的成功处理逻辑，这会自动将本地旧存档上传到新注册的空账号中
-          await this.onLoginSuccess(msg, '注册成功！已绑定旧存档');
-        }
+        // 注册响应已经带有持久会话，避免重复登录制造第二个设备会话。
+        await this.onLoginSuccess(msg, '注册成功！已绑定旧存档');
       } else {
-        if (result.error && result.error.code === 202) {
-          msg.innerText = '该用户名已被使用，请换一个';
-        } else {
-          msg.innerText = result.message || '注册失败';
-        }
+        msg.innerText = result.message || '注册未完成，请检查道号和密语规则';
       }
     } finally {
       this.isAuthBusy = false;
@@ -8882,28 +8886,7 @@ export class Game {
                     <span class="btn-text" style="font-size:0.8rem">${username}</span>
                 </div>
             `;
-      btn.onclick = () => {
-        // Muted/Audio handling (delayed slightly for feel)
-        setTimeout(() => {
-          this.showConfirmModal('确定要退出登录吗？\n(退出前将自动上传当前进度)', async () => {
-            // 退出前强制尝试上传一次本地存档
-            const localSave = localStorage.getItem('theDefierSave');
-            // Fix: Check if we have a valid slot before syncing
-            if (localSave && this.currentSaveSlot !== null && this.currentSaveSlot !== undefined) {
-              try {
-                const data = JSON.parse(localSave);
-                await AuthService.saveCloudData(data, this.currentSaveSlot);
-                console.log('Logout sync complete');
-              } catch (e) {
-                console.error('Logout sync failed', e);
-              }
-            }
-            AuthService.logout();
-            this.checkLoginStatus();
-            location.reload();
-          });
-        }, 50);
-      };
+      btn.onclick = () => this.showSocialHub('friends');
     } else {
       btn.innerHTML = `
                     <div class="talisman-paper"></div>

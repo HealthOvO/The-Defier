@@ -31,7 +31,7 @@ function makeId(prefix) {
 }
 
 function makeInviteCode() {
-    return `TD${crypto.randomBytes(3).toString('hex').toUpperCase()}`;
+    return `TD${crypto.randomBytes(16).toString('hex').toUpperCase()}`;
 }
 
 function normalizeReplayShareRecord(share = {}) {
@@ -147,7 +147,7 @@ function normalizeInviteCode(inviteCode) {
         .trim()
         .toUpperCase()
         .replace(/[^A-Z0-9]/g, '')
-        .slice(0, 16);
+        .slice(0, 64);
 }
 
 function normalizePlayerIdentity(player) {
@@ -897,10 +897,33 @@ class LivePvpStore {
         this.friendlyRematchRequests = new Map();
         this.inviteRooms = new Map();
         this.inviteCodeByHostUserId = new Map();
+        this.inviteHostLocks = new Map();
+        this.inviteJoinLocks = new Map();
+        this.rematchLocks = new Map();
         this.recentOpponentPairs = new Map();
         this.avoidedOpponentPairs = new Map();
         this.matchmakingGuards = new Map();
         this.replayShares = new Map();
+    }
+
+    async withSerialLock(lockMap, key, callback) {
+        const safeKey = String(key || '').trim();
+        if (!safeKey) return callback();
+        const previous = lockMap.get(safeKey) || Promise.resolve();
+        let release = () => {};
+        const current = previous.catch(() => {}).then(() => new Promise(resolve => {
+            release = resolve;
+        }));
+        lockMap.set(safeKey, current);
+        await previous.catch(() => {});
+        try {
+            return await callback();
+        } finally {
+            release();
+            if (lockMap.get(safeKey) === current) {
+                lockMap.delete(safeKey);
+            }
+        }
     }
 
     setPersistence(persistence = null) {
@@ -1351,6 +1374,21 @@ class LivePvpStore {
         await this.persistence.saveRematchRequest(request);
     }
 
+    async claimFriendlyRematchRequest(sourceMatchId, claimId) {
+        if (!this.persistence || typeof this.persistence.claimRematchRequest !== 'function') return true;
+        return this.persistence.claimRematchRequest(sourceMatchId, claimId, this.now());
+    }
+
+    async completeFriendlyRematchRequest(sourceMatchId, claimId, matchedMatchId) {
+        if (!this.persistence || typeof this.persistence.completeRematchRequest !== 'function') return true;
+        return this.persistence.completeRematchRequest(sourceMatchId, claimId, matchedMatchId, this.now());
+    }
+
+    async releaseFriendlyRematchClaim(sourceMatchId, claimId) {
+        if (!this.persistence || typeof this.persistence.releaseRematchRequestClaim !== 'function') return false;
+        return this.persistence.releaseRematchRequestClaim(sourceMatchId, claimId, this.now());
+    }
+
     async deleteFriendlyRematchRequest(sourceMatchId) {
         if (!this.persistence || typeof this.persistence.deleteRematchRequest !== 'function') return;
         await this.persistence.deleteRematchRequest(sourceMatchId);
@@ -1374,6 +1412,10 @@ class LivePvpStore {
             seriesId: String(request.seriesId || ''),
             createdAt: Math.max(0, Math.floor(Number(request.createdAt) || this.now())),
             seriesCreatedAt: Math.max(0, Math.floor(Number(request.seriesCreatedAt) || 0)),
+            status: String(request.status || 'waiting'),
+            claimId: String(request.claimId || ''),
+            claimedAt: Math.max(0, Math.floor(Number(request.claimedAt) || 0)),
+            matchedMatchId: String(request.matchedMatchId || ''),
             playersByUserId
         };
         if (!hydrated.seriesId) return null;
@@ -1429,6 +1471,10 @@ class LivePvpStore {
             inviteCode,
             host: inviteRoom.host,
             target: normalizeInviteTarget(inviteRoom.target),
+            claimedByUserId: String(inviteRoom.claimedByUserId || ''),
+            claimId: String(inviteRoom.claimId || ''),
+            claimedAt: Math.max(0, Math.floor(Number(inviteRoom.claimedAt) || 0)),
+            matchedMatchId: String(inviteRoom.matchedMatchId || ''),
             createdAt: Math.max(0, Math.floor(Number(inviteRoom.createdAt) || this.now()))
         };
         this.inviteRooms.set(inviteCode, normalized);
@@ -1459,6 +1505,17 @@ class LivePvpStore {
         if (existing) return existing;
         if (!this.persistence || typeof this.persistence.loadInviteRoomByCode !== 'function') return null;
         return this.rememberInviteRoom(await this.persistence.loadInviteRoomByCode(code));
+    }
+
+    async hydrateInviteRoomForJoin(inviteCode) {
+        const code = normalizeInviteCode(inviteCode);
+        if (!code) return null;
+        const existing = this.inviteRooms.get(code);
+        if (existing) return existing;
+        if (!this.persistence || typeof this.persistence.loadInviteRoomForJoin !== 'function') {
+            return this.hydrateInviteRoomByCode(code);
+        }
+        return this.rememberInviteRoom(await this.persistence.loadInviteRoomForJoin(code));
     }
 
     async hydrateInviteRoomForHost(userId) {
@@ -1542,6 +1599,7 @@ class LivePvpStore {
 
     async createInvite(playerInput = {}) {
         const identity = normalizePlayerIdentity(playerInput);
+        return this.withSerialLock(this.inviteHostLocks, identity.userId, async () => {
         const target = normalizeInviteTarget(playerInput.target);
         if (target && target.userId === identity.userId) {
             return {
@@ -1583,6 +1641,7 @@ class LivePvpStore {
         });
         await this.saveInviteRoom(inviteRoom);
         return this.makeInviteResult(inviteRoom);
+        });
     }
 
     async getCurrentInvite(userId) {
@@ -1598,18 +1657,12 @@ class LivePvpStore {
         return this.makeInviteResult(inviteRoom);
     }
 
-    async joinInvite(userId, inviteCode, playerInput = {}) {
+    async joinInvite(userId, inviteCode, playerInput = {}, options = {}) {
         const code = normalizeInviteCode(inviteCode);
         if (!code) return null;
-        const inviteRoom = await this.hydrateInviteRoomByCode(code);
+        return this.withSerialLock(this.inviteJoinLocks, code, async () => {
+        const inviteRoom = await this.hydrateInviteRoomForJoin(code);
         if (!inviteRoom || !inviteRoom.host || !inviteRoom.host.userId) return null;
-        if (await this.deleteIfInviteExpired(inviteRoom)) {
-            return {
-                status: 'expired',
-                reason: 'invite_expired',
-                message: '好友约战邀请码已过期'
-            };
-        }
         if (inviteRoom.host.userId === userId) {
             return {
                 status: 'blocked',
@@ -1623,6 +1676,54 @@ class LivePvpStore {
                 reason: 'invite_target_mismatch',
                 message: '该好友约战只邀请了指定道友'
             };
+        }
+        if (inviteRoom.claimedAt > 0) {
+            if (!this.persistence || typeof this.persistence.recoverInviteRoomClaim !== 'function') return null;
+            const recovery = await this.persistence.recoverInviteRoomClaim(code, userId, this.now());
+            if (recovery && recovery.matchedMatchId) {
+                const access = await this.getMatchForUser(userId, recovery.matchedMatchId);
+                if (!access || !access.match) return null;
+                await this.deleteInviteRoom(code);
+                return {
+                    ...this.makeMatchedQueueResult(access.match, userId),
+                    inviteCode: code,
+                    inviteReport: makeInviteReport({
+                        inviteCode: code,
+                        status: 'matched',
+                        host: inviteRoom.host,
+                        target: inviteRoom.target,
+                        createdAt: inviteRoom.createdAt,
+                        inviteTtlMs: this.inviteTtlMs
+                    })
+                };
+            }
+            if (!recovery || !recovery.released) return null;
+            inviteRoom.claimedByUserId = '';
+            inviteRoom.claimId = '';
+            inviteRoom.claimedAt = 0;
+            inviteRoom.matchedMatchId = '';
+        }
+        if (await this.deleteIfInviteExpired(inviteRoom)) {
+            return {
+                status: 'expired',
+                reason: 'invite_expired',
+                message: '好友约战邀请码已过期'
+            };
+        }
+        if (typeof options.validateJoin === 'function') {
+            const allowed = await options.validateJoin({
+                hostUserId: String(inviteRoom.host.userId || ''),
+                guestUserId: String(userId || ''),
+                targetUserId: String(inviteRoom.target && inviteRoom.target.userId || ''),
+                targeted: !!(inviteRoom.target && inviteRoom.target.userId)
+            });
+            if (!allowed) {
+                return {
+                    status: 'blocked',
+                    reason: 'target_unavailable',
+                    message: '目标当前不可用'
+                };
+            }
         }
 
         const hostActive = await this.getActiveMatchForUser(inviteRoom.host.userId);
@@ -1653,20 +1754,50 @@ class LivePvpStore {
             ...playerInput,
             userId
         }, this.now);
+
+        const inviteClaimId = makeId('pvplic');
+        if (this.persistence && typeof this.persistence.claimInviteRoom === 'function') {
+            const claimed = await this.persistence.claimInviteRoom(code, userId, inviteClaimId, this.now());
+            if (!claimed) {
+                this.inviteRooms.delete(code);
+                if (inviteRoom.host && inviteRoom.host.userId) {
+                    this.inviteCodeByHostUserId.delete(inviteRoom.host.userId);
+                }
+                return null;
+            }
+        }
+
         const matchedAt = this.now();
-        const match = await this.createMatch(inviteRoom.host, guest, {
-            matchedAt,
-            candidatePoolSize: 2,
-            expansionStage: 'friend_invite',
-            ratingDeltaBucket: 'friend_invite',
-            waitMs: {
-                A: Math.max(0, matchedAt - Math.floor(Number(inviteRoom.createdAt) || matchedAt)),
-                B: 0
-            },
-            safeguards: ['server_authoritative', 'snapshot_locked', 'setup_ready_required', 'first_action_budget', 'invite_only_match', 'friendly_no_ranked_impact']
-        }, {
-            mode: 'friendly'
-        });
+        let match;
+        try {
+            match = await this.createMatch(inviteRoom.host, guest, {
+                matchedAt,
+                candidatePoolSize: 2,
+                expansionStage: 'friend_invite',
+                ratingDeltaBucket: 'friend_invite',
+                waitMs: {
+                    A: Math.max(0, matchedAt - Math.floor(Number(inviteRoom.createdAt) || matchedAt)),
+                    B: 0
+                },
+                safeguards: ['server_authoritative', 'snapshot_locked', 'setup_ready_required', 'first_action_budget', 'invite_only_match', 'friendly_no_ranked_impact']
+            }, {
+                mode: 'friendly',
+                sourceInviteCode: code
+            });
+            if (this.persistence && typeof this.persistence.completeInviteRoomClaim === 'function') {
+                const completed = await this.persistence.completeInviteRoomClaim(code, inviteClaimId, match.matchId);
+                if (!completed) throw new Error('durable invite completion lost its claim');
+            }
+        } catch (error) {
+            if (!match && this.persistence && typeof this.persistence.releaseInviteRoomClaim === 'function') {
+                try {
+                    await this.persistence.releaseInviteRoomClaim(code, inviteClaimId);
+                } catch (releaseError) {
+                    console.warn('[PVP Live] invite claim release failed:', releaseError);
+                }
+            }
+            throw error;
+        }
         await this.deleteQueueEntryForUser(inviteRoom.host.userId);
         await this.deleteQueueEntryForUser(guest.userId);
         await this.deleteInviteRoom(code);
@@ -1682,6 +1813,7 @@ class LivePvpStore {
                 inviteTtlMs: this.inviteTtlMs
             })
         };
+        });
     }
 
     async cancelInvite(userId, inviteCode) {
@@ -3209,6 +3341,8 @@ class LivePvpStore {
         const match = {
             matchId,
             mode,
+            sourceInviteCode: String(options && options.sourceInviteCode || ''),
+            sourceRematchMatchId: String(options && options.sourceRematchMatchId || ''),
             ...(testMatchScope ? { testMatchScope } : {}),
             createdAt,
             updatedAt: createdAt,
@@ -3386,6 +3520,32 @@ class LivePvpStore {
         return active.match.matchId !== sourceMatchId && !this.isTerminalStatus(active.match.state && active.match.state.status);
     }
 
+    async makeCompletedFriendlyRematchResult(userId, request) {
+        const matchedMatchId = String(request && request.matchedMatchId || '').trim();
+        if (!matchedMatchId) return null;
+        const access = await this.getMatchForUser(userId, matchedMatchId);
+        if (!access || !access.match) return null;
+        return {
+            ...this.makeMatchedQueueResult(access.match, userId),
+            friendlySeries: access.match.state && access.match.state.friendlySeries || null
+        };
+    }
+
+    async waitForCompletedFriendlyRematch(userId, sourceMatchId, attempts = 20) {
+        if (!this.persistence || typeof this.persistence.loadRematchRequest !== 'function') return null;
+        for (let attempt = 0; attempt < attempts; attempt += 1) {
+            const request = await this.persistence.loadRematchRequest(sourceMatchId);
+            if (request && request.status === 'matched' && request.matchedMatchId) {
+                return this.makeCompletedFriendlyRematchResult(userId, request);
+            }
+            if (request && request.status === 'waiting') return null;
+            if (attempt + 1 < attempts) {
+                await new Promise(resolve => setTimeout(resolve, 25));
+            }
+        }
+        return null;
+    }
+
     isFriendlyRematchRequestExpired(request) {
         if (!request) return false;
         const createdAt = Math.max(0, Math.floor(Number(request.createdAt) || 0));
@@ -3398,8 +3558,8 @@ class LivePvpStore {
         const sourceMatch = matchAccess.match;
         const participantIds = Object.keys(sourceMatch.seatsByUserId || {});
         if (participantIds.length !== 2 || !participantIds.includes(userId)) return null;
-        const request = this.friendlyRematchRequests.get(sourceMatch.matchId)
-            || await this.hydrateFriendlyRematchRequest(sourceMatch.matchId, participantIds);
+        const persistedRequest = await this.hydrateFriendlyRematchRequest(sourceMatch.matchId, participantIds);
+        const request = persistedRequest || this.friendlyRematchRequests.get(sourceMatch.matchId);
         return {
             sourceMatch,
             participantIds,
@@ -3410,6 +3570,9 @@ class LivePvpStore {
     async getFriendlyRematchStatus(userId, sourceMatchId) {
         const access = await this.getFriendlyRematchAccess(userId, sourceMatchId);
         if (!access || !access.request) return null;
+        if (access.request.status === 'matched') {
+            return this.makeCompletedFriendlyRematchResult(userId, access.request);
+        }
         if (this.isFriendlyRematchRequestExpired(access.request)) {
             this.friendlyRematchRequests.delete(access.sourceMatch.matchId);
             await this.deleteFriendlyRematchRequest(access.sourceMatch.matchId);
@@ -3479,6 +3642,8 @@ class LivePvpStore {
     }
 
     async requestFriendlyRematch(userId, sourceMatchId, playerInput = {}) {
+        const rematchLockKey = String(sourceMatchId || '').trim();
+        return this.withSerialLock(this.rematchLocks, rematchLockKey, async () => {
         const matchAccess = await this.getMatchForUser(userId, sourceMatchId);
         if (!matchAccess || !matchAccess.match || !matchAccess.match.state) return null;
         const sourceMatch = matchAccess.match;
@@ -3496,7 +3661,19 @@ class LivePvpStore {
         }
         const participantIds = Object.keys(sourceMatch.seatsByUserId || {});
         if (participantIds.length !== 2 || !participantIds.includes(userId)) return null;
-        if (await this.hasBlockingActiveMatch(userId, sourceMatch.matchId)) {
+        const existingActive = await this.getActiveMatchForUser(userId);
+        if (existingActive && existingActive.match
+            && existingActive.match.matchId !== sourceMatch.matchId
+            && !this.isTerminalStatus(existingActive.match.state && existingActive.match.state.status)) {
+            const activeSeries = existingActive.match.state && existingActive.match.state.friendlySeries;
+            if (existingActive.match.state.mode === 'friendly'
+                && activeSeries
+                && String(activeSeries.sourceMatchId || '') === sourceMatch.matchId) {
+                return {
+                    ...this.makeMatchedQueueResult(existingActive.match, userId),
+                    friendlySeries: activeSeries
+                };
+            }
             return {
                 status: 'blocked',
                 reason: 'active_match_exists',
@@ -3510,6 +3687,26 @@ class LivePvpStore {
         }, this.now);
         let request = this.friendlyRematchRequests.get(sourceMatch.matchId)
             || await this.hydrateFriendlyRematchRequest(sourceMatch.matchId, participantIds);
+        if (request && request.status === 'matched') {
+            return this.makeCompletedFriendlyRematchResult(userId, request);
+        }
+        if (request && request.status === 'matching'
+            && Math.max(0, Math.floor(Number(request.claimedAt) || 0)) + 30000 > this.now()) {
+            const completed = await this.waitForCompletedFriendlyRematch(userId, sourceMatch.matchId);
+            if (completed) return completed;
+            return {
+                status: 'waiting_rematch',
+                matchId: sourceMatch.matchId,
+                sourceMatchId: sourceMatch.matchId,
+                reason: 'rematch_matching',
+                friendlySeries: this.makeFriendlySeriesForSource(
+                    sourceMatch,
+                    request,
+                    'waiting_rematch',
+                    request.playersByUserId.size
+                )
+            };
+        }
         if (this.isFriendlyRematchRequestExpired(request)) {
             this.friendlyRematchRequests.delete(sourceMatch.matchId);
             await this.deleteFriendlyRematchRequest(sourceMatch.matchId);
@@ -3569,22 +3766,53 @@ class LivePvpStore {
         const playerB = request.playersByUserId.get(sourceSeatAUserId);
         if (!playerA || !playerB) return null;
 
+        await this.saveFriendlyRematchRequest(request);
+        const durableClaim = !!(this.persistence && typeof this.persistence.claimRematchRequest === 'function');
+        const claimId = durableClaim ? makeId('pvplrc') : '';
+        if (durableClaim && !await this.claimFriendlyRematchRequest(sourceMatch.matchId, claimId)) {
+            this.friendlyRematchRequests.delete(sourceMatch.matchId);
+            const completed = await this.waitForCompletedFriendlyRematch(userId, sourceMatch.matchId);
+            if (completed) return completed;
+            return {
+                status: 'waiting_rematch',
+                matchId: sourceMatch.matchId,
+                sourceMatchId: sourceMatch.matchId,
+                reason: 'rematch_matching',
+                friendlySeries
+            };
+        }
+
+        let rematch = null;
+        try {
+            rematch = await this.createMatch(playerA, playerB, {
+                matchedAt: this.now(),
+                candidatePoolSize: 2,
+                waitMs: { A: 0, B: 0 },
+                safeguards: ['server_authoritative', 'snapshot_locked', 'setup_ready_required', 'first_action_budget', 'friendly_no_ranked_impact']
+            }, {
+                mode: 'friendly',
+                friendlySeries,
+                sourceRematchMatchId: sourceMatch.matchId
+            });
+            if (durableClaim) {
+                const completed = await this.completeFriendlyRematchRequest(sourceMatch.matchId, claimId, rematch.matchId);
+                if (!completed) throw new Error('durable rematch completion lost its claim');
+            } else {
+                await this.deleteFriendlyRematchRequest(sourceMatch.matchId);
+            }
+        } catch (error) {
+            if (durableClaim && !rematch) {
+                await this.releaseFriendlyRematchClaim(sourceMatch.matchId, claimId);
+            }
+            throw error;
+        }
         this.friendlyRematchRequests.delete(sourceMatch.matchId);
-        await this.deleteFriendlyRematchRequest(sourceMatch.matchId);
-        const rematch = await this.createMatch(playerA, playerB, {
-            matchedAt: this.now(),
-            candidatePoolSize: 2,
-            waitMs: { A: 0, B: 0 },
-            safeguards: ['server_authoritative', 'snapshot_locked', 'setup_ready_required', 'first_action_budget', 'friendly_no_ranked_impact']
-        }, {
-            mode: 'friendly',
-            friendlySeries
-        });
         const result = this.makeMatchedQueueResult(rematch, userId);
         return {
             ...result,
             friendlySeries
         };
+        });
     }
 
     makeStoreEvent(match, eventType, actingSeat, payload = {}) {

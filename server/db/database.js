@@ -11,6 +11,7 @@ const { bootstrapSeasonOpsSchema } = require('../season-ops/bootstrap');
 const { bootstrapAuthoritativeRunsSchema } = require('../progression/authoritative-runs/bootstrap');
 const { bootstrapChallengeLadderSchema } = require('../challenge-ladder/bootstrap');
 const { bootstrapWorldRiftSchema } = require('../world-rift/bootstrap');
+const { bootstrapAccountSocialSchema } = require('../account-social/bootstrap');
 
 const dbPath = process.env.DEFIER_DB_PATH
     ? path.resolve(process.env.DEFIER_DB_PATH)
@@ -280,6 +281,8 @@ const initDb = () => {
                 state_version INTEGER NOT NULL DEFAULT 0,
                 state_json TEXT NOT NULL,
                 connection_json TEXT NOT NULL DEFAULT '{}',
+                source_invite_code TEXT NOT NULL DEFAULT '',
+                source_rematch_match_id TEXT NOT NULL DEFAULT '',
                 created_at INTEGER NOT NULL,
                 updated_at INTEGER NOT NULL,
                 finished_at INTEGER NOT NULL DEFAULT 0
@@ -295,6 +298,22 @@ const initDb = () => {
                 if (err && !/duplicate column/i.test(String(err.message || ''))) {
                     fail(err);
                 }
+            });
+            db.run(`ALTER TABLE pvp_live_matches ADD COLUMN source_invite_code TEXT NOT NULL DEFAULT ''`, (err) => {
+                if (err && !/duplicate column/i.test(String(err.message || ''))) fail(err);
+            });
+            db.run(`ALTER TABLE pvp_live_matches ADD COLUMN source_rematch_match_id TEXT NOT NULL DEFAULT ''`, (err) => {
+                if (err && !/duplicate column/i.test(String(err.message || ''))) fail(err);
+            });
+            db.run(`CREATE UNIQUE INDEX IF NOT EXISTS idx_pvp_live_matches_source_invite_unique
+                ON pvp_live_matches(source_invite_code)
+                WHERE source_invite_code != ''`, (err) => {
+                if (err) fail(err);
+            });
+            db.run(`CREATE UNIQUE INDEX IF NOT EXISTS idx_pvp_live_matches_source_rematch_unique
+                ON pvp_live_matches(source_rematch_match_id)
+                WHERE source_rematch_match_id != ''`, (err) => {
+                if (err) fail(err);
             });
             db.run(`CREATE INDEX IF NOT EXISTS idx_pvp_live_matches_seat_a_status ON pvp_live_matches(seat_a_user_id, status, updated_at)`, (err) => {
                 if (err) fail(err);
@@ -344,6 +363,10 @@ const initDb = () => {
                 source_match_id TEXT PRIMARY KEY,
                 series_id TEXT NOT NULL,
                 players_json TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'waiting',
+                claim_id TEXT NOT NULL DEFAULT '',
+                claimed_at INTEGER NOT NULL DEFAULT 0,
+                matched_match_id TEXT NOT NULL DEFAULT '',
                 created_at INTEGER NOT NULL,
                 updated_at INTEGER NOT NULL,
                 FOREIGN KEY(source_match_id) REFERENCES pvp_live_matches(match_id)
@@ -353,6 +376,21 @@ const initDb = () => {
             db.run(`CREATE INDEX IF NOT EXISTS idx_pvp_live_rematch_updated ON pvp_live_rematch_requests(updated_at)`, (err) => {
                 if (err) fail(err);
             });
+            db.run(`ALTER TABLE pvp_live_rematch_requests ADD COLUMN status TEXT NOT NULL DEFAULT 'waiting'`, (err) => {
+                if (err && !/duplicate column/i.test(String(err.message || ''))) fail(err);
+            });
+            db.run(`ALTER TABLE pvp_live_rematch_requests ADD COLUMN claim_id TEXT NOT NULL DEFAULT ''`, (err) => {
+                if (err && !/duplicate column/i.test(String(err.message || ''))) fail(err);
+            });
+            db.run(`ALTER TABLE pvp_live_rematch_requests ADD COLUMN claimed_at INTEGER NOT NULL DEFAULT 0`, (err) => {
+                if (err && !/duplicate column/i.test(String(err.message || ''))) fail(err);
+            });
+            db.run(`ALTER TABLE pvp_live_rematch_requests ADD COLUMN matched_match_id TEXT NOT NULL DEFAULT ''`, (err) => {
+                if (err && !/duplicate column/i.test(String(err.message || ''))) fail(err);
+            });
+            db.run(`CREATE INDEX IF NOT EXISTS idx_pvp_live_rematch_status_updated ON pvp_live_rematch_requests(status, updated_at)`, (err) => {
+                if (err) fail(err);
+            });
             db.run(`CREATE TABLE IF NOT EXISTS pvp_live_invites (
                 invite_code TEXT PRIMARY KEY,
                 host_user_id TEXT NOT NULL UNIQUE,
@@ -360,6 +398,10 @@ const initDb = () => {
                 host_loadout_snapshot_json TEXT NOT NULL,
                 target_user_id TEXT NOT NULL DEFAULT '',
                 target_user_name TEXT NOT NULL DEFAULT '',
+                claimed_by_user_id TEXT NOT NULL DEFAULT '',
+                claim_id TEXT NOT NULL DEFAULT '',
+                claimed_at INTEGER NOT NULL DEFAULT 0,
+                matched_match_id TEXT NOT NULL DEFAULT '',
                 created_at INTEGER NOT NULL,
                 FOREIGN KEY(host_user_id) REFERENCES users(id)
             )`, (err) => {
@@ -374,6 +416,22 @@ const initDb = () => {
                 if (err && !/duplicate column/i.test(String(err.message || ''))) {
                     fail(err);
                 }
+            });
+            db.run(`ALTER TABLE pvp_live_invites ADD COLUMN claimed_by_user_id TEXT NOT NULL DEFAULT ''`, (err) => {
+                if (err && !/duplicate column/i.test(String(err.message || ''))) {
+                    fail(err);
+                }
+            });
+            db.run(`ALTER TABLE pvp_live_invites ADD COLUMN claimed_at INTEGER NOT NULL DEFAULT 0`, (err) => {
+                if (err && !/duplicate column/i.test(String(err.message || ''))) {
+                    fail(err);
+                }
+            });
+            db.run(`ALTER TABLE pvp_live_invites ADD COLUMN claim_id TEXT NOT NULL DEFAULT ''`, (err) => {
+                if (err && !/duplicate column/i.test(String(err.message || ''))) fail(err);
+            });
+            db.run(`ALTER TABLE pvp_live_invites ADD COLUMN matched_match_id TEXT NOT NULL DEFAULT ''`, (err) => {
+                if (err && !/duplicate column/i.test(String(err.message || ''))) fail(err);
             });
             db.run(`CREATE INDEX IF NOT EXISTS idx_pvp_live_invites_created ON pvp_live_invites(created_at)`, (err) => {
                 if (err) fail(err);
@@ -762,6 +820,7 @@ const initDb = () => {
                         await bootstrapAuthoritativeRunsSchema(db);
                         await bootstrapChallengeLadderSchema(db);
                         await bootstrapWorldRiftSchema(db);
+                        await bootstrapAccountSocialSchema(db);
                         recordCurrentSchemaMigration(db, (migrationErr) => {
                             if (migrationErr) fail(migrationErr);
                             else done();

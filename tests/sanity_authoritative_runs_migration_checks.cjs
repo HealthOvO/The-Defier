@@ -240,8 +240,8 @@ async function main() {
     await waitForHealth(server, 'fresh-start');
     const version = await request(PORT, '/api/version');
     assert.strictEqual(version.status, 200, JSON.stringify(version.payload));
-    assert.strictEqual(version.payload?.schema?.version, 8);
-    assert.strictEqual(version.payload?.schema?.currentMigrationId, '0008_authoritative_world_rift');
+    assert.strictEqual(version.payload?.schema?.version, 9);
+    assert.strictEqual(version.payload?.schema?.currentMigrationId, '0009_account_social_coop');
     assert.deepStrictEqual(
       version.payload?.schema?.appliedMigrations?.map(entry => entry.id),
       [
@@ -252,7 +252,8 @@ async function main() {
         '0005_season_ops_economy',
         '0006_authoritative_runs_v2',
         '0007_authoritative_challenge_ladder',
-        '0008_authoritative_world_rift'
+        '0008_authoritative_world_rift',
+        '0009_account_social_coop'
       ]
     );
 
@@ -408,7 +409,7 @@ async function main() {
     server = startServer({ port: PORT, dbPath: DB_PATH, gitSha: 'authoritative-runs-v7-to-v8' });
     await waitForHealth(server, 'v7-to-v8-restart');
     const v7ToV8Version = await request(PORT, '/api/version');
-    assert.strictEqual(v7ToV8Version.payload?.schema?.currentMigrationId, '0008_authoritative_world_rift');
+    assert.strictEqual(v7ToV8Version.payload?.schema?.currentMigrationId, '0009_account_social_coop');
     const preservedRuns = await dbGet(
       DB_PATH,
       `SELECT COUNT(*) AS count
@@ -468,7 +469,7 @@ async function main() {
     server = startServer({ port: PORT, dbPath: DB_PATH, gitSha: 'authoritative-runs-v2-reapply' });
     await waitForHealth(server, 'upgrade-reapply');
     const upgraded = await request(PORT, '/api/version');
-    assert.strictEqual(upgraded.payload?.schema?.currentMigrationId, '0008_authoritative_world_rift');
+    assert.strictEqual(upgraded.payload?.schema?.currentMigrationId, '0009_account_social_coop');
     assert.deepStrictEqual(
       upgraded.payload?.schema?.appliedMigrations?.map(entry => entry.id),
       [
@@ -479,7 +480,8 @@ async function main() {
         '0005_season_ops_economy',
         '0006_authoritative_runs_v2',
         '0007_authoritative_challenge_ladder',
-        '0008_authoritative_world_rift'
+        '0008_authoritative_world_rift',
+        '0009_account_social_coop'
       ],
       'reapplying authoritative runs should still converge on the full schema chain'
     );

@@ -116,7 +116,7 @@ async function waitForChallengeHubReady(page, expectedTab = 'daily') {
       /试炼压强|DRI/.test(challengeHubProbe.summary || '') &&
       /难度同轴|主轴/.test(challengeHubProbe.sideText || '') &&
       challengeHubProbe.rewardCount >= 1 &&
-      challengeHubProbe.tabCount === 3 &&
+      challengeHubProbe.tabCount === 4 &&
       challengeHubProbe.dangerChipCount === 4 &&
       challengeHubProbe.challenge?.hub?.activeTab === 'daily' &&
       (challengeHubProbe.challenge?.hub?.dangerProfile?.axes?.length || 0) === 4 &&

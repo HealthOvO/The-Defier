@@ -1,5 +1,21 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-07-13: V10-S105 账号安全与道友协作平台 V1
+  - 本轮完成
+    - SQLite 升级到 V9 `0009_account_social_coop`：旧账号增量回填规范道号和 auth version；新注册执行 3-24 字符道号及 8-72 字节密语策略，旧短密语仍可登录，历史规范名碰撞不会静默合并账号。
+    - 30 天 JWT 增加 `sid + av` 并绑定持久设备会话；每次认证校验账号版本、会话撤销和到期状态，支持改密换签、单设备撤销、当前退出和全端退出。登录失败使用持久 user+IP/IP 桶限频，未知账号执行 dummy bcrypt，登录和重复注册均不返回账号存在性 oracle。
+    - 新增“道友录”社交图：完整道号精确搜索、双向道友请求、互发自动接受、删除、屏蔽、静音、隐私、45 秒心跳和 120 秒 TTL；公开响应使用 profileId，屏蔽/隐私/未知目标统一不可用，不提供自由聊天、赠礼或资源交易。
+    - 好友一键约战复用现有 authoritative friendly PVP，正式积分和奖励保持 `none`；旧 `targetUsername` 兼容输入也必须通过好友门禁。邀请码升级为 128-bit，join 时实时复核好友/屏蔽/隐私，SQLite claim 使用 nonce、租约、来源唯一索引和崩溃恢复，跨进程及 kill -9 窗口都只会创建一场友谊赛。
+    - 新增每轮最多四人的天穹裂隙小队：好友邀请、接受/拒绝、离队和正贡献后归属锁定；权威 contribution 在原世界裂隙写事务内链接一次，小队只汇总每名成员最佳一次，2000/5000/8000 分奖励 30/60/100 外观荣誉，不增加全服伤害、正式次数或战力。0 贡献及历史 0 分脏行不会计参与、领奖或锁定成员。
+    - 客户端新增道友、信笺、裂隙小队和账号安全四个工作视图；主菜单账号入口进入道友录，挑战观察站展示真实小队摘要。全零个人占位不再显示成正式参与，移动端不再被延迟主菜单提示遮挡。
+  - 已验证
+    - 账号安全、社交状态机、PVP 门禁、裂隙小队、V9 迁移和旧平台回归定向测试均通过，并纳入 `npm run test:node`。
+    - 完整 Node 门禁：`PVP_LIVE_WS_FANOUT_MESSAGE_TIMEOUT_MS=60000 npm run test:node`；额外覆盖双进程同时接受再战收敛到同一 `matchId`、非法牌组/屏蔽不消费邀请码、stale claim 恢复、来源唯一索引和历史 0 贡献清理语义。
+    - 正式浏览器 release 子门禁：`AUDIT_FILTER=account-social-real bash tests/run_browser_release_checks.sh http://127.0.0.1:4177 output/release-browser-account-social-s105-final-2`，13/13 findings、0 failed、0 console error；覆盖两账号结为道友、好友约战 inbox、小队建队/邀请、改密换签、旧 token 失效及 390px 布局，结构汇总同时通过。
+    - 本地生产构建：`npm run build:pages`；账号安全、PVP/持久化、客户端/CI 三路挑战者最终均无剩余 P1/P2。
+  - 当前结论
+    - 本轮仅在独立 worktree 和开发分支完成设计、开发、测试、提交与推送；未执行 SSH、rsync、systemd、Nginx、生产数据库写入或线上部署，也不合并 `main`。
+
 - 2026-07-12: V10-S104 异步协作世界裂隙 V1
   - 本轮完成
     - 新增观星台“天穹裂隙”正式共斗：UTC 周轮换、三阶段 10000 点全服生命、每账号 5 次正式出征、同槽位同服务端种子、最佳 3 次贡献计榜；没有假玩家、末刀、首杀或战力奖励。

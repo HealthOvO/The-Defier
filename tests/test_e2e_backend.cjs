@@ -209,13 +209,13 @@ async function runPvpSettlementGateCheck(assertStep, options = {}) {
     });
     try {
         await waitForHealthAt(gateBaseUrl);
-        const username = `pvp_gate_${Date.now()}`;
+        const username = `pvp_${Date.now().toString(36)}`;
         const reg = await rawApiRequest('/api/auth/register', {
             baseUrl: gateBaseUrl,
             method: 'POST',
             data: {
                 username,
-                password: 'pwd123'
+                password: 'pwd123456'
             }
         });
         const token = reg.payload?.token || reg.payload?.sessionToken || reg.payload?.user?.sessionToken;
@@ -296,8 +296,8 @@ const runE2E = async () => {
     assertStep(AuthService.isInitialized, '初始化失败', AuthService.initError);
     console.log('1. 初始化成功，模式:', vm.runInContext('BackendClient.provider', ctx));
 
-    const testUser = 'e2e_user_' + Date.now();
-    const testPass = 'pwd123';
+    const testUser = `e2e_${Date.now().toString(36)}`;
+    const testPass = 'pwd123456';
 
     const regRes = await AuthService.register(testUser, testPass);
     console.log('2. 注册:', regRes.success ? '成功' : '失败', regRes.message || '');
@@ -500,7 +500,7 @@ const runE2E = async () => {
     });
     assertStep(tamperedDefenseRes.status === 403, 'PVP defense 元数据篡改没有触发签名拒绝', JSON.stringify(tamperedDefenseRes));
 
-    const opponentUser = `${testUser}_opponent`;
+    const opponentUser = `${testUser}_opp`;
     AuthService.logout();
     const opponentRegRes = await AuthService.register(opponentUser, testPass);
     assertStep(opponentRegRes.success, '注册对手用户失败', opponentRegRes.message || JSON.stringify(opponentRegRes));
@@ -557,7 +557,7 @@ const runE2E = async () => {
     assertStep(pvpMatchRes.opponent?.battleData?.deck?.some(card => card.id === 'audit_guard'), 'PVP 匹配未返回对手战斗牌组', JSON.stringify(pvpMatchRes));
     const unsignedMatchRes = await rawApiRequest('/api/pvp/match', {
         method: 'POST',
-        token: mainSession.token,
+        token: getSession().token,
         data: {
             myScore: pvpRankRes.rank.score,
             myRealm: auditRealm,

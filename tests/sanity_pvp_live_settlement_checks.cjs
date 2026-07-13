@@ -400,10 +400,10 @@ async function withServer(fn) {
 }
 
 async function registerUser(prefix) {
-  const username = `${prefix}_${Date.now()}_${Math.floor(Math.random() * 100000)}`;
+  const username = `${String(prefix || 'settle').slice(0, 8)}_${Date.now().toString(36)}_${Math.floor(Math.random() * 46656).toString(36)}`;
   const response = await request('/api/auth/register', {
     method: 'POST',
-    body: { username, password: 'pwd123' },
+    body: { username, password: 'pwd123456' },
   });
   assert.equal(response.status, 200, `register should succeed: ${JSON.stringify(response.payload)}`);
   return {

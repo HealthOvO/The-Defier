@@ -128,6 +128,32 @@ const SCHEMA_MIGRATIONS = [
             'world_rift_ops_events',
             'world_rift_ops_counters'
         ]
+    }),
+    makeMigration({
+        id: '0009_account_social_coop',
+        version: 9,
+        description: 'Revocable account sessions, social graph, presence, friend invites, and world-rift squads',
+        resources: [
+            'users.username_normalized',
+            'users.auth_version',
+            'auth_sessions',
+            'auth_login_limits',
+            'auth_security_mutations',
+            'auth_security_events',
+            'social_profiles',
+            'social_friend_requests',
+            'social_friendships',
+            'social_relationship_controls',
+            'social_presence',
+            'social_mutations',
+            'social_ops_events',
+            'world_rift_squads',
+            'world_rift_squad_members',
+            'world_rift_squad_invites',
+            'world_rift_squad_contributions',
+            'world_rift_squad_entries',
+            'world_rift_squad_reward_claims'
+        ]
     })
 ];
 const CURRENT_MIGRATION = SCHEMA_MIGRATIONS[SCHEMA_MIGRATIONS.length - 1];
