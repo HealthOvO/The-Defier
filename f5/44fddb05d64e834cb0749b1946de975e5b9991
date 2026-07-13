@@ -1,0 +1,29 @@
+js/core/challenge_hub.js
+  s_ca5652313828d6::t_c0eb8344642b66 2723,2979,3066,3577
+js/views/AuthoritativeRunPanel.js
+  s_ca5652313828d6::t_702aeb6c877c31 91-99,941,1272
+js/views/FateChronicleView.js
+  s_ca5652313828d6::t_52bc889b9f1bba 94-102,639,1183
+tests/sanity_fate_chronicle_ui_checks.mjs
+  s_ca5652313828d6::t_c1d8f7bf681939 45-48,70-73
+tests/sanity_secondary_frontend_flow_checks.cjs
+  s_ca5652313828d6::t_36d89c36232d33 194-206
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "f544fddb05d64e834cb0749b1946de975e5b9991",
+  "prompts": {},
+  "sessions": {
+    "s_ca5652313828d6": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f3fed-94d5-77b2-9af0-61333559ff38",
+        "model": "unknown"
+      },
+      "human_author": "AI Agent <bot@example.com>"
+    }
+  },
+  "attestation_metadata": {},
+  "remote_transcripts": {}
+}
