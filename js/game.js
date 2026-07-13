@@ -8586,6 +8586,10 @@ export class Game {
   }
   // --- Auth System ---
   showLoginModal() {
+    if (typeof AuthService !== 'undefined' && AuthService.isLoggedIn?.()) {
+      document.getElementById('auth-modal')?.classList.remove('active');
+      return false;
+    }
     if (!this.systemView) this.systemView = new SystemView(this);
     return this.systemView.showLoginModal();
   }
@@ -8925,6 +8929,7 @@ export class Game {
     this.showLoginModal();
   }
   requestLogout() {
+    document.getElementById('auth-modal')?.classList.remove('active');
     this.showConfirmModal('确定要退出登录吗？\n(退出前将自动上传当前进度)', async () => {
       const localSave = localStorage.getItem('theDefierSave');
       if (localSave && this.currentSaveSlot !== null && this.currentSaveSlot !== undefined) {
