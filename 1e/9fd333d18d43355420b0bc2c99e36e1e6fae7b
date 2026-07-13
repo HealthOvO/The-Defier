@@ -1,0 +1,21 @@
+js/game.js
+  s_ca5652313828d6::t_2d099bb557c36d 47-49,504-508,511,516,519-596,8902,9155,9226-9227,9244-9248
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "1e9fd333d18d43355420b0bc2c99e36e1e6fae7b",
+  "prompts": {},
+  "sessions": {
+    "s_ca5652313828d6": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f3fed-94d5-77b2-9af0-61333559ff38",
+        "model": "unknown"
+      },
+      "human_author": "AI Agent <bot@example.com>"
+    }
+  },
+  "attestation_metadata": {},
+  "remote_transcripts": {}
+}
