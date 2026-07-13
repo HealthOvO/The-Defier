@@ -3,13 +3,14 @@ import { ChallengeLadderService } from "../services/challenge-ladder-service.js"
 import { WorldRiftService } from "../services/world-rift-service.js";
 import { buildDataAttributes, escapeHtml } from "../ui/render-safe.js";
 
-const MODES = ["pve", "challenge", "expedition", "challenge_ladder", "world_rift"];
+const MODES = ["pve", "challenge", "expedition", "challenge_ladder", "world_rift", "relay_expedition"];
 const FOCUS_KEYS = Object.freeze({
   refresh: "authoritative:refresh",
   begin: "authoritative:begin",
   settle: "authoritative:settle",
   endTurn: "authoritative:end-turn",
-  abandon: "authoritative:abandon"
+  abandon: "authoritative:abandon",
+  returnRelay: "authoritative:return-relay"
 });
 
 const MODE_META = Object.freeze({
@@ -42,6 +43,12 @@ const MODE_META = Object.freeze({
     shortLabel: "共斗",
     summary: "用服务端完整重放推进真实全服首领；每周五次，最佳三次进入贡献榜。",
     tags: ["异步共斗", "全服阶段", "最佳三次"]
+  },
+  relay_expedition: {
+    label: "同道远征",
+    shortLabel: "接力",
+    summary: "共享路线与接力谱，不共享残血、牌组、手牌、弃牌堆或临时状态。",
+    tags: ["四棒共享", "服务端接棒", "权威投影"]
   }
 });
 
@@ -165,18 +172,24 @@ export class AuthoritativeRunPanel {
     service = AuthoritativeRunService,
     challengeLadderService = typeof ChallengeLadderService !== "undefined" ? ChallengeLadderService : null,
     worldRiftService = typeof WorldRiftService !== "undefined" ? WorldRiftService : null,
+    relayExpeditionService = null,
     getCurrentUserId = () => "",
     requestRender = () => {},
     requestLogin = () => {},
-    requestConfirm = async () => false
+    requestConfirm = async () => false,
+    onRelayExpeditionProjected = () => {},
+    onRelayExpeditionReturn = () => {}
   } = {}) {
     this.service = service;
     this.challengeLadderService = challengeLadderService;
     this.worldRiftService = worldRiftService;
+    this.relayExpeditionService = relayExpeditionService;
     this.getCurrentUserId = getCurrentUserId;
     this.requestRender = requestRender;
     this.requestLogin = requestLogin;
     this.requestConfirm = requestConfirm;
+    this.onRelayExpeditionProjected = onRelayExpeditionProjected;
+    this.onRelayExpeditionReturn = onRelayExpeditionReturn;
     this.activeMode = "pve";
     this.serviceState = this.service && typeof this.service.getState === "function" ? this.service.getState() : {};
     this.lastRunMeta = null;
@@ -188,6 +201,9 @@ export class AuthoritativeRunPanel {
       : {};
     this.worldRiftState = this.worldRiftService && typeof this.worldRiftService.getState === "function"
       ? this.worldRiftService.getState()
+      : {};
+    this.relayExpeditionState = this.relayExpeditionService && typeof this.relayExpeditionService.getState === "function"
+      ? this.relayExpeditionService.getState()
       : {};
     this.unsubscribe = this.service && typeof this.service.subscribe === "function"
       ? this.service.subscribe(snapshot => {
@@ -207,12 +223,19 @@ export class AuthoritativeRunPanel {
         this.requestRender();
       }, { emitCurrent: false })
       : () => {};
+    this.unsubscribeRelayExpedition = this.relayExpeditionService && typeof this.relayExpeditionService.subscribe === "function"
+      ? this.relayExpeditionService.subscribe(snapshot => {
+        this.relayExpeditionState = snapshot || {};
+        this.requestRender();
+      }, { emitCurrent: false })
+      : () => {};
   }
 
   destroy() {
     if (typeof this.unsubscribe === "function") this.unsubscribe();
     if (typeof this.unsubscribeChallengeLadder === "function") this.unsubscribeChallengeLadder();
     if (typeof this.unsubscribeWorldRift === "function") this.unsubscribeWorldRift();
+    if (typeof this.unsubscribeRelayExpedition === "function") this.unsubscribeRelayExpedition();
   }
 
   isBusy() {
@@ -220,6 +243,10 @@ export class AuthoritativeRunPanel {
       (this.serviceState && (this.serviceState.pending || this.serviceState.pendingReplay))
       || (this.getCurrentMode() === "challenge_ladder" && this.challengeLadderState && this.challengeLadderState.pending)
       || (this.getCurrentMode() === "world_rift" && this.worldRiftState && this.worldRiftState.pending)
+      || (this.getCurrentMode() === "relay_expedition" && this.relayExpeditionState && (
+        this.relayExpeditionState.pending
+        || this.relayExpeditionState.authoritativeRun && this.relayExpeditionState.authoritativeRun.pending
+      ))
     );
   }
 
@@ -227,7 +254,68 @@ export class AuthoritativeRunPanel {
     return isMode(this.activeMode) ? this.activeMode : "pve";
   }
 
+  isRelayExpeditionMode() {
+    return this.getCurrentMode() === "relay_expedition";
+  }
+
+  openRelayExpeditionMode() {
+    this.activeMode = "relay_expedition";
+    this.requestRender();
+    return { success: true };
+  }
+
+  shouldShowMode(mode = "") {
+    if (mode !== "relay_expedition") return true;
+    return this.getCurrentMode() === "relay_expedition"
+      || !!(
+        this.relayExpeditionState
+        && (
+          this.relayExpeditionState.session
+          || this.relayExpeditionState.current
+          || this.relayExpeditionState.currentLeg
+          || this.relayExpeditionState.pending
+          || this.relayExpeditionState.lastError
+        )
+      );
+  }
+
+  getRelaySession() {
+    return this.relayExpeditionState && (
+      this.relayExpeditionState.session
+      || this.relayExpeditionState.current && this.relayExpeditionState.current.currentSession
+      || this.relayExpeditionState.current && this.relayExpeditionState.current.session
+    ) || null;
+  }
+
+  getRelayCurrentLeg() {
+    return this.relayExpeditionState && (
+      this.relayExpeditionState.currentLeg
+      || this.relayExpeditionState.session && (this.relayExpeditionState.session.currentLeg || this.relayExpeditionState.session.activeLeg)
+      || this.relayExpeditionState.current && (this.relayExpeditionState.current.currentLeg || this.relayExpeditionState.current.activeLeg)
+    ) || null;
+  }
+
+  getRelayAuthoritativeState() {
+    return this.relayExpeditionState && this.relayExpeditionState.authoritativeRun
+      ? this.relayExpeditionState.authoritativeRun
+      : null;
+  }
+
+  getRelayActiveRunId() {
+    const leg = this.getRelayCurrentLeg();
+    const relayAuthoritative = this.getRelayAuthoritativeState();
+    return normalizeText(
+      relayAuthoritative && relayAuthoritative.runId
+      || leg && (leg.runId || leg.run && leg.run.runId)
+      || this.serviceState && this.serviceState.runId
+    );
+  }
+
   getCurrentProjection() {
+    if (this.isRelayExpeditionMode()) {
+      const relayProjection = this.getRelayAuthoritativeState() && this.getRelayAuthoritativeState().projection;
+      if (relayProjection && typeof relayProjection === "object") return relayProjection;
+    }
     const projection = this.serviceState && this.serviceState.projection;
     if (!projection || typeof projection !== "object") return null;
     const projectionMode = normalizeText(projection.mode);
@@ -241,6 +329,7 @@ export class AuthoritativeRunPanel {
   }
 
   getActiveRunId() {
+    if (this.isRelayExpeditionMode()) return this.getRelayActiveRunId();
     const projection = this.getCurrentProjection();
     if (projection && projection.runId) return normalizeText(projection.runId);
     const metaMatchesMode = this.lastRunMeta && normalizeText(this.lastRunMeta.mode) === this.getCurrentMode();
@@ -248,6 +337,15 @@ export class AuthoritativeRunPanel {
   }
 
   getExpectedVersion() {
+    if (this.isRelayExpeditionMode()) {
+      const projection = this.getCurrentProjection();
+      return clampInt(
+        projection && Object.prototype.hasOwnProperty.call(projection, "version")
+          ? projection.version
+          : this.getRelayAuthoritativeState() && this.getRelayAuthoritativeState().projection && this.getRelayAuthoritativeState().projection.version,
+        0
+      );
+    }
     const projection = this.getCurrentProjection();
     return clampInt(
       projection && Object.prototype.hasOwnProperty.call(projection, "version")
@@ -258,6 +356,12 @@ export class AuthoritativeRunPanel {
   }
 
   getStatus() {
+    if (this.isRelayExpeditionMode()) {
+      const relayProjectionStatus = normalizeText(this.getCurrentProjection() && this.getCurrentProjection().runStatus);
+      if (relayProjectionStatus) return relayProjectionStatus;
+      const relayStateStatus = normalizeText(this.getRelayAuthoritativeState() && this.getRelayAuthoritativeState().status);
+      if (relayStateStatus) return relayStateStatus;
+    }
     const projectionStatus = normalizeText(this.getCurrentProjection() && this.getCurrentProjection().runStatus);
     if (projectionStatus) return projectionStatus;
     const runStatus = normalizeText(this.lastRunMeta && this.lastRunMeta.status);
@@ -310,6 +414,11 @@ export class AuthoritativeRunPanel {
     } else {
       this.worldRiftState = {};
     }
+    if (this.relayExpeditionService && typeof this.relayExpeditionService.reset === "function") {
+      this.relayExpeditionState = this.relayExpeditionService.reset();
+    } else {
+      this.relayExpeditionState = {};
+    }
     this.requestRender();
     if (active) {
       return this.activate({ force: true });
@@ -321,6 +430,9 @@ export class AuthoritativeRunPanel {
     const expectedUserId = normalizeText(this.getCurrentUserId());
     if (!expectedUserId) {
       return this.handleAuthStateChanged({ active: false });
+    }
+    if (this.isRelayExpeditionMode()) {
+      return this.loadRelayExpedition({ force, expectedUserId });
     }
     if (this.getCurrentMode() === "challenge_ladder"
       && this.challengeLadderService
@@ -341,10 +453,53 @@ export class AuthoritativeRunPanel {
     return this.applyResult(result, { kind: "current", userId: expectedUserId, force });
   }
 
+  async loadRelayExpedition({ force = false, expectedUserId = normalizeText(this.getCurrentUserId()) } = {}) {
+    if (!this.relayExpeditionService || typeof this.relayExpeditionService.current !== "function") {
+      return { success: false, reason: "relay_expedition_unavailable", message: "同道远征服务尚未就绪。" };
+    }
+    const relayResult = await this.relayExpeditionService.current({ expectedUserId });
+    this.relayExpeditionState = this.relayExpeditionService.getState();
+    const loadKey = this.getLoadKey(expectedUserId, this.getCurrentMode());
+    if (!relayResult || relayResult.success === false) {
+      if (loadKey && this.lastLoadedKey === loadKey) this.lastLoadedKey = "";
+      this.requestRender();
+      return relayResult;
+    }
+    if (loadKey) this.lastLoadedKey = loadKey;
+    const runId = this.getRelayActiveRunId();
+    if (!runId) {
+      this.lastEnvelope = null;
+      this.lastRunMeta = null;
+      this.lastReceipt = null;
+      this.serviceState = {
+        ...this.serviceState,
+        mode: "relay_expedition",
+        runId: "",
+        projection: null,
+        lastReceipt: null,
+        lastError: null,
+        pending: null,
+        pendingReplay: false
+      };
+      this.requestRender();
+      return relayResult;
+    }
+    const runResult = await this.relayExpeditionService.refreshRelayRun({ runId, expectedUserId });
+    this.relayExpeditionState = this.relayExpeditionService.getState();
+    if (runResult && runResult.success !== false) {
+      return this.applyResult(runResult, { kind: "get", userId: expectedUserId, force: true });
+    }
+    this.requestRender();
+    return runResult;
+  }
+
   async refreshProjection() {
     const expectedUserId = normalizeText(this.getCurrentUserId());
     if (!expectedUserId) {
       return this.handleAuthStateChanged({ active: false });
+    }
+    if (this.isRelayExpeditionMode()) {
+      return this.loadRelayExpedition({ force: true, expectedUserId });
     }
     if (this.getCurrentMode() === "challenge_ladder"
       && this.challengeLadderService
@@ -370,6 +525,13 @@ export class AuthoritativeRunPanel {
     if (!expectedUserId) {
       this.requestLogin();
       return { success: false, reason: "not_logged_in" };
+    }
+    if (this.isRelayExpeditionMode()) {
+      return {
+        success: false,
+        reason: "relay_expedition_start_from_social",
+        message: "同道远征的开队与接棒只在道友录小队页处理。"
+      };
     }
     if (this.getCurrentMode() === "challenge_ladder"
       && (!this.challengeLadderService || typeof this.challengeLadderService.start !== "function")) {
@@ -437,6 +599,35 @@ export class AuthoritativeRunPanel {
       expectedUserId
     });
     const applied = this.applyResult(result, { kind: "settle", userId: expectedUserId, force: true });
+    if (result && result.success !== false && this.isRelayExpeditionMode()) {
+      if (!this.relayExpeditionService || typeof this.relayExpeditionService.projectLeg !== "function") {
+        return { ...applied, relayProjection: { success: false, reason: "relay_expedition_unavailable" } };
+      }
+      const relayProjection = await this.relayExpeditionService.projectLeg({ runId, expectedUserId });
+      this.relayExpeditionState = this.relayExpeditionService.getState();
+      if (relayProjection && relayProjection.success !== false) {
+        await this.relayExpeditionService.current({ expectedUserId });
+        this.relayExpeditionState = this.relayExpeditionService.getState();
+        this.lastEnvelope = null;
+        this.lastRunMeta = null;
+        this.lastReceipt = null;
+        this.serviceState = {
+          ...this.serviceState,
+          mode: "relay_expedition",
+          runId: "",
+          projection: null,
+          lastReceipt: null,
+          pending: null,
+          pendingReplay: false,
+          lastError: null
+        };
+        this.requestRender();
+        if (typeof this.onRelayExpeditionProjected === "function") {
+          this.onRelayExpeditionProjected(relayProjection);
+        }
+      }
+      return { ...applied, relayProjection };
+    }
     if (result && result.success !== false && this.getCurrentMode() === "challenge_ladder") {
       if (!this.challengeLadderService || typeof this.challengeLadderService.submit !== "function") {
         return { ...applied, ladderSubmission: { success: false, reason: "challenge_ladder_unavailable" } };
@@ -481,6 +672,9 @@ export class AuthoritativeRunPanel {
     if (nextMode === this.getCurrentMode()) return { success: true, skipped: true };
     this.activeMode = nextMode;
     this.requestRender();
+    if (nextMode === "relay_expedition") {
+      return this.activate({ force: false });
+    }
     if (nextMode === "challenge_ladder" && normalizeText(this.getCurrentUserId())) {
       if (!this.challengeLadderService || typeof this.challengeLadderService.current !== "function") {
         return { success: false, reason: "challenge_ladder_unavailable", message: "众生试炼服务尚未就绪。" };
@@ -575,6 +769,10 @@ export class AuthoritativeRunPanel {
       this.requestLogin();
       return true;
     }
+    if (action === "authoritative-return-relay") {
+      if (typeof this.onRelayExpeditionReturn === "function") this.onRelayExpeditionReturn();
+      return true;
+    }
     if (action === "authoritative-begin") {
       await this.beginRun();
       return true;
@@ -620,7 +818,7 @@ export class AuthoritativeRunPanel {
   }
 
   renderModeSection() {
-    const buttons = MODES.map(mode => {
+    const buttons = MODES.filter(mode => this.shouldShowMode(mode)).map(mode => {
       const meta = MODE_META[mode];
       const selected = this.getCurrentMode() === mode;
       return `
@@ -675,6 +873,7 @@ export class AuthoritativeRunPanel {
     const error = this.serviceState && this.serviceState.lastError
       || (this.getCurrentMode() === "challenge_ladder" && this.challengeLadderState && this.challengeLadderState.lastError)
       || (this.getCurrentMode() === "world_rift" && this.worldRiftState && this.worldRiftState.lastError)
+      || (this.getCurrentMode() === "relay_expedition" && this.relayExpeditionState && this.relayExpeditionState.lastError)
       || null;
     if (this.isBusy() && !projection) {
       return this.renderStateCard(
@@ -727,6 +926,9 @@ export class AuthoritativeRunPanel {
   }
 
   renderNoRunCard() {
+    if (this.isRelayExpeditionMode()) {
+      return this.renderRelayExpeditionNoRunCard();
+    }
     const modeMeta = MODE_META[this.getCurrentMode()];
     const ladderContext = this.getCurrentMode() === "challenge_ladder" ? this.renderChallengeLadderContext() : "";
     const worldRiftContext = this.getCurrentMode() === "world_rift" ? this.renderWorldRiftContext() : "";
@@ -764,6 +966,66 @@ export class AuthoritativeRunPanel {
             data-season-ops-focus-key="${escapeHtml(FOCUS_KEYS.refresh)}"
             ${this.isBusy() ? "disabled" : ""}
           >${this.isBusy() ? "恢复中..." : "恢复服务器卷面"}</button>
+        </div>
+      </section>
+    `;
+  }
+
+  renderRelayExpeditionNoRunCard() {
+    const session = this.getRelaySession();
+    const leg = this.getRelayCurrentLeg();
+    const milestoneCount = Array.isArray(session && session.rewardMilestones)
+      ? session.rewardMilestones.length
+      : Array.isArray(session && session.milestones)
+        ? session.milestones.length
+        : 0;
+    const currentLegIndex = clampInt(
+      session && Object.prototype.hasOwnProperty.call(session, "currentLegIndex")
+        ? session.currentLegIndex
+        : leg && Object.prototype.hasOwnProperty.call(leg, "legIndex")
+          ? leg.legIndex
+          : 0,
+      0
+    );
+    const displayLegIndex = Math.max(1, Math.min(4, currentLegIndex || 1));
+    const routeScore = clampInt(session && (session.totalScore ?? session.routeScore));
+    const processedLegs = clampInt(session && (session.processedLegs ?? session.completedLegs));
+    const legStatus = normalizeText(leg && leg.status, "queued");
+    return `
+      <section class="season-ops-section-card season-ops-authoritative-section">
+        <div class="season-ops-section-head">
+          <div>
+            <h3>同道远征共享态</h3>
+            <p>接力谱、路线分和棒次共享；残血、手牌、弃牌堆与临时状态不共享。</p>
+          </div>
+          <div class="season-ops-counter-chip">${session ? "共享卷面已恢复" : "尚未开跑"}</div>
+        </div>
+        <div class="season-ops-authoritative-meta-row">
+          ${session ? renderChip(`第 ${displayLegIndex} / 4 棒`) : ""}
+          ${session ? renderChip(`路线分 ${routeScore}`) : ""}
+          ${session ? renderChip(`已处理 ${processedLegs} 棒`) : ""}
+          ${session ? renderChip(`里程碑 ${milestoneCount}`) : ""}
+          ${session && leg ? renderChip(`当前状态 ${legStatus}`) : ""}
+        </div>
+        <div class="season-ops-inline-note">
+          ${session
+            ? "接棒、让棒、奖励领取与下一棒调度都在道友录的小队工作区完成；这里仅恢复当前绑定的权威卷面。"
+            : "当前没有可恢复的同道远征权威卷面。请回到道友录的小队页开跑、接棒或查看共享路线。"}
+        </div>
+        <div class="season-ops-state-actions season-ops-authoritative-inline-actions">
+          <button
+            type="button"
+            class="season-ops-inline-btn"
+            data-season-ops-action="authoritative-return-relay"
+            data-season-ops-focus-key="${escapeHtml(FOCUS_KEYS.returnRelay)}"
+          >返回同道远征工作区</button>
+          <button
+            type="button"
+            class="season-ops-inline-btn"
+            data-season-ops-action="authoritative-refresh"
+            data-season-ops-focus-key="${escapeHtml(FOCUS_KEYS.refresh)}"
+            ${this.isBusy() ? "disabled" : ""}
+          >${this.isBusy() ? "恢复中..." : "恢复共享状态"}</button>
         </div>
       </section>
     `;
@@ -855,6 +1117,7 @@ export class AuthoritativeRunPanel {
     const integrity = this.lastRunMeta && this.lastRunMeta.integrity ? this.lastRunMeta.integrity : {};
     const recovery = this.lastRunMeta && this.lastRunMeta.recovery ? this.lastRunMeta.recovery : {};
     const player = projection && projection.player ? projection.player : {};
+    const relayLeg = this.getRelayCurrentLeg();
     return `
       <section class="season-ops-section-card season-ops-authoritative-section">
         <div class="season-ops-section-head">
@@ -879,6 +1142,8 @@ export class AuthoritativeRunPanel {
           ${renderChip(`状态哈希 ${shortHash(integrity.stateHash)}`)}
           ${renderChip(`链首 ${shortHash(integrity.chainHead)}`)}
           ${renderChip(`信任 ${this.lastRunMeta.trustTier || "server_authoritative"}`)}
+          ${this.isRelayExpeditionMode() && relayLeg ? renderChip(`第 ${clampInt(relayLeg.legIndex, 1)} 棒`) : ""}
+          ${this.isRelayExpeditionMode() && relayLeg && relayLeg.tacticId ? renderChip(`接力谱 ${relayLeg.tacticId}`) : ""}
         </div>
         ${this.getCurrentMode() === "challenge_ladder" ? this.renderChallengeLadderContext() : ""}
         ${this.getCurrentMode() === "world_rift" ? this.renderWorldRiftContext() : ""}
@@ -1079,12 +1344,15 @@ export class AuthoritativeRunPanel {
     const settled = normalizeText(this.getStatus()) === "settled" || clampInt(this.lastRunMeta && this.lastRunMeta.settledAt) > 0;
     const summary = this.getCurrentProjection() && this.getCurrentProjection().summary ? this.getCurrentProjection().summary : {};
     const receipt = this.lastReceipt || (this.lastRunMeta && this.lastRunMeta.receipt) || null;
+    const isRelay = this.isRelayExpeditionMode();
     return `
       <section class="season-ops-section-card season-ops-authoritative-section">
         <div class="season-ops-section-head">
           <div>
-            <h3>${settled ? "已结算归档" : "待提交结算"}</h3>
-            <p>${settled ? "这条 run 已写入赛季进度与权威计数。" : "服务器已确认通关，但赛季进度还要等完整重放结算通过。"}</p>
+            <h3>${settled ? (isRelay ? "已完成权威结算" : "已结算归档") : (isRelay ? "待投影共享路线" : "待提交结算")}</h3>
+            <p>${settled
+              ? (isRelay ? "这条接力 run 已完成服务端结算，下一步会把结果投影回共享路线。" : "这条 run 已写入赛季进度与权威计数。")
+              : (isRelay ? "服务器已确认本棒通关；结算后会直接投影回同道远征共享状态。" : "服务器已确认通关，但赛季进度还要等完整重放结算通过。")}</p>
           </div>
           <div class="season-ops-counter-chip">${escapeHtml(summary.grade || "未评级")}</div>
         </div>
@@ -1099,8 +1367,8 @@ export class AuthoritativeRunPanel {
               data-season-ops-action="authoritative-settle"
               data-season-ops-focus-key="${escapeHtml(FOCUS_KEYS.settle)}"
               ${this.isBusy() ? "disabled" : ""}
-            >${this.isBusy() ? "结算中..." : "提交正式结算"}</button>
-          ` : `
+            >${this.isBusy() ? "结算中..." : isRelay ? "结算并投影到共享路线" : "提交正式结算"}</button>
+          ` : !isRelay ? `
             <button
               type="button"
               class="season-ops-inline-btn is-claimable"
@@ -1108,6 +1376,13 @@ export class AuthoritativeRunPanel {
               data-season-ops-focus-key="${escapeHtml(FOCUS_KEYS.begin)}"
               ${this.isBusy() ? "disabled" : ""}
             >${this.isBusy() ? "发车中..." : "再开一局"}</button>
+          ` : `
+            <button
+              type="button"
+              class="season-ops-inline-btn"
+              data-season-ops-action="authoritative-return-relay"
+              data-season-ops-focus-key="${escapeHtml(FOCUS_KEYS.returnRelay)}"
+            >返回同道远征工作区</button>
           `}
           <button
             type="button"
@@ -1125,25 +1400,39 @@ export class AuthoritativeRunPanel {
     const projection = this.getCurrentProjection();
     const summary = projection && projection.summary ? projection.summary : {};
     const abandoned = projection && projection.phase === "abandoned";
+    const isRelay = this.isRelayExpeditionMode();
     return `
       <section class="season-ops-section-card season-ops-authoritative-section">
         <div class="season-ops-section-head">
           <div>
-            <h3>${abandoned ? "试炼已放弃" : "试炼已结束"}</h3>
-            <p>${abandoned ? "这条权威路线已被主动封卷，不再接受后续操作。" : "服务器已确认败退终态，客户端只展示最终投影。"} </p>
+            <h3>${abandoned ? "试炼已放弃" : isRelay ? "本棒已结束" : "试炼已结束"}</h3>
+            <p>${abandoned
+              ? "这条权威路线已被主动封卷，不再接受后续操作。"
+              : isRelay
+                ? "服务器已确认本棒终态；共享路线推进与下一棒安排回到同道远征工作区处理。"
+                : "服务器已确认败退终态，客户端只展示最终投影。"} </p>
           </div>
           <div class="season-ops-counter-chip">${escapeHtml(summary.reason || "terminal")}</div>
         </div>
         ${this.renderSummaryGrid(summary)}
         ${this.renderRouteHistory()}
         <div class="season-ops-state-actions season-ops-authoritative-inline-actions">
-          <button
-            type="button"
-            class="season-ops-inline-btn is-claimable"
-            data-season-ops-action="authoritative-begin-new"
-            data-season-ops-focus-key="${escapeHtml(FOCUS_KEYS.begin)}"
-            ${this.isBusy() ? "disabled" : ""}
-          >${this.isBusy() ? "发车中..." : "重新开始本模式"}</button>
+          ${isRelay ? `
+            <button
+              type="button"
+              class="season-ops-inline-btn"
+              data-season-ops-action="authoritative-return-relay"
+              data-season-ops-focus-key="${escapeHtml(FOCUS_KEYS.returnRelay)}"
+            >返回同道远征工作区</button>
+          ` : `
+            <button
+              type="button"
+              class="season-ops-inline-btn is-claimable"
+              data-season-ops-action="authoritative-begin-new"
+              data-season-ops-focus-key="${escapeHtml(FOCUS_KEYS.begin)}"
+              ${this.isBusy() ? "disabled" : ""}
+            >${this.isBusy() ? "发车中..." : "重新开始本模式"}</button>
+          `}
           <button
             type="button"
             class="season-ops-inline-btn"
@@ -1171,6 +1460,7 @@ export class AuthoritativeRunPanel {
     const effectiveReceipt = receipt && typeof receipt === "object" ? receipt : null;
     const progressDelta = effectiveReceipt && effectiveReceipt.progressDelta ? effectiveReceipt.progressDelta : null;
     const integrity = effectiveReceipt && effectiveReceipt.integrity ? effectiveReceipt.integrity : null;
+    const isRelay = this.isRelayExpeditionMode();
     return `
       <article class="season-ops-authoritative-settlement">
         <div class="season-ops-authoritative-choice-top">
@@ -1186,8 +1476,8 @@ export class AuthoritativeRunPanel {
         </div>
         <p class="season-ops-inline-note">${escapeHtml(
           settled
-            ? "服务器已完成完整重放校验，并把这条 run 记入权威赛季进度。"
-            : "只有完整重放与状态哈希一致时，服务器才会把这条 run 写入正式历练。"
+            ? (isRelay ? "服务器已完成完整重放校验；投影后会把本棒摘要写回共享路线。" : "服务器已完成完整重放校验，并把这条 run 记入权威赛季进度。")
+            : (isRelay ? "只有完整重放与状态哈希一致时，服务器才会允许把本棒结果投影回同道远征。" : "只有完整重放与状态哈希一致时，服务器才会把这条 run 写入正式历练。")
         )}</p>
       </article>
     `;

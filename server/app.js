@@ -19,6 +19,7 @@ const seasonOpsRoutes = require('./routes/season-ops');
 const challengeLadderRoutes = require('./routes/challenge-ladder');
 const worldRiftRoutes = require('./routes/world-rift');
 const socialRoutes = require('./routes/social');
+const relayExpeditionRoutes = require('./routes/relay-expedition');
 
 const app = express();
 const PORT = process.env.PORT || 9000;
@@ -41,6 +42,7 @@ app.use('/api/season-ops', seasonOpsRoutes);
 app.use('/api/challenge-ladder', challengeLadderRoutes);
 app.use('/api/world-rift', worldRiftRoutes);
 app.use('/api/social', socialRoutes);
+app.use('/api/relay-expeditions', relayExpeditionRoutes);
 
 const getHealthPayload = async () => {
     const schemaStatus = await getSchemaStatus();
@@ -136,6 +138,7 @@ const startServer = async () => {
             console.log(`- GET/POST /api/challenge-ladder/*`);
             console.log(`- GET/POST /api/world-rift/*`);
             console.log(`- GET/POST /api/social/*`);
+            console.log(`- GET/POST /api/relay-expeditions/*`);
         });
         attachLivePvpWebSocket(server, { livePvpStore: pvpLiveRoutes.__livePvpStore });
     } catch (err) {

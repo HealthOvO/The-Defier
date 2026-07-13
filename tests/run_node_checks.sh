@@ -44,6 +44,11 @@ node tests/sanity_world_rift_client_checks.mjs
 node tests/sanity_world_rift_ui_checks.mjs
 node tests/sanity_world_rift_platform_checks.cjs
 node tests/sanity_world_rift_squad_platform_checks.cjs
+node tests/sanity_relay_expedition_migration_checks.cjs
+node tests/sanity_relay_expedition_platform_checks.cjs
+node tests/sanity_relay_expedition_cross_process_checks.cjs
+node tests/sanity_relay_expedition_client_checks.mjs
+node tests/sanity_relay_expedition_ui_checks.mjs
 node tests/sanity_balance_checks.cjs
 node tests/sanity_expansion_system_checks.cjs
 node tests/sanity_event_flow_checks.cjs

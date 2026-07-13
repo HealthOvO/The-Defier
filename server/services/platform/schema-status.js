@@ -154,6 +154,21 @@ const SCHEMA_MIGRATIONS = [
             'world_rift_squad_entries',
             'world_rift_squad_reward_claims'
         ]
+    }),
+    makeMigration({
+        id: '0010_relay_expedition',
+        version: 10,
+        description: 'Authoritative squad relay expeditions, recoverable legs, cosmetic milestones, and ops telemetry',
+        resources: [
+            'relay_expedition_rotations',
+            'relay_expedition_sessions',
+            'relay_expedition_members',
+            'relay_expedition_legs',
+            'relay_expedition_reward_claims',
+            'relay_expedition_mutations',
+            'relay_expedition_ops_events',
+            'relay_expedition_ops_counters'
+        ]
     })
 ];
 const CURRENT_MIGRATION = SCHEMA_MIGRATIONS[SCHEMA_MIGRATIONS.length - 1];

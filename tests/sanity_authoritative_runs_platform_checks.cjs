@@ -28,9 +28,21 @@ const DB_PATH = process.env.AUTHORITATIVE_RUNS_PLATFORM_TEST_DB_PATH
 const JWT_SECRET = 'authoritative-runs-platform-jwt-secret';
 const HMAC_SECRET = 'authoritative-runs-platform-hmac-secret';
 const OPS_TOKEN = 'authoritative-runs-platform-ops-token';
-const CONTENT_VERSION = 'authoritative-trials-v1';
 const BLOCK_CARDS = new Set(['guard', 'iron_mandate']);
 const TERMINAL_PHASES = new Set(['completed', 'defeated', 'abandoned']);
+const RELAY_RUN_TTL_MS = 2 * 60 * 60 * 1000;
+
+process.env.DEFIER_DB_PATH = DB_PATH;
+
+const { CONTENT_SNAPSHOT, CONTENT_VERSION } = require('../server/progression/authoritative-runs/catalog');
+
+function loadAuthoritativeRunsService() {
+  const target = require.resolve('../server/progression/authoritative-runs/service');
+  delete require.cache[target];
+  return require(target);
+}
+
+const { issueAuthoritativeRun } = loadAuthoritativeRunsService();
 
 let runCounter = 0;
 let actionCounter = 0;
@@ -51,14 +63,31 @@ function nextId(prefix) {
   return `ar-${prefix}-${String(counters[prefix]).padStart(4, '0')}`;
 }
 
+function seedHex(label) {
+  return crypto.createHash('sha256').update(String(label), 'utf8').digest('hex');
+}
+
+function countDeck(cards) {
+  return cards.reduce((accumulator, cardId) => {
+    accumulator[cardId] = (accumulator[cardId] || 0) + 1;
+    return accumulator;
+  }, {});
+}
+
 function removeDbFiles() {
   for (const suffix of ['', '-wal', '-shm']) {
     fs.rmSync(`${DB_PATH}${suffix}`, { force: true });
   }
 }
 
+function buildServerBootstrapScript() {
+  return `
+    require('./server/app.js');
+  `;
+}
+
 function startServer() {
-  const child = spawn(process.execPath, ['server/app.js'], {
+  const child = spawn(process.execPath, ['-e', buildServerBootstrapScript()], {
     cwd: ROOT,
     env: {
       ...process.env,
@@ -303,6 +332,33 @@ async function settleRun(token, runId, expectedVersion, mutationId = nextId('mut
   });
 }
 
+async function issueInternalRelayRun(userId, {
+  clientRunId,
+  scenarioId,
+  ttlMs,
+  seedLabel = `relay:${scenarioId}:${clientRunId}`
+}) {
+  return issueAuthoritativeRun(
+    userId,
+    {
+      clientRunId,
+      mode: 'relay_expedition',
+      contentVersion: CONTENT_VERSION,
+    },
+    Date.now(),
+    {
+      binding: {
+        type: 'relay_expedition',
+        sessionId: `relay-session-${scenarioId}`,
+        legId: `relay-leg-${scenarioId}`,
+      },
+      seedHex: seedHex(seedLabel),
+      scenarioId,
+      runTtlMs: ttlMs,
+    }
+  );
+}
+
 async function driveRun(token, run, { maxSteps = 256, stopAfterSteps = null } = {}) {
   let currentRun = run;
   const actions = [];
@@ -346,8 +402,8 @@ async function main() {
 
     const version = await request('/api/version');
     assert.strictEqual(version.status, 200, JSON.stringify(version.payload));
-    assert.strictEqual(version.payload?.schema?.version, 9);
-    assert.strictEqual(version.payload?.schema?.currentMigrationId, '0009_account_social_coop');
+    assert.strictEqual(version.payload?.schema?.version, 10);
+    assert.strictEqual(version.payload?.schema?.currentMigrationId, '0010_relay_expedition');
     assert.deepStrictEqual(
       version.payload?.schema?.appliedMigrations?.map(entry => entry.id),
       [
@@ -359,7 +415,8 @@ async function main() {
         '0006_authoritative_runs_v2',
         '0007_authoritative_challenge_ladder',
         '0008_authoritative_world_rift',
-        '0009_account_social_coop'
+        '0009_account_social_coop',
+        '0010_relay_expedition'
       ]
     );
 
@@ -486,6 +543,81 @@ async function main() {
       }
     });
     expectReason(staleContentVersion, 409, 'unsupported_content_version');
+
+    const relayPublicStart = await signedRequest('/api/progression/authoritative-runs', {
+      token: primary.token,
+      data: {
+        clientRunId: 'relay-public-client-0001',
+        mode: 'relay_expedition',
+        contentVersion: CONTENT_VERSION
+      }
+    });
+    expectReason(relayPublicStart, 403, 'relay_expedition_start_required');
+
+    await dbRun(
+      `INSERT INTO game_saves (user_id, slot_index, save_data, save_time)
+       VALUES (?, ?, ?, ?)`,
+      [
+        primary.userId,
+        3,
+        JSON.stringify({
+          hp: 1,
+          maxHp: 999,
+          deck: ['forged-save-card'],
+          heavenlyInsight: 999
+        }),
+        Date.now()
+      ]
+    );
+
+    const relayVanguard = await issueInternalRelayRun(primary.userId, {
+      clientRunId: 'relay-internal-vanguard-0001',
+      scenarioId: 'vanguard'
+    });
+    assert.strictEqual(relayVanguard.run.mode, 'relay_expedition');
+    assert.strictEqual(relayVanguard.run.projection?.scenario?.scenarioId, 'vanguard');
+    assert.strictEqual(relayVanguard.run.projection?.player?.hp, CONTENT_SNAPSHOT.scenarios.vanguard.maxHp);
+    assert.strictEqual(relayVanguard.run.projection?.player?.maxHp, CONTENT_SNAPSHOT.scenarios.vanguard.maxHp);
+    assert.strictEqual(relayVanguard.run.projection?.player?.deckSize, 10);
+    assert.deepStrictEqual(
+      relayVanguard.run.projection?.player?.deckCounts,
+      countDeck(CONTENT_SNAPSHOT.scenarios.vanguard.starterDeck),
+      'relay vanguard should ignore account save data and use the standardized deck'
+    );
+    assert(
+      Number(relayVanguard.run.expiresAt) - Number(relayVanguard.run.startedAt) <= RELAY_RUN_TTL_MS,
+      `relay vanguard ttl should be capped at 2h, got ${relayVanguard.run.expiresAt} - ${relayVanguard.run.startedAt}`
+    );
+    const relayCurrent = await getCurrentRun(primary.token, 'relay_expedition');
+    assert.strictEqual(relayCurrent.status, 200, JSON.stringify(relayCurrent.payload));
+    assert.strictEqual(relayCurrent.payload?.run?.runId, relayVanguard.run.runId);
+    assert.strictEqual(relayCurrent.payload?.run?.projection?.scenario?.scenarioId, 'vanguard');
+
+    const relayIdempotent = await issueInternalRelayRun(primary.userId, {
+      clientRunId: 'relay-internal-vanguard-0001',
+      scenarioId: 'vanguard',
+      ttlMs: 30 * 60 * 1000
+    });
+    assert.strictEqual(relayIdempotent.run.runId, relayVanguard.run.runId);
+    assert.strictEqual(relayIdempotent.run.idempotent, true);
+
+    await assert.rejects(
+      issueInternalRelayRun(primary.userId, {
+        clientRunId: 'relay-invalid-scenario-0001',
+        scenarioId: 'unknown'
+      }),
+      error => error && error.reason === 'relay_expedition_scenario_invalid',
+      'relay issue should reject unknown internal scenarios'
+    );
+    await assert.rejects(
+      issueInternalRelayRun(primary.userId, {
+        clientRunId: 'relay-invalid-ttl-0001',
+        scenarioId: 'bulwark',
+        ttlMs: RELAY_RUN_TTL_MS + 1
+      }),
+      error => error && error.reason === 'relay_expedition_ttl_invalid',
+      'relay issue should reject ttl values beyond 2h'
+    );
 
     const startedPve = await startRun(primary.token, 'pve', 'pve-ar-client-0001');
     const startedChallenge = await startRun(primary.token, 'challenge', 'challenge-ar-client-0001');
@@ -743,6 +875,24 @@ async function main() {
       assert(!replayJson.includes(forbidden), `replay response must redact ${forbidden}`);
     }
 
+    const relayAdvanced = await driveRun(primary.token, relayVanguard.run, { stopAfterSteps: 6 });
+    const relayReplay = await getReplay(primary.token, relayAdvanced.run.runId);
+    assert.strictEqual(relayReplay.status, 200, JSON.stringify(relayReplay.payload));
+    assert.strictEqual(relayReplay.payload?.replay?.finalState?.scenario?.scenarioId, 'vanguard');
+    assert.strictEqual(relayReplay.payload?.replay?.finalState?.mode, 'relay_expedition');
+
+    const completedRelay = await driveRun(primary.token, relayAdvanced.run);
+    assert.strictEqual(completedRelay.run.status, 'completed');
+    const nextRelayAfterCompleted = await issueInternalRelayRun(primary.userId, {
+      clientRunId: 'relay-internal-vanguard-0002',
+      scenarioId: 'vanguard'
+    });
+    assert.notStrictEqual(
+      nextRelayAfterCompleted.run.runId,
+      completedRelay.run.runId,
+      'a completed relay run must not block the same account from receiving a later relay leg'
+    );
+
     await dbRun(
       `CREATE TRIGGER authoritative_settlement_fault_before_receipt
        BEFORE INSERT ON progression_authoritative_run_receipts
@@ -831,6 +981,7 @@ async function main() {
     assert.strictEqual(ops.status, 200, JSON.stringify(ops.payload));
     assert.strictEqual(ops.payload?.limits?.snapshotInterval, 8);
     assert(ops.payload?.totals?.runs >= 3);
+    assert(ops.payload?.byMode?.relay_expedition >= 1, 'ops overview should count internal relay runs');
     assert(ops.payload?.counters?.state_recovered?.count >= 1);
     const opsJson = JSON.stringify(ops.payload);
     for (const forbidden of [primary.userId, pveRun.runId, challengeRun.runId, JWT_SECRET, HMAC_SECRET, OPS_TOKEN, '"state_json"', '"payload_json"']) {

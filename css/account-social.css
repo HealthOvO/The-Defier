@@ -330,6 +330,154 @@
   margin: 0 0 18px;
 }
 
+.social-relay-workspace {
+  padding: 22px 0 18px;
+}
+
+.social-relay-hero,
+.social-relay-leg-top,
+.social-relay-leg-meta,
+.social-relay-reward-copy {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.social-relay-hero {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.social-relay-score,
+.social-relay-current,
+.social-relay-leg,
+.social-relay-tactic {
+  padding: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  background: #16191b;
+}
+
+.social-relay-score,
+.social-relay-current {
+  display: grid;
+  gap: 5px;
+}
+
+.social-relay-score strong {
+  color: #f1d58e;
+  font-size: 1.8rem;
+  line-height: 1.1;
+}
+
+.social-relay-score span,
+.social-relay-current span,
+.social-inline-note,
+.social-relay-leg-meta span,
+.social-relay-leg-summary span,
+.social-relay-reward-copy span {
+  color: #99a19d;
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+
+.social-inline-note {
+  margin-bottom: 14px;
+}
+
+.social-relay-route-grid,
+.social-relay-tactic-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.social-relay-route-grid {
+  margin-bottom: 14px;
+}
+
+.social-relay-leg {
+  display: grid;
+  gap: 8px;
+  min-height: 124px;
+}
+
+.social-relay-leg strong,
+.social-relay-current strong,
+.social-relay-reward-copy strong,
+.social-relay-tactic-copy strong {
+  display: block;
+  color: #eef1ee;
+}
+
+.social-relay-leg-top span {
+  color: #d8b765;
+  font-size: 0.78rem;
+  text-align: right;
+}
+
+.social-relay-leg-meta,
+.social-relay-reward-copy {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+}
+
+.social-relay-tactics {
+  margin-bottom: 14px;
+}
+
+.social-relay-tactic {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
+  cursor: pointer;
+}
+
+.social-relay-tactic.selected {
+  border-color: rgba(216, 183, 101, 0.38);
+  background: #1a1d1e;
+}
+
+.social-relay-tactic input {
+  margin-top: 2px;
+  accent-color: #d8b765;
+}
+
+.social-relay-tactic-copy span {
+  display: block;
+  margin-top: 4px;
+  color: #96a09a;
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+
+.social-relay-actions {
+  justify-content: flex-start;
+  margin-bottom: 14px;
+}
+
+.social-relay-actions button {
+  min-width: 128px;
+}
+
+.social-relay-rewards {
+  display: grid;
+  gap: 10px;
+}
+
+.social-relay-reward-panel {
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  background: #16191b;
+}
+
 .social-security-grid {
   display: grid;
   grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
@@ -414,6 +562,32 @@
 
   .social-security-grid {
     grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .social-relay-hero,
+  .social-relay-route-grid,
+  .social-relay-tactic-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .social-relay-actions button {
+    flex: 1 1 140px;
+  }
+}
+
+@media (max-width: 430px) {
+  .social-relay-score strong {
+    font-size: 1.5rem;
+  }
+
+  .social-relay-actions button,
+  .social-rewards button {
+    width: 100%;
+  }
+
+  .social-relay-leg-top,
+  .social-relay-tactic {
     gap: 8px;
   }
 }

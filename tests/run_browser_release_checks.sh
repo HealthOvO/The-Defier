@@ -30,6 +30,9 @@ audit_timeout_for() {
     frontend-layout)
       printf '%s\n' "$FRONTEND_LAYOUT_AUDIT_TIMEOUT_SECONDS"
       ;;
+    relay-expedition-real)
+      printf '%s\n' "${RELAY_EXPEDITION_REAL_AUDIT_TIMEOUT_SECONDS:-1200}"
+      ;;
     pvp-live-real|pvp-live-mobile-real|authoritative-runs-real)
       printf '%s\n' "${PVP_LIVE_REAL_AUDIT_TIMEOUT_SECONDS:-1200}"
       ;;
@@ -176,6 +179,7 @@ run_selected_audit dongfu node tests/browser_dongfu_audit.mjs "$BASE_URL" "$OUTP
 run_selected_audit challenge node tests/browser_challenge_audit.mjs "$BASE_URL" "$OUTPUT_ROOT/challenge"
 run_selected_audit season-ops node tests/browser_season_ops_audit.mjs "$BASE_URL" "$OUTPUT_ROOT/season-ops"
 run_selected_audit authoritative-runs-real node tests/browser_authoritative_runs_real_backend_smoke.mjs "$BASE_URL" "$OUTPUT_ROOT/authoritative-runs-real"
+run_selected_audit relay-expedition-real node tests/browser_relay_expedition_real_backend_smoke.mjs "$BASE_URL" "$OUTPUT_ROOT/relay-expedition-real"
 run_selected_audit expedition node tests/browser_expedition_audit.mjs "$BASE_URL" "$OUTPUT_ROOT/expedition"
 run_selected_audit events node tests/browser_event_branch_audit.mjs "$BASE_URL" "$OUTPUT_ROOT/events"
 run_selected_audit vow-choice node tests/browser_vow_choice_audit.mjs "$BASE_URL" "$OUTPUT_ROOT/vow-choice"

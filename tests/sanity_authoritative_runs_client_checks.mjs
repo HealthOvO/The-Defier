@@ -109,7 +109,7 @@ assert.equal(typeof BackendClient.getAuthoritativeRunReplay, 'function', 'Backen
 const beginResult = await BackendClient.beginAuthoritativeRun({
   clientRunId: 'ar-client-api-0001',
   mode: 'pve',
-  contentVersion: 'authoritative-trials-v1',
+  contentVersion: 'authoritative-trials-v2',
   score: 9999
 }, { expectedUserId: 'authrun-user-a' });
 assert.equal(beginResult.success, true);
@@ -119,7 +119,7 @@ assert.equal(requestCalls.at(-1).options.authToken, 'authoritative-run-session-t
 assert.deepEqual(signingCalls.at(-1).payload, {
   clientRunId: 'ar-client-api-0001',
   mode: 'pve',
-  contentVersion: 'authoritative-trials-v1'
+  contentVersion: 'authoritative-trials-v2'
 }, 'begin signature should cover only the signed business payload');
 
 const currentResult = await BackendClient.getCurrentAuthoritativeRun('challenge', { expectedUserId: 'authrun-user-a' });

@@ -161,11 +161,11 @@ async function runChecks() {
   try {
     await waitForHealth(server);
     const version = await request('/api/version');
-    assert.strictEqual(version.payload?.schema?.version, 9);
-    assert.strictEqual(version.payload?.schema?.currentMigrationId, '0009_account_social_coop');
+    assert.strictEqual(version.payload?.schema?.version, 10);
+    assert.strictEqual(version.payload?.schema?.currentMigrationId, '0010_relay_expedition');
     assert.deepStrictEqual(
       version.payload?.schema?.appliedMigrations?.map(entry => entry.id),
-      ['0001_startup_schema', '0002_progression_platform', '0003_verified_runs', '0004_cloud_state_v2', '0005_season_ops_economy', '0006_authoritative_runs_v2', '0007_authoritative_challenge_ladder', '0008_authoritative_world_rift', '0009_account_social_coop']
+      ['0001_startup_schema', '0002_progression_platform', '0003_verified_runs', '0004_cloud_state_v2', '0005_season_ops_economy', '0006_authoritative_runs_v2', '0007_authoritative_challenge_ladder', '0008_authoritative_world_rift', '0009_account_social_coop', '0010_relay_expedition']
     );
     for (const table of [
       'progression_verified_runs',
@@ -184,10 +184,10 @@ async function runChecks() {
     server = startServer();
     await waitForHealth(server);
     const upgradedVersion = await request('/api/version');
-    assert.strictEqual(upgradedVersion.payload?.schema?.currentMigrationId, '0009_account_social_coop', 'older databases should advance through verified runs to account social v9 on restart');
+    assert.strictEqual(upgradedVersion.payload?.schema?.currentMigrationId, '0010_relay_expedition', 'older databases should advance through verified runs to relay expedition v10 on restart');
     assert.deepStrictEqual(
       upgradedVersion.payload?.schema?.appliedMigrations?.map(entry => entry.id),
-      ['0001_startup_schema', '0002_progression_platform', '0003_verified_runs', '0004_cloud_state_v2', '0005_season_ops_economy', '0006_authoritative_runs_v2', '0007_authoritative_challenge_ladder', '0008_authoritative_world_rift', '0009_account_social_coop'],
+      ['0001_startup_schema', '0002_progression_platform', '0003_verified_runs', '0004_cloud_state_v2', '0005_season_ops_economy', '0006_authoritative_runs_v2', '0007_authoritative_challenge_ladder', '0008_authoritative_world_rift', '0009_account_social_coop', '0010_relay_expedition'],
       'older databases should record the complete additive migration chain'
     );
     for (const table of [

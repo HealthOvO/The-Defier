@@ -162,7 +162,7 @@ try {
   apiUrl = `http://127.0.0.1:${port}`;
   backend = startBackend(port);
   const health = await waitForHealth();
-  add('real backend boots account social schema V9', health?.schema?.version === 9 && health?.schema?.currentMigrationId === '0009_account_social_coop', JSON.stringify(health?.schema || {}));
+  add('real backend boots relay expedition schema V10', health?.schema?.version === 10 && health?.schema?.currentMigrationId === '0010_relay_expedition', JSON.stringify(health?.schema || {}));
 
   const accountA = await register(usernameA, 'Desktop A');
   const accountB = await register(usernameB, 'Desktop B');

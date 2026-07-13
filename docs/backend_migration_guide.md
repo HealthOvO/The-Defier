@@ -216,9 +216,15 @@ localStorage.setItem('theDefierServerConfig', JSON.stringify({
 - `social_profiles/friend_requests/friendships/relationship_controls/presence` 保存公开 profileId、双向道友关系、单向屏蔽/静音、隐私和 TTL 在线状态；不存在、隐私拒绝和屏蔽目标对外统一不可用。
 - `world_rift_squads/members/invites/contributions/entries/reward_claims/mutations` 保存按轮换冻结的小队、成员快照、贡献归属、每成员最佳一次聚合和仅外观荣誉回执；不会增加个人次数、全服伤害或战力。
 
+### relay_expedition_*
+
+- `relay_expedition_rotations/sessions/members/legs` 保存不可变周轮换、2-4 人成员快照、四棒接力状态、权威 run 绑定、脱敏摘要和共享路线投影；上一棒的生命、牌组、手牌或 RNG 不进入共享状态。
+- `relay_expedition_reward_claims/mutations` 将真实投影资格、外观荣誉钱包、追加式账本、claim fact 和幂等回执放在同一事务边界；不会写 PVP 或世界裂隙正式数据。
+- `relay_expedition_ops_events/counters` 只保存哈希化账号/session/run 引用和有限枚举；发车绑定失败会释放预留并作废未绑定的孤儿权威 run。
+
 ## 当前迁移提示
 
-1. 当前 Schema 版本为 `9`；启动顺序为 `0001_startup_schema`、`0002_progression_platform`、`0003_verified_runs`、`0004_cloud_state_v2`、`0005_season_ops_economy`、`0006_authoritative_runs_v2`、`0007_authoritative_challenge_ladder`、`0008_authoritative_world_rift`、`0009_account_social_coop`。
+1. 当前 Schema 版本为 `10`；启动顺序为 `0001_startup_schema`、`0002_progression_platform`、`0003_verified_runs`、`0004_cloud_state_v2`、`0005_season_ops_economy`、`0006_authoritative_runs_v2`、`0007_authoritative_challenge_ladder`、`0008_authoritative_world_rift`、`0009_account_social_coop`、`0010_relay_expedition`。
 2. `0004_cloud_state_v2` 以事务方式幂等回填旧槽位和账号全局数据；旧数据不会因超过 V2 新写入上限而阻断启动。
 3. `0005_season_ops_economy` 优先按服务端战斗状态 `setup.battleStartedAt` 回填 `match_started_at` 并重放赛季有效时间窗内的 live PVP 正式结算；仅在旧状态缺失时回退到房间创建时间，不能把历史异步 PVP、练习局或赛季外对局写入新榜。
 4. 旧 `pvp_ranks` 保持累计段位兼容，正式赛季榜从 1000 独立起算；升级不会用旧累计分污染赛季榜，也不会在首场新结算时清零旧客户端段位。
@@ -227,5 +233,6 @@ localStorage.setItem('theDefierServerConfig', JSON.stringify({
 7. `0007_authoritative_challenge_ladder` 追加权威挑战轮转、尝试、结算结果、榜单、奖励领取、幂等 mutation 和运维表；它建立在前序迁移之上，但不会改写 `0006_authoritative_runs_v2` 已记录的版本语义。
 8. `0008_authoritative_world_rift` 追加裂隙轮换、全服共享状态、权威出征、不可变贡献、最佳三次榜单、奖励、幂等 mutation 和运维表；升级不会回填本地挑战或伪造全服贡献。
 9. `0009_account_social_coop` 追加账号规范名、持久会话、登录限频、道友图、有限在线状态和裂隙协作小队；旧短密码可继续登录，改密后全部旧票据立即失效，协作奖励只进入外观荣誉账本。
-10. 旧客户端继续使用时间戳兼容写入，新客户端必须使用完整业务体签名、revision/CAS 和 mutationId，失败时不得降级旧协议。
-11. 云状态只管理四个存档槽和账号全局数据；PVP、长期进度、可信运行、权威试炼、权威挑战榜、世界裂隙、道友关系与赛季经济继续由各自服务端域负责。
+10. `0010_relay_expedition` 追加同道远征周轮换、session、成员快照、四棒、奖励、mutation 与脱敏运维表；启动会保留旧权威目录和既有账号/社交/裂隙数据，不会把本地战绩回填为接力贡献。
+11. 旧客户端继续使用时间戳兼容写入，新客户端必须使用完整业务体签名、revision/CAS 和 mutationId，失败时不得降级旧协议。
+12. 云状态只管理四个存档槽和账号全局数据；PVP、长期进度、可信运行、权威试炼、权威挑战榜、世界裂隙、道友关系、同道远征与赛季经济继续由各自服务端域负责。

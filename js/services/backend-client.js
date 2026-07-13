@@ -3,12 +3,13 @@ export const CLOUD_STATE_PROTOCOL_VERSION = 'cloud-state-v2';
 export const ACCOUNT_SECURITY_PROTOCOL_VERSION = 'account-security-v1';
 export const SOCIAL_GRAPH_PROTOCOL_VERSION = 'social-graph-v1';
 export const WORLD_RIFT_SQUAD_PROTOCOL_VERSION = 'world-rift-squad-v1';
+export const RELAY_EXPEDITION_PROTOCOL_VERSION = 'relay-expedition-v1';
 const DEVICE_STORAGE_KEY = 'theDefierDeviceIdV1';
 const AUTHORITATIVE_RUN_SAFE_ID = /^[A-Za-z0-9._:-]{8,128}$/;
 const AUTHORITATIVE_RUN_ENTITY_ID = /^[A-Za-z0-9._:-]{1,128}$/;
-const AUTHORITATIVE_RUN_MODES = new Set(['pve', 'challenge', 'expedition', 'challenge_ladder', 'world_rift']);
+const AUTHORITATIVE_RUN_MODES = new Set(['pve', 'challenge', 'expedition', 'challenge_ladder', 'world_rift', 'relay_expedition']);
 const AUTHORITATIVE_RUN_COMMANDS = new Set(['select_node', 'play_card', 'end_turn', 'choose_reward', 'abandon']);
-const AUTHORITATIVE_RUN_CONTENT_VERSION = 'authoritative-trials-v1';
+const AUTHORITATIVE_RUN_CONTENT_VERSION = 'authoritative-trials-v2';
 export const BackendClient = {
   provider: 'server',
   initError: null,
@@ -64,7 +65,8 @@ export const BackendClient = {
       seasonOpsPathPrefix: typeof config.seasonOpsPathPrefix === 'string' ? config.seasonOpsPathPrefix.trim() : '/api/season-ops',
       challengeLadderPathPrefix: typeof config.challengeLadderPathPrefix === 'string' ? config.challengeLadderPathPrefix.trim() : '/api/challenge-ladder',
       worldRiftPathPrefix: typeof config.worldRiftPathPrefix === 'string' ? config.worldRiftPathPrefix.trim() : '/api/world-rift',
-      socialPathPrefix: typeof config.socialPathPrefix === 'string' ? config.socialPathPrefix.trim() : '/api/social'
+      socialPathPrefix: typeof config.socialPathPrefix === 'string' ? config.socialPathPrefix.trim() : '/api/social',
+      relayExpeditionPathPrefix: typeof config.relayExpeditionPathPrefix === 'string' ? config.relayExpeditionPathPrefix.trim() : '/api/relay-expeditions'
     };
   },
   cloneData(data) {
@@ -1208,6 +1210,12 @@ export const BackendClient = {
     return config && typeof config.worldRiftPathPrefix === 'string' && config.worldRiftPathPrefix.trim()
       ? config.worldRiftPathPrefix.trim().replace(/\/+$/, '')
       : '/api/world-rift';
+  },
+  getRelayExpeditionPathPrefix() {
+    const config = this.getServerConfig();
+    return config && typeof config.relayExpeditionPathPrefix === 'string' && config.relayExpeditionPathPrefix.trim()
+      ? config.relayExpeditionPathPrefix.trim().replace(/\/+$/, '')
+      : '/api/relay-expeditions';
   },
   getSocialPathPrefix() {
     const config = this.getServerConfig();
@@ -3292,6 +3300,140 @@ export const BackendClient = {
         message: error.message || '天穹裂隙领奖失败'
       };
     }
+  },
+  async requestRelayExpedition(path = '', {
+    method = 'GET',
+    data,
+    expectedUserId = ''
+  } = {}) {
+    const requestMethod = String(method || 'GET').toUpperCase();
+    const boundUserId = String(expectedUserId || this.getCurrentUser()?.objectId || this.getCurrentUser()?.id || '').trim();
+    const session = this.captureProgressionSessionSnapshot(
+      { expectedUserId: boundUserId },
+      '登录账号已变化，请刷新同道远征后重试'
+    );
+    if (!session || !session.success) return session;
+    const prefix = this.getRelayExpeditionPathPrefix();
+    const requestPath = `${prefix}${String(path || '')}`;
+    const payload = data && typeof data === 'object' && !Array.isArray(data)
+      ? this.cloneData(data) || {}
+      : {};
+    if (requestMethod !== 'GET') {
+      if (!payload.protocolVersion) payload.protocolVersion = RELAY_EXPEDITION_PROTOCOL_VERSION;
+      if (!payload.mutationId) payload.mutationId = this.createAuthoritativeRunRequestId('relay-mutation');
+      const integrity = await this.createRequiredSessionIntegrityFields(
+        payload,
+        session.sessionToken,
+        '当前环境不支持同道远征签名，请刷新后重试',
+        'relay_expedition_signature_required',
+        `${requestMethod} ${requestPath.split('?')[0]}`
+      );
+      if (!integrity || !integrity.success) return { ...integrity, mutationId: payload.mutationId };
+      Object.assign(payload, integrity.integrity);
+    }
+    try {
+      const result = await this.requestServer(requestPath, {
+        method: requestMethod,
+        authToken: session.sessionToken,
+        data: requestMethod === 'GET' ? undefined : payload
+      });
+      const currentUserId = String(this.getCurrentUser()?.objectId || this.getCurrentUser()?.id || '').trim();
+      if (!boundUserId || currentUserId !== boundUserId) {
+        return {
+          success: false,
+          reason: 'relay_expedition_account_changed',
+          mutationId: payload.mutationId,
+          message: '登录账号已变化，旧同道远征回执未应用；原账号可刷新恢复'
+        };
+      }
+      return {
+        ...(result && typeof result === 'object'
+          ? result
+          : { success: false, reason: 'relay_expedition_invalid_response', message: '同道远征服务返回异常' }),
+        ...(payload.mutationId ? { mutationId: payload.mutationId } : {})
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error,
+        reason: error && error.reason || undefined,
+        mutationId: payload.mutationId,
+        message: error.message || '同道远征服务暂时不可用'
+      };
+    }
+  },
+  async getRelayExpeditionCurrent(options = {}) {
+    return this.requestRelayExpedition('/current', {
+      method: 'GET',
+      expectedUserId: options.expectedUserId
+    });
+  },
+  async createRelayExpeditionSession(request = {}, options = {}) {
+    return this.requestRelayExpedition('/sessions', {
+      method: 'POST',
+      expectedUserId: options.expectedUserId,
+      data: {
+        protocolVersion: request.protocolVersion || RELAY_EXPEDITION_PROTOCOL_VERSION,
+        rotationId: String(request.rotationId || '').trim(),
+        sourceSquadId: String(request.sourceSquadId || '').trim(),
+        clientSessionId: String(request.clientSessionId || this.createAuthoritativeRunRequestId('relay-session')).trim(),
+        mutationId: String(request.mutationId || this.createAuthoritativeRunRequestId('relay-create')).trim()
+      }
+    });
+  },
+  async claimRelayExpeditionLeg(request = {}, options = {}) {
+    return this.requestRelayExpedition('/legs/claim', {
+      method: 'POST',
+      expectedUserId: options.expectedUserId,
+      data: {
+        protocolVersion: request.protocolVersion || RELAY_EXPEDITION_PROTOCOL_VERSION,
+        sessionId: String(request.sessionId || '').trim(),
+        legIndex: Math.floor(Number(request.legIndex)),
+        tacticId: String(request.tacticId || '').trim(),
+        clientLegId: String(request.clientLegId || this.createAuthoritativeRunRequestId('relay-leg')).trim(),
+        mutationId: String(request.mutationId || this.createAuthoritativeRunRequestId('relay-claim')).trim()
+      }
+    });
+  },
+  async passRelayExpeditionBaton(request = {}, options = {}) {
+    return this.requestRelayExpedition('/baton/pass', {
+      method: 'POST',
+      expectedUserId: options.expectedUserId,
+      data: {
+        protocolVersion: request.protocolVersion || RELAY_EXPEDITION_PROTOCOL_VERSION,
+        sessionId: String(request.sessionId || '').trim(),
+        legIndex: Math.floor(Number(request.legIndex)),
+        mutationId: String(request.mutationId || this.createAuthoritativeRunRequestId('relay-pass')).trim()
+      }
+    });
+  },
+  async projectRelayExpeditionLeg(legId = '', request = {}, options = {}) {
+    const safeLegId = String(legId || request.legId || '').trim();
+    return this.requestRelayExpedition(`/legs/${encodeURIComponent(safeLegId)}/project`, {
+      method: 'POST',
+      expectedUserId: options.expectedUserId,
+      data: {
+        protocolVersion: request.protocolVersion || RELAY_EXPEDITION_PROTOCOL_VERSION,
+        sessionId: String(request.sessionId || '').trim(),
+        legId: safeLegId,
+        runId: String(request.runId || '').trim(),
+        mutationId: String(request.mutationId || this.createAuthoritativeRunRequestId('relay-project')).trim()
+      }
+    });
+  },
+  async claimRelayExpeditionReward(milestoneId = '', request = {}, options = {}) {
+    const safeMilestoneId = String(milestoneId || request.milestoneId || '').trim();
+    return this.requestRelayExpedition(`/rewards/${encodeURIComponent(safeMilestoneId)}/claim`, {
+      method: 'POST',
+      expectedUserId: options.expectedUserId,
+      data: {
+        protocolVersion: request.protocolVersion || RELAY_EXPEDITION_PROTOCOL_VERSION,
+        sessionId: String(request.sessionId || '').trim(),
+        rotationId: String(request.rotationId || '').trim(),
+        milestoneId: safeMilestoneId,
+        mutationId: String(request.mutationId || this.createAuthoritativeRunRequestId('relay-reward')).trim()
+      }
+    });
   },
   async getPvpEconomy() {
     const user = this.getCurrentUser();

@@ -73,6 +73,8 @@ jobs:
             audits: core,feature,automation-boot,map-overview-risk,ui-gallery
           - shard: frontend-layout
             audits: frontend-layout,season-ops,authoritative-runs-real
+          - shard: relay-expedition
+            audits: relay-expedition-real
           - shard: backend-mobile-meta
             audits: backend-client,auth-ui-cloud,account-social-real,mobile,reward-mobile,meta
           - shard: run-path-challenge
@@ -96,7 +98,7 @@ jobs:
         run: npm ci
 
       - name: Install backend dependencies
-        if: contains(matrix.audits, 'backend-client') || contains(matrix.audits, 'auth-ui-cloud') || contains(matrix.audits, 'account-social-real') || contains(matrix.audits, 'pvp-live-real') || contains(matrix.audits, 'pvp-live-mobile-real') || contains(matrix.audits, 'authoritative-runs-real')
+        if: contains(matrix.audits, 'backend-client') || contains(matrix.audits, 'auth-ui-cloud') || contains(matrix.audits, 'account-social-real') || contains(matrix.audits, 'pvp-live-real') || contains(matrix.audits, 'pvp-live-mobile-real') || contains(matrix.audits, 'authoritative-runs-real') || contains(matrix.audits, 'relay-expedition-real')
         run: npm ci --prefix server
 
       - name: Install Playwright browser

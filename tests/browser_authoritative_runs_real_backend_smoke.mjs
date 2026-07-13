@@ -540,7 +540,7 @@ try {
   apiUrl = `http://127.0.0.1:${port}`;
   backend = startBackend();
   const health = await waitForHealth();
-  add('real backend boots schema V9', health?.schema?.version === 9 && health?.schema?.currentMigrationId === '0009_account_social_coop', JSON.stringify(health?.schema || {}));
+  add('real backend boots schema V10', health?.schema?.version === 10 && health?.schema?.currentMigrationId === '0010_relay_expedition', JSON.stringify(health?.schema || {}));
 
   const launchArgs = [];
   if (new URL(appUrl).protocol === 'https:') {

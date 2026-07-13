@@ -101,7 +101,7 @@ function createRunEnvelope({ mode = "pve", phase = "route", status = "active", s
     mode,
     status,
     protocolVersion: "authoritative-run-v2",
-    contentVersion: "authoritative-trials-v1",
+    contentVersion: "authoritative-trials-v2",
     contentHash: "aa18ac01c39d1c1c38d0c26fe3d83d92a3b34035b25305628e00a96a42bdd281",
     authorityLevel: "server",
     trustTier: "server_authoritative",
@@ -138,7 +138,7 @@ function createRunEnvelope({ mode = "pve", phase = "route", status = "active", s
     projection: {
       schemaVersion: 2,
       protocolVersion: "authoritative-run-v2",
-      contentVersion: "authoritative-trials-v1",
+      contentVersion: "authoritative-trials-v2",
       runId: `arun-${mode}-${phase}`,
       mode,
       scenario: {

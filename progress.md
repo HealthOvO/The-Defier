@@ -1,5 +1,20 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-07-13: V10-S106 同道远征 V1
+  - 本轮完成
+    - SQLite 升级到 V10 `0010_relay_expedition`，新增不可变周轮换、2-4 人 session 成员快照、四棒状态机、权威 run 绑定、路线投影、幂等奖励和脱敏运维事实；当前轮换目录为 `relay-expedition-catalog-v2 / relay-expedition-rotation-v2`，已落盘且哈希匹配的 v1 周轮换只读保留。`authoritative-trials-v2` 增加破阵、守脉、观星三套固定 10 张牌接力谱，旧 `authoritative-trials-v1` 继续保留用于历史 run 恢复。
+    - 道友录“裂隙小队”新增同道远征工作区：队长从当前 active 小队开启四棒异步接力，成员按 6 小时优先、18 小时开放、2 小时运行租约接棒；失败、放弃、超时和无人接棒都会推进，不生成机器人或模拟贡献。
+    - 每棒都是独立的账号权威三战，服务端只共享路线、棒次、接力谱和脱敏摘要，明确“共享路线，不共享残血与牌组”；每人最多两棒，有其他合格成员时不得连续接棒，上一棒不能把残血、牌组、手牌、弃牌堆、临时状态或 RNG 交给下一位。
+    - 奖励为 30/60/100 荣誉，只有真实投影成员可领，`rewardImpact=cosmetic_only`、`powerImpact=none`；完整流程不会改写 PVP 排名/钱包、世界裂隙正式次数、贡献或伤害。
+    - 恢复链覆盖 reserved 未发车、权威终态未投影、迟到 receipt、跨周 active session 和 N-1/N-2 多条领奖窗口；发车后绑定失败会原子释放棒次、回滚成员计数并作废孤儿 run，同一过期 clientLegId 不能重新绑定。
+  - 已验证
+    - 完整 Node 门禁：`npm run test:node`；relay V10 迁移、平台、跨进程、客户端、UI、权威 run 复用以及既有 PVP/存档/E2E 回归全部通过。
+    - 本地生产构建：`npm run build:pages`。正式真实后端浏览器分片：`AUDIT_FILTER=relay-expedition-real bash tests/run_browser_release_checks.sh http://127.0.0.1:4173 output/release-browser-audits-relay-expedition-final`，24/24 findings、0 failed、0 console error、6 张本轮 fresh 截图，missing / duplicate / unexpected report module 均为空。
+    - 最终 `gpt-5.4` 挑战者发现并修复两条边界：轮换运行时标量列可脱离冻结 snapshot 漂移、无 active run 时一基棒次被再次 `+1`；现已用单列篡改 fail-closed 和 `1/4 -> 4/4` 终态 UI 回归锁定。
+    - 当前玩家版本口径更新为“V10 同道远征 · 权威接力闭环”，同时保留实时论道、权威试炼、道友录和裂隙协作小队的既有入口与公平合同。
+  - 当前结论
+    - S106 功能、全量 Node 回归、真实浏览器证据、生产构建与挑战者终审均已完成；本轮后续只执行提交、合并、生产备份部署与线上 smoke，不预先把本地结果当成线上已更新。
+
 - 2026-07-13: V10-S105 账号安全与道友协作平台 V1
   - 本轮完成
     - SQLite 升级到 V9 `0009_account_social_coop`：旧账号增量回填规范道号和 auth version；新注册执行 3-24 字符道号及 8-72 字节密语策略，旧短密语仍可登录，历史规范名碰撞不会静默合并账号。

@@ -39,8 +39,8 @@ const JWT_SECRET = 'challenge-ladder-platform-jwt-secret-32';
 const HMAC_SECRET = 'challenge-ladder-platform-hmac-secret-32';
 const OPS_TOKEN = 'challenge-ladder-platform-ops-token-32';
 const PROTOCOL_VERSION = 'authoritative-challenge-ladder-v1';
-const EXPECTED_SCHEMA_VERSION = 9;
-const EXPECTED_MIGRATION_ID = '0009_account_social_coop';
+const EXPECTED_SCHEMA_VERSION = 10;
+const EXPECTED_MIGRATION_ID = '0010_relay_expedition';
 const EXPECTED_TABLES = [
   'challenge_ladder_rotations',
   'challenge_ladder_attempts',

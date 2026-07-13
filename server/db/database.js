@@ -12,6 +12,7 @@ const { bootstrapAuthoritativeRunsSchema } = require('../progression/authoritati
 const { bootstrapChallengeLadderSchema } = require('../challenge-ladder/bootstrap');
 const { bootstrapWorldRiftSchema } = require('../world-rift/bootstrap');
 const { bootstrapAccountSocialSchema } = require('../account-social/bootstrap');
+const { bootstrapRelayExpeditionSchema } = require('../relay-expedition/bootstrap');
 
 const dbPath = process.env.DEFIER_DB_PATH
     ? path.resolve(process.env.DEFIER_DB_PATH)
@@ -821,6 +822,7 @@ const initDb = () => {
                         await bootstrapChallengeLadderSchema(db);
                         await bootstrapWorldRiftSchema(db);
                         await bootstrapAccountSocialSchema(db);
+                        await bootstrapRelayExpeditionSchema(db);
                         recordCurrentSchemaMigration(db, (migrationErr) => {
                             if (migrationErr) fail(migrationErr);
                             else done();

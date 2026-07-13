@@ -24,6 +24,7 @@ const browserPvpMobileAudit = read('tests/browser_pvp_mobile_audit.mjs');
 const browserPvpLiveAudit = read('tests/browser_pvp_live_audit.mjs');
 const browserPvpLiveRealSmoke = read('tests/browser_pvp_live_real_backend_smoke.mjs');
 const browserAuthoritativeRunsRealSmoke = read('tests/browser_authoritative_runs_real_backend_smoke.mjs');
+const browserRelayExpeditionRealSmoke = read('tests/browser_relay_expedition_real_backend_smoke.mjs');
 const browserFeatureAudit = read('tests/browser_feature_audit.mjs');
 const browserUiGalleryAudit = read('tests/browser_ui_gallery_audit.mjs');
 const frontendUpgradeAssetChecks = read('tests/sanity_frontend_upgrade_asset_checks.cjs');
@@ -62,6 +63,7 @@ const requiredBrowserReleaseAudits = [
   'challenge',
   'season-ops',
   'authoritative-runs-real',
+  'relay-expedition-real',
   'expedition',
   'events',
   'vow-choice',
@@ -175,6 +177,17 @@ const worldRiftClientChecks = read('tests/sanity_world_rift_client_checks.mjs');
 const worldRiftUiChecks = read('tests/sanity_world_rift_ui_checks.mjs');
 const worldRiftPlatformChecks = read('tests/sanity_world_rift_platform_checks.cjs');
 const worldRiftDocumentation = read('docs/backend_authoritative_world_rift_v1.md');
+const relayExpeditionCatalog = read('server/relay-expedition/catalog.js');
+const relayExpeditionBootstrap = read('server/relay-expedition/bootstrap.js');
+const relayExpeditionService = read('server/relay-expedition/service.js');
+const relayExpeditionRoutes = read('server/routes/relay-expedition.js');
+const relayExpeditionClient = read('js/services/relay-expedition-service.js');
+const relayExpeditionMigrationChecks = read('tests/sanity_relay_expedition_migration_checks.cjs');
+const relayExpeditionPlatformChecks = read('tests/sanity_relay_expedition_platform_checks.cjs');
+const relayExpeditionCrossProcessChecks = read('tests/sanity_relay_expedition_cross_process_checks.cjs');
+const relayExpeditionClientChecks = read('tests/sanity_relay_expedition_client_checks.mjs');
+const relayExpeditionUiChecks = read('tests/sanity_relay_expedition_ui_checks.mjs');
+const relayExpeditionDocumentation = read('docs/backend_relay_expedition_v1.md');
 const shopManager = read('js/managers/ShopManager.js');
 const coreUtils = read('js/core/utils.js');
 const gameSource = read('js/game.js');
@@ -405,7 +418,7 @@ const waitingReportSource = pvpLiveStore.slice(
   'receipt?.idempotent',
   'server_verified must only upgrade an observed event',
   'a checkpoint source must not move across tickets',
-  'older databases should advance through verified runs to account social v9 on restart',
+  'older databases should advance through verified runs to relay expedition v10 on restart',
 ].forEach((needle) => {
   assert.ok(
     verifiedRunsPlatformChecks.includes(needle) || verifiedRunsDocumentation.includes(needle),
@@ -462,7 +475,17 @@ const waitingReportSource = pvpLiveStore.slice(
 });
 
 [
-  [authoritativeRunsCatalog, "CONTENT_VERSION = 'authoritative-trials-v1'"],
+  'sanity_relay_expedition_migration_checks.cjs',
+  'sanity_relay_expedition_platform_checks.cjs',
+  'sanity_relay_expedition_cross_process_checks.cjs',
+  'sanity_relay_expedition_client_checks.mjs',
+  'sanity_relay_expedition_ui_checks.mjs',
+].forEach((needle) => {
+  assert.ok(runNodeChecks.includes(needle), `node gate should execute relay expedition check: ${needle}`);
+});
+
+[
+  [authoritativeRunsCatalog, "CONTENT_VERSION = 'authoritative-trials-v2'"],
   [authoritativeRunsCatalog, "PROTOCOL_VERSION = 'authoritative-run-v2'"],
   [authoritativeRunsEngine, 'function createInitialState'],
   [authoritativeRunsEngine, 'function projectState'],
@@ -536,6 +559,29 @@ const waitingReportSource = pvpLiveStore.slice(
 });
 
 [
+  [relayExpeditionCatalog, "PROTOCOL_VERSION = 'relay-expedition-v1'"],
+  [relayExpeditionCatalog, 'PRIORITY_WINDOW_MS = 6 * 60 * 60 * 1000'],
+  [relayExpeditionCatalog, 'OPEN_CLAIM_WINDOW_MS = 18 * 60 * 60 * 1000'],
+  [relayExpeditionCatalog, 'ACTIVE_LEASE_MS = 2 * 60 * 60 * 1000'],
+  [relayExpeditionBootstrap, 'relay_expedition_sessions'],
+  [relayExpeditionBootstrap, 'relay_expedition_reward_claims'],
+  [relayExpeditionService, "const RELAY_MODE = 'relay_expedition'"],
+  [authoritativeRunsService, 'relay_expedition_start_required'],
+  [relayExpeditionRoutes, "integrity.mode !== 'session-v2'"],
+  [relayExpeditionRoutes, "router.get('/ops/overview', authenticate, requireOpsToken"],
+  [relayExpeditionClient, "DEFAULT_PROTOCOL_VERSION = 'relay-expedition-v1'"],
+  [relayExpeditionMigrationChecks, 'v9 to v10 must preserve users'],
+  [relayExpeditionCrossProcessChecks, 'concurrent claim should produce exactly one winner'],
+  [relayExpeditionPlatformChecks, 'relay reward must not mutate pvp ranks'],
+  [relayExpeditionCrossProcessChecks, 'launch->bind recovery must not duplicate authoritative runs'],
+  [relayExpeditionClientChecks, 'account churn should suppress stale relay responses'],
+  [relayExpeditionUiChecks, 'Relay expedition UI checks passed.'],
+  [relayExpeditionDocumentation, '不写 PVP 排名、PVP 钱包'],
+].forEach(([source, needle]) => {
+  assert.ok(source.includes(needle), `relay expedition V1 should pin release marker: ${needle}`);
+});
+
+[
   'progressionRunOwnerUserId',
   'currentSaveSlot',
   'seedSignature',
@@ -558,6 +604,7 @@ const waitingReportSource = pvpLiveStore.slice(
   '0007_authoritative_challenge_ladder',
   '0008_authoritative_world_rift',
   '0009_account_social_coop',
+  '0010_relay_expedition',
   'cloud_state_revisions',
   'cloud_state_heads',
   'cloud_state_ops_counters',
@@ -595,6 +642,14 @@ const waitingReportSource = pvpLiveStore.slice(
   'world_rift_mutations',
   'world_rift_ops_events',
   'world_rift_ops_counters',
+  'relay_expedition_rotations',
+  'relay_expedition_sessions',
+  'relay_expedition_members',
+  'relay_expedition_legs',
+  'relay_expedition_reward_claims',
+  'relay_expedition_mutations',
+  'relay_expedition_ops_events',
+  'relay_expedition_ops_counters',
 ].forEach((needle) => {
   assert.ok(
     schemaStatusSource.includes(needle)
@@ -602,7 +657,8 @@ const waitingReportSource = pvpLiveStore.slice(
       || cloudStateBootstrap.includes(needle)
       || authoritativeRunsBootstrap.includes(needle)
       || challengeLadderBootstrap.includes(needle)
-      || worldRiftBootstrap.includes(needle),
+      || worldRiftBootstrap.includes(needle)
+      || relayExpeditionBootstrap.includes(needle),
     `progression schema should pin migration/table marker: ${needle}`,
   );
 });
@@ -1012,6 +1068,8 @@ const browserAutomationBootAudit = read('tests/browser_automation_boot_audit.mjs
   'node tests/browser_challenge_audit.mjs "$BASE_URL" "$OUTPUT_ROOT/challenge"',
   'node tests/browser_season_ops_audit.mjs "$BASE_URL" "$OUTPUT_ROOT/season-ops"',
   'node tests/browser_authoritative_runs_real_backend_smoke.mjs "$BASE_URL" "$OUTPUT_ROOT/authoritative-runs-real"',
+  'node tests/browser_relay_expedition_real_backend_smoke.mjs "$BASE_URL" "$OUTPUT_ROOT/relay-expedition-real"',
+  'RELAY_EXPEDITION_REAL_AUDIT_TIMEOUT_SECONDS',
   'node tests/browser_expedition_audit.mjs "$BASE_URL" "$OUTPUT_ROOT/expedition"',
   'node tests/browser_event_branch_audit.mjs "$BASE_URL" "$OUTPUT_ROOT/events"',
   'node tests/browser_vow_choice_audit.mjs "$BASE_URL" "$OUTPUT_ROOT/vow-choice"',
@@ -1026,11 +1084,11 @@ const browserAutomationBootAudit = read('tests/browser_automation_boot_audit.mjs
 });
 
 const configuredBrowserReleaseAudits = [...browserReleaseScript.matchAll(/run_selected_audit\s+([^\s]+)/g)].map((match) => match[1]);
-assert.strictEqual(requiredBrowserReleaseAudits.length, 32, 'required browser release audit list should pin all 32 audits');
+assert.strictEqual(requiredBrowserReleaseAudits.length, 33, 'required browser release audit list should pin all 33 audits');
 assert.deepStrictEqual(
   configuredBrowserReleaseAudits,
   requiredBrowserReleaseAudits,
-  'browser release gate should keep the full explicit 32-audit coverage set in sync',
+  'browser release gate should keep the full explicit 33-audit coverage set in sync',
 );
 
 assert.strictEqual(
@@ -1040,7 +1098,7 @@ assert.strictEqual(
 );
 
 [
-  'real backend boots schema V9',
+  'real backend boots schema V10',
   'challenge ladder GET current returns initial allowance before any formal run',
   'challenge hub global UI shows formal attempts and official ladder copy before submission',
   'global formal surface uses the server rotation and excludes legacy local rewards',
@@ -1069,6 +1127,25 @@ assert.strictEqual(
   'real settled mobile view has no horizontal overflow',
 ].forEach((needle) => {
   assert.ok(browserAuthoritativeRunsRealSmoke.includes(needle), `authoritative runs real browser gate should pin marker: ${needle}`);
+});
+
+[
+  'real backend boots relay expedition schema V10',
+  'two-account active world-rift squad is established before relay',
+  'leader creates the relay session from the real social workspace',
+  'account A claim binds a real relay_expedition authoritative run in the UI',
+  'social workspace reopen recovers the same in-flight relay authoritative run',
+  'account A completes the relay authoritative leg through the real three-battle UI',
+  'settle auto-projects back into the shared relay route and returns to the social workspace',
+  'relay first-handoff reward stays renown cosmetic-only and records one progression ledger entry',
+  'relay reward does not rewrite PVP wallet/rank or formal world-rift attempts and damage',
+  'relay social workspace stays readable on mobile after reward claim',
+  'account B refresh sees the same shared relay route and second-leg claim affordance',
+  'account B claims the subsequent relay baton into its own real authoritative run',
+  'shared route persists while HP and deck state remain isolated between legs',
+  'real browser console errors are empty',
+].forEach((needle) => {
+  assert.ok(browserRelayExpeditionRealSmoke.includes(needle), `relay expedition real browser gate should pin marker: ${needle}`);
 });
 
 [
@@ -1140,8 +1217,9 @@ assert.strictEqual(
 
 [
   'audits: frontend-layout,season-ops,authoritative-runs-real',
+  'audits: relay-expedition-real',
   'audits: expedition,events,vow-choice,guide,inheritance,pvp,pvp-live,pvp-live-real,pvp-live-mobile-real,pvp-mobile,pvp-mobile-result,challenge-mobile-flow',
-  "if: contains(matrix.audits, 'backend-client') || contains(matrix.audits, 'auth-ui-cloud') || contains(matrix.audits, 'account-social-real') || contains(matrix.audits, 'pvp-live-real') || contains(matrix.audits, 'pvp-live-mobile-real') || contains(matrix.audits, 'authoritative-runs-real')",
+  "if: contains(matrix.audits, 'backend-client') || contains(matrix.audits, 'auth-ui-cloud') || contains(matrix.audits, 'account-social-real') || contains(matrix.audits, 'pvp-live-real') || contains(matrix.audits, 'pvp-live-mobile-real') || contains(matrix.audits, 'authoritative-runs-real') || contains(matrix.audits, 'relay-expedition-real')",
 ].forEach((needle) => {
   assert.ok(
     pagesWorkflow.includes(needle),
@@ -1152,6 +1230,7 @@ assert.strictEqual(
 [
   "'season-ops'",
   "'authoritative-runs-real'",
+  "'relay-expedition-real'",
   "'pvp-live'",
   "'pvp-live-real'",
   "'pvp-live-mobile-real'",
