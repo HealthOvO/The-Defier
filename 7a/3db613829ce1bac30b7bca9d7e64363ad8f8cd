@@ -1,0 +1,41 @@
+css/frontend-upgrade.css
+  s_ca5652313828d6::t_264e15c0a08b11 15-457,4066-4153
+index.html
+  s_ca5652313828d6::t_dc26f7aec9989d 24,1761-1762,2084-2093,2099
+js/core/challenge_hub.js
+  s_ca5652313828d6::t_cfada7626ce4d0 4053,4058,4060,4063-4073,4076-4077
+js/game.js
+  s_ca5652313828d6::t_6623b0028c028e 8879-8880,8884,8889,8892-8893,8895,8904,8915-8943
+js/views/RewardView.js
+  s_ca5652313828d6::t_489e1c599cd4e9 1050,1052-1059,1124,1173,1175-1182,1186
+tests/run_node_checks.sh
+  s_ca5652313828d6::t_50af7309e7e620 16
+tests/sanity_secondary_frontend_flow_checks.cjs
+  s_decb0562bd6fee::t_13b1706a0fe8f3 1-194
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "7a3db613829ce1bac30b7bca9d7e64363ad8f8cd",
+  "prompts": {},
+  "sessions": {
+    "s_ca5652313828d6": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f3fed-94d5-77b2-9af0-61333559ff38",
+        "model": "unknown"
+      },
+      "human_author": "AI Agent <bot@example.com>"
+    },
+    "s_decb0562bd6fee": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f5994-8716-7a22-93f5-29a581dd70b7",
+        "model": "unknown"
+      },
+      "human_author": "AI Agent <bot@example.com>"
+    }
+  },
+  "attestation_metadata": {},
+  "remote_transcripts": {}
+}
