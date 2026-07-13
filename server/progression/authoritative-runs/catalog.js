@@ -1,7 +1,8 @@
 const { cloneJson, hashCanonical, stableStringify } = require('./canonical');
 
 const PROTOCOL_VERSION = 'authoritative-run-v2';
-const CONTENT_VERSION = 'authoritative-trials-v1';
+const CONTENT_VERSION = 'authoritative-trials-v2';
+const RELAY_EXPEDITION_SCENARIO_IDS = ['vanguard', 'bulwark', 'insight'];
 
 function deepFreeze(value) {
     if (!value || typeof value !== 'object' || Object.isFrozen(value)) return value;
@@ -201,6 +202,79 @@ const CONTENT_SNAPSHOT = deepFreeze({
                 { type: 'expedition_elite', pool: ['chain_colossus', 'oath_guard', 'mirror_seer'] },
                 { type: 'boss', pool: ['rift_sovereign'] }
             ]
+        },
+        vanguard: {
+            scenarioId: 'vanguard',
+            mode: 'relay_expedition',
+            title: '破阵谱',
+            description: '偏主动进攻的标准化接力谱，以更快的收束换取更高的失误成本。',
+            maxHp: 48,
+            energyPerTurn: 3,
+            handSize: 5,
+            turnBudget: 0,
+            betweenEncounterHeal: 0,
+            scoreMultiplier: 1,
+            starterDeck: [
+                'strike', 'strike', 'strike', 'strike',
+                'guard', 'guard',
+                'insight',
+                'sky_pierce',
+                'flowing_qi',
+                'fracture'
+            ],
+            stages: [
+                { type: 'relay', pool: ['ink_scout', 'ash_acolyte', 'oath_scribe'] },
+                { type: 'relay_elite', pool: ['mirror_seer', 'oath_guard', 'chain_colossus'] },
+                { type: 'boss', pool: ['trial_adjudicator'] }
+            ]
+        },
+        bulwark: {
+            scenarioId: 'bulwark',
+            mode: 'relay_expedition',
+            title: '守脉谱',
+            description: '偏稳健与护盾容错的标准化接力谱，不继承上一棒残局。',
+            maxHp: 60,
+            energyPerTurn: 3,
+            handSize: 5,
+            turnBudget: 0,
+            betweenEncounterHeal: 0,
+            scoreMultiplier: 1,
+            starterDeck: [
+                'strike', 'strike', 'strike',
+                'guard', 'guard', 'guard', 'guard',
+                'insight',
+                'iron_mandate',
+                'life_siphon'
+            ],
+            stages: [
+                { type: 'relay', pool: ['ink_scout', 'ash_acolyte', 'oath_scribe'] },
+                { type: 'relay_elite', pool: ['chain_colossus', 'oath_guard', 'mirror_seer'] },
+                { type: 'boss', pool: ['rift_sovereign'] }
+            ]
+        },
+        insight: {
+            scenarioId: 'insight',
+            mode: 'relay_expedition',
+            title: '观星谱',
+            description: '偏抽滤与节奏调整的标准化接力谱，不读取账号既有收藏或存档。',
+            maxHp: 52,
+            energyPerTurn: 3,
+            handSize: 5,
+            turnBudget: 0,
+            betweenEncounterHeal: 0,
+            scoreMultiplier: 1,
+            starterDeck: [
+                'strike', 'strike', 'strike',
+                'guard', 'guard',
+                'insight', 'insight',
+                'flowing_qi', 'flowing_qi',
+                'fracture'
+            ],
+            stages: [
+                { type: 'relay', pool: ['ash_acolyte', 'oath_scribe', 'ink_scout'] },
+                { type: 'relay_elite', pool: ['mirror_seer', 'chain_colossus', 'oath_guard'] },
+                { type: 'boss', pool: ['trial_adjudicator'] }
+            ]
         }
     }
 });
@@ -218,5 +292,6 @@ module.exports = {
     CONTENT_SNAPSHOT,
     CONTENT_VERSION,
     PROTOCOL_VERSION,
+    RELAY_EXPEDITION_SCENARIO_IDS,
     getContentSnapshot
 };

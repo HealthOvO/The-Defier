@@ -455,6 +455,8 @@ function makeMatchFromRow(row) {
         matchId: row.match_id,
         createdAt: Number(row.created_at) || 0,
         updatedAt: Number(row.updated_at) || 0,
+        sourceInviteCode: String(row.source_invite_code || ''),
+        sourceRematchMatchId: String(row.source_rematch_match_id || ''),
         state,
         connection: parseConnection(row),
         seatsByUserId: {
@@ -542,6 +544,10 @@ function makeRematchRequestFromRow(row) {
         sourceMatchId: row.source_match_id,
         seriesId: row.series_id,
         createdAt: Math.max(0, Math.floor(Number(row.created_at) || 0)),
+        status: String(row.status || 'waiting'),
+        claimId: String(row.claim_id || ''),
+        claimedAt: Math.max(0, Math.floor(Number(row.claimed_at) || 0)),
+        matchedMatchId: String(row.matched_match_id || ''),
         playersByUserId
     };
 }
@@ -562,6 +568,10 @@ function makeInviteRoomFromRow(row) {
             userId: String(row.target_user_id),
             displayName: String(row.target_user_name || row.target_user_id)
         } : null,
+        claimedByUserId: String(row.claimed_by_user_id || ''),
+        claimId: String(row.claim_id || ''),
+        claimedAt: Math.max(0, Math.floor(Number(row.claimed_at) || 0)),
+        matchedMatchId: String(row.matched_match_id || ''),
         createdAt: Math.max(0, Math.floor(Number(row.created_at) || 0))
     };
 }
@@ -958,8 +968,9 @@ function makeSqliteLivePvpPersistence() {
                     END`;
             const writeResult = await dbRun(
                 `INSERT INTO pvp_live_matches
-                    (match_id, status, seat_a_user_id, seat_b_user_id, state_version, state_json, connection_json, created_at, updated_at, finished_at)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    (match_id, status, seat_a_user_id, seat_b_user_id, state_version, state_json, connection_json,
+                     source_invite_code, source_rematch_match_id, created_at, updated_at, finished_at)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                  ON CONFLICT(match_id) DO UPDATE SET
                     status = excluded.status,
                     seat_a_user_id = excluded.seat_a_user_id,
@@ -967,6 +978,8 @@ function makeSqliteLivePvpPersistence() {
                     state_version = excluded.state_version,
                     state_json = excluded.state_json,
                     connection_json = ${connectionAssignmentSql},
+                    source_invite_code = excluded.source_invite_code,
+                    source_rematch_match_id = excluded.source_rematch_match_id,
                     updated_at = excluded.updated_at,
                     finished_at = excluded.finished_at
                  WHERE
@@ -985,6 +998,8 @@ function makeSqliteLivePvpPersistence() {
                     stateVersion,
                     serializedState,
                     serializeConnection(match.connection),
+                    String(match.sourceInviteCode || ''),
+                    String(match.sourceRematchMatchId || ''),
                     createdAt,
                     now,
                     finishedAt
@@ -1236,12 +1251,13 @@ function makeSqliteLivePvpPersistence() {
             const updatedAt = Date.now();
             await dbRun(
                 `INSERT INTO pvp_live_rematch_requests
-                    (source_match_id, series_id, players_json, created_at, updated_at)
-                 VALUES (?, ?, ?, ?, ?)
+                    (source_match_id, series_id, players_json, status, claim_id, claimed_at, matched_match_id, created_at, updated_at)
+                 VALUES (?, ?, ?, 'waiting', '', 0, '', ?, ?)
                  ON CONFLICT(source_match_id) DO UPDATE SET
                     series_id = excluded.series_id,
                     players_json = excluded.players_json,
-                    updated_at = excluded.updated_at`,
+                    updated_at = excluded.updated_at
+                 WHERE pvp_live_rematch_requests.status = 'waiting'`,
                 [
                     request.sourceMatchId,
                     request.seriesId,
@@ -1262,10 +1278,92 @@ function makeSqliteLivePvpPersistence() {
             );
             return makeRematchRequestFromRow(row);
         },
+        async claimRematchRequest(sourceMatchId, claimId, claimedAt = Date.now()) {
+            const match = String(sourceMatchId || '').trim();
+            const claim = String(claimId || '').trim();
+            const now = Math.max(1, Math.floor(Number(claimedAt) || Date.now()));
+            const staleBefore = Math.max(0, now - 30000);
+            if (!match || !claim) return false;
+            await dbRun(
+                `UPDATE pvp_live_rematch_requests
+                 SET status = 'matched',
+                     matched_match_id = (
+                         SELECT m.match_id
+                         FROM pvp_live_matches m
+                         WHERE m.source_rematch_match_id = pvp_live_rematch_requests.source_match_id
+                           AND m.created_at >= pvp_live_rematch_requests.claimed_at
+                         ORDER BY m.created_at ASC, m.match_id ASC
+                         LIMIT 1
+                     ),
+                     updated_at = ?
+                 WHERE source_match_id = ?
+                   AND status = 'matching'
+                   AND claimed_at <= ?
+                   AND EXISTS (
+                       SELECT 1
+                       FROM pvp_live_matches m
+                       WHERE m.source_rematch_match_id = pvp_live_rematch_requests.source_match_id
+                         AND m.created_at >= pvp_live_rematch_requests.claimed_at
+                   )`,
+                [now, match, staleBefore]
+            );
+            const result = await dbRun(
+                `UPDATE pvp_live_rematch_requests
+                 SET status = 'matching',
+                     claim_id = ?,
+                     claimed_at = ?,
+                     updated_at = ?
+                 WHERE source_match_id = ?
+                   AND (status = 'waiting' OR (status = 'matching' AND claimed_at <= ?))`,
+                [claim, now, now, match, staleBefore]
+            );
+            return Number(result && result.changes) === 1;
+        },
+        async completeRematchRequest(sourceMatchId, claimId, matchedMatchId, updatedAt = Date.now()) {
+            const match = String(sourceMatchId || '').trim();
+            const claim = String(claimId || '').trim();
+            const matched = String(matchedMatchId || '').trim();
+            const now = Math.max(1, Math.floor(Number(updatedAt) || Date.now()));
+            if (!match || !claim || !matched) return false;
+            const result = await dbRun(
+                `UPDATE pvp_live_rematch_requests
+                 SET status = 'matched',
+                     matched_match_id = ?,
+                     updated_at = ?
+                 WHERE source_match_id = ?
+                   AND status = 'matching'
+                   AND claim_id = ?`,
+                [matched, now, match, claim]
+            );
+            return Number(result && result.changes) === 1;
+        },
+        async releaseRematchRequestClaim(sourceMatchId, claimId, updatedAt = Date.now()) {
+            const match = String(sourceMatchId || '').trim();
+            const claim = String(claimId || '').trim();
+            const now = Math.max(1, Math.floor(Number(updatedAt) || Date.now()));
+            if (!match || !claim) return false;
+            const result = await dbRun(
+                `UPDATE pvp_live_rematch_requests
+                 SET status = 'waiting',
+                     claim_id = '',
+                     claimed_at = 0,
+                     updated_at = ?
+                 WHERE source_match_id = ?
+                   AND status = 'matching'
+                   AND claim_id = ?`,
+                [now, match, claim]
+            );
+            return Number(result && result.changes) === 1;
+        },
         async deleteRematchRequest(sourceMatchId) {
             const match = String(sourceMatchId || '').trim();
             if (!match) return;
-            await dbRun('DELETE FROM pvp_live_rematch_requests WHERE source_match_id = ?', [match]);
+            await dbRun(
+                `DELETE FROM pvp_live_rematch_requests
+                 WHERE source_match_id = ?
+                   AND status = 'waiting'`,
+                [match]
+            );
         },
         async saveInviteRoom(inviteRoom) {
             if (!inviteRoom || !inviteRoom.inviteCode || !inviteRoom.host || !inviteRoom.host.userId || !inviteRoom.host.loadoutSnapshot) return;
@@ -1273,14 +1371,19 @@ function makeSqliteLivePvpPersistence() {
             const target = inviteRoom.target && inviteRoom.target.userId ? inviteRoom.target : null;
             await dbRun(
                 `INSERT INTO pvp_live_invites
-                    (invite_code, host_user_id, host_display_name, host_loadout_snapshot_json, target_user_id, target_user_name, created_at)
-                 VALUES (?, ?, ?, ?, ?, ?, ?)
+                    (invite_code, host_user_id, host_display_name, host_loadout_snapshot_json, target_user_id, target_user_name,
+                     claimed_by_user_id, claim_id, claimed_at, matched_match_id, created_at)
+                 VALUES (?, ?, ?, ?, ?, ?, '', '', 0, '', ?)
                  ON CONFLICT(host_user_id) DO UPDATE SET
                     invite_code = excluded.invite_code,
                     host_display_name = excluded.host_display_name,
                     host_loadout_snapshot_json = excluded.host_loadout_snapshot_json,
                     target_user_id = excluded.target_user_id,
                     target_user_name = excluded.target_user_name,
+                    claimed_by_user_id = '',
+                    claim_id = '',
+                    claimed_at = 0,
+                    matched_match_id = '',
                     created_at = excluded.created_at`,
                 [
                     inviteRoom.inviteCode,
@@ -1299,6 +1402,18 @@ function makeSqliteLivePvpPersistence() {
             const row = await dbGet(
                 `SELECT * FROM pvp_live_invites
                  WHERE invite_code = ?
+                   AND claimed_at = 0
+                 LIMIT 1`,
+                [code]
+            );
+            return makeInviteRoomFromRow(row);
+        },
+        async loadInviteRoomForJoin(inviteCode) {
+            const code = String(inviteCode || '').trim().toUpperCase();
+            if (!code) return null;
+            const row = await dbGet(
+                `SELECT * FROM pvp_live_invites
+                 WHERE invite_code = ?
                  LIMIT 1`,
                 [code]
             );
@@ -1310,6 +1425,7 @@ function makeSqliteLivePvpPersistence() {
             const row = await dbGet(
                 `SELECT * FROM pvp_live_invites
                  WHERE host_user_id = ?
+                   AND claimed_at = 0
                  LIMIT 1`,
                 [id]
             );
@@ -1322,6 +1438,7 @@ function makeSqliteLivePvpPersistence() {
                 db.all(
                     `SELECT * FROM pvp_live_invites
                      WHERE target_user_id = ?
+                       AND claimed_at = 0
                      ORDER BY created_at DESC
                      LIMIT 20`,
                     [id],
@@ -1332,6 +1449,105 @@ function makeSqliteLivePvpPersistence() {
                 );
             });
             return rows.map(makeInviteRoomFromRow).filter(Boolean);
+        },
+        async recoverInviteRoomClaim(inviteCode, userId, recoveredAt = Date.now()) {
+            const code = String(inviteCode || '').trim().toUpperCase();
+            const id = String(userId || '').trim();
+            const now = Math.max(1, Math.floor(Number(recoveredAt) || Date.now()));
+            const staleBefore = Math.max(0, now - 30000);
+            if (!code || !id) return null;
+            await dbRun(
+                `UPDATE pvp_live_invites
+                 SET matched_match_id = (
+                     SELECT m.match_id
+                     FROM pvp_live_matches m
+                     WHERE m.source_invite_code = pvp_live_invites.invite_code
+                       AND m.created_at >= pvp_live_invites.claimed_at
+                     ORDER BY m.created_at ASC, m.match_id ASC
+                     LIMIT 1
+                 )
+                 WHERE invite_code = ?
+                   AND claimed_at > 0
+                   AND matched_match_id = ''
+                   AND EXISTS (
+                     SELECT 1
+                     FROM pvp_live_matches m
+                     WHERE m.source_invite_code = pvp_live_invites.invite_code
+                       AND m.created_at >= pvp_live_invites.claimed_at
+                   )`,
+                [code]
+            );
+            let row = await dbGet('SELECT * FROM pvp_live_invites WHERE invite_code = ? LIMIT 1', [code]);
+            if (!row) return null;
+            if (row.matched_match_id) {
+                return {
+                    matchedMatchId: String(row.claimed_by_user_id || '') === id ? String(row.matched_match_id) : '',
+                    released: false
+                };
+            }
+            if (Math.max(0, Math.floor(Number(row.claimed_at) || 0)) > 0
+                && Math.max(0, Math.floor(Number(row.claimed_at) || 0)) <= staleBefore
+                && (!row.target_user_id || String(row.target_user_id) === id)) {
+                const released = await dbRun(
+                    `UPDATE pvp_live_invites
+                     SET claimed_by_user_id = '', claim_id = '', claimed_at = 0
+                     WHERE invite_code = ?
+                       AND claim_id = ?
+                       AND matched_match_id = ''`,
+                    [code, String(row.claim_id || '')]
+                );
+                return { matchedMatchId: '', released: Number(released && released.changes) === 1 };
+            }
+            return { matchedMatchId: '', released: false };
+        },
+        async claimInviteRoom(inviteCode, userId, claimId, claimedAt = Date.now()) {
+            const code = String(inviteCode || '').trim().toUpperCase();
+            const id = String(userId || '').trim();
+            const claim = String(claimId || '').trim();
+            const now = Math.max(1, Math.floor(Number(claimedAt) || Date.now()));
+            if (!code || !id || !claim) return false;
+            const result = await dbRun(
+                `UPDATE pvp_live_invites
+                 SET claimed_by_user_id = ?,
+                     claim_id = ?,
+                     claimed_at = ?
+                 WHERE invite_code = ?
+                   AND claimed_at = 0
+                   AND (target_user_id = '' OR target_user_id = ?)`,
+                [id, claim, now, code, id]
+            );
+            return Number(result && result.changes) === 1;
+        },
+        async completeInviteRoomClaim(inviteCode, claimId, matchedMatchId) {
+            const code = String(inviteCode || '').trim().toUpperCase();
+            const claim = String(claimId || '').trim();
+            const matched = String(matchedMatchId || '').trim();
+            if (!code || !claim || !matched) return false;
+            const result = await dbRun(
+                `UPDATE pvp_live_invites
+                 SET matched_match_id = ?
+                 WHERE invite_code = ?
+                   AND claim_id = ?
+                   AND claimed_at > 0`,
+                [matched, code, claim]
+            );
+            return Number(result && result.changes) === 1;
+        },
+        async releaseInviteRoomClaim(inviteCode, claimId) {
+            const code = String(inviteCode || '').trim().toUpperCase();
+            const claim = String(claimId || '').trim();
+            if (!code || !claim) return false;
+            const result = await dbRun(
+                `UPDATE pvp_live_invites
+                 SET claimed_by_user_id = '',
+                     claim_id = '',
+                     claimed_at = 0
+                 WHERE invite_code = ?
+                   AND claim_id = ?
+                   AND matched_match_id = ''`,
+                [code, claim]
+            );
+            return Number(result && result.changes) === 1;
         },
         async deleteInviteRoom(inviteCode) {
             const code = String(inviteCode || '').trim().toUpperCase();

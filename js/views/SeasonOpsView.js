@@ -1,5 +1,6 @@
 import { AuthService } from "../services/authService.js";
 import { BackendClient, SESSION_STORAGE_KEY } from "../services/backend-client.js";
+import { RelayExpeditionService } from "../services/relay-expedition-service.js";
 import { AuthoritativeRunPanel } from "./AuthoritativeRunPanel.js";
 import { buildDataAttributes, escapeHtml } from "../ui/render-safe.js";
 
@@ -138,10 +139,13 @@ export class SeasonOpsView {
     this.purchaseMutationIds = new Map();
     this.pendingFocusKey = "";
     this.authoritativeRunPanel = new AuthoritativeRunPanel({
+      relayExpeditionService: RelayExpeditionService,
       getCurrentUserId: () => this.getCurrentUserId(),
       requestRender: () => this.render(),
       requestLogin: () => this.openLoginModal(),
-      requestConfirm: message => this.requestConfirmation(message)
+      requestConfirm: message => this.requestConfirmation(message),
+      onRelayExpeditionProjected: result => this.handleRelayExpeditionProjected(result),
+      onRelayExpeditionReturn: () => this.handleRelayExpeditionProjected()
     });
     this.boundClickHandler = this.handleClick.bind(this);
     this.boundKeydownHandler = this.handleKeydown.bind(this);
@@ -293,6 +297,25 @@ export class SeasonOpsView {
         console.warn("Authoritative run panel activation failed:", error);
       });
     }
+  }
+
+  openRelayExpeditionMode(options = {}) {
+    if (this.authoritativeRunPanel && typeof this.authoritativeRunPanel.openRelayExpeditionMode === "function") {
+      this.authoritativeRunPanel.openRelayExpeditionMode();
+    }
+    this.activeTab = AUTHORITATIVE_TAB_ID;
+    if (options.render !== false) this.render();
+    return { success: true };
+  }
+
+  handleRelayExpeditionProjected() {
+    this.notice = { tone: "success", text: "本棒结果已投影到共享路线，已回到同道远征工作区。" };
+    if (this.game && typeof this.game.showSocialHub === "function") {
+      this.game.showSocialHub("squad");
+      return { success: true, redirected: true };
+    }
+    this.render();
+    return { success: true, redirected: false };
   }
 
   async handleAuthStateChanged() {

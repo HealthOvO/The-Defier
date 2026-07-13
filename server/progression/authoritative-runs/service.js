@@ -4,7 +4,8 @@ const { dbPath } = require('../../db/database');
 const {
     CONTENT_HASH,
     CONTENT_VERSION,
-    PROTOCOL_VERSION
+    PROTOCOL_VERSION,
+    RELAY_EXPEDITION_SCENARIO_IDS
 } = require('./catalog');
 const {
     deterministicId,
@@ -37,6 +38,35 @@ const RETENTION_MAX_DAYS = 365;
 const SAFE_ID = /^[A-Za-z0-9._:-]{8,128}$/;
 const ACTIVE_RUN_STATUSES = ['active', 'completed'];
 const RETAINABLE_STATUSES = ['settled', 'defeated', 'abandoned', 'expired'];
+const CHALLENGE_LADDER_MODE = 'challenge_ladder';
+const WORLD_RIFT_MODE = 'world_rift';
+const RELAY_EXPEDITION_MODE = 'relay_expedition';
+const INTERNAL_SEED = /^[a-f0-9]{64}$/;
+const MAX_RELAY_RUN_TTL_MS = 2 * 60 * 60 * 1000;
+
+const BOUND_MODE_META = Object.freeze({
+    [CHALLENGE_LADDER_MODE]: {
+        bindingType: CHALLENGE_LADDER_MODE,
+        startReason: 'challenge_ladder_start_required',
+        startMessage: '众生试炼正式 run 必须从权威赛道发车',
+        seedReason: 'challenge_ladder_seed_invalid',
+        seedMessage: '众生试炼服务端种子无效'
+    },
+    [WORLD_RIFT_MODE]: {
+        bindingType: WORLD_RIFT_MODE,
+        startReason: 'world_rift_start_required',
+        startMessage: '天穹裂隙正式 run 必须从裂隙服务发车',
+        seedReason: 'world_rift_seed_invalid',
+        seedMessage: '天穹裂隙服务端种子无效'
+    },
+    [RELAY_EXPEDITION_MODE]: {
+        bindingType: RELAY_EXPEDITION_MODE,
+        startReason: 'relay_expedition_start_required',
+        startMessage: '同道远征正式 run 必须从远征服务发车',
+        seedReason: 'relay_expedition_seed_invalid',
+        seedMessage: '同道远征服务端种子无效'
+    }
+});
 
 function openDb() {
     const connection = new sqlite3.Database(dbPath);
@@ -627,6 +657,49 @@ async function expireRunIfNeeded(connection, run, now = Date.now()) {
     return loadOwnedRun(connection, run.user_id, run.run_id);
 }
 
+async function expireInternalRelayRun(userId, rawContext = {}, nowInput, internalOptions = {}) {
+    const identity = String(userId || '').trim();
+    const runId = safeId(rawContext.runId);
+    const clientRunId = safeId(rawContext.clientRunId);
+    const reason = String(rawContext.reason || 'relay_bind_failed').slice(0, 96);
+    if (!identity || !runId || !clientRunId) {
+        throw makeError(500, 'relay_internal_expire_context_invalid', '同道远征孤儿 run 清理上下文无效');
+    }
+    const fixedNow = Number.isFinite(Number(nowInput)) ? clampInt(nowInput) : Date.now();
+    const execute = async connection => {
+        const run = await dbGet(
+            connection,
+            `SELECT * FROM progression_authoritative_runs
+             WHERE run_id = ? AND user_id = ? AND client_run_id = ?`,
+            [runId, identity, clientRunId]
+        );
+        if (!run) return { success: true, expired: false, status: 'missing' };
+        if (String(run.activity_mode || '') !== RELAY_EXPEDITION_MODE) {
+            throw makeError(409, 'relay_internal_expire_mode_mismatch', '拒绝清理非同道远征权威 run');
+        }
+        if (String(run.status || '') !== 'active') {
+            return { success: true, expired: false, status: String(run.status || '') };
+        }
+        const updated = await dbRun(
+            connection,
+            `UPDATE progression_authoritative_runs
+             SET status = 'expired', expires_at = MIN(expires_at, ?), updated_at = ?
+             WHERE run_id = ? AND user_id = ? AND client_run_id = ? AND status = 'active'`,
+            [fixedNow, fixedNow, runId, identity, clientRunId]
+        );
+        if (updated.changes > 0) {
+            await recordOpsEvent(connection, 'relay_orphan_expired', run, {
+                mode: RELAY_EXPEDITION_MODE,
+                status: 'expired',
+                reason
+            }, 0, fixedNow);
+        }
+        return { success: true, expired: updated.changes > 0, status: updated.changes > 0 ? 'expired' : String(run.status || '') };
+    };
+    const externalConnection = internalOptions && internalOptions.connection;
+    return externalConnection ? execute(externalConnection) : withWriteTransaction(execute);
+}
+
 async function loadReceipt(connection, runId) {
     return dbGet(
         connection,
@@ -689,12 +762,64 @@ async function formatRun(connection, run, state, content, { idempotent = false, 
     };
 }
 
-async function issueAuthoritativeRun(userId, rawRequest, now = Date.now()) {
+async function issueAuthoritativeRun(userId, rawRequest, nowInput, internalOptions = {}) {
     const identity = String(userId || '').trim();
     if (!identity) throw makeError(401, 'missing_user', '登录账号缺失');
+    const fixedNow = Number.isFinite(Number(nowInput)) ? clampInt(nowInput) : null;
+    const externalNowProvider = internalOptions && typeof internalOptions.nowProvider === 'function'
+        ? internalOptions.nowProvider
+        : null;
+    const nowProvider = () => {
+        const candidate = externalNowProvider ? externalNowProvider() : fixedNow;
+        return candidate !== null && candidate !== undefined && Number.isFinite(Number(candidate))
+            ? clampInt(candidate)
+            : Date.now();
+    };
+    const startDeadline = clampInt(internalOptions && internalOptions.startDeadline);
+    const startDeadlineReason = String(internalOptions && internalOptions.startDeadlineReason || 'authoritative_start_window_closed');
+    const startDeadlineMessage = String(internalOptions && internalOptions.startDeadlineMessage || '权威发车窗口已关闭');
     const request = normalizeStartRequest(rawRequest);
+    const binding = internalOptions && internalOptions.binding && typeof internalOptions.binding === 'object'
+        ? internalOptions.binding
+        : null;
+    const boundSeedHex = String(internalOptions && internalOptions.seedHex || '').trim().toLowerCase();
+    const requestedScenarioId = String(internalOptions && internalOptions.scenarioId || '').trim();
+    const relayRunTtlInput = internalOptions && internalOptions.runTtlMs;
+    const boundMode = BOUND_MODE_META[request.mode] || null;
+    if (boundMode) {
+        if (!binding || String(binding.type || '') !== boundMode.bindingType) {
+            throw makeError(403, boundMode.startReason, boundMode.startMessage);
+        }
+        if (!INTERNAL_SEED.test(boundSeedHex)) {
+            throw makeError(500, boundMode.seedReason, boundMode.seedMessage);
+        }
+    } else if (boundSeedHex) {
+        throw makeError(500, 'unexpected_authoritative_seed', '普通权威 run 不接受外部种子');
+    }
+    if (request.mode === RELAY_EXPEDITION_MODE) {
+        if (!RELAY_EXPEDITION_SCENARIO_IDS.includes(requestedScenarioId)) {
+            throw makeError(400, 'relay_expedition_scenario_invalid', '同道远征接力谱不受支持');
+        }
+    } else if (requestedScenarioId) {
+        throw makeError(500, 'unexpected_authoritative_scenario', '普通权威 run 不接受外部场景');
+    }
+    let runTtlMs = RUN_TTL_MS;
+    if (request.mode === RELAY_EXPEDITION_MODE) {
+        if (relayRunTtlInput === undefined || relayRunTtlInput === null || relayRunTtlInput === '') {
+            runTtlMs = MAX_RELAY_RUN_TTL_MS;
+        } else {
+            const parsedRunTtlMs = Math.floor(Number(relayRunTtlInput));
+            if (!Number.isInteger(parsedRunTtlMs) || parsedRunTtlMs <= 0 || parsedRunTtlMs > MAX_RELAY_RUN_TTL_MS) {
+                throw makeError(400, 'relay_expedition_ttl_invalid', '同道远征权威 run TTL 必须在 1-7200000 毫秒之间');
+            }
+            runTtlMs = parsedRunTtlMs;
+        }
+    } else if (relayRunTtlInput !== undefined && relayRunTtlInput !== null && relayRunTtlInput !== '') {
+        throw makeError(500, 'unexpected_authoritative_ttl', '普通权威 run 不接受外部 TTL');
+    }
     const startedAt = Date.now();
     return withWriteTransaction(async connection => {
+        const transactionNow = nowProvider();
         const existing = await dbGet(
             connection,
             `SELECT * FROM progression_authoritative_runs
@@ -703,11 +828,12 @@ async function issueAuthoritativeRun(userId, rawRequest, now = Date.now()) {
         );
         if (existing) {
             if (String(existing.activity_mode || '') !== request.mode
-                || String(existing.content_version || '') !== request.contentVersion) {
+                || String(existing.content_version || '') !== request.contentVersion
+                || (request.mode === RELAY_EXPEDITION_MODE && String(existing.scenario_id || '') !== requestedScenarioId)) {
                 throw makeError(409, 'client_run_conflict', '相同客户端 run id 已绑定其他权威上下文');
             }
-            const ensured = await ensureRunState(connection, existing, now);
-            const expired = await expireRunIfNeeded(connection, ensured.run, now);
+            const ensured = await ensureRunState(connection, existing, transactionNow);
+            const expired = await expireRunIfNeeded(connection, ensured.run, transactionNow);
             const run = expired || ensured.run;
             return {
                 success: true,
@@ -720,24 +846,34 @@ async function issueAuthoritativeRun(userId, rawRequest, now = Date.now()) {
             connection,
             `SELECT * FROM progression_authoritative_runs
              WHERE user_id = ? AND activity_mode = ? AND status = 'active' AND expires_at <= ?`,
-            [identity, request.mode, now]
+            [identity, request.mode, transactionNow]
         );
-        for (const row of expiring) await expireRunIfNeeded(connection, row, now);
+        for (const row of expiring) await expireRunIfNeeded(connection, row, transactionNow);
 
+        const currentStatusClause = request.mode === RELAY_EXPEDITION_MODE
+            ? "status = 'active'"
+            : "status IN ('active', 'completed')";
         const current = await dbGet(
             connection,
             `SELECT * FROM progression_authoritative_runs
-             WHERE user_id = ? AND activity_mode = ? AND status IN ('active', 'completed')
+             WHERE user_id = ? AND activity_mode = ? AND ${currentStatusClause}
              ORDER BY updated_at DESC LIMIT 1`,
             [identity, request.mode]
         );
         if (current) {
-            const ensured = await ensureRunState(connection, current, now);
+            if (request.mode === RELAY_EXPEDITION_MODE && String(current.scenario_id || '') !== requestedScenarioId) {
+                throw makeError(409, 'relay_expedition_scenario_conflict', '当前同道远征权威 run 已绑定其他接力谱');
+            }
+            const ensured = await ensureRunState(connection, current, transactionNow);
             return {
                 success: true,
                 reportVersion: `${REPORT_VERSION}-start`,
                 run: await formatRun(connection, ensured.run, ensured.state, ensured.content, { resumedExisting: true })
             };
+        }
+
+        if (startDeadline > 0 && transactionNow >= startDeadline) {
+            throw makeError(409, startDeadlineReason, startDeadlineMessage);
         }
 
         const catalog = await dbGet(
@@ -753,8 +889,17 @@ async function issueAuthoritativeRun(userId, rawRequest, now = Date.now()) {
             throw makeError(503, 'authoritative_catalog_unavailable', '权威内容目录暂不可用');
         }
         const runId = `arun-${crypto.randomUUID()}`;
-        const seedHex = crypto.randomBytes(32).toString('hex');
-        const state = createInitialState({ runId, userId: identity, mode: request.mode, seedHex, content });
+        const seedHex = boundMode
+            ? boundSeedHex
+            : crypto.randomBytes(32).toString('hex');
+        const state = createInitialState({
+            runId,
+            userId: identity,
+            mode: request.mode,
+            scenarioId: request.mode === RELAY_EXPEDITION_MODE ? requestedScenarioId : '',
+            seedHex,
+            content
+        });
         const stateJson = stableStringify(state);
         if (Buffer.byteLength(stateJson, 'utf8') > MAX_STATE_BYTES) {
             throw makeError(500, 'initial_state_too_large', '权威初始状态超过限制');
@@ -767,7 +912,7 @@ async function issueAuthoritativeRun(userId, rawRequest, now = Date.now()) {
             contentHash: CONTENT_HASH,
             stateHash
         });
-        const expiresAt = now + RUN_TTL_MS;
+        const expiresAt = transactionNow + runTtlMs;
         await dbRun(
             connection,
             `INSERT INTO progression_authoritative_runs
@@ -788,9 +933,9 @@ async function issueAuthoritativeRun(userId, rawRequest, now = Date.now()) {
                 stateJson,
                 stateHash,
                 chainHead,
-                now,
+                transactionNow,
                 expiresAt,
-                now
+                transactionNow
             ]
         );
         await dbRun(
@@ -798,10 +943,13 @@ async function issueAuthoritativeRun(userId, rawRequest, now = Date.now()) {
             `INSERT INTO progression_authoritative_run_snapshots
                 (snapshot_id, run_id, sequence, state_json, state_hash, chain_head, created_at)
              VALUES (?, ?, 0, ?, ?, ?, ?)`,
-            [deterministicId('arsnap', [runId, 0]), runId, stateJson, stateHash, chainHead, now]
+            [deterministicId('arsnap', [runId, 0]), runId, stateJson, stateHash, chainHead, transactionNow]
         );
         const run = await loadOwnedRun(connection, identity, runId);
-        await recordOpsEvent(connection, 'run_started', run, { status: 'active', actionCount: 0 }, Date.now() - startedAt, now);
+        await recordOpsEvent(connection, 'run_started', run, { status: 'active', actionCount: 0 }, Date.now() - startedAt, transactionNow);
+        if (startDeadline > 0 && nowProvider() >= startDeadline) {
+            throw makeError(409, startDeadlineReason, startDeadlineMessage);
+        }
         return {
             success: true,
             reportVersion: `${REPORT_VERSION}-start`,
@@ -1424,6 +1572,7 @@ module.exports = {
     CONTENT_VERSION,
     MAX_ACTIONS,
     MAX_ACTION_PAYLOAD_BYTES,
+    MAX_RELAY_RUN_TTL_MS,
     MAX_STATE_BYTES,
     PROTOCOL_VERSION,
     REPORT_VERSION,
@@ -1434,6 +1583,7 @@ module.exports = {
     getAuthoritativeRunOpsOverview,
     getAuthoritativeRunReplay,
     getCurrentAuthoritativeRun,
+    expireInternalRelayRun,
     issueAuthoritativeRun,
     normalizeActionRequest,
     normalizeSettlementRequest,

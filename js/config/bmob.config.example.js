@@ -19,7 +19,9 @@
         savePathPrefix: '/api/saves',
         userPathPrefix: '/api/user',
         ghostPathPrefix: '/api/ghosts',
-        seasonOpsPathPrefix: '/api/season-ops'
+        seasonOpsPathPrefix: '/api/season-ops',
+        challengeLadderPathPrefix: '/api/challenge-ladder',
+        worldRiftPathPrefix: '/api/world-rift'
     };
 
     window.__THE_DEFIER_CONFIG__.bmob = {

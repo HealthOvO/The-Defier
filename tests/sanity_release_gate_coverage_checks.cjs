@@ -24,6 +24,7 @@ const browserPvpMobileAudit = read('tests/browser_pvp_mobile_audit.mjs');
 const browserPvpLiveAudit = read('tests/browser_pvp_live_audit.mjs');
 const browserPvpLiveRealSmoke = read('tests/browser_pvp_live_real_backend_smoke.mjs');
 const browserAuthoritativeRunsRealSmoke = read('tests/browser_authoritative_runs_real_backend_smoke.mjs');
+const browserRelayExpeditionRealSmoke = read('tests/browser_relay_expedition_real_backend_smoke.mjs');
 const browserFeatureAudit = read('tests/browser_feature_audit.mjs');
 const browserUiGalleryAudit = read('tests/browser_ui_gallery_audit.mjs');
 const frontendUpgradeAssetChecks = read('tests/sanity_frontend_upgrade_asset_checks.cjs');
@@ -50,6 +51,7 @@ const requiredBrowserReleaseAudits = [
   'frontend-layout',
   'backend-client',
   'auth-ui-cloud',
+  'account-social-real',
   'mobile',
   'reward-mobile',
   'meta',
@@ -61,6 +63,7 @@ const requiredBrowserReleaseAudits = [
   'challenge',
   'season-ops',
   'authoritative-runs-real',
+  'relay-expedition-real',
   'expedition',
   'events',
   'vow-choice',
@@ -157,6 +160,34 @@ const authoritativeRunsPlatformChecks = read('tests/sanity_authoritative_runs_pl
 const authoritativeRunsClientChecks = read('tests/sanity_authoritative_runs_client_checks.mjs');
 const authoritativeRunsUiChecks = read('tests/sanity_authoritative_runs_ui_checks.mjs');
 const authoritativeRunsDocumentation = read('docs/backend_authoritative_runs_v2.md');
+const challengeLadderCatalog = read('server/challenge-ladder/catalog.js');
+const challengeLadderBootstrap = read('server/challenge-ladder/bootstrap.js');
+const challengeLadderService = read('server/challenge-ladder/service.js');
+const challengeLadderRoutes = read('server/routes/challenge-ladder.js');
+const challengeLadderClient = read('js/services/challenge-ladder-service.js');
+const challengeLadderClientChecks = read('tests/sanity_challenge_ladder_client_checks.mjs');
+const challengeLadderPlatformChecks = read('tests/sanity_challenge_ladder_platform_checks.cjs');
+const challengeLadderDocumentation = read('docs/backend_authoritative_challenge_ladder_v1.md');
+const worldRiftCatalog = read('server/world-rift/catalog.js');
+const worldRiftBootstrap = read('server/world-rift/bootstrap.js');
+const worldRiftService = read('server/world-rift/service.js');
+const worldRiftRoutes = read('server/routes/world-rift.js');
+const worldRiftClient = read('js/services/world-rift-service.js');
+const worldRiftClientChecks = read('tests/sanity_world_rift_client_checks.mjs');
+const worldRiftUiChecks = read('tests/sanity_world_rift_ui_checks.mjs');
+const worldRiftPlatformChecks = read('tests/sanity_world_rift_platform_checks.cjs');
+const worldRiftDocumentation = read('docs/backend_authoritative_world_rift_v1.md');
+const relayExpeditionCatalog = read('server/relay-expedition/catalog.js');
+const relayExpeditionBootstrap = read('server/relay-expedition/bootstrap.js');
+const relayExpeditionService = read('server/relay-expedition/service.js');
+const relayExpeditionRoutes = read('server/routes/relay-expedition.js');
+const relayExpeditionClient = read('js/services/relay-expedition-service.js');
+const relayExpeditionMigrationChecks = read('tests/sanity_relay_expedition_migration_checks.cjs');
+const relayExpeditionPlatformChecks = read('tests/sanity_relay_expedition_platform_checks.cjs');
+const relayExpeditionCrossProcessChecks = read('tests/sanity_relay_expedition_cross_process_checks.cjs');
+const relayExpeditionClientChecks = read('tests/sanity_relay_expedition_client_checks.mjs');
+const relayExpeditionUiChecks = read('tests/sanity_relay_expedition_ui_checks.mjs');
+const relayExpeditionDocumentation = read('docs/backend_relay_expedition_v1.md');
 const shopManager = read('js/managers/ShopManager.js');
 const coreUtils = read('js/core/utils.js');
 const gameSource = read('js/game.js');
@@ -387,7 +418,7 @@ const waitingReportSource = pvpLiveStore.slice(
   'receipt?.idempotent',
   'server_verified must only upgrade an observed event',
   'a checkpoint source must not move across tickets',
-  'older databases should advance through verified runs to authoritative runs v6 on restart',
+  'older databases should advance through verified runs to relay expedition v10 on restart',
 ].forEach((needle) => {
   assert.ok(
     verifiedRunsPlatformChecks.includes(needle) || verifiedRunsDocumentation.includes(needle),
@@ -429,7 +460,32 @@ const waitingReportSource = pvpLiveStore.slice(
 });
 
 [
-  [authoritativeRunsCatalog, "CONTENT_VERSION = 'authoritative-trials-v1'"],
+  'sanity_challenge_ladder_client_checks.mjs',
+  'sanity_challenge_ladder_platform_checks.cjs',
+].forEach((needle) => {
+  assert.ok(runNodeChecks.includes(needle), `node gate should execute challenge ladder check: ${needle}`);
+});
+
+[
+  'sanity_world_rift_client_checks.mjs',
+  'sanity_world_rift_ui_checks.mjs',
+  'sanity_world_rift_platform_checks.cjs',
+].forEach((needle) => {
+  assert.ok(runNodeChecks.includes(needle), `node gate should execute world rift check: ${needle}`);
+});
+
+[
+  'sanity_relay_expedition_migration_checks.cjs',
+  'sanity_relay_expedition_platform_checks.cjs',
+  'sanity_relay_expedition_cross_process_checks.cjs',
+  'sanity_relay_expedition_client_checks.mjs',
+  'sanity_relay_expedition_ui_checks.mjs',
+].forEach((needle) => {
+  assert.ok(runNodeChecks.includes(needle), `node gate should execute relay expedition check: ${needle}`);
+});
+
+[
+  [authoritativeRunsCatalog, "CONTENT_VERSION = 'authoritative-trials-v2'"],
   [authoritativeRunsCatalog, "PROTOCOL_VERSION = 'authoritative-run-v2'"],
   [authoritativeRunsEngine, 'function createInitialState'],
   [authoritativeRunsEngine, 'function projectState'],
@@ -457,6 +513,75 @@ const waitingReportSource = pvpLiveStore.slice(
 });
 
 [
+  [challengeLadderCatalog, "PROTOCOL_VERSION = 'authoritative-challenge-ladder-v1'"],
+  [challengeLadderCatalog, 'ATTEMPT_LIMIT = 3'],
+  [challengeLadderBootstrap, 'challenge_ladder_attempts'],
+  [challengeLadderBootstrap, 'UNIQUE(user_id, mutation_id)'],
+  [challengeLadderService, "activity_mode || '') !== 'challenge_ladder'"],
+  [authoritativeRunsService, 'challenge_ladder_start_required'],
+  [challengeLadderService, 'fullReplayPassed !== true'],
+  [challengeLadderRoutes, "router.get('/ops/overview', authenticate, requireOpsToken"],
+  [challengeLadderClient, "DEFAULT_PROTOCOL_VERSION = 'authoritative-challenge-ladder-v1'"],
+  [challengeLadderClientChecks, 'account churn should suppress the stale ladder response'],
+  [challengeLadderPlatformChecks, 'same attempt slot across accounts should share one ladder seed fingerprint'],
+  [challengeLadderPlatformChecks, 'cross-process reward claims with distinct mutations should mint one ledger entry'],
+  [challengeLadderDocumentation, '离线练习，不计正式榜'],
+].forEach(([source, needle]) => {
+  assert.ok(source.includes(needle), `challenge ladder V1 should pin release marker: ${needle}`);
+});
+
+[
+  [worldRiftCatalog, "PROTOCOL_VERSION = 'authoritative-world-rift-v1'"],
+  [worldRiftCatalog, 'ATTEMPT_LIMIT = 5'],
+  [worldRiftCatalog, 'CLAIM_WINDOW_MS = 7 * 24 * 60 * 60 * 1000'],
+  [worldRiftBootstrap, 'world_rift_states'],
+  [worldRiftBootstrap, 'UNIQUE(user_id, mutation_id)'],
+  [worldRiftService, "activity_mode || '') !== 'world_rift'"],
+  [worldRiftService, 'fullReplayPassed !== true'],
+  [worldRiftService, 'r.grace_ends_at > ?'],
+  [authoritativeRunsService, 'world_rift_start_required'],
+  [worldRiftRoutes, "router.get('/ops/overview', authenticate, requireOpsToken"],
+  [worldRiftClient, "DEFAULT_PROTOCOL_VERSION = 'authoritative-world-rift-v1'"],
+  [worldRiftClientChecks, 'account churn should suppress the stale world-rift response'],
+  [worldRiftUiChecks, 'World rift UI checks passed.'],
+  [challengeHub, 'role="progressbar"'],
+  [worldRiftPlatformChecks, 'two concurrent contributions must each be recorded exactly once'],
+  [worldRiftPlatformChecks, 'claim-only rotations must not expose or auto-project stale authoritative attempts after settlement grace'],
+  [worldRiftPlatformChecks, 'start requests queued across endsAt must be rejected after the write lock is acquired'],
+  [worldRiftPlatformChecks, 'contribution requests queued across graceEndsAt must not commit late world state'],
+  [worldRiftPlatformChecks, 'reward claims queued across claimEndsAt must not mint late ledger entries'],
+  [worldRiftPlatformChecks, 'unauthenticated callers must not get an ops-token validity oracle'],
+  [worldRiftPlatformChecks, 'echo submissions must not change cleared world damage'],
+  [authoritativeRunsMigrationChecks, 'v7 to v8 restart must preserve live authoritative-run data while adding world-rift tables'],
+  [worldRiftDocumentation, '没有末刀奖励'],
+].forEach(([source, needle]) => {
+  assert.ok(source.includes(needle), `world rift V1 should pin release marker: ${needle}`);
+});
+
+[
+  [relayExpeditionCatalog, "PROTOCOL_VERSION = 'relay-expedition-v1'"],
+  [relayExpeditionCatalog, 'PRIORITY_WINDOW_MS = 6 * 60 * 60 * 1000'],
+  [relayExpeditionCatalog, 'OPEN_CLAIM_WINDOW_MS = 18 * 60 * 60 * 1000'],
+  [relayExpeditionCatalog, 'ACTIVE_LEASE_MS = 2 * 60 * 60 * 1000'],
+  [relayExpeditionBootstrap, 'relay_expedition_sessions'],
+  [relayExpeditionBootstrap, 'relay_expedition_reward_claims'],
+  [relayExpeditionService, "const RELAY_MODE = 'relay_expedition'"],
+  [authoritativeRunsService, 'relay_expedition_start_required'],
+  [relayExpeditionRoutes, "integrity.mode !== 'session-v2'"],
+  [relayExpeditionRoutes, "router.get('/ops/overview', authenticate, requireOpsToken"],
+  [relayExpeditionClient, "DEFAULT_PROTOCOL_VERSION = 'relay-expedition-v1'"],
+  [relayExpeditionMigrationChecks, 'v9 to v10 must preserve users'],
+  [relayExpeditionCrossProcessChecks, 'concurrent claim should produce exactly one winner'],
+  [relayExpeditionPlatformChecks, 'relay reward must not mutate pvp ranks'],
+  [relayExpeditionCrossProcessChecks, 'launch->bind recovery must not duplicate authoritative runs'],
+  [relayExpeditionClientChecks, 'account churn should suppress stale relay responses'],
+  [relayExpeditionUiChecks, 'Relay expedition UI checks passed.'],
+  [relayExpeditionDocumentation, '不写 PVP 排名、PVP 钱包'],
+].forEach(([source, needle]) => {
+  assert.ok(source.includes(needle), `relay expedition V1 should pin release marker: ${needle}`);
+});
+
+[
   'progressionRunOwnerUserId',
   'currentSaveSlot',
   'seedSignature',
@@ -476,6 +601,10 @@ const waitingReportSource = pvpLiveStore.slice(
   '0004_cloud_state_v2',
   '0005_season_ops_economy',
   '0006_authoritative_runs_v2',
+  '0007_authoritative_challenge_ladder',
+  '0008_authoritative_world_rift',
+  '0009_account_social_coop',
+  '0010_relay_expedition',
   'cloud_state_revisions',
   'cloud_state_heads',
   'cloud_state_ops_counters',
@@ -496,12 +625,40 @@ const waitingReportSource = pvpLiveStore.slice(
   'progression_authoritative_run_actions',
   'progression_authoritative_run_snapshots',
   'progression_authoritative_run_receipts',
+  'challenge_ladder_rotations',
+  'challenge_ladder_attempts',
+  'challenge_ladder_results',
+  'challenge_ladder_entries',
+  'challenge_ladder_reward_claims',
+  'challenge_ladder_mutations',
+  'challenge_ladder_ops_events',
+  'challenge_ladder_ops_counters',
+  'world_rift_rotations',
+  'world_rift_states',
+  'world_rift_attempts',
+  'world_rift_contributions',
+  'world_rift_entries',
+  'world_rift_reward_claims',
+  'world_rift_mutations',
+  'world_rift_ops_events',
+  'world_rift_ops_counters',
+  'relay_expedition_rotations',
+  'relay_expedition_sessions',
+  'relay_expedition_members',
+  'relay_expedition_legs',
+  'relay_expedition_reward_claims',
+  'relay_expedition_mutations',
+  'relay_expedition_ops_events',
+  'relay_expedition_ops_counters',
 ].forEach((needle) => {
   assert.ok(
     schemaStatusSource.includes(needle)
       || pvpLiveDatabase.includes(needle)
       || cloudStateBootstrap.includes(needle)
-      || authoritativeRunsBootstrap.includes(needle),
+      || authoritativeRunsBootstrap.includes(needle)
+      || challengeLadderBootstrap.includes(needle)
+      || worldRiftBootstrap.includes(needle)
+      || relayExpeditionBootstrap.includes(needle),
     `progression schema should pin migration/table marker: ${needle}`,
   );
 });
@@ -892,6 +1049,7 @@ const browserAutomationBootAudit = read('tests/browser_automation_boot_audit.mjs
   'node tests/browser_frontend_layout_audit.mjs "$BASE_URL" "$OUTPUT_ROOT/frontend-layout"',
   'node tests/browser_backend_client_smoke.mjs "$BASE_URL" "$OUTPUT_ROOT/backend-client"',
   'node tests/browser_auth_ui_cloud_smoke.mjs "$BASE_URL" "$OUTPUT_ROOT/auth-ui-cloud"',
+  'node tests/browser_account_social_real_backend_smoke.mjs "$BASE_URL" "$OUTPUT_ROOT/account-social-real"',
   'node tests/browser_mobile_layout_audit.mjs "$BASE_URL" "$OUTPUT_ROOT/mobile"',
   'node tests/browser_reward_meta_mobile_audit.mjs "$BASE_URL" "$OUTPUT_ROOT/reward-mobile"',
   'node tests/browser_meta_screen_audit.mjs "$BASE_URL" "$OUTPUT_ROOT/meta"',
@@ -910,6 +1068,8 @@ const browserAutomationBootAudit = read('tests/browser_automation_boot_audit.mjs
   'node tests/browser_challenge_audit.mjs "$BASE_URL" "$OUTPUT_ROOT/challenge"',
   'node tests/browser_season_ops_audit.mjs "$BASE_URL" "$OUTPUT_ROOT/season-ops"',
   'node tests/browser_authoritative_runs_real_backend_smoke.mjs "$BASE_URL" "$OUTPUT_ROOT/authoritative-runs-real"',
+  'node tests/browser_relay_expedition_real_backend_smoke.mjs "$BASE_URL" "$OUTPUT_ROOT/relay-expedition-real"',
+  'RELAY_EXPEDITION_REAL_AUDIT_TIMEOUT_SECONDS',
   'node tests/browser_expedition_audit.mjs "$BASE_URL" "$OUTPUT_ROOT/expedition"',
   'node tests/browser_event_branch_audit.mjs "$BASE_URL" "$OUTPUT_ROOT/events"',
   'node tests/browser_vow_choice_audit.mjs "$BASE_URL" "$OUTPUT_ROOT/vow-choice"',
@@ -924,11 +1084,11 @@ const browserAutomationBootAudit = read('tests/browser_automation_boot_audit.mjs
 });
 
 const configuredBrowserReleaseAudits = [...browserReleaseScript.matchAll(/run_selected_audit\s+([^\s]+)/g)].map((match) => match[1]);
-assert.strictEqual(requiredBrowserReleaseAudits.length, 31, 'required browser release audit list should pin all 31 audits');
+assert.strictEqual(requiredBrowserReleaseAudits.length, 33, 'required browser release audit list should pin all 33 audits');
 assert.deepStrictEqual(
   configuredBrowserReleaseAudits,
   requiredBrowserReleaseAudits,
-  'browser release gate should keep the full explicit 31-audit coverage set in sync',
+  'browser release gate should keep the full explicit 33-audit coverage set in sync',
 );
 
 assert.strictEqual(
@@ -938,16 +1098,54 @@ assert.strictEqual(
 );
 
 [
-  'real backend boots schema V6',
+  'real backend boots schema V10',
+  'challenge ladder GET current returns initial allowance before any formal run',
+  'challenge hub global UI shows formal attempts and official ladder copy before submission',
+  'global formal surface uses the server rotation and excludes legacy local rewards',
+  'formal challenge ladder attempt binds a server-authoritative run',
   'full browser reload resumes the same server run',
+  'settlement auto-submits the challenge ladder result with a full replay receipt',
   'settlement receipt confirms full genesis replay',
-  'real UI completes and settles all three authoritative modes',
-  'all modes mint exactly one receipt and event per settled run',
-  'database persists one receipt and one authoritative progression event',
+  'challenge ladder GET current after submission returns personal best leaderboard and my rank',
+  'database persists settled authoritative receipt plus ladder result and leaderboard entry',
+  'real UI completes and settles all three base authoritative modes alongside challenge ladder and world rift',
+  'all base modes challenge ladder and world rift mint exactly one receipt and event per settled run',
+  'world rift GET current returns shared boss and five formal attempts',
+  'world rift hub renders real shared state without simulated participants',
+  'formal world rift attempt binds a server-authoritative shared seed',
+  'full browser reload resumes the same world rift server run',
+  'world rift account switch discards an in-flight old-account refresh',
+  'switching back resumes the same world rift server run',
+  'settlement atomically projects world rift contribution and shared state',
+  'world rift current and hub refresh after contribution',
+  'database persists one world-rift contribution and shared-state increment',
+  'world rift ops overview is redacted',
+  'real world rift mobile view has no horizontal overflow',
+  'real world rift mobile controls meet touch target',
   'ops overview reports settlement through redacted references',
+  'challenge ladder ops overview reports redacted attempt result and claim aggregates',
   'real settled mobile view has no horizontal overflow',
 ].forEach((needle) => {
   assert.ok(browserAuthoritativeRunsRealSmoke.includes(needle), `authoritative runs real browser gate should pin marker: ${needle}`);
+});
+
+[
+  'real backend boots relay expedition schema V10',
+  'two-account active world-rift squad is established before relay',
+  'leader creates the relay session from the real social workspace',
+  'account A claim binds a real relay_expedition authoritative run in the UI',
+  'social workspace reopen recovers the same in-flight relay authoritative run',
+  'account A completes the relay authoritative leg through the real three-battle UI',
+  'settle auto-projects back into the shared relay route and returns to the social workspace',
+  'relay first-handoff reward stays renown cosmetic-only and records one progression ledger entry',
+  'relay reward does not rewrite PVP wallet/rank or formal world-rift attempts and damage',
+  'relay social workspace stays readable on mobile after reward claim',
+  'account B refresh sees the same shared relay route and second-leg claim affordance',
+  'account B claims the subsequent relay baton into its own real authoritative run',
+  'shared route persists while HP and deck state remain isolated between legs',
+  'real browser console errors are empty',
+].forEach((needle) => {
+  assert.ok(browserRelayExpeditionRealSmoke.includes(needle), `relay expedition real browser gate should pin marker: ${needle}`);
 });
 
 [
@@ -1025,8 +1223,9 @@ assert.strictEqual(
 
 [
   'audits: frontend-layout,season-ops,authoritative-runs-real',
+  'audits: relay-expedition-real',
   'audits: expedition,events,vow-choice,guide,inheritance,pvp,pvp-live,pvp-live-real,pvp-live-mobile-real,pvp-mobile,pvp-mobile-result,challenge-mobile-flow',
-  "if: contains(matrix.audits, 'backend-client') || contains(matrix.audits, 'auth-ui-cloud') || contains(matrix.audits, 'pvp-live-real') || contains(matrix.audits, 'pvp-live-mobile-real') || contains(matrix.audits, 'authoritative-runs-real')",
+  "if: contains(matrix.audits, 'backend-client') || contains(matrix.audits, 'auth-ui-cloud') || contains(matrix.audits, 'account-social-real') || contains(matrix.audits, 'pvp-live-real') || contains(matrix.audits, 'pvp-live-mobile-real') || contains(matrix.audits, 'authoritative-runs-real') || contains(matrix.audits, 'relay-expedition-real')",
 ].forEach((needle) => {
   assert.ok(
     pagesWorkflow.includes(needle),
@@ -1037,6 +1236,7 @@ assert.strictEqual(
 [
   "'season-ops'",
   "'authoritative-runs-real'",
+  "'relay-expedition-real'",
   "'pvp-live'",
   "'pvp-live-real'",
   "'pvp-live-mobile-real'",
@@ -3102,18 +3302,20 @@ assert.ok(
   'connection_json',
   'pending friendly rematch request should be persisted before restart',
   'restarted pending rematch requester should read pending rematch status before opponent accepts',
-  'restarted pending rematch should create the friendly match instead of waiting again',
+  'both processes should converge on the durable matched rematch',
   'restarted pending rematch should keep original series id',
-  'accepted pending rematch should be cleared after friendly match creation',
+  'accepted pending rematch should retain a durable matched fact',
   'expired restarted pending rematch should expose stable expiry reason',
   'expired pending rematch should be cleared after status read',
   'pvp_live_rematch_requests',
   'pending private invite should be persisted before restart',
   'persisted targeted private invite should keep target user id',
   'restarted targeted private invite recipient should read inbox',
-  'restarted targeted private invite should appear in recipient inbox',
+  'released stale invite claim should return to the recipient inbox',
   'restarted private invite should create a live match',
   'restarted targeted private invite join should keep target report',
+  'illegal guest loadout must leave the durable invite unclaimed',
+  'invite join should recheck a block created after invite issuance',
   'restarted private invite should preserve host locked loadout hash',
   'accepted private invite should be cleared after match creation',
   'expired persisted private invite should expose stable expiry reason',

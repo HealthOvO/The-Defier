@@ -1,4 +1,5 @@
 const jwt = require('jsonwebtoken');
+const { validateAuthenticatedSession } = require('../account-social/security-service');
 
 function getJwtSecret() {
     return process.env.JWT_SECRET || 'the-defier-local-dev-secret';
@@ -15,18 +16,25 @@ function validateAuthConfig() {
 const authenticate = (req, res, next) => {
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
-        return res.status(401).json({ success: false, message: '未提供认证Token' });
+        return res.status(401).json({ success: false, reason: 'auth_required', message: '未提供认证Token' });
     }
 
     const token = authHeader.split(' ')[1];
-    try {
-        const decoded = jwt.verify(token, getJwtSecret());
-        req.user = decoded; // { id, username }
-        req.authToken = token;
-        next();
-    } catch (err) {
-        return res.status(401).json({ success: false, message: 'Token无效或已过期' });
-    }
+    validateAuthenticatedSession({ token })
+        .then((session) => {
+            req.user = session.user;
+            req.authToken = token;
+            req.authSession = session.currentSession;
+            req.authLegacy = !!session.isLegacy;
+            next();
+        })
+        .catch((error) => {
+            res.status(Number(error && error.status) || 401).json({
+                success: false,
+                reason: error && error.reason || 'invalid_token',
+                message: error && error.message || 'Token无效或已过期'
+            });
+        });
 };
 
 const generateToken = (user) => {

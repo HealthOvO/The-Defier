@@ -2,7 +2,7 @@ const crypto = require('node:crypto');
 const { cloneJson } = require('./canonical');
 const { CONTENT_VERSION, PROTOCOL_VERSION } = require('./catalog');
 
-const MODES = ['pve', 'challenge', 'expedition'];
+const MODES = ['pve', 'challenge', 'expedition', 'challenge_ladder', 'world_rift', 'relay_expedition'];
 const COMMANDS = ['select_node', 'play_card', 'end_turn', 'choose_reward', 'abandon'];
 const TERMINAL_PHASES = new Set(['completed', 'defeated', 'abandoned']);
 const SAFE_REF = /^[A-Za-z0-9._:-]{1,128}$/;
@@ -20,9 +20,35 @@ function clampInt(value, min = 0, max = Number.MAX_SAFE_INTEGER) {
     return Math.max(min, Math.min(max, number));
 }
 
-function getScenario(content, mode) {
-    const scenario = content && content.scenarios && content.scenarios[mode];
-    if (!scenario || !MODES.includes(mode)) {
+function isModeCompatible(mode, scenario) {
+    if (!scenario) return false;
+    if (String(scenario.mode || '') === String(mode || '')) return true;
+    return ['challenge_ladder', 'world_rift'].includes(mode) && String(scenario.mode || '') === 'challenge';
+}
+
+function findScenarioById(content, scenarioId) {
+    const safeScenarioId = String(scenarioId || '').trim();
+    if (!safeScenarioId) return null;
+    const direct = content && content.scenarios && content.scenarios[safeScenarioId];
+    if (direct && String(direct.scenarioId || '') === safeScenarioId) return direct;
+    const scenarios = Object.values(content && content.scenarios || {});
+    return scenarios.find(scenario => String(scenario && scenario.scenarioId || '') === safeScenarioId) || null;
+}
+
+function getScenario(content, mode, scenarioId = '') {
+    if (!MODES.includes(mode)) {
+        throw makeRuleError('unsupported_run_mode', '权威试炼模式不受支持', 400);
+    }
+    const resolvedById = findScenarioById(content, scenarioId);
+    if (resolvedById) {
+        if (!isModeCompatible(mode, resolvedById)) {
+            throw makeRuleError('scenario_mode_mismatch', '权威试炼场景与模式不匹配', 409);
+        }
+        return resolvedById;
+    }
+    const scenarioKey = ['challenge_ladder', 'world_rift'].includes(mode) ? 'challenge' : mode;
+    const scenario = content && content.scenarios && content.scenarios[scenarioKey];
+    if (!scenario || !isModeCompatible(mode, scenario)) {
         throw makeRuleError('unsupported_run_mode', '权威试炼模式不受支持', 400);
     }
     return scenario;
@@ -68,7 +94,7 @@ function createCardInstance(state, cardId) {
 }
 
 function generateRouteChoices(state, content) {
-    const scenario = getScenario(content, state.mode);
+    const scenario = getScenario(content, state.mode, state.scenarioId);
     const stage = scenario.stages[state.route.stageIndex];
     if (!stage) return [];
     const enemyIds = stage.pool.length <= 2 ? stage.pool.slice() : shuffle(state, stage.pool).slice(0, 2);
@@ -111,7 +137,7 @@ function currentEnemyIntent(state, content) {
     return cloneJson(pattern[index]);
 }
 
-function createInitialState({ runId, userId, mode, seedHex, content }) {
+function createInitialState({ runId, userId, mode, scenarioId = '', seedHex, content }) {
     if (!SAFE_REF.test(String(runId || ''))) {
         throw makeRuleError('invalid_run_id', '权威 run id 非法', 400);
     }
@@ -124,7 +150,7 @@ function createInitialState({ runId, userId, mode, seedHex, content }) {
     if (!content || content.protocolVersion !== PROTOCOL_VERSION || content.contentVersion !== CONTENT_VERSION) {
         throw makeRuleError('unsupported_content_version', '权威内容版本不受支持', 409);
     }
-    const scenario = getScenario(content, mode);
+    const scenario = getScenario(content, mode, scenarioId);
     const state = {
         schemaVersion: 2,
         protocolVersion: PROTOCOL_VERSION,
@@ -166,7 +192,10 @@ function createInitialState({ runId, userId, mode, seedHex, content }) {
         },
         summary: null
     };
-    state.player.deck = content.starterDeck.map(cardId => createCardInstance(state, cardId));
+    const starterDeck = Array.isArray(scenario.starterDeck) && scenario.starterDeck.length > 0
+        ? scenario.starterDeck
+        : content.starterDeck;
+    state.player.deck = starterDeck.map(cardId => createCardInstance(state, cardId));
     state.route.choices = generateRouteChoices(state, content);
     return state;
 }
@@ -206,7 +235,7 @@ function normalizePayload(command, rawPayload) {
 }
 
 function beginBattle(state, content, node) {
-    const scenario = getScenario(content, state.mode);
+    const scenario = getScenario(content, state.mode, state.scenarioId);
     const enemy = getEnemy(content, node.enemyId);
     state.phase = 'battle';
     state.reward = null;
@@ -276,7 +305,7 @@ function makeRewardChoices(state, content) {
 }
 
 function buildSummary(state, content, result, reason) {
-    const scenario = getScenario(content, state.mode);
+    const scenario = getScenario(content, state.mode, state.scenarioId);
     const base = state.stats.encountersWon * 120
         + state.stats.bossWins * 180
         + state.player.hp * 3
@@ -401,7 +430,7 @@ function endTurn(state, content, events) {
     if (state.phase !== 'battle' || !state.battle) {
         throw makeRuleError('command_not_allowed', '当前阶段不能结束回合');
     }
-    const scenario = getScenario(content, state.mode);
+    const scenario = getScenario(content, state.mode, state.scenarioId);
     state.player.discardPile.push(...state.player.hand);
     state.player.hand = [];
     applyEnemyIntent(state, content, events);
@@ -445,7 +474,7 @@ function chooseReward(state, content, payload, events) {
     } else {
         throw makeRuleError('unknown_reward_kind', '奖励定义不存在', 500);
     }
-    const scenario = getScenario(content, state.mode);
+    const scenario = getScenario(content, state.mode, state.scenarioId);
     if (scenario.betweenEncounterHeal > 0) {
         state.player.hp = Math.min(state.player.maxHp, state.player.hp + scenario.betweenEncounterHeal);
     }
@@ -507,7 +536,7 @@ function getAllowedCommands(state) {
 }
 
 function projectState(state, content) {
-    const scenario = getScenario(content, state.mode);
+    const scenario = getScenario(content, state.mode, state.scenarioId);
     const deckCounts = {};
     state.player.deck.forEach(instance => {
         deckCounts[instance.cardId] = (deckCounts[instance.cardId] || 0) + 1;

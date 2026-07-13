@@ -85,6 +85,7 @@
     <link rel="stylesheet" href="css/layout-fixes.css">
     <link rel="stylesheet" href="css/frontend-upgrade.css">
     <link id="season-ops-stylesheet" rel="stylesheet" href="css/season-ops.css">
+    <link rel="stylesheet" href="css/account-social.css">
 </head>
 
 <body>
@@ -214,7 +215,27 @@
                 <button class="menu-btn small cheat-btn" data-boot-action="enable-cheat"
                     style="display: none; width: auto; padding: 5px 15px;">🛠️ 作弊</button>
             </div>
-            <div class="version-info">V10 真 PVP · 实时后端闭环 · 权威试炼 · 玩家指南更新 · 主菜单场景图 · 角色立绘 · 移动端适配 · 命途任务 · 章节考试 · DRI读题 · 洞府议程 · 挑战观察站 · PVP复盘</div>
+            <div class="version-info">V10 同道远征 · 权威接力闭环 · 真 PVP · 道友录 · 可撤销账号会话 · 裂隙协作小队 · 权威试炼 · 玩家指南更新 · 移动端适配</div>
+        </div>
+    </div>
+
+    <div id="social-screen" class="screen" aria-label="道友录">
+        <div class="screen-header social-screen-header">
+            <button class="back-btn" onclick="game.showScreen('main-menu')" aria-label="返回主菜单" title="返回主菜单">↩</button>
+            <div>
+                <span class="social-kicker">账号与协作</span>
+                <h2>道友录</h2>
+            </div>
+            <p id="social-status" role="status" aria-live="polite"></p>
+        </div>
+        <div class="social-shell">
+            <div id="social-tabs" class="social-tabs" role="tablist" aria-label="道友录视图">
+                <button type="button" role="tab" data-social-tab="friends" class="active" aria-selected="true">道友</button>
+                <button type="button" role="tab" data-social-tab="requests" aria-selected="false">信笺</button>
+                <button type="button" role="tab" data-social-tab="squad" aria-selected="false">裂隙小队</button>
+                <button type="button" role="tab" data-social-tab="security" aria-selected="false">账号安全</button>
+            </div>
+            <main id="social-content" class="social-content"></main>
         </div>
     </div>
 
@@ -1302,6 +1323,8 @@
                     onclick="game.switchChallengeTab('weekly')">七日劫数</button>
                 <button type="button" class="challenge-tab-btn" data-challenge-tab="global"
                     onclick="game.switchChallengeTab('global')">众生试炼</button>
+                <button type="button" class="challenge-tab-btn" data-challenge-tab="rift"
+                    onclick="game.switchChallengeTab('rift')">天穹裂隙</button>
             </div>
 
             <div class="challenge-scroll-container">
@@ -2027,6 +2050,7 @@
                 <div class="form-group" style="margin-bottom: 20px;">
                     <input type="password" id="auth-password" placeholder="密语 (密码)"
                         style="width: 100%; padding: 10px; background: rgba(0,0,0,0.3); border: 1px solid var(--border-color); color: white; border-radius: 4px;">
+                    <small class="auth-password-note">新密语需 8-72 字节，并包含字母、数字或符号中的至少两类。</small>
                 </div>
                 <div class="auth-actions" style="display: flex; gap: 10px; justify-content: center;">
                     <button id="login-btn-modal" class="menu-btn primary small" onclick="game.handleLogin()">登录</button>

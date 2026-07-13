@@ -5,6 +5,9 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
 node tests/sanity_auth_config_checks.cjs
+node tests/sanity_account_security_platform_checks.cjs
+node tests/sanity_social_graph_platform_checks.cjs
+node tests/sanity_account_social_client_checks.mjs
 node tests/sanity_backend_hmac_checks.cjs
 node tests/sanity_backend_timestamp_checks.cjs
 node tests/sanity_cloud_state_v2_checks.cjs
@@ -35,6 +38,17 @@ node tests/sanity_authoritative_runs_migration_checks.cjs
 node tests/sanity_authoritative_runs_platform_checks.cjs
 node tests/sanity_authoritative_runs_client_checks.mjs
 node tests/sanity_authoritative_runs_ui_checks.mjs
+node tests/sanity_challenge_ladder_client_checks.mjs
+node tests/sanity_challenge_ladder_platform_checks.cjs
+node tests/sanity_world_rift_client_checks.mjs
+node tests/sanity_world_rift_ui_checks.mjs
+node tests/sanity_world_rift_platform_checks.cjs
+node tests/sanity_world_rift_squad_platform_checks.cjs
+node tests/sanity_relay_expedition_migration_checks.cjs
+node tests/sanity_relay_expedition_platform_checks.cjs
+node tests/sanity_relay_expedition_cross_process_checks.cjs
+node tests/sanity_relay_expedition_client_checks.mjs
+node tests/sanity_relay_expedition_ui_checks.mjs
 node tests/sanity_balance_checks.cjs
 node tests/sanity_expansion_system_checks.cjs
 node tests/sanity_event_flow_checks.cjs
@@ -121,6 +135,7 @@ node tests/sanity_pvp_live_ws_checks.cjs
 node tests/sanity_pvp_live_cross_process_ws_fanout_checks.cjs
 node tests/sanity_pvp_live_cross_process_queue_checks.cjs
 node tests/sanity_pvp_live_route_checks.cjs
+node tests/sanity_pvp_live_social_gate_checks.cjs
 node tests/sanity_pvp_live_persistence_checks.cjs
 node tests/sanity_pvp_live_settlement_checks.cjs
 node tests/sanity_pvp_live_client_checks.mjs

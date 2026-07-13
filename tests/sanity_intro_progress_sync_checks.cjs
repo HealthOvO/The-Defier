@@ -32,7 +32,9 @@ function assert(condition, message) {
   const systemView = fs.readFileSync(systemViewPath, 'utf8');
 
   const sharedAnchors = [
-    'V10 真 PVP · 实时后端闭环',
+    'V10 同道远征 · 权威接力闭环',
+    '同道远征',
+    '共享路线，不共享残血与牌组',
     '三周一章',
     '章末评语',
     '章目标',
@@ -64,8 +66,8 @@ function assert(condition, message) {
   ];
 
   const introOnlyAnchors = [
-    '当前版本重点（V10 真 PVP · 实时后端闭环）',
-    '当前迭代重点（V10 真 PVP · 实时后端闭环）',
+    '当前版本重点（V10 同道远征 · 权威接力闭环）',
+    '当前迭代重点（V10 同道远征 · 权威接力闭环）',
     'PVP 风险画像已上线',
     '正式胜负、积分和赛季记录只以实时论道为准',
     '不写正式赛季验证',
@@ -78,7 +80,9 @@ function assert(condition, message) {
   ];
 
   const systemViewCurrentAnchors = [
-    'V10 真 PVP · 实时后端闭环',
+    'V10 同道远征 · 权威接力闭环',
+    '同道远征',
+    '共享路线，不共享残血与牌组',
     '镜像练习',
     '实时论道赛后复盘',
     'PVP 练习快照',
@@ -103,11 +107,11 @@ function assert(condition, message) {
     assert(systemView.includes(anchor), `SystemView guide missing current PVP anchor: ${anchor}`);
   });
 
-  const currentVersionPattern = /V10 真 PVP · 实时后端闭环/g;
+  const currentVersionPattern = /V10 同道远征 · 权威接力闭环/g;
   const introVersionCount = (intro.match(currentVersionPattern) || []).length;
   const progressVersionCount = (progress.match(currentVersionPattern) || []).length;
-  assert(introVersionCount >= 2, `expected intro to mention V10 真 PVP · 实时后端闭环 at least twice, got ${introVersionCount}`);
-  assert(progressVersionCount >= 1, `expected progress to mention V10 真 PVP · 实时后端闭环 at least once, got ${progressVersionCount}`);
+  assert(introVersionCount >= 2, `expected intro to mention V10 同道远征 · 权威接力闭环 at least twice, got ${introVersionCount}`);
+  assert(progressVersionCount >= 1, `expected progress to mention V10 同道远征 · 权威接力闭环 at least once, got ${progressVersionCount}`);
   assert(!/v9\.2/i.test(intro), 'intro should not keep stale v9.2 current-version copy');
   assert(!/v9\.2/i.test(index), 'index should not keep stale v9.2 current-version copy');
   assert(!/v9\.2/i.test(systemView), 'SystemView guide should not keep stale v9.2 current-version copy');

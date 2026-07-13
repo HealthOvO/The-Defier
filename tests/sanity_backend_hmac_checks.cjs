@@ -34,6 +34,15 @@ const sessionToken = 'session-token-for-browser-integrity';
 const sessionSignature = hmac.generateSessionSignature('payload', 'session-salt-1', sessionToken);
 assert.strictEqual(hmac.verifySessionSignature('payload', 'session-salt-1', sessionSignature, sessionToken), true, 'valid session signature should verify');
 assert.strictEqual(hmac.verifySessionSignature('tampered', 'session-salt-1', sessionSignature, sessionToken), false, 'tampered session payload should fail verification');
+const signedRoute = 'POST /api/social/preferences';
+const routeBoundSessionSignature = hmac.generateSessionSignature('payload', 'session-salt-2', sessionToken, signedRoute);
+assert.strictEqual(hmac.verifySessionSignature('payload', 'session-salt-2', routeBoundSessionSignature, sessionToken, signedRoute), true, 'route-bound session signature should verify on its signed route');
+assert.strictEqual(hmac.verifySessionSignature('payload', 'session-salt-2', routeBoundSessionSignature, sessionToken, 'POST /api/social/presence/heartbeat'), false, 'route-bound session signature must fail on a sibling route');
+assert.strictEqual(hmac.verifyRequestIntegrity('payload', 'session-salt-2', routeBoundSessionSignature, {
+  route: signedRoute,
+  sessionToken,
+  signatureMode: 'session-v2'
+}).mode, 'session-v2', 'request integrity should surface the route-bound session mode');
 assert.deepStrictEqual(hmac.validateSignatureInput('salt-1234', signature), { valid: true }, 'valid signature input should pass format checks');
 assert.strictEqual(hmac.validateSignatureInput('bad', signature).reason, 'invalid-salt', 'short salt should be rejected');
 assert.strictEqual(hmac.validateSignatureInput('salt-1234', 'not-hex').reason, 'invalid-signature-format', 'non-hex signature should be rejected');

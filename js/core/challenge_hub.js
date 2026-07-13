@@ -1,6 +1,8 @@
 import { CHALLENGE_RULES } from "../data/challenge_rules.js";
 import { PVPService } from "../services/pvp-service.js";
 import { ProgressionService } from "../services/progression-service.js";
+import { ChallengeLadderService } from "../services/challenge-ladder-service.js";
+import { WorldRiftService } from "../services/world-rift-service.js";
 import { GameMap } from "./map.js";
 import { Utils } from "./utils.js";
 import { CHARACTERS } from "../data/index.js";
@@ -29,6 +31,12 @@ const challengeHubMethods = Object.create(null);
       title: '观星台 · 众生试炼',
       subtitle: '在统一规则下积累跨周样本，争夺本周最高试炼分与档案席位。',
       label: '众生试炼',
+      accentClass: 'global'
+    },
+    rift: {
+      title: '观星台 · 天穹裂隙',
+      subtitle: '真实全服共同推进三阶段首领；每周五次正式出征，最佳三次进入贡献榜。',
+      label: '天穹裂隙',
       accentClass: 'global'
     }
   };
@@ -374,7 +382,7 @@ const challengeHubMethods = Object.create(null);
     const verificationArchiveFilters = source.verificationArchiveFilters && typeof source.verificationArchiveFilters === 'object' ? source.verificationArchiveFilters : {};
     const archivePresets = source.archivePresets && typeof source.archivePresets === 'object' ? source.archivePresets : {};
     return {
-      tab: ['daily', 'weekly', 'global'].includes(source.tab) ? source.tab : 'daily',
+      tab: ['daily', 'weekly', 'global', 'rift'].includes(source.tab) ? source.tab : 'daily',
       archiveFilters: {
         daily: normalizeChallengeArchiveFilterState(archiveFilters.daily),
         weekly: normalizeChallengeArchiveFilterState(archiveFilters.weekly),
@@ -2220,6 +2228,10 @@ const challengeHubMethods = Object.create(null);
       };
     }) : [];
     const records = Array.isArray(entry.records) ? entry.records.slice(0, 5) : [];
+    const officialLadder = safeMode === 'global' ? this.getChallengeLadderViewModel() : null;
+    const officialBestScore = clampInt(officialLadder?.personalBest?.officialScore ?? officialLadder?.personalBest?.score, 0);
+    const officialAttempts = clampInt(officialLadder?.usedAttempts, 0);
+    const officialCompletions = clampInt(officialLadder?.personalBest?.completedAttempts, 0);
     return {
       mode: safeMode,
       rotationKey,
@@ -2230,15 +2242,16 @@ const challengeHubMethods = Object.create(null);
       dangerProfile,
       seedSignature,
       progress: {
-        attempts: clampInt(entry.attempts, 0),
-        completions: clampInt(entry.completions, 0),
-        bestScore: clampInt(entry.bestScore, 0),
+        attempts: safeMode === 'global' && officialLadder ? officialAttempts : clampInt(entry.attempts, 0),
+        completions: safeMode === 'global' && officialLadder ? officialCompletions : clampInt(entry.completions, 0),
+        bestScore: safeMode === 'global' && officialBestScore > 0 ? officialBestScore : clampInt(entry.bestScore, 0),
         totalScore: clampInt(entry.totalScore, 0),
-        currentValue
+        currentValue: safeMode === 'global' && officialBestScore > 0 ? officialBestScore : currentValue
       },
-      rewards,
+      rewards: safeMode === 'global' ? [] : rewards,
       records,
-      leaderboard: safeMode === 'global' ? this.buildChallengeLeaderboard(rotationKey, entry) : []
+      leaderboard: safeMode === 'global' ? this.buildChallengeLeaderboard() : [],
+      officialLadder
     };
   };
   challengeHubMethods.buildReplayBundleFromArchiveEntry = function (recordId = '') {
@@ -2438,38 +2451,358 @@ const challengeHubMethods = Object.create(null);
     }
     return true;
   };
-  challengeHubMethods.buildChallengeLeaderboard = function (rotationKey = '', entry = null) {
-    const baseNames = ['丹渊', '孤衡', '南烛', '玄泠', '照川', '寂河', '停云', '白述'];
-    const scores = [];
-    const seed = hashString(`leaderboard:${rotationKey}`);
-    for (let i = 0; i < baseNames.length; i += 1) {
-      const wobble = (seed >> i % 8 & 31) - 15;
-      scores.push({
-        name: baseNames[i],
-        score: 1280 - i * 58 + wobble,
-        highlight: false
-      });
-    }
-    if (entry && clampInt(entry.bestScore, 0) > 0) {
-      scores.push({
-        name: '你',
-        score: clampInt(entry.bestScore, 0),
-        highlight: true
-      });
-    } else {
-      scores.push({
-        name: '你',
-        score: 0,
-        highlight: true
-      });
-    }
-    scores.sort((a, b) => b.score - a.score);
-    return scores.slice(0, 8).map((item, index) => ({
-      rank: index + 1,
-      name: item.name,
-      score: clampInt(item.score, 0),
-      highlight: !!item.highlight
+  challengeHubMethods.getChallengeLadderViewModel = function () {
+    const userId = typeof this.getCurrentProgressionUserId === 'function'
+      ? String(this.getCurrentProgressionUserId() || '').trim()
+      : '';
+    const service = typeof ChallengeLadderService !== 'undefined' ? ChallengeLadderService : null;
+    const state = service && typeof service.getState === 'function'
+      ? service.getState()
+      : {};
+    const current = state.current && typeof state.current === 'object' ? state.current : null;
+    const rotation = current?.rotation && typeof current.rotation === 'object' ? current.rotation : current;
+    const leaderboardSource = Array.isArray(current?.leaderboard)
+      ? current.leaderboard
+      : Array.isArray(current?.leaderboard?.entries)
+        ? current.leaderboard.entries
+        : Array.isArray(current?.entries)
+          ? current.entries
+          : Array.isArray(current?.topEntries)
+            ? current.topEntries
+            : [];
+    const milestones = Array.isArray(current?.milestones)
+      ? current.milestones
+      : Array.isArray(current?.rewardMilestones)
+        ? current.rewardMilestones
+        : [];
+    const attemptLimit = clampInt(current?.allowance?.attemptLimit ?? current?.attemptLimit ?? rotation?.attemptLimit, 3);
+    const usedAttempts = clampInt(current?.allowance?.usedAttempts ?? current?.attemptsUsed ?? current?.attempts?.used, 0);
+    const remainingAttempts = clampInt(
+      current?.allowance?.remainingAttempts ?? current?.remainingAttempts ?? current?.attempts?.remaining ?? Math.max(0, attemptLimit - usedAttempts),
+      0
+    );
+    const personalBest = current?.personalBest || current?.self || current?.leaderboard?.self || null;
+    const myRank = current?.leaderboard?.myRank || current?.myRank || null;
+    const phase = !userId
+      ? 'login_required'
+      : state.pending
+        ? 'loading'
+        : current
+          ? 'ready'
+          : state.lastError
+            ? 'error'
+            : 'idle';
+    return {
+      phase,
+      userId,
+      current,
+      rotation: rotation || null,
+      attemptLimit,
+      usedAttempts,
+      remainingAttempts,
+      personalBest,
+      myRank,
+      previousGrace: current?.previousGrace || null,
+      recoverableAttempt: current?.resumableAttempt || current?.recoverableAttempt || current?.currentAttempt || current?.activeAttempt || state.attempt || null,
+      leaderboard: leaderboardSource,
+      milestones,
+      error: state.lastError || null,
+      pending: state.pending || null
+    };
+  };
+  challengeHubMethods.buildChallengeLeaderboard = function () {
+    const ladder = this.getChallengeLadderViewModel();
+    if (ladder.phase !== 'ready') return [];
+    return ladder.leaderboard.slice(0, 20).map((item, index) => ({
+      rank: clampInt(item.rank, index + 1),
+      name: String(item.userName || item.username || item.displayName || item.name || '无名修士'),
+      score: clampInt(item.officialScore ?? item.score, 0),
+      turns: clampInt(item.turns, 0),
+      remainingHp: clampInt(item.remainingHp, 0),
+      highlight: !!(item.isSelf || item.highlight)
     }));
+  };
+  challengeHubMethods.refreshChallengeLadder = async function () {
+    const userId = typeof this.getCurrentProgressionUserId === 'function'
+      ? String(this.getCurrentProgressionUserId() || '').trim()
+      : '';
+    const service = typeof ChallengeLadderService !== 'undefined' ? ChallengeLadderService : null;
+    if (!userId || !service || typeof service.current !== 'function') {
+      return { success: false, reason: 'not_logged_in' };
+    }
+    const state = service.getState();
+    if (state.pending) return { success: true, skipped: true };
+    const result = await service.current({ expectedUserId: userId });
+    if (this.currentScreen === 'challenge-screen' && this.challengeHubState?.tab === 'global') {
+      this.initChallengeHub();
+    }
+    return result;
+  };
+  challengeHubMethods.claimAuthoritativeChallengeMilestone = async function (milestoneId = '', rotationId = '') {
+    const ladder = this.getChallengeLadderViewModel();
+    const resolvedRotationId = String(rotationId || ladder.rotation?.rotationId || ladder.rotation?.id || '').trim();
+    const expectedUserId = String(ladder.userId || '').trim();
+    const ladderService = typeof ChallengeLadderService !== 'undefined' ? ChallengeLadderService : null;
+    if (!milestoneId || !resolvedRotationId || !expectedUserId || !ladderService || typeof ladderService.claim !== 'function') {
+      return { success: false, reason: 'challenge_ladder_claim_unavailable' };
+    }
+    const result = await ladderService.claim({ milestoneId, rotationId: resolvedRotationId, expectedUserId });
+    if (!result || result.success === false) {
+      if (typeof Utils !== 'undefined' && Utils && typeof Utils.showBattleLog === 'function') {
+        Utils.showBattleLog(result?.message || '众生试炼奖励领取失败，请稍后重试。', { category: 'system', duration: 2600 });
+      }
+    }
+    await this.refreshChallengeLadder();
+    return result;
+  };
+  challengeHubMethods.getWorldRiftViewModel = function () {
+    const userId = typeof this.getCurrentProgressionUserId === 'function'
+      ? String(this.getCurrentProgressionUserId() || '').trim()
+      : '';
+    const service = typeof WorldRiftService !== 'undefined' ? WorldRiftService : null;
+    const state = service && typeof service.getState === 'function' ? service.getState() : {};
+    const current = state.current && typeof state.current === 'object' ? state.current : null;
+    const rotation = current?.rotation && typeof current.rotation === 'object' ? current.rotation : current;
+    const world = current?.world && typeof current.world === 'object'
+      ? current.world
+      : current?.worldState && typeof current.worldState === 'object'
+        ? current.worldState
+        : state.world && typeof state.world === 'object'
+          ? state.world
+          : null;
+    const leaderboardEnvelope = current?.leaderboard || state.leaderboard || null;
+    const leaderboardSource = Array.isArray(leaderboardEnvelope)
+      ? leaderboardEnvelope
+      : Array.isArray(leaderboardEnvelope?.entries)
+        ? leaderboardEnvelope.entries
+        : Array.isArray(current?.entries)
+          ? current.entries
+          : [];
+    const milestones = Array.isArray(current?.milestones)
+      ? current.milestones
+      : [
+        ...(Array.isArray(current?.personalMilestones) ? current.personalMilestones : []),
+        ...(Array.isArray(current?.globalMilestones) ? current.globalMilestones : [])
+      ];
+    const attemptLimit = clampInt(current?.allowance?.attemptLimit ?? current?.attemptLimit ?? rotation?.attemptLimit, 5);
+    const usedAttempts = clampInt(current?.allowance?.usedAttempts ?? current?.attemptsUsed ?? current?.attempts?.used, 0);
+    const remainingAttempts = clampInt(
+      current?.allowance?.remainingAttempts ?? current?.remainingAttempts ?? current?.attempts?.remaining ?? Math.max(0, attemptLimit - usedAttempts),
+      0
+    );
+    const personal = current?.personal || current?.personalContribution || current?.entry || current?.self
+      || state.contribution || leaderboardEnvelope?.self || null;
+    const myRank = leaderboardEnvelope?.myRank || current?.myRank || null;
+    const phase = !userId
+      ? 'login_required'
+      : state.pending
+        ? 'loading'
+        : current
+          ? ((rotation?.status || rotation?.state) === 'closed' ? 'archived' : (rotation?.status || rotation?.state) === 'grace' ? 'grace' : 'ready')
+          : state.lastError
+            ? 'error'
+            : 'idle';
+    return {
+      phase,
+      userId,
+      current,
+      rotation: rotation || null,
+      world,
+      attemptLimit,
+      usedAttempts,
+      remainingAttempts,
+      personal,
+      myRank,
+      previousClaim: current?.previousClaim || current?.previousGrace || state.previousClaim || null,
+      recoverableAttempt: current?.resumableAttempt || current?.recoverableAttempt || current?.currentAttempt || state.attempt || null,
+      leaderboard: leaderboardSource,
+      milestones,
+      error: state.lastError || null,
+      pending: state.pending || null
+    };
+  };
+  challengeHubMethods.refreshWorldRift = async function () {
+    const view = this.getWorldRiftViewModel();
+    const service = typeof WorldRiftService !== 'undefined' ? WorldRiftService : null;
+    if (!view.userId || !service || typeof service.current !== 'function') {
+      return { success: false, reason: 'not_logged_in' };
+    }
+    const state = service.getState();
+    if (state.pending) return { success: true, skipped: true };
+    const result = await service.current({ expectedUserId: view.userId });
+    if (this.currentScreen === 'challenge-screen' && this.challengeHubState?.tab === 'rift') {
+      this.initWorldRiftHub();
+    }
+    return result;
+  };
+  challengeHubMethods.claimWorldRiftMilestone = async function (milestoneId = '', rotationId = '') {
+    const view = this.getWorldRiftViewModel();
+    const resolvedRotationId = String(rotationId || view.rotation?.rotationId || view.rotation?.id || '').trim();
+    const service = typeof WorldRiftService !== 'undefined' ? WorldRiftService : null;
+    if (!milestoneId || !resolvedRotationId || !view.userId || !service || typeof service.claim !== 'function') {
+      return { success: false, reason: 'world_rift_claim_unavailable' };
+    }
+    const result = await service.claim({
+      milestoneId,
+      rotationId: resolvedRotationId,
+      expectedUserId: view.userId
+    });
+    if (!result || result.success === false) {
+      if (typeof Utils !== 'undefined' && Utils && typeof Utils.showBattleLog === 'function') {
+        Utils.showBattleLog(result?.message || '天穹裂隙奖励领取失败，请稍后重试。', { category: 'system', duration: 2600 });
+      }
+    }
+    await this.refreshWorldRift();
+    return result;
+  };
+  challengeHubMethods.initWorldRiftHub = function () {
+    if (typeof document === 'undefined') return;
+    const view = this.getWorldRiftViewModel();
+    const rotation = view.rotation || {};
+    const world = view.world || {};
+    const totalHp = clampInt(world.totalHp ?? rotation.totalHp, 10000);
+    const appliedDamage = clampInt(world.appliedDamage ?? world.damage, 0, totalHp);
+    const remainingHp = clampInt(world.remainingHp ?? Math.max(0, totalHp - appliedDamage), 0, totalHp);
+    const progressPercent = totalHp > 0 ? Math.min(100, Math.round(appliedDamage / totalHp * 100)) : 0;
+    const rawPhaseIndex = clampInt(world.currentPhaseIndex ?? world.phaseIndex, 1, 3);
+    const phaseIndex = clampInt(rawPhaseIndex - 1, 0, 2);
+    const phases = Array.isArray(rotation.phases) ? rotation.phases : Array.isArray(world.phases) ? world.phases : [];
+    const currentPhase = world.currentPhase && typeof world.currentPhase === 'object' ? world.currentPhase : phases[phaseIndex] || {};
+    const cleared = !!(world.cleared || world.status === 'cleared' || remainingHp === 0);
+    const phaseTitle = String(currentPhase.title || currentPhase.name || (cleared ? '裂隙余响' : `第 ${phaseIndex + 1} 阶段`));
+    const personalTotal = clampInt(view.personal?.totalContribution ?? view.personal?.contributionTotal, 0);
+    const rankedContribution = clampInt(view.personal?.rankedContribution ?? view.personal?.rankScore ?? view.personal?.score, 0);
+    const selfRank = clampInt(view.myRank?.rank ?? view.personal?.rank, 0);
+    const titleEl = document.getElementById('challenge-hub-title');
+    const subtitleEl = document.getElementById('challenge-hub-subtitle');
+    const summaryEl = document.getElementById('challenge-hub-summary');
+    const rulesEl = document.getElementById('challenge-hub-rules');
+    const rewardsEl = document.getElementById('challenge-hub-rewards');
+    const recordsEl = document.getElementById('challenge-hub-records');
+    const sideEl = document.getElementById('challenge-hub-side');
+    const rankingEl = document.getElementById('challenge-hub-ranking');
+    const launchEl = document.getElementById('challenge-hub-launch');
+    if (titleEl) titleEl.textContent = '观星台 · 天穹裂隙';
+    if (subtitleEl) subtitleEl.textContent = '真实全服共同推进三阶段首领；每周五次正式出征，最佳三次进入贡献榜。';
+    document.querySelectorAll('#challenge-screen [data-challenge-tab]').forEach(button => {
+      button.classList.toggle('active', button.dataset.challengeTab === 'rift');
+    });
+    const phaseMessage = view.phase === 'login_required'
+      ? '登录后读取真实全服首领、正式额度、贡献榜和奖励资格。'
+      : view.phase === 'loading'
+        ? '正在读取服务端世界状态。'
+        : view.phase === 'error'
+          ? view.error?.message || '天穹裂隙读取失败，可刷新后重试。'
+          : cleared
+            ? '三阶段首领已经击破。剩余正式次数仍可投入余响，继续累积个人贡献和榜单成绩。'
+            : rotation.description || '所有有效完整重放都会原子推进真实全服首领。';
+    if (summaryEl) {
+      summaryEl.innerHTML = `
+        <article class="challenge-focus-card global" data-world-rift-summary data-world-rift-state-version="${clampInt(world.stateVersion, 0)}">
+          <div class="challenge-focus-head">
+            <span class="challenge-focus-icon">裂</span>
+            <div>
+              <span class="challenge-kicker">异步共斗 · ${escapeHtml(rotation.rotationId || '等待服务器')}</span>
+              <h3>${escapeHtml(rotation.title || '天穹裂隙')}</h3>
+            </div>
+          </div>
+          <p class="challenge-focus-intro">${escapeHtml(phaseMessage)}</p>
+          <div class="challenge-focus-meta">
+            <div class="challenge-meta-chip"><strong>${view.remainingAttempts}/${view.attemptLimit}</strong><span>剩余正式次数</span></div>
+            <div class="challenge-meta-chip"><strong>${escapeHtml(phaseTitle)}</strong><span>当前全服阶段</span></div>
+            <div class="challenge-meta-chip"><strong>${remainingHp}/${totalHp}</strong><span>全服剩余生命</span></div>
+            <div class="challenge-meta-chip"><strong>${rankedContribution}${selfRank > 0 ? ` · #${selfRank}` : ''}</strong><span>最佳三次贡献</span></div>
+          </div>
+          <div class="challenge-danger-band">
+            <div class="challenge-danger-head"><strong>${escapeHtml(cleared ? '裂隙余响' : phaseTitle)}</strong><span>${progressPercent}%</span></div>
+            <div class="world-rift-progress-track" role="progressbar" aria-label="全服裂隙进度" aria-valuemin="0" aria-valuemax="${totalHp}" aria-valuenow="${appliedDamage}"><span style="width:${progressPercent}%"></span></div>
+            <p class="challenge-danger-summary">全服已推进 ${appliedDamage}/${totalHp}；溢出会穿透到下一阶段，击破后贡献转入余响。</p>
+            <div class="challenge-danger-foot"><span>无末刀奖励</span><span>状态版本 ${clampInt(world.stateVersion, 0)}</span></div>
+          </div>
+          <div class="challenge-tag-strip">
+            <span class="challenge-tag">server_authoritative</span>
+            <span class="challenge-tag">每周 ${view.attemptLimit} 次</span>
+            <span class="challenge-tag">最佳 3 次计榜</span>
+            <span class="challenge-tag">固定牌组与统一种子</span>
+          </div>
+        </article>`;
+    }
+    if (rulesEl) {
+      const formula = String(rotation.contributionFormula?.formulaText || rotation.contribution?.formulaText || rotation.scoring?.formulaText || 'contribution = clamp(300 + score * 2 + 生存加成 + 节奏加成, 300, 2400)');
+      const rules = [
+        `轮换窗口：${rotation.rotationId || '等待服务器'} · UTC 周轮换`,
+        `正式额度：每账号每轮 ${view.attemptLimit} 次，发车即消耗；失败、放弃和过期不返还`,
+        '统一命盘：第 N 次出征对所有账号使用相同的第 N 号服务端种子',
+        `贡献公式：${formula}`,
+        '世界推进：贡献可跨阶段溢出；击破后进入余响，不产生负生命',
+        '榜单规则：贡献最高三次之和，再比较最佳单次、血量与回合；不使用提交时间',
+        '奖励边界：个人与全服里程碑只发外观用途荣誉；没有末刀、首杀或战力奖励'
+      ];
+      rulesEl.innerHTML = rules.map(line => `<article class="challenge-rule-card"><span class="challenge-rule-bullet">✦</span><p>${escapeHtml(line)}</p></article>`).join('');
+    }
+    if (rewardsEl) {
+      const groups = [
+        { label: '本周裂隙', rotation, world, personal: view.personal, milestones: view.milestones },
+        ...(view.previousClaim ? [{
+          label: '上轮待领',
+          rotation: view.previousClaim.rotation || {},
+          world: view.previousClaim.world || {},
+          personal: view.previousClaim.personal || {},
+          milestones: Array.isArray(view.previousClaim.milestones) ? view.previousClaim.milestones : []
+        }] : [])
+      ];
+      const cards = groups.flatMap(group => group.milestones.map(item => {
+        const milestoneId = String(item.milestoneId || item.id || '');
+        const rotationId = String(group.rotation.rotationId || group.rotation.id || '');
+        const claimed = !!item.claimed;
+        const claimable = !!(item.claimable || item.ready || item.eligible) && !claimed;
+        const target = clampInt(item.targetContribution ?? item.targetAppliedDamage ?? item.targetDamage ?? item.target, 0);
+        const milestoneType = String(item.milestoneType || item.kind || item.type || '');
+        const groupAppliedDamage = clampInt(group.world?.appliedDamage ?? group.world?.damage, 0);
+        const groupPersonalTotal = clampInt(group.personal?.totalContribution ?? group.personal?.contributionTotal, 0);
+        const current = clampInt(item.currentContribution ?? item.progress ?? (milestoneType.includes('global') ? groupAppliedDamage : groupPersonalTotal), 0);
+        const amount = clampInt(item.reward?.amount ?? item.amount ?? item.renown, 0);
+        const requirement = target > 0 ? `${Math.min(current, target)}/${target}` : claimable || claimed ? '已解锁' : '未解锁';
+        return `
+          <article class="challenge-reward-card ${claimed ? 'claimed' : claimable ? 'ready' : 'locked'}" data-world-rift-milestone="${escapeHtml(milestoneId)}">
+            <div class="challenge-reward-top"><div><strong>${escapeHtml(item.title || item.label || milestoneId)}</strong><p>${escapeHtml(`${group.label} · ${amount} 荣誉（仅外观）`)}</p></div><span class="challenge-reward-progress">${escapeHtml(requirement)}</span></div>
+            <button type="button" class="collection-inline-btn" data-challenge-action="claim-world-rift-milestone" data-rotation-id="${escapeHtml(rotationId)}" data-milestone-id="${escapeHtml(milestoneId)}" ${claimable ? '' : 'disabled'}>${claimed ? '已领取' : claimable ? `领取 ${amount} 荣誉` : '未达成'}</button>
+          </article>`;
+      }));
+      rewardsEl.innerHTML = cards.join('') || '<div class="codex-empty-state">登录并完成一次正式贡献后，可读取个人与全服里程碑。</div>';
+    }
+    if (recordsEl) {
+      const completedAttempts = clampInt(view.personal?.completedAttempts, 0);
+      const hasFormalContribution = completedAttempts > 0 || personalTotal > 0 || rankedContribution > 0;
+      recordsEl.innerHTML = hasFormalContribution ? `
+        <article class="challenge-record-item"><div><strong>本周个人贡献</strong><span>全部有效贡献 ${personalTotal} · 最佳三次 ${rankedContribution}</span></div><span>${completedAttempts}/${view.attemptLimit} 次</span></article>
+        <div class="challenge-inline-note">正式事实只来自服务端完整重放。这里不显示本地模拟首领、离线贡献或伪造参与人数。</div>
+      ` : '<div class="codex-empty-state">尚无正式贡献。完成第一条权威裂隙战局后会在这里留下真实记录。</div>';
+    }
+    if (sideEl) {
+      const squadDashboard = view.current?.riftSquad?.current || view.current?.riftSquad || null;
+      const squad = squadDashboard?.squad || null;
+      const squadCard = squad ? `
+        <section class="codex-side-card" data-world-rift-squad-summary><span class="codex-side-kicker">裂隙小队</span><h3>${clampInt(squad.cooperativeScore, 0)} / 9600 协作分</h3><p>${clampInt(squad.memberCount, 0)}/4 位成员，${clampInt(squad.contributingMembers, 0)} 位已有真实贡献。每人只取最佳一次，不增加伤害、次数或战力。</p><button type="button" class="collection-inline-btn" data-challenge-action="open-social-squad">管理小队</button></section>`
+        : `
+        <section class="codex-side-card" data-world-rift-squad-summary><span class="codex-side-kicker">裂隙小队</span><h3>本轮尚未组队</h3><p>可与至多三位道友汇总真实贡献；组队不会增加伤害、次数或战力。</p><button type="button" class="collection-inline-btn" data-challenge-action="open-social-squad">前往组队</button></section>`;
+      sideEl.innerHTML = `
+        <section class="codex-side-card"><span class="codex-side-kicker">全服当前战线</span><h3>${escapeHtml(phaseTitle)}</h3><p>${escapeHtml(cleared ? '首领已击破，余响期间仍可完成个人里程碑和贡献榜。' : currentPhase.description || '所有玩家的有效贡献都会穿透阶段并保留完整事实。')}</p><div class="challenge-record-tags"><span class="challenge-tag">剩余 ${remainingHp}</span><span class="challenge-tag">推进 ${progressPercent}%</span><span class="challenge-tag">版本 ${clampInt(world.stateVersion, 0)}</span></div></section>
+        ${squadCard}
+        <section class="codex-side-card"><span class="codex-side-kicker">公平合同</span><h3>同槽位同种子</h3><p>固定服务器牌组，不读取命环成长。每人相同次数，最佳三次计榜，末刀不额外发奖。</p></section>`;
+    }
+    if (rankingEl) {
+      const rows = view.leaderboard.slice(0, 20).map((item, index) => `
+        <div class="challenge-rank-row ${item.isSelf || item.highlight ? 'highlight' : ''}" data-world-rift-rank="${clampInt(item.rank, index + 1)}"><span>#${clampInt(item.rank, index + 1)}</span><strong>${escapeHtml(item.userName || item.username || item.displayName || '无名修士')}</strong><span>${clampInt(item.rankedContribution ?? item.rankScore ?? item.score, 0)}</span></div>`).join('');
+      const empty = view.phase === 'login_required' ? '登录后读取真实贡献榜。' : view.phase === 'error' ? view.error?.message || '贡献榜读取失败。' : '本周尚无正式贡献。';
+      rankingEl.innerHTML = `<section class="codex-side-card"><span class="codex-side-kicker">真实共斗榜</span><h3>最佳三次贡献</h3><p>排序不使用提交时间，不奖励抢跑或末刀。</p><div class="challenge-leaderboard">${rows || `<div class="challenge-record-empty">${escapeHtml(empty)}</div>`}</div><button type="button" class="collection-inline-btn secondary" data-challenge-action="refresh-world-rift" ${view.phase === 'loading' ? 'disabled' : ''}>${view.phase === 'loading' ? '读取中...' : '刷新世界状态'}</button></section>`;
+    }
+    if (launchEl) {
+      launchEl.innerHTML = `
+        <button type="button" class="menu-btn primary challenge-launch-btn" data-challenge-action="open-authoritative-world-rift">${view.recoverableAttempt ? '继续裂隙出征' : cleared ? '进入裂隙余响' : '进入权威共斗'}</button>
+        <p class="collection-muted">发车会消耗一次正式额度；断线后恢复同一 run，不会重抽种子或重复推进世界状态。</p>`;
+    }
+    this.bindChallengeHubDelegates({ rewardsEl, recordsEl, sideEl, rankingEl, launchEl });
   };
   challengeHubMethods.getSanctumOverviewData = function () {
     const data = typeof originalGetSanctumOverviewData === 'function' ? originalGetSanctumOverviewData.call(this) : null;
@@ -2512,27 +2845,44 @@ const challengeHubMethods = Object.create(null);
   };
   challengeHubMethods.showChallengeHub = function (tab = 'daily') {
     this.ensureChallengeHubBootState();
-    this.challengeHubState.tab = ['daily', 'weekly', 'global'].includes(tab) ? tab : 'daily';
+    this.challengeHubState.tab = ['daily', 'weekly', 'global', 'rift'].includes(tab) ? tab : 'daily';
     this.persistChallengeHubState();
     this.showScreen('challenge-screen');
     this.initChallengeHub();
+    if (this.challengeHubState.tab === 'global') {
+      Promise.resolve(this.refreshChallengeLadder()).catch(() => {});
+    }
+    if (this.challengeHubState.tab === 'rift') {
+      Promise.resolve(this.refreshWorldRift()).catch(() => {});
+    }
   };
   challengeHubMethods.switchChallengeTab = function (tab = 'daily') {
     this.ensureChallengeHubBootState();
-    this.challengeHubState.tab = ['daily', 'weekly', 'global'].includes(tab) ? tab : 'daily';
+    this.challengeHubState.tab = ['daily', 'weekly', 'global', 'rift'].includes(tab) ? tab : 'daily';
     this.persistChallengeHubState();
     if (this.currentScreen !== 'challenge-screen') {
       this.showChallengeHub(this.challengeHubState.tab);
       return;
     }
     this.initChallengeHub();
+    if (this.challengeHubState.tab === 'global') {
+      Promise.resolve(this.refreshChallengeLadder()).catch(() => {});
+    }
+    if (this.challengeHubState.tab === 'rift') {
+      Promise.resolve(this.refreshWorldRift()).catch(() => {});
+    }
   };
   challengeHubMethods.initChallengeHub = function () {
     if (typeof document === 'undefined') return;
     this.ensureChallengeHubBootState();
     const tab = this.challengeHubState.tab || 'daily';
+    if (tab === 'rift') {
+      this.initWorldRiftHub();
+      return;
+    }
     const bundle = this.buildChallengeBundle(tab);
     if (!bundle || !bundle.rule) return;
+    const isAuthoritativeGlobal = bundle.mode === 'global';
     const titleEl = document.getElementById('challenge-hub-title');
     const subtitleEl = document.getElementById('challenge-hub-subtitle');
     const summaryEl = document.getElementById('challenge-hub-summary');
@@ -2542,8 +2892,10 @@ const challengeHubMethods = Object.create(null);
     const sideEl = document.getElementById('challenge-hub-side');
     const rankingEl = document.getElementById('challenge-hub-ranking');
     const launchEl = document.getElementById('challenge-hub-launch');
-    if (titleEl) titleEl.textContent = bundle.meta.title;
-    if (subtitleEl) subtitleEl.textContent = bundle.meta.subtitle;
+    if (titleEl) titleEl.textContent = isAuthoritativeGlobal ? '观星台 · 众生试炼' : bundle.meta.title;
+    if (subtitleEl) subtitleEl.textContent = isAuthoritativeGlobal
+      ? '服务端统一轮换、有限正式次数与真实榜单；离线练习单独保留。'
+      : bundle.meta.subtitle;
     document.querySelectorAll('#challenge-screen [data-challenge-tab]').forEach(button => {
       button.classList.toggle('active', button.dataset.challengeTab === tab);
     });
@@ -2557,6 +2909,7 @@ const challengeHubMethods = Object.create(null);
     });
     const trainingFocus = this.getObservatoryTrainingFocus();
     const pvpLivePracticeReturn = this.getPvpLivePracticeReturnReceipt();
+    const officialLadder = bundle.officialLadder || this.getChallengeLadderViewModel();
     const archiveFilters = this.buildChallengeArchiveFilterBundle(bundle);
     const comparison = this.buildObservatoryThemeComparison({
       mode: bundle.mode,
@@ -2588,8 +2941,63 @@ const challengeHubMethods = Object.create(null);
       return `${lead} · ${entry?.completed ? '完成' : '中断'} · 得分 ${clampInt(entry?.score, 0)}${entry?.themeLabel ? ` · ${entry.themeLabel}` : ''}`;
     };
     if (summaryEl) {
-      const tags = normalizeTagList([themeMeta.signatureTag, ...(Array.isArray(bundle.rule.tags) ? bundle.rule.tags : [])], 4);
-      summaryEl.innerHTML = `
+      if (isAuthoritativeGlobal) {
+        const rotation = officialLadder.rotation || {};
+        const scoring = rotation.scoring || {};
+        const bestScore = clampInt(officialLadder.personalBest?.officialScore ?? officialLadder.personalBest?.score, 0);
+        const completedAttempts = clampInt(officialLadder.personalBest?.completedAttempts, 0);
+        const selfRank = clampInt(officialLadder.myRank?.rank, 0);
+        const formulaText = String(scoring.formulaText || 'officialScore = server authoritative score');
+        const phaseMessage = officialLadder.phase === 'login_required'
+          ? '登录后才能读取正式轮换、次数、成绩和奖励。'
+          : officialLadder.phase === 'error'
+            ? officialLadder.error?.message || '正式轮换读取失败，可刷新后重试。'
+            : officialLadder.phase === 'loading'
+              ? '正在读取服务端正式轮换。'
+              : rotation.description || '本周正式轮换由服务器统一裁定。';
+        summaryEl.innerHTML = `
+          <article class="challenge-focus-card ${escapeHtml(bundle.meta.accentClass)}" data-authoritative-challenge-summary>
+            <div class="challenge-focus-head">
+              <span class="challenge-focus-icon">△</span>
+              <div>
+                <span class="challenge-kicker">权威轮换 · ${escapeHtml(rotation.rotationId || '等待服务器')}</span>
+                <h3>${escapeHtml(rotation.title || '众生试炼正式赛道')}</h3>
+              </div>
+            </div>
+            <p class="challenge-focus-intro">${escapeHtml(phaseMessage)}</p>
+            <div class="challenge-focus-meta">
+              <div class="challenge-meta-chip"><strong>${officialLadder.usedAttempts}/${officialLadder.attemptLimit}</strong><span>已用正式次数</span></div>
+              <div class="challenge-meta-chip"><strong>${officialLadder.remainingAttempts}</strong><span>剩余正式次数</span></div>
+              <div class="challenge-meta-chip"><strong>${bestScore}</strong><span>个人正式最高分</span></div>
+              <div class="challenge-meta-chip"><strong>${selfRank > 0 ? `#${selfRank}` : completedAttempts}</strong><span>${selfRank > 0 ? '当前正式名次' : '正式完成次数'}</span></div>
+            </div>
+            <div class="challenge-tag-strip">
+              <span class="challenge-tag">server_authoritative</span>
+              <span class="challenge-tag">UTC 周轮换</span>
+              <span class="challenge-tag">每周 ${officialLadder.attemptLimit} 次</span>
+              <span class="challenge-tag">荣誉仅用于外观</span>
+            </div>
+            <div class="challenge-seed-line">
+              <span class="challenge-seed-chip">统一种子槽</span>
+              <span>同一轮换中，各账号第 N 次正式尝试使用相同的第 N 号服务端种子；原始种子不向客户端公开。</span>
+            </div>
+            <div class="challenge-danger-band">
+              <div class="challenge-danger-head">
+                <strong>服务端正式计分</strong>
+                <span>${escapeHtml(String(scoring.mode || 'balanced'))}</span>
+              </div>
+              <p class="challenge-danger-summary">${escapeHtml(formulaText)}</p>
+              <div class="challenge-danger-foot">
+                <span>只接受完整重放回执</span>
+                <span>并列顺序：回合更少 / 剩余生命更高 / 更早提交</span>
+              </div>
+            </div>
+            <div class="challenge-inline-note">离线练习保留本地命盘与档案，但不进入正式榜，也不能领取权威里程碑。</div>
+          </article>
+        `;
+      } else {
+        const tags = normalizeTagList([themeMeta.signatureTag, ...(Array.isArray(bundle.rule.tags) ? bundle.rule.tags : [])], 4);
+        summaryEl.innerHTML = `
                 <article class="challenge-focus-card ${escapeHtml(bundle.meta.accentClass)}">
                     <div class="challenge-focus-head">
                         <span class="challenge-focus-icon">${escapeHtml(bundle.rule.icon || '✦')}</span>
@@ -2639,10 +3047,26 @@ const challengeHubMethods = Object.create(null);
                     ${isCurrentRun ? `<div class="challenge-inline-note">当前已有进行中的 ${escapeHtml(bundle.meta.label)}，回地图即可继续冲线。</div>` : ''}
                 </article>
             `;
+      }
     }
     if (rulesEl) {
-      const scoreDefaults = this.getChallengeScoreDefaults();
-      const rules = [`指定角色：${this.getCharacterDisplayName(bundle.rule.characterId)}`, `开局命格：${this.getChallengeMetaName('destiny', bundle.rule.runDestinyId)}`, `同行灵契：${this.getChallengeMetaName('spirit', bundle.rule.spiritCompanionId)}`, Array.isArray(bundle.rule.vowIds) && bundle.rule.vowIds.length > 0 ? `固定誓约：${bundle.rule.vowIds.map(id => this.getChallengeMetaName('vow', id)).join(' / ')}` : '固定誓约：无', bundle.rule.battleModifiers?.enemyOpeningBlock > 0 ? `敌方开场护盾 +${clampInt(bundle.rule.battleModifiers.enemyOpeningBlock, 0)}` : null, Number(bundle.rule.battleModifiers?.enemyHpMul || 1) > 1 ? `敌方生命 x${safeNumber(bundle.rule.battleModifiers.enemyHpMul, 1).toFixed(2)}` : null, Number(bundle.rule.battleModifiers?.enemyAtkMul || 1) > 1 ? `敌方伤害 x${safeNumber(bundle.rule.battleModifiers.enemyAtkMul, 1).toFixed(2)}` : null, bundle.rule.battleModifiers?.enemyDebuff?.type ? `额外压制：${bundle.rule.battleModifiers.enemyDebuff.type} ${clampInt(bundle.rule.battleModifiers.enemyDebuff.value, 0)}` : null, `基础计分：普通战 +${scoreDefaults.battleWin} / 精英 +${scoreDefaults.eliteWin} / Boss +${scoreDefaults.bossWin}`, `章节推进：每破一重 +${scoreDefaults.realmClear}，完成线 +${scoreDefaults.completeBonus}`].filter(Boolean);
+      let rules = [];
+      if (isAuthoritativeGlobal) {
+        const rotation = officialLadder.rotation || {};
+        const scoring = rotation.scoring || {};
+        rules = [
+          `轮换窗口：${rotation.rotationId || '等待服务器'} · UTC 周轮换`,
+          `正式次数：每账号每轮 ${officialLadder.attemptLimit} 次，预留 attempt 即消耗额度`,
+          '统一种子：各账号第 N 次正式尝试共享第 N 号服务端种子槽',
+          `正式计分：${scoring.formulaText || '以服务端权威结算分为准'}`,
+          '准入条件：server_authoritative + server_replayed + fullReplayPassed',
+          '并列顺序：分数降序、回合升序、剩余生命降序、提交时间升序',
+          '离线边界：本地练习不限次数，但不计榜、不占正式额度、不发权威奖励'
+        ];
+      } else {
+        const scoreDefaults = this.getChallengeScoreDefaults();
+        rules = [`指定角色：${this.getCharacterDisplayName(bundle.rule.characterId)}`, `开局命格：${this.getChallengeMetaName('destiny', bundle.rule.runDestinyId)}`, `同行灵契：${this.getChallengeMetaName('spirit', bundle.rule.spiritCompanionId)}`, Array.isArray(bundle.rule.vowIds) && bundle.rule.vowIds.length > 0 ? `固定誓约：${bundle.rule.vowIds.map(id => this.getChallengeMetaName('vow', id)).join(' / ')}` : '固定誓约：无', bundle.rule.battleModifiers?.enemyOpeningBlock > 0 ? `敌方开场护盾 +${clampInt(bundle.rule.battleModifiers.enemyOpeningBlock, 0)}` : null, Number(bundle.rule.battleModifiers?.enemyHpMul || 1) > 1 ? `敌方生命 x${safeNumber(bundle.rule.battleModifiers.enemyHpMul, 1).toFixed(2)}` : null, Number(bundle.rule.battleModifiers?.enemyAtkMul || 1) > 1 ? `敌方伤害 x${safeNumber(bundle.rule.battleModifiers.enemyAtkMul, 1).toFixed(2)}` : null, bundle.rule.battleModifiers?.enemyDebuff?.type ? `额外压制：${bundle.rule.battleModifiers.enemyDebuff.type} ${clampInt(bundle.rule.battleModifiers.enemyDebuff.value, 0)}` : null, `基础计分：普通战 +${scoreDefaults.battleWin} / 精英 +${scoreDefaults.eliteWin} / Boss +${scoreDefaults.bossWin}`, `章节推进：每破一重 +${scoreDefaults.realmClear}，完成线 +${scoreDefaults.completeBonus}`].filter(Boolean);
+      }
       rulesEl.innerHTML = rules.map(line => `
                 <article class="challenge-rule-card">
                     <span class="challenge-rule-bullet">✦</span>
@@ -2651,7 +3075,49 @@ const challengeHubMethods = Object.create(null);
             `).join('');
     }
     if (rewardsEl) {
-      rewardsEl.innerHTML = bundle.rewards.map(reward => `
+      if (isAuthoritativeGlobal) {
+        const currentRotation = officialLadder.rotation || {};
+        const rewardGroups = [
+          {
+            label: '本周正式轮换',
+            rotation: currentRotation,
+            bestScore: clampInt(officialLadder.personalBest?.officialScore ?? officialLadder.personalBest?.score, 0),
+            milestones: officialLadder.milestones
+          },
+          ...(officialLadder.previousGrace ? [{
+            label: '上轮领奖宽限',
+            rotation: officialLadder.previousGrace.rotation || {},
+            bestScore: clampInt(officialLadder.previousGrace.personalBest?.officialScore ?? officialLadder.previousGrace.personalBest?.score, 0),
+            milestones: Array.isArray(officialLadder.previousGrace.milestones) ? officialLadder.previousGrace.milestones : []
+          }] : [])
+        ];
+        const rewardCards = rewardGroups.flatMap(group => group.milestones.map(item => {
+          const milestoneId = String(item.milestoneId || item.id || '');
+          const rotationId = String(group.rotation.rotationId || group.rotation.id || '');
+          const claimed = !!item.claimed;
+          const claimable = !!(item.claimable || item.ready || item.eligible) && !claimed;
+          const targetScore = clampInt(item.targetScore ?? item.target, 0);
+          const amount = clampInt(item.reward?.amount ?? item.amount ?? item.renown, 0);
+          return `
+            <article class="challenge-reward-card ${claimed ? 'claimed' : claimable ? 'ready' : 'locked'}" data-authoritative-milestone="${escapeHtml(milestoneId)}">
+              <div class="challenge-reward-top">
+                <div>
+                  <strong>${escapeHtml(item.title || item.label || milestoneId)}</strong>
+                  <p>${escapeHtml(`${group.label} · 达到 ${targetScore} 正式分 · ${amount} 荣誉（仅外观）`)}</p>
+                </div>
+                <span class="challenge-reward-progress">${Math.min(group.bestScore, targetScore)}/${targetScore}</span>
+              </div>
+              <button type="button" class="collection-inline-btn"
+                data-challenge-action="claim-authoritative-milestone"
+                data-rotation-id="${escapeHtml(rotationId)}"
+                data-milestone-id="${escapeHtml(milestoneId)}"
+                ${claimable ? '' : 'disabled'}>${claimed ? '已领取' : claimable ? `领取 ${amount} 荣誉` : '未达成'}</button>
+            </article>
+          `;
+        }));
+        rewardsEl.innerHTML = rewardCards.join('') || '<div class="codex-empty-state">登录后可读取本周正式里程碑；离线练习不在此发奖。</div>';
+      } else {
+        rewardsEl.innerHTML = bundle.rewards.map(reward => `
                 <article class="challenge-reward-card ${reward.claimed ? 'claimed' : reward.ready ? 'ready' : 'locked'}">
                     <div class="challenge-reward-top">
                         <div>
@@ -2667,6 +3133,7 @@ const challengeHubMethods = Object.create(null);
                         ${reward.ready && !reward.claimed ? '' : 'disabled'}>${reward.claimed ? '已领取' : reward.ready ? '领取奖励' : '未达成'}</button>
                 </article>
             `).join('');
+      }
     }
     if (recordsEl) {
       const source = bundle.records.length > 0 ? bundle.records : Array.isArray(this.challengeProgressState?.recentResults) ? this.challengeProgressState.recentResults.filter(item => item.mode === bundle.mode).slice(0, 4) : [];
@@ -2774,9 +3241,10 @@ const challengeHubMethods = Object.create(null);
                     </article>
                 `).join('') : `<div class="codex-empty-state">${escapeHtml(comparison.emptyText)}</div>`;
       recordsEl.innerHTML = `
+                ${isAuthoritativeGlobal ? '<div class="challenge-inline-note">以下记录、回放和远征线索均来自离线练习档案，不参与服务端正式榜。</div>' : ''}
                 <section class="challenge-record-section">
                     <div class="challenge-record-section-head">
-                        <strong>当前轮换记录</strong>
+                        <strong>${isAuthoritativeGlobal ? '离线练习记录' : '当前轮换记录'}</strong>
                         <span>${escapeHtml(bundle.rotationLabel)}</span>
                     </div>
                     ${currentRecordsMarkup}
@@ -2936,8 +3404,52 @@ const challengeHubMethods = Object.create(null);
             `;
     }
     if (sideEl) {
-      const nextReward = bundle.rewards.find(item => !item.claimed) || null;
-      sideEl.innerHTML = `
+      if (isAuthoritativeGlobal) {
+        const rotation = officialLadder.rotation || {};
+        const scoring = rotation.scoring || {};
+        const bestScore = clampInt(officialLadder.personalBest?.officialScore ?? officialLadder.personalBest?.score, 0);
+        const completedAttempts = clampInt(officialLadder.personalBest?.completedAttempts, 0);
+        sideEl.innerHTML = `
+          <section class="codex-side-card" data-authoritative-rotation-side>
+            <span class="codex-side-kicker">服务端正式轮换</span>
+            <h3>${escapeHtml(rotation.title || '等待本周轮换')}</h3>
+            <p>${escapeHtml(rotation.description || '正式规则由服务器统一下发，不读取本地伪榜。')}</p>
+            <div class="challenge-record-tags">
+              <span class="challenge-tag">${escapeHtml(String(scoring.mode || 'balanced'))}</span>
+              <span class="challenge-tag">UTC 周轮换</span>
+              <span class="challenge-tag">完整重放</span>
+            </div>
+          </section>
+          <section class="codex-side-card">
+            <span class="codex-side-kicker">正式赛道总览</span>
+            <h3>众生试炼进度</h3>
+            <div class="codex-summary-grid two-cols">
+              <div class="codex-summary-chip"><strong>${officialLadder.usedAttempts}</strong><span>已用次数</span></div>
+              <div class="codex-summary-chip"><strong>${officialLadder.remainingAttempts}</strong><span>剩余次数</span></div>
+              <div class="codex-summary-chip"><strong>${bestScore}</strong><span>正式最高分</span></div>
+              <div class="codex-summary-chip"><strong>${completedAttempts}</strong><span>正式完成</span></div>
+            </div>
+            <p>${escapeHtml(officialLadder.myRank?.rank ? `当前正式排名 #${officialLadder.myRank.rank}。` : '完成一次权威试炼后进入真实榜单。')}</p>
+          </section>
+          <section class="codex-side-card" data-offline-practice-summary>
+            <span class="codex-side-kicker">离线练习</span>
+            <h3>${escapeHtml(bundle.rule.name || '本地命盘练习')}</h3>
+            <p>${escapeHtml(bundle.rule.objective || '本地练习用于熟悉构筑和路线。')}</p>
+            <p class="collection-muted">练习压强 DRI ${dangerProfile.index} · 不占正式次数、不计榜、不发权威奖励。</p>
+          </section>
+          <section class="codex-side-card">
+            <span class="codex-side-kicker">离线档案</span>
+            <h3>回放与训练样本</h3>
+            <div class="codex-summary-grid two-cols">
+              <div class="codex-summary-chip"><strong>${archiveSummary.totalRecords}</strong><span>总留痕</span></div>
+              <div class="codex-summary-chip"><strong>${archiveSummary.replayableCount}</strong><span>可回放</span></div>
+            </div>
+            <p>下方留痕与远征线索均属于离线练习档案，不会改写正式榜。</p>
+          </section>
+        `;
+      } else {
+        const nextReward = bundle.rewards.find(item => !item.claimed) || null;
+        sideEl.innerHTML = `
                 <section class="codex-side-card">
                     <span class="codex-side-kicker">难度同轴</span>
                     <h3>试炼压强 DRI ${dangerProfile.index}</h3>
@@ -3030,21 +3542,41 @@ const challengeHubMethods = Object.create(null);
       })}
                 </section>
             `;
+      }
     }
     if (rankingEl) {
+      const ladderRotation = officialLadder.rotation || {};
+      const ladderBestScore = clampInt(officialLadder.personalBest?.officialScore ?? officialLadder.personalBest?.score, 0);
+      const ladderSelfRank = clampInt(officialLadder.myRank?.rank ?? officialLadder.personalBest?.rank, 0);
+      const ladderPhaseCopy = {
+        login_required: '登录后读取本周真实榜单、正式次数和个人里程碑。',
+        loading: '正在读取服务端权威榜单，不会显示本地模拟名次。',
+        error: officialLadder.error?.message || '权威榜单暂时不可用，可重试或继续离线练习。',
+        idle: '等待服务端公布本周权威轮换。',
+        ready: officialLadder.leaderboard.length > 0 ? '' : '本周尚无正式成绩，完成第一条权威试炼即可占据席位。'
+      };
+      const ladderRows = bundle.leaderboard.map(item => `
+        <div class="challenge-rank-row ${item.highlight ? 'highlight' : ''}" data-challenge-ladder-rank="${item.rank}">
+          <span>#${item.rank}</span>
+          <strong>${escapeHtml(item.name)}</strong>
+          <span>${clampInt(item.score, 0)}</span>
+        </div>
+      `).join('');
       rankingEl.innerHTML = bundle.mode === 'global' ? `
                     <section class="codex-side-card">
-                        <span class="codex-side-kicker">众生榜</span>
-                        <h3>本周统一排行</h3>
-                        <div class="challenge-leaderboard">
-                            ${bundle.leaderboard.map(item => `
-                                <div class="challenge-rank-row ${item.highlight ? 'highlight' : ''}">
-                                    <span>#${item.rank}</span>
-                                    <strong>${escapeHtml(item.name)}</strong>
-                                    <span>${clampInt(item.score, 0)}</span>
-                                </div>
-                            `).join('')}
+                        <span class="codex-side-kicker">权威众生榜</span>
+                        <h3>${escapeHtml(ladderRotation.title || '本周统一排行')}</h3>
+                        <p>${escapeHtml(ladderRotation.description || ladderRotation.summary || '同序号同种子，每人三次正式机会；只接受服务端完整重放成绩。')}</p>
+                        <div class="challenge-record-tags">
+                          <span class="challenge-tag">正式次数 ${officialLadder.remainingAttempts}/${officialLadder.attemptLimit}</span>
+                          ${ladderBestScore > 0 ? `<span class="challenge-tag">个人最佳 ${ladderBestScore}${ladderSelfRank > 0 ? ` · #${ladderSelfRank}` : ''}</span>` : ''}
+                          <span class="challenge-tag">server_authoritative</span>
+                          <span class="challenge-tag">并列：回合 / 血量 / 时间</span>
                         </div>
+                        <div class="challenge-leaderboard">
+                            ${ladderRows || `<div class="challenge-record-empty">${escapeHtml(ladderPhaseCopy[officialLadder.phase] || '')}</div>`}
+                        </div>
+                        <button type="button" class="collection-inline-btn secondary" data-challenge-action="refresh-authoritative-ladder" ${officialLadder.phase === 'loading' ? 'disabled' : ''}>${officialLadder.phase === 'loading' ? '读取中...' : '刷新权威榜'}</button>
                     </section>
                 ` : `
                     <section class="codex-side-card">
@@ -3055,7 +3587,14 @@ const challengeHubMethods = Object.create(null);
                 `;
     }
     if (launchEl) {
-      launchEl.innerHTML = `
+      launchEl.innerHTML = bundle.mode === 'global' ? `
+                <button type="button" class="menu-btn primary challenge-launch-btn"
+                    data-challenge-action="open-authoritative-ladder">${officialLadder.recoverableAttempt ? '继续权威众生试炼' : '进入权威众生试炼'}</button>
+                <button type="button" class="menu-btn challenge-launch-btn"
+                    data-challenge-action="begin-challenge"
+                    data-challenge-mode="global">${isCurrentRun ? '继续离线练习' : '开始离线练习'}</button>
+                <p class="collection-muted">权威赛道每周三次、统一种子并写真实榜；离线练习不限次数，但不计正式榜和权威奖励。</p>
+            ` : `
                 <button type="button" class="menu-btn primary challenge-launch-btn"
                     data-challenge-action="begin-challenge"
                     data-challenge-mode="${escapeHtml(bundle.mode)}">${isCurrentRun ? '继续当前挑战' : `开启${escapeHtml(bundle.meta.label)}`}</button>
@@ -3066,6 +3605,7 @@ const challengeHubMethods = Object.create(null);
       rewardsEl,
       recordsEl,
       sideEl,
+      rankingEl,
       launchEl
     });
     this.renderMainMenuChallengeSummary();
@@ -3150,6 +3690,7 @@ const challengeHubMethods = Object.create(null);
     rewardsEl = null,
     recordsEl = null,
     sideEl = null,
+    rankingEl = null,
     launchEl = null
   } = {}) {
     const bindRootClick = (root, handler, flag) => {
@@ -3173,7 +3714,20 @@ const challengeHubMethods = Object.create(null);
       root[flag] = true;
     };
     bindRootClick(rewardsEl, button => {
-      if (button.dataset.challengeAction !== 'claim-milestone') return;
+      const action = String(button.dataset.challengeAction || '');
+      if (action === 'claim-world-rift-milestone') {
+        const milestoneId = String(button.dataset.milestoneId || '');
+        const rotationId = String(button.dataset.rotationId || '');
+        Promise.resolve(this.claimWorldRiftMilestone(milestoneId, rotationId)).catch(() => {});
+        return;
+      }
+      if (action === 'claim-authoritative-milestone') {
+        const milestoneId = String(button.dataset.milestoneId || '');
+        const rotationId = String(button.dataset.rotationId || '');
+        Promise.resolve(this.claimAuthoritativeChallengeMilestone(milestoneId, rotationId)).catch(() => {});
+        return;
+      }
+      if (action !== 'claim-milestone') return;
       const mode = String(button.dataset.challengeMode || '');
       const rewardId = String(button.dataset.rewardId || '');
       if (mode && rewardId) {
@@ -3255,10 +3809,45 @@ const challengeHubMethods = Object.create(null);
       }
       if (action === 'open-pvp-live-practice-return') {
         this.openPvpLivePracticeReturn();
+        return;
+      }
+      if (action === 'open-social-squad' && typeof this.showSocialHub === 'function') {
+        this.showSocialHub('squad');
       }
     }, '__challengeSideDelegatesBound');
+    bindRootClick(rankingEl, async button => {
+      const action = String(button.dataset.challengeAction || '');
+      if (action === 'refresh-world-rift') {
+        await this.refreshWorldRift();
+        return;
+      }
+      if (action === 'claim-world-rift-milestone') {
+        const milestoneId = String(button.dataset.milestoneId || '');
+        const rotationId = String(button.dataset.rotationId || '');
+        await this.claimWorldRiftMilestone(milestoneId, rotationId);
+        return;
+      }
+      if (action === 'refresh-authoritative-ladder') {
+        await this.refreshChallengeLadder();
+        return;
+      }
+      if (action === 'claim-authoritative-milestone') {
+        const milestoneId = String(button.dataset.milestoneId || '');
+        const rotationId = String(button.dataset.rotationId || '');
+        await this.claimAuthoritativeChallengeMilestone(milestoneId, rotationId);
+      }
+    }, '__challengeLadderDelegatesBound');
     bindRootClick(launchEl, button => {
-      if (button.dataset.challengeAction !== 'begin-challenge') return;
+      const action = String(button.dataset.challengeAction || '');
+      if (action === 'open-authoritative-world-rift') {
+        Promise.resolve(this.openAuthoritativeWorldRift()).catch(() => {});
+        return;
+      }
+      if (action === 'open-authoritative-ladder') {
+        Promise.resolve(this.openAuthoritativeChallengeLadder()).catch(() => {});
+        return;
+      }
+      if (action !== 'begin-challenge') return;
       const mode = String(button.dataset.challengeMode || '');
       if (mode) {
         this.beginChallengeStart(mode);
@@ -3295,6 +3884,22 @@ const challengeHubMethods = Object.create(null);
     bindMenuRoot(dailyEl);
     bindMenuRoot(weeklyEl);
     bindMenuRoot(unlockEl);
+  };
+  challengeHubMethods.openAuthoritativeChallengeLadder = async function () {
+    if (typeof this.showSeasonOps !== 'function') return false;
+    await this.showSeasonOps('authoritative');
+    const panel = this.seasonOpsView?.authoritativeRunPanel;
+    if (!panel || typeof panel.selectMode !== 'function') return false;
+    await panel.selectMode('challenge_ladder');
+    return true;
+  };
+  challengeHubMethods.openAuthoritativeWorldRift = async function () {
+    if (typeof this.showSeasonOps !== 'function') return false;
+    await this.showSeasonOps('authoritative');
+    const panel = this.seasonOpsView?.authoritativeRunPanel;
+    if (!panel || typeof panel.selectMode !== 'function') return false;
+    await panel.selectMode('world_rift');
+    return true;
   };
   challengeHubMethods.beginChallengeStart = function (mode = 'daily') {
     this.ensureChallengeHubBootState();
@@ -3904,6 +4509,7 @@ const challengeHubMethods = Object.create(null);
   };
   challengeHubMethods.claimChallengeMilestone = function (mode = 'daily', rewardId = '') {
     this.ensureChallengeHubBootState();
+    if (mode === 'global') return false;
     const bundle = this.buildChallengeBundle(mode);
     if (!bundle || !bundle.rule || !rewardId) return false;
     const reward = bundle.rewards.find(item => item.id === rewardId);

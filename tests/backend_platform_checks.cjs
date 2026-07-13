@@ -105,8 +105,8 @@ async function main() {
     assert.strictEqual(version.payload?.gitSha, 'platform-test-sha', '/api/version should prefer deployment git sha env');
     assert.match(version.payload?.packageLockDigest || '', /^[a-f0-9]{16,64}$/, '/api/version should expose root lockfile digest');
     assert.match(version.payload?.serverPackageLockDigest || '', /^[a-f0-9]{16,64}$/, '/api/version should expose server lockfile digest');
-    assert.strictEqual(version.payload?.schema?.version, 6, '/api/version should expose schema version');
-    assert.strictEqual(version.payload?.schema?.currentMigrationId, '0006_authoritative_runs_v2', '/api/version should expose current migration id');
+    assert.strictEqual(version.payload?.schema?.version, 10, '/api/version should expose schema version');
+    assert.strictEqual(version.payload?.schema?.currentMigrationId, '0010_relay_expedition', '/api/version should expose current migration id');
     assert.ok(Array.isArray(version.payload?.schema?.appliedMigrations), '/api/version should expose applied migration list');
     assert.ok(
       version.payload.schema.appliedMigrations.some(item => item.id === '0001_startup_schema' && Number(item.appliedAt) > 0),
@@ -132,6 +132,22 @@ async function main() {
       version.payload.schema.appliedMigrations.some(item => item.id === '0006_authoritative_runs_v2' && Number(item.appliedAt) > 0),
       '/api/version should include applied authoritative runs schema migration'
     );
+    assert.ok(
+      version.payload.schema.appliedMigrations.some(item => item.id === '0007_authoritative_challenge_ladder' && Number(item.appliedAt) > 0),
+      '/api/version should include applied authoritative challenge ladder schema migration'
+    );
+    assert.ok(
+      version.payload.schema.appliedMigrations.some(item => item.id === '0008_authoritative_world_rift' && Number(item.appliedAt) > 0),
+      '/api/version should include applied authoritative world rift schema migration'
+    );
+    assert.ok(
+      version.payload.schema.appliedMigrations.some(item => item.id === '0009_account_social_coop' && Number(item.appliedAt) > 0),
+      '/api/version should include applied account and social schema migration'
+    );
+    assert.ok(
+      version.payload.schema.appliedMigrations.some(item => item.id === '0010_relay_expedition' && Number(item.appliedAt) > 0),
+      '/api/version should include applied relay expedition schema migration'
+    );
     const rootVersion = await request('/version');
     assert.strictEqual(rootVersion.status, 200, `/version should return 200: ${JSON.stringify(rootVersion.payload)}`);
     assert.deepStrictEqual(rootVersion.payload?.schema, version.payload.schema, '/version and /api/version should share schema payload');
@@ -143,7 +159,7 @@ async function main() {
     assert.strictEqual(health.payload?.status, 'ok', '/api/health should keep status=ok');
     assert.strictEqual(health.payload?.message, 'The Defier Backend is running', '/api/health should preserve existing health message');
     assert.strictEqual(health.payload?.checks?.database, 'ok', '/api/health should report database status');
-    assert.strictEqual(health.payload?.schema?.currentMigrationId, '0006_authoritative_runs_v2', '/api/health should expose current schema migration');
+    assert.strictEqual(health.payload?.schema?.currentMigrationId, '0010_relay_expedition', '/api/health should expose current schema migration');
     assert.strictEqual(health.payload?.version?.gitSha, 'platform-test-sha', '/api/health should include runtime version summary');
     const healthJson = JSON.stringify(health.payload);
     assert(!healthJson.includes(JWT_SECRET), '/api/health must not leak JWT secret');
@@ -181,6 +197,26 @@ async function main() {
     assert.strictEqual(Number(authoritativeRunsMigration?.version), 6, 'authoritative runs migration should record schema version 6');
     assert.match(authoritativeRunsMigration?.checksum || '', /^[a-f0-9]{16,64}$/, 'authoritative runs migration should record stable checksum');
     assert(Number(authoritativeRunsMigration?.applied_at) > 0, 'authoritative runs migration should record applied timestamp');
+    const challengeLadderMigration = await dbGet('SELECT id, version, checksum, applied_at FROM schema_migrations WHERE id = ?', ['0007_authoritative_challenge_ladder']);
+    assert.strictEqual(challengeLadderMigration?.id, '0007_authoritative_challenge_ladder', 'schema_migrations should record authoritative challenge ladder migration');
+    assert.strictEqual(Number(challengeLadderMigration?.version), 7, 'authoritative challenge ladder migration should record schema version 7');
+    assert.match(challengeLadderMigration?.checksum || '', /^[a-f0-9]{16,64}$/, 'authoritative challenge ladder migration should record stable checksum');
+    assert(Number(challengeLadderMigration?.applied_at) > 0, 'authoritative challenge ladder migration should record applied timestamp');
+    const worldRiftMigration = await dbGet('SELECT id, version, checksum, applied_at FROM schema_migrations WHERE id = ?', ['0008_authoritative_world_rift']);
+    assert.strictEqual(worldRiftMigration?.id, '0008_authoritative_world_rift', 'schema_migrations should record authoritative world rift migration');
+    assert.strictEqual(Number(worldRiftMigration?.version), 8, 'authoritative world rift migration should record schema version 8');
+    assert.match(worldRiftMigration?.checksum || '', /^[a-f0-9]{16,64}$/, 'authoritative world rift migration should record stable checksum');
+    assert(Number(worldRiftMigration?.applied_at) > 0, 'authoritative world rift migration should record applied timestamp');
+    const accountSocialMigration = await dbGet('SELECT id, version, checksum, applied_at FROM schema_migrations WHERE id = ?', ['0009_account_social_coop']);
+    assert.strictEqual(accountSocialMigration?.id, '0009_account_social_coop', 'schema_migrations should record account and social migration');
+    assert.strictEqual(Number(accountSocialMigration?.version), 9, 'account and social migration should record schema version 9');
+    assert.match(accountSocialMigration?.checksum || '', /^[a-f0-9]{16,64}$/, 'account and social migration should record stable checksum');
+    assert(Number(accountSocialMigration?.applied_at) > 0, 'account and social migration should record applied timestamp');
+    const relayExpeditionMigration = await dbGet('SELECT id, version, checksum, applied_at FROM schema_migrations WHERE id = ?', ['0010_relay_expedition']);
+    assert.strictEqual(relayExpeditionMigration?.id, '0010_relay_expedition', 'schema_migrations should record relay expedition migration');
+    assert.strictEqual(Number(relayExpeditionMigration?.version), 10, 'relay expedition migration should record schema version 10');
+    assert.match(relayExpeditionMigration?.checksum || '', /^[a-f0-9]{16,64}$/, 'relay expedition migration should record stable checksum');
+    assert(Number(relayExpeditionMigration?.applied_at) > 0, 'relay expedition migration should record applied timestamp');
 
     console.log('Backend platform checks passed.');
   } catch (error) {

@@ -97,6 +97,78 @@ const SCHEMA_MIGRATIONS = [
             'progression_authoritative_run_ops_events',
             'progression_authoritative_run_ops_counters'
         ]
+    }),
+    makeMigration({
+        id: '0007_authoritative_challenge_ladder',
+        version: 7,
+        description: 'Authoritative rotating challenge attempts, results, leaderboard, rewards, and ops telemetry',
+        resources: [
+            'challenge_ladder_rotations',
+            'challenge_ladder_attempts',
+            'challenge_ladder_results',
+            'challenge_ladder_entries',
+            'challenge_ladder_reward_claims',
+            'challenge_ladder_mutations',
+            'challenge_ladder_ops_events',
+            'challenge_ladder_ops_counters'
+        ]
+    }),
+    makeMigration({
+        id: '0008_authoritative_world_rift',
+        version: 8,
+        description: 'Authoritative asynchronous world-rift rotations, shared state, contributions, rewards, and ops telemetry',
+        resources: [
+            'world_rift_rotations',
+            'world_rift_states',
+            'world_rift_attempts',
+            'world_rift_contributions',
+            'world_rift_entries',
+            'world_rift_reward_claims',
+            'world_rift_mutations',
+            'world_rift_ops_events',
+            'world_rift_ops_counters'
+        ]
+    }),
+    makeMigration({
+        id: '0009_account_social_coop',
+        version: 9,
+        description: 'Revocable account sessions, social graph, presence, friend invites, and world-rift squads',
+        resources: [
+            'users.username_normalized',
+            'users.auth_version',
+            'auth_sessions',
+            'auth_login_limits',
+            'auth_security_mutations',
+            'auth_security_events',
+            'social_profiles',
+            'social_friend_requests',
+            'social_friendships',
+            'social_relationship_controls',
+            'social_presence',
+            'social_mutations',
+            'social_ops_events',
+            'world_rift_squads',
+            'world_rift_squad_members',
+            'world_rift_squad_invites',
+            'world_rift_squad_contributions',
+            'world_rift_squad_entries',
+            'world_rift_squad_reward_claims'
+        ]
+    }),
+    makeMigration({
+        id: '0010_relay_expedition',
+        version: 10,
+        description: 'Authoritative squad relay expeditions, recoverable legs, cosmetic milestones, and ops telemetry',
+        resources: [
+            'relay_expedition_rotations',
+            'relay_expedition_sessions',
+            'relay_expedition_members',
+            'relay_expedition_legs',
+            'relay_expedition_reward_claims',
+            'relay_expedition_mutations',
+            'relay_expedition_ops_events',
+            'relay_expedition_ops_counters'
+        ]
     })
 ];
 const CURRENT_MIGRATION = SCHEMA_MIGRATIONS[SCHEMA_MIGRATIONS.length - 1];

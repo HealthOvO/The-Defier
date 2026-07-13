@@ -1,5 +1,53 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-07-13: V10-S106 同道远征 V1
+  - 本轮完成
+    - SQLite 升级到 V10 `0010_relay_expedition`，新增不可变周轮换、2-4 人 session 成员快照、四棒状态机、权威 run 绑定、路线投影、幂等奖励和脱敏运维事实；当前轮换目录为 `relay-expedition-catalog-v2 / relay-expedition-rotation-v2`，已落盘且哈希匹配的 v1 周轮换只读保留。`authoritative-trials-v2` 增加破阵、守脉、观星三套固定 10 张牌接力谱，旧 `authoritative-trials-v1` 继续保留用于历史 run 恢复。
+    - 道友录“裂隙小队”新增同道远征工作区：队长从当前 active 小队开启四棒异步接力，成员按 6 小时优先、18 小时开放、2 小时运行租约接棒；失败、放弃、超时和无人接棒都会推进，不生成机器人或模拟贡献。
+    - 每棒都是独立的账号权威三战，服务端只共享路线、棒次、接力谱和脱敏摘要，明确“共享路线，不共享残血与牌组”；每人最多两棒，有其他合格成员时不得连续接棒，上一棒不能把残血、牌组、手牌、弃牌堆、临时状态或 RNG 交给下一位。
+    - 奖励为 30/60/100 荣誉，只有真实投影成员可领，`rewardImpact=cosmetic_only`、`powerImpact=none`；完整流程不会改写 PVP 排名/钱包、世界裂隙正式次数、贡献或伤害。
+    - 恢复链覆盖 reserved 未发车、权威终态未投影、迟到 receipt、跨周 active session 和 N-1/N-2 多条领奖窗口；发车后绑定失败会原子释放棒次、回滚成员计数并作废孤儿 run，同一过期 clientLegId 不能重新绑定。
+  - 已验证
+    - 完整 Node 门禁：`npm run test:node`；relay V10 迁移、平台、跨进程、客户端、UI、权威 run 复用以及既有 PVP/存档/E2E 回归全部通过。
+    - 本地生产构建：`npm run build:pages`。正式真实后端浏览器分片：`AUDIT_FILTER=relay-expedition-real bash tests/run_browser_release_checks.sh http://127.0.0.1:4173 output/release-browser-audits-relay-expedition-final`，24/24 findings、0 failed、0 console error、6 张本轮 fresh 截图，missing / duplicate / unexpected report module 均为空。
+    - 最终 `gpt-5.4` 挑战者发现并修复两条边界：轮换运行时标量列可脱离冻结 snapshot 漂移、无 active run 时一基棒次被再次 `+1`；现已用单列篡改 fail-closed 和 `1/4 -> 4/4` 终态 UI 回归锁定。
+    - 当前玩家版本口径更新为“V10 同道远征 · 权威接力闭环”，同时保留实时论道、权威试炼、道友录和裂隙协作小队的既有入口与公平合同。
+  - 当前结论
+    - S106 功能、全量 Node 回归、真实浏览器证据、生产构建与挑战者终审均已完成；本轮后续只执行提交、合并、生产备份部署与线上 smoke，不预先把本地结果当成线上已更新。
+
+- 2026-07-13: V10-S105 账号安全与道友协作平台 V1
+  - 本轮完成
+    - SQLite 升级到 V9 `0009_account_social_coop`：旧账号增量回填规范道号和 auth version；新注册执行 3-24 字符道号及 8-72 字节密语策略，旧短密语仍可登录，历史规范名碰撞不会静默合并账号。
+    - 30 天 JWT 增加 `sid + av` 并绑定持久设备会话；每次认证校验账号版本、会话撤销和到期状态，支持改密换签、单设备撤销、当前退出和全端退出。登录失败使用持久 user+IP/IP 桶限频，未知账号执行 dummy bcrypt，登录和重复注册均不返回账号存在性 oracle。
+    - 新增“道友录”社交图：完整道号精确搜索、双向道友请求、互发自动接受、删除、屏蔽、静音、隐私、45 秒心跳和 120 秒 TTL；公开响应使用 profileId，屏蔽/隐私/未知目标统一不可用，不提供自由聊天、赠礼或资源交易。
+    - 好友一键约战复用现有 authoritative friendly PVP，正式积分和奖励保持 `none`；旧 `targetUsername` 兼容输入也必须通过好友门禁。邀请码升级为 128-bit，join 时实时复核好友/屏蔽/隐私，SQLite claim 使用 nonce、租约、来源唯一索引和崩溃恢复，跨进程及 kill -9 窗口都只会创建一场友谊赛。
+    - 新增每轮最多四人的天穹裂隙小队：好友邀请、接受/拒绝、离队和正贡献后归属锁定；权威 contribution 在原世界裂隙写事务内链接一次，小队只汇总每名成员最佳一次，2000/5000/8000 分奖励 30/60/100 外观荣誉，不增加全服伤害、正式次数或战力。0 贡献及历史 0 分脏行不会计参与、领奖或锁定成员。
+    - 客户端新增道友、信笺、裂隙小队和账号安全四个工作视图；主菜单账号入口进入道友录，挑战观察站展示真实小队摘要。全零个人占位不再显示成正式参与，移动端不再被延迟主菜单提示遮挡。
+  - 已验证
+    - 账号安全、社交状态机、PVP 门禁、裂隙小队、V9 迁移和旧平台回归定向测试均通过，并纳入 `npm run test:node`。
+    - 完整 Node 门禁：`PVP_LIVE_WS_FANOUT_MESSAGE_TIMEOUT_MS=60000 npm run test:node`；额外覆盖双进程同时接受再战收敛到同一 `matchId`、非法牌组/屏蔽不消费邀请码、stale claim 恢复、来源唯一索引和历史 0 贡献清理语义。
+    - 正式浏览器 release 子门禁：`AUDIT_FILTER=account-social-real bash tests/run_browser_release_checks.sh http://127.0.0.1:4177 output/release-browser-account-social-s105-final-2`，13/13 findings、0 failed、0 console error；覆盖两账号结为道友、好友约战 inbox、小队建队/邀请、改密换签、旧 token 失效及 390px 布局，结构汇总同时通过。
+    - 本地生产构建：`npm run build:pages`；账号安全、PVP/持久化、客户端/CI 三路挑战者最终均无剩余 P1/P2。
+  - 当前结论
+    - 本轮仅在独立 worktree 和开发分支完成设计、开发、测试、提交与推送；未执行 SSH、rsync、systemd、Nginx、生产数据库写入或线上部署，也不合并 `main`。
+
+- 2026-07-12: V10-S104 异步协作世界裂隙 V1
+  - 本轮完成
+    - 新增观星台“天穹裂隙”正式共斗：UTC 周轮换、三阶段 10000 点全服生命、每账号 5 次正式出征、同槽位同服务端种子、最佳 3 次贡献计榜；没有假玩家、末刀、首杀或战力奖励。
+    - 正式出征复用权威战局 V2 的固定牌组、完整动作链和 genesis 重放；只有 `server_authoritative + server_replayed + fullReplayPassed` 回执能投影贡献，直接调用通用 `world_rift` 发车入口会被拒绝。
+    - SQLite 升级到 V8 `0008_authoritative_world_rift`，新增轮换、共享状态、尝试、贡献、榜单、领奖、幂等回执和脱敏运维表；共享血量推进、跨阶段溢出、击破后余响、里程碑与榜单都在写事务中原子结算。
+    - 奖励只发外观用途荣誉；个人 1500/4500/8000 与全服三阶段里程碑独立计算，上一轮在 7 日窗口内继续可领，重复和跨进程并发领取只写一条 claim 与一条经济流水。
+    - 客户端新增稳定重试 ID、部分回执恢复、账号切换抑制、裂隙挑战中心、权威战局上下文与桌面/移动布局；全服状态、榜单和阶段生命均来自真实后端，不使用本地模拟参与者。
+    - 双路 `gpt-5.4` 挑战者复审发现并修复 5 类边界：写锁排队跨过发车/结算/领奖截止仍可能提交、ops token 在 JWT 前校验形成有效性侧信道、裂隙真实浏览器恢复与切号证据不足、进度条缺少数值 ARIA、移动触控断言未被结构门禁锁定；并补齐 V7 到 V8 保留旧权威战局的重启迁移回归。
+  - 已验证
+    - 完整 Node 门禁：`npm run test:node`。
+    - 本地生产构建：`npm run build:pages`。
+    - 裂隙平台定向回归：`node tests/sanity_world_rift_platform_checks.cjs`，覆盖双进程无丢更新、重复投影、跨阶段溢出、余响、并发领奖、三个跨截止写锁竞态与运维脱敏。
+    - 迁移与复用回归：`node tests/sanity_authoritative_runs_migration_checks.cjs`、`node tests/sanity_authoritative_runs_platform_checks.cjs`、`node tests/sanity_challenge_ladder_platform_checks.cjs`。
+    - 真实后端浏览器：`node tests/browser_authoritative_runs_real_backend_smoke.mjs http://127.0.0.1:4174 output/browser-authoritative-runs-real-backend-smoke-s104-3`，41/41 findings、0 failed、0 console error；覆盖整页重载恢复、在途切号抑制、切回同一 run、完整结算、数据库事实、桌面与 390px 移动端。
+  - 当前结论
+    - 本轮只在独立 worktree 和开发分支完成设计、开发、测试、提交与推送；未执行 SSH、rsync、systemd、Nginx、生产数据库写入或线上部署，也不合并 `main`。
+
 - 2026-07-11: V10-S102 全游戏服务端权威运行与反作弊平台 V2
   - 本轮完成
     - 新增独立的“权威试炼”可玩切片，在赛季司内覆盖 PVE、挑战、远征三种服务器裁定场景；浏览器只提交择路、出牌、结束回合、选奖励、放弃与结算命令，不再自述伤害、随机数、敌方行动、奖励或最终得分。
