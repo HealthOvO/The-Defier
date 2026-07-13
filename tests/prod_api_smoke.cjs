@@ -17,7 +17,7 @@ if (isProductionTarget && process.env.CONFIRM_PROD !== '1') {
 }
 
 const REQUEST_TIMEOUT_MS = Number(process.env.PROD_SMOKE_TIMEOUT_MS || 15000);
-const RUN_ID = `${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
+const RUN_ID = `${Date.now().toString(36).slice(-5)}${crypto.randomBytes(2).toString('hex')}`;
 const PASSWORD = `pwd_${crypto.randomBytes(8).toString('hex')}`;
 const REALM = 900000 + Math.floor(Math.random() * 90000);
 
@@ -114,6 +114,56 @@ function signedFields(data, token, saltPrefix) {
     signature: sessionSignature(dataStr, salt, token),
     signatureMode: 'session'
   };
+}
+
+function routeSignedFields(data, token, saltPrefix, route) {
+  const salt = `${saltPrefix}-${RUN_ID}`;
+  const dataStr = JSON.stringify(data);
+  return {
+    salt,
+    signature: crypto.createHmac('sha256', token)
+      .update(`session-v2\n${route}\n${salt}\n${dataStr}`, 'utf8')
+      .digest('hex'),
+    signatureMode: 'session-v2'
+  };
+}
+
+async function establishFriendship({ requester, accepter, targetUsername }) {
+  const requestPath = '/api/social/requests';
+  const friendRequestPayload = {
+    protocolVersion: 'social-graph-v1',
+    mutationId: `prod-friend-${RUN_ID}`,
+    targetUsername
+  };
+  const friendRequest = await request(requestPath, {
+    method: 'POST',
+    token: requester.sessionToken,
+    body: {
+      ...friendRequestPayload,
+      ...routeSignedFields(friendRequestPayload, requester.sessionToken, 'social-friend', `POST ${requestPath}`)
+    }
+  });
+  requireOk('prod social friend request', friendRequest);
+  assert.strictEqual(friendRequest.payload.status, 'pending', `prod social friend request should be pending: ${JSON.stringify(friendRequest.payload)}`);
+  const requestId = String(friendRequest.payload.requestId || '');
+  assert(requestId, `prod social friend request should expose requestId: ${JSON.stringify(friendRequest.payload)}`);
+
+  const acceptPath = `/api/social/requests/${encodeURIComponent(requestId)}/accept`;
+  const acceptPayload = {
+    protocolVersion: 'social-graph-v1',
+    mutationId: `prod-accept-${RUN_ID}`,
+    requestId
+  };
+  const accepted = await request(acceptPath, {
+    method: 'POST',
+    token: accepter.sessionToken,
+    body: {
+      ...acceptPayload,
+      ...routeSignedFields(acceptPayload, accepter.sessionToken, 'social-accept', `POST ${acceptPath}`)
+    }
+  });
+  requireOk('prod social friend accept', accepted);
+  assert.strictEqual(accepted.payload.status, 'accepted', `prod social friend request should be accepted: ${JSON.stringify(accepted.payload)}`);
 }
 
 function makePvpBattleData(marker, overrides = {}) {
@@ -735,6 +785,7 @@ async function main() {
 
   const username = `smoke_${RUN_ID}`;
   const opponentName = `smoke_opponent_${RUN_ID}`;
+  assert([...username].length <= 24 && [...opponentName].length <= 24, 'production smoke usernames must satisfy the account policy');
   await register(username);
   const user = await login(username);
   const opponent = await register(opponentName);
@@ -838,6 +889,12 @@ async function main() {
   requireOk('opponent PVP rank read', opponentPvpRank);
   assert.strictEqual(opponentPvpRank.payload.rank?.user?.username, opponentName, `opponent PVP rank should bind the smoke account: ${JSON.stringify(opponentPvpRank.payload)}`);
 
+  await establishFriendship({
+    requester: user,
+    accepter: opponent,
+    targetUsername: opponentName
+  });
+
   await assertLivePvpInviteSmoke({
     host: user,
     guest: opponent,
@@ -848,6 +905,10 @@ async function main() {
   const rankedAName = `smoke_ranked_a_${RUN_ID}`;
   const rankedBName = `smoke_ranked_b_${RUN_ID}`;
   const rankedCName = `smoke_ranked_c_${RUN_ID}`;
+  assert(
+    [rankedAName, rankedBName, rankedCName].every(name => [...name].length <= 24),
+    'production ranked smoke usernames must satisfy the account policy'
+  );
   const rankedA = await register(rankedAName);
   const rankedB = await register(rankedBName);
   const rankedC = await register(rankedCName);
