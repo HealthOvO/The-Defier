@@ -11,9 +11,11 @@ Original prompt: 进入全自动审查与修复模式，按顺序审查并修复
     - 完整 Node 门禁：`npm run test:node`；relay V10 迁移、平台、跨进程、客户端、UI、权威 run 复用以及既有 PVP/存档/E2E 回归全部通过。
     - 本地生产构建：`npm run build:pages`。正式真实后端浏览器分片：`AUDIT_FILTER=relay-expedition-real bash tests/run_browser_release_checks.sh http://127.0.0.1:4173 output/release-browser-audits-relay-expedition-final`，24/24 findings、0 failed、0 console error、6 张本轮 fresh 截图，missing / duplicate / unexpected report module 均为空。
     - 最终 `gpt-5.4` 挑战者发现并修复两条边界：轮换运行时标量列可脱离冻结 snapshot 漂移、无 active run 时一基棒次被再次 `+1`；现已用单列篡改 fail-closed 和 `1/4 -> 4/4` 终态 UI 回归锁定。
+    - 正式服务器部署前已备份 `/www/backup/the-defier/wwwroot_20260713_144433.tar.gz` 与 `backend_20260713_144433.tar.gz`；静态站和后端同步后，`the-defier-backend` 为 active、`nginx -t` 通过，公网首页与 `/api/health` 均为 200，线上 schema 为 V10 `0010_relay_expedition`。
+    - `CONFIRM_PROD=1 node tests/prod_api_smoke.cjs https://080305.xyz` 完整通过，覆盖注册、登录、存档、全局进度、残影上传/拉取、好友门禁后的友谊约战与实时排位；额外公网探针确认 `/api/relay-expeditions/current` 返回 `relay-expedition-catalog-v2 / relay-expedition-rotation-v2`。
     - 当前玩家版本口径更新为“V10 同道远征 · 权威接力闭环”，同时保留实时论道、权威试炼、道友录和裂隙协作小队的既有入口与公平合同。
   - 当前结论
-    - S106 功能、全量 Node 回归、真实浏览器证据、生产构建与挑战者终审均已完成；本轮后续只执行提交、合并、生产备份部署与线上 smoke，不预先把本地结果当成线上已更新。
+    - S106 已完成设计、开发、全量回归、挑战者终审、提交合并、生产备份部署和线上 smoke；正式访问地址为 `https://080305.xyz/`。
 
 - 2026-07-13: V10-S105 账号安全与道友协作平台 V1
   - 本轮完成
