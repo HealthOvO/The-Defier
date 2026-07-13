@@ -1,0 +1,147 @@
+js/game.js
+  s_bae69f1b7fab46::t_9fe530a66d8847 5718-5727,9315-9316,9486-9488,9492-9494
+  s_ca5652313828d6::t_27fb089aef15cd 158-165,235-469,669-680,691-714,716-717,724,890-901,963,997-1000,1043,5099-5100,5113-5121,5651-5694,5696-5698,5700-5711,6556-6560,10005-10012
+  s_bae69f1b7fab46::t_73996d8815857d 5733,5735-5742,5744-5764
+  s_ca5652313828d6::t_9b59459d2ec9e3 157
+  s_bae69f1b7fab46::t_c23292d206bc12 9314
+  s_ca5652313828d6::t_fc473fd5a0db7f 5715-5716
+tests/sanity_frontend_design_system_checks.cjs
+  s_ca5652313828d6::t_8c6ad855fa484c 68,85-87,90-94
+js/views/FateChronicleView.js
+  s_bae69f1b7fab46::t_410235c56a8e3b 1127-1130,1413,1417,1421
+  s_bae69f1b7fab46::t_68dec2867fc9ef 1124-1126
+  s_ca5652313828d6::t_38e1b7dcee5324 8-12,1110-1123
+tests/browser_automation_boot_audit.mjs
+  s_ca5652313828d6::t_eecdcd441ebb34 30-73,119-120,126-143,148,163-168,180-181,189,198,211,215-267,271-574,591-593,604-626,660,675,691-727,790,848,862-896,934,936,949,953-958
+  s_ca5652313828d6::t_376b54d13b44ca 212-214
+  s_ca5652313828d6::t_5fb3b3502085b3 195-197
+  s_ca5652313828d6::t_2f442b87a41820 199-201,208-210
+  s_ca5652313828d6::t_b8e13e04bb4edd 959
+  s_ca5652313828d6::t_6a2e8945ebdd91 202-207
+tests/sanity_architecture_cleanup_checks.cjs
+  s_bae69f1b7fab46::t_9b20c8756f5cab 19-23,27-28,30-36,53-54
+index.html
+  s_ca5652313828d6::t_00c114a7b6a002 11-12,18-48,53,60-67,75-79,91-103,115,119-120,122,124-130,156-161
+tests/browser_pvp_live_audit.mjs
+  s_ca5652313828d6::t_1d0c2bb73c6508 8741,8744-8759,8767-8769,8806-8816
+css/layout-fixes.css
+  s_ca5652313828d6::t_0502f9364d4cb5 183
+package.json
+  s_ca5652313828d6::t_644c2d4eff6ae5 14
+js/managers/MetaProgressionManager.js
+  s_ca5652313828d6::t_fa19f8078d8a2d 995-996
+scripts/run-local-release-gate.sh
+  s_ca5652313828d6::t_33ecfd28ba24cc 15
+tests/sanity_secondary_frontend_flow_checks.cjs
+  s_bae69f1b7fab46::t_a466bdb80b8cf0 14,98,102-103,107,154,159-164,216-222
+  s_decb0562bd6fee::t_13b1706a0fe8f3 111
+  s_bae69f1b7fab46::t_c6f734353ecd7a 99-101
+  s_bae69f1b7fab46::t_0bcba713f01e36 104-106
+  s_ca5652313828d6::t_e87d97cd94d94b 68,108-110
+tests/browser_ui_gallery_audit.mjs
+  s_ca5652313828d6::t_02052c56a794a7 35-54,659,661,1108-1110,1402-1404
+js/views/RewardView.js
+  s_ca5652313828d6::t_a31dc72fab6e1f 574-576,578
+tests/browser_audit.mjs
+  s_ca5652313828d6::t_8eed568428cccf 734-738
+css/frontend-upgrade.css
+  s_ca5652313828d6::t_f3341429ea179c 146-147,168-170,179,190,239-248,477-625,1263-1264,1277,1281-1282,2778-2779,2783,2786-2787,4052-4073,4293-4302
+tests/sanity_fate_chronicle_ui_checks.mjs
+  s_bae69f1b7fab46::t_f626cbff087c36 81
+  s_bae69f1b7fab46::t_feba1d9984bb0d 80
+  s_ca5652313828d6::t_75e2057df550e0 29,36-37,44,87,96,100
+tests/browser_backend_client_smoke.mjs
+  s_ca5652313828d6::t_85be32587950c8 57,61-92,164-190,211,691,693,714,830-836,978,980,986-991,1053-1056
+  s_ca5652313828d6::t_7ffccb4452de8b 22
+tests/browser_map_overview_risk_audit.mjs
+  s_bae69f1b7fab46::t_43f326bd520262 147,149-164,183-184,187,206-208,232-238,263
+  s_bae69f1b7fab46::t_eb1b308c24e9cf 146
+js/scenes/pvp-scene.js
+  s_ca5652313828d6::t_f26f7053e39d4e 7-11,59,461-464,4587-4621,4640-4641,4667,4689,4709,4714,4819-4823,4832,4845,4909,5826
+tests/browser_meta_screen_audit.mjs
+  s_ca5652313828d6::t_93f908a200e4d5 3220,3222-3224
+tests/browser_mobile_layout_audit.mjs
+  s_ca5652313828d6::t_258866e7b1e448 730-731,846-847,882-884
+tests/browser_pvp_live_real_backend_smoke.mjs
+  s_ca5652313828d6::t_198be0a0ba2ec9 240-260,281,394,1598,1602,2211
+  s_ca5652313828d6::t_94bc50f9fd1c81 3579,3588-3590
+tests/browser_auth_ui_cloud_smoke.mjs
+  s_bae69f1b7fab46::t_0a74f081bbcf36 377,383
+  s_ca5652313828d6::t_c3cd0c0fdd2f84 1747-1754
+js/views/SeasonOpsView.js
+  s_ca5652313828d6::t_c07b6cdd013b62 7-11
+tests/browser_run_path_reward_audit.mjs
+  s_ca5652313828d6::t_9f1491262d1b97 178,770-772,794-796,819-821
+tests/sanity_season_ops_ui_checks.cjs
+  s_ca5652313828d6::t_ecdaca51379c39 22,25-26,29,36
+js/views/MapView.js
+  s_bae69f1b7fab46::t_dec45d2c408e56 325-328
+js/core/challenge_hub.js
+  s_bae69f1b7fab46::t_345ba8933377b8 4314-4316,4331-4337
+vite.config.js
+  s_ca5652313828d6::t_8366020c46ce6c 6-7,9-17
+scripts/check-frontend-budgets.mjs
+  s_bae69f1b7fab46::t_803452fccc745f 1-118
+tests/browser_frontend_layout_audit.mjs
+  s_ca5652313828d6::t_5176accdf3c458 1284-1289,2308,2310,2321-2322,2355-2356
+js/core/collection_hub.js
+  s_ca5652313828d6::t_8b0fd2c2de570f 6857-6860,6887-6889,6891
+js/core/expedition_hub.js
+  s_ca5652313828d6::t_ceeca30474cf32 10,82-134,3948-3969
+css/fate-chronicle.css
+  s_ca5652313828d6::t_fd57e5c34e8ad7 58-81
+css/pvp.css
+  s_ca5652313828d6::t_40f11e4ecbf1cd 777-792,4844-4848
+js/views/SocialView.js
+  s_ca5652313828d6::t_9773b3af39bfb0 5-9
+tests/browser_account_social_real_backend_smoke.mjs
+  s_0a4ba8e8b0fd7c::t_a07e514cf592e7 157-164
+tests/sanity_account_social_client_checks.mjs
+  s_ca5652313828d6::t_c49fef7124faca 32-33,45-46
+tests/sanity_pvp_live_ui_runtime_checks.mjs
+  s_ca5652313828d6::t_1bd78e64dccada 4149-4151,4162-4167,4232,4234-4285
+tests/sanity_release_gate_coverage_checks.cjs
+  s_ca5652313828d6::t_61d3b92cd76b41 814,824-828,4423-4427,4439,4524-4529
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "331838dbf15a2320842a4a14d547f31d6ecde3bc",
+  "prompts": {},
+  "sessions": {
+    "s_0a4ba8e8b0fd7c": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f5b5d-bacd-7cc0-b004-3c185af32297",
+        "model": "unknown"
+      },
+      "human_author": "AI Agent <bot@example.com>"
+    },
+    "s_bae69f1b7fab46": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ed4f6-e7ac-73e0-a29e-119f3eddb407",
+        "model": "unknown"
+      },
+      "human_author": "AI Agent <bot@example.com>"
+    },
+    "s_ca5652313828d6": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f3fed-94d5-77b2-9af0-61333559ff38",
+        "model": "unknown"
+      },
+      "human_author": "AI Agent <bot@example.com>"
+    },
+    "s_decb0562bd6fee": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f5994-8716-7a22-93f5-29a581dd70b7",
+        "model": "unknown"
+      },
+      "human_author": "AI Agent <bot@example.com>"
+    }
+  },
+  "attestation_metadata": {},
+  "remote_transcripts": {}
+}
