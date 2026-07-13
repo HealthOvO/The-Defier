@@ -1,0 +1,227 @@
+.github/workflows/pages.yml
+  s_bae69f1b7fab46::t_37650083692514 75,101
+css/fate-chronicle.css
+  s_bae69f1b7fab46::t_e6b3e8420b9d21 1-544
+css/frontend-upgrade.css
+  s_bae69f1b7fab46::t_e7e6de718ac0f5 289,2617,2621,2625,3474-3475,3687-3688,3886,4154-4178
+docs/backend_authoritative_fate_chronicle_v1.md
+  s_bae69f1b7fab46::t_959fa74150694a 1-169
+game-intro.html
+  s_420840102be117::t_89197a6fd7092e 164-169,177,182-184,186
+index.html
+  s_9c9b1448ad4c8e::t_238953eb6ee292 29,89,174-179,226,253-255
+js/config/bmob.config.example.js
+  s_bae69f1b7fab46::t_75987dc982b1f9 24-27
+js/config/bmob.config.js
+  s_bae69f1b7fab46::t_26e3742377bfb1 42-45
+js/core/challenge_hub.js
+  s_bae69f1b7fab46::t_e7c00a4d56f5de 2885-2887,2916,3124,3143,3455,3478,3560,3562
+js/game.js
+  s_bae69f1b7fab46::t_9fe530a66d8847 46,115-118,165,520,5375-5385,5394-5399,8749,8787-8793,8803-8844,8901,8910,8915-8916,8945-8967,8987-8991,9116,9132-9141
+js/scenes/pvp-scene.js
+  s_bae69f1b7fab46::t_2b7f3655670d0c 27-28,571,5971,5974,5980-5986,5995-6015
+js/services/authoritative-run-service.js
+  s_bae69f1b7fab46::t_5f8c93822e16bc 4,13,421-444
+js/services/backend-client.js
+  s_bae69f1b7fab46::t_80b44efd7bd77f 7-8,12,14,71-73,1224-1235,3454-3597
+js/services/fate-chronicle-service.js
+  s_bae69f1b7fab46::t_59205d99e92508 1-886
+js/views/AuthoritativeRunPanel.js
+  s_bae69f1b7fab46::t_a651642c38c9fa 6,13-14,53-58,131,138-140,187,193-195,201,208-209,225-227,252-257,265,277,289-292,299-305,307-308,310,463-467,483-488,556-561,594-600,696-711,857-860,962,1018-1020,1123-1152,1467,1490-1497,1531,1555-1561
+js/views/FateChronicleView.js
+  s_bae69f1b7fab46::t_410235c56a8e3b 1-1432
+js/views/SocialView.js
+  s_bae69f1b7fab46::t_39bdf2cea8a1ec 788-800,802-807
+js/views/SystemView.js
+  s_bae69f1b7fab46::t_2ae690861e5019 29-31,401,403-404,418-419,421,429,483
+package.json
+  s_bae69f1b7fab46::t_5cd60ea301e119 20
+progress.md
+  s_420840102be117::t_324a74654ae769 3-13
+server/app.js
+  s_bae69f1b7fab46::t_bd54145118da85 23-24,48-49,53-55,60-61,65-66,81-82,94-96,154-155
+server/db/database.js
+  s_bae69f1b7fab46::t_fd240d163ed347 16-17,828-829
+server/fate-chronicle/bootstrap.js
+  s_a01daa299b14d2::t_753f0dd794c3e3 1-343
+server/fate-chronicle/catalog.js
+  s_a01daa299b14d2::t_aff445c6d594db 1-275
+server/fate-chronicle/service.js
+  s_bae69f1b7fab46::t_f760bb10bb4214 1-1971
+server/progression/authoritative-runs/bootstrap.js
+  s_bae69f1b7fab46::t_26cb06af164430 36-41,296-297,307-318
+server/progression/authoritative-runs/catalog.js
+  s_44aee4a633b2b2::t_98a774ae90ba4a 4,6-13,81-108,188-219,346-489,506
+server/progression/authoritative-runs/engine.js
+  s_44aee4a633b2b2::t_c770f605597bfd 5,280-284
+server/progression/authoritative-runs/service.js
+  s_bae69f1b7fab46::t_17f5aac6cff082 7,32,46,49,72-78,671,675-683,685,696-697,710-711,722-735,820,832-841,848-853,855-859,864,879,911-914,949,1041-1072,1277-1278,1291-1301,1311-1312,1315-1330,1335-1339,1464-1465,1473-1474,1688,1694,1701
+server/pvp-live/live-store.js
+  s_bae69f1b7fab46::t_71de7a14838e3e 718
+server/routes/fate-chronicle.js
+  s_bae69f1b7fab46::t_a6f346e78fd354 1-128
+server/routes/weekly-archive.js
+  s_bae69f1b7fab46::t_fbe64d14e23e49 1-106
+server/services/platform/schema-status.js
+  s_bae69f1b7fab46::t_ff9ded69fb01e4 7,173-194,245-280,282-292,296-299
+server/weekly-archive/bootstrap.js
+  s_44aee4a633b2b2::t_a8e874642d3fe5 1-229
+server/weekly-archive/catalog.js
+  s_44aee4a633b2b2::t_5b7d9310f7022c 1-278
+server/weekly-archive/service.js
+  s_bae69f1b7fab46::t_ffeccb409275fc 1-871
+tests/backend_platform_checks.cjs
+  s_bae69f1b7fab46::t_cecbb38b36f5b4 108-111,153-156,168-170,228-232
+tests/browser_account_social_real_backend_smoke.mjs
+  s_b25239a90321e7::t_7deb621365097e 165
+tests/browser_auth_ui_cloud_smoke.mjs
+  s_bae69f1b7fab46::t_0a74f081bbcf36 16,28-29,367-444,1490,1740-1745,1747-1752,1757-1767,1769,1771-1781,1784,1795-1803,1827,1942-1956,1992-2000,2003-2005,2008-2010,2013-2014,2125
+tests/browser_authoritative_runs_real_backend_smoke.mjs
+  s_bae69f1b7fab46::t_44e4a7acd75ad9 543,809,816-817,1133
+tests/browser_automation_boot_audit.mjs
+  s_bae69f1b7fab46::t_03017a2b3ad38f 97,374-383
+tests/browser_backend_client_smoke.mjs
+  s_bae69f1b7fab46::t_6579619963f14a 175-177,676-678
+tests/browser_challenge_audit.mjs
+  s_bae69f1b7fab46::t_60222074fa4eab 1181
+tests/browser_challenge_mobile_flow_audit.mjs
+  s_bae69f1b7fab46::t_a6592772109592 308
+tests/browser_fate_chronicle_real_backend_smoke.mjs
+  s_bae69f1b7fab46::t_97f6b4284300c4 1-727
+tests/browser_frontend_layout_audit.mjs
+  s_bae69f1b7fab46::t_a6305894a36918 2304-2309,2317-2318,2352,2534-2536,2539
+tests/browser_guide_modal_audit.mjs
+  s_bae69f1b7fab46::t_9f0c9cad764fbe 26-30,153
+tests/browser_map_overview_risk_audit.mjs
+  s_bae69f1b7fab46::t_2c1db49fd650c4 65-68,146-154,161-164,170-174,177-186,196-198,201-202,205-207,220,222-224,227-231
+tests/browser_meta_screen_audit.mjs
+  s_bae69f1b7fab46::t_e9db6c8c052f42 50,2543,4004,4299,4361,4403,4410,4450,4457,4499,4506
+tests/browser_pvp_live_audit.mjs
+  s_bae69f1b7fab46::t_f3bf6235f663da 8710-8714
+tests/browser_pvp_live_real_backend_smoke.mjs
+  s_bae69f1b7fab46::t_2e79f7e549caab 2,45-52,241,318-347,418-422,2065-2070,2117,2133,2164-2169,2197,2201,2210,2305,2334,2336,2354,2356,3106,3374-3375,3468,5578-5579
+tests/browser_relay_expedition_real_backend_smoke.mjs
+  s_b25239a90321e7::t_4930e991b7507c 619
+tests/browser_run_path_reward_audit.mjs
+  s_bae69f1b7fab46::t_0cd7a9372840b0 177,201-202,770
+tests/browser_ui_gallery_audit.mjs
+  s_bae69f1b7fab46::t_c4c269799a409e 11,399-401,564,1398-1400,1428-1429,1431
+tests/run_browser_release_checks.sh
+  s_bae69f1b7fab46::t_13da204a2808d6 36-38,185
+tests/run_node_checks.sh
+  s_bae69f1b7fab46::t_1be89de0f49816 41-44
+tests/sanity_account_security_platform_checks.cjs
+  s_b25239a90321e7::t_a2c0a645a8bd28 295-296
+tests/sanity_authoritative_runs_client_checks.mjs
+  s_bae69f1b7fab46::t_ea804ad301f6a1 419-446
+tests/sanity_authoritative_runs_engine_checks.cjs
+  s_bae69f1b7fab46::t_c451beee4cde0f 7,90,93,165,171,177,199,205,211,241-274,303-315
+tests/sanity_authoritative_runs_migration_checks.cjs
+  s_bae69f1b7fab46::t_917ee6477e8441 256-257,270-271,276-281,444,516,529-530
+tests/sanity_authoritative_runs_platform_checks.cjs
+  s_bae69f1b7fab46::t_9ebd5176868dca 45-49,409-410,423-424,940-958,961-1002
+tests/sanity_authoritative_runs_ui_checks.mjs
+  s_bae69f1b7fab46::t_e7c45eb0539eb5 351-366
+tests/sanity_challenge_ladder_platform_checks.cjs
+  s_b25239a90321e7::t_fa0d38640f3b20 42-43
+tests/sanity_cloud_state_ui_checks.cjs
+  s_bae69f1b7fab46::t_fc2e23220e8ad8 44-47
+tests/sanity_cloud_state_v2_checks.cjs
+  s_b25239a90321e7::t_c6d036e51f281a 285-286,292
+tests/sanity_fate_chronicle_client_checks.mjs
+  s_bae69f1b7fab46::t_f22889fd151185 1-237
+tests/sanity_fate_chronicle_platform_checks.cjs
+  s_bae69f1b7fab46::t_4ff71d62ad7283 1-493
+tests/sanity_fate_chronicle_ui_checks.mjs
+  s_bae69f1b7fab46::t_f626cbff087c36 1-245
+tests/sanity_intro_progress_sync_checks.cjs
+  s_bae69f1b7fab46::t_6e68edf521e96a 35-46,50-53,57-58,65-74,101,104-112
+tests/sanity_progression_platform_checks.cjs
+  s_b25239a90321e7::t_d2f1f0cc1f08b9 182-183,186
+tests/sanity_pvp_live_ui_contract_checks.cjs
+  s_bae69f1b7fab46::t_6005932bfcb4ee 18,1103-1115
+tests/sanity_pvp_live_ui_runtime_checks.mjs
+  s_bae69f1b7fab46::t_1f16122792caa3 1849
+tests/sanity_relay_expedition_migration_checks.cjs
+  s_b25239a90321e7::t_a0908ea1678286 303-304,408
+tests/sanity_release_gate_coverage_checks.cjs
+  s_bae69f1b7fab46::t_50078c6ef76f6b 19,28,68,194-208,246-251,445,482-485,516,612-640,665,711-723,732-734,1144-1145,1162,1174-1178,1181,1213,1231-1251,1294-1296,1298-1302,1315-1328,1344,1347,1358
+tests/sanity_season_ops_platform_checks.cjs
+  s_b25239a90321e7::t_1e12ed6a8db72e 107-108,208-209
+tests/sanity_verified_runs_platform_checks.cjs
+  s_b25239a90321e7::t_e6d58eb6b2fa2c 164-165,168,187,190
+tests/sanity_weekly_archive_platform_checks.cjs
+  s_09b9d04427694b::t_43c7ea5b9de4c5 1-280
+tests/sanity_weekly_challenge_checks.cjs
+  s_bae69f1b7fab46::t_ff3ffae3fc28e1 32,77,280-303
+tests/sanity_world_rift_platform_checks.cjs
+  s_b25239a90321e7::t_30b6d3d6054f81 42-43
+tests/summarize_browser_release_reports.cjs
+  s_bae69f1b7fab46::t_baa4b47509990f 36
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "24b88b19a0446956d30634ff5dea735216cf7a49",
+  "prompts": {},
+  "sessions": {
+    "s_09b9d04427694b": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f5a46-df72-7421-b535-728281300358",
+        "model": "unknown"
+      },
+      "human_author": "AI Agent <bot@example.com>"
+    },
+    "s_420840102be117": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f5a5d-e160-71f0-a494-07fa74303143",
+        "model": "unknown"
+      },
+      "human_author": "AI Agent <bot@example.com>"
+    },
+    "s_44aee4a633b2b2": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f5a46-dee0-75e0-a5a6-49d98966757b",
+        "model": "unknown"
+      },
+      "human_author": "AI Agent <bot@example.com>"
+    },
+    "s_9c9b1448ad4c8e": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f5a51-4dbe-7b73-ad9e-9f9e0aa57ea1",
+        "model": "unknown"
+      },
+      "human_author": "AI Agent <bot@example.com>"
+    },
+    "s_a01daa299b14d2": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f5a46-de51-7a21-b255-564a14caf199",
+        "model": "unknown"
+      },
+      "human_author": "AI Agent <bot@example.com>"
+    },
+    "s_b25239a90321e7": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f5a5d-cb3e-7221-a010-42c3be5ca30e",
+        "model": "unknown"
+      },
+      "human_author": "AI Agent <bot@example.com>"
+    },
+    "s_bae69f1b7fab46": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ed4f6-e7ac-73e0-a29e-119f3eddb407",
+        "model": "unknown"
+      },
+      "human_author": "AI Agent <bot@example.com>"
+    }
+  },
+  "attestation_metadata": {},
+  "remote_transcripts": {}
+}
