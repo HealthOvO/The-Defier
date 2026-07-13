@@ -45,6 +45,9 @@ import { CampfireView } from "./views/CampfireView.js";
 import { SeasonOpsView } from "./views/SeasonOpsView.js";
 import { SocialView } from "./views/SocialView.js";
 import { attachRegisteredHubControllers } from "./runtime/hub-registry.js";
+
+const PENDING_CHALLENGE_SLOT_RELOAD_KEY = 'theDefierPendingChallengeSlotReloadV1';
+const PENDING_CHALLENGE_SLOT_RELOAD_TTL_MS = 5 * 60 * 1000;
 /**
  * The Defier 4.2 - 逆命者
  * 主游戏控制器（修复版）
@@ -499,15 +502,98 @@ export class Game {
     this.showScreen('main-menu');
 
     const publicReplayShareBooted = this.schedulePublicReplayShareBoot();
+    if (publicReplayShareBooted) {
+      sessionStorage.removeItem(PENDING_CHALLENGE_SLOT_RELOAD_KEY);
+    }
+    const pendingChallengeResumeScheduled = !publicReplayShareBooted
+      && this.resumePendingChallengeStartAfterSlotLoad();
 
     // 安全检查：如果已登录但没有选中存档位（例如新标签页打开），强制显示存档选择，防止数据错乱
-    if (!publicReplayShareBooted && typeof AuthService !== 'undefined' && AuthService.isLoggedIn() && this.currentSaveSlot === null) {
+    if (!publicReplayShareBooted && !pendingChallengeResumeScheduled && typeof AuthService !== 'undefined' && AuthService.isLoggedIn() && this.currentSaveSlot === null) {
       console.log('Logged in but slot unknown. Prompting selection.');
       // 延迟一点以免与主菜单动画冲突
       setTimeout(() => this.openSaveSlotsWithSync(), 800);
     }
-    if (!publicReplayShareBooted) this.scheduleAutomationBoot();
+    if (!publicReplayShareBooted && !pendingChallengeResumeScheduled) this.scheduleAutomationBoot();
     console.log('The Defier 2.1 初始化完成！');
+  }
+
+  persistPendingChallengeStartForSlotReload() {
+    const pending = this.pendingChallengeStart;
+    if (!pending || typeof pending !== 'object' || !pending.mode || !pending.rule || typeof pending.rule !== 'object') {
+      sessionStorage.removeItem(PENDING_CHALLENGE_SLOT_RELOAD_KEY);
+      return false;
+    }
+    const slotIndex = Number.isInteger(this.currentSaveSlot) ? this.currentSaveSlot : null;
+    if (slotIndex === null) {
+      sessionStorage.removeItem(PENDING_CHALLENGE_SLOT_RELOAD_KEY);
+      return false;
+    }
+    const userId = typeof AuthService !== 'undefined' && typeof AuthService.getUserIdentity === 'function'
+      ? String(AuthService.getUserIdentity(AuthService.getCurrentUser?.()) || '')
+      : '';
+    try {
+      sessionStorage.setItem(PENDING_CHALLENGE_SLOT_RELOAD_KEY, JSON.stringify({
+        version: 1,
+        savedAt: Date.now(),
+        slotIndex,
+        userId,
+        pending
+      }));
+      return true;
+    } catch (error) {
+      console.warn('Pending challenge slot reload state could not be saved:', error);
+      sessionStorage.removeItem(PENDING_CHALLENGE_SLOT_RELOAD_KEY);
+      return false;
+    }
+  }
+
+  resumePendingChallengeStartAfterSlotLoad() {
+    const raw = sessionStorage.getItem(PENDING_CHALLENGE_SLOT_RELOAD_KEY);
+    if (!raw) return false;
+    sessionStorage.removeItem(PENDING_CHALLENGE_SLOT_RELOAD_KEY);
+    if (this.automationBootConfig || !this.loadGameResult) return false;
+
+    let payload = null;
+    try {
+      payload = JSON.parse(raw);
+    } catch (error) {
+      console.warn('Pending challenge slot reload state could not be parsed:', error);
+      return false;
+    }
+    const pending = payload && typeof payload === 'object' ? payload.pending : null;
+    const savedAt = Number(payload?.savedAt || 0);
+    const slotIndex = Number(payload?.slotIndex);
+    const currentUserId = typeof AuthService !== 'undefined' && typeof AuthService.getUserIdentity === 'function'
+      ? String(AuthService.getUserIdentity(AuthService.getCurrentUser?.()) || '')
+      : '';
+    const markerUserId = String(payload?.userId || '');
+    if (payload?.version !== 1
+      || !pending
+      || typeof pending !== 'object'
+      || !pending.mode
+      || !pending.rule
+      || typeof pending.rule !== 'object'
+      || !savedAt
+      || Date.now() - savedAt < -30000
+      || Date.now() - savedAt > PENDING_CHALLENGE_SLOT_RELOAD_TTL_MS
+      || !Number.isInteger(slotIndex)
+      || slotIndex !== this.currentSaveSlot
+      || markerUserId !== currentUserId) {
+      return false;
+    }
+
+    void this.ensureChallengeHubLoaded()
+      .then(() => {
+        this.pendingChallengeStart = pending;
+        this.showCharacterSelection();
+      })
+      .catch(error => {
+        console.error('Pending challenge slot reload resume failed:', error);
+        this.pendingChallengeStart = null;
+        this.showScreen('main-menu');
+      });
+    return true;
   }
   parsePublicReplayShareConfig() {
     if (typeof window === 'undefined' || !window.location || !window.location.search) return null;
@@ -8825,6 +8911,7 @@ export class Game {
         const doLoad = () => {
           try {
             localStorage.setItem('theDefierSave', JSON.stringify(cloudData));
+            this.persistPendingChallengeStartForSlotReload();
             sessionStorage.setItem('justLoadedSave', 'true'); // Prevent loop
 
             Utils.showBattleLog(`已加载 存档 ${index + 1} `);
@@ -9069,6 +9156,7 @@ export class Game {
       sessionStorage.setItem('currentSaveSlot', String(slot));
       localStorage.setItem('lastSaveSlot', String(slot));
       localStorage.setItem('theDefierSave', JSON.stringify(restoredData));
+      this.persistPendingChallengeStartForSlotReload();
       sessionStorage.setItem('justLoadedSave', 'true');
       Utils.showBattleLog(`已恢复并载入 存档 ${slot + 1} 的云端历史版本`);
       this.closeCloudSaveHistory(false);
@@ -9139,6 +9227,8 @@ export class Game {
       // Keep Cloud -> Overwrite Local
       if (this.tempCloudData) {
         localStorage.setItem('theDefierSave', JSON.stringify(this.tempCloudData));
+        this.persistPendingChallengeStartForSlotReload();
+        sessionStorage.setItem('justLoadedSave', 'true');
         alert('已从云端恢复存档！');
         modal.classList.remove('active');
         window.location.reload(); // Reload to apply
@@ -9155,6 +9245,11 @@ export class Game {
       const slot = Number.isInteger(this.currentSaveSlot) ? this.currentSaveSlot : 0;
       if (res.success && Array.isArray(res.slots) && res.slots[slot]) {
         localStorage.setItem('theDefierSave', JSON.stringify(res.slots[slot]));
+        this.currentSaveSlot = slot;
+        sessionStorage.setItem('currentSaveSlot', String(slot));
+        localStorage.setItem('lastSaveSlot', String(slot));
+        this.persistPendingChallengeStartForSlotReload();
+        sessionStorage.setItem('justLoadedSave', 'true');
         Utils.showBattleLog('已拉取云端存档');
         setTimeout(() => window.location.reload(), 500);
       }

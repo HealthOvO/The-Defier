@@ -1195,6 +1195,12 @@ assert.strictEqual(
   "await loginPage.click('#generic-cancel-btn')",
   "loginPage.click('#generic-confirm-btn')",
   'requestCount: Number(window.__logoutRequestCount || 0)',
+  'real authenticated cloud slot reload preserves the complete pending challenge selection',
+  'runChallengeCloudSlotResumeProbe',
+  'challengeCloudResumeMarkerWitness',
+  'pendingSnapshot: pending ? JSON.parse(JSON.stringify(pending)) : null',
+  'result.challengeCloudSlotResumeProbe.after?.witness?.userId === result.challengeCloudSlotResumeProbe.expectedUserId',
+  'JSON.stringify(result.challengeCloudSlotResumeProbe.after?.pendingSnapshot) === JSON.stringify(result.challengeCloudSlotResumeProbe.before?.pendingSnapshot)',
 ].forEach((needle) => {
   assert.ok(
     browserAuthUiCloudSmoke.includes(needle),
@@ -4918,6 +4924,17 @@ assert.ok(
 
 [
   'challenge mobile selection disclosure expands and collapses through real summary clicks',
+  'challenge cloud slot reload resumes the pending mobile selection instead of returning to the menu',
+  'challenge slot reload rejects expired and future pending handoffs',
+  "sessionStorage.removeItem('theDefierPendingChallengeSlotReloadV1')",
+  "sessionStorage.getItem('theDefierPendingChallengeSlotReloadV1')",
+  "{ name: 'expired', savedAt: Date.now() - (6 * 60 * 1000) }",
+  "{ name: 'future', savedAt: Date.now() + (60 * 1000) }",
+  'slotReloadResumeProbe.temporalRejections?.length === 2',
+  'challengeSlotResumeMarkerWitness',
+  'slotReloadResumeProbe.after?.reloadMarkerWitness',
+  "window.game?.currentScreen === 'character-selection-screen'",
+  'await page.click(loadSelector)',
   "page.locator('#challenge-selection-banner > summary')",
   'await challengeSummary.click()',
   'startSelectionProbe.bannerOpen === false',
