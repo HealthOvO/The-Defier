@@ -1,0 +1,147 @@
+.github/workflows/pages.yml
+  s_bae69f1b7fab46::t_ab2cae8ae61499 77,99
+css/account-social.css
+  s_bae69f1b7fab46::t_3d759aa8f67e3d 1-419
+docs/backend_migration_guide.md
+  s_66f7d59b18e8ed::t_b50e8b578b67d9 212-218,221,229-231
+index.html
+  s_bae69f1b7fab46::t_d4c8ba60fc3a58 23,153-173,1985
+js/core/challenge_hub.js
+  s_bae69f1b7fab46::t_3ff37d9a163272 2776-2777,2783-2788,2791,3812-3815
+js/game.js
+  s_bae69f1b7fab46::t_73996d8815857d 46,3860,5293-5302,8611,8851,8865-8866,8868,8889
+js/services/authService.js
+  s_bae69f1b7fab46::t_dadf8963a7992a 322-344
+js/services/backend-client.js
+  s_bae69f1b7fab46::t_be661376a28471 3-6,66-67,106-125,176,188-191,203-204,209,472-473,512-513,539-546,549,1212-1279,1337,1339-1340,1342,2215,2219,3348-3480
+js/views/SocialView.js
+  s_bae69f1b7fab46::t_e0121c37015651 1-314
+package.json
+  s_bae69f1b7fab46::t_c5bac2428defd9 19
+server/account-social/bootstrap.js
+  s_779c9f4992c994::t_763419a2e738d0 1-473
+server/account-social/security-service.js
+  s_bae69f1b7fab46::t_3c2abddb3f0008 1-1484
+server/account-social/social-service.js
+  s_bae69f1b7fab46::t_2cebdd535c4dbd 1-1562
+server/app.js
+  s_3ed68e2141b8ab::t_f12352fbe3920a 21,43,138
+server/middleware/auth.js
+  s_66f7d59b18e8ed::t_ec18776602defe 2,19,23-37
+server/routes/auth.js
+  s_bae69f1b7fab46::t_e657b77491caa1 2-12,16-18,20-34,36-60,62,64-65,67-78,80-91,93-159
+server/routes/pvp-live.js
+  s_bae69f1b7fab46::t_e2f6c1f0208e92 11,27,1201-1204,1211,1213-1215,1218-1238,1346-1359,2457,2462
+server/routes/social.js
+  s_bae69f1b7fab46::t_d39e0d78964686 1-148
+server/services/platform/schema-status.js
+  s_3ed68e2141b8ab::t_10563000e203e6 131-156
+server/utils/hmac.js
+  s_bae69f1b7fab46::t_2cb7f798dccc79 44-48,52,54-55,74,78,118-123,131-136
+server/world-rift/service.js
+  s_66f7d59b18e8ed::t_9f6ac37cafd734 32-35,1260-1264,1620-1625,1649,1673
+tests/backend_platform_checks.cjs
+  s_bae69f1b7fab46::t_b8224a4784efc9 108-109,143-146,158,206-210
+tests/backend_security_checks.cjs
+  s_bae69f1b7fab46::t_9ccbeb6cf776c3 153-154,170,526
+tests/browser_account_social_real_backend_smoke.mjs
+  s_bae69f1b7fab46::t_d55935b0178d64 1-293
+tests/browser_authoritative_runs_real_backend_smoke.mjs
+  s_bae69f1b7fab46::t_2ed816758e1f58 543
+tests/browser_challenge_audit.mjs
+  s_bae69f1b7fab46::t_092e2c6f582e6d 119
+tests/run_browser_release_checks.sh
+  s_bae69f1b7fab46::t_9a7654ec565fc7 167
+tests/run_node_checks.sh
+  s_bae69f1b7fab46::t_b0ba43bde9869e 8-10,45,132
+tests/sanity_account_security_platform_checks.cjs
+  s_bae69f1b7fab46::t_8995a5265d4933 1-549
+tests/sanity_account_social_client_checks.mjs
+  s_bae69f1b7fab46::t_1a5e09c675d275 1-47
+tests/sanity_authoritative_runs_migration_checks.cjs
+  s_bae69f1b7fab46::t_a8d8aba8e449ff 243-244,255-256,412,472,483-484
+tests/sanity_authoritative_runs_platform_checks.cjs
+  s_bae69f1b7fab46::t_47dca9be95f33f 156,349-350,361-362
+tests/sanity_backend_hmac_checks.cjs
+  s_bae69f1b7fab46::t_ba04bebb7a6ba2 37-45
+tests/sanity_challenge_ladder_platform_checks.cjs
+  s_bae69f1b7fab46::t_ffd275306e8ce3 42-43,192
+tests/sanity_cloud_state_v2_checks.cjs
+  s_bae69f1b7fab46::t_7c23f30c4ba603 240-241,285-286,290
+tests/sanity_progression_platform_checks.cjs
+  s_bae69f1b7fab46::t_dbe8d3a4aa875a 117-118,182-183,186
+tests/sanity_pvp_live_cross_process_ws_fanout_checks.cjs
+  s_bae69f1b7fab46::t_b4da08d8d9161a 144,147
+tests/sanity_pvp_live_replay_checks.cjs
+  s_8e9ced510b51e5::t_d23e22eb705065 2-4,9-18,253-264
+tests/sanity_pvp_live_route_checks.cjs
+  s_bae69f1b7fab46::t_a92edf1789ef87 337-348,1046,1056-1063
+tests/sanity_pvp_live_settlement_checks.cjs
+  s_bae69f1b7fab46::t_d312919b64801a 403,406
+tests/sanity_pvp_live_ws_checks.cjs
+  s_bae69f1b7fab46::t_81845494024aca 3-5,10-19,856-866
+tests/sanity_season_ops_platform_checks.cjs
+  s_bae69f1b7fab46::t_77104ab9532d21 107-108,146-147,208-209
+tests/sanity_social_graph_platform_checks.cjs
+  s_bae69f1b7fab46::t_7ec907a1272678 1-299
+tests/sanity_verified_runs_platform_checks.cjs
+  s_bae69f1b7fab46::t_6709889c4d0913 109-110,164-165,168,187,190
+tests/sanity_world_rift_platform_checks.cjs
+  s_bae69f1b7fab46::t_287e7498674f85 42-43,194
+tests/sanity_world_rift_ui_checks.mjs
+  s_bae69f1b7fab46::t_7121bed4bc3e8c 23-26
+tests/summarize_browser_release_reports.cjs
+  s_bae69f1b7fab46::t_b0b75a935d902b 24
+tests/test_e2e_backend.cjs
+  s_bae69f1b7fab46::t_50dded85900cb9 212,218,299-300,503,560
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "d81cf1223f015aab9be4e19fdefc6aa6733239ad",
+  "prompts": {},
+  "sessions": {
+    "s_3ed68e2141b8ab": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f598d-f43f-7d73-a78f-2a18f9f97e16",
+        "model": "unknown"
+      },
+      "human_author": "AI Agent <bot@example.com>"
+    },
+    "s_66f7d59b18e8ed": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f5998-2811-7892-ac2f-f837b4de5dbf",
+        "model": "unknown"
+      },
+      "human_author": "AI Agent <bot@example.com>"
+    },
+    "s_779c9f4992c994": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f598d-f334-7991-b3a1-67fb86a60858",
+        "model": "unknown"
+      },
+      "human_author": "AI Agent <bot@example.com>"
+    },
+    "s_8e9ced510b51e5": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f59a4-dae2-7c71-a13e-94ae1fb11dbe",
+        "model": "unknown"
+      },
+      "human_author": "AI Agent <bot@example.com>"
+    },
+    "s_bae69f1b7fab46": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ed4f6-e7ac-73e0-a29e-119f3eddb407",
+        "model": "unknown"
+      },
+      "human_author": "AI Agent <bot@example.com>"
+    }
+  },
+  "attestation_metadata": {},
+  "remote_transcripts": {}
+}
