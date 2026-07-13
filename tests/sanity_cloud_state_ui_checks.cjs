@@ -23,6 +23,9 @@ for (const expected of [
 }
 
 const selectSlotSource = gameSource.slice(gameSource.indexOf('selectSlot(index, mode)'), gameSource.indexOf('async handleRegister()', gameSource.indexOf('selectSlot(index, mode)')));
+const restoreCloudRevisionSource = gameSource.slice(gameSource.indexOf('restoreCloudSaveRevision(revisionId)'), gameSource.indexOf('// 解决存档冲突'));
+const resolveSaveConflictSource = gameSource.slice(gameSource.indexOf('resolveSaveConflict(choice)'), gameSource.indexOf('// 加载云端存档 (无本地时)'));
+const loadCloudGameSource = gameSource.slice(gameSource.indexOf('loadCloudGame()'), gameSource.indexOf('// 打开法宝囊'));
 assert(
   selectSlotSource.indexOf("mode === 'history'") < selectSlotSource.indexOf('this.currentSaveSlot = index'),
   'viewing cloud history must return before changing the active save slot'
@@ -34,6 +37,23 @@ assert(gameSource.includes('this.closeCloudSaveHistory(true);'), 'an expired log
 assert(gameSource.includes('this.cloudHistoryUserId = historyUserId'), 'cloud history should bind the UI flow to the account that opened it');
 assert(gameSource.includes("refreshed.reason === 'cloud_state_account_changed'"), 'restore refresh should stop when the account changes');
 assert(!gameSource.includes('restored.saveData || restored.data || null'), 'restore UI must not fall back to stale account data after refresh failure');
+assert(gameSource.includes("const PENDING_CHALLENGE_SLOT_RELOAD_KEY = 'theDefierPendingChallengeSlotReloadV1'"), 'challenge starts should use a session-scoped slot reload handoff');
+assert(gameSource.includes('persistPendingChallengeStartForSlotReload()'), 'challenge starts should persist their pending bundle before a cloud slot reload');
+assert(gameSource.includes('resumePendingChallengeStartAfterSlotLoad()'), 'challenge starts should resume after a cloud slot reload');
+assert(gameSource.includes('slotIndex !== this.currentSaveSlot'), 'challenge slot reload resume should stay bound to the selected save slot');
+assert(gameSource.includes('markerUserId !== currentUserId'), 'challenge slot reload resume should stay bound to the account that started it');
+assert(gameSource.includes('Date.now() - savedAt < -30000'), 'challenge slot reload resume should reject implausibly future handoffs');
+assert(gameSource.includes('Date.now() - savedAt > PENDING_CHALLENGE_SLOT_RELOAD_TTL_MS'), 'challenge slot reload resume should reject expired handoffs');
+assert(selectSlotSource.includes('this.persistPendingChallengeStartForSlotReload();'), 'loading an existing cloud slot should preserve a pending challenge before reload');
+assert(
+  selectSlotSource.indexOf('this.persistPendingChallengeStartForSlotReload();') < selectSlotSource.indexOf("setTimeout(() => window.location.reload(), 500)"),
+  'pending challenge state must be persisted before the slot reload begins'
+);
+assert(gameSource.includes('this.pendingChallengeStart = pending;\n        this.showCharacterSelection();'), 'a restored pending challenge should continue at character selection');
+assert(restoreCloudRevisionSource.includes('this.persistPendingChallengeStartForSlotReload();'), 'cloud history reload should preserve a pending challenge');
+assert(resolveSaveConflictSource.includes('this.persistPendingChallengeStartForSlotReload();'), 'choosing the cloud conflict version should preserve a pending challenge');
+assert(loadCloudGameSource.includes('this.persistPendingChallengeStartForSlotReload();'), 'legacy cloud loading should preserve a pending challenge');
+assert(loadCloudGameSource.includes("sessionStorage.setItem('currentSaveSlot', String(slot))"), 'legacy cloud loading should bind the restored challenge to its slot');
 
 assert(saveManagerSource.includes('res && res.conflict'), 'SaveManager should distinguish CAS conflicts from transport failures');
 assert(saveManagerSource.includes('showSaveConflictModal(gameState, cloudData, cloudTime)'), 'SaveManager should open the conflict chooser with both versions');

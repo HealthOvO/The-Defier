@@ -28,6 +28,7 @@ const AUTH_UI_CLOUD_FINDING = 'real auth UI register/login syncs global progress
 const LOGOUT_UI_FINDING = 'logged-in account control opens one logout confirmation without reopening auth and completes logout';
 const SAVE_CONFLICT_FINDING = 'real save CAS conflict modal rebases explicit local or cloud choices without silent overwrite';
 const CLOUD_HISTORY_FINDING = 'cloud save history restores an immutable revision through the real UI';
+const CHALLENGE_CLOUD_RESUME_FINDING = 'real authenticated cloud slot reload preserves the complete pending challenge selection';
 
 function usesHttpsAppWithLoopbackApi(targetApiUrl = apiUrl) {
   try {
@@ -63,7 +64,14 @@ function recordConsoleError(text) {
   if (/ERR_NETWORK_CHANGED/.test(message)) return;
   if (/Failed to load resource: net::ERR_FILE_NOT_FOUND/.test(message)) return;
   if (/Failed to load resource: the server responded with a status of 409 \(Conflict\)/.test(message)) return;
+  if (/Failed to load resource: the server responded with a status of 404 \(Not Found\).*\/api\/pvp\/live\/(?:matches|invites)\/current/.test(message)) return;
   consoleErrors.push(message);
+}
+
+function recordConsoleMessage(message) {
+  const location = message.location?.() || null;
+  const sourceUrl = String(location?.url || '').trim();
+  recordConsoleError(sourceUrl ? `${message.text()} [${sourceUrl}]` : message.text());
 }
 
 async function reserveAvailablePort(preferredPort = 0) {
@@ -385,7 +393,7 @@ async function runConflictDecisionProbe(browser, token, serverSession, choice, s
     await dialog.accept();
   });
   conflictPage.on('console', msg => {
-    if (msg.type() === 'error') recordConsoleError(msg.text());
+    if (msg.type() === 'error') recordConsoleMessage(msg);
   });
   conflictPage.on('pageerror', error => recordConsoleError(error.message));
 
@@ -491,7 +499,7 @@ async function runConflictDecisionProbe(browser, token, serverSession, choice, s
             resolveFulfilled: !!resolveResult?.fulfilled,
             resolveConflict: !!resolveResult?.value?.conflict,
             resolveReason: resolveResult?.value?.reason || '',
-            battleLogMentionsRace: document.body?.textContent?.includes('云端版本再次变化') || false,
+            conflictStatusMentionsRace: document.getElementById('save-conflict-status')?.textContent?.includes('同步期间云端再次更新') || false,
             tempCloudMarkerIsLatest: window.game?.tempCloudData?.marker === raceCloudPayload.marker,
             cachedMarkerIsLatest: window.game?.cachedSlots?.[slotIndex]?.marker === raceCloudPayload.marker,
           };
@@ -631,7 +639,7 @@ async function runCloudHistoryRestoreProbe(browser, token, serverSession, slotIn
   });
   const page = await context.newPage();
   page.on('console', msg => {
-    if (msg.type() === 'error') recordConsoleError(msg.text());
+    if (msg.type() === 'error') recordConsoleMessage(msg);
   });
   page.on('pageerror', error => recordConsoleError(error.message));
   try {
@@ -820,7 +828,7 @@ async function runInvalidConflictSlotProbe(browser, token, serverSession) {
     await dialog.accept();
   });
   invalidPage.on('console', msg => {
-    if (msg.type() === 'error') recordConsoleError(msg.text());
+    if (msg.type() === 'error') recordConsoleMessage(msg);
   });
   invalidPage.on('pageerror', error => recordConsoleError(error.message));
 
@@ -879,7 +887,7 @@ async function runCleanCloudRestoreProbe(browser, serverSession, expectedGold, o
   const context = await browser.newContext();
   const restorePage = await context.newPage();
   restorePage.on('console', msg => {
-    if (msg.type() === 'error') recordConsoleError(msg.text());
+    if (msg.type() === 'error') recordConsoleMessage(msg);
   });
   restorePage.on('pageerror', error => recordConsoleError(error.message));
 
@@ -1003,6 +1011,174 @@ async function runCleanCloudRestoreProbe(browser, serverSession, expectedGold, o
         reloadObserved: reloadObserved || after.reloadObserved,
       },
     };
+  } finally {
+    await context.close();
+  }
+}
+
+async function runChallengeCloudSlotResumeProbe(browser, serverSession, expectedGold) {
+  const context = await browser.newContext({
+    viewport: { width: 390, height: 844 },
+    isMobile: true,
+    hasTouch: true,
+  });
+  const page = await context.newPage();
+  page.on('console', msg => {
+    if (msg.type() === 'error') recordConsoleMessage(msg);
+  });
+  page.on('pageerror', error => recordConsoleError(error.message));
+  let stage = 'configure';
+
+  try {
+    await configurePage(page);
+    await page.addInitScript((session) => {
+      try {
+        localStorage.setItem('theDefierDebug', 'true');
+        localStorage.setItem('theDefierServerSession', JSON.stringify(session));
+        if (sessionStorage.getItem('challengeCloudResumePrepared') !== 'true') {
+          localStorage.removeItem('theDefierSave');
+          localStorage.removeItem('lastSaveSlot');
+          sessionStorage.removeItem('currentSaveSlot');
+          sessionStorage.removeItem('justLoadedSave');
+          sessionStorage.removeItem('theDefierPendingChallengeSlotReloadV1');
+          sessionStorage.removeItem('challengeCloudResumeMarkerWitness');
+          sessionStorage.setItem('challengeCloudResumePrepared', 'true');
+          return;
+        }
+        const raw = sessionStorage.getItem('theDefierPendingChallengeSlotReloadV1');
+        if (!raw) return;
+        const payload = JSON.parse(raw);
+        const pending = payload?.pending || null;
+        sessionStorage.setItem('challengeCloudResumeMarkerWitness', JSON.stringify({
+          slotIndex: payload?.slotIndex ?? null,
+          userId: String(payload?.userId || ''),
+          pendingSnapshot: pending ? JSON.parse(JSON.stringify(pending)) : null,
+        }));
+      } catch {}
+    }, serverSession);
+    stage = 'wait-game';
+    await waitForGame(page);
+    stage = 'wait-auth';
+    await page.waitForFunction(() => {
+      const authService = window.__THE_DEFIER_SERVICES__?.AuthService;
+      return authService?.isLoggedIn?.() === true;
+    }, null, { timeout: uiWaitTimeoutMs });
+    stage = 'start-challenge';
+    await page.evaluate(async () => {
+      await window.game.ensureChallengeHubLoaded();
+      window.game.showChallengeHub('daily');
+      window.game.beginChallengeStart('daily');
+    });
+
+    const loadSelector = '#save-slots-modal [data-system-action="select-slot"][data-slot-index="0"][data-slot-mode="load"]';
+    stage = 'wait-slots';
+    await page.waitForSelector('#save-slots-modal.active', { timeout: uiWaitTimeoutMs });
+    await page.waitForSelector(loadSelector, { timeout: uiWaitTimeoutMs });
+    const before = await page.evaluate((expectedGold) => {
+      const authService = window.__THE_DEFIER_SERVICES__?.AuthService;
+      const pending = window.game?.pendingChallengeStart || null;
+      const cached = window.game?.cachedSlots?.[0] || null;
+      return {
+        loggedIn: authService?.isLoggedIn?.() === true,
+        accountUserId: String(authService?.getUserIdentity?.(authService?.getCurrentUser?.()) || ''),
+        currentScreen: window.game?.currentScreen || '',
+        saveSlotsActive: !!document.getElementById('save-slots-modal')?.classList.contains('active'),
+        cachedGold: Number(cached?.player?.gold || 0),
+        cachedGoldMatched: Number(cached?.player?.gold || 0) === expectedGold,
+        pendingSnapshot: pending ? JSON.parse(JSON.stringify(pending)) : null,
+      };
+    }, expectedGold);
+
+    const navigation = page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: navigationTimeoutMs })
+      .then(() => true)
+      .catch(() => false);
+    await page.click(loadSelector);
+    const reloadObserved = await navigation;
+    stage = 'wait-selection';
+    await page.waitForFunction(() => {
+      const banner = document.getElementById('challenge-selection-banner');
+      return window.game?.currentScreen === 'character-selection-screen'
+        && window.game?.pendingChallengeStart?.mode === 'daily'
+        && banner?.tagName === 'DETAILS';
+    }, null, { timeout: uiWaitTimeoutMs });
+
+    const after = await page.evaluate(() => {
+      const authService = window.__THE_DEFIER_SERVICES__?.AuthService;
+      const pending = window.game?.pendingChallengeStart || null;
+      const banner = document.getElementById('challenge-selection-banner');
+      const confirm = document.getElementById('confirm-character-btn');
+      const witnessRaw = sessionStorage.getItem('challengeCloudResumeMarkerWitness');
+      let witness = null;
+      try {
+        witness = witnessRaw ? JSON.parse(witnessRaw) : null;
+      } catch {}
+      const rectObject = (rect) => rect ? {
+        left: Math.round(rect.left),
+        right: Math.round(rect.right),
+        top: Math.round(rect.top),
+        bottom: Math.round(rect.bottom),
+        width: Math.round(rect.width),
+        height: Math.round(rect.height),
+      } : null;
+      return {
+        loggedIn: authService?.isLoggedIn?.() === true,
+        accountUserId: String(authService?.getUserIdentity?.(authService?.getCurrentUser?.()) || ''),
+        currentScreen: window.game?.currentScreen || '',
+        currentSaveSlot: window.game?.currentSaveSlot ?? null,
+        runtimeGold: Number(window.game?.player?.gold || 0),
+        pendingSnapshot: pending ? JSON.parse(JSON.stringify(pending)) : null,
+        witness,
+        bannerOpen: banner?.open === true,
+        bannerRect: rectObject(banner?.getBoundingClientRect() || null),
+        confirmRect: rectObject(confirm?.getBoundingClientRect() || null),
+        saveSlotsActive: !!document.getElementById('save-slots-modal')?.classList.contains('active'),
+        markerPresent: !!sessionStorage.getItem('theDefierPendingChallengeSlotReloadV1'),
+        pageOverflow: Math.max(0, document.documentElement.scrollWidth - document.documentElement.clientWidth),
+      };
+    });
+
+    const summary = page.locator('#challenge-selection-banner > summary');
+    await summary.click();
+    await page.waitForTimeout(120);
+    const expanded = await page.evaluate(() => {
+      const banner = document.getElementById('challenge-selection-banner');
+      return { open: banner?.open === true, height: Math.round(banner?.getBoundingClientRect().height || 0) };
+    });
+    await summary.click();
+    await page.waitForTimeout(120);
+    const collapsed = await page.evaluate(() => {
+      const banner = document.getElementById('challenge-selection-banner');
+      return { open: banner?.open === true, height: Math.round(banner?.getBoundingClientRect().height || 0) };
+    });
+    await safeAuditScreenshot(page, path.join(outDir, 'authenticated-challenge-cloud-slot-resume.png'));
+    return {
+      expectedUserId: String(serverSession?.user?.objectId || ''),
+      expectedGold,
+      before,
+      after,
+      expanded,
+      collapsed,
+      reloadObserved,
+    };
+  } catch (error) {
+    const state = await page.evaluate(() => {
+      const authService = window.__THE_DEFIER_SERVICES__?.AuthService;
+      const backendClient = window.__THE_DEFIER_SERVICES__?.BackendClient;
+      return {
+        url: location.href,
+        loggedIn: authService?.isLoggedIn?.() === true,
+        userId: String(authService?.getUserIdentity?.(authService?.getCurrentUser?.()) || ''),
+        backendUserId: String(backendClient?.getCurrentUser?.()?.objectId || ''),
+        sessionPresent: !!localStorage.getItem('theDefierServerSession'),
+        currentScreen: window.game?.currentScreen || '',
+        currentSaveSlot: window.game?.currentSaveSlot ?? null,
+        pendingMode: window.game?.pendingChallengeStart?.mode || '',
+        saveSlotsActive: !!document.getElementById('save-slots-modal')?.classList.contains('active'),
+        markerPresent: !!sessionStorage.getItem('theDefierPendingChallengeSlotReloadV1'),
+        witness: sessionStorage.getItem('challengeCloudResumeMarkerWitness') || '',
+      };
+    }).catch(() => null);
+    throw new Error(`challenge cloud resume probe failed at ${stage}: ${error?.message || error}; state=${JSON.stringify(state)}`);
   } finally {
     await context.close();
   }
@@ -1236,7 +1412,7 @@ async function runSmoke(page, browser) {
   const loginContext = await browser.newContext();
   const loginPage = await loginContext.newPage();
   loginPage.on('console', msg => {
-    if (msg.type() === 'error') recordConsoleError(msg.text());
+    if (msg.type() === 'error') recordConsoleMessage(msg);
   });
   loginPage.on('pageerror', error => recordConsoleError(error.message));
   let slotProbe = null;
@@ -1246,6 +1422,7 @@ async function runSmoke(page, browser) {
   let globalProbe = null;
   let saveConflictProbe = null;
   let cleanCloudRestoreProbe = null;
+  let challengeCloudSlotResumeProbe = null;
   let rewardCloudRestoreProbe = null;
   let cloudHistoryProbe = null;
   let logoutProbe = null;
@@ -1464,6 +1641,7 @@ async function runSmoke(page, browser) {
     saveWritebackProbe.cloudSaveTimeAdvanced = saveWritebackProbe.cloudSaveTime >= originalCloudSaveTime;
     await safeAuditScreenshot(loginPage, path.join(outDir, 'cloud-save-writeback.png'));
     cleanCloudRestoreProbe = await runCleanCloudRestoreProbe(browser, serverSession, writebackGold);
+    challengeCloudSlotResumeProbe = await runChallengeCloudSlotResumeProbe(browser, serverSession, writebackGold);
     rewardCloudRestoreProbe = await runRewardCloudRestoreProbe(loginPage, browser, loginToken, serverSession, writebackGold);
     cloudHistoryProbe = await runCloudHistoryRestoreProbe(browser, loginToken, serverSession, 0);
     saveConflictProbe = {
@@ -1549,6 +1727,7 @@ async function runSmoke(page, browser) {
     saveWritebackProbe,
     loginSessionProbe,
     cleanCloudRestoreProbe,
+    challengeCloudSlotResumeProbe,
     rewardCloudRestoreProbe,
     cloudHistoryProbe,
     saveConflictProbe,
@@ -1587,7 +1766,7 @@ try {
   });
   const page = await browser.newPage();
   page.on('console', msg => {
-    if (msg.type() === 'error') recordConsoleError(msg.text());
+    if (msg.type() === 'error') recordConsoleMessage(msg);
   });
   page.on('pageerror', error => recordConsoleError(error.message));
   const result = await runSmoke(page, browser);
@@ -1667,6 +1846,39 @@ try {
     JSON.stringify(result)
   );
   add(
+    CHALLENGE_CLOUD_RESUME_FINDING,
+    result.challengeCloudSlotResumeProbe?.reloadObserved
+      && result.challengeCloudSlotResumeProbe.before?.loggedIn
+      && result.challengeCloudSlotResumeProbe.before?.accountUserId === result.challengeCloudSlotResumeProbe.expectedUserId
+      && result.challengeCloudSlotResumeProbe.before?.saveSlotsActive
+      && result.challengeCloudSlotResumeProbe.before?.cachedGoldMatched
+      && !!result.challengeCloudSlotResumeProbe.before?.pendingSnapshot?.rotationKey
+      && !!result.challengeCloudSlotResumeProbe.before?.pendingSnapshot?.rule?.id
+      && result.challengeCloudSlotResumeProbe.before?.pendingSnapshot?.replayOnly !== true
+      && result.challengeCloudSlotResumeProbe.before?.pendingSnapshot?.practiceOnly !== true
+      && result.challengeCloudSlotResumeProbe.after?.loggedIn
+      && result.challengeCloudSlotResumeProbe.after?.accountUserId === result.challengeCloudSlotResumeProbe.expectedUserId
+      && result.challengeCloudSlotResumeProbe.after?.currentScreen === 'character-selection-screen'
+      && result.challengeCloudSlotResumeProbe.after?.currentSaveSlot === 0
+      && result.challengeCloudSlotResumeProbe.after?.runtimeGold === result.challengeCloudSlotResumeProbe.expectedGold
+      && JSON.stringify(result.challengeCloudSlotResumeProbe.after?.pendingSnapshot) === JSON.stringify(result.challengeCloudSlotResumeProbe.before?.pendingSnapshot)
+      && result.challengeCloudSlotResumeProbe.after?.witness?.slotIndex === 0
+      && result.challengeCloudSlotResumeProbe.after?.witness?.userId === result.challengeCloudSlotResumeProbe.expectedUserId
+      && JSON.stringify(result.challengeCloudSlotResumeProbe.after?.witness?.pendingSnapshot) === JSON.stringify(result.challengeCloudSlotResumeProbe.before?.pendingSnapshot)
+      && result.challengeCloudSlotResumeProbe.after?.bannerOpen === false
+      && result.challengeCloudSlotResumeProbe.after?.bannerRect?.left >= 0
+      && result.challengeCloudSlotResumeProbe.after?.bannerRect?.right <= 390
+      && result.challengeCloudSlotResumeProbe.after?.confirmRect?.left >= 0
+      && result.challengeCloudSlotResumeProbe.after?.confirmRect?.right <= 390
+      && !result.challengeCloudSlotResumeProbe.after?.saveSlotsActive
+      && !result.challengeCloudSlotResumeProbe.after?.markerPresent
+      && result.challengeCloudSlotResumeProbe.after?.pageOverflow === 0
+      && result.challengeCloudSlotResumeProbe.expanded?.open === true
+      && result.challengeCloudSlotResumeProbe.expanded?.height > result.challengeCloudSlotResumeProbe.collapsed?.height + 24
+      && result.challengeCloudSlotResumeProbe.collapsed?.open === false,
+    JSON.stringify(result.challengeCloudSlotResumeProbe || null)
+  );
+  add(
     LOGOUT_UI_FINDING,
     result.logoutProbe?.firstPrompt?.requestCount === 1
       && result.logoutProbe.firstPrompt.confirmModalCount === 1
@@ -1713,7 +1925,7 @@ try {
       && casRaceConflict.casRaceFirst?.resolveFulfilled
       && casRaceConflict.casRaceFirst?.resolveConflict
       && casRaceConflict.casRaceFirst?.resolveReason === 'save_conflict'
-      && casRaceConflict.casRaceFirst?.battleLogMentionsRace
+      && casRaceConflict.casRaceFirst?.conflictStatusMentionsRace
       && casRaceConflict.casRaceFirst?.tempCloudMarkerIsLatest
       && casRaceConflict.casRaceFirst?.cachedMarkerIsLatest
       && casRaceConflict.casRaceFirst?.cloudReadbackStillLatest
@@ -1796,6 +2008,7 @@ try {
   add(LOGOUT_UI_FINDING, false, error?.message || String(error));
   add(SAVE_CONFLICT_FINDING, false, error?.message || String(error));
   add(CLOUD_HISTORY_FINDING, false, error?.message || String(error));
+  add(CHALLENGE_CLOUD_RESUME_FINDING, false, error?.message || String(error));
 } finally {
   if (browser) await browser.close().catch(() => {});
   await stopBackend(server);
