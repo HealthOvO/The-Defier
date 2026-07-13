@@ -1,0 +1,161 @@
+.github/workflows/pages.yml
+  s_bae69f1b7fab46::t_f656825bc5f5ce 76-77,101
+css/account-social.css
+  s_f3be061b5a1a60::t_79ee21d1f01ab5 333-480,567-592
+css/season-ops.css
+  s_86acd585d8ed0c::t_05eeeb33f4cd37 825,838
+docs/backend_migration_guide.md
+  s_b2f48f235f901c::t_815501e8f4807a 219-224,227,236-238
+docs/backend_progression_platform_v1.md
+  s_b2f48f235f901c::t_72a7220ad614c4 83
+game-intro.html
+  s_bae69f1b7fab46::t_dc203cafc428dc 164-166,179-181
+index.html
+  s_bae69f1b7fab46::t_8f0013e68baf2d 218
+js/services/authoritative-run-service.js
+  s_bae69f1b7fab46::t_8aff619bc732b0 13
+js/services/backend-client.js
+  s_bae69f1b7fab46::t_230566ed84f018 6,10,12,68-69,1214-1219,3304-3437
+js/services/relay-expedition-service.js
+  s_f3be061b5a1a60::t_a2fd8128d6dda6 1-1327
+js/views/SeasonOpsView.js
+  s_86acd585d8ed0c::t_6e585024dff751 3,142,146-148,302-320
+js/views/SocialView.js
+  s_bae69f1b7fab46::t_9fc9d15e6289af 3,6-19,60,65,123-126,134-136,197-606,657,664,695-699,701-765,794-802,805-813,815-816
+js/views/SystemView.js
+  s_bae69f1b7fab46::t_4ebdcf675b1fb2 398,400-401,416,427,478
+server/app.js
+  s_bae69f1b7fab46::t_035af6a295c2a2 22,45,141
+server/db/database.js
+  s_bae69f1b7fab46::t_7b4fe1c6cee497 15,825
+server/progression/authoritative-runs/catalog.js
+  s_bae69f1b7fab46::t_c0dfa84d1d3fd8 4-5,205-277,295
+server/progression/authoritative-runs/engine.js
+  s_06e8a27b4d01da::t_c69378ee845dca 5,23-48,51,97,140,153,195-198,238,308,433,477,539
+server/progression/authoritative-runs/service.js
+  s_bae69f1b7fab46::t_0e49a57c7cb446 7-8,43,45,61-67,660-702,786-787,799-819,831-832,853-855,859,864-866,895-902,915,1575,1586
+server/relay-expedition/catalog.js
+  s_bae69f1b7fab46::t_6b507e02516414 1-288
+server/relay-expedition/service.js
+  s_bae69f1b7fab46::t_b8cc0864e16c3e 1-1804
+server/routes/relay-expedition.js
+  s_bae69f1b7fab46::t_243a500706c359 1-141
+server/services/platform/schema-status.js
+  s_bae69f1b7fab46::t_cccf86a1d4a47e 157-171
+tests/backend_platform_checks.cjs
+  s_bae69f1b7fab46::t_d328d0ef13835c 108-109,147-150,162,215-219
+tests/browser_account_social_real_backend_smoke.mjs
+  s_bae69f1b7fab46::t_e788647f108f5a 165
+tests/browser_authoritative_runs_real_backend_smoke.mjs
+  s_bae69f1b7fab46::t_6cbed06ef8c3c7 543
+tests/browser_relay_expedition_real_backend_smoke.mjs
+  s_081e02b8495b98::t_c842a80e972289 1-1071
+tests/browser_season_ops_audit.mjs
+  s_bae69f1b7fab46::t_e02ab63a4849f3 339,422
+tests/run_browser_release_checks.sh
+  s_bae69f1b7fab46::t_385f771a8c8475 33-35,182
+tests/run_node_checks.sh
+  s_081e02b8495b98::t_288e09b0e5d974 47-51
+tests/sanity_account_security_platform_checks.cjs
+  s_bae69f1b7fab46::t_aaca533c4469ab 295-296
+tests/sanity_authoritative_runs_client_checks.mjs
+  s_bae69f1b7fab46::t_e3110a1520f0f3 112,122
+tests/sanity_authoritative_runs_engine_checks.cjs
+  s_081e02b8495b98::t_bcb19dfb843bd2 8,25,30,62-63,73-74,81-87,89,92,134-160,164,170,176,195-239,255-267,318-345
+tests/sanity_authoritative_runs_migration_checks.cjs
+  s_bae69f1b7fab46::t_06e0dcb4f0c849 74,79-85,127-132,141,256-257,269-270,287-297,437,445-456,509,521-522
+tests/sanity_authoritative_runs_platform_checks.cjs
+  s_bae69f1b7fab46::t_2eb5cac0250126 33-45,66-76,83-88,90,335-361,405-406,418-419,547-621,878-895,984
+tests/sanity_authoritative_runs_ui_checks.mjs
+  s_bae69f1b7fab46::t_1a6597f6dc7c0d 104,141
+tests/sanity_challenge_ladder_platform_checks.cjs
+  s_bae69f1b7fab46::t_564b5d8264b669 42-43
+tests/sanity_cloud_state_v2_checks.cjs
+  s_bae69f1b7fab46::t_e2617ab64e65b4 285-286,291
+tests/sanity_intro_progress_sync_checks.cjs
+  s_bae69f1b7fab46::t_4e5d6398a68991 35-37,69-70,83-85,110,113-114
+tests/sanity_progression_platform_checks.cjs
+  s_bae69f1b7fab46::t_26146c39cdeee5 182-183,186
+tests/sanity_relay_expedition_client_checks.mjs
+  s_f3be061b5a1a60::t_14524cbc47f2a6 1-568
+tests/sanity_relay_expedition_cross_process_checks.cjs
+  s_b741c3210bc2d1::t_b45560a85312ce 1-541
+tests/sanity_relay_expedition_platform_checks.cjs
+  s_bae69f1b7fab46::t_3241ea28d0b78f 1-1186
+tests/sanity_release_gate_coverage_checks.cjs
+  s_bae69f1b7fab46::t_8aa739ab6761a5 27,66,180-190,421,478-488,561-583,607,645-652,660-661,1071-1072,1087,1091,1101,1132-1150,1220,1222,1233
+tests/sanity_season_ops_platform_checks.cjs
+  s_bae69f1b7fab46::t_f7b103e39e8974 107-108,208-209
+tests/sanity_verified_runs_platform_checks.cjs
+  s_bae69f1b7fab46::t_83ff038ab4f771 164-165,168,187,190
+tests/sanity_world_rift_platform_checks.cjs
+  s_bae69f1b7fab46::t_3e20d18dc69851 42-43
+tests/summarize_browser_release_reports.cjs
+  s_bae69f1b7fab46::t_7b89558c07a7e1 36
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "3c861d1e691065886207836aa0acbd6257ac42a8",
+  "prompts": {},
+  "sessions": {
+    "s_06e8a27b4d01da": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f59f3-2e56-7a62-a784-5d63ac7516e4",
+        "model": "unknown"
+      },
+      "human_author": "AI Agent <bot@example.com>"
+    },
+    "s_081e02b8495b98": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f5a08-9181-77a0-9f1e-26b413fc9e2b",
+        "model": "unknown"
+      },
+      "human_author": "AI Agent <bot@example.com>"
+    },
+    "s_86acd585d8ed0c": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f59fc-392f-7683-8313-8a39a6c98ba3",
+        "model": "unknown"
+      },
+      "human_author": "AI Agent <bot@example.com>"
+    },
+    "s_b2f48f235f901c": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f5a23-40d6-7a31-9de7-a7c3253f3e7d",
+        "model": "unknown"
+      },
+      "human_author": "AI Agent <bot@example.com>"
+    },
+    "s_b741c3210bc2d1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f5a03-5660-7141-8f0d-ed1a2812b94b",
+        "model": "unknown"
+      },
+      "human_author": "AI Agent <bot@example.com>"
+    },
+    "s_bae69f1b7fab46": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ed4f6-e7ac-73e0-a29e-119f3eddb407",
+        "model": "unknown"
+      },
+      "human_author": "AI Agent <bot@example.com>"
+    },
+    "s_f3be061b5a1a60": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f5a19-9d94-7223-9263-6d0b8868435d",
+        "model": "unknown"
+      },
+      "human_author": "AI Agent <bot@example.com>"
+    }
+  },
+  "attestation_metadata": {},
+  "remote_transcripts": {}
+}
