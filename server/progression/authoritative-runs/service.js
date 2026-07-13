@@ -4,6 +4,7 @@ const { dbPath } = require('../../db/database');
 const {
     CONTENT_HASH,
     CONTENT_VERSION,
+    FATE_CHRONICLE_SCENARIO_IDS,
     PROTOCOL_VERSION,
     RELAY_EXPEDITION_SCENARIO_IDS
 } = require('./catalog');
@@ -28,6 +29,7 @@ const REPORT_VERSION = 'account-authoritative-run-v2';
 const AUTHORITY_LEVEL = 'server_replayed';
 const TRUST_TIER = 'server_authoritative';
 const RUN_TTL_MS = 24 * 60 * 60 * 1000;
+const SETTLEMENT_RECEIPT_RECOVERY_WINDOW_MS = 10 * 60 * 1000;
 const MAX_ACTIONS = 256;
 const MAX_ACTION_PAYLOAD_BYTES = 2 * 1024;
 const MAX_STATE_BYTES = 64 * 1024;
@@ -41,8 +43,10 @@ const RETAINABLE_STATUSES = ['settled', 'defeated', 'abandoned', 'expired'];
 const CHALLENGE_LADDER_MODE = 'challenge_ladder';
 const WORLD_RIFT_MODE = 'world_rift';
 const RELAY_EXPEDITION_MODE = 'relay_expedition';
+const FATE_CHRONICLE_MODE = 'fate_chronicle';
 const INTERNAL_SEED = /^[a-f0-9]{64}$/;
 const MAX_RELAY_RUN_TTL_MS = 2 * 60 * 60 * 1000;
+const MAX_FATE_CHRONICLE_RUN_TTL_MS = 72 * 60 * 60 * 1000;
 
 const BOUND_MODE_META = Object.freeze({
     [CHALLENGE_LADDER_MODE]: {
@@ -65,6 +69,13 @@ const BOUND_MODE_META = Object.freeze({
         startMessage: '同道远征正式 run 必须从远征服务发车',
         seedReason: 'relay_expedition_seed_invalid',
         seedMessage: '同道远征服务端种子无效'
+    },
+    [FATE_CHRONICLE_MODE]: {
+        bindingType: FATE_CHRONICLE_MODE,
+        startReason: 'fate_chronicle_start_required',
+        startMessage: '命途长卷 run 必须从长卷服务发车',
+        seedReason: 'fate_chronicle_seed_invalid',
+        seedMessage: '命途长卷服务端种子无效'
     }
 });
 
@@ -657,13 +668,21 @@ async function expireRunIfNeeded(connection, run, now = Date.now()) {
     return loadOwnedRun(connection, run.user_id, run.run_id);
 }
 
-async function expireInternalRelayRun(userId, rawContext = {}, nowInput, internalOptions = {}) {
+async function expireInternalBoundRun(userId, rawContext = {}, nowInput, internalOptions = {}) {
     const identity = String(userId || '').trim();
     const runId = safeId(rawContext.runId);
     const clientRunId = safeId(rawContext.clientRunId);
-    const reason = String(rawContext.reason || 'relay_bind_failed').slice(0, 96);
+    const expectedMode = String(internalOptions && internalOptions.mode || '').trim();
+    const isRelay = expectedMode === RELAY_EXPEDITION_MODE;
+    const isChronicle = expectedMode === FATE_CHRONICLE_MODE;
+    const reason = String(rawContext.reason || (isRelay ? 'relay_bind_failed' : 'chronicle_bind_failed')).slice(0, 96);
+    const reasonPrefix = isRelay ? 'relay' : 'fate_chronicle';
+    const label = isRelay ? '同道远征' : '命途长卷';
+    if (!isRelay && !isChronicle) {
+        throw makeError(500, 'bound_run_expire_mode_invalid', '内部权威 run 清理模式无效');
+    }
     if (!identity || !runId || !clientRunId) {
-        throw makeError(500, 'relay_internal_expire_context_invalid', '同道远征孤儿 run 清理上下文无效');
+        throw makeError(500, `${reasonPrefix}_internal_expire_context_invalid`, `${label}孤儿 run 清理上下文无效`);
     }
     const fixedNow = Number.isFinite(Number(nowInput)) ? clampInt(nowInput) : Date.now();
     const execute = async connection => {
@@ -674,8 +693,8 @@ async function expireInternalRelayRun(userId, rawContext = {}, nowInput, interna
             [runId, identity, clientRunId]
         );
         if (!run) return { success: true, expired: false, status: 'missing' };
-        if (String(run.activity_mode || '') !== RELAY_EXPEDITION_MODE) {
-            throw makeError(409, 'relay_internal_expire_mode_mismatch', '拒绝清理非同道远征权威 run');
+        if (String(run.activity_mode || '') !== expectedMode) {
+            throw makeError(409, `${reasonPrefix}_internal_expire_mode_mismatch`, `拒绝清理非${label}权威 run`);
         }
         if (String(run.status || '') !== 'active') {
             return { success: true, expired: false, status: String(run.status || '') };
@@ -688,8 +707,8 @@ async function expireInternalRelayRun(userId, rawContext = {}, nowInput, interna
             [fixedNow, fixedNow, runId, identity, clientRunId]
         );
         if (updated.changes > 0) {
-            await recordOpsEvent(connection, 'relay_orphan_expired', run, {
-                mode: RELAY_EXPEDITION_MODE,
+            await recordOpsEvent(connection, `${reasonPrefix}_orphan_expired`, run, {
+                mode: expectedMode,
                 status: 'expired',
                 reason
             }, 0, fixedNow);
@@ -698,6 +717,20 @@ async function expireInternalRelayRun(userId, rawContext = {}, nowInput, interna
     };
     const externalConnection = internalOptions && internalOptions.connection;
     return externalConnection ? execute(externalConnection) : withWriteTransaction(execute);
+}
+
+function expireInternalRelayRun(userId, rawContext = {}, nowInput, internalOptions = {}) {
+    return expireInternalBoundRun(userId, rawContext, nowInput, {
+        ...internalOptions,
+        mode: RELAY_EXPEDITION_MODE
+    });
+}
+
+function expireInternalFateChronicleRun(userId, rawContext = {}, nowInput, internalOptions = {}) {
+    return expireInternalBoundRun(userId, rawContext, nowInput, {
+        ...internalOptions,
+        mode: FATE_CHRONICLE_MODE
+    });
 }
 
 async function loadReceipt(connection, runId) {
@@ -784,7 +817,7 @@ async function issueAuthoritativeRun(userId, rawRequest, nowInput, internalOptio
         : null;
     const boundSeedHex = String(internalOptions && internalOptions.seedHex || '').trim().toLowerCase();
     const requestedScenarioId = String(internalOptions && internalOptions.scenarioId || '').trim();
-    const relayRunTtlInput = internalOptions && internalOptions.runTtlMs;
+    const boundRunTtlInput = internalOptions && internalOptions.runTtlMs;
     const boundMode = BOUND_MODE_META[request.mode] || null;
     if (boundMode) {
         if (!binding || String(binding.type || '') !== boundMode.bindingType) {
@@ -796,25 +829,39 @@ async function issueAuthoritativeRun(userId, rawRequest, nowInput, internalOptio
     } else if (boundSeedHex) {
         throw makeError(500, 'unexpected_authoritative_seed', '普通权威 run 不接受外部种子');
     }
-    if (request.mode === RELAY_EXPEDITION_MODE) {
-        if (!RELAY_EXPEDITION_SCENARIO_IDS.includes(requestedScenarioId)) {
+    const scenarioIds = request.mode === RELAY_EXPEDITION_MODE
+        ? RELAY_EXPEDITION_SCENARIO_IDS
+        : request.mode === FATE_CHRONICLE_MODE
+            ? FATE_CHRONICLE_SCENARIO_IDS
+            : null;
+    if (scenarioIds) {
+        if (!scenarioIds.includes(requestedScenarioId)) {
+            if (request.mode === FATE_CHRONICLE_MODE) {
+                throw makeError(400, 'fate_chronicle_scenario_invalid', '命途长卷誓约场景不受支持');
+            }
             throw makeError(400, 'relay_expedition_scenario_invalid', '同道远征接力谱不受支持');
         }
     } else if (requestedScenarioId) {
         throw makeError(500, 'unexpected_authoritative_scenario', '普通权威 run 不接受外部场景');
     }
     let runTtlMs = RUN_TTL_MS;
-    if (request.mode === RELAY_EXPEDITION_MODE) {
-        if (relayRunTtlInput === undefined || relayRunTtlInput === null || relayRunTtlInput === '') {
-            runTtlMs = MAX_RELAY_RUN_TTL_MS;
+    if (request.mode === RELAY_EXPEDITION_MODE || request.mode === FATE_CHRONICLE_MODE) {
+        const maxRunTtlMs = request.mode === RELAY_EXPEDITION_MODE
+            ? MAX_RELAY_RUN_TTL_MS
+            : MAX_FATE_CHRONICLE_RUN_TTL_MS;
+        if (boundRunTtlInput === undefined || boundRunTtlInput === null || boundRunTtlInput === '') {
+            runTtlMs = maxRunTtlMs;
         } else {
-            const parsedRunTtlMs = Math.floor(Number(relayRunTtlInput));
-            if (!Number.isInteger(parsedRunTtlMs) || parsedRunTtlMs <= 0 || parsedRunTtlMs > MAX_RELAY_RUN_TTL_MS) {
+            const parsedRunTtlMs = Math.floor(Number(boundRunTtlInput));
+            if (!Number.isInteger(parsedRunTtlMs) || parsedRunTtlMs <= 0 || parsedRunTtlMs > maxRunTtlMs) {
+                if (request.mode === FATE_CHRONICLE_MODE) {
+                    throw makeError(400, 'fate_chronicle_ttl_invalid', '命途长卷权威 run TTL 必须在 1-259200000 毫秒之间');
+                }
                 throw makeError(400, 'relay_expedition_ttl_invalid', '同道远征权威 run TTL 必须在 1-7200000 毫秒之间');
             }
             runTtlMs = parsedRunTtlMs;
         }
-    } else if (relayRunTtlInput !== undefined && relayRunTtlInput !== null && relayRunTtlInput !== '') {
+    } else if (boundRunTtlInput !== undefined && boundRunTtlInput !== null && boundRunTtlInput !== '') {
         throw makeError(500, 'unexpected_authoritative_ttl', '普通权威 run 不接受外部 TTL');
     }
     const startedAt = Date.now();
@@ -829,7 +876,7 @@ async function issueAuthoritativeRun(userId, rawRequest, nowInput, internalOptio
         if (existing) {
             if (String(existing.activity_mode || '') !== request.mode
                 || String(existing.content_version || '') !== request.contentVersion
-                || (request.mode === RELAY_EXPEDITION_MODE && String(existing.scenario_id || '') !== requestedScenarioId)) {
+                || (scenarioIds && String(existing.scenario_id || '') !== requestedScenarioId)) {
                 throw makeError(409, 'client_run_conflict', '相同客户端 run id 已绑定其他权威上下文');
             }
             const ensured = await ensureRunState(connection, existing, transactionNow);
@@ -861,7 +908,10 @@ async function issueAuthoritativeRun(userId, rawRequest, nowInput, internalOptio
             [identity, request.mode]
         );
         if (current) {
-            if (request.mode === RELAY_EXPEDITION_MODE && String(current.scenario_id || '') !== requestedScenarioId) {
+            if (scenarioIds && String(current.scenario_id || '') !== requestedScenarioId) {
+                if (request.mode === FATE_CHRONICLE_MODE) {
+                    throw makeError(409, 'fate_chronicle_scenario_conflict', '当前命途长卷 run 已绑定其他誓约');
+                }
                 throw makeError(409, 'relay_expedition_scenario_conflict', '当前同道远征权威 run 已绑定其他接力谱');
             }
             const ensured = await ensureRunState(connection, current, transactionNow);
@@ -896,7 +946,7 @@ async function issueAuthoritativeRun(userId, rawRequest, nowInput, internalOptio
             runId,
             userId: identity,
             mode: request.mode,
-            scenarioId: request.mode === RELAY_EXPEDITION_MODE ? requestedScenarioId : '',
+            scenarioId: scenarioIds ? requestedScenarioId : '',
             seedHex,
             content
         });
@@ -988,7 +1038,38 @@ async function getCurrentAuthoritativeRun(userId, rawMode, now = Date.now()) {
             [identity, mode]
         );
         if (!run) {
-            return { success: true, reportVersion: `${REPORT_VERSION}-current`, run: null };
+            const settledRun = await dbGet(
+                connection,
+                `SELECT * FROM progression_authoritative_runs
+                 WHERE user_id = ? AND activity_mode = ? AND status = 'settled'
+                   AND settled_at >= ?
+                   AND EXISTS (
+                     SELECT 1 FROM progression_authoritative_run_receipts
+                     WHERE progression_authoritative_run_receipts.run_id = progression_authoritative_runs.run_id
+                       AND progression_authoritative_run_receipts.user_id = progression_authoritative_runs.user_id
+                   )
+                 ORDER BY settled_at DESC, updated_at DESC
+                 LIMIT 1`,
+                [identity, mode, now - SETTLEMENT_RECEIPT_RECOVERY_WINDOW_MS]
+            );
+            if (!settledRun) {
+                return { success: true, reportVersion: `${REPORT_VERSION}-current`, run: null };
+            }
+            const settledState = await ensureRunState(connection, settledRun, now);
+            return {
+                success: true,
+                reportVersion: `${REPORT_VERSION}-current`,
+                run: null,
+                recoveryKind: 'settlement_receipt',
+                recoveryExpiresAt: clampInt(settledRun.settled_at) + SETTLEMENT_RECEIPT_RECOVERY_WINDOW_MS,
+                lastSettlement: await formatRun(
+                    connection,
+                    settledState.run,
+                    settledState.state,
+                    settledState.content,
+                    { idempotent: true }
+                )
+            };
         }
         const ensured = await ensureRunState(connection, run, now);
         run = await expireRunIfNeeded(connection, ensured.run, now);
@@ -1193,6 +1274,8 @@ function makeProgressionEvent(run, state, receiptId, now) {
 async function settleAuthoritativeRun(userId, runId, rawRequest, now = Date.now()) {
     const identity = String(userId || '').trim();
     const request = normalizeSettlementRequest(runId, rawRequest);
+    const requestBodyJson = stableStringify(request);
+    const requestHash = sha256(requestBodyJson);
     const startedAt = Date.now();
     return withWriteTransaction(async connection => {
         const mutationReceipt = await dbGet(
@@ -1205,6 +1288,17 @@ async function settleAuthoritativeRun(userId, runId, rawRequest, now = Date.now(
             if (String(mutationReceipt.run_id || '') !== request.runId) {
                 throw makeError(409, 'settlement_mutation_conflict', '结算 mutation 已绑定其他权威 run');
             }
+            const storedRequestHash = String(mutationReceipt.request_hash || '');
+            const storedReceipt = parseJson(mutationReceipt.receipt_json, {});
+            const legacyExpectedVersion = clampInt(
+                storedReceipt && storedReceipt.integrity && storedReceipt.integrity.actionCount,
+                0,
+                MAX_ACTIONS
+            );
+            if ((storedRequestHash && storedRequestHash !== requestHash)
+                || (!storedRequestHash && request.expectedVersion !== legacyExpectedVersion)) {
+                throw makeError(409, 'settlement_mutation_payload_conflict', '结算 mutation 请求体与首次请求不一致');
+            }
             const run = await loadOwnedRun(connection, identity, request.runId);
             const ensured = await ensureRunState(connection, run, now);
             return {
@@ -1214,21 +1308,38 @@ async function settleAuthoritativeRun(userId, runId, rawRequest, now = Date.now(
                 run: await formatRun(connection, ensured.run, ensured.state, ensured.content, { idempotent: true })
             };
         }
+        let run = await loadOwnedRun(connection, identity, request.runId);
+        if (!run) throw makeError(404, 'authoritative_run_not_found', '权威 run 不存在');
         const existingReceipt = await loadReceipt(connection, request.runId);
         if (existingReceipt) {
-            const run = await loadOwnedRun(connection, identity, request.runId);
-            if (!run) throw makeError(404, 'authoritative_run_not_found', '权威 run 不存在');
+            if (String(existingReceipt.user_id || '') !== identity || String(run.status || '') !== 'settled') {
+                throw makeError(409, 'settlement_receipt_state_conflict', '权威结算回执与 run 状态不一致');
+            }
+            const storedReceipt = parseJson(existingReceipt.receipt_json, {});
+            const storedRequest = parseJson(existingReceipt.request_body_json, {});
+            const hasStoredExpectedVersion = storedRequest
+                && Object.prototype.hasOwnProperty.call(storedRequest, 'expectedVersion')
+                && Number.isFinite(Number(storedRequest.expectedVersion));
+            const storedExpectedVersion = hasStoredExpectedVersion
+                ? clampInt(storedRequest.expectedVersion, 0, MAX_ACTIONS)
+                : clampInt(storedReceipt && storedReceipt.integrity && storedReceipt.integrity.actionCount, 0, MAX_ACTIONS);
+            if (request.expectedVersion !== storedExpectedVersion) {
+                throw makeError(409, 'settlement_recovery_version_conflict', '结算恢复版本与已落库回执不一致', {
+                    currentVersion: clampInt(run.state_version, 0, MAX_ACTIONS)
+                });
+            }
             const ensured = await ensureRunState(connection, run, now);
             return {
                 success: true,
                 reportVersion: `${REPORT_VERSION}-settlement`,
-                receipt: { ...parseJson(existingReceipt.receipt_json, {}), idempotent: true },
-                run: await formatRun(connection, ensured.run, ensured.state, ensured.content, { idempotent: true })
+                receipt: { ...storedReceipt, idempotent: true, recovered: true },
+                run: {
+                    ...await formatRun(connection, ensured.run, ensured.state, ensured.content, { idempotent: true }),
+                    recovered: true
+                }
             };
         }
 
-        let run = await loadOwnedRun(connection, identity, request.runId);
-        if (!run) throw makeError(404, 'authoritative_run_not_found', '权威 run 不存在');
         const ensured = await ensureRunState(connection, run, now);
         run = ensured.run;
         if (String(run.status || '') !== 'completed') {
@@ -1350,8 +1461,8 @@ async function settleAuthoritativeRun(userId, runId, rawRequest, now = Date.now(
             connection,
             `INSERT INTO progression_authoritative_run_receipts
                 (receipt_id, run_id, user_id, mutation_id, activity_mode, event_id,
-                 receipt_json, state_hash, chain_head, created_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                 request_hash, request_body_json, receipt_json, state_hash, chain_head, created_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
                 receiptId,
                 run.run_id,
@@ -1359,6 +1470,8 @@ async function settleAuthoritativeRun(userId, runId, rawRequest, now = Date.now(
                 request.mutationId,
                 run.activity_mode,
                 progressionEvent.eventId,
+                requestHash,
+                requestBodyJson,
                 JSON.stringify(receiptPayload),
                 run.state_hash,
                 run.chain_head,
@@ -1572,17 +1685,20 @@ module.exports = {
     CONTENT_VERSION,
     MAX_ACTIONS,
     MAX_ACTION_PAYLOAD_BYTES,
+    MAX_FATE_CHRONICLE_RUN_TTL_MS,
     MAX_RELAY_RUN_TTL_MS,
     MAX_STATE_BYTES,
     PROTOCOL_VERSION,
     REPORT_VERSION,
     RUN_TTL_MS,
+    SETTLEMENT_RECEIPT_RECOVERY_WINDOW_MS,
     SNAPSHOT_INTERVAL,
     TRUST_TIER,
     getAuthoritativeRun,
     getAuthoritativeRunOpsOverview,
     getAuthoritativeRunReplay,
     getCurrentAuthoritativeRun,
+    expireInternalFateChronicleRun,
     expireInternalRelayRun,
     issueAuthoritativeRun,
     normalizeActionRequest,

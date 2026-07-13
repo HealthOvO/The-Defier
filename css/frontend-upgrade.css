@@ -286,6 +286,7 @@
     }
 
     #character-selection-screen .character-card .char-avatar-wrapper {
+        flex-basis: 88px;
         width: 88px;
         height: 88px;
     }
@@ -2613,15 +2614,15 @@ body:has(.modal-overlay.active) .battle-log-panel {
     }
 
     #map-screen .map-screen-v3.show-map-intel #map-expedition-panels > .expedition-branch-card {
-        order: -50;
-    }
-
-    #map-screen .map-screen-v3.show-map-intel #map-chapter-risk-card {
         order: -40;
     }
 
+    #map-screen .map-screen-v3.show-map-intel #map-chapter-risk-card {
+        order: -50;
+    }
+
     #map-screen .map-screen-v3.show-map-intel #map-situation-overview {
-        order: -30;
+        order: -60;
     }
 
     #map-screen .map-screen-v3.show-map-intel #map-expedition-panels > .expedition-bounty-card {
@@ -3470,8 +3471,8 @@ body:has(.modal-overlay.active) .battle-log-panel {
 
 @media (min-width: 769px) and (max-width: 1100px) {
     body[data-current-screen="battle-screen"] #battle-log {
-        left: calc(50% + 138px);
-        max-width: min(50vw, 520px);
+        left: calc(50% + 56px);
+        max-width: min(38vw, 420px);
     }
 }
 
@@ -3683,8 +3684,8 @@ body:has(.modal-overlay.active) .battle-log-panel {
     #reward-screen .reward-card,
     #reward-screen .reward-cards .card,
     #reward-screen .reward-card-stage .card {
-        flex: 0 0 min(278px, calc(100vw - 72px));
-        width: min(278px, calc(100vw - 72px));
+        flex: 0 0 min(278px, calc(100% - 24px));
+        width: min(278px, calc(100% - 24px));
         min-height: 310px;
         scroll-snap-align: center;
     }
@@ -3882,8 +3883,7 @@ body:has(.modal-overlay.active) .battle-log-panel {
 
 #pvp-screen #tab-live[data-live-phase="idle"] .pvp-live-social-panel,
 #pvp-screen #tab-live[data-live-phase="idle"] .pvp-live-first-guide,
-#pvp-screen #tab-live[data-live-phase="idle"] .pvp-live-waiting-report,
-#pvp-screen #tab-live[data-live-phase="idle"] .pvp-live-replay-share-viewer {
+#pvp-screen #tab-live[data-live-phase="idle"] .pvp-live-waiting-report {
     display: none;
 }
 
@@ -4149,5 +4149,30 @@ body:has(.modal-overlay.active) .battle-log-panel {
 
     #character-selection-screen .character-selection-footer .menu-btn {
         min-height: 48px;
+    }
+}
+
+@media (max-width: 768px) {
+    #map-screen .map-screen-v3.show-map-intel .map-situation-overview {
+        padding: 8px;
+    }
+
+    #map-screen .map-screen-v3.show-map-intel .map-overview-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 4px;
+    }
+
+    #map-screen .map-screen-v3.show-map-intel .map-overview-item {
+        min-height: 36px;
+        padding: 3px 6px;
+    }
+
+    #map-screen .map-screen-v3.show-map-intel .map-chapter-risk-card {
+        min-height: 145px;
+        max-height: 145px;
+        padding: 8px 9px;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+        scrollbar-width: thin;
     }
 }

@@ -785,9 +785,26 @@ export class SocialView {
     if (action === 'squad-claim') return this.mutate(() => BackendClient.claimRiftSquadReward(data.milestoneId, this.getSquadContext()), '协作荣誉已入账');
     if (action === 'revoke-session' && window.confirm('撤销这台设备的登录会话？')) return this.mutate(() => AuthService.revokeSession(data.sessionId), '设备会话已撤销', true);
     if (action === 'logout-all' && window.confirm('退出所有设备？当前页面也会退出登录。')) {
-      const result = await AuthService.logoutAll();
+      const gameRef = this.game;
+      if (gameRef && typeof gameRef.prepareForAuthLogout === 'function') {
+        await gameRef.prepareForAuthLogout();
+      }
+      let result = null;
+      try {
+        result = await AuthService.logoutAll();
+      } catch (error) {
+        if (gameRef && typeof gameRef.resumeAfterAuthLogoutFailure === 'function') {
+          await gameRef.resumeAfterAuthLogoutFailure();
+        }
+        throw error;
+      }
       if (result && result.success !== false) window.location.reload();
-      else this.notice(result && result.message || '全端退出失败', true);
+      else {
+        if (gameRef && typeof gameRef.resumeAfterAuthLogoutFailure === 'function') {
+          await gameRef.resumeAfterAuthLogoutFailure();
+        }
+        this.notice(result && result.message || '全端退出失败', true);
+      }
     }
   }
 

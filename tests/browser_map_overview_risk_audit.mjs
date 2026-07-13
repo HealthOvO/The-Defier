@@ -62,7 +62,10 @@ async function enterMap(page) {
     const visible = (el) => {
       if (!el) return false;
       const style = getComputedStyle(el);
-      return style.display !== 'none' && style.visibility !== 'hidden' && Number(style.opacity || '1') > 0;
+      return el.getClientRects().length > 0
+        && style.display !== 'none'
+        && style.visibility !== 'hidden'
+        && Number(style.opacity || '1') > 0;
     };
 
     const overview = document.getElementById('map-situation-overview');
@@ -140,20 +143,47 @@ async function enterMap(page) {
 
   await page.setViewportSize({ width: 390, height: 844 });
   await enterMap(page);
+  await page.locator('[data-map-action="toggle-map-intel"]').click();
+  await page.waitForFunction(() => {
+    const shell = document.querySelector('#map-screen .map-screen-v3');
+    const toggle = document.querySelector('[data-map-action="toggle-map-intel"]');
+    const drawer = document.getElementById('map-intel-drawer');
+    return shell?.classList.contains('show-map-intel')
+      && toggle?.getAttribute('aria-expanded') === 'true'
+      && drawer?.getAttribute('aria-hidden') === 'false';
+  }, null, { timeout: 5000 });
 
   const mobileProbe = await page.evaluate(() => {
     const normalize = (text) => String(text || '').replace(/\s+/g, ' ').trim();
     const visible = (el) => {
       if (!el) return false;
       const style = getComputedStyle(el);
-      return style.display !== 'none' && style.visibility !== 'hidden' && Number(style.opacity || '1') > 0;
+      return el.getClientRects().length > 0
+        && style.display !== 'none'
+        && style.visibility !== 'hidden'
+        && Number(style.opacity || '1') > 0;
     };
     const numberOrZero = (value) => (Number.isFinite(Number(value)) ? Number(value) : 0);
 
     const overview = document.getElementById('map-situation-overview');
     const risk = document.getElementById('map-chapter-risk-card');
+    const routeCard = document.querySelector('#map-expedition-panels > .expedition-branch-card');
+    const firstRouteChoice = routeCard?.querySelector('.expedition-choice-card') || null;
+    const shell = document.querySelector('#map-screen .map-screen-v3');
+    const toggle = document.querySelector('[data-map-action="toggle-map-intel"]');
+    const drawer = document.getElementById('map-intel-drawer');
     const overviewRect = overview ? overview.getBoundingClientRect() : null;
     const riskRect = risk ? risk.getBoundingClientRect() : null;
+    const drawerRect = drawer ? drawer.getBoundingClientRect() : null;
+    const firstRouteRect = firstRouteChoice ? firstRouteChoice.getBoundingClientRect() : null;
+    const routeClipTop = drawerRect ? Math.max(0, drawerRect.top) : 0;
+    const routeClipBottom = drawerRect ? Math.min(window.innerHeight, drawerRect.bottom) : window.innerHeight;
+    const firstRouteVisibleHeight = firstRouteRect
+      ? Math.max(0, Math.min(firstRouteRect.bottom, routeClipBottom) - Math.max(firstRouteRect.top, routeClipTop))
+      : 0;
+    const firstRouteVisibleRatio = firstRouteRect && firstRouteRect.height > 0
+      ? firstRouteVisibleHeight / firstRouteRect.height
+      : 0;
     const riskLines = risk ? Array.from(risk.querySelectorAll('.map-risk-line')) : [];
     const lineHeights = riskLines.map((line) => numberOrZero(line.getBoundingClientRect().height));
     const overflow = riskRect ? Math.max(0, riskRect.bottom - window.innerHeight) : 9999;
@@ -163,10 +193,18 @@ async function enterMap(page) {
 
     return {
       viewportHeight: window.innerHeight,
+      drawerOpen: !!shell?.classList.contains('show-map-intel'),
+      toggleExpanded: toggle?.getAttribute('aria-expanded') === 'true',
+      drawerExposed: drawer?.getAttribute('aria-hidden') === 'false',
       overviewVisible: visible(overview),
       riskVisible: visible(risk),
+      routeCardVisible: visible(routeCard),
+      firstRouteChoiceVisible: visible(firstRouteChoice),
       overviewText: normalize(overview?.textContent),
       riskText: normalize(risk?.textContent),
+      routeCardText: normalize(routeCard?.textContent),
+      routeChoiceCount: routeCard ? routeCard.querySelectorAll('.expedition-choice-card').length : 0,
+      firstRouteVisibleRatio,
       overviewHeight: overviewRect ? numberOrZero(overviewRect.height) : 0,
       riskHeight: riskRect ? numberOrZero(riskRect.height) : 0,
       riskTop: riskRect ? numberOrZero(riskRect.top) : 0,
@@ -179,10 +217,18 @@ async function enterMap(page) {
   });
 
   add(
-    'mobile map keeps overview and risk card readable, with key risk info visible within two small scroll steps',
+    'mobile map keeps overview, risk, and the first route choice readable in the opened intel drawer',
     !!mobileProbe
+      && mobileProbe.drawerOpen
+      && mobileProbe.toggleExpanded
+      && mobileProbe.drawerExposed
       && mobileProbe.overviewVisible
       && mobileProbe.riskVisible
+      && mobileProbe.routeCardVisible
+      && mobileProbe.firstRouteChoiceVisible
+      && mobileProbe.routeChoiceCount >= 1
+      && /选择本章路线/.test(mobileProbe.routeCardText || '')
+      && mobileProbe.firstRouteVisibleRatio >= 0.35
       && mobileProbe.overviewHeight >= 120
       && mobileProbe.riskHeight >= 145
       && mobileProbe.minRiskLineHeight >= 12

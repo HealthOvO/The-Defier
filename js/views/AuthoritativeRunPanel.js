@@ -3,14 +3,15 @@ import { ChallengeLadderService } from "../services/challenge-ladder-service.js"
 import { WorldRiftService } from "../services/world-rift-service.js";
 import { buildDataAttributes, escapeHtml } from "../ui/render-safe.js";
 
-const MODES = ["pve", "challenge", "expedition", "challenge_ladder", "world_rift", "relay_expedition"];
+const MODES = ["pve", "challenge", "expedition", "challenge_ladder", "world_rift", "relay_expedition", "fate_chronicle"];
 const FOCUS_KEYS = Object.freeze({
   refresh: "authoritative:refresh",
   begin: "authoritative:begin",
   settle: "authoritative:settle",
   endTurn: "authoritative:end-turn",
   abandon: "authoritative:abandon",
-  returnRelay: "authoritative:return-relay"
+  returnRelay: "authoritative:return-relay",
+  returnChronicle: "authoritative:return-chronicle"
 });
 
 const MODE_META = Object.freeze({
@@ -49,6 +50,12 @@ const MODE_META = Object.freeze({
     shortLabel: "接力",
     summary: "共享路线与接力谱，不共享残血、牌组、手牌、弃牌堆或临时状态。",
     tags: ["四棒共享", "服务端接棒", "权威投影"]
+  },
+  fate_chronicle: {
+    label: "命途长卷",
+    shortLabel: "长卷",
+    summary: "三章双誓约的服务器权威主线；失败不扣次数，当前卷面可跨设备恢复。",
+    tags: ["单人主线", "双誓约", "失败可重试"]
   }
 });
 
@@ -121,12 +128,16 @@ function formatPhase(phase = "") {
 
 function extractRunEnvelope(result = null) {
   if (result && result.run && typeof result.run === "object") return result.run;
+  if (result && result.lastSettlement && typeof result.lastSettlement === "object") return result.lastSettlement;
   return null;
 }
 
 function extractResultReceipt(result = null) {
   if (result && result.receipt && typeof result.receipt === "object") return result.receipt;
   if (result && result.action && typeof result.action === "object") return result.action;
+  if (result && result.lastSettlement && result.lastSettlement.receipt && typeof result.lastSettlement.receipt === "object") {
+    return result.lastSettlement.receipt;
+  }
   return null;
 }
 
@@ -173,23 +184,29 @@ export class AuthoritativeRunPanel {
     challengeLadderService = typeof ChallengeLadderService !== "undefined" ? ChallengeLadderService : null,
     worldRiftService = typeof WorldRiftService !== "undefined" ? WorldRiftService : null,
     relayExpeditionService = null,
+    fateChronicleService = null,
     getCurrentUserId = () => "",
     requestRender = () => {},
     requestLogin = () => {},
     requestConfirm = async () => false,
     onRelayExpeditionProjected = () => {},
-    onRelayExpeditionReturn = () => {}
+    onRelayExpeditionReturn = () => {},
+    onFateChronicleProjected = () => {},
+    onFateChronicleReturn = () => {}
   } = {}) {
     this.service = service;
     this.challengeLadderService = challengeLadderService;
     this.worldRiftService = worldRiftService;
     this.relayExpeditionService = relayExpeditionService;
+    this.fateChronicleService = fateChronicleService;
     this.getCurrentUserId = getCurrentUserId;
     this.requestRender = requestRender;
     this.requestLogin = requestLogin;
     this.requestConfirm = requestConfirm;
     this.onRelayExpeditionProjected = onRelayExpeditionProjected;
     this.onRelayExpeditionReturn = onRelayExpeditionReturn;
+    this.onFateChronicleProjected = onFateChronicleProjected;
+    this.onFateChronicleReturn = onFateChronicleReturn;
     this.activeMode = "pve";
     this.serviceState = this.service && typeof this.service.getState === "function" ? this.service.getState() : {};
     this.lastRunMeta = null;
@@ -204,6 +221,9 @@ export class AuthoritativeRunPanel {
       : {};
     this.relayExpeditionState = this.relayExpeditionService && typeof this.relayExpeditionService.getState === "function"
       ? this.relayExpeditionService.getState()
+      : {};
+    this.fateChronicleState = this.fateChronicleService && typeof this.fateChronicleService.getState === "function"
+      ? this.fateChronicleService.getState()
       : {};
     this.unsubscribe = this.service && typeof this.service.subscribe === "function"
       ? this.service.subscribe(snapshot => {
@@ -229,6 +249,12 @@ export class AuthoritativeRunPanel {
         this.requestRender();
       }, { emitCurrent: false })
       : () => {};
+    this.unsubscribeFateChronicle = this.fateChronicleService && typeof this.fateChronicleService.subscribe === "function"
+      ? this.fateChronicleService.subscribe(snapshot => {
+        this.fateChronicleState = snapshot || {};
+        this.requestRender();
+      }, { emitCurrent: false })
+      : () => {};
   }
 
   destroy() {
@@ -236,6 +262,7 @@ export class AuthoritativeRunPanel {
     if (typeof this.unsubscribeChallengeLadder === "function") this.unsubscribeChallengeLadder();
     if (typeof this.unsubscribeWorldRift === "function") this.unsubscribeWorldRift();
     if (typeof this.unsubscribeRelayExpedition === "function") this.unsubscribeRelayExpedition();
+    if (typeof this.unsubscribeFateChronicle === "function") this.unsubscribeFateChronicle();
   }
 
   isBusy() {
@@ -247,6 +274,7 @@ export class AuthoritativeRunPanel {
         this.relayExpeditionState.pending
         || this.relayExpeditionState.authoritativeRun && this.relayExpeditionState.authoritativeRun.pending
       ))
+      || (this.getCurrentMode() === "fate_chronicle" && this.fateChronicleState && this.fateChronicleState.pending)
     );
   }
 
@@ -258,15 +286,28 @@ export class AuthoritativeRunPanel {
     return this.getCurrentMode() === "relay_expedition";
   }
 
+  isFateChronicleMode() {
+    return this.getCurrentMode() === "fate_chronicle";
+  }
+
   openRelayExpeditionMode() {
     this.activeMode = "relay_expedition";
     this.requestRender();
     return { success: true };
   }
 
+  openFateChronicleMode() {
+    this.activeMode = "fate_chronicle";
+    this.lastLoadedKey = "";
+    this.requestRender();
+    return { success: true };
+  }
+
   shouldShowMode(mode = "") {
+    if (this.isFateChronicleMode()) return mode === "fate_chronicle";
+    if (mode === "fate_chronicle") return false;
     if (mode !== "relay_expedition") return true;
-    return this.getCurrentMode() === "relay_expedition"
+    return this.isRelayExpeditionMode()
       || !!(
         this.relayExpeditionState
         && (
@@ -419,6 +460,11 @@ export class AuthoritativeRunPanel {
     } else {
       this.relayExpeditionState = {};
     }
+    if (this.fateChronicleService && typeof this.fateChronicleService.reset === "function") {
+      this.fateChronicleState = this.fateChronicleService.reset();
+    } else {
+      this.fateChronicleState = {};
+    }
     this.requestRender();
     if (active) {
       return this.activate({ force: true });
@@ -433,6 +479,12 @@ export class AuthoritativeRunPanel {
     }
     if (this.isRelayExpeditionMode()) {
       return this.loadRelayExpedition({ force, expectedUserId });
+    }
+    if (this.isFateChronicleMode()
+      && this.fateChronicleService
+      && typeof this.fateChronicleService.current === "function") {
+      await this.fateChronicleService.current({ expectedUserId });
+      this.fateChronicleState = this.fateChronicleService.getState();
     }
     if (this.getCurrentMode() === "challenge_ladder"
       && this.challengeLadderService
@@ -501,6 +553,12 @@ export class AuthoritativeRunPanel {
     if (this.isRelayExpeditionMode()) {
       return this.loadRelayExpedition({ force: true, expectedUserId });
     }
+    if (this.isFateChronicleMode()
+      && this.fateChronicleService
+      && typeof this.fateChronicleService.current === "function") {
+      await this.fateChronicleService.current({ expectedUserId });
+      this.fateChronicleState = this.fateChronicleService.getState();
+    }
     if (this.getCurrentMode() === "challenge_ladder"
       && this.challengeLadderService
       && typeof this.challengeLadderService.current === "function") {
@@ -531,6 +589,13 @@ export class AuthoritativeRunPanel {
         success: false,
         reason: "relay_expedition_start_from_social",
         message: "同道远征的开队与接棒只在道友录小队页处理。"
+      };
+    }
+    if (this.isFateChronicleMode()) {
+      return {
+        success: false,
+        reason: "fate_chronicle_start_from_workspace",
+        message: "请回到命途长卷选择章节与誓约后发车。"
       };
     }
     if (this.getCurrentMode() === "challenge_ladder"
@@ -627,6 +692,22 @@ export class AuthoritativeRunPanel {
         }
       }
       return { ...applied, relayProjection };
+    }
+    if (result && result.success !== false && this.isFateChronicleMode()) {
+      if (!this.fateChronicleService || typeof this.fateChronicleService.submit !== "function") {
+        return { ...applied, chronicleSubmission: { success: false, reason: "fate_chronicle_unavailable" } };
+      }
+      const chronicleSubmission = await this.fateChronicleService.submit({ runId, expectedUserId });
+      if (chronicleSubmission && chronicleSubmission.success !== false
+        && typeof this.fateChronicleService.current === "function") {
+        await this.fateChronicleService.current({ expectedUserId });
+      }
+      this.fateChronicleState = this.fateChronicleService.getState();
+      if (chronicleSubmission && chronicleSubmission.success !== false
+        && typeof this.onFateChronicleProjected === "function") {
+        this.onFateChronicleProjected(chronicleSubmission);
+      }
+      return { ...applied, chronicleSubmission };
     }
     if (result && result.success !== false && this.getCurrentMode() === "challenge_ladder") {
       if (!this.challengeLadderService || typeof this.challengeLadderService.submit !== "function") {
@@ -773,6 +854,10 @@ export class AuthoritativeRunPanel {
       if (typeof this.onRelayExpeditionReturn === "function") this.onRelayExpeditionReturn();
       return true;
     }
+    if (action === "authoritative-return-chronicle") {
+      if (typeof this.onFateChronicleReturn === "function") this.onFateChronicleReturn();
+      return true;
+    }
     if (action === "authoritative-begin") {
       await this.beginRun();
       return true;
@@ -874,6 +959,7 @@ export class AuthoritativeRunPanel {
       || (this.getCurrentMode() === "challenge_ladder" && this.challengeLadderState && this.challengeLadderState.lastError)
       || (this.getCurrentMode() === "world_rift" && this.worldRiftState && this.worldRiftState.lastError)
       || (this.getCurrentMode() === "relay_expedition" && this.relayExpeditionState && this.relayExpeditionState.lastError)
+      || (this.getCurrentMode() === "fate_chronicle" && this.fateChronicleState && this.fateChronicleState.lastError)
       || null;
     if (this.isBusy() && !projection) {
       return this.renderStateCard(
@@ -928,6 +1014,9 @@ export class AuthoritativeRunPanel {
   renderNoRunCard() {
     if (this.isRelayExpeditionMode()) {
       return this.renderRelayExpeditionNoRunCard();
+    }
+    if (this.isFateChronicleMode()) {
+      return this.renderFateChronicleNoRunCard();
     }
     const modeMeta = MODE_META[this.getCurrentMode()];
     const ladderContext = this.getCurrentMode() === "challenge_ladder" ? this.renderChallengeLadderContext() : "";
@@ -1026,6 +1115,36 @@ export class AuthoritativeRunPanel {
             data-season-ops-focus-key="${escapeHtml(FOCUS_KEYS.refresh)}"
             ${this.isBusy() ? "disabled" : ""}
           >${this.isBusy() ? "恢复中..." : "恢复共享状态"}</button>
+        </div>
+      </section>
+    `;
+  }
+
+  renderFateChronicleNoRunCard() {
+    return `
+      <section class="season-ops-section-card season-ops-authoritative-section">
+        <div class="season-ops-section-head">
+          <div>
+            <h3>命途长卷</h3>
+            <p>当前没有可恢复的长卷战斗。章节、誓约、解锁和失败重试都在长卷工作区处理。</p>
+          </div>
+          <div class="season-ops-counter-chip">未发车</div>
+        </div>
+        <div class="season-ops-inline-note">长卷不扣正式次数。回到工作区选择已解锁章节与誓约后，服务器才会生成绑定卷面。</div>
+        <div class="season-ops-state-actions season-ops-authoritative-inline-actions">
+          <button
+            type="button"
+            class="season-ops-inline-btn is-claimable"
+            data-season-ops-action="authoritative-return-chronicle"
+            data-season-ops-focus-key="${escapeHtml(FOCUS_KEYS.returnChronicle)}"
+          >返回命途长卷</button>
+          <button
+            type="button"
+            class="season-ops-inline-btn"
+            data-season-ops-action="authoritative-refresh"
+            data-season-ops-focus-key="${escapeHtml(FOCUS_KEYS.refresh)}"
+            ${this.isBusy() ? "disabled" : ""}
+          >${this.isBusy() ? "恢复中..." : "检查可恢复卷面"}</button>
         </div>
       </section>
     `;
@@ -1345,6 +1464,7 @@ export class AuthoritativeRunPanel {
     const summary = this.getCurrentProjection() && this.getCurrentProjection().summary ? this.getCurrentProjection().summary : {};
     const receipt = this.lastReceipt || (this.lastRunMeta && this.lastRunMeta.receipt) || null;
     const isRelay = this.isRelayExpeditionMode();
+    const isChronicle = this.isFateChronicleMode();
     return `
       <section class="season-ops-section-card season-ops-authoritative-section">
         <div class="season-ops-section-head">
@@ -1367,7 +1487,14 @@ export class AuthoritativeRunPanel {
               data-season-ops-action="authoritative-settle"
               data-season-ops-focus-key="${escapeHtml(FOCUS_KEYS.settle)}"
               ${this.isBusy() ? "disabled" : ""}
-            >${this.isBusy() ? "结算中..." : isRelay ? "结算并投影到共享路线" : "提交正式结算"}</button>
+            >${this.isBusy() ? "结算中..." : isRelay ? "结算并投影到共享路线" : isChronicle ? "结算并归入长卷" : "提交正式结算"}</button>
+          ` : isChronicle ? `
+            <button
+              type="button"
+              class="season-ops-inline-btn is-claimable"
+              data-season-ops-action="authoritative-return-chronicle"
+              data-season-ops-focus-key="${escapeHtml(FOCUS_KEYS.returnChronicle)}"
+            >返回命途长卷</button>
           ` : !isRelay ? `
             <button
               type="button"
@@ -1401,6 +1528,7 @@ export class AuthoritativeRunPanel {
     const summary = projection && projection.summary ? projection.summary : {};
     const abandoned = projection && projection.phase === "abandoned";
     const isRelay = this.isRelayExpeditionMode();
+    const isChronicle = this.isFateChronicleMode();
     return `
       <section class="season-ops-section-card season-ops-authoritative-section">
         <div class="season-ops-section-head">
@@ -1424,6 +1552,13 @@ export class AuthoritativeRunPanel {
               data-season-ops-action="authoritative-return-relay"
               data-season-ops-focus-key="${escapeHtml(FOCUS_KEYS.returnRelay)}"
             >返回同道远征工作区</button>
+          ` : isChronicle ? `
+            <button
+              type="button"
+              class="season-ops-inline-btn is-claimable"
+              data-season-ops-action="authoritative-return-chronicle"
+              data-season-ops-focus-key="${escapeHtml(FOCUS_KEYS.returnChronicle)}"
+            >返回长卷重试</button>
           ` : `
             <button
               type="button"

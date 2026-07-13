@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import crypto from 'node:crypto';
 import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
@@ -40,6 +41,14 @@ const findings = [];
 const consoleErrors = [];
 let port = 0;
 let apiUrl = '';
+
+function compactTestUsername(value) {
+  const text = String(value || 'pvp-live-smoke');
+  if ([...text].length <= 24) return text;
+  const prefix = text.replace(/[^a-z0-9_-]/gi, '_').slice(0, 12);
+  const digest = crypto.createHash('sha256').update(text).digest('hex').slice(0, 10);
+  return `${prefix}_${digest}`;
+}
 
 function usesHttpsAppWithLoopbackApi(targetApiUrl = apiUrl) {
   try {
@@ -229,6 +238,7 @@ function makeLoadout(identitySlot, pattern) {
 }
 
 async function preparePage(browser, username, displayName) {
+  username = compactTestUsername(username);
   const context = await browser.newContext(isMobileViewport
     ? { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true }
     : { viewport: { width: 1366, height: 860 } });
@@ -305,6 +315,36 @@ async function preparePage(browser, username, displayName) {
   return { context, page, username, displayName };
 }
 
+async function establishFriendship(requesterPage, recipientPage, targetUsername, mutationScope) {
+  const request = await requesterPage.evaluate(async ({ targetUsername, mutationId }) => {
+    const client = window.__THE_DEFIER_SERVICES__?.BackendClient;
+    return await client.sendFriendRequest(targetUsername, { mutationId });
+  }, { targetUsername, mutationId: `${mutationScope}-request` });
+  if (request?.success === false || request?.status !== 'pending') {
+    throw new Error(`friend request failed: ${JSON.stringify(request)}`);
+  }
+  const dashboard = await recipientPage.evaluate(async () => {
+    const client = window.__THE_DEFIER_SERVICES__?.BackendClient;
+    return await client.getSocialDashboard();
+  });
+  const requestId = String(dashboard?.incomingRequests?.[0]?.requestId || '').trim();
+  if (!requestId) {
+    throw new Error(`friend request missing from recipient dashboard: ${JSON.stringify(dashboard)}`);
+  }
+  const accepted = await recipientPage.evaluate(async ({ requestId, mutationId }) => {
+    const client = window.__THE_DEFIER_SERVICES__?.BackendClient;
+    return await client.acceptFriendRequest(requestId, { mutationId });
+  }, { requestId, mutationId: `${mutationScope}-accept` });
+  if (accepted?.success === false || accepted?.status !== 'accepted') {
+    throw new Error(`friend request accept failed: ${JSON.stringify(accepted)}`);
+  }
+  return {
+    requestId,
+    requestStatus: request.status,
+    acceptedStatus: accepted.status,
+  };
+}
+
 async function getLiveSnapshot(page) {
   return page.evaluate(() => window.PVPScene.getLiveSnapshot());
 }
@@ -375,7 +415,11 @@ async function reloadAndOpenLivePanel(page) {
     document.getElementById('tab-live')?.classList.add('active');
     await window.PVPScene.loadLivePanel();
   }, TEST_MATCH_SCOPE);
-  await closeSaveSlotsModalViaUi(page, 'reload-live-panel-save-slots-cancel', 3000);
+  await page.waitForTimeout(1000);
+  const saveSlotsActive = await page.locator('#save-slots-modal.active').count();
+  if (saveSlotsActive > 0) {
+    throw new Error('save slots modal reopened over the live PVP panel after navigation');
+  }
 }
 
 async function waitForLivePhase(page, phase, timeoutMs = liveStateTimeoutMs) {
@@ -703,18 +747,6 @@ async function clickLiveControl(page, selector, label) {
     return actionability;
   }
   await page.mouse.click(actionability.tapPoint.x, actionability.tapPoint.y);
-  return actionability;
-}
-
-async function closeSaveSlotsModalViaUi(page, label, waitMs = 0) {
-  const selector = '#save-slots-modal.active .modal-footer button';
-  if (waitMs > 0) {
-    await page.waitForSelector(selector, { state: 'visible', timeout: waitMs }).catch(() => null);
-  }
-  const visible = await page.locator(selector).isVisible().catch(() => false);
-  if (!visible) return null;
-  const actionability = await clickLiveControl(page, selector, label);
-  await page.waitForFunction(() => !document.getElementById('save-slots-modal')?.classList.contains('active'), null, { timeout: 5000 });
   return actionability;
 }
 
@@ -2030,6 +2062,12 @@ async function writeReport() {
 
     const inviteCancelHost = await preparePage(browser, `live_real_invite_cancel_host_${runId}`, '消甲');
     const inviteCancelGuest = await preparePage(browser, `live_real_invite_cancel_guest_${runId}`, '消乙');
+    const inviteCancelFriendship = await establishFriendship(
+      inviteCancelHost.page,
+      inviteCancelGuest.page,
+      inviteCancelGuest.username,
+      `invite-cancel-${runId}`,
+    );
     await reloadAndOpenLivePanel(inviteCancelGuest.page);
     const realInviteCancelGuestIdleProbe = await inviteCancelGuest.page.evaluate(() => ({
       phase: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-phase') || '',
@@ -2076,6 +2114,7 @@ async function writeReport() {
     add(
       'real browser host cancels recovered targeted invite without entering public queue',
       !!realInviteCancelCode
+        && inviteCancelFriendship.acceptedStatus === 'accepted'
         && realInviteCancelResume.phase === 'waiting_invite'
         && realInviteCancelResume.inviteCode === realInviteCancelCode
         && realInviteCancelledHost.phase === 'idle'
@@ -2091,7 +2130,7 @@ async function writeReport() {
         && !/findOpponent|reportMatchResult|GhostEnemy|startPVPBattle|didWin|matchTicket|"rating":|"elo":|"score":/i.test(JSON.stringify(realInviteCancelProbe))
         && (!isMobileViewport || realInviteCancelCreateActionable?.ok === true)
         && (!isMobileViewport || realInviteCancelActionable?.ok === true),
-      JSON.stringify({ realInviteCancelCode, realInviteCancelCreated, realInviteCancelGuestBeforeProbe, realInviteCancelResume, realInviteCancelledHost, realInviteCancelProbe, realInviteCancelCreateActionable, realInviteCancelActionable }),
+      JSON.stringify({ inviteCancelFriendship, realInviteCancelCode, realInviteCancelCreated, realInviteCancelGuestBeforeProbe, realInviteCancelResume, realInviteCancelledHost, realInviteCancelProbe, realInviteCancelCreateActionable, realInviteCancelActionable }),
     );
     const realInviteCancelClearedProbe = await waitForLiveInviteInboxCleared(inviteCancelGuest.page, realInviteCancelCode, 'real-invite-cancel-recipient-clear');
     const realInviteCancelledInboxProbe = await inviteCancelGuest.page.evaluate(({ beforeProbe, expectedInviteCode, clearProbe }) => ({
@@ -2122,6 +2161,12 @@ async function writeReport() {
 
     const inviteHost = await preparePage(browser, `live_real_invite_host_${runId}`, '邀甲');
     const inviteGuest = await preparePage(browser, `live_real_invite_guest_${runId}`, '邀乙');
+    const inviteFriendship = await establishFriendship(
+      inviteHost.page,
+      inviteGuest.page,
+      inviteGuest.username,
+      `invite-join-${runId}`,
+    );
     await reloadAndOpenLivePanel(inviteGuest.page);
     const realInviteIdleBeforeProbe = await inviteGuest.page.evaluate(() => ({
       phase: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-phase') || '',
@@ -2149,10 +2194,11 @@ async function writeReport() {
     add(
       'real browser creates targeted live invite through backend without entering public queue',
       realInviteCreated.phase === 'waiting_invite'
+        && inviteFriendship.acceptedStatus === 'accepted'
         && realInviteCreateProbe.phase === 'waiting_invite'
         && !!realInviteCode
         && realInviteCreateProbe.inviteCodeText.includes(realInviteCode)
-        && /好友约战|邀请|约战/.test(realInviteCreateProbe.inviteReportText)
+        && /好友|邀请|约战/.test(realInviteCreateProbe.inviteReportText)
         && /指定/.test(realInviteCreateProbe.inviteReportText)
         && /不写正式积分/.test(realInviteCreateProbe.inviteReportText)
         && realInviteCreateProbe.snapshot?.inviteReport?.reportVersion === 'pvp-live-invite-v1'
@@ -2161,7 +2207,7 @@ async function writeReport() {
         && realInviteCreateProbe.snapshot?.queueTicket === ''
         && realInviteCreateProbe.snapshot?.matchId === ''
         && (!isMobileViewport || realInviteCreateActionable?.ok === true),
-      JSON.stringify({ realInviteCreated, realInviteCreateProbe, realInviteCreateActionable }),
+      JSON.stringify({ inviteFriendship, realInviteCreated, realInviteCreateProbe, realInviteCreateActionable }),
     );
 
     await reloadAndOpenLivePanel(inviteHost.page);
@@ -2256,7 +2302,7 @@ async function writeReport() {
       JSON.stringify({ realInviteCode, realInvitePassiveInboxProbe }),
     );
 
-    const realInviteSaveSlotsCancelActionable = await closeSaveSlotsModalViaUi(inviteGuest.page, 'real-invite-save-slots-cancel');
+    const realInviteSaveSlotsModalActive = await inviteGuest.page.locator('#save-slots-modal.active').count();
     const realInviteInboxJoinResult = await clickLiveInboxInviteUntilSetup(inviteGuest.page, realInviteCode, 'real-invite-inbox-join');
     const realInviteInboxJoinActionable = realInviteInboxJoinResult.actionables.at(-1) || null;
     const realInviteJoined = realInviteInboxJoinResult.setup;
@@ -2285,9 +2331,9 @@ async function writeReport() {
         && /友谊再战|准备阶段/.test(realInviteJoinProbe.summary)
         && /--/.test(realInviteJoinProbe.inviteCodeText)
         && !/settlementReport|findOpponent|reportMatchResult|GhostEnemy|startPVPBattle|didWin|matchTicket|"rating":|"elo":|"score":/i.test(JSON.stringify(realInviteJoinProbe))
-        && (realInviteSaveSlotsCancelActionable == null || realInviteSaveSlotsCancelActionable?.ok === true)
+        && realInviteSaveSlotsModalActive === 0
         && (!isMobileViewport || realInviteInboxJoinActionable?.ok === true),
-      JSON.stringify({ realInviteCode, realInviteJoined, realInviteHostSetup, realInviteJoinProbe, realInviteInboxJoinActionable, realInviteSaveSlotsCancelActionable }),
+      JSON.stringify({ realInviteCode, realInviteJoined, realInviteHostSetup, realInviteJoinProbe, realInviteInboxJoinActionable, realInviteSaveSlotsModalActive }),
     );
     add(
       'real browser recipient joins refreshed inbox invite into friendly setup',
@@ -2305,9 +2351,9 @@ async function writeReport() {
         && /友谊再战|准备阶段/.test(realInvitePassiveJoinProbe.summary)
         && /--/.test(realInvitePassiveJoinProbe.inviteCodeText)
         && !/settlementReport|findOpponent|reportMatchResult|GhostEnemy|startPVPBattle|didWin|matchTicket|"rating":|"elo":|"score":/i.test(JSON.stringify(realInvitePassiveJoinProbe))
-        && (realInviteSaveSlotsCancelActionable == null || realInviteSaveSlotsCancelActionable?.ok === true)
+        && realInviteSaveSlotsModalActive === 0
         && (!isMobileViewport || realInviteInboxJoinActionable?.ok === true),
-      JSON.stringify({ realInviteCode, realInviteJoined, realInviteHostSetup, realInvitePassiveJoinProbe, realInviteInboxJoinActionable, realInviteSaveSlotsCancelActionable }),
+      JSON.stringify({ realInviteCode, realInviteJoined, realInviteHostSetup, realInvitePassiveJoinProbe, realInviteInboxJoinActionable, realInviteSaveSlotsModalActive }),
     );
     await inviteHost.context.close().catch(() => {});
     await inviteGuest.context.close().catch(() => {});
@@ -3057,7 +3103,7 @@ async function writeReport() {
     }));
     add(
       'real browser live match exposes authoritative connection report',
-      /连接：/.test(setupConnectionProbe.text)
+      /联机：/.test(setupConnectionProbe.text)
         && setupConnectionProbe.payload?.reportVersion === 'pvp-live-connection-v1'
         && ['online', 'grace', 'disconnected'].includes(setupConnectionProbe.payload?.opponent?.status)
         && setupConnectionProbe.textPayload?.reportVersion === 'pvp-live-connection-v1',
@@ -3325,8 +3371,8 @@ async function writeReport() {
         && /准备阶段/.test(setupReloadProbe.summaryText)
         && /已准备/.test(setupReloadProbe.opponentStatsText)
         && /未准备/.test(setupReloadProbe.selfStatsText)
-        && /准备阶段/.test(setupReloadProbe.lastErrorText)
-        && /连接：/.test(setupReloadProbe.connectionText)
+        && /准备阶段|调息.*准备|确认出战/.test(setupReloadProbe.lastErrorText)
+        && /联机：/.test(setupReloadProbe.connectionText)
         && setupReloadProbe.payload?.postMatchReview == null
         && setupReloadProbe.textPayload?.postMatchReview == null
         && setupReloadProbe.opponentHandArray === false
@@ -3419,7 +3465,7 @@ async function writeReport() {
         && reloadProbe.textPayload?.matchId === activeReloadBefore.matchId
         && reloadProbe.textPayload?.turnTimer?.startedAt === activeReloadBefore.turnTimer?.startedAt
         && /行动倒计时/.test(reloadProbe.timerText)
-        && /连接：/.test(reloadProbe.connectionText)
+        && /联机：/.test(reloadProbe.connectionText)
         && ['online', 'grace'].includes(reloadProbe.payload?.connectionReport?.viewer?.status)
         && reloadProbe.payload?.postMatchReview == null
         && reloadProbe.textPayload?.postMatchReview == null
@@ -5529,8 +5575,8 @@ async function writeReport() {
         && timeoutSetupC.phase === 'setup'
         && invalidatedC.phase === 'invalidated'
         && invalidatedNoSeasonHonorProbe.phase === 'invalidated'
-        && /准备超时|无效局/.test(invalidatedNoSeasonHonorProbe.summary)
-        && /不写正式积分|不计正式积分/.test(invalidatedNoSeasonHonorProbe.hint)
+        && /准备超时|无效局|本局已取消.*不计入战绩/.test(invalidatedNoSeasonHonorProbe.summary)
+        && /不写正式积分|不计正式积分|不会计入战绩/.test(invalidatedNoSeasonHonorProbe.hint)
         && invalidatedNoSeasonHonorProbe.eventTypes.includes('ready_timeout')
         && invalidatedNoSeasonHonorProbe.eventTypes.includes('match_invalidated')
         && invalidatedNoSeasonHonorProbe.postReviewHidden === true

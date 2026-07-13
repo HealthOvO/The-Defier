@@ -540,7 +540,7 @@ try {
   apiUrl = `http://127.0.0.1:${port}`;
   backend = startBackend();
   const health = await waitForHealth();
-  add('real backend boots schema V10', health?.schema?.version === 10 && health?.schema?.currentMigrationId === '0010_relay_expedition', JSON.stringify(health?.schema || {}));
+  add('real backend boots schema V11', health?.schema?.version === 11 && health?.schema?.currentMigrationId === '0011_authoritative_fate_chronicle', JSON.stringify(health?.schema || {}));
 
   const launchArgs = [];
   if (new URL(appUrl).protocol === 'https:') {
@@ -806,13 +806,15 @@ try {
     && Number(persisted.submit_mutation_count) === 1, JSON.stringify(persisted));
 
   const challengeHubAfter = await openChallengeHubGlobal(page, 2);
+  const expectedLadderBestScore = Number(ladderCurrentAfter?.personalBest?.officialScore || 0);
   add('challenge hub global UI refreshes to the real ladder result after submit', challengeHubAfter.currentScreen === 'challenge-screen'
     && challengeHubAfter.activeTab === 'global'
     && /权威众生榜/.test(challengeHubAfter.rankingText)
     && /正式次数 2\/3/.test(challengeHubAfter.rankingText)
     && /server_authoritative/.test(challengeHubAfter.rankingText)
     && challengeHubAfter.summaryText.includes('个人正式最高分')
-    && challengeHubAfter.summaryText.includes('938')
+    && expectedLadderBestScore > 0
+    && challengeHubAfter.summaryText.includes(String(expectedLadderBestScore))
     && challengeHubAfter.legacyClaimCount === 0
     && challengeHubAfter.authoritativeRewardCount >= 1
     && challengeHubAfter.rankRowCount >= 1
@@ -1128,7 +1130,7 @@ try {
   add('real settled mobile view has no horizontal overflow', mobileLayout.documentScrollWidth === 390
     && mobileLayout.rootScrollWidth === mobileLayout.rootClientWidth, JSON.stringify(mobileLayout));
   add('real settled mobile controls meet touch target', mobileLayout.undersized.length === 0, JSON.stringify(mobileLayout.undersized));
-  await page.locator('[data-season-ops-action="authoritative-begin"]').scrollIntoViewIfNeeded();
+  await page.locator('[data-season-ops-action="authoritative-begin-new"]').scrollIntoViewIfNeeded();
   await safeAuditScreenshot(page, path.join(outDir, 'challenge-ladder-settled-mobile.png'), 'browser_authoritative_runs_real_backend_smoke', { timeout: 9000 });
   const riftMobileHub = await openChallengeHubRift(page, 4);
   const riftMobileLayout = await readLayout(page);

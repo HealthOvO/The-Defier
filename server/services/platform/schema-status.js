@@ -4,6 +4,7 @@ const makeMigration = ({ id, version, description, resources }) => ({
     id,
     version,
     description,
+    resources: resources.slice(),
     checksum: crypto
         .createHash('sha256')
         .update(['the-defier-backend', id, String(version), ...resources].join('|'))
@@ -169,6 +170,28 @@ const SCHEMA_MIGRATIONS = [
             'relay_expedition_ops_events',
             'relay_expedition_ops_counters'
         ]
+    }),
+    makeMigration({
+        id: '0011_authoritative_fate_chronicle',
+        version: 11,
+        description: 'Authoritative solo fate chronicle and low-pressure weekly evidence archive',
+        resources: [
+            'fate_chronicle_rotations',
+            'fate_chronicle_attempts',
+            'fate_chronicle_results',
+            'fate_chronicle_progress',
+            'fate_chronicle_reward_claims',
+            'fate_chronicle_mutations',
+            'fate_chronicle_ops_events',
+            'fate_chronicle_ops_counters',
+            'weekly_archive_cycles',
+            'weekly_archive_reward_claims',
+            'weekly_archive_mutations',
+            'weekly_archive_ops_events',
+            'weekly_archive_ops_counters',
+            'progression_authoritative_run_receipts.request_hash',
+            'progression_authoritative_run_receipts.request_body_json'
+        ]
     })
 ];
 const CURRENT_MIGRATION = SCHEMA_MIGRATIONS[SCHEMA_MIGRATIONS.length - 1];
@@ -219,11 +242,61 @@ const queryAppliedMigrations = (db) => new Promise((resolve, reject) => {
     );
 });
 
+const queryRows = (db, sql) => new Promise((resolve, reject) => {
+    db.all(sql, (err, rows) => {
+        if (err) reject(err);
+        else resolve(rows || []);
+    });
+});
+
+const inspectRequiredResources = async (db) => {
+    const resources = Array.from(new Set(SCHEMA_MIGRATIONS.flatMap(migration => migration.resources || [])));
+    const tableRows = await queryRows(db, "SELECT name FROM sqlite_master WHERE type = 'table'");
+    const tables = new Set(tableRows.map(row => String(row.name || '')));
+    const missingResources = [];
+    const columnsByTable = new Map();
+    for (const resource of resources) {
+        const [tableName, columnName = ''] = String(resource || '').split('.', 2);
+        if (!tables.has(tableName)) {
+            missingResources.push(resource);
+            continue;
+        }
+        if (!columnName) continue;
+        if (!columnsByTable.has(tableName)) {
+            if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(tableName)) {
+                missingResources.push(resource);
+                continue;
+            }
+            const rows = await queryRows(db, `PRAGMA table_info("${tableName}")`);
+            columnsByTable.set(tableName, new Set(rows.map(row => String(row.name || ''))));
+        }
+        if (!columnsByTable.get(tableName)?.has(columnName)) missingResources.push(resource);
+    }
+    return {
+        requiredResourceCount: resources.length,
+        missingResources
+    };
+};
+
 const getSchemaStatus = async (db) => {
-    const rows = await queryAppliedMigrations(db);
+    const [rows, resourceStatus] = await Promise.all([
+        queryAppliedMigrations(db),
+        inspectRequiredResources(db)
+    ]);
+    const appliedById = new Map(rows.map(row => [String(row.id || ''), row]));
+    const missingMigrations = SCHEMA_MIGRATIONS
+        .filter(migration => {
+            const applied = appliedById.get(migration.id);
+            return !applied || Number(applied.version) !== migration.version || String(applied.checksum || '') !== migration.checksum;
+        })
+        .map(migration => migration.id);
     return {
         version: SCHEMA_VERSION,
         currentMigrationId: CURRENT_MIGRATION_ID,
+        ready: missingMigrations.length === 0 && resourceStatus.missingResources.length === 0,
+        requiredResourceCount: resourceStatus.requiredResourceCount,
+        missingMigrations,
+        missingResources: resourceStatus.missingResources,
         appliedMigrations: rows.map(row => ({
             id: row.id,
             version: Number(row.version) || 0,

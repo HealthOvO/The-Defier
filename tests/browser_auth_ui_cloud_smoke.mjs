@@ -13,7 +13,7 @@ const requestedPort = Number(process.env.BROWSER_AUTH_UI_SMOKE_PORT || 0);
 let port = 0;
 let apiUrl = '';
 const runId = `${Date.now()}_${Math.random().toString(16).slice(2, 10)}`;
-const username = `ui_cloud_${runId}`;
+const username = `ui_${Date.now().toString(36)}${Math.random().toString(16).slice(2, 8)}`;
 const password = `pwd_${runId}`;
 const marker = `ui-cloud-marker-${runId}`;
 const dbPath = process.env.BROWSER_AUTH_UI_SMOKE_DB_PATH || path.join(os.tmpdir(), `the-defier-browser-auth-ui-${process.pid}.sqlite`);
@@ -25,7 +25,8 @@ fs.mkdirSync(outDir, { recursive: true });
 const findings = [];
 const consoleErrors = [];
 const AUTH_UI_CLOUD_FINDING = 'real auth UI register/login syncs global progress, loads cloud slot, and writes save back to cloud';
-const LOGOUT_UI_FINDING = 'logged-in account control opens one logout confirmation without reopening auth and completes logout';
+const DEFERRED_SLOT_FINDING = 'login from live PVP defers save-slot selection until returning to the main menu';
+const LOGOUT_UI_FINDING = 'logged-in account control opens security hub and logout-all confirms once before clearing session';
 const SAVE_CONFLICT_FINDING = 'real save CAS conflict modal rebases explicit local or cloud choices without silent overwrite';
 const CLOUD_HISTORY_FINDING = 'cloud save history restores an immutable revision through the real UI';
 const CHALLENGE_CLOUD_RESUME_FINDING = 'real authenticated cloud slot reload preserves the complete pending challenge selection';
@@ -361,6 +362,84 @@ async function waitForGame(page) {
     }
   }
   throw new Error(`auth UI game bootstrap timed out after ${attempts} attempt(s): ${lastError?.message || 'unknown'}`);
+}
+
+async function runPvpDeferredSaveSlotSelectionProbe(browser) {
+  const context = await browser.newContext();
+  const page = await context.newPage();
+  page.on('console', message => {
+    if (message.type() === 'error') recordConsoleMessage(message);
+  });
+  page.on('pageerror', error => recordConsoleError(error.message));
+  try {
+    await configurePage(page);
+    await waitForGame(page);
+    await page.evaluate(() => {
+      sessionStorage.removeItem('currentSaveSlot');
+      localStorage.removeItem('lastSaveSlot');
+      window.game.currentSaveSlot = null;
+      window.game.pendingSaveSlotSelection = false;
+      window.game.saveSlotsSynced = false;
+      window.game.showScreen('pvp-screen');
+      window.PVPScene?.onShow?.();
+      window.game.showLoginModal();
+    });
+    await page.waitForSelector('#auth-modal.active', { timeout: uiWaitTimeoutMs });
+    await page.fill('#auth-username', username);
+    await page.fill('#auth-password', password);
+    await page.click('#auth-modal [onclick="game.handleLogin()"]');
+    await page.waitForFunction(
+      () => document.getElementById('auth-message')?.textContent?.includes('登录成功'),
+      null,
+      { timeout: uiWaitTimeoutMs }
+    );
+    try {
+      await page.waitForFunction(
+        () => !!localStorage.getItem('theDefierServerSession')
+          && window.PVPScene?.isLiveAuthenticated?.() === true
+          && window.game?.currentScreen === 'pvp-screen'
+          && window.game?.currentSaveSlot === null
+          && window.game?.pendingSaveSlotSelection === true
+          && window.game?.saveSlotsSynced === true,
+        null,
+        { timeout: Math.min(uiWaitTimeoutMs, 15000) }
+      );
+    } catch (error) {
+      const state = await page.evaluate(() => ({
+        authMessage: document.getElementById('auth-message')?.textContent || '',
+        sessionPresent: !!localStorage.getItem('theDefierServerSession'),
+        authLoggedIn: window.AuthService?.isLoggedIn?.() === true,
+        currentScreen: window.game?.currentScreen || '',
+        currentSaveSlot: window.game?.currentSaveSlot ?? null,
+        pendingSaveSlotSelection: window.game?.pendingSaveSlotSelection,
+        saveSlotsSynced: window.game?.saveSlotsSynced,
+        saveSlotsActive: !!document.getElementById('save-slots-modal')?.classList.contains('active'),
+        pvpAuthenticated: window.PVPScene?.isLiveAuthenticated?.() === true,
+      }));
+      throw new Error(`PVP deferred save-slot state did not settle: ${JSON.stringify(state)}; ${error.message || error}`);
+    }
+    const beforeReturn = await page.evaluate(() => ({
+      currentScreen: window.game?.currentScreen || '',
+      currentSaveSlot: window.game?.currentSaveSlot ?? null,
+      pendingSaveSlotSelection: window.game?.pendingSaveSlotSelection === true,
+      saveSlotsSynced: window.game?.saveSlotsSynced === true,
+      saveSlotsActive: !!document.getElementById('save-slots-modal')?.classList.contains('active'),
+      pvpAuthenticated: window.PVPScene?.isLiveAuthenticated?.() === true,
+    }));
+
+    await page.evaluate(() => window.game?.showScreen?.('main-menu'));
+    await page.waitForSelector('#save-slots-modal.active', { timeout: uiWaitTimeoutMs });
+    const afterReturn = await page.evaluate(() => ({
+      currentScreen: window.game?.currentScreen || '',
+      currentSaveSlot: window.game?.currentSaveSlot ?? null,
+      pendingSaveSlotSelection: window.game?.pendingSaveSlotSelection === true,
+      saveSlotsActive: !!document.getElementById('save-slots-modal')?.classList.contains('active'),
+      hasCloudLoadAction: !!document.querySelector('#save-slots-modal [data-system-action="select-slot"][data-slot-index="0"][data-slot-mode="load"]'),
+    }));
+    return { beforeReturn, afterReturn };
+  } finally {
+    await context.close();
+  }
 }
 
 async function runConflictDecisionProbe(browser, token, serverSession, choice, slotIndex) {
@@ -1408,6 +1487,7 @@ async function runSmoke(page, browser) {
     lastUpdated: Date.now(),
   };
   await uploadGlobalProgress(token, cloudGlobalProgress);
+  const deferredSlotProbe = await runPvpDeferredSaveSlotSelectionProbe(browser);
 
   const loginContext = await browser.newContext();
   const loginPage = await loginContext.newPage();
@@ -1656,47 +1736,52 @@ async function runSmoke(page, browser) {
       document.getElementById('save-slots-modal')?.classList.remove('active');
       document.getElementById('generic-confirm-modal')?.classList.remove('active');
       window.game?.showScreen?.('main-menu');
-      window.__logoutRequestCount = 0;
-      const originalRequestLogout = window.game?.requestLogout?.bind(window.game);
-      if (!originalRequestLogout) throw new Error('game.requestLogout is unavailable');
-      window.game.requestLogout = (...args) => {
-        window.__logoutRequestCount += 1;
-        return originalRequestLogout(...args);
-      };
     });
+    let logoutAllRequestCount = 0;
+    let logoutDialogCount = 0;
+    const countLogoutAllRequest = (request) => {
+      if (/\/api\/auth\/logout-all(?:\?|$)/.test(request.url())) logoutAllRequestCount += 1;
+    };
+    loginPage.on('request', countLogoutAllRequest);
     await loginPage.click('#login-btn');
-    await loginPage.waitForSelector('#generic-confirm-modal.active', { timeout: uiWaitTimeoutMs });
-    const firstPrompt = await loginPage.evaluate(() => ({
-      requestCount: Number(window.__logoutRequestCount || 0),
-      confirmModalCount: document.querySelectorAll('#generic-confirm-modal').length,
-      confirmActive: !!document.getElementById('generic-confirm-modal')?.classList.contains('active'),
-      confirmMessage: document.getElementById('generic-confirm-message')?.textContent?.replace(/\s+/g, ' ').trim() || '',
-      authActive: !!document.getElementById('auth-modal')?.classList.contains('active'),
-      sessionPresent: !!localStorage.getItem('theDefierServerSession'),
-    }));
-    await loginPage.click('#generic-cancel-btn');
-    await loginPage.waitForFunction(
-      () => !document.getElementById('generic-confirm-modal')?.classList.contains('active'),
-      null,
-      { timeout: uiWaitTimeoutMs }
-    );
-    const afterCancel = await loginPage.evaluate(() => ({
-      requestCount: Number(window.__logoutRequestCount || 0),
-      confirmActive: !!document.getElementById('generic-confirm-modal')?.classList.contains('active'),
+    await loginPage.waitForSelector('#social-screen.active', { timeout: uiWaitTimeoutMs });
+    await loginPage.click('[data-social-tab="security"]');
+    await loginPage.waitForSelector('[data-social-action="logout-all"]', { timeout: uiWaitTimeoutMs });
+    const hubProbe = await loginPage.evaluate(() => ({
+      socialActive: !!document.getElementById('social-screen')?.classList.contains('active'),
+      securitySelected: document.querySelector('[data-social-tab="security"]')?.getAttribute('aria-selected') === 'true',
       authActive: !!document.getElementById('auth-modal')?.classList.contains('active'),
       sessionPresent: !!localStorage.getItem('theDefierServerSession'),
     }));
 
-    await loginPage.click('#login-btn');
-    await loginPage.waitForSelector('#generic-confirm-modal.active', { timeout: uiWaitTimeoutMs });
-    const secondPrompt = await loginPage.evaluate(() => ({
-      requestCount: Number(window.__logoutRequestCount || 0),
-      confirmActive: !!document.getElementById('generic-confirm-modal')?.classList.contains('active'),
+    let firstDialogMessage = '';
+    loginPage.once('dialog', async (dialog) => {
+      logoutDialogCount += 1;
+      firstDialogMessage = dialog.message();
+      await dialog.dismiss();
+    });
+    await loginPage.click('[data-social-action="logout-all"]');
+    await loginPage.waitForTimeout(250);
+    const firstPrompt = await loginPage.evaluate(() => ({
+      socialActive: !!document.getElementById('social-screen')?.classList.contains('active'),
+      securitySelected: document.querySelector('[data-social-tab="security"]')?.getAttribute('aria-selected') === 'true',
       authActive: !!document.getElementById('auth-modal')?.classList.contains('active'),
+      sessionPresent: !!localStorage.getItem('theDefierServerSession'),
     }));
+    firstPrompt.dialogMessage = firstDialogMessage;
+    firstPrompt.dialogCount = logoutDialogCount;
+    firstPrompt.requestCount = logoutAllRequestCount;
+    const afterCancel = { ...firstPrompt };
+
+    let secondDialogMessage = '';
+    loginPage.once('dialog', async (dialog) => {
+      logoutDialogCount += 1;
+      secondDialogMessage = dialog.message();
+      await dialog.accept();
+    });
     await Promise.all([
       loginPage.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: navigationTimeoutMs }),
-      loginPage.click('#generic-confirm-btn'),
+      loginPage.click('[data-social-action="logout-all"]'),
     ]);
     await waitForGame(loginPage);
     await loginPage.waitForTimeout(900);
@@ -1707,7 +1792,15 @@ async function runSmoke(page, browser) {
       confirmActive: !!document.getElementById('generic-confirm-modal')?.classList.contains('active'),
       authActive: !!document.getElementById('auth-modal')?.classList.contains('active'),
     }));
-    logoutProbe = { firstPrompt, afterCancel, secondPrompt, afterConfirm };
+    const secondPrompt = {
+      dialogMessage: secondDialogMessage,
+      dialogCount: logoutDialogCount,
+      requestCount: logoutAllRequestCount,
+    };
+    afterConfirm.dialogCount = logoutDialogCount;
+    afterConfirm.requestCount = logoutAllRequestCount;
+    loginPage.off('request', countLogoutAllRequest);
+    logoutProbe = { hubProbe, firstPrompt, afterCancel, secondPrompt, afterConfirm };
   } finally {
     await loginContext.close();
   }
@@ -1731,6 +1824,7 @@ async function runSmoke(page, browser) {
     rewardCloudRestoreProbe,
     cloudHistoryProbe,
     saveConflictProbe,
+    deferredSlotProbe,
     logoutProbe,
   };
 }
@@ -1846,6 +1940,21 @@ try {
     JSON.stringify(result)
   );
   add(
+    DEFERRED_SLOT_FINDING,
+    result.deferredSlotProbe?.beforeReturn?.currentScreen === 'pvp-screen'
+      && result.deferredSlotProbe.beforeReturn.currentSaveSlot === null
+      && result.deferredSlotProbe.beforeReturn.pendingSaveSlotSelection
+      && result.deferredSlotProbe.beforeReturn.saveSlotsSynced
+      && !result.deferredSlotProbe.beforeReturn.saveSlotsActive
+      && result.deferredSlotProbe.beforeReturn.pvpAuthenticated
+      && result.deferredSlotProbe.afterReturn?.currentScreen === 'main-menu'
+      && result.deferredSlotProbe.afterReturn.currentSaveSlot === null
+      && !result.deferredSlotProbe.afterReturn.pendingSaveSlotSelection
+      && result.deferredSlotProbe.afterReturn.saveSlotsActive
+      && result.deferredSlotProbe.afterReturn.hasCloudLoadAction,
+    JSON.stringify(result.deferredSlotProbe || null)
+  );
+  add(
     CHALLENGE_CLOUD_RESUME_FINDING,
     result.challengeCloudSlotResumeProbe?.reloadObserved
       && result.challengeCloudSlotResumeProbe.before?.loggedIn
@@ -1880,21 +1989,29 @@ try {
   );
   add(
     LOGOUT_UI_FINDING,
-    result.logoutProbe?.firstPrompt?.requestCount === 1
-      && result.logoutProbe.firstPrompt.confirmModalCount === 1
-      && result.logoutProbe.firstPrompt.confirmActive
-      && /退出登录/.test(result.logoutProbe.firstPrompt.confirmMessage || '')
+    result.logoutProbe?.hubProbe?.socialActive
+      && result.logoutProbe.hubProbe.securitySelected
+      && !result.logoutProbe.hubProbe.authActive
+      && result.logoutProbe.hubProbe.sessionPresent
+      && result.logoutProbe.firstPrompt?.dialogCount === 1
+      && result.logoutProbe.firstPrompt.requestCount === 0
+      && /退出所有设备/.test(result.logoutProbe.firstPrompt.dialogMessage || '')
+      && result.logoutProbe.firstPrompt.socialActive
+      && result.logoutProbe.firstPrompt.securitySelected
       && !result.logoutProbe.firstPrompt.authActive
       && result.logoutProbe.firstPrompt.sessionPresent
-      && result.logoutProbe.afterCancel?.requestCount === 1
-      && !result.logoutProbe.afterCancel.confirmActive
+      && result.logoutProbe.afterCancel?.requestCount === 0
+      && result.logoutProbe.afterCancel.socialActive
+      && result.logoutProbe.afterCancel.securitySelected
       && !result.logoutProbe.afterCancel.authActive
       && result.logoutProbe.afterCancel.sessionPresent
-      && result.logoutProbe.secondPrompt?.requestCount === 2
-      && result.logoutProbe.secondPrompt.confirmActive
-      && !result.logoutProbe.secondPrompt.authActive
+      && result.logoutProbe.secondPrompt?.dialogCount === 2
+      && result.logoutProbe.secondPrompt.requestCount === 1
+      && /退出所有设备/.test(result.logoutProbe.secondPrompt.dialogMessage || '')
       && !result.logoutProbe.afterConfirm?.sessionPresent
       && !result.logoutProbe.afterConfirm?.authLoggedIn
+      && result.logoutProbe.afterConfirm?.dialogCount === 2
+      && result.logoutProbe.afterConfirm?.requestCount === 1
       && /登入轮回|登录/.test(result.logoutProbe.afterConfirm?.loginButtonText || '')
       && !result.logoutProbe.afterConfirm?.confirmActive
       && !result.logoutProbe.afterConfirm?.authActive,
@@ -2005,6 +2122,7 @@ try {
   );
 } catch (error) {
   add(AUTH_UI_CLOUD_FINDING, false, error?.message || String(error));
+  add(DEFERRED_SLOT_FINDING, false, error?.message || String(error));
   add(LOGOUT_UI_FINDING, false, error?.message || String(error));
   add(SAVE_CONFLICT_FINDING, false, error?.message || String(error));
   add(CLOUD_HISTORY_FINDING, false, error?.message || String(error));

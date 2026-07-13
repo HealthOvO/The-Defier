@@ -39,8 +39,8 @@ const JWT_SECRET = 'world-rift-platform-jwt-secret-32';
 const HMAC_SECRET = 'world-rift-platform-hmac-secret-32';
 const OPS_TOKEN = 'world-rift-platform-ops-token-32';
 const PROTOCOL_VERSION = 'authoritative-world-rift-v1';
-const EXPECTED_SCHEMA_VERSION = 10;
-const EXPECTED_MIGRATION_ID = '0010_relay_expedition';
+const EXPECTED_SCHEMA_VERSION = 11;
+const EXPECTED_MIGRATION_ID = '0011_authoritative_fate_chronicle';
 const EXPECTED_TABLES = [
   'world_rift_rotations',
   'world_rift_states',

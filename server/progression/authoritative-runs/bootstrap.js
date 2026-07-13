@@ -33,6 +33,12 @@ function dbAll(db, sql, params = []) {
     });
 }
 
+async function addColumnIfMissing(db, tableName, columnName, definition) {
+    const columns = await dbAll(db, `PRAGMA table_info(${tableName})`);
+    if (columns.some(column => String(column.name || '') === columnName)) return;
+    await dbRun(db, `ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${definition}`);
+}
+
 function stableStringify(value) {
     if (value === null || value === undefined) return 'null';
     if (Array.isArray(value)) return `[${value.map(item => stableStringify(item)).join(',')}]`;
@@ -287,6 +293,8 @@ async function bootstrapAuthoritativeRunsSchema(db) {
                 mutation_id TEXT NOT NULL,
                 activity_mode TEXT NOT NULL,
                 event_id TEXT NOT NULL DEFAULT '',
+                request_hash TEXT NOT NULL DEFAULT '',
+                request_body_json TEXT NOT NULL DEFAULT '{}',
                 receipt_json TEXT NOT NULL DEFAULT '{}',
                 state_hash TEXT NOT NULL DEFAULT '',
                 chain_head TEXT NOT NULL DEFAULT '',
@@ -295,6 +303,18 @@ async function bootstrapAuthoritativeRunsSchema(db) {
                 FOREIGN KEY(run_id) REFERENCES progression_authoritative_runs(run_id),
                 FOREIGN KEY(user_id) REFERENCES users(id)
             )`
+        );
+        await addColumnIfMissing(
+            db,
+            'progression_authoritative_run_receipts',
+            'request_hash',
+            "TEXT NOT NULL DEFAULT ''"
+        );
+        await addColumnIfMissing(
+            db,
+            'progression_authoritative_run_receipts',
+            'request_body_json',
+            "TEXT NOT NULL DEFAULT '{}'"
         );
         await dbRun(
             db,

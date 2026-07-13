@@ -715,7 +715,7 @@ function makeWaitingReport({ waitMs = 0, thresholdMs = DEFAULT_LONG_WAIT_THRESHO
             })
             : null,
         message: hasAvoidOpponentSuppression
-            ? '已优先避开你赛后屏蔽的对手，正在为你换一位真人；若真人池过小，系统会继续解释等待原因。'
+            ? '已优先避开你赛后屏蔽的对手，正在为你换一位真人；不会自动切残影，若真人池过小会继续解释等待原因。'
             : hasRecentOpponentSuppression
             ? '刚刚交手的近期对手会被暂时跳过，正在为你换一位真人；不会自动切残影。'
             : hasLowSampleProtection

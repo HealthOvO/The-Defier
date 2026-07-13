@@ -38,6 +38,10 @@ node tests/sanity_authoritative_runs_migration_checks.cjs
 node tests/sanity_authoritative_runs_platform_checks.cjs
 node tests/sanity_authoritative_runs_client_checks.mjs
 node tests/sanity_authoritative_runs_ui_checks.mjs
+node tests/sanity_fate_chronicle_platform_checks.cjs
+node tests/sanity_weekly_archive_platform_checks.cjs
+node tests/sanity_fate_chronicle_client_checks.mjs
+node tests/sanity_fate_chronicle_ui_checks.mjs
 node tests/sanity_challenge_ladder_client_checks.mjs
 node tests/sanity_challenge_ladder_platform_checks.cjs
 node tests/sanity_world_rift_client_checks.mjs

@@ -2301,6 +2301,12 @@ async function inspectLayout(page, rootSelector, scenarioId) {
     if (scenarioId === 'reward-screen') {
       const panel = root.querySelector('#reward-expedition-meta');
       const sideColumn = root.querySelector('.reward-side-column');
+      const disclosureInitiallyOpen = !!panel?.open;
+      if (panel && !panel.open) {
+        const summary = panel.querySelector('summary');
+        if (summary && typeof summary.click === 'function') summary.click();
+        if (!panel.open) panel.open = true;
+      }
       const laneRewardButton = panel?.querySelector('[data-season-board-lane-reward-claim="true"]') || null;
       const handoffButton = panel?.querySelector('[data-season-board-action-reward="true"] [data-season-board-handoff-cta="true"]') || null;
       const laneRewardHit = readHitStateAfterScroll(laneRewardButton);
@@ -2308,6 +2314,8 @@ async function inspectLayout(page, rootSelector, scenarioId) {
       const panelRect = panel ? panel.getBoundingClientRect() : null;
       const sideRect = sideColumn ? sideColumn.getBoundingClientRect() : null;
       rewardExpeditionCtaProbe = {
+        disclosureInitiallyOpen,
+        disclosureOpen: !!panel?.open,
         panelVisible: !!(panel && isVisible(panel)),
         sideColumnVisible: !!(sideColumn && isVisible(sideColumn)),
         laneRewardVisible: !!(laneRewardButton && isVisible(laneRewardButton)),
@@ -2341,6 +2349,7 @@ async function inspectLayout(page, rootSelector, scenarioId) {
       if (
         !rewardExpeditionCtaProbe.panelVisible
         || !rewardExpeditionCtaProbe.sideColumnVisible
+        || !rewardExpeditionCtaProbe.disclosureOpen
         || !rewardExpeditionCtaProbe.laneRewardVisible
         || !rewardExpeditionCtaProbe.handoffVisible
         || rewardExpeditionCtaProbe.laneRewardClaimable !== 'true'
@@ -2522,9 +2531,12 @@ async function inspectLayout(page, rootSelector, scenarioId) {
       const filledSlots = slots.filter((slot) => !slot.classList.contains('empty'));
       const emptySlots = slots.filter((slot) => slot.classList.contains('empty'));
       const lastFilledSlot = filledSlots[filledSlots.length - 1] || null;
+      if (lastFilledSlot && typeof lastFilledSlot.scrollIntoView === 'function') {
+        lastFilledSlot.scrollIntoView({ block: 'nearest', inline: 'center' });
+      }
       const loadButton = lastFilledSlot?.querySelector('[data-system-action="select-slot"][data-slot-mode="load"]') || null;
       const overwriteButton = lastFilledSlot?.querySelector('[data-system-action="select-slot"][data-slot-mode="overwrite"]') || null;
-      const cancelButton = root.querySelector('.modal-footer button');
+      const cancelButton = Array.from(root.querySelectorAll('.modal-footer button, .modal-close')).find(isVisible) || null;
       const loadHit = readHitStateAfterScroll(loadButton);
       const overwriteHit = readHitStateAfterScroll(overwriteButton);
       const cancelHit = readHitStateAfterScroll(cancelButton);

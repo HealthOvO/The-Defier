@@ -39,6 +39,9 @@
         ghostPathPrefix: '/api/ghosts',
         seasonOpsPathPrefix: '/api/season-ops',
         challengeLadderPathPrefix: '/api/challenge-ladder',
-        worldRiftPathPrefix: '/api/world-rift'
+        worldRiftPathPrefix: '/api/world-rift',
+        relayExpeditionPathPrefix: '/api/relay-expeditions',
+        fateChroniclePathPrefix: '/api/fate-chronicle',
+        weeklyArchivePathPrefix: '/api/weekly-archive'
     };
 })();

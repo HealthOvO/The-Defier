@@ -348,6 +348,22 @@ assert.match(html, /结算回执/);
 assert.match(html, /战斗胜利 \+3/);
 assert.match(html, /再开一局/);
 
+panel.applyResult({
+  success: true,
+  reportVersion: "authoritative-runs-ui-test-recovered-settlement",
+  run: null,
+  recoveryKind: "settlement_receipt",
+  lastSettlement: createRunEnvelope({
+    mode: "challenge",
+    phase: "completed",
+    status: "settled",
+    settledAt: Date.UTC(2026, 6, 11, 8, 31)
+  })
+});
+html = panel.render();
+assert.match(html, /已结算归档/, "current recovery should preserve the settled run instead of clearing the panel");
+assert.match(html, /结算回执/);
+
 await panel.handleAction({
   disabled: false,
   dataset: { seasonOpsAction: "authoritative-begin-new" }

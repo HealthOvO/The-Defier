@@ -174,7 +174,7 @@ async function safeScreenshot(page, outPath) {
       rewardCardAriaPressed: firstRewardCard?.getAttribute('aria-pressed') || '',
       rewardCardAriaDisabled: firstRewardCard?.getAttribute('aria-disabled') || '',
       rewardCardAriaLabel: firstRewardCard?.getAttribute('aria-label') || '',
-      header: document.querySelector('.reward-run-path-badge')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+      summary: panel?.querySelector('.reward-disclosure-summary')?.textContent?.replace(/\s+/g, ' ').trim() || '',
       status: document.querySelector('.reward-run-path-status')?.textContent?.replace(/\s+/g, ' ').trim() || '',
       entries: entries.map((entry) => ({
         text: entry.textContent?.replace(/\s+/g, ' ').trim() || '',
@@ -198,7 +198,8 @@ async function safeScreenshot(page, outPath) {
       && rewardProbe.rewardCardAriaDisabled === 'false'
       && /选择奖励卡牌/.test(rewardProbe.rewardCardAriaLabel || '')
       && /断命问锋/.test(rewardProbe.narrativeText || '')
-      && /破命流/.test(rewardProbe.header || '')
+      && /命途结算回响/.test(rewardProbe.summary || '')
+      && /破命流/.test(rewardProbe.summary || '')
       && /本场推进 2 个阶段/.test(rewardProbe.status || '')
       && rewardProbe.entries.some((item) => /碎誓试锋/.test(item.text))
       && rewardProbe.entries.some((item) => /裂阵逐锋/.test(item.text))
@@ -766,6 +767,7 @@ async function safeScreenshot(page, outPath) {
     const screen = document.getElementById('reward-screen');
     const sideColumn = document.querySelector('.reward-side-column');
     const panel = document.getElementById('reward-expedition-meta');
+    if (panel && !panel.open) panel.open = true;
     const chapterArcNode = panel?.querySelector('[data-season-board-chapter-arc-reward="true"]') || null;
     const drillButtons = Array.from(chapterArcNode?.querySelectorAll('[data-season-board-chapter-drill-cta="true"]') || []);
     const chapterArcRect = chapterArcNode?.getBoundingClientRect() || null;

@@ -172,8 +172,9 @@ async function runBrowserSmoke(page, targetApiUrl = apiUrl) {
     };
     const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
-    const mainName = `browser_${runId}`;
-    const opponentName = `browser_opp_${runId}`;
+    const accountSeed = String(runId).replace(/[^a-z0-9]/gi, '').slice(-14);
+    const mainName = `bc_${accountSeed}`;
+    const opponentName = `bo_${accountSeed}`;
     const pvpDeck = [
       'strike',
       'heavyStrike',
@@ -672,8 +673,9 @@ async function runAuthoritativePvpSettlementSmoke(browser) {
           throw new Error(`${message}${detail ? `: ${JSON.stringify(detail)}` : ''}`);
         }
       };
-      const mainName = `browser_auth_${runId}`;
-      const opponentName = `browser_auth_opp_${runId}`;
+      const accountSeed = String(runId).replace(/[^a-z0-9]/gi, '').slice(-14);
+      const mainName = `ba_${accountSeed}`;
+      const opponentName = `bb_${accountSeed}`;
       const mainDeck = ['strike', 'heavyStrike', 'quickSlash', 'defend', 'ironWill', 'shieldBash', 'spiritBoost', 'meditation'];
       const opponentDeck = ['mirrorWall', 'ironBreath', 'reboundingShell', 'bastionStudy', 'wardingSweep', 'defend', 'ironWill', 'shieldBash'];
 

@@ -20,6 +20,8 @@ const challengeLadderRoutes = require('./routes/challenge-ladder');
 const worldRiftRoutes = require('./routes/world-rift');
 const socialRoutes = require('./routes/social');
 const relayExpeditionRoutes = require('./routes/relay-expedition');
+const fateChronicleRoutes = require('./routes/fate-chronicle');
+const weeklyArchiveRoutes = require('./routes/weekly-archive');
 
 const app = express();
 const PORT = process.env.PORT || 9000;
@@ -43,18 +45,25 @@ app.use('/api/challenge-ladder', challengeLadderRoutes);
 app.use('/api/world-rift', worldRiftRoutes);
 app.use('/api/social', socialRoutes);
 app.use('/api/relay-expeditions', relayExpeditionRoutes);
+app.use('/api/fate-chronicle', fateChronicleRoutes);
+app.use('/api/weekly-archive', weeklyArchiveRoutes);
 
 const getHealthPayload = async () => {
     const schemaStatus = await getSchemaStatus();
+    if (!schemaStatus.ready) {
+        throw new Error(`database schema is incomplete: ${schemaStatus.missingResources.join(', ')}`);
+    }
     return {
         status: 'ok',
         message: 'The Defier Backend is running',
         checks: {
-            database: db.open ? 'ok' : 'unknown'
+            database: db.open ? 'ok' : 'unknown',
+            schema: 'ok'
         },
         schema: {
             version: schemaStatus.version,
-            currentMigrationId: schemaStatus.currentMigrationId
+            currentMigrationId: schemaStatus.currentMigrationId,
+            ready: true
         },
         version: makeHealthVersionSummary(),
         uptimeMs: Math.floor(process.uptime() * 1000)
@@ -69,7 +78,8 @@ const sendHealth = async (req, res) => {
             status: 'error',
             message: 'The Defier Backend health check failed',
             checks: {
-                database: 'error'
+                database: 'error',
+                schema: 'error'
             },
             requestId: req.requestId
         });
@@ -81,7 +91,9 @@ app.get('/health', sendHealth);
 app.get('/api/health', sendHealth);
 const sendVersion = async (req, res) => {
     try {
-        res.json(makeVersionPayload(await getSchemaStatus()));
+        const schemaStatus = await getSchemaStatus();
+        if (!schemaStatus.ready) throw new Error('database schema is incomplete');
+        res.json(makeVersionPayload(schemaStatus));
     } catch (error) {
         res.status(503).json({
             status: 'error',
@@ -139,6 +151,8 @@ const startServer = async () => {
             console.log(`- GET/POST /api/world-rift/*`);
             console.log(`- GET/POST /api/social/*`);
             console.log(`- GET/POST /api/relay-expeditions/*`);
+            console.log(`- GET/POST /api/fate-chronicle/*`);
+            console.log(`- GET/POST /api/weekly-archive/*`);
         });
         attachLivePvpWebSocket(server, { livePvpStore: pvpLiveRoutes.__livePvpStore });
     } catch (err) {

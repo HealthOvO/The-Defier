@@ -416,6 +416,34 @@ assert.equal(settleCalls[0].payload.mutationId, settleCalls[1].payload.mutationI
 assert.equal(service.getState().projection.version, 3);
 assert.equal(service.getState().projection.phase, 'completed');
 
+const recoveredCurrent = createDeferred();
+currentDeferredQueue = [recoveredCurrent];
+const recoveredService = createAuthoritativeRunService({ client: serviceClient, now: () => 2500 });
+const recoveredCurrentPromise = recoveredService.current({ mode: 'pve', expectedUserId: 'service-user-a' });
+recoveredCurrent.resolve({
+  success: true,
+  run: null,
+  recoveryKind: 'settlement_receipt',
+  lastSettlement: {
+    runId: 'ar-service-run-0001',
+    mode: 'pve',
+    status: 'settled',
+    receipt: { receiptId: 'settle-receipt-recovered-0001', recovered: true },
+    projection: {
+      runId: 'ar-service-run-0001',
+      mode: 'pve',
+      version: 3,
+      phase: 'completed',
+      runStatus: 'settled'
+    }
+  }
+});
+const recoveredCurrentResult = await recoveredCurrentPromise;
+assert.equal(recoveredCurrentResult.success, true);
+assert.equal(recoveredService.getState().runId, 'ar-service-run-0001');
+assert.equal(recoveredService.getState().projection.runStatus, 'settled', 'fresh service should recover the durable settlement projection');
+assert.equal(recoveredService.getState().lastReceipt.receiptId, 'settle-receipt-recovered-0001', 'fresh service should recover the durable settlement receipt');
+
 const staleFirst = createDeferred();
 const staleSecond = createDeferred();
 currentDeferredQueue = [staleFirst, staleSecond];

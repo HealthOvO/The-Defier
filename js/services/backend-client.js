@@ -4,12 +4,14 @@ export const ACCOUNT_SECURITY_PROTOCOL_VERSION = 'account-security-v1';
 export const SOCIAL_GRAPH_PROTOCOL_VERSION = 'social-graph-v1';
 export const WORLD_RIFT_SQUAD_PROTOCOL_VERSION = 'world-rift-squad-v1';
 export const RELAY_EXPEDITION_PROTOCOL_VERSION = 'relay-expedition-v1';
+export const FATE_CHRONICLE_PROTOCOL_VERSION = 'authoritative-fate-chronicle-v1';
+export const WEEKLY_ARCHIVE_PROTOCOL_VERSION = 'weekly-archive-v1';
 const DEVICE_STORAGE_KEY = 'theDefierDeviceIdV1';
 const AUTHORITATIVE_RUN_SAFE_ID = /^[A-Za-z0-9._:-]{8,128}$/;
 const AUTHORITATIVE_RUN_ENTITY_ID = /^[A-Za-z0-9._:-]{1,128}$/;
-const AUTHORITATIVE_RUN_MODES = new Set(['pve', 'challenge', 'expedition', 'challenge_ladder', 'world_rift', 'relay_expedition']);
+const AUTHORITATIVE_RUN_MODES = new Set(['pve', 'challenge', 'expedition', 'challenge_ladder', 'world_rift', 'relay_expedition', 'fate_chronicle']);
 const AUTHORITATIVE_RUN_COMMANDS = new Set(['select_node', 'play_card', 'end_turn', 'choose_reward', 'abandon']);
-const AUTHORITATIVE_RUN_CONTENT_VERSION = 'authoritative-trials-v2';
+const AUTHORITATIVE_RUN_CONTENT_VERSION = 'authoritative-trials-v3';
 export const BackendClient = {
   provider: 'server',
   initError: null,
@@ -66,7 +68,9 @@ export const BackendClient = {
       challengeLadderPathPrefix: typeof config.challengeLadderPathPrefix === 'string' ? config.challengeLadderPathPrefix.trim() : '/api/challenge-ladder',
       worldRiftPathPrefix: typeof config.worldRiftPathPrefix === 'string' ? config.worldRiftPathPrefix.trim() : '/api/world-rift',
       socialPathPrefix: typeof config.socialPathPrefix === 'string' ? config.socialPathPrefix.trim() : '/api/social',
-      relayExpeditionPathPrefix: typeof config.relayExpeditionPathPrefix === 'string' ? config.relayExpeditionPathPrefix.trim() : '/api/relay-expeditions'
+      relayExpeditionPathPrefix: typeof config.relayExpeditionPathPrefix === 'string' ? config.relayExpeditionPathPrefix.trim() : '/api/relay-expeditions',
+      fateChroniclePathPrefix: typeof config.fateChroniclePathPrefix === 'string' ? config.fateChroniclePathPrefix.trim() : '/api/fate-chronicle',
+      weeklyArchivePathPrefix: typeof config.weeklyArchivePathPrefix === 'string' ? config.weeklyArchivePathPrefix.trim() : '/api/weekly-archive'
     };
   },
   cloneData(data) {
@@ -1216,6 +1220,18 @@ export const BackendClient = {
     return config && typeof config.relayExpeditionPathPrefix === 'string' && config.relayExpeditionPathPrefix.trim()
       ? config.relayExpeditionPathPrefix.trim().replace(/\/+$/, '')
       : '/api/relay-expeditions';
+  },
+  getFateChroniclePathPrefix() {
+    const config = this.getServerConfig();
+    return config && typeof config.fateChroniclePathPrefix === 'string' && config.fateChroniclePathPrefix.trim()
+      ? config.fateChroniclePathPrefix.trim().replace(/\/+$/, '')
+      : '/api/fate-chronicle';
+  },
+  getWeeklyArchivePathPrefix() {
+    const config = this.getServerConfig();
+    return config && typeof config.weeklyArchivePathPrefix === 'string' && config.weeklyArchivePathPrefix.trim()
+      ? config.weeklyArchivePathPrefix.trim().replace(/\/+$/, '')
+      : '/api/weekly-archive';
   },
   getSocialPathPrefix() {
     const config = this.getServerConfig();
@@ -3432,6 +3448,150 @@ export const BackendClient = {
         rotationId: String(request.rotationId || '').trim(),
         milestoneId: safeMilestoneId,
         mutationId: String(request.mutationId || this.createAuthoritativeRunRequestId('relay-reward')).trim()
+      }
+    });
+  },
+  async requestSignedGameplayFeature(prefix = '', path = '', {
+    method = 'GET',
+    data,
+    expectedUserId = '',
+    protocolVersion = '',
+    featureLabel = '权威玩法',
+    reasonPrefix = 'authoritative_feature'
+  } = {}) {
+    const requestMethod = String(method || 'GET').toUpperCase();
+    const boundUserId = String(expectedUserId || this.getCurrentUser()?.objectId || this.getCurrentUser()?.id || '').trim();
+    const session = this.captureProgressionSessionSnapshot(
+      { expectedUserId: boundUserId },
+      `登录账号已变化，请刷新${featureLabel}后重试`
+    );
+    if (!session || !session.success) return session;
+    const requestPath = `${String(prefix || '').replace(/\/+$/, '')}${String(path || '')}`;
+    const payload = data && typeof data === 'object' && !Array.isArray(data)
+      ? this.cloneData(data) || {}
+      : {};
+    if (requestMethod !== 'GET') {
+      if (!payload.protocolVersion && protocolVersion) payload.protocolVersion = protocolVersion;
+      if (!payload.mutationId) payload.mutationId = this.createAuthoritativeRunRequestId(`${reasonPrefix}-mutation`);
+      const integrity = await this.createRequiredSessionIntegrityFields(
+        payload,
+        session.sessionToken,
+        `当前环境不支持${featureLabel}签名，请刷新后重试`,
+        `${reasonPrefix}_signature_required`,
+        `${requestMethod} ${requestPath.split('?')[0]}`
+      );
+      if (!integrity || !integrity.success) return { ...integrity, mutationId: payload.mutationId };
+      Object.assign(payload, integrity.integrity);
+    }
+    try {
+      const result = await this.requestServer(requestPath, {
+        method: requestMethod,
+        authToken: session.sessionToken,
+        data: requestMethod === 'GET' ? undefined : payload
+      });
+      const currentUserId = String(this.getCurrentUser()?.objectId || this.getCurrentUser()?.id || '').trim();
+      if (!boundUserId || currentUserId !== boundUserId) {
+        return {
+          success: false,
+          reason: `${reasonPrefix}_account_changed`,
+          mutationId: payload.mutationId,
+          message: `登录账号已变化，旧${featureLabel}回执未应用；原账号可刷新恢复`
+        };
+      }
+      return {
+        ...(result && typeof result === 'object'
+          ? result
+          : { success: false, reason: `${reasonPrefix}_invalid_response`, message: `${featureLabel}服务返回异常` }),
+        ...(payload.mutationId ? { mutationId: payload.mutationId } : {})
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error,
+        reason: error && error.reason || undefined,
+        mutationId: payload.mutationId,
+        message: error.message || `${featureLabel}服务暂时不可用`
+      };
+    }
+  },
+  async getFateChronicleCurrent(options = {}) {
+    return this.requestSignedGameplayFeature(this.getFateChroniclePathPrefix(), '/current', {
+      method: 'GET',
+      expectedUserId: options.expectedUserId,
+      featureLabel: '命途长卷',
+      reasonPrefix: 'fate_chronicle'
+    });
+  },
+  async startFateChronicleAttempt(request = {}, options = {}) {
+    return this.requestSignedGameplayFeature(this.getFateChroniclePathPrefix(), '/attempts', {
+      method: 'POST',
+      expectedUserId: options.expectedUserId,
+      protocolVersion: FATE_CHRONICLE_PROTOCOL_VERSION,
+      featureLabel: '命途长卷',
+      reasonPrefix: 'fate_chronicle',
+      data: {
+        protocolVersion: request.protocolVersion || FATE_CHRONICLE_PROTOCOL_VERSION,
+        rotationId: String(request.rotationId || '').trim(),
+        chapterId: String(request.chapterId || '').trim(),
+        oathId: String(request.oathId || '').trim(),
+        clientAttemptId: String(request.clientAttemptId || this.createAuthoritativeRunRequestId('chronicle-attempt')).trim(),
+        mutationId: String(request.mutationId || this.createAuthoritativeRunRequestId('chronicle-start')).trim()
+      }
+    });
+  },
+  async submitFateChronicleResult(request = {}, options = {}) {
+    return this.requestSignedGameplayFeature(this.getFateChroniclePathPrefix(), '/results', {
+      method: 'POST',
+      expectedUserId: options.expectedUserId,
+      protocolVersion: FATE_CHRONICLE_PROTOCOL_VERSION,
+      featureLabel: '命途长卷',
+      reasonPrefix: 'fate_chronicle',
+      data: {
+        protocolVersion: request.protocolVersion || FATE_CHRONICLE_PROTOCOL_VERSION,
+        runId: String(request.runId || '').trim(),
+        mutationId: String(request.mutationId || this.createAuthoritativeRunRequestId('chronicle-result')).trim()
+      }
+    });
+  },
+  async claimFateChronicleReward(milestoneId = '', request = {}, options = {}) {
+    const safeMilestoneId = String(milestoneId || request.milestoneId || '').trim();
+    return this.requestSignedGameplayFeature(
+      this.getFateChroniclePathPrefix(),
+      `/rewards/${encodeURIComponent(safeMilestoneId)}/claim`,
+      {
+        method: 'POST',
+        expectedUserId: options.expectedUserId,
+        protocolVersion: FATE_CHRONICLE_PROTOCOL_VERSION,
+        featureLabel: '命途长卷',
+        reasonPrefix: 'fate_chronicle',
+        data: {
+          protocolVersion: request.protocolVersion || FATE_CHRONICLE_PROTOCOL_VERSION,
+          rotationId: String(request.rotationId || '').trim(),
+          milestoneId: safeMilestoneId,
+          mutationId: String(request.mutationId || this.createAuthoritativeRunRequestId('chronicle-reward')).trim()
+        }
+      }
+    );
+  },
+  async getWeeklyArchiveCurrent(options = {}) {
+    return this.requestSignedGameplayFeature(this.getWeeklyArchivePathPrefix(), '/current', {
+      method: 'GET',
+      expectedUserId: options.expectedUserId,
+      featureLabel: '三证归卷',
+      reasonPrefix: 'weekly_archive'
+    });
+  },
+  async claimWeeklyArchiveFoundation(request = {}, options = {}) {
+    return this.requestSignedGameplayFeature(this.getWeeklyArchivePathPrefix(), '/rewards/foundation/claim', {
+      method: 'POST',
+      expectedUserId: options.expectedUserId,
+      protocolVersion: WEEKLY_ARCHIVE_PROTOCOL_VERSION,
+      featureLabel: '三证归卷',
+      reasonPrefix: 'weekly_archive',
+      data: {
+        protocolVersion: request.protocolVersion || WEEKLY_ARCHIVE_PROTOCOL_VERSION,
+        cycleId: String(request.cycleId || '').trim(),
+        mutationId: String(request.mutationId || this.createAuthoritativeRunRequestId('weekly-archive-claim')).trim()
       }
     });
   },

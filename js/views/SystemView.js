@@ -26,6 +26,9 @@ export class SystemView {
   }
   showScreen(screenId) {
     console.log(`[Debug] showScreen called for: ${screenId}`);
+    if (screenId !== 'main-menu') {
+      document.getElementById('save-slots-modal')?.classList.remove('active');
+    }
     document.querySelectorAll('.screen').forEach(screen => {
       screen.classList.remove('active');
     });
@@ -395,10 +398,10 @@ export class SystemView {
     // Tab 4: Updates
     const updatesContent = `
             <div class="intro-section">
-                <h3>🌌 当前版本重点（V10 同道远征 · 权威接力闭环）</h3>
+                <h3>🌌 当前版本重点（V11 命途长卷 · 三证归卷）</h3>
                 <p class="intro-text">
-                    V10 同道远征 · 权威接力闭环把道友关系与裂隙小队推进为四棒异步协作，同时保留真人论道、公平回执、赛后学习、赛季荣誉收藏和长期复盘。
-                    当前版本让奖励页、地图、远征、洞府、构筑快照、挑战观察站、实时论道与同道远征使用同一套权威口径，并明确“共享路线，不共享残血与牌组”。
+                    V11 命途长卷 · 三证归卷以 3 章各 2 条誓约组成服务器权威 run 主线；失败不扣次数，也不会回退已完成章节。
+                    三证归卷只认 5 类权威活动铸证，2/5 领取 120 荣誉，3/5 只提升档案等级；实时论道是非强制 PVP，所有奖励都保持纯外观里程碑边界。
                 </p>
             </div>
 
@@ -412,8 +415,10 @@ export class SystemView {
                     <li><strong>挑战观察站</strong>：固定命盘会沉淀成观星样本，支持复刻重点、失手剖面、训练标签、样本排序和常用训练视角。</li>
                     <li><strong>洞府议程</strong>：归卷书架、命盘研究、章中处置、锁线契约和残卷回收形成长期承诺循环。</li>
                     <li><strong>无尽轮回 DRI</strong>：赛季词条、季签、崩盘账本与偏执层会统一折算成主轴、对策和预留建议。</li>
+                    <li><strong>命途长卷</strong>：每周 3 章各 2 条誓约，选定后由服务器创建绑定的权威 run；标准牌组、生命、敌人与周种子不读取本地主线永久战力。</li>
+                    <li><strong>三证归卷</strong>：命途长卷、众生试炼、世界裂隙、实时论道与同道远征均可铸证；2/5 发基础荣誉，3/5 及以上只提升档案展示。</li>
                     <li><strong>权威试炼</strong>：赛季司提供 PVE、挑战、远征三种服务器裁定路线；浏览器只提交命令，断线后恢复服务器卷面，完整重放通过后才写入权威赛季进度。旧玩法继续保留离线兼容，不会被误记为权威成绩。</li>
-                    <li><strong>同道远征</strong>：从道友录的裂隙小队开启 2-4 人四棒异步接力；每棒使用独立满血与固定牌组，失败或超时也会推进，真实投影成员获得的荣誉只用于外观。</li>
+                    <li><strong>同道远征</strong>：从道友录的裂隙小队开启 2-4 人四棒异步接力；共享路线，不共享残血与牌组，失败或超时也会推进，真实投影成员获得的荣誉只用于外观。</li>
                     <li><strong>PVP 天道榜</strong>：PVP 风险画像、对手档案、PVP DRI、焦点约战、镜像练习、实时论道赛后复盘、段位倍率、连胜奖励、商店与外观已打通。</li>
                 </ul>
             </div>
@@ -421,7 +426,7 @@ export class SystemView {
             <div class="intro-section">
                 <h3>🧭 推荐体验路线</h3>
                 <ul class="intro-list">
-                    <li>先用主线跑完一条命途，熟悉战斗、地图、章节 DRI 与奖励选择。</li>
+                    <li>先进入命途长卷选定一条誓约，用固定权威命盘熟悉三章推进与完整重放。</li>
                     <li>再进入挑战观察站，复刻一个固定命盘，练习同类章节题面。</li>
                     <li>随后查看洞府和归卷书架，把高分答卷立项成下一章研究。</li>
                     <li>结成裂隙小队后进入道友录完成同道远征，体验共享路线但不共享残局的四棒协作。</li>
@@ -475,7 +480,7 @@ export class SystemView {
             </div>
 
             <div style="text-align: center; margin-top: auto; font-size: 0.8rem; color: rgba(255,255,255,0.2); padding-top: 10px;">
-                V10 同道远征 · 权威接力闭环 当前版本 | Breaking Fate since 2024
+                V11 命途长卷 · 三证归卷 当前版本 | Breaking Fate since 2024
             </div>
         </div>
         `;

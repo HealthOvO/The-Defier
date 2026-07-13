@@ -43,6 +43,7 @@ import { SeasonBoardManager } from "./managers/SeasonBoardManager.js";
 import { SanctumAgendaManager } from "./managers/SanctumAgendaManager.js";
 import { CampfireView } from "./views/CampfireView.js";
 import { SeasonOpsView } from "./views/SeasonOpsView.js";
+import { FateChronicleView } from "./views/FateChronicleView.js";
 import { SocialView } from "./views/SocialView.js";
 import { attachRegisteredHubControllers } from "./runtime/hub-registry.js";
 
@@ -111,6 +112,10 @@ export class Game {
     this.currentSaveSlot = null; // Default to null (unknown), NOT 0 (Slot 1)
     this.cachedSlots = [null, null, null, null]; // Cache for slots
     this.cachedSlotEntries = [null, null, null, null];
+    this.pendingSaveSlotSelection = false;
+    this.saveSlotsSynced = false;
+    this.saveSlotSelectionTimer = null;
+    this.isLoginCloudSyncing = false;
     this.cloudHistorySlot = null;
     this.guestMode = false;
     this.guideState = this.loadGuideState();
@@ -157,6 +162,7 @@ export class Game {
     this.rewardView = new RewardView(this);
     this.eventView = new EventView(this);
     this.seasonOpsView = null;
+    this.fateChronicleView = null;
     this.publicReplayShareConfig = this.parsePublicReplayShareConfig();
     this.automationBootConfig = this.parseAutomationBootConfig();
     this.boundGlobalEvents = false;
@@ -511,8 +517,7 @@ export class Game {
     // 安全检查：如果已登录但没有选中存档位（例如新标签页打开），强制显示存档选择，防止数据错乱
     if (!publicReplayShareBooted && !pendingChallengeResumeScheduled && typeof AuthService !== 'undefined' && AuthService.isLoggedIn() && this.currentSaveSlot === null) {
       console.log('Logged in but slot unknown. Prompting selection.');
-      // 延迟一点以免与主菜单动画冲突
-      setTimeout(() => this.openSaveSlotsWithSync(), 800);
+      this.queueSaveSlotSelection(800);
     }
     if (!publicReplayShareBooted && !pendingChallengeResumeScheduled) this.scheduleAutomationBoot();
     console.log('The Defier 2.1 初始化完成！');
@@ -5367,13 +5372,29 @@ export class Game {
   }
   showScreen(screenId) {
     if (!this.systemView) this.systemView = new SystemView(this);
-    return this.systemView.showScreen(screenId);
+    if (screenId !== 'main-menu'
+      && this.currentSaveSlot === null
+      && typeof AuthService !== 'undefined'
+      && AuthService.isLoggedIn()) {
+      this.pendingSaveSlotSelection = true;
+    }
+    const result = this.systemView.showScreen(screenId);
+    if (screenId === 'main-menu') {
+      setTimeout(() => this.flushPendingSaveSlotSelection(), 0);
+    }
+    return result;
   }
 
   showSeasonOps(tab = 'contracts') {
     this.showScreen('season-ops-screen');
     if (!this.seasonOpsView) this.seasonOpsView = new SeasonOpsView(this);
     return this.seasonOpsView.show({ tab });
+  }
+
+  showFateChronicle() {
+    this.showScreen('fate-chronicle-screen');
+    if (!this.fateChronicleView) this.fateChronicleView = new FateChronicleView(this);
+    return this.fateChronicleView.show();
   }
 
   showSocialHub(tab = 'friends') {
@@ -8725,6 +8746,7 @@ export class Game {
   // 打开存档选择界面 (同步云端)
   async openSaveSlotsWithSync() {
     if (this.isSyncingSlots) return;
+    const requestedScreen = this.currentScreen;
     const cloudEnabled = !AuthService.isCloudEnabled || AuthService.isCloudEnabled();
     if (!cloudEnabled) {
       this.guestMode = true;
@@ -8762,7 +8784,13 @@ export class Game {
       // Update cache
       this.cachedSlots = slots;
       this.cachedSlotEntries = Array.isArray(res.slotEntries) ? res.slotEntries : this.cachedSlotEntries;
-      this.renderSaveSlots(slots);
+      this.saveSlotsSynced = true;
+      if (this.currentScreen === requestedScreen) {
+        this.pendingSaveSlotSelection = false;
+        this.renderSaveSlots(slots);
+      } else if (this.currentSaveSlot === null) {
+        this.pendingSaveSlotSelection = true;
+      }
     } catch (e) {
       console.error('Sync failed', e);
       if (msgBtn) msgBtn.innerHTML = originalText;
@@ -8770,6 +8798,48 @@ export class Game {
     } finally {
       this.isSyncingSlots = false;
     }
+  }
+
+  queueSaveSlotSelection(delayMs = 0) {
+    if (typeof AuthService === 'undefined' || !AuthService.isLoggedIn() || this.currentSaveSlot !== null) {
+      this.pendingSaveSlotSelection = false;
+      return false;
+    }
+    this.pendingSaveSlotSelection = true;
+    if (this.saveSlotSelectionTimer) clearTimeout(this.saveSlotSelectionTimer);
+    const run = () => {
+      this.saveSlotSelectionTimer = null;
+      this.flushPendingSaveSlotSelection();
+    };
+    const waitMs = Math.max(0, Math.floor(Number(delayMs) || 0));
+    if (waitMs > 0) {
+      this.saveSlotSelectionTimer = setTimeout(run, waitMs);
+    } else {
+      run();
+    }
+    return true;
+  }
+
+  flushPendingSaveSlotSelection() {
+    if (!this.pendingSaveSlotSelection
+      || this.currentScreen !== 'main-menu'
+      || this.currentSaveSlot !== null
+      || typeof AuthService === 'undefined'
+      || !AuthService.isLoggedIn()
+      || this.isSyncingSlots
+      || this.isLoginCloudSyncing) {
+      return false;
+    }
+    if (this.saveSlotsSynced) {
+      this.pendingSaveSlotSelection = false;
+      this.renderSaveSlots(this.cachedSlots);
+      return true;
+    }
+    this.openSaveSlotsWithSync().catch(error => {
+      this.pendingSaveSlotSelection = true;
+      console.warn('Deferred save slot sync failed:', error);
+    });
+    return true;
   }
 
   async syncGlobalProgressFromCloud(source = 'login', timeoutMs = 5000) {
@@ -8828,16 +8898,7 @@ export class Game {
     setTimeout(async () => {
       this.closeModal();
       this.checkLoginStatus();
-      if (this.seasonOpsView) {
-        this.seasonOpsView.handleAuthStateChanged().catch(error => {
-          console.warn('Season ops auth refresh failed:', error);
-        });
-      }
-      if (PVPScene && typeof PVPScene.handleAuthStateChanged === 'function') {
-        PVPScene.handleAuthStateChanged().catch(error => {
-          console.warn('PVP auth refresh failed:', error);
-        });
-      }
+      this.pendingSaveSlotSelection = this.currentSaveSlot === null;
       const globalSyncPromise = this.syncGlobalProgressFromCloud(successMsg.includes('注册') ? 'register' : 'login');
 
       // 登录成功后，获取云端存档列表并展示选择界面
@@ -8846,10 +8907,13 @@ export class Game {
         slots: [null, null, null, null],
         isEmpty: true
       };
+      this.isLoginCloudSyncing = true;
       try {
         res = await AuthService.getCloudData();
       } catch (error) {
         console.error('Fetch cloud data after login failed:', error);
+      } finally {
+        this.isLoginCloudSyncing = false;
       }
       await globalSyncPromise;
 
@@ -8878,7 +8942,29 @@ export class Game {
         Utils.showBattleLog('检测到旧存档，已自动绑定至 存档 1');
       }
       this.cachedSlots = slots;
-      this.renderSaveSlots(slots);
+      this.saveSlotsSynced = true;
+      if (this.currentScreen === 'main-menu' && this.currentSaveSlot === null) {
+        this.pendingSaveSlotSelection = false;
+        this.renderSaveSlots(slots);
+      } else if (this.currentSaveSlot === null) {
+        this.pendingSaveSlotSelection = true;
+      }
+      if (this.seasonOpsView) {
+        this.seasonOpsView.handleAuthStateChanged().catch(error => {
+          console.warn('Season ops auth refresh failed:', error);
+        });
+      }
+      if (this.fateChronicleView) {
+        this.fateChronicleView.refresh({ silent: true }).catch(error => {
+          console.warn('Fate chronicle auth refresh failed:', error);
+        });
+      }
+      if (PVPScene && typeof PVPScene.handleAuthStateChanged === 'function') {
+        PVPScene.handleAuthStateChanged().catch(error => {
+          console.warn('PVP auth refresh failed:', error);
+        });
+      }
+      this.flushPendingSaveSlotSelection();
     }, 500);
   }
 
@@ -8898,6 +8984,11 @@ export class Game {
       return;
     }
     this.currentSaveSlot = index;
+    this.pendingSaveSlotSelection = false;
+    if (this.saveSlotSelectionTimer) {
+      clearTimeout(this.saveSlotSelectionTimer);
+      this.saveSlotSelectionTimer = null;
+    }
     // 持久化存储，防止刷新丢失
     sessionStorage.setItem('currentSaveSlot', index);
     localStorage.setItem('lastSaveSlot', String(index));
@@ -9022,6 +9113,7 @@ export class Game {
   requestLogout() {
     document.getElementById('auth-modal')?.classList.remove('active');
     this.showConfirmModal('确定要退出登录吗？\n(退出前将自动上传当前进度)', async () => {
+      await this.prepareForAuthLogout();
       const localSave = localStorage.getItem('theDefierSave');
       if (localSave && this.currentSaveSlot !== null && this.currentSaveSlot !== undefined) {
         try {
@@ -9036,6 +9128,16 @@ export class Game {
       this.checkLoginStatus();
       location.reload();
     });
+  }
+  async prepareForAuthLogout() {
+    if (PVPScene && typeof PVPScene.prepareForAuthLogout === 'function') {
+      await PVPScene.prepareForAuthLogout();
+    }
+  }
+  async resumeAfterAuthLogoutFailure() {
+    if (PVPScene && typeof PVPScene.resumeAfterAuthLogoutFailure === 'function') {
+      await PVPScene.resumeAfterAuthLogoutFailure();
+    }
   }
   async checkForCloudSave() {
     // 如果是刚刚手动加载的存档，跳过冲突检测，并清除标记

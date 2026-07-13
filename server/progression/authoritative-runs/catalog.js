@@ -1,8 +1,16 @@
 const { cloneJson, hashCanonical, stableStringify } = require('./canonical');
 
 const PROTOCOL_VERSION = 'authoritative-run-v2';
-const CONTENT_VERSION = 'authoritative-trials-v2';
+const CONTENT_VERSION = 'authoritative-trials-v3';
 const RELAY_EXPEDITION_SCENARIO_IDS = ['vanguard', 'bulwark', 'insight'];
+const FATE_CHRONICLE_SCENARIO_IDS = [
+    'chronicle-ember-guard',
+    'chronicle-ember-edge',
+    'chronicle-mirror-guard',
+    'chronicle-mirror-edge',
+    'chronicle-rift-guard',
+    'chronicle-rift-edge'
+];
 
 function deepFreeze(value) {
     if (!value || typeof value !== 'object' || Object.isFrozen(value)) return value;
@@ -70,6 +78,34 @@ const CONTENT_SNAPSHOT = deepFreeze({
             description: '获得 1 点能量并抽 1 张牌。',
             cost: 0,
             effect: { energy: 1, draw: 1 }
+        },
+        ember_riposte: {
+            cardId: 'ember_riposte',
+            name: '照火反锋',
+            description: '造成 6 点伤害并获得 4 点格挡。',
+            cost: 1,
+            effect: { damage: 6, block: 4 }
+        },
+        mirror_breath: {
+            cardId: 'mirror_breath',
+            name: '镜息',
+            description: '获得 5 点格挡并回复 3 点生命。',
+            cost: 1,
+            effect: { block: 5, heal: 3 }
+        },
+        severing_flow: {
+            cardId: 'severing_flow',
+            name: '截流',
+            description: '造成 7 点伤害并获得 1 点能量。',
+            cost: 1,
+            effect: { damage: 7, energy: 1 }
+        },
+        archive_surge: {
+            cardId: 'archive_surge',
+            name: '归卷冲霄',
+            description: '造成 11 点伤害并抽 1 张牌。',
+            cost: 2,
+            effect: { damage: 11, draw: 1 }
         }
     },
     starterDeck: [
@@ -148,6 +184,38 @@ const CONTENT_SNAPSHOT = deepFreeze({
                 { type: 'defend_attack', block: 6, amount: 7, label: '界幕 6 / 7' },
                 { type: 'attack', amount: 10, label: '裂空 10' },
                 { type: 'attack', amount: 12, label: '界崩 12' }
+            ]
+        },
+        ember_revenant: {
+            enemyId: 'ember_revenant', name: '照火残影', maxHp: 30, threat: '常规',
+            pattern: [
+                { type: 'attack', amount: 6, label: '余焰 6' },
+                { type: 'defend_attack', block: 4, amount: 4, label: '藏锋 4 / 反灼 4' },
+                { type: 'attack', amount: 8, label: '焚心 8' }
+            ]
+        },
+        mirror_duelist: {
+            enemyId: 'mirror_duelist', name: '镜命剑客', maxHp: 37, threat: '精英',
+            pattern: [
+                { type: 'defend_attack', block: 5, amount: 5, label: '映守 5 / 返剑 5' },
+                { type: 'attack', amount: 9, label: '辨真 9' },
+                { type: 'fortify', block: 8, label: '镜界 8' }
+            ]
+        },
+        void_archivist: {
+            enemyId: 'void_archivist', name: '虚卷司书', maxHp: 43, threat: '精英',
+            pattern: [
+                { type: 'fortify', block: 7, label: '封卷 7' },
+                { type: 'attack', amount: 10, label: '删命 10' },
+                { type: 'defend_attack', block: 5, amount: 7, label: '归档 5 / 追索 7' }
+            ]
+        },
+        heaven_breaker: {
+            enemyId: 'heaven_breaker', name: '裂天执卷者', maxHp: 68, threat: '终章首领', boss: true,
+            pattern: [
+                { type: 'attack', amount: 9, label: '开卷 9' },
+                { type: 'defend_attack', block: 8, amount: 7, label: '天衡 8 / 逆裁 7' },
+                { type: 'attack', amount: 14, label: '裂天 14' }
             ]
         }
     },
@@ -275,6 +343,150 @@ const CONTENT_SNAPSHOT = deepFreeze({
                 { type: 'relay_elite', pool: ['mirror_seer', 'chain_colossus', 'oath_guard'] },
                 { type: 'boss', pool: ['trial_adjudicator'] }
             ]
+        },
+        'chronicle-ember-guard': {
+            scenarioId: 'chronicle-ember-guard',
+            mode: 'fate_chronicle',
+            title: '照火问心 · 守誓',
+            description: '用护盾与调息稳住三战长线，适合先读懂敌意再反击。',
+            maxHp: 60,
+            energyPerTurn: 3,
+            handSize: 5,
+            turnBudget: 0,
+            betweenEncounterHeal: 4,
+            scoreMultiplier: 1,
+            starterDeck: [
+                'strike', 'strike', 'strike',
+                'guard', 'guard', 'guard',
+                'insight', 'iron_mandate', 'life_siphon', 'ember_riposte'
+            ],
+            rewardCardPool: ['iron_mandate', 'life_siphon', 'ember_riposte', 'mirror_breath', 'flowing_qi'],
+            stages: [
+                { type: 'chronicle', pool: ['ink_scout', 'ash_acolyte', 'ember_revenant'] },
+                { type: 'chronicle_elite', pool: ['oath_guard', 'mirror_seer', 'mirror_duelist'] },
+                { type: 'boss', pool: ['fate_warden'] }
+            ]
+        },
+        'chronicle-ember-edge': {
+            scenarioId: 'chronicle-ember-edge',
+            mode: 'fate_chronicle',
+            title: '照火问心 · 锋誓',
+            description: '以易伤与能量换取主动收束，失误空间更小但路线更短促。',
+            maxHp: 50,
+            energyPerTurn: 3,
+            handSize: 5,
+            turnBudget: 20,
+            betweenEncounterHeal: 2,
+            scoreMultiplier: 1.12,
+            starterDeck: [
+                'strike', 'strike', 'strike', 'strike',
+                'guard', 'guard',
+                'insight', 'fracture', 'severing_flow', 'ember_riposte'
+            ],
+            rewardCardPool: ['sky_pierce', 'fracture', 'severing_flow', 'archive_surge', 'flowing_qi'],
+            stages: [
+                { type: 'chronicle', pool: ['ash_acolyte', 'ember_revenant', 'oath_scribe'] },
+                { type: 'chronicle_elite', pool: ['mirror_duelist', 'oath_guard', 'chain_colossus'] },
+                { type: 'boss', pool: ['trial_adjudicator'] }
+            ]
+        },
+        'chronicle-mirror-guard': {
+            scenarioId: 'chronicle-mirror-guard',
+            mode: 'fate_chronicle',
+            title: '镜命辨真 · 守誓',
+            description: '四战中持续修复生命与手牌质量，容许一次路线判断失误。',
+            maxHp: 64,
+            energyPerTurn: 3,
+            handSize: 5,
+            turnBudget: 0,
+            betweenEncounterHeal: 5,
+            scoreMultiplier: 1.08,
+            starterDeck: [
+                'strike', 'strike', 'strike',
+                'guard', 'guard', 'guard',
+                'insight', 'mirror_breath', 'life_siphon', 'ember_riposte'
+            ],
+            rewardCardPool: ['iron_mandate', 'life_siphon', 'mirror_breath', 'ember_riposte', 'insight'],
+            stages: [
+                { type: 'chronicle', pool: ['ink_scout', 'oath_scribe', 'ember_revenant'] },
+                { type: 'chronicle', pool: ['ash_acolyte', 'ember_revenant', 'oath_scribe'] },
+                { type: 'chronicle_elite', pool: ['mirror_seer', 'mirror_duelist', 'void_archivist'] },
+                { type: 'boss', pool: ['trial_adjudicator'] }
+            ]
+        },
+        'chronicle-mirror-edge': {
+            scenarioId: 'chronicle-mirror-edge',
+            mode: 'fate_chronicle',
+            title: '镜命辨真 · 锋誓',
+            description: '在回合预算内连续完成四战，奖励能量循环与攻击节奏。',
+            maxHp: 52,
+            energyPerTurn: 3,
+            handSize: 5,
+            turnBudget: 28,
+            betweenEncounterHeal: 2,
+            scoreMultiplier: 1.2,
+            starterDeck: [
+                'strike', 'strike', 'strike',
+                'guard', 'guard',
+                'insight', 'fracture', 'flowing_qi', 'severing_flow', 'archive_surge'
+            ],
+            rewardCardPool: ['sky_pierce', 'fracture', 'flowing_qi', 'severing_flow', 'archive_surge'],
+            stages: [
+                { type: 'chronicle', pool: ['ash_acolyte', 'ember_revenant', 'ink_scout'] },
+                { type: 'chronicle', pool: ['oath_scribe', 'ember_revenant', 'ash_acolyte'] },
+                { type: 'chronicle_elite', pool: ['mirror_duelist', 'chain_colossus', 'void_archivist'] },
+                { type: 'boss', pool: ['rift_sovereign'] }
+            ]
+        },
+        'chronicle-rift-guard': {
+            scenarioId: 'chronicle-rift-guard',
+            mode: 'fate_chronicle',
+            title: '裂天归卷 · 守誓',
+            description: '五战终章以恢复和稳定构筑抵抗长线损耗。',
+            maxHp: 70,
+            energyPerTurn: 3,
+            handSize: 5,
+            turnBudget: 0,
+            betweenEncounterHeal: 6,
+            scoreMultiplier: 1.16,
+            starterDeck: [
+                'strike', 'strike', 'strike',
+                'guard', 'guard', 'guard',
+                'insight', 'iron_mandate', 'mirror_breath', 'life_siphon'
+            ],
+            rewardCardPool: ['iron_mandate', 'life_siphon', 'mirror_breath', 'ember_riposte', 'flowing_qi'],
+            stages: [
+                { type: 'chronicle', pool: ['ink_scout', 'ash_acolyte', 'ember_revenant'] },
+                { type: 'chronicle', pool: ['oath_scribe', 'ember_revenant', 'ash_acolyte'] },
+                { type: 'chronicle_elite', pool: ['oath_guard', 'mirror_seer', 'mirror_duelist'] },
+                { type: 'chronicle_elite', pool: ['chain_colossus', 'void_archivist', 'mirror_duelist'] },
+                { type: 'boss', pool: ['heaven_breaker'] }
+            ]
+        },
+        'chronicle-rift-edge': {
+            scenarioId: 'chronicle-rift-edge',
+            mode: 'fate_chronicle',
+            title: '裂天归卷 · 锋誓',
+            description: '五战高压终章，以更强的进攻谱换取更严格的回合与生命容错。',
+            maxHp: 56,
+            energyPerTurn: 3,
+            handSize: 5,
+            turnBudget: 38,
+            betweenEncounterHeal: 3,
+            scoreMultiplier: 1.3,
+            starterDeck: [
+                'strike', 'strike', 'strike',
+                'guard', 'guard',
+                'insight', 'fracture', 'severing_flow', 'archive_surge', 'flowing_qi'
+            ],
+            rewardCardPool: ['sky_pierce', 'fracture', 'severing_flow', 'archive_surge', 'flowing_qi'],
+            stages: [
+                { type: 'chronicle', pool: ['ash_acolyte', 'ember_revenant', 'oath_scribe'] },
+                { type: 'chronicle', pool: ['ember_revenant', 'ink_scout', 'ash_acolyte'] },
+                { type: 'chronicle_elite', pool: ['mirror_duelist', 'oath_guard', 'mirror_seer'] },
+                { type: 'chronicle_elite', pool: ['void_archivist', 'chain_colossus', 'mirror_duelist'] },
+                { type: 'boss', pool: ['heaven_breaker'] }
+            ]
         }
     }
 });
@@ -291,6 +503,7 @@ module.exports = {
     CONTENT_JSON,
     CONTENT_SNAPSHOT,
     CONTENT_VERSION,
+    FATE_CHRONICLE_SCENARIO_IDS,
     PROTOCOL_VERSION,
     RELAY_EXPEDITION_SCENARIO_IDS,
     getContentSnapshot

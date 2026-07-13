@@ -23,7 +23,11 @@ const introPageText = (() => {
 })();
 
 const introProgressSyncAnchors = [
-  'V10 真 PVP · 实时后端闭环',
+  'V11 命途长卷 · 三证归卷',
+  '命途长卷',
+  '三证归卷',
+  '非强制 PVP',
+  '纯外观里程碑',
   '三周一章',
   '章末评语',
   '章目标',
@@ -146,7 +150,7 @@ async function safeScreenshot(page, outPath) {
         !!activePanel &&
         !!activeTab &&
         activeTab.textContent.trim() === '更新' &&
-        text.includes('V10 真 PVP · 实时后端闭环') &&
+        text.includes('V11 命途长卷 · 三证归卷') &&
         text.includes('当前版本重点') &&
         !/v9\.2/i.test(text) &&
         !/feedbackLine|pressureWindow/.test(text) &&

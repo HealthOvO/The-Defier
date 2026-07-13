@@ -33,6 +33,7 @@ const EXPECTED_RELEASE_MODULES = [
   'challenge',
   'season-ops',
   'authoritative-runs-real',
+  'fate-chronicle-real',
   'relay-expedition-real',
   'expedition',
   'events',

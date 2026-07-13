@@ -15,6 +15,7 @@ const html = read('index.html');
 const scene = read('js/scenes/pvp-scene.js');
 const liveSession = read('js/services/pvp-live-session.js');
 const game = read('js/game.js');
+const socialView = read('js/views/SocialView.js');
 const challengeHub = read('js/core/challenge_hub.js');
 const css = read('css/pvp.css');
 const nodeGate = read('tests/run_node_checks.sh');
@@ -1098,5 +1099,18 @@ assert.ok(browserGate.includes('node tests/browser_pvp_live_audit.mjs "$BASE_URL
 ].forEach((needle) => {
   assert.ok(liveSession.includes(needle), `live PVP session should include rematch lifecycle marker: ${needle}`);
 });
+
+[
+  'livePollInFlight',
+  'liveAuthQuiescing',
+  'prepareForAuthLogout',
+  'await pendingPoll',
+].forEach((needle) => {
+  assert.ok(scene.includes(needle), `live PVP logout quiesce should include marker: ${needle}`);
+});
+assert.ok(
+  socialView.indexOf('prepareForAuthLogout') < socialView.indexOf('AuthService.logoutAll()'),
+  'logout-all should quiesce live PVP before invalidating the authenticated session',
+);
 
 console.log('PVP live UI contract checks passed.');

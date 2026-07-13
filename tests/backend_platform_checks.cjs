@@ -105,8 +105,10 @@ async function main() {
     assert.strictEqual(version.payload?.gitSha, 'platform-test-sha', '/api/version should prefer deployment git sha env');
     assert.match(version.payload?.packageLockDigest || '', /^[a-f0-9]{16,64}$/, '/api/version should expose root lockfile digest');
     assert.match(version.payload?.serverPackageLockDigest || '', /^[a-f0-9]{16,64}$/, '/api/version should expose server lockfile digest');
-    assert.strictEqual(version.payload?.schema?.version, 10, '/api/version should expose schema version');
-    assert.strictEqual(version.payload?.schema?.currentMigrationId, '0010_relay_expedition', '/api/version should expose current migration id');
+    assert.strictEqual(version.payload?.schema?.version, 11, '/api/version should expose schema version');
+    assert.strictEqual(version.payload?.schema?.currentMigrationId, '0011_authoritative_fate_chronicle', '/api/version should expose current migration id');
+    assert.strictEqual(version.payload?.schema?.ready, true, '/api/version should verify required schema resources');
+    assert.deepStrictEqual(version.payload?.schema?.missingResources, [], '/api/version should report no missing schema resources');
     assert.ok(Array.isArray(version.payload?.schema?.appliedMigrations), '/api/version should expose applied migration list');
     assert.ok(
       version.payload.schema.appliedMigrations.some(item => item.id === '0001_startup_schema' && Number(item.appliedAt) > 0),
@@ -148,6 +150,10 @@ async function main() {
       version.payload.schema.appliedMigrations.some(item => item.id === '0010_relay_expedition' && Number(item.appliedAt) > 0),
       '/api/version should include applied relay expedition schema migration'
     );
+    assert.ok(
+      version.payload.schema.appliedMigrations.some(item => item.id === '0011_authoritative_fate_chronicle' && Number(item.appliedAt) > 0),
+      '/api/version should include applied authoritative fate chronicle schema migration'
+    );
     const rootVersion = await request('/version');
     assert.strictEqual(rootVersion.status, 200, `/version should return 200: ${JSON.stringify(rootVersion.payload)}`);
     assert.deepStrictEqual(rootVersion.payload?.schema, version.payload.schema, '/version and /api/version should share schema payload');
@@ -159,7 +165,9 @@ async function main() {
     assert.strictEqual(health.payload?.status, 'ok', '/api/health should keep status=ok');
     assert.strictEqual(health.payload?.message, 'The Defier Backend is running', '/api/health should preserve existing health message');
     assert.strictEqual(health.payload?.checks?.database, 'ok', '/api/health should report database status');
-    assert.strictEqual(health.payload?.schema?.currentMigrationId, '0010_relay_expedition', '/api/health should expose current schema migration');
+    assert.strictEqual(health.payload?.checks?.schema, 'ok', '/api/health should report verified schema resources');
+    assert.strictEqual(health.payload?.schema?.ready, true, '/api/health should expose schema readiness');
+    assert.strictEqual(health.payload?.schema?.currentMigrationId, '0011_authoritative_fate_chronicle', '/api/health should expose current schema migration');
     assert.strictEqual(health.payload?.version?.gitSha, 'platform-test-sha', '/api/health should include runtime version summary');
     const healthJson = JSON.stringify(health.payload);
     assert(!healthJson.includes(JWT_SECRET), '/api/health must not leak JWT secret');
@@ -217,6 +225,11 @@ async function main() {
     assert.strictEqual(Number(relayExpeditionMigration?.version), 10, 'relay expedition migration should record schema version 10');
     assert.match(relayExpeditionMigration?.checksum || '', /^[a-f0-9]{16,64}$/, 'relay expedition migration should record stable checksum');
     assert(Number(relayExpeditionMigration?.applied_at) > 0, 'relay expedition migration should record applied timestamp');
+    const fateChronicleMigration = await dbGet('SELECT id, version, checksum, applied_at FROM schema_migrations WHERE id = ?', ['0011_authoritative_fate_chronicle']);
+    assert.strictEqual(fateChronicleMigration?.id, '0011_authoritative_fate_chronicle', 'schema_migrations should record authoritative fate chronicle migration');
+    assert.strictEqual(Number(fateChronicleMigration?.version), 11, 'authoritative fate chronicle migration should record schema version 11');
+    assert.match(fateChronicleMigration?.checksum || '', /^[a-f0-9]{16,64}$/, 'authoritative fate chronicle migration should record stable checksum');
+    assert(Number(fateChronicleMigration?.applied_at) > 0, 'authoritative fate chronicle migration should record applied timestamp');
 
     console.log('Backend platform checks passed.');
   } catch (error) {

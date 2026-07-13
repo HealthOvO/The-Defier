@@ -47,7 +47,7 @@ function rectObj(rect) {
     if (msg.type() === 'error') recordConsoleError(msg.text());
   });
   page.on('pageerror', (err) => {
-    recordConsoleError(String(err));
+    recordConsoleError(err?.stack || String(err));
   });
 
   await page.addInitScript(() => {
@@ -2540,6 +2540,7 @@ function rectObj(rect) {
     const side = document.querySelector('.reward-side-column');
     const actions = document.querySelector('.reward-actions');
     const expeditionPanel = document.getElementById('reward-expedition-meta');
+    if (expeditionPanel && !expeditionPanel.open) expeditionPanel.open = true;
     const cardRail = document.getElementById('reward-cards');
     const cards = Array.from(document.querySelectorAll('#reward-cards .card'));
     const verificationCard = document.querySelector('[data-season-board-verification-reward="true"]');
@@ -4000,7 +4001,7 @@ function rectObj(rect) {
         const titleText = (document.getElementById('challenge-hub-title')?.textContent || '').replace(/\s+/g, ' ').trim();
         const summaryText = (document.getElementById('challenge-hub-summary')?.textContent || '').replace(/\s+/g, ' ').trim();
         return window.game?.currentScreen === 'challenge-screen' && titleText.length > 0 && summaryText.length > 0;
-      }, { timeout: 5000 });
+      }, null, { timeout: 5000 });
       probe = await page.evaluate(({ key, count }) => {
         const text = (value) => (value?.textContent || '').replace(/\s+/g, ' ').trim();
         const activeTab = document.querySelector('#challenge-screen [data-challenge-tab].active')?.getAttribute('data-challenge-tab') || '';
@@ -4295,7 +4296,7 @@ function rectObj(rect) {
       await page.waitForFunction(() => {
         const section = document.querySelector('[data-season-verification-archive="true"]');
         return window.game?.currentScreen === 'challenge-screen' && !!section;
-      }, { timeout: 5000 });
+      }, null, { timeout: 5000 });
       seasonVerificationArchiveWeeklyProbe = await page.evaluate(({ count }) => {
         const text = (value) => (value?.textContent || '').replace(/\s+/g, ' ').trim();
         const archiveSection = document.querySelector('[data-season-verification-archive="true"]');
@@ -4357,7 +4358,7 @@ function rectObj(rect) {
         ? JSON.parse(window.render_game_to_text())?.challenge?.verificationArchive
         : null;
       return payload?.filterState?.sourceMode === 'pvp' && payload?.filteredCount === 1;
-    }, { timeout: 5000 });
+    }, null, { timeout: 5000 });
     seasonVerificationArchiveSourceFilterProbe = await page.evaluate(() => {
       const payload = typeof window.render_game_to_text === 'function'
         ? JSON.parse(window.render_game_to_text())?.challenge?.verificationArchive
@@ -4399,14 +4400,14 @@ function rectObj(rect) {
         ? JSON.parse(window.render_game_to_text())?.challenge?.verificationArchive
         : null;
       return payload?.filterState?.phaseKey === 'all' && payload?.filteredCount >= 4;
-    }, { timeout: 5000 });
+    }, null, { timeout: 5000 });
     await page.selectOption('[data-season-verification-filter="phaseKey"]', 'ranking');
     await page.waitForFunction(() => {
       const payload = typeof window.render_game_to_text === 'function'
         ? JSON.parse(window.render_game_to_text())?.challenge?.verificationArchive
         : null;
       return payload?.filterState?.phaseKey === 'ranking' && payload?.filteredCount === 1;
-    }, { timeout: 5000 });
+    }, null, { timeout: 5000 });
     seasonVerificationArchivePhaseFilterProbe = await page.evaluate(() => {
       const payload = typeof window.render_game_to_text === 'function'
         ? JSON.parse(window.render_game_to_text())?.challenge?.verificationArchive
@@ -4446,14 +4447,14 @@ function rectObj(rect) {
         ? JSON.parse(window.render_game_to_text())?.challenge?.verificationArchive
         : null;
       return payload?.filterState?.sourceMode === 'all' && payload?.filteredCount >= 4;
-    }, { timeout: 5000 });
+    }, null, { timeout: 5000 });
     await page.selectOption('[data-season-verification-filter="resultStatus"]', 'failed');
     await page.waitForFunction(() => {
       const payload = typeof window.render_game_to_text === 'function'
         ? JSON.parse(window.render_game_to_text())?.challenge?.verificationArchive
         : null;
       return payload?.filterState?.resultStatus === 'failed' && payload?.filteredCount === 1;
-    }, { timeout: 5000 });
+    }, null, { timeout: 5000 });
     seasonVerificationArchiveFailedFilterProbe = await page.evaluate(() => {
       const payload = typeof window.render_game_to_text === 'function'
         ? JSON.parse(window.render_game_to_text())?.challenge?.verificationArchive
@@ -4495,14 +4496,14 @@ function rectObj(rect) {
         ? JSON.parse(window.render_game_to_text())?.challenge?.verificationArchive
         : null;
       return payload?.filterState?.trajectoryKey === 'all' && payload?.filteredCount >= 4;
-    }, { timeout: 5000 });
+    }, null, { timeout: 5000 });
     await page.selectOption('[data-season-verification-filter="trajectoryKey"]', 'carry_forward');
     await page.waitForFunction(() => {
       const payload = typeof window.render_game_to_text === 'function'
         ? JSON.parse(window.render_game_to_text())?.challenge?.verificationArchive
         : null;
       return payload?.filterState?.trajectoryKey === 'carry_forward' && payload?.filteredCount === 1;
-    }, { timeout: 5000 });
+    }, null, { timeout: 5000 });
     seasonVerificationArchiveTrajectoryFilterProbe = await page.evaluate(() => {
       const payload = typeof window.render_game_to_text === 'function'
         ? JSON.parse(window.render_game_to_text())?.challenge?.verificationArchive

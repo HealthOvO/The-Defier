@@ -1178,7 +1178,7 @@ async function waitForChallengeHubReady(page, expectedTab = 'daily') {
     !!mobileProbe &&
       mobileProbe.shellWidth > 300 &&
       mobileProbe.scrollWidth > 300 &&
-      mobileProbe.tabWidths.length === 3 &&
+      mobileProbe.tabWidths.length === 4 &&
       mobileProbe.tabWidths.every((width) => width > 80) &&
       mobileProbe.launchWidth > 250,
     JSON.stringify(mobileProbe || null)

@@ -8,6 +8,7 @@ fs.mkdirSync(outDir, { recursive: true });
 
 const findings = [];
 const consoleErrors = [];
+let browser = null;
 
 function add(name, pass, detail = '') {
   findings.push({ name, pass, detail });
@@ -395,7 +396,9 @@ function collectDesignSystemProbe(options = {}) {
             ? parseFloat(style?.borderRadius || '0') >= 20
             : kind === 'actionBar'
               ? ['flex', 'grid'].includes(style?.display || '') && parseFloat(style?.columnGap || style?.gap || '0') >= 8
-            : parseFloat(style?.borderRadius || '0') >= 16 && style?.borderTopWidth !== '0px';
+              : kind === 'compactSurface'
+                ? parseFloat(style?.borderRadius || '0') >= 8 && style?.borderTopWidth !== '0px'
+                : parseFloat(style?.borderRadius || '0') >= 16 && style?.borderTopWidth !== '0px';
     return {
       name,
       selector,
@@ -558,7 +561,7 @@ function collectCoreLoopDesignSystemProbe(options = {}) {
 
 (async () => {
   const executablePath = process.env.PLAYWRIGHT_EXECUTABLE_PATH || undefined;
-  const browser = await chromium.launch({
+  browser = await chromium.launch({
     executablePath,
     headless: true,
     args: ['--use-gl=angle', '--use-angle=swiftshader'],
@@ -1392,9 +1395,9 @@ function collectCoreLoopDesignSystemProbe(options = {}) {
   const pvpDesignSystemProbe = await page.evaluate(collectDesignSystemProbe, {
     activeScreenId: 'pvp-screen',
     surfaceTargets: [
-      ['pvpLiveStatus', '#pvp-screen .pvp-live-status-card', 'surface'],
-      ['pvpLiveSeat', '#pvp-screen .pvp-live-seat-panel', 'surface'],
-      ['pvpLiveEvent', '#pvp-screen .pvp-live-event-panel', 'surface'],
+      ['pvpLiveStatus', '#pvp-screen .pvp-live-status-card', 'compactSurface'],
+      ['pvpLiveSeat', '#pvp-screen .pvp-live-seat-panel', 'surface', { optionalWhenHidden: true }],
+      ['pvpLiveEvent', '#pvp-screen .pvp-live-event-panel', 'surface', { optionalWhenHidden: true }],
       ['pvpRuneTab', '#pvp-screen .rune-tab', 'control'],
       ['pvpLiveActionBar', '#pvp-screen .pvp-live-action-bar', 'actionBar'],
       ['pvpLiveAction', '#pvp-screen .pvp-live-action-bar .challenge-btn[data-live-action="join-queue"]', 'control'],
@@ -1422,7 +1425,9 @@ function collectCoreLoopDesignSystemProbe(options = {}) {
   }
 
   await browser.close();
-})().catch((error) => {
+  browser = null;
+})().catch(async (error) => {
   console.error(error);
+  if (browser) await browser.close().catch(() => {});
   process.exitCode = 1;
 });

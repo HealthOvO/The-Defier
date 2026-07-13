@@ -41,6 +41,10 @@ assert(gameSource.includes("const PENDING_CHALLENGE_SLOT_RELOAD_KEY = 'theDefier
 assert(gameSource.includes('persistPendingChallengeStartForSlotReload()'), 'challenge starts should persist their pending bundle before a cloud slot reload');
 assert(gameSource.includes('resumePendingChallengeStartAfterSlotLoad()'), 'challenge starts should resume after a cloud slot reload');
 assert(gameSource.includes('slotIndex !== this.currentSaveSlot'), 'challenge slot reload resume should stay bound to the selected save slot');
+assert(gameSource.includes('queueSaveSlotSelection(delayMs = 0)'), 'unknown authenticated save slots should enter a deferred selection lifecycle');
+assert(gameSource.includes('flushPendingSaveSlotSelection()'), 'returning to the main menu should retry deferred save-slot selection');
+assert(gameSource.includes("this.currentScreen !== 'main-menu'"), 'automatic save-slot selection should stay off gameplay and server-backed screens');
+assert(systemViewSource.includes("screenId !== 'main-menu'"), 'screen changes away from the main menu should close the save-slot modal');
 assert(gameSource.includes('markerUserId !== currentUserId'), 'challenge slot reload resume should stay bound to the account that started it');
 assert(gameSource.includes('Date.now() - savedAt < -30000'), 'challenge slot reload resume should reject implausibly future handoffs');
 assert(gameSource.includes('Date.now() - savedAt > PENDING_CHALLENGE_SLOT_RELOAD_TTL_MS'), 'challenge slot reload resume should reject expired handoffs');

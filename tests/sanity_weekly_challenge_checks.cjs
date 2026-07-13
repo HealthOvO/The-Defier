@@ -29,6 +29,7 @@ function loadFile(ctx, filePath) {
 (function run() {
   const root = path.resolve(__dirname, '..');
   const storage = new Map();
+  const domElements = new Map();
   let currentProgressionUserId = 'challenge-account-a';
   const pvpState = {
     coins: 0,
@@ -73,7 +74,7 @@ function loadFile(ctx, filePath) {
       this.unlocks = [];
     },
     document: {
-      getElementById: () => null,
+      getElementById: (id) => domElements.get(id) || null,
       querySelectorAll: () => [],
       querySelector: () => null
     },
@@ -275,6 +276,30 @@ function loadFile(ctx, filePath) {
   assert(authoritativeGlobalBundle.rewards.length === 0, 'global formal surface must not expose legacy local reward cards');
   assert(authoritativeGlobalBundle.officialLadder.previousGrace.rotation.rotationId === 'acl-2026-w10', 'global formal surface should preserve previous-grace claim context');
   assert(game.claimChallengeMilestone('global', 'global_score_1000') === false, 'legacy local milestone claims must be disabled on the formal global tab');
+
+  const partialWeeklyBundle = game.buildChallengeBundle('weekly', new Date('2026-03-14T08:00:00'));
+  delete partialWeeklyBundle.rewards;
+  delete partialWeeklyBundle.records;
+  delete partialWeeklyBundle.leaderboard;
+  const originalBuildChallengeBundle = game.buildChallengeBundle.bind(game);
+  const rankingEl = {
+    innerHTML: '',
+    addEventListener: () => {},
+    contains: () => false
+  };
+  domElements.set('challenge-hub-ranking', rankingEl);
+  game.challengeHubState.tab = 'weekly';
+  game.buildChallengeBundle = () => partialWeeklyBundle;
+  let partialBundleRenderError = null;
+  try {
+    game.initChallengeHub();
+  } catch (error) {
+    partialBundleRenderError = error;
+  }
+  game.buildChallengeBundle = originalBuildChallengeBundle;
+  domElements.delete('challenge-hub-ranking');
+  assert(!partialBundleRenderError, `partial challenge bundles should render safely, got ${partialBundleRenderError && partialBundleRenderError.message}`);
+  assert(/怎样把分打高/.test(rankingEl.innerHTML), 'partial weekly bundle should still render the non-ranking guidance');
 
   const sanctum = game.getSanctumOverviewData();
   const observatory = sanctum.rooms.find((room) => room.id === 'observatory');

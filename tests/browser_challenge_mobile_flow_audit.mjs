@@ -305,7 +305,7 @@ async function runChallengeSlotReloadResumeProbe(browser) {
       && /第1章|完成线/.test(hubProbe.summaryText || '')
       && /试炼压强|DRI/.test(hubProbe.summaryText || '')
       && /难度同轴|主轴/.test(hubProbe.sideText || '')
-      && hubProbe.tabCount === 3
+      && hubProbe.tabCount === 4
       && hubProbe.rewardCount >= 1
       && hubProbe.dangerChipCount === 4
       && hubProbe.shellWidth >= 300

@@ -2882,6 +2882,9 @@ const challengeHubMethods = Object.create(null);
     }
     const bundle = this.buildChallengeBundle(tab);
     if (!bundle || !bundle.rule) return;
+    const bundleRewards = Array.isArray(bundle.rewards) ? bundle.rewards : [];
+    const bundleRecords = Array.isArray(bundle.records) ? bundle.records : [];
+    const bundleLeaderboard = Array.isArray(bundle.leaderboard) ? bundle.leaderboard : [];
     const isAuthoritativeGlobal = bundle.mode === 'global';
     const titleEl = document.getElementById('challenge-hub-title');
     const subtitleEl = document.getElementById('challenge-hub-subtitle');
@@ -2910,6 +2913,7 @@ const challengeHubMethods = Object.create(null);
     const trainingFocus = this.getObservatoryTrainingFocus();
     const pvpLivePracticeReturn = this.getPvpLivePracticeReturnReceipt();
     const officialLadder = bundle.officialLadder || this.getChallengeLadderViewModel();
+    const officialLeaderboard = Array.isArray(officialLadder?.leaderboard) ? officialLadder.leaderboard : [];
     const archiveFilters = this.buildChallengeArchiveFilterBundle(bundle);
     const comparison = this.buildObservatoryThemeComparison({
       mode: bundle.mode,
@@ -3117,7 +3121,7 @@ const challengeHubMethods = Object.create(null);
         }));
         rewardsEl.innerHTML = rewardCards.join('') || '<div class="codex-empty-state">登录后可读取本周正式里程碑；离线练习不在此发奖。</div>';
       } else {
-        rewardsEl.innerHTML = bundle.rewards.map(reward => `
+        rewardsEl.innerHTML = bundleRewards.map(reward => `
                 <article class="challenge-reward-card ${reward.claimed ? 'claimed' : reward.ready ? 'ready' : 'locked'}">
                     <div class="challenge-reward-top">
                         <div>
@@ -3136,7 +3140,7 @@ const challengeHubMethods = Object.create(null);
       }
     }
     if (recordsEl) {
-      const source = bundle.records.length > 0 ? bundle.records : Array.isArray(this.challengeProgressState?.recentResults) ? this.challengeProgressState.recentResults.filter(item => item.mode === bundle.mode).slice(0, 4) : [];
+      const source = bundleRecords.length > 0 ? bundleRecords : Array.isArray(this.challengeProgressState?.recentResults) ? this.challengeProgressState.recentResults.filter(item => item.mode === bundle.mode).slice(0, 4) : [];
       const currentRecordsMarkup = source.length > 0 ? source.map(record => `
                     <article class="challenge-record-item">
                         <div>
@@ -3448,7 +3452,7 @@ const challengeHubMethods = Object.create(null);
           </section>
         `;
       } else {
-        const nextReward = bundle.rewards.find(item => !item.claimed) || null;
+        const nextReward = bundleRewards.find(item => !item.claimed) || null;
         sideEl.innerHTML = `
                 <section class="codex-side-card">
                     <span class="codex-side-kicker">难度同轴</span>
@@ -3471,7 +3475,7 @@ const challengeHubMethods = Object.create(null);
                         <div class="codex-summary-chip"><strong>${clampInt(bundle.progress.attempts, 0)}</strong><span>挑战次数</span></div>
                         <div class="codex-summary-chip"><strong>${clampInt(bundle.progress.completions, 0)}</strong><span>完成次数</span></div>
                         <div class="codex-summary-chip"><strong>${clampInt(bundle.progress.bestScore, 0)}</strong><span>最高得分</span></div>
-                        <div class="codex-summary-chip"><strong>${bundle.mode === 'weekly' ? clampInt(bundle.progress.totalScore, 0) : clampInt(bundle.rewards.filter(item => item.claimed).length, 0)}</strong><span>${bundle.mode === 'weekly' ? '累计积分' : '已领奖励'}</span></div>
+                        <div class="codex-summary-chip"><strong>${bundle.mode === 'weekly' ? clampInt(bundle.progress.totalScore, 0) : clampInt(bundleRewards.filter(item => item.claimed).length, 0)}</strong><span>${bundle.mode === 'weekly' ? '累计积分' : '已领奖励'}</span></div>
                     </div>
                     <p>${escapeHtml(bundle.rule.objective || '观星台正在推演这一轮的试炼目标。')}</p>
                     <p class="collection-muted">当前命盘签：${escapeHtml(bundle.seedSignature)}</p>
@@ -3553,9 +3557,9 @@ const challengeHubMethods = Object.create(null);
         loading: '正在读取服务端权威榜单，不会显示本地模拟名次。',
         error: officialLadder.error?.message || '权威榜单暂时不可用，可重试或继续离线练习。',
         idle: '等待服务端公布本周权威轮换。',
-        ready: officialLadder.leaderboard.length > 0 ? '' : '本周尚无正式成绩，完成第一条权威试炼即可占据席位。'
+        ready: officialLeaderboard.length > 0 ? '' : '本周尚无正式成绩，完成第一条权威试炼即可占据席位。'
       };
-      const ladderRows = bundle.leaderboard.map(item => `
+      const ladderRows = bundleLeaderboard.map(item => `
         <div class="challenge-rank-row ${item.highlight ? 'highlight' : ''}" data-challenge-ladder-rank="${item.rank}">
           <span>#${item.rank}</span>
           <strong>${escapeHtml(item.name)}</strong>

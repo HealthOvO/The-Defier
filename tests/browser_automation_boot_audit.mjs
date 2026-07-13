@@ -94,6 +94,7 @@ async function runColdStartClickScenario(browser, scenario) {
     pvpLivePaneActive: document.getElementById('tab-live')?.classList.contains('active') || false,
     pvpRankingTabActive: document.getElementById('pvp-tab-ranking')?.classList.contains('active') || false,
     pvpRankingPaneActive: document.getElementById('tab-ranking')?.classList.contains('active') || false,
+    fateChronicleActive: document.getElementById('fate-chronicle-screen')?.classList.contains('active') || false,
   }), triggerSelector);
   add(
     `cold-start ${label} action queues before runtime and runs after Game initialization`,
@@ -368,6 +369,16 @@ const coldStartScenarios = [
       && probe.pvpLivePaneActive
       && !probe.pvpRankingTabActive
       && !probe.pvpRankingPaneActive
+    ),
+  },
+  {
+    scenarioId: 'cold-start-fate-chronicle-action',
+    triggerSelector: 'button[data-boot-action="open-chronicle"]',
+    actionId: 'open-chronicle',
+    label: 'fate chronicle',
+    verifyOutcome: (probe) => (
+      probe.currentScreen === 'fate-chronicle-screen'
+      && probe.fateChronicleActive
     ),
   },
 ];

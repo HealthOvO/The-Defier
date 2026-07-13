@@ -253,8 +253,8 @@ async function main() {
     await waitForHealth(server, 'fresh-start');
     const version = await request(PORT, '/api/version');
     assert.strictEqual(version.status, 200, JSON.stringify(version.payload));
-    assert.strictEqual(version.payload?.schema?.version, 10);
-    assert.strictEqual(version.payload?.schema?.currentMigrationId, '0010_relay_expedition');
+    assert.strictEqual(version.payload?.schema?.version, 11);
+    assert.strictEqual(version.payload?.schema?.currentMigrationId, '0011_authoritative_fate_chronicle');
     assert.deepStrictEqual(
       version.payload?.schema?.appliedMigrations?.map(entry => entry.id),
       [
@@ -267,11 +267,18 @@ async function main() {
         '0007_authoritative_challenge_ladder',
         '0008_authoritative_world_rift',
         '0009_account_social_coop',
-        '0010_relay_expedition'
+        '0010_relay_expedition',
+        '0011_authoritative_fate_chronicle'
       ]
     );
 
     await assertTablesExist(DB_PATH);
+    const receiptColumns = new Set(
+      (await dbAll(DB_PATH, 'PRAGMA table_info(progression_authoritative_run_receipts)'))
+        .map(row => String(row.name || ''))
+    );
+    assert(receiptColumns.has('request_hash'), 'V11 schema should expose authoritative settlement request_hash');
+    assert(receiptColumns.has('request_body_json'), 'V11 schema should expose authoritative settlement request_body_json');
 
     const catalogRow = await dbGet(
       DB_PATH,
@@ -434,7 +441,7 @@ async function main() {
     server = startServer({ port: PORT, dbPath: DB_PATH, gitSha: 'authoritative-runs-v7-to-v8' });
     await waitForHealth(server, 'v7-to-v8-restart');
     const v7ToV8Version = await request(PORT, '/api/version');
-    assert.strictEqual(v7ToV8Version.payload?.schema?.currentMigrationId, '0010_relay_expedition');
+    assert.strictEqual(v7ToV8Version.payload?.schema?.currentMigrationId, '0011_authoritative_fate_chronicle');
     const preservedRuns = await dbGet(
       DB_PATH,
       `SELECT COUNT(*) AS count
@@ -506,7 +513,7 @@ async function main() {
     server = startServer({ port: PORT, dbPath: DB_PATH, gitSha: 'authoritative-runs-v2-reapply' });
     await waitForHealth(server, 'upgrade-reapply');
     const upgraded = await request(PORT, '/api/version');
-    assert.strictEqual(upgraded.payload?.schema?.currentMigrationId, '0010_relay_expedition');
+    assert.strictEqual(upgraded.payload?.schema?.currentMigrationId, '0011_authoritative_fate_chronicle');
     assert.deepStrictEqual(
       upgraded.payload?.schema?.appliedMigrations?.map(entry => entry.id),
       [
@@ -519,7 +526,8 @@ async function main() {
         '0007_authoritative_challenge_ladder',
         '0008_authoritative_world_rift',
         '0009_account_social_coop',
-        '0010_relay_expedition'
+        '0010_relay_expedition',
+        '0011_authoritative_fate_chronicle'
       ],
       'reapplying authoritative runs should still converge on the full schema chain'
     );

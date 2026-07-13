@@ -1,0 +1,544 @@
+#fate-chronicle-screen {
+  overflow-x: hidden;
+  background:
+    radial-gradient(circle at top left, rgba(150, 111, 51, 0.16), transparent 36%),
+    linear-gradient(180deg, #0d1013 0%, #08090c 48%, #050607 100%);
+  color: rgba(241, 235, 220, 0.92);
+}
+
+#fate-chronicle-screen,
+#fate-chronicle-screen * {
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+#fate-chronicle-screen .fate-chronicle-shell {
+  width: min(1260px, calc(100% - 28px));
+  margin: 0 auto;
+  padding: 24px 0 40px;
+  display: grid;
+  gap: 16px;
+}
+
+#fate-chronicle-screen .fate-chronicle-header,
+#fate-chronicle-screen .fate-chronicle-section,
+#fate-chronicle-screen .fate-chronicle-state-card,
+#fate-chronicle-screen .fate-chronicle-account-card,
+#fate-chronicle-screen .fate-chronicle-summary-card,
+#fate-chronicle-screen .fate-chronicle-voucher,
+#fate-chronicle-screen .fate-chronicle-chapter-card,
+#fate-chronicle-screen .fate-chronicle-launch-card,
+#fate-chronicle-screen .fate-chronicle-milestone-card,
+#fate-chronicle-screen .season-ops-section-card,
+#fate-chronicle-screen .season-ops-state-panel,
+#fate-chronicle-screen .season-ops-authoritative-stat,
+#fate-chronicle-screen .season-ops-authoritative-choice-card,
+#fate-chronicle-screen .season-ops-authoritative-hand-card,
+#fate-chronicle-screen .season-ops-authoritative-combatant,
+#fate-chronicle-screen .season-ops-authoritative-settlement {
+  border-radius: 8px;
+  border: 1px solid rgba(203, 174, 124, 0.16);
+  background: linear-gradient(180deg, rgba(22, 22, 24, 0.92), rgba(8, 9, 11, 0.98));
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.28);
+}
+
+#fate-chronicle-screen .fate-chronicle-header,
+#fate-chronicle-screen .fate-chronicle-section,
+#fate-chronicle-screen .fate-chronicle-state-card {
+  padding: 18px;
+}
+
+#fate-chronicle-screen .fate-chronicle-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+#fate-chronicle-screen .fate-chronicle-title-group,
+#fate-chronicle-screen .fate-chronicle-section-head > div:first-child,
+#fate-chronicle-screen .fate-chronicle-header-side {
+  display: grid;
+  gap: 6px;
+}
+
+#fate-chronicle-screen .fate-chronicle-header-side {
+  justify-items: end;
+  flex: 0 1 360px;
+}
+
+#fate-chronicle-screen .fate-chronicle-kicker {
+  color: rgba(215, 186, 129, 0.74);
+  font-size: 0.74rem;
+  text-transform: uppercase;
+  letter-spacing: 0;
+}
+
+#fate-chronicle-screen h1,
+#fate-chronicle-screen h2,
+#fate-chronicle-screen h3,
+#fate-chronicle-screen p {
+  margin: 0;
+}
+
+#fate-chronicle-screen h1 {
+  font-size: 1.9rem;
+  line-height: 1.15;
+  color: #f7eed8;
+}
+
+#fate-chronicle-screen h2 {
+  font-size: 1.2rem;
+  line-height: 1.2;
+  color: #f6ebd1;
+}
+
+#fate-chronicle-screen h3 {
+  font-size: 1rem;
+  line-height: 1.25;
+  color: #f4ead1;
+}
+
+#fate-chronicle-screen p,
+#fate-chronicle-screen small {
+  color: rgba(225, 219, 203, 0.74);
+  line-height: 1.55;
+}
+
+#fate-chronicle-screen .fate-chronicle-account-card {
+  padding: 10px 12px;
+  display: grid;
+  gap: 4px;
+  width: min(100%, 320px);
+}
+
+#fate-chronicle-screen .fate-chronicle-account-card span {
+  font-size: 0.72rem;
+  color: rgba(212, 203, 182, 0.56);
+}
+
+#fate-chronicle-screen .fate-chronicle-account-card strong {
+  color: #f4ead1;
+  font-size: 0.92rem;
+  overflow-wrap: anywhere;
+}
+
+#fate-chronicle-screen .fate-chronicle-notice {
+  padding: 12px 14px;
+  border-radius: 8px;
+  border: 1px solid rgba(151, 133, 99, 0.22);
+  background: rgba(22, 21, 19, 0.88);
+  color: #efe6d2;
+}
+
+#fate-chronicle-screen .fate-chronicle-notice.tone-success {
+  border-color: rgba(94, 164, 118, 0.3);
+}
+
+#fate-chronicle-screen .fate-chronicle-notice.tone-info {
+  border-color: rgba(92, 166, 178, 0.28);
+}
+
+#fate-chronicle-screen .fate-chronicle-notice.tone-warning {
+  border-color: rgba(196, 149, 83, 0.3);
+}
+
+#fate-chronicle-screen .fate-chronicle-notice.tone-danger {
+  border-color: rgba(190, 92, 92, 0.28);
+}
+
+#fate-chronicle-screen .fate-chronicle-section-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  align-items: flex-start;
+  margin-bottom: 14px;
+}
+
+#fate-chronicle-screen .fate-chronicle-tier-card {
+  min-width: 96px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(43, 34, 20, 0.76);
+  border: 1px solid rgba(214, 179, 114, 0.24);
+  display: grid;
+  gap: 4px;
+  text-align: right;
+}
+
+#fate-chronicle-screen .fate-chronicle-tier-card strong {
+  color: #f7e7b7;
+  font-size: 1rem;
+}
+
+#fate-chronicle-screen .fate-chronicle-summary-grid,
+#fate-chronicle-screen .season-ops-authoritative-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+#fate-chronicle-screen .season-ops-authoritative-stats-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+#fate-chronicle-screen .fate-chronicle-summary-card,
+#fate-chronicle-screen .season-ops-authoritative-stat {
+  padding: 14px;
+  display: grid;
+  gap: 6px;
+}
+
+#fate-chronicle-screen .fate-chronicle-summary-card span,
+#fate-chronicle-screen .season-ops-summary-label {
+  color: rgba(209, 195, 166, 0.62);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+}
+
+#fate-chronicle-screen .fate-chronicle-summary-card strong,
+#fate-chronicle-screen .season-ops-summary-value {
+  color: #f8edd0;
+  font-size: 1.26rem;
+  line-height: 1.15;
+}
+
+#fate-chronicle-screen .fate-chronicle-voucher-grid,
+#fate-chronicle-screen .fate-chronicle-milestone-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px;
+}
+
+#fate-chronicle-screen .fate-chronicle-voucher,
+#fate-chronicle-screen .fate-chronicle-milestone-card {
+  padding: 14px;
+  display: grid;
+  gap: 8px;
+}
+
+#fate-chronicle-screen .fate-chronicle-voucher.is-complete {
+  border-color: rgba(96, 168, 124, 0.3);
+  background:
+    linear-gradient(180deg, rgba(38, 53, 42, 0.28), rgba(8, 9, 11, 0.98)),
+    linear-gradient(180deg, rgba(22, 22, 24, 0.92), rgba(8, 9, 11, 0.98));
+}
+
+#fate-chronicle-screen .fate-chronicle-voucher-top,
+#fate-chronicle-screen .fate-chronicle-chapter-head,
+#fate-chronicle-screen .season-ops-authoritative-choice-top,
+#fate-chronicle-screen .season-ops-authoritative-card-top,
+#fate-chronicle-screen .season-ops-authoritative-combatant-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+#fate-chronicle-screen .fate-chronicle-voucher-top span,
+#fate-chronicle-screen .fate-chronicle-voucher-top small {
+  color: rgba(221, 214, 196, 0.64);
+  font-size: 0.78rem;
+}
+
+#fate-chronicle-screen .fate-chronicle-actions,
+#fate-chronicle-screen .season-ops-state-actions,
+#fate-chronicle-screen .season-ops-authoritative-inline-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+#fate-chronicle-screen .fate-chronicle-chip,
+#fate-chronicle-screen .season-ops-counter-chip,
+#fate-chronicle-screen .season-ops-meta-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 28px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(206, 177, 122, 0.18);
+  background: rgba(255, 246, 228, 0.04);
+  color: #eadbbb;
+  font-size: 0.76rem;
+}
+
+#fate-chronicle-screen .fate-chronicle-chip.tone-success {
+  border-color: rgba(96, 168, 124, 0.28);
+}
+
+#fate-chronicle-screen .fate-chronicle-chip.tone-info {
+  border-color: rgba(92, 166, 178, 0.26);
+}
+
+#fate-chronicle-screen .fate-chronicle-chip.tone-warning {
+  border-color: rgba(196, 149, 83, 0.3);
+}
+
+#fate-chronicle-screen .fate-chronicle-chip.tone-muted {
+  opacity: 0.72;
+}
+
+#fate-chronicle-screen .fate-chronicle-inline-stack,
+#fate-chronicle-screen .season-ops-authoritative-meta-row,
+#fate-chronicle-screen .season-ops-authoritative-history-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+#fate-chronicle-screen .fate-chronicle-chapter-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+#fate-chronicle-screen .fate-chronicle-chapter-card {
+  padding: 14px;
+  display: grid;
+  gap: 10px;
+}
+
+#fate-chronicle-screen .fate-chronicle-chapter-card.is-selected {
+  border-color: rgba(214, 179, 114, 0.34);
+  box-shadow: inset 0 0 0 1px rgba(255, 235, 189, 0.04), 0 0 24px rgba(182, 141, 72, 0.08);
+}
+
+#fate-chronicle-screen .fate-chronicle-chapter-card.is-locked {
+  opacity: 0.78;
+}
+
+#fate-chronicle-screen .fate-chronicle-chapter-head > div {
+  display: grid;
+  gap: 3px;
+}
+
+#fate-chronicle-screen .fate-chronicle-chapter-head span {
+  color: rgba(212, 203, 182, 0.6);
+  font-size: 0.76rem;
+}
+
+#fate-chronicle-screen .fate-chronicle-vow-list {
+  display: grid;
+  gap: 8px;
+}
+
+#fate-chronicle-screen .fate-chronicle-vow-btn {
+  width: 100%;
+  min-height: 76px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(205, 174, 122, 0.18);
+  background: rgba(255, 248, 235, 0.03);
+  color: #f1e7cf;
+  display: grid;
+  gap: 4px;
+  text-align: left;
+  cursor: pointer;
+}
+
+#fate-chronicle-screen .fate-chronicle-vow-btn.is-selected {
+  border-color: rgba(214, 179, 114, 0.36);
+  background: rgba(82, 62, 29, 0.26);
+}
+
+#fate-chronicle-screen .fate-chronicle-vow-btn.is-complete {
+  border-color: rgba(96, 168, 124, 0.3);
+}
+
+#fate-chronicle-screen .fate-chronicle-vow-btn:disabled {
+  cursor: default;
+  opacity: 0.56;
+}
+
+#fate-chronicle-screen .fate-chronicle-vow-btn span {
+  font-weight: 700;
+}
+
+#fate-chronicle-screen .fate-chronicle-vow-btn small {
+  font-size: 0.78rem;
+}
+
+#fate-chronicle-screen .fate-chronicle-launch-card {
+  margin-top: 12px;
+  padding: 16px;
+  display: grid;
+  gap: 10px;
+}
+
+#fate-chronicle-screen .fate-chronicle-inline-note,
+#fate-chronicle-screen .season-ops-inline-note {
+  color: rgba(223, 216, 199, 0.72);
+  font-size: 0.86rem;
+  line-height: 1.55;
+}
+
+#fate-chronicle-screen .fate-chronicle-run-shell {
+  display: grid;
+  gap: 12px;
+}
+
+#fate-chronicle-screen .season-ops-authoritative-section,
+#fate-chronicle-screen .season-ops-authoritative-settlement,
+#fate-chronicle-screen .season-ops-authoritative-stat,
+#fate-chronicle-screen .season-ops-authoritative-choice-card,
+#fate-chronicle-screen .season-ops-authoritative-hand-card,
+#fate-chronicle-screen .season-ops-authoritative-combatant {
+  padding: 14px;
+}
+
+#fate-chronicle-screen .season-ops-authoritative-choice-grid,
+#fate-chronicle-screen .season-ops-authoritative-hand-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+#fate-chronicle-screen .season-ops-authoritative-battle-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+#fate-chronicle-screen .season-ops-authoritative-card-cost {
+  min-width: 30px;
+  min-height: 30px;
+  border-radius: 999px;
+  display: inline-grid;
+  place-items: center;
+  background: rgba(214, 179, 114, 0.16);
+  color: #f8edd0;
+  font-weight: 700;
+}
+
+#fate-chronicle-screen .season-ops-authoritative-hand-card.is-playable {
+  border-color: rgba(214, 179, 114, 0.26);
+}
+
+#fate-chronicle-screen .season-ops-authoritative-hand-card.is-locked {
+  opacity: 0.76;
+}
+
+#fate-chronicle-screen .season-ops-authoritative-event-list {
+  display: grid;
+  gap: 8px;
+}
+
+#fate-chronicle-screen .season-ops-authoritative-event-row {
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(255, 248, 235, 0.03);
+  color: rgba(228, 221, 205, 0.82);
+}
+
+#fate-chronicle-screen .season-ops-inline-btn,
+#fate-chronicle-screen .menu-btn {
+  min-height: 42px;
+  border-radius: 8px;
+}
+
+#fate-chronicle-screen .menu-btn {
+  width: auto;
+  max-width: 100%;
+  padding: 10px 16px;
+  font-size: 0.95rem;
+}
+
+#fate-chronicle-screen .fate-chronicle-milestone-card .menu-btn {
+  width: 100%;
+  margin-top: auto;
+}
+
+#fate-chronicle-screen .season-ops-inline-btn {
+  padding: 0 14px;
+  border: 1px solid rgba(205, 174, 122, 0.18);
+  background: linear-gradient(180deg, rgba(21, 18, 15, 0.94), rgba(10, 10, 12, 0.98));
+  color: #efe4cb;
+  cursor: pointer;
+}
+
+#fate-chronicle-screen .season-ops-inline-btn.is-claimable {
+  border-color: rgba(214, 179, 114, 0.34);
+}
+
+#fate-chronicle-screen .season-ops-inline-btn.is-muted {
+  opacity: 0.72;
+}
+
+#fate-chronicle-screen .season-ops-inline-btn:disabled {
+  cursor: default;
+  opacity: 0.56;
+}
+
+@media (max-width: 980px) {
+  #fate-chronicle-screen .fate-chronicle-voucher-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  #fate-chronicle-screen .fate-chronicle-chapter-grid,
+  #fate-chronicle-screen .season-ops-authoritative-stats-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  #fate-chronicle-screen .fate-chronicle-shell {
+    width: min(100%, calc(100% - 16px));
+    padding: 16px 0 28px;
+  }
+
+  #fate-chronicle-screen .fate-chronicle-header,
+  #fate-chronicle-screen .fate-chronicle-section-head,
+  #fate-chronicle-screen .season-ops-section-head {
+    grid-template-columns: 1fr;
+    display: grid;
+  }
+
+  #fate-chronicle-screen .fate-chronicle-header-side {
+    justify-items: stretch;
+  }
+
+  #fate-chronicle-screen .fate-chronicle-summary-grid,
+  #fate-chronicle-screen .fate-chronicle-voucher-grid,
+  #fate-chronicle-screen .fate-chronicle-milestone-grid,
+  #fate-chronicle-screen .fate-chronicle-chapter-grid,
+  #fate-chronicle-screen .season-ops-authoritative-stats-grid,
+  #fate-chronicle-screen .season-ops-authoritative-choice-grid,
+  #fate-chronicle-screen .season-ops-authoritative-hand-grid,
+  #fate-chronicle-screen .season-ops-authoritative-battle-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 390px) {
+  #fate-chronicle-screen .fate-chronicle-shell {
+    width: min(100%, calc(100% - 12px));
+  }
+
+  #fate-chronicle-screen .fate-chronicle-header,
+  #fate-chronicle-screen .fate-chronicle-section,
+  #fate-chronicle-screen .fate-chronicle-state-card,
+  #fate-chronicle-screen .season-ops-section-card,
+  #fate-chronicle-screen .season-ops-state-panel {
+    padding: 14px;
+  }
+
+  #fate-chronicle-screen h1 {
+    font-size: 1.52rem;
+  }
+
+  #fate-chronicle-screen .fate-chronicle-actions,
+  #fate-chronicle-screen .season-ops-state-actions,
+  #fate-chronicle-screen .season-ops-authoritative-inline-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  #fate-chronicle-screen .fate-chronicle-actions > *,
+  #fate-chronicle-screen .season-ops-state-actions > *,
+  #fate-chronicle-screen .season-ops-authoritative-inline-actions > * {
+    width: 100%;
+  }
+}

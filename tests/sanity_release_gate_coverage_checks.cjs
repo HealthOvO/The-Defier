@@ -16,6 +16,7 @@ const browserReleaseSummary = read('tests/summarize_browser_release_reports.cjs'
 const backendSecurityChecks = read('tests/backend_security_checks.cjs');
 const backendClientSmoke = read('tests/browser_backend_client_smoke.mjs');
 const browserAuthUiCloudSmoke = read('tests/browser_auth_ui_cloud_smoke.mjs');
+const browserMapOverviewRiskAudit = read('tests/browser_map_overview_risk_audit.mjs');
 const browserRewardMetaMobileAudit = read('tests/browser_reward_meta_mobile_audit.mjs');
 const backendClientSource = read('js/services/backend-client.js');
 const browserAudit = read('tests/browser_audit.mjs');
@@ -24,6 +25,7 @@ const browserPvpMobileAudit = read('tests/browser_pvp_mobile_audit.mjs');
 const browserPvpLiveAudit = read('tests/browser_pvp_live_audit.mjs');
 const browserPvpLiveRealSmoke = read('tests/browser_pvp_live_real_backend_smoke.mjs');
 const browserAuthoritativeRunsRealSmoke = read('tests/browser_authoritative_runs_real_backend_smoke.mjs');
+const browserFateChronicleRealSmoke = read('tests/browser_fate_chronicle_real_backend_smoke.mjs');
 const browserRelayExpeditionRealSmoke = read('tests/browser_relay_expedition_real_backend_smoke.mjs');
 const browserFeatureAudit = read('tests/browser_feature_audit.mjs');
 const browserUiGalleryAudit = read('tests/browser_ui_gallery_audit.mjs');
@@ -63,6 +65,7 @@ const requiredBrowserReleaseAudits = [
   'challenge',
   'season-ops',
   'authoritative-runs-real',
+  'fate-chronicle-real',
   'relay-expedition-real',
   'expedition',
   'events',
@@ -188,6 +191,21 @@ const relayExpeditionCrossProcessChecks = read('tests/sanity_relay_expedition_cr
 const relayExpeditionClientChecks = read('tests/sanity_relay_expedition_client_checks.mjs');
 const relayExpeditionUiChecks = read('tests/sanity_relay_expedition_ui_checks.mjs');
 const relayExpeditionDocumentation = read('docs/backend_relay_expedition_v1.md');
+const fateChronicleCatalog = read('server/fate-chronicle/catalog.js');
+const fateChronicleBootstrap = read('server/fate-chronicle/bootstrap.js');
+const fateChronicleService = read('server/fate-chronicle/service.js');
+const fateChronicleRoutes = read('server/routes/fate-chronicle.js');
+const weeklyArchiveCatalog = read('server/weekly-archive/catalog.js');
+const weeklyArchiveBootstrap = read('server/weekly-archive/bootstrap.js');
+const weeklyArchiveService = read('server/weekly-archive/service.js');
+const weeklyArchiveRoutes = read('server/routes/weekly-archive.js');
+const fateChronicleClient = read('js/services/fate-chronicle-service.js');
+const fateChronicleView = read('js/views/FateChronicleView.js');
+const fateChronicleClientChecks = read('tests/sanity_fate_chronicle_client_checks.mjs');
+const fateChronicleUiChecks = read('tests/sanity_fate_chronicle_ui_checks.mjs');
+const fateChroniclePlatformChecks = read('tests/sanity_fate_chronicle_platform_checks.cjs');
+const weeklyArchivePlatformChecks = read('tests/sanity_weekly_archive_platform_checks.cjs');
+const fateChronicleDocumentation = read('docs/backend_authoritative_fate_chronicle_v1.md');
 const shopManager = read('js/managers/ShopManager.js');
 const coreUtils = read('js/core/utils.js');
 const gameSource = read('js/game.js');
@@ -224,6 +242,12 @@ const waitingReportSource = pvpLiveStore.slice(
     `production read-only check should cover backend marker: ${needle}`,
   );
 });
+
+assert.match(
+  pagesWorkflow,
+  /^      - name: Install backend dependencies\n        if: contains\(matrix\.audits, 'backend-client'\).*\n        run: npm ci --prefix server$/m,
+  'GitHub Pages backend dependency step should keep valid step-level YAML indentation',
+);
 
 [
   "router.get('/status'",
@@ -418,7 +442,7 @@ const waitingReportSource = pvpLiveStore.slice(
   'receipt?.idempotent',
   'server_verified must only upgrade an observed event',
   'a checkpoint source must not move across tickets',
-  'older databases should advance through verified runs to relay expedition v10 on restart',
+  'older databases should advance through verified runs to authoritative fate chronicle v11 on restart',
 ].forEach((needle) => {
   assert.ok(
     verifiedRunsPlatformChecks.includes(needle) || verifiedRunsDocumentation.includes(needle),
@@ -455,6 +479,10 @@ const waitingReportSource = pvpLiveStore.slice(
   'sanity_authoritative_runs_platform_checks.cjs',
   'sanity_authoritative_runs_client_checks.mjs',
   'sanity_authoritative_runs_ui_checks.mjs',
+  'sanity_fate_chronicle_platform_checks.cjs',
+  'sanity_weekly_archive_platform_checks.cjs',
+  'sanity_fate_chronicle_client_checks.mjs',
+  'sanity_fate_chronicle_ui_checks.mjs',
 ].forEach((needle) => {
   assert.ok(runNodeChecks.includes(needle), `node gate should execute authoritative runs check: ${needle}`);
 });
@@ -485,7 +513,7 @@ const waitingReportSource = pvpLiveStore.slice(
 });
 
 [
-  [authoritativeRunsCatalog, "CONTENT_VERSION = 'authoritative-trials-v2'"],
+  [authoritativeRunsCatalog, "CONTENT_VERSION = 'authoritative-trials-v3'"],
   [authoritativeRunsCatalog, "PROTOCOL_VERSION = 'authoritative-run-v2'"],
   [authoritativeRunsEngine, 'function createInitialState'],
   [authoritativeRunsEngine, 'function projectState'],
@@ -582,6 +610,35 @@ const waitingReportSource = pvpLiveStore.slice(
 });
 
 [
+  [fateChronicleCatalog, "PROTOCOL_VERSION = 'authoritative-fate-chronicle-v1'"],
+  [fateChronicleCatalog, 'SETTLEMENT_GRACE_MS = 72 * 60 * 60 * 1000'],
+  [fateChronicleCatalog, "chapterId: 'chapter-3'"],
+  [fateChronicleBootstrap, 'fate_chronicle_reward_claims'],
+  [authoritativeRunsService, 'settlement_mutation_payload_conflict'],
+  [fateChronicleRoutes, "integrity.mode !== 'session-v2'"],
+  [weeklyArchiveCatalog, 'FOUNDATION_REWARD_AMOUNT = 120'],
+  [weeklyArchiveCatalog, "mode: 'pvp_live'"],
+  [weeklyArchiveBootstrap, 'weekly_archive_reward_claims'],
+  [weeklyArchiveService, "trust_tier = 'server_authoritative'"],
+  [weeklyArchiveService, 'return withReadConnection(async connection =>'],
+  [weeklyArchiveRoutes, "integrity.mode !== 'session-v2'"],
+  [fateChronicleService, 'return withReadConnection(async connection =>'],
+  [fateChronicleClient, 'completedMutationEpoch'],
+  [fateChronicleView, 'authoritative-return-chronicle'],
+  [fateChroniclePlatformChecks, 'abandon must free the account for an immediate fresh retry'],
+  [fateChroniclePlatformChecks, 'weekly ops token must not bypass account authentication'],
+  [fateChroniclePlatformChecks, "expectReason(weeklyUnsigned, 400, 'missing-signature')"],
+  [fateChroniclePlatformChecks, "expectReason(weeklyLegacySignature, 400, 'route-bound-signature-required')"],
+  [fateChroniclePlatformChecks, "expectReason(weeklyWrongRouteSignature, 403, 'session-signature-mismatch')"],
+  [weeklyArchivePlatformChecks, 'Weekly archive platform checks passed.'],
+  [fateChronicleClientChecks, 'a read started before a mutation must not overwrite mutation state'],
+  [fateChronicleUiChecks, "2/5 evidence must not override the server's explicit claim-window decision"],
+  [fateChronicleDocumentation, '不强制参与 PVP'],
+].forEach(([source, needle]) => {
+  assert.ok(source.includes(needle), `fate chronicle V1 should pin release marker: ${needle}`);
+});
+
+[
   'progressionRunOwnerUserId',
   'currentSaveSlot',
   'seedSignature',
@@ -605,6 +662,7 @@ const waitingReportSource = pvpLiveStore.slice(
   '0008_authoritative_world_rift',
   '0009_account_social_coop',
   '0010_relay_expedition',
+  '0011_authoritative_fate_chronicle',
   'cloud_state_revisions',
   'cloud_state_heads',
   'cloud_state_ops_counters',
@@ -650,6 +708,19 @@ const waitingReportSource = pvpLiveStore.slice(
   'relay_expedition_mutations',
   'relay_expedition_ops_events',
   'relay_expedition_ops_counters',
+  'fate_chronicle_rotations',
+  'fate_chronicle_attempts',
+  'fate_chronicle_results',
+  'fate_chronicle_progress',
+  'fate_chronicle_reward_claims',
+  'fate_chronicle_mutations',
+  'fate_chronicle_ops_events',
+  'fate_chronicle_ops_counters',
+  'weekly_archive_cycles',
+  'weekly_archive_reward_claims',
+  'weekly_archive_mutations',
+  'weekly_archive_ops_events',
+  'weekly_archive_ops_counters',
 ].forEach((needle) => {
   assert.ok(
     schemaStatusSource.includes(needle)
@@ -658,7 +729,9 @@ const waitingReportSource = pvpLiveStore.slice(
       || authoritativeRunsBootstrap.includes(needle)
       || challengeLadderBootstrap.includes(needle)
       || worldRiftBootstrap.includes(needle)
-      || relayExpeditionBootstrap.includes(needle),
+      || relayExpeditionBootstrap.includes(needle)
+      || fateChronicleBootstrap.includes(needle)
+      || weeklyArchiveBootstrap.includes(needle),
     `progression schema should pin migration/table marker: ${needle}`,
   );
 });
@@ -1068,6 +1141,8 @@ const browserAutomationBootAudit = read('tests/browser_automation_boot_audit.mjs
   'node tests/browser_challenge_audit.mjs "$BASE_URL" "$OUTPUT_ROOT/challenge"',
   'node tests/browser_season_ops_audit.mjs "$BASE_URL" "$OUTPUT_ROOT/season-ops"',
   'node tests/browser_authoritative_runs_real_backend_smoke.mjs "$BASE_URL" "$OUTPUT_ROOT/authoritative-runs-real"',
+  'node tests/browser_fate_chronicle_real_backend_smoke.mjs "$BASE_URL" "$OUTPUT_ROOT/fate-chronicle-real"',
+  'FATE_CHRONICLE_REAL_AUDIT_TIMEOUT_SECONDS',
   'node tests/browser_relay_expedition_real_backend_smoke.mjs "$BASE_URL" "$OUTPUT_ROOT/relay-expedition-real"',
   'RELAY_EXPEDITION_REAL_AUDIT_TIMEOUT_SECONDS',
   'node tests/browser_expedition_audit.mjs "$BASE_URL" "$OUTPUT_ROOT/expedition"',
@@ -1084,7 +1159,7 @@ const browserAutomationBootAudit = read('tests/browser_automation_boot_audit.mjs
 });
 
 const configuredBrowserReleaseAudits = [...browserReleaseScript.matchAll(/run_selected_audit\s+([^\s]+)/g)].map((match) => match[1]);
-assert.strictEqual(requiredBrowserReleaseAudits.length, 33, 'required browser release audit list should pin all 33 audits');
+assert.strictEqual(requiredBrowserReleaseAudits.length, 34, 'required browser release audit list should pin all 34 audits');
 assert.deepStrictEqual(
   configuredBrowserReleaseAudits,
   requiredBrowserReleaseAudits,
@@ -1096,9 +1171,14 @@ assert.strictEqual(
   'node tests/browser_frontend_layout_audit.mjs',
   'package.json should expose a dedicated frontend layout/density browser audit script',
 );
+assert.strictEqual(
+  packageJson.scripts['test:browser:fate-chronicle-real'],
+  'node tests/browser_fate_chronicle_real_backend_smoke.mjs',
+  'package.json should expose the real-backend fate chronicle browser audit',
+);
 
 [
-  'real backend boots schema V10',
+  'real backend boots schema V11',
   'challenge ladder GET current returns initial allowance before any formal run',
   'challenge hub global UI shows formal attempts and official ladder copy before submission',
   'global formal surface uses the server rotation and excludes legacy local rewards',
@@ -1130,7 +1210,7 @@ assert.strictEqual(
 });
 
 [
-  'real backend boots relay expedition schema V10',
+  'real backend boots authoritative fate chronicle schema V11',
   'two-account active world-rift squad is established before relay',
   'leader creates the relay session from the real social workspace',
   'account A claim binds a real relay_expedition authoritative run in the UI',
@@ -1146,6 +1226,27 @@ assert.strictEqual(
   'real browser console errors are empty',
 ].forEach((needle) => {
   assert.ok(browserRelayExpeditionRealSmoke.includes(needle), `relay expedition real browser gate should pin marker: ${needle}`);
+});
+
+[
+  'real backend boots fate chronicle schema V11',
+  'fate chronicle renders three chapters six oaths and five archive proofs',
+  'real fate chronicle desktop milestone controls stay within cards',
+  'chapter oath starts a server-authoritative fate run',
+  'full browser reload resumes the same fate chronicle run',
+  'real fate chronicle UI completes the first guard oath',
+  'settlement projects chapter progress and unlocks the next chapter without consuming failure attempts',
+  'chapter clear reward claims once as cosmetic-only renown',
+  'weekly archive reaches foundation 2/5 and exposes the 120 renown claim CTA',
+  'real browser foundation CTA grants 120 renown and locks after one claim',
+  'second foundation claim replays the existing authoritative receipt without extra renown',
+  'database persists one authoritative weekly foundation claim while crediting renown exactly once',
+  'mobile archive read failure clears stale 2/5 cache and disables foundation claim controls',
+  'real fate chronicle mobile view has no horizontal overflow',
+  'real fate chronicle mobile controls meet touch target',
+  'real fate chronicle browser console errors are empty',
+].forEach((needle) => {
+  assert.ok(browserFateChronicleRealSmoke.includes(needle), `fate chronicle real browser gate should pin marker: ${needle}`);
 });
 
 [
@@ -1190,11 +1291,15 @@ assert.strictEqual(
 });
 
 [
-  'logged-in account control opens one logout confirmation without reopening auth and completes logout',
+  'logged-in account control opens security hub and logout-all confirms once before clearing session',
+  'login from live PVP defers save-slot selection until returning to the main menu',
+  'pendingSaveSlotSelection',
   "await loginPage.click('#login-btn')",
-  "await loginPage.click('#generic-cancel-btn')",
-  "loginPage.click('#generic-confirm-btn')",
-  'requestCount: Number(window.__logoutRequestCount || 0)',
+  "loginPage.click('[data-social-action=\"logout-all\"]')",
+  "loginPage.once('dialog'",
+  'await dialog.dismiss()',
+  'await dialog.accept()',
+  'requestCount: logoutAllRequestCount',
   'real authenticated cloud slot reload preserves the complete pending challenge selection',
   'runChallengeCloudSlotResumeProbe',
   'challengeCloudResumeMarkerWitness',
@@ -1205,6 +1310,20 @@ assert.strictEqual(
   assert.ok(
     browserAuthUiCloudSmoke.includes(needle),
     `auth UI cloud smoke should exercise the logged-in logout control through real clicks: ${needle}`,
+  );
+});
+assert.ok(
+  !browserAuthUiCloudSmoke.includes('expectLogoutAuthorizationRace'),
+  'auth UI cloud smoke must not suppress PVP authorization failures during logout-all',
+);
+[
+  'firstRouteVisibleRatio',
+  'firstRouteVisibleRatio >= 0.35',
+  "routeChoiceCount >= 1",
+].forEach((needle) => {
+  assert.ok(
+    browserMapOverviewRiskAudit.includes(needle),
+    `mobile map gate should protect first-route visibility: ${needle}`,
   );
 });
 
@@ -1222,10 +1341,10 @@ assert.strictEqual(
 });
 
 [
-  'audits: frontend-layout,season-ops,authoritative-runs-real',
+  'audits: frontend-layout,season-ops,authoritative-runs-real,fate-chronicle-real',
   'audits: relay-expedition-real',
   'audits: expedition,events,vow-choice,guide,inheritance,pvp,pvp-live,pvp-live-real,pvp-live-mobile-real,pvp-mobile,pvp-mobile-result,challenge-mobile-flow',
-  "if: contains(matrix.audits, 'backend-client') || contains(matrix.audits, 'auth-ui-cloud') || contains(matrix.audits, 'account-social-real') || contains(matrix.audits, 'pvp-live-real') || contains(matrix.audits, 'pvp-live-mobile-real') || contains(matrix.audits, 'authoritative-runs-real') || contains(matrix.audits, 'relay-expedition-real')",
+  "if: contains(matrix.audits, 'backend-client') || contains(matrix.audits, 'auth-ui-cloud') || contains(matrix.audits, 'account-social-real') || contains(matrix.audits, 'pvp-live-real') || contains(matrix.audits, 'pvp-live-mobile-real') || contains(matrix.audits, 'authoritative-runs-real') || contains(matrix.audits, 'fate-chronicle-real') || contains(matrix.audits, 'relay-expedition-real')",
 ].forEach((needle) => {
   assert.ok(
     pagesWorkflow.includes(needle),
@@ -1236,6 +1355,7 @@ assert.strictEqual(
 [
   "'season-ops'",
   "'authoritative-runs-real'",
+  "'fate-chronicle-real'",
   "'relay-expedition-real'",
   "'pvp-live'",
   "'pvp-live-real'",

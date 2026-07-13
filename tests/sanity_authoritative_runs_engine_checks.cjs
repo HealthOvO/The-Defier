@@ -4,6 +4,7 @@ const {
   CONTENT_HASH,
   CONTENT_SNAPSHOT,
   CONTENT_VERSION,
+  FATE_CHRONICLE_SCENARIO_IDS,
   PROTOCOL_VERSION,
   RELAY_EXPEDITION_SCENARIO_IDS,
 } = require('../server/progression/authoritative-runs/catalog');
@@ -86,10 +87,10 @@ function countDeckCards(cards) {
 }
 
 assert.strictEqual(PROTOCOL_VERSION, 'authoritative-run-v2');
-assert.strictEqual(CONTENT_VERSION, 'authoritative-trials-v2');
+assert.strictEqual(CONTENT_VERSION, 'authoritative-trials-v3');
 assert.strictEqual(
   CONTENT_HASH,
-  '57e76d6f0877d17d250c1252aae022f862fbb38bd5647689795a45eca01353fb',
+  '7140563ebff0cb1825d6ed732f93bcd84c7fccfa4b48bf1ce85aece23ad157af',
   'content hash should change only with an intentional catalog version update',
 );
 
@@ -161,19 +162,19 @@ for (const scenarioId of RELAY_EXPEDITION_SCENARIO_IDS) {
 const golden = {
   pve: {
     actions: 55,
-    hash: 'ff048ca5dd38bdc591adeaea39d4ab9b41974f2509e683c7ea26948edf02b043',
+    hash: '2614a8a4ab72d9f98f21f248832e2ef68ee2c82169ee18d10f9f3c1b08693fa1',
     score: 613,
     turns: 14,
   },
   challenge: {
     actions: 45,
-    hash: '49cb89f4005c5ae2d585466c8d049ddef452eae639ea829c14708ac5d88ebea2',
+    hash: '2d1f05efff9f34c50a50cb81547da92087887cf508369df58cf16f7bcf2fd462',
     score: 781,
     turns: 12,
   },
   expedition: {
     actions: 61,
-    hash: 'd8d153a3a0a8bf3c666a70222a947b7e31c39b44a13188c41cdbc6ffd54496d2',
+    hash: '6170f378e5681fadbfba3f3e4f972c541637f650a3585f752aac7ec8fdced961',
     score: 722,
     turns: 13,
   },
@@ -195,19 +196,19 @@ for (const mode of Object.keys(golden)) {
 const relayGolden = {
   vanguard: {
     actions: 27,
-    hash: '1dfcd7e186187d0341070fbc34e7b9c2eb676e41f2f8cb167eaf4ae00844782d',
+    hash: '5200e3bb3c34e8bd0a658cf612ce4dc0837790b290e32003f752f06ee406f247',
     score: 615,
     turns: 6,
   },
   bulwark: {
     actions: 53,
-    hash: '4fe17d7e57889b13923382613b8a1febc3f70c578a869995096a3077dd3a6e85',
+    hash: '12031bc7f72ea0bdbd002b2d41563c463d287c593281c26c20804d2255d982de',
     score: 600,
     turns: 15,
   },
   insight: {
     actions: 40,
-    hash: '78c3192a0e27498f07e85b01cc06cf935159fb540d66e7c20a7b8988bac61ba5',
+    hash: 'f0780d0404a55faf0f0e6712eadc6e6904178db1e0761f69056e58851ec89840',
     score: 653,
     turns: 7,
   },
@@ -237,6 +238,40 @@ for (const scenarioId of RELAY_EXPEDITION_SCENARIO_IDS) {
   assert.strictEqual(stableStringify(replayed), stableStringify(result.state), `${scenarioId} relay replay must be byte-identical`);
 }
 
+const fateGolden = {
+  'chronicle-ember-guard': { actions: 45, hash: '6523fe6a91751e0ba634a784911354eb7a3459aec2dcc6a6426fb8b3bc69f8bc', score: 670, turns: 12 },
+  'chronicle-ember-edge': { actions: 34, hash: '149be668bebe61d36002d4c5640a15337691834e548222fa5ca7c230cea5ce6f', score: 725, turns: 7 },
+  'chronicle-mirror-guard': { actions: 64, hash: 'c46f7eb8c6bb05fc83f058a680c8081f60c62d6a1697af351059b82a58cefe79', score: 851, turns: 16 },
+  'chronicle-mirror-edge': { actions: 41, hash: '2fc4af2acb3febb8c06035a8458dcbc45380fdcfa88ccf5fd7f7d577cc0c95b5', score: 894, turns: 9 },
+  'chronicle-rift-guard': { actions: 92, hash: '3700f93a7ff65459d019c7c0fc6156b0272ff3feb68c0d946ffb3ce5682a2cd0', score: 986, turns: 24 },
+  'chronicle-rift-edge': { actions: 59, hash: '07a843fdec9a097850a998964558b97d67c990f88e78ec7ab16a21da3da7ecdb', score: 1097, turns: 11 },
+};
+
+for (const scenarioId of FATE_CHRONICLE_SCENARIO_IDS) {
+  const scenario = CONTENT_SNAPSHOT.scenarios[scenarioId];
+  const result = drive(
+    'fate_chronicle',
+    `fate:${scenarioId}:golden:0`,
+    `fate-${scenarioId}-golden-0001`,
+    scenarioId,
+  );
+  const expected = fateGolden[scenarioId];
+  assert.strictEqual(result.state.phase, 'completed', `${scenarioId} fate golden run should complete`);
+  assert.strictEqual(result.state.player.maxHp, scenario.maxHp, `${scenarioId} should pin its oath hp`);
+  assert.strictEqual(result.commands.length, expected.actions, `${scenarioId} fate action count drifted`);
+  assert.strictEqual(hashCanonical(result.state), expected.hash, `${scenarioId} fate final state drifted`);
+  assert.strictEqual(result.state.summary.score, expected.score, `${scenarioId} fate score drifted`);
+  assert.strictEqual(result.state.stats.turns, expected.turns, `${scenarioId} fate turn count drifted`);
+  const replayed = replay(
+    'fate_chronicle',
+    `fate:${scenarioId}:golden:0`,
+    `fate-${scenarioId}-golden-0001`,
+    result.commands,
+    scenarioId,
+  );
+  assert.strictEqual(stableStringify(replayed), stableStringify(result.state), `${scenarioId} fate replay must be byte-identical`);
+}
+
 for (const mode of ['pve', 'challenge', 'expedition', 'challenge_ladder', 'world_rift']) {
   for (let index = 0; index < 40; index += 1) {
     const label = `${mode}:property:${index}`;
@@ -262,6 +297,19 @@ for (const scenarioId of RELAY_EXPEDITION_SCENARIO_IDS) {
     assert(result.commands.length <= 256, `${scenarioId}/${index} should stay under the action budget`);
     const replayed = replay('relay_expedition', label, runId, result.commands, scenarioId);
     assert.strictEqual(hashCanonical(replayed), hashCanonical(result.state), `${scenarioId}/${index} replay hash must match`);
+  }
+}
+
+for (const scenarioId of FATE_CHRONICLE_SCENARIO_IDS) {
+  for (let index = 0; index < 60; index += 1) {
+    const label = `fate:${scenarioId}:property:${index}`;
+    const runId = `fate-${scenarioId}-${String(index).padStart(8, '0')}`;
+    const result = drive('fate_chronicle', label, runId, scenarioId);
+    assert(TERMINAL_PHASES.has(result.state.phase), `${scenarioId}/${index} should terminate`);
+    assert(result.commands.length <= 256, `${scenarioId}/${index} should stay under the action budget`);
+    assert(result.state.player.hp >= 0 && result.state.player.hp <= result.state.player.maxHp);
+    const replayed = replay('fate_chronicle', label, runId, result.commands, scenarioId);
+    assert.strictEqual(hashCanonical(replayed), hashCanonical(result.state), `${scenarioId}/${index} fate replay hash must match`);
   }
 }
 

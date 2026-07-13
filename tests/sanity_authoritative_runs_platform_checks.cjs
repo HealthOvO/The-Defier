@@ -42,7 +42,11 @@ function loadAuthoritativeRunsService() {
   return require(target);
 }
 
-const { issueAuthoritativeRun } = loadAuthoritativeRunsService();
+const {
+  getCurrentAuthoritativeRun,
+  issueAuthoritativeRun,
+  SETTLEMENT_RECEIPT_RECOVERY_WINDOW_MS
+} = loadAuthoritativeRunsService();
 
 let runCounter = 0;
 let actionCounter = 0;
@@ -402,8 +406,8 @@ async function main() {
 
     const version = await request('/api/version');
     assert.strictEqual(version.status, 200, JSON.stringify(version.payload));
-    assert.strictEqual(version.payload?.schema?.version, 10);
-    assert.strictEqual(version.payload?.schema?.currentMigrationId, '0010_relay_expedition');
+    assert.strictEqual(version.payload?.schema?.version, 11);
+    assert.strictEqual(version.payload?.schema?.currentMigrationId, '0011_authoritative_fate_chronicle');
     assert.deepStrictEqual(
       version.payload?.schema?.appliedMigrations?.map(entry => entry.id),
       [
@@ -416,7 +420,8 @@ async function main() {
         '0007_authoritative_challenge_ladder',
         '0008_authoritative_world_rift',
         '0009_account_social_coop',
-        '0010_relay_expedition'
+        '0010_relay_expedition',
+        '0011_authoritative_fate_chronicle'
       ]
     );
 
@@ -932,24 +937,69 @@ async function main() {
       settleRun(primary.token, pveRun.runId, pveRun.stateVersion, settleMutationA),
       settleRun(primary.token, pveRun.runId, pveRun.stateVersion, settleMutationB)
     ]);
-    for (const response of [settleConcurrentA, settleConcurrentB]) {
-      assert.strictEqual(response.status, 200, JSON.stringify(response.payload));
-      assert.strictEqual(response.payload?.receipt?.runId, pveRun.runId);
-    }
-    const settleReceiptIds = new Set([
-      settleConcurrentA.payload?.receipt?.receiptId,
-      settleConcurrentB.payload?.receipt?.receiptId
-    ]);
-    assert.strictEqual(settleReceiptIds.size, 1, 'concurrent settle should converge on one receipt');
-    const settleIdempotentFlags = [
-      !!settleConcurrentA.payload?.receipt?.idempotent,
-      !!settleConcurrentB.payload?.receipt?.idempotent
-    ].sort();
-    assert.deepStrictEqual(settleIdempotentFlags, [false, true]);
+    const concurrentSettles = [
+      { response: settleConcurrentA, mutationId: settleMutationA },
+      { response: settleConcurrentB, mutationId: settleMutationB }
+    ];
+    assert.deepStrictEqual(
+      concurrentSettles.map(entry => entry.response.status).sort(),
+      [200, 200],
+      'concurrent settles with different mutation ids must reuse one canonical receipt'
+    );
+    const winningSettle = concurrentSettles.find(entry => entry.response.payload?.receipt?.idempotent === false);
+    const recoveredConcurrentSettle = concurrentSettles.find(entry => entry.response.payload?.receipt?.recovered === true);
+    assert(winningSettle, JSON.stringify(concurrentSettles));
+    assert(recoveredConcurrentSettle, JSON.stringify(concurrentSettles));
+    assert.strictEqual(winningSettle.response.payload?.receipt?.runId, pveRun.runId);
+    assert.strictEqual(winningSettle.response.payload?.receipt?.idempotent, false);
+    assert.strictEqual(recoveredConcurrentSettle.response.payload?.receipt?.receiptId, winningSettle.response.payload?.receipt?.receiptId);
+    assert.strictEqual(recoveredConcurrentSettle.response.payload?.run?.recovered, true);
 
-    const repeatedSettle = await settleRun(primary.token, pveRun.runId, pveRun.stateVersion, settleMutationA);
+    const repeatedSettle = await settleRun(primary.token, pveRun.runId, pveRun.stateVersion, winningSettle.mutationId);
     assert.strictEqual(repeatedSettle.status, 200, JSON.stringify(repeatedSettle.payload));
     assert.strictEqual(repeatedSettle.payload?.receipt?.idempotent, true);
+    const mismatchedSettleReplay = await settleRun(
+      primary.token,
+      pveRun.runId,
+      Math.max(0, pveRun.stateVersion - 1),
+      winningSettle.mutationId
+    );
+    assert.strictEqual(mismatchedSettleReplay.status, 409, JSON.stringify(mismatchedSettleReplay.payload));
+    assert.strictEqual(mismatchedSettleReplay.payload?.reason, 'settlement_mutation_payload_conflict');
+
+    const recoveredAfterLostResponse = await settleRun(
+      primary.token,
+      pveRun.runId,
+      pveRun.stateVersion,
+      nextId('mutation')
+    );
+    assert.strictEqual(recoveredAfterLostResponse.status, 200, JSON.stringify(recoveredAfterLostResponse.payload));
+    assert.strictEqual(recoveredAfterLostResponse.payload?.receipt?.receiptId, winningSettle.response.payload?.receipt?.receiptId);
+    assert.strictEqual(recoveredAfterLostResponse.payload?.receipt?.idempotent, true);
+    assert.strictEqual(recoveredAfterLostResponse.payload?.receipt?.recovered, true);
+    const recoveryVersionConflict = await settleRun(
+      primary.token,
+      pveRun.runId,
+      Math.max(0, pveRun.stateVersion - 1),
+      nextId('mutation')
+    );
+    assert.strictEqual(recoveryVersionConflict.status, 409, JSON.stringify(recoveryVersionConflict.payload));
+    assert.strictEqual(recoveryVersionConflict.payload?.reason, 'settlement_recovery_version_conflict');
+
+    const settledCurrent = await getCurrentRun(primary.token, 'pve');
+    assert.strictEqual(settledCurrent.status, 200, JSON.stringify(settledCurrent.payload));
+    assert.strictEqual(settledCurrent.payload?.run, null);
+    assert.strictEqual(settledCurrent.payload?.recoveryKind, 'settlement_receipt');
+    assert.strictEqual(settledCurrent.payload?.lastSettlement?.runId, pveRun.runId);
+    assert.strictEqual(settledCurrent.payload?.lastSettlement?.status, 'settled');
+    assert.strictEqual(settledCurrent.payload?.lastSettlement?.receipt?.receiptId, winningSettle.response.payload?.receipt?.receiptId);
+    const historicalCurrent = await getCurrentAuthoritativeRun(
+      primary.userId,
+      'pve',
+      Number(settledCurrent.payload?.lastSettlement?.settledAt) + SETTLEMENT_RECEIPT_RECOVERY_WINDOW_MS + 1
+    );
+    assert.strictEqual(historicalCurrent.run, null);
+    assert.strictEqual(historicalCurrent.lastSettlement, undefined, 'historical settlements must not replace no-current-run state');
 
     const authoritativeReceiptRow = await dbGet(
       `SELECT COUNT(*) AS count FROM progression_authoritative_run_receipts WHERE run_id = ?`,

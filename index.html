@@ -26,6 +26,7 @@
                 'open-collection': () => window.game.showCollection(),
                 'open-challenges': () => window.game.showChallengeHub('daily'),
                 'open-season': () => window.game.showSeasonOps('contracts'),
+                'open-chronicle': () => window.game.showFateChronicle(),
                 'open-achievements': () => window.game.showAchievements(),
                 'open-legacy': () => window.game.showLegacyScreen(),
                 'open-treasures': () => window.game.showTreasureCompendium(),
@@ -85,6 +86,7 @@
     <link rel="stylesheet" href="css/layout-fixes.css">
     <link rel="stylesheet" href="css/frontend-upgrade.css">
     <link id="season-ops-stylesheet" rel="stylesheet" href="css/season-ops.css">
+    <link id="fate-chronicle-stylesheet" rel="stylesheet" href="css/fate-chronicle.css">
     <link rel="stylesheet" href="css/account-social.css">
 </head>
 
@@ -170,6 +172,12 @@
                     <span class="util-label">赛季司</span>
                 </div>
                 <div class="util-btn-wrapper">
+                    <button class="util-btn" data-boot-action="open-chronicle" aria-label="命途长卷" title="命途长卷">
+                        <span class="btn-icon">📖</span>
+                    </button>
+                    <span class="util-label">命途长卷</span>
+                </div>
+                <div class="util-btn-wrapper">
                     <button class="util-btn" data-boot-action="open-achievements" aria-label="成就殿堂" title="成就殿堂">
                         <span class="btn-icon">🏆</span>
                     </button>
@@ -215,7 +223,7 @@
                 <button class="menu-btn small cheat-btn" data-boot-action="enable-cheat"
                     style="display: none; width: auto; padding: 5px 15px;">🛠️ 作弊</button>
             </div>
-            <div class="version-info">V10 同道远征 · 权威接力闭环 · 真 PVP · 道友录 · 可撤销账号会话 · 裂隙协作小队 · 权威试炼 · 玩家指南更新 · 移动端适配</div>
+            <div class="version-info">V11 命途长卷 · 三证归卷 · 同道远征 · 真 PVP · 道友录 · 权威试炼 · 移动端适配</div>
         </div>
     </div>
 
@@ -241,6 +249,9 @@
 
     <!-- 全游戏赛季运营、外观经济与权威榜单 -->
     <div id="season-ops-screen" class="screen" aria-label="赛季司"></div>
+
+    <!-- 服务端权威单人主线与跨玩法周归卷 -->
+    <div id="fate-chronicle-screen" class="screen" aria-label="命途长卷"></div>
 
     <!-- PVP 界面 (天道榜) -->
     <!-- PVP 界面 (天道榜 - Ink & Gold Redesign) -->

@@ -616,7 +616,7 @@ try {
   apiUrl = `http://127.0.0.1:${port}`;
   backend = startBackend();
   const health = await waitForHealth();
-  add('real backend boots relay expedition schema V10', health?.schema?.version === 10 && health?.schema?.currentMigrationId === '0010_relay_expedition', JSON.stringify(health?.schema || {}));
+  add('real backend boots authoritative fate chronicle schema V11', health?.schema?.version === 11 && health?.schema?.currentMigrationId === '0011_authoritative_fate_chronicle', JSON.stringify(health?.schema || {}));
 
   const accountA = await register(usernameA, 'Relay Desktop A');
   const accountB = await register(usernameB, 'Relay Desktop B');

@@ -1846,7 +1846,7 @@ const avoidOpponentWaitingState = {
     ...recentOpponentWaitingState.waitingReport,
     protectionReason: 'player_avoid_opponent',
     releaseMode: 'quality_safeguard_wait',
-    message: '已优先避开你赛后屏蔽的对手，正在为你换一位真人；若真人池过小，系统会继续解释等待原因。',
+    message: '已优先避开你赛后屏蔽的对手，正在为你换一位真人；不会自动切残影，若真人池过小会继续解释等待原因。',
     safeguards: ['real_player_only', 'player_avoid_opponent', 'no_ghost_fallback', 'no_score_change']
   }
 };

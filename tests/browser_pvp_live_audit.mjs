@@ -3531,7 +3531,6 @@ async function clickVisiblePostReviewAction(page, actionId) {
       await delay(0);
     }
     controlledRealtimeHandlers?.onClose?.();
-    await delay(0);
     const beforeResumeStatus = session.getState?.()?.realtimeStatus || '';
     const beforeResumePayload = JSON.parse(window.render_game_to_text()).pvp?.live || null;
     window.__livePvpAuditRecordRealtime = true;
@@ -8708,6 +8707,11 @@ async function clickVisiblePostReviewAction(page, actionId) {
     return true;
   });
   await mobilePage.waitForTimeout(500);
+  const collapsedPracticeDisclosure = mobilePage.locator('#challenge-selection-banner:not([open]) > summary');
+  if (await collapsedPracticeDisclosure.count()) {
+    await collapsedPracticeDisclosure.click();
+    await mobilePage.waitForTimeout(100);
+  }
   const mobilePostReviewPracticeProbe = await mobilePage.evaluate(async () => {
     const rectObject = (rect) => {
       if (!rect) return null;

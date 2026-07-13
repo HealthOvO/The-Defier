@@ -1,7 +1,7 @@
 import { BackendClient } from "./backend-client.js";
 
 const SAFE_ID = /^[A-Za-z0-9._:-]{8,128}$/;
-const MODES = new Set(['pve', 'challenge', 'expedition', 'challenge_ladder', 'world_rift']);
+const MODES = new Set(['pve', 'challenge', 'expedition', 'challenge_ladder', 'world_rift', 'fate_chronicle']);
 const TERMINAL_PHASE_RANK = Object.freeze({
   route: 1,
   battle: 2,
@@ -10,7 +10,7 @@ const TERMINAL_PHASE_RANK = Object.freeze({
   defeated: 4,
   abandoned: 4
 });
-const DEFAULT_CONTENT_VERSION = 'authoritative-trials-v2';
+const DEFAULT_CONTENT_VERSION = 'authoritative-trials-v3';
 const DEFAULT_STATE = Object.freeze({
   mode: '',
   runId: '',
@@ -418,6 +418,30 @@ export function createAuthoritativeRunService({
     if (kind === 'current'
       && Object.prototype.hasOwnProperty.call(result, 'run')
       && result.run === null) {
+      const lastSettlement = result.lastSettlement && typeof result.lastSettlement === 'object'
+        ? result.lastSettlement
+        : null;
+      const recoveredProjection = lastSettlement
+        ? extractProjection({ run: lastSettlement })
+        : null;
+      const recovered = recoveredProjection
+        ? resolveProjectionAcceptance(recoveredProjection, {
+          allowRunSwitch: true,
+          requestRunId: lastSettlement.runId,
+          requestMode
+        })
+        : null;
+      if (recovered && recovered.accepted) {
+        publish({
+          mode: recovered.mode,
+          runId: recovered.runId,
+          projection: recovered.projection,
+          lastReceipt: cloneData(lastSettlement.receipt || recovered.projection.receipt || null),
+          pending: null,
+          lastError: null
+        });
+        return result;
+      }
       publish({
         mode: normalizeMode(requestMode),
         runId: '',

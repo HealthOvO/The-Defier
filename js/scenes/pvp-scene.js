@@ -24,6 +24,8 @@ export const PVPScene = {
   liveSession: null,
   liveSessionUserScope: '',
   livePollTimer: null,
+  livePollInFlight: null,
+  liveAuthQuiescing: false,
   liveQueueCooldownTimer: null,
   liveQueueCooldownTickMs: 1000,
   liveHeartbeatTimer: null,
@@ -566,6 +568,7 @@ export const PVPScene = {
     return false;
   },
   async handleAuthStateChanged() {
+    this.liveAuthQuiescing = false;
     this.getLiveSession();
     this.liveInlineHint = '';
     if (this.activeTab === 'live') {
@@ -5965,14 +5968,22 @@ export const PVPScene = {
     }
   },
   startLivePolling() {
+    if (this.liveAuthQuiescing) return;
     this.stopLivePolling();
     this.livePollTimer = window.setInterval(async () => {
+      if (this.liveAuthQuiescing || this.livePollInFlight) return;
       const state = this.getLiveSession().getState();
       if (!this.shouldLivePoll(state)) {
         this.stopLivePolling();
         return;
       }
-      await this.refreshLiveMatch({ fromAutoPoll: true });
+      const pollTask = Promise.resolve().then(() => this.refreshLiveMatch({ fromAutoPoll: true }));
+      this.livePollInFlight = pollTask;
+      try {
+        await pollTask;
+      } finally {
+        if (this.livePollInFlight === pollTask) this.livePollInFlight = null;
+      }
     }, 2500);
   },
   stopLivePolling() {
@@ -5980,6 +5991,27 @@ export const PVPScene = {
       window.clearInterval(this.livePollTimer);
     }
     this.livePollTimer = null;
+  },
+  async prepareForAuthLogout() {
+    this.liveAuthQuiescing = true;
+    this.stopLivePolling();
+    this.stopLiveQueueCooldownTicker();
+    this.stopLiveHeartbeat();
+    const pendingPoll = this.livePollInFlight;
+    if (pendingPoll) {
+      try {
+        await pendingPoll;
+      } catch (error) {
+        console.warn('[PVP Live] poll quiesce before logout failed', error);
+      }
+    }
+    if (this.liveSession && typeof this.liveSession.disconnectRealtime === 'function') {
+      this.liveSession.disconnectRealtime();
+    }
+  },
+  async resumeAfterAuthLogoutFailure() {
+    this.liveAuthQuiescing = false;
+    await this.handleAuthStateChanged();
   },
   shouldLiveHeartbeat(phase) {
     return phase === 'matched' || phase === 'setup' || phase === 'active' || phase === 'sync_required';
