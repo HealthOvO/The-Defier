@@ -1,0 +1,21 @@
+tests/prod_api_smoke.cjs
+  s_bae69f1b7fab46::t_d58dc6767e14f2 20,119-168,788,892-897,908-911
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "9c94afa95aaaa645407b06c1445df035b13f813e",
+  "prompts": {},
+  "sessions": {
+    "s_bae69f1b7fab46": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ed4f6-e7ac-73e0-a29e-119f3eddb407",
+        "model": "unknown"
+      },
+      "human_author": "AI Agent <bot@example.com>"
+    }
+  },
+  "attestation_metadata": {},
+  "remote_transcripts": {}
+}
