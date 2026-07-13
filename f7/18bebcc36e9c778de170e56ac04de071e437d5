@@ -1,0 +1,25 @@
+js/game.js
+  s_ca5652313828d6::t_764a8e99b4e1ee 8589-8592,8932
+js/views/SystemView.js
+  s_ca5652313828d6::t_dc73e9c2b79ca8 688-692
+tests/sanity_secondary_frontend_flow_checks.cjs
+  s_ca5652313828d6::t_4ac34178fa8851 13,68-69,101-120
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "f718bebcc36e9c778de170e56ac04de071e437d5",
+  "prompts": {},
+  "sessions": {
+    "s_ca5652313828d6": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f3fed-94d5-77b2-9af0-61333559ff38",
+        "model": "unknown"
+      },
+      "human_author": "AI Agent <bot@example.com>"
+    }
+  },
+  "attestation_metadata": {},
+  "remote_transcripts": {}
+}
