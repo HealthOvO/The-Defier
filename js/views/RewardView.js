@@ -1,4 +1,3 @@
-import { PVPScene } from "../scenes/pvp-scene.js";
 import { Utils } from "../core/utils.js";
 import { getCounterTreasures, TREASURES } from "../data/treasures.js";
 import { BOSS_MECHANICS } from "../data/boss_mechanics.js";
@@ -572,14 +571,11 @@ export class RewardView {
       return true;
     }
     if (action === 'screen') {
-      this.game.showScreen(value || 'map-screen');
-      if (value === 'pvp-screen' && typeof PVPScene !== 'undefined' && PVPScene) {
-        if (typeof PVPScene.onShow === 'function') {
-          PVPScene.onShow();
-        } else if (typeof PVPScene.loadRankings === 'function') {
-          PVPScene.loadRankings();
-        }
+      if (value === 'pvp-screen' && typeof this.game.showPvpScreen === 'function') {
+        this.game.showPvpScreen();
+        return true;
       }
+      this.game.showScreen(value || 'map-screen');
       return true;
     }
     if (action === 'treasure') {

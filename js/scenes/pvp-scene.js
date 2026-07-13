@@ -4,6 +4,11 @@ import { PVP_SHOP_ITEMS } from "../data/shop-items.js";
 import { Utils } from "../core/utils.js";
 import { GhostEnemy } from "../entities/ghost-enemy.js";
 import { escapeHtml as renderEscapeHtml } from "../ui/render-safe.js";
+
+export function loadPvpSceneStyles() {
+  if (typeof import.meta.env !== 'object') return Promise.resolve();
+  return import('../../css/pvp.css');
+}
 /**
  * The Defier - PVP Scene Controller (Ink & Gold Edition)
  * 天道榜界面逻辑 - 适配新UI
@@ -51,6 +56,7 @@ export const PVPScene = {
   livePostReviewConfirmAction: '',
   livePostReviewConfirmMatchId: '',
   liveReplayShareViewer: null,
+  liveReplayShareViewerRequestId: 0,
   liveReviewFocus: '',
   liveLoadoutReviewFocused: false,
   liveLoadoutReviewFocusReason: 'loadout',
@@ -452,6 +458,10 @@ export const PVPScene = {
   },
   switchTab(tabName, options = {}) {
     const shouldSkipLoad = !!(options && typeof options === 'object' && options.skipLoad);
+    const shouldKeepReplayViewer = !!(options && typeof options === 'object' && options.keepReplayShareViewer);
+    if (this.liveReplayShareViewer && !shouldKeepReplayViewer) {
+      this.clearLiveReplayShareViewer();
+    }
     if (this.activeTab === 'live' && tabName !== 'live') {
       this.stopLivePolling();
       this.stopLiveQueueCooldownTicker();
@@ -4574,6 +4584,41 @@ export const PVPScene = {
     const token = String(value || '').trim();
     return /^pvplrs-[a-zA-Z0-9_-]{24,80}$/.test(token) ? token : '';
   },
+  clearLiveReplayShareViewer(options = {}) {
+    const shouldSyncUrl = !(options && typeof options === 'object' && options.syncUrl === false);
+    const gameRef = this.getGameRef();
+    const hadViewer = !!this.liveReplayShareViewer || !!(gameRef && gameRef.publicReplayShareConfig);
+    this.liveReplayShareViewerRequestId += 1;
+    this.liveReplayShareViewer = null;
+    if (gameRef && Object.prototype.hasOwnProperty.call(gameRef, 'publicReplayShareConfig')) {
+      gameRef.publicReplayShareConfig = null;
+    }
+    this.renderLiveReplayShareViewer();
+    if (shouldSyncUrl
+      && typeof window !== 'undefined'
+      && window.location
+      && window.history
+      && typeof window.history.replaceState === 'function') {
+      try {
+        const url = new URL(window.location.href);
+        if (url.searchParams.has('pvpReplayShare')) {
+          url.searchParams.delete('pvpReplayShare');
+          window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`);
+        }
+      } catch (error) {
+        console.warn('Public replay share URL cleanup failed:', error);
+      }
+    }
+    return hadViewer;
+  },
+  closeLiveReplayShareViewer(options = {}) {
+    const shouldResumeLive = !(options && typeof options === 'object' && options.resumeLive === false);
+    const cleared = this.clearLiveReplayShareViewer(options);
+    if (shouldResumeLive) {
+      this.switchTab('live');
+    }
+    return cleared;
+  },
   activateLiveReplayShareViewerSurface() {
     if (typeof document === 'undefined') return;
     this.activeTab = 'live';
@@ -4592,6 +4637,8 @@ export const PVPScene = {
   },
   async openLiveReplayShareViewer(shareToken = '') {
     const token = this.normalizeLiveReplayShareToken(shareToken);
+    const requestId = this.liveReplayShareViewerRequestId + 1;
+    this.liveReplayShareViewerRequestId = requestId;
     const gameRef = this.getGameRef();
     if (gameRef && typeof gameRef.showScreen === 'function') {
       gameRef.showScreen('pvp-screen');
@@ -4617,6 +4664,7 @@ export const PVPScene = {
         throw new Error('公开战报分享服务未就绪');
       }
       const result = await PVPService.live.getReplayShare(token);
+      if (requestId !== this.liveReplayShareViewerRequestId) return null;
       if (!result || result.success === false) {
         const reason = String(result && (result.reason || result.message) || 'replay_share_unavailable');
         this.liveReplayShareViewer = {
@@ -4638,6 +4686,7 @@ export const PVPScene = {
       this.renderLiveReplayShareViewer();
       return this.liveReplayShareViewer;
     } catch (error) {
+      if (requestId !== this.liveReplayShareViewerRequestId) return null;
       this.liveReplayShareViewer = {
         status: 'error',
         shareToken: token,
@@ -4657,10 +4706,12 @@ export const PVPScene = {
     if (!host) return '';
     const viewer = this.liveReplayShareViewer;
     if (!viewer) {
+      root?.removeAttribute('data-live-public-replay');
       host.hidden = true;
       host.innerHTML = '';
       return '';
     }
+    root?.setAttribute('data-live-public-replay', 'true');
     host.hidden = false;
     const status = String(viewer.status || 'idle');
     host.setAttribute('data-live-replay-share-viewer-status', status);
@@ -4765,6 +4816,11 @@ export const PVPScene = {
   },
   renderLiveReplayShareViewerMarkup(viewer = {}) {
     const status = String(viewer.status || 'idle');
+    const returnAction = `
+      <div class="pvp-live-replay-share-viewer-actions">
+        <button class="challenge-btn secondary" type="button" data-live-replay-share-close onclick="PVPScene.closeLiveReplayShareViewer()">返回实时论道</button>
+      </div>
+    `;
     if (status === 'loading') {
       return `
         <section class="pvp-live-replay-share-card" data-live-replay-share-viewer data-live-replay-share-viewer-status="loading">
@@ -4773,6 +4829,7 @@ export const PVPScene = {
             <span>replay_public</span>
           </div>
           <div class="pvp-live-dispute-receipt-line">正在读取公开战报...</div>
+          ${returnAction}
         </section>
       `;
     }
@@ -4785,6 +4842,7 @@ export const PVPScene = {
           </div>
           <div class="pvp-live-dispute-receipt-line">${this.escapeHtml(viewer.message || '公开战报已失效或暂不可读。')}</div>
           <div class="pvp-live-dispute-receipt-boundary">公开 viewer 只读取 replay_public，不读取本人回放、隐藏手牌、牌库或结算奖励。</div>
+          ${returnAction}
         </section>
       `;
     }
@@ -4848,6 +4906,7 @@ export const PVPScene = {
         </div>
         <div class="pvp-live-event-log" data-live-replay-share-event-log>${eventRows}</div>
         <div class="pvp-live-dispute-receipt-boundary">${this.escapeHtml(share.boundary || '公开战报分享只暴露 replay_public 脱敏回放，不读取隐藏手牌、牌库、随机种子或本人结算。')}</div>
+        ${returnAction}
       </section>
     `;
   },
@@ -5764,7 +5823,7 @@ export const PVPScene = {
     const postReviewEl = root.querySelector('[data-live-post-match-review]');
     if (postReviewEl) {
       const postReviewMarkup = this.renderLivePostMatchReview(view, phase);
-      const rematchReportMarkup = this.renderLiveFriendlySeries(state.rematchReport);
+      const rematchReportMarkup = this.renderLiveFriendlySeries(state.rematchReport || view?.friendlySeries);
       postReviewEl.hidden = !(postReviewMarkup || rematchReportMarkup);
       postReviewEl.innerHTML = postReviewMarkup || rematchReportMarkup
         ? `${postReviewMarkup}${rematchReportMarkup}`

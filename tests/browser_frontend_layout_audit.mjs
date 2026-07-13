@@ -1281,8 +1281,12 @@ async function prepareScenario(page, scenarioId) {
         break;
       case 'pvp-screen':
         ensureGame();
-        game.showScreen('pvp-screen');
-        if (window.PVPScene && typeof PVPScene.onShow === 'function') PVPScene.onShow();
+        if (typeof game.showPvpScreen === 'function') {
+          await game.showPvpScreen();
+        } else {
+          game.showScreen('pvp-screen');
+          if (window.PVPScene && typeof PVPScene.onShow === 'function') PVPScene.onShow();
+        }
         break;
       case 'character-selection-screen':
         ensureGame();
@@ -2301,10 +2305,9 @@ async function inspectLayout(page, rootSelector, scenarioId) {
     if (scenarioId === 'reward-screen') {
       const panel = root.querySelector('#reward-expedition-meta');
       const sideColumn = root.querySelector('.reward-side-column');
-      const disclosureInitiallyOpen = !!panel?.open;
+      const panelInitiallyOpen = panel?.open === true;
       if (panel && !panel.open) {
-        const summary = panel.querySelector('summary');
-        if (summary && typeof summary.click === 'function') summary.click();
+        panel.querySelector(':scope > summary')?.click();
         if (!panel.open) panel.open = true;
       }
       const laneRewardButton = panel?.querySelector('[data-season-board-lane-reward-claim="true"]') || null;
@@ -2314,9 +2317,9 @@ async function inspectLayout(page, rootSelector, scenarioId) {
       const panelRect = panel ? panel.getBoundingClientRect() : null;
       const sideRect = sideColumn ? sideColumn.getBoundingClientRect() : null;
       rewardExpeditionCtaProbe = {
-        disclosureInitiallyOpen,
-        disclosureOpen: !!panel?.open,
         panelVisible: !!(panel && isVisible(panel)),
+        panelInitiallyOpen,
+        panelOpenedForCtaAudit: panel?.open === true,
         sideColumnVisible: !!(sideColumn && isVisible(sideColumn)),
         laneRewardVisible: !!(laneRewardButton && isVisible(laneRewardButton)),
         handoffVisible: !!(handoffButton && isVisible(handoffButton)),
@@ -2349,7 +2352,8 @@ async function inspectLayout(page, rootSelector, scenarioId) {
       if (
         !rewardExpeditionCtaProbe.panelVisible
         || !rewardExpeditionCtaProbe.sideColumnVisible
-        || !rewardExpeditionCtaProbe.disclosureOpen
+        || (viewport.width <= 840 && rewardExpeditionCtaProbe.panelInitiallyOpen)
+        || !rewardExpeditionCtaProbe.panelOpenedForCtaAudit
         || !rewardExpeditionCtaProbe.laneRewardVisible
         || !rewardExpeditionCtaProbe.handoffVisible
         || rewardExpeditionCtaProbe.laneRewardClaimable !== 'true'

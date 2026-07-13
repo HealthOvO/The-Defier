@@ -11,6 +11,7 @@
     "build": "vite build",
     "build:pages": "bash scripts/prepare-pages.sh .site",
     "test:node": "bash tests/run_node_checks.sh",
+    "test:frontend:budget": "node scripts/check-frontend-budgets.mjs",
     "test:browser:feature": "node tests/browser_feature_audit.mjs",
     "test:browser:frontend-layout-density": "node tests/browser_frontend_layout_audit.mjs",
     "test:browser:mobile": "node tests/browser_mobile_layout_audit.mjs",

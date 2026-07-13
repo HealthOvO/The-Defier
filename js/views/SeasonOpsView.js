@@ -4,6 +4,11 @@ import { RelayExpeditionService } from "../services/relay-expedition-service.js"
 import { AuthoritativeRunPanel } from "./AuthoritativeRunPanel.js";
 import { buildDataAttributes, escapeHtml } from "../ui/render-safe.js";
 
+export function loadSeasonOpsStyles() {
+  if (typeof import.meta.env !== 'object') return Promise.resolve();
+  return import('../../css/season-ops.css');
+}
+
 const TAB_ORDER = ["contracts", "store", "leaderboard", "ledger"];
 const UI_TAB_ORDER = [...TAB_ORDER, "authoritative"];
 const AUTHORITATIVE_TAB_ID = "authoritative";
@@ -157,25 +162,9 @@ export class SeasonOpsView {
     return document.getElementById(this.containerId);
   }
 
-  ensureStylesheet() {
-    if (typeof document === "undefined") return;
-    const existing = document.getElementById("season-ops-stylesheet");
-    if (existing) return;
-    const link = document.createElement("link");
-    link.id = "season-ops-stylesheet";
-    link.rel = "stylesheet";
-    try {
-      link.href = new URL("../../css/season-ops.css", import.meta.url).href;
-    } catch (error) {
-      link.href = "css/season-ops.css";
-    }
-    document.head.appendChild(link);
-  }
-
   ensureRoot() {
     const container = this.getContainer();
     if (!container) return null;
-    this.ensureStylesheet();
     container.classList.add("season-ops-screen");
     if (!container.__seasonOpsBound) {
       container.addEventListener("click", this.boundClickHandler);

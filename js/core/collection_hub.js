@@ -6854,6 +6854,10 @@ const collectionHubMethods = Object.create(null);
         }
         if (action === 'show-screen') {
           const screenId = String(collectionActionBtn.dataset.screenId || '');
+          if (screenId === 'pvp-screen' && typeof this.showPvpScreen === 'function') {
+            this.showPvpScreen();
+            return;
+          }
           if (screenId && typeof this.showScreen === 'function') {
             this.showScreen(screenId);
             return;
@@ -6880,14 +6884,11 @@ const collectionHubMethods = Object.create(null);
             return;
           }
           if (taskActionType === 'screen' && taskActionValue && typeof this.showScreen === 'function') {
-            this.showScreen(taskActionValue);
-            if (taskActionValue === 'pvp-screen' && typeof PVPScene !== 'undefined' && PVPScene) {
-              if (typeof PVPScene.onShow === 'function') {
-                PVPScene.onShow();
-              } else if (typeof PVPScene.loadRankings === 'function') {
-                PVPScene.loadRankings();
-              }
+            if (taskActionValue === 'pvp-screen' && typeof this.showPvpScreen === 'function') {
+              this.showPvpScreen();
+              return;
             }
+            this.showScreen(taskActionValue);
             return;
           }
           if (taskAnchorSection && typeof this.jumpToHeavenlyMandateAnchor === 'function') {

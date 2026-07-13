@@ -3217,8 +3217,11 @@ function rectObj(rect) {
     document.querySelectorAll('.modal.active, .card-detail-overlay.active').forEach((el) => el.classList.remove('active'));
   });
 
-  const buildAndSanctumProbe = await page.evaluate(() => {
+  const buildAndSanctumProbe = await page.evaluate(async () => {
     if (!window.game || !game.player || typeof game.showCollection !== 'function') return { ok: false, reason: 'no_game' };
+    if (typeof game.ensureChallengeHubLoaded === 'function') {
+      await game.ensureChallengeHubLoaded();
+    }
     document.querySelectorAll('.achievement-popup').forEach((el) => el.remove());
     document.querySelectorAll('.modal.active, .card-detail-overlay.active').forEach((el) => el.classList.remove('active'));
     const firstLaw = typeof LAWS !== 'undefined' ? LAWS.flameTruth || Object.values(LAWS)[0] : null;

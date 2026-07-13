@@ -5,6 +5,11 @@ import { FateChronicleService } from "../services/fate-chronicle-service.js";
 import { AuthoritativeRunPanel } from "./AuthoritativeRunPanel.js";
 import { buildDataAttributes, escapeHtml } from "../ui/render-safe.js";
 
+export function loadFateChronicleStyles() {
+  if (typeof import.meta.env !== "object") return Promise.resolve();
+  return import("../../css/fate-chronicle.css");
+}
+
 const CHAPTER_BLUEPRINTS = Object.freeze([
   {
     order: 1,
@@ -730,24 +735,9 @@ export class FateChronicleView {
     return document.getElementById(this.containerId);
   }
 
-  ensureStylesheet() {
-    if (typeof document === "undefined") return;
-    if (document.getElementById("fate-chronicle-stylesheet")) return;
-    const link = document.createElement("link");
-    link.id = "fate-chronicle-stylesheet";
-    link.rel = "stylesheet";
-    try {
-      link.href = new URL("../../css/fate-chronicle.css", import.meta.url).href;
-    } catch (error) {
-      link.href = "css/fate-chronicle.css";
-    }
-    document.head.appendChild(link);
-  }
-
   ensureRoot() {
     const container = this.getContainer();
     if (!container) return null;
-    this.ensureStylesheet();
     container.classList.add("fate-chronicle-screen");
     if (!container.__fateChronicleBound) {
       container.addEventListener("click", this.boundClickHandler);
@@ -1117,6 +1107,27 @@ export class FateChronicleView {
     `;
   }
 
+  renderStateShell(content = "") {
+    return `
+      <div class="fate-chronicle-shell fate-chronicle-state-shell">
+        <div class="fate-chronicle-state-nav">
+          <button
+            type="button"
+            class="back-btn fate-chronicle-state-back"
+            data-fate-chronicle-action="return-menu"
+            aria-label="返回主菜单"
+            title="返回主菜单"
+          >↩</button>
+          <div>
+            <div class="fate-chronicle-kicker">命途长卷</div>
+            <strong>周命档案</strong>
+          </div>
+        </div>
+        ${content}
+      </div>
+    `;
+  }
+
   renderGuestState() {
     return `
       <section class="fate-chronicle-state-card" data-fate-chronicle-state="guest">
@@ -1399,15 +1410,15 @@ export class FateChronicleView {
     const container = this.ensureRoot();
     if (!container) return;
     if (this.phase === "not_logged_in") {
-      container.innerHTML = `<div class="fate-chronicle-shell">${this.renderGuestState()}</div>`;
+      container.innerHTML = this.renderStateShell(this.renderGuestState());
       return;
     }
     if (this.phase === "loading") {
-      container.innerHTML = `<div class="fate-chronicle-shell">${this.renderLoadingState()}</div>`;
+      container.innerHTML = this.renderStateShell(this.renderLoadingState());
       return;
     }
     if (this.phase === "error") {
-      container.innerHTML = `<div class="fate-chronicle-shell">${this.renderErrorState()}</div>`;
+      container.innerHTML = this.renderStateShell(this.renderErrorState());
       return;
     }
     const model = this.getModel();

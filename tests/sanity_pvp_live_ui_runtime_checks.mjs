@@ -4146,6 +4146,9 @@ const replayShareViewerHost = {
   setAttribute(name, value) {
     this.attributes[name] = String(value);
   },
+  removeAttribute(name) {
+    delete this.attributes[name];
+  },
   getAttribute(name) {
     return this.attributes[name] || '';
   }
@@ -4155,6 +4158,12 @@ const replayShareViewerRoot = {
   attributes: {},
   setAttribute(name, value) {
     this.attributes[name] = String(value);
+  },
+  removeAttribute(name) {
+    delete this.attributes[name];
+  },
+  getAttribute(name) {
+    return this.attributes[name] || '';
   },
   querySelector(selector) {
     if (selector === '[data-live-replay-share-viewer-root]') return replayShareViewerHost;
@@ -4220,7 +4229,60 @@ assert.match(replayShareViewerHost.innerHTML, /关键节点/, 'public replay vie
 assert.match(replayShareViewerHost.innerHTML, /开局/, 'public replay viewer should highlight the public opening moment');
 assert.match(replayShareViewerHost.innerHTML, /反打窗口/, 'public replay viewer should highlight the anti-snowball counterplay moment');
 assert.match(replayShareViewerHost.innerHTML, /终局/, 'public replay viewer should highlight the public finish moment');
+assert.match(replayShareViewerHost.innerHTML, /data-live-replay-share-close/, 'public replay viewer should expose a return-to-live control');
 assert.equal(/pvpm-ui-runtime-raw-should-not-render|SHOULD_NOT_RENDER|postMatchReview|settlementReport|seasonHonorReport/.test(replayShareViewerHost.innerHTML), false, 'public replay viewer should not render raw match ids or seat-specific payload fields');
+assert.equal(PVPScene.closeLiveReplayShareViewer({ resumeLive: false, syncUrl: false }), true, 'public replay viewer close control should clear an active viewer');
+assert.equal(PVPScene.liveReplayShareViewer, null, 'public replay viewer close control should clear viewer state');
+assert.equal(replayShareViewerHost.hidden, true, 'public replay viewer close control should hide its host');
+assert.equal(replayShareViewerHost.innerHTML, '', 'public replay viewer close control should clear stale replay markup');
+assert.equal(replayShareViewerRoot.getAttribute('data-live-public-replay'), '', 'public replay viewer close control should restore the normal live panel surface');
+
+let resolveDelayedReplayShare = null;
+PVPService.live.getReplayShare = () => new Promise((resolve) => {
+  resolveDelayedReplayShare = resolve;
+});
+const delayedReplayOpen = PVPScene.openLiveReplayShareViewer('pvplrs-ui_loading_exit_token_1234567890');
+await Promise.resolve();
+assert.equal(PVPScene.liveReplayShareViewer?.status, 'loading', 'public replay viewer should expose its loading state before the share request resolves');
+assert.match(replayShareViewerHost.innerHTML, /data-live-replay-share-close/, 'public replay viewer loading state should expose a return-to-live control');
+PVPScene.closeLiveReplayShareViewer({ resumeLive: false, syncUrl: false });
+resolveDelayedReplayShare({
+  success: true,
+  share: { visibilityLayer: 'replay_public', matchRef: 'late-response-should-not-render' },
+  replay: {
+    visibilityLayer: 'replay_public',
+    publicSummary: { status: 'finished', winnerSeat: 'A', loserSeat: 'B', finishReason: 'lethal' },
+    events: [],
+    hiddenScan: { forbiddenTokenCount: 0, forbiddenKeyCount: 0, forbiddenStringCount: 0 }
+  }
+});
+assert.equal(await delayedReplayOpen, null, 'public replay viewer should discard a response that arrives after the player exits');
+assert.equal(PVPScene.liveReplayShareViewer, null, 'a delayed public replay response should not reopen a closed viewer');
+assert.equal(replayShareViewerHost.hidden, true, 'a delayed public replay response should leave the normal live panel visible');
+assert.equal(replayShareViewerHost.innerHTML, '', 'a delayed public replay response should not restore stale replay markup');
+
+const replayUrlReplaceCalls = [];
+window.location = { href: 'https://080305.xyz/?foo=1&pvpReplayShare=pvplrs-ui_switch_tab_token_1234567890#live' };
+window.history = {
+  state: { screen: 'pvp' },
+  replaceState(state, title, nextUrl) {
+    replayUrlReplaceCalls.push({ state, title, nextUrl });
+  }
+};
+PVPScene.liveReplayShareViewer = {
+  status: 'error',
+  shareToken: 'pvplrs-ui_switch_tab_token_1234567890',
+  message: '公开战报暂不可用。'
+};
+PVPScene.activeTab = 'live';
+PVPScene.renderLiveReplayShareViewer();
+PVPScene.switchTab('ranking', { skipLoad: true });
+assert.equal(PVPScene.liveReplayShareViewer, null, 'switching away from live PVP should clear an active public replay viewer');
+assert.equal(replayShareViewerRoot.getAttribute('data-live-public-replay'), '', 'switching tabs should restore the normal PVP surface');
+assert.deepEqual(replayUrlReplaceCalls, [{ state: { screen: 'pvp' }, title: '', nextUrl: '/?foo=1#live' }], 'switching tabs should remove only the public replay share parameter from the URL');
+delete window.location;
+delete window.history;
+PVPScene.activeTab = 'live';
 PVPService.live.getReplayShare = previousPvpServiceGetReplayShare;
 documentStub.querySelector = previousDocumentQuerySelectorForReplayShare;
 

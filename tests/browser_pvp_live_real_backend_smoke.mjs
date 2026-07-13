@@ -237,6 +237,27 @@ function makeLoadout(identitySlot, pattern) {
   };
 }
 
+async function waitForCoreAndLoadPvpRuntime(page) {
+  await page.waitForFunction(
+    () => !!window.game
+      && !!window.__THE_DEFIER_SERVICES__?.BackendClient
+      && !!window.__THE_DEFIER_SERVICES__?.AuthService
+      && typeof window.game.ensurePvpSceneLoaded === 'function'
+      && typeof window.render_game_to_text === 'function',
+    null,
+    { timeout: bootTimeoutMs },
+  );
+  await page.evaluate(async () => {
+    const scene = await window.game.ensurePvpSceneLoaded();
+    if (!scene) throw new Error('lazy PVP runtime did not resolve');
+  });
+  await page.waitForFunction(
+    () => !!window.PVPService && !!window.PVPScene,
+    null,
+    { timeout: bootTimeoutMs },
+  );
+}
+
 async function preparePage(browser, username, displayName) {
   username = compactTestUsername(username);
   const context = await browser.newContext(isMobileViewport
@@ -257,15 +278,7 @@ async function preparePage(browser, username, displayName) {
   for (let attempt = 1; attempt <= bootAttempts; attempt += 1) {
     try {
       await page.goto(appUrl, { waitUntil: 'domcontentloaded', timeout: navigationTimeoutMs });
-      await page.waitForFunction(
-        () => !!window.game
-          && !!window.__THE_DEFIER_SERVICES__?.BackendClient
-          && !!window.__THE_DEFIER_SERVICES__?.AuthService
-          && !!window.PVPService
-          && !!window.PVPScene,
-        null,
-        { timeout: bootTimeoutMs },
-      );
+      await waitForCoreAndLoadPvpRuntime(page);
       lastBootError = null;
       break;
     } catch (error) {
@@ -378,11 +391,7 @@ async function reloadAndOpenLivePanel(page) {
   for (let attempt = 1; attempt <= bootAttempts; attempt += 1) {
     try {
       await page.reload({ waitUntil: 'domcontentloaded', timeout: navigationTimeoutMs });
-      await page.waitForFunction(
-        () => !!window.game && !!window.PVPScene && typeof window.render_game_to_text === 'function',
-        null,
-        { timeout: bootTimeoutMs },
-      );
+      await waitForCoreAndLoadPvpRuntime(page);
       lastBootError = null;
       break;
     } catch (error) {
@@ -1586,10 +1595,11 @@ async function runFocusedPostMatchSafetyExit(browser) {
       && suppressionReports.every(report => report?.protectionReason === 'player_avoid_opponent')
       && suppressionReports.every(report => report?.releaseMode === 'quality_safeguard_wait')
       && suppressionReports.every(report => report?.safeguards?.includes('player_avoid_opponent'))
+      && suppressionReports.every(report => report?.safeguards?.includes('no_ghost_fallback'))
       && suppressionReports.every(report => report?.currentEligibleActions?.includes('practice'))
       && suppressionReports.every(report => report?.currentEligibleActions?.includes('cancel_queue'))
       && /匹配质量护栏|赛后避开对手|换一位真人/.test(`${suppressionProbe.avoided.waitingText} ${suppressionProbe.avoider.waitingText}`)
-      && /不会自动切残影|不会自动切换残影/.test(`${suppressionProbe.avoided.waitingText} ${suppressionProbe.avoider.waitingText} ${suppressionProbe.avoided.hint} ${suppressionProbe.avoider.hint}`)
+      && /不会自动切残影|不会自动切换残影|换一位真人/.test(`${suppressionProbe.avoided.waitingText} ${suppressionProbe.avoider.waitingText} ${suppressionProbe.avoided.hint} ${suppressionProbe.avoider.hint}`)
       && suppressionProbe.avoided.practiceDisabled === false
       && suppressionProbe.avoider.practiceDisabled === false
       && suppressionProbe.avoided.cancelDisabled === false
@@ -2198,7 +2208,7 @@ async function writeReport() {
         && realInviteCreateProbe.phase === 'waiting_invite'
         && !!realInviteCode
         && realInviteCreateProbe.inviteCodeText.includes(realInviteCode)
-        && /好友|邀请|约战/.test(realInviteCreateProbe.inviteReportText)
+        && /好友约战|邀请|约战|等待好友加入/.test(realInviteCreateProbe.inviteReportText)
         && /指定/.test(realInviteCreateProbe.inviteReportText)
         && /不写正式积分/.test(realInviteCreateProbe.inviteReportText)
         && realInviteCreateProbe.snapshot?.inviteReport?.reportVersion === 'pvp-live-invite-v1'
@@ -3566,6 +3576,7 @@ async function writeReport() {
       await secondSeatClient.page.waitForTimeout(500);
       const activeNonTurnDisconnectProbe = await firstSeatClient.page.evaluate(async secondSeat => {
         const BackendClient = window.__THE_DEFIER_SERVICES__?.BackendClient;
+        await window.PVPScene.getLiveSession().heartbeat();
         const before = window.PVPScene.getLiveSnapshot();
         const heartbeatElapsedMs = Math.max(0, Number(before?.connectionReport?.heartbeatStaleMs || 1000))
           + Math.max(0, Number(before?.connectionReport?.graceMs || 60000))
@@ -3574,8 +3585,9 @@ async function writeReport() {
           method: 'POST',
           data: { heartbeatElapsedMs, testMatchScope: window.__DEFIER_PVP_REAL_TEST_SCOPE }
         });
-        await window.PVPScene.refreshLiveMatch();
-        await new Promise(resolve => setTimeout(resolve, 300));
+        await window.PVPScene.getLiveSession().heartbeat();
+        await window.PVPScene.refreshLiveMatch({ fromAutoPoll: true });
+        await new Promise(resolve => setTimeout(resolve, 100));
         const snapshot = window.PVPScene.getLiveSnapshot();
         const textPayload = JSON.parse(window.render_game_to_text()).pvp?.live || null;
         const tempoEl = document.querySelector('[data-live-connection-tempo]');

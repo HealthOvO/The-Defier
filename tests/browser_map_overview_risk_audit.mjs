@@ -143,15 +143,25 @@ async function enterMap(page) {
 
   await page.setViewportSize({ width: 390, height: 844 });
   await enterMap(page);
-  await page.locator('[data-map-action="toggle-map-intel"]').click();
-  await page.waitForFunction(() => {
+
+  const mobileInitialProbe = await page.evaluate(() => {
     const shell = document.querySelector('#map-screen .map-screen-v3');
-    const toggle = document.querySelector('[data-map-action="toggle-map-intel"]');
-    const drawer = document.getElementById('map-intel-drawer');
-    return shell?.classList.contains('show-map-intel')
-      && toggle?.getAttribute('aria-expanded') === 'true'
-      && drawer?.getAttribute('aria-hidden') === 'false';
-  }, null, { timeout: 5000 });
+    const button = document.querySelector('#map-screen [data-map-action="toggle-map-intel"]');
+    const buttonRect = button?.getBoundingClientRect();
+    return {
+      intelOpen: !!shell?.classList.contains('show-map-intel'),
+      buttonVisible: !!(buttonRect && buttonRect.width > 0 && buttonRect.height > 0),
+      buttonExpanded: button?.getAttribute('aria-expanded') || '',
+      buttonText: button?.textContent?.replace(/\s+/g, ' ').trim() || '',
+    };
+  });
+  const intelToggle = page.locator('#map-screen [data-map-action="toggle-map-intel"]');
+  if ((await intelToggle.count()) !== 1) throw new Error('mobile map should expose one intel toggle');
+  await intelToggle.click();
+  await page.waitForFunction(() => (
+    document.querySelector('#map-screen .map-screen-v3')?.classList.contains('show-map-intel')
+      && document.querySelector('#map-screen [data-map-action="toggle-map-intel"]')?.getAttribute('aria-expanded') === 'true'
+  ), null, { timeout: 5000 });
 
   const mobileProbe = await page.evaluate(() => {
     const normalize = (text) => String(text || '').replace(/\s+/g, ' ').trim();
@@ -170,11 +180,11 @@ async function enterMap(page) {
     const routeCard = document.querySelector('#map-expedition-panels > .expedition-branch-card');
     const firstRouteChoice = routeCard?.querySelector('.expedition-choice-card') || null;
     const shell = document.querySelector('#map-screen .map-screen-v3');
-    const toggle = document.querySelector('[data-map-action="toggle-map-intel"]');
-    const drawer = document.getElementById('map-intel-drawer');
+    const intelButton = document.querySelector('#map-screen [data-map-action="toggle-map-intel"]');
+    const intelDrawer = document.getElementById('map-intel-drawer');
     const overviewRect = overview ? overview.getBoundingClientRect() : null;
     const riskRect = risk ? risk.getBoundingClientRect() : null;
-    const drawerRect = drawer ? drawer.getBoundingClientRect() : null;
+    const drawerRect = intelDrawer ? intelDrawer.getBoundingClientRect() : null;
     const firstRouteRect = firstRouteChoice ? firstRouteChoice.getBoundingClientRect() : null;
     const routeClipTop = drawerRect ? Math.max(0, drawerRect.top) : 0;
     const routeClipBottom = drawerRect ? Math.min(window.innerHeight, drawerRect.bottom) : window.innerHeight;
@@ -193,9 +203,9 @@ async function enterMap(page) {
 
     return {
       viewportHeight: window.innerHeight,
-      drawerOpen: !!shell?.classList.contains('show-map-intel'),
-      toggleExpanded: toggle?.getAttribute('aria-expanded') === 'true',
-      drawerExposed: drawer?.getAttribute('aria-hidden') === 'false',
+      intelOpen: !!shell?.classList.contains('show-map-intel'),
+      intelButtonExpanded: intelButton?.getAttribute('aria-expanded') || '',
+      intelDrawerHidden: intelDrawer?.getAttribute('aria-hidden') || '',
       overviewVisible: visible(overview),
       riskVisible: visible(risk),
       routeCardVisible: visible(routeCard),
@@ -219,9 +229,13 @@ async function enterMap(page) {
   add(
     'mobile map keeps overview, risk, and the first route choice readable in the opened intel drawer',
     !!mobileProbe
-      && mobileProbe.drawerOpen
-      && mobileProbe.toggleExpanded
-      && mobileProbe.drawerExposed
+      && mobileInitialProbe.intelOpen === false
+      && mobileInitialProbe.buttonVisible
+      && mobileInitialProbe.buttonExpanded === 'false'
+      && /关卡情报/.test(mobileInitialProbe.buttonText)
+      && mobileProbe.intelOpen
+      && mobileProbe.intelButtonExpanded === 'true'
+      && mobileProbe.intelDrawerHidden === 'false'
       && mobileProbe.overviewVisible
       && mobileProbe.riskVisible
       && mobileProbe.routeCardVisible
@@ -246,7 +260,7 @@ async function enterMap(page) {
       && /工程态势/.test(mobileProbe.riskText || '')
       && /防御策略/.test(mobileProbe.riskText || '')
       && /资源预留/.test(mobileProbe.riskText || ''),
-    JSON.stringify(mobileProbe || null)
+    JSON.stringify({ initial: mobileInitialProbe, expanded: mobileProbe } || null)
   );
   await safeScreenshot(page, path.join(outDir, 'map-overview-risk-mobile.png'));
 

@@ -774,6 +774,22 @@
     color: rgba(238, 246, 242, 0.72);
 }
 
+.pvp-live-replay-share-viewer-actions {
+    margin-top: 12px;
+    display: flex;
+    justify-content: flex-end;
+}
+
+.pvp-live-replay-share-viewer-actions .challenge-btn {
+    width: auto;
+    min-width: 132px;
+    min-height: 42px;
+    padding: 8px 14px;
+    clip-path: none;
+    border-radius: 8px;
+    letter-spacing: 0;
+}
+
 .pvp-live-meta-grid {
     margin-top: 14px;
     display: grid;
@@ -4823,6 +4839,11 @@ input:checked+.seal-slider .seal-face.on {
         grid-template-columns: repeat(2, minmax(0, 1fr));
         margin-top: 6px;
         gap: 4px;
+    }
+
+    .pvp-live-replay-share-viewer-actions .challenge-btn {
+        width: 100%;
+        min-height: 44px;
     }
 
     .pvp-live-meta {

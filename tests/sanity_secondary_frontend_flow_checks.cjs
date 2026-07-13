@@ -11,6 +11,7 @@ const frontendUpgradeCss = read('css/frontend-upgrade.css');
 const challengeHubSource = read('js/core/challenge_hub.js');
 const rewardViewSource = read('js/views/RewardView.js');
 const systemViewSource = read('js/views/SystemView.js');
+const browserFrontendLayoutAudit = read('tests/browser_frontend_layout_audit.mjs');
 
 function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -64,6 +65,7 @@ assertHasPattern(
 
 const checkLoginStatusSection = sliceBetween(gameSource, 'checkLoginStatus() {', '\n  handleLoginMenuAction() {');
 const handleLoginMenuActionSection = sliceBetween(gameSource, 'handleLoginMenuAction() {', '\n  requestLogout() {');
+const showChallengeHubSection = sliceBetween(gameSource, "showChallengeHub(tab = 'daily') {", '\n  initChallengeHub() {');
 const requestLogoutSection = sliceBetween(gameSource, 'requestLogout() {', '\n  async checkForCloudSave() {');
 const gameShowLoginSection = sliceBetween(gameSource, 'showLoginModal() {', '\n  async handleLogin() {');
 const systemShowLoginSection = sliceBetween(systemViewSource, '  showLoginModal() {', '\n  renderSaveSlots(slots) {');
@@ -92,6 +94,20 @@ assertHasPattern(
   handleLoginMenuActionSection,
   /this\.showSocialHub\('friends'\);/,
   'handleLoginMenuAction should open the account and social hub when already logged in',
+);
+assertHasPattern(
+  showChallengeHubSection,
+  /\['daily', 'weekly', 'global', 'rift'\]\.includes\(tab\)/,
+  'cold challenge hub routing should preserve the world rift tab',
+);
+assertHasPattern(
+  gameSource,
+  /const pvpScene = this\.getPvpScene\(\);[\s\S]{0,180}pvpScene\.handleAuthStateChanged\(\)/,
+  'auth refresh should use the optional deferred PVP scene instance',
+);
+assert.ok(
+  !/\bif \(PVPScene &&/.test(gameSource),
+  'lazy PVP integration must not read an undeclared global scene during auth transitions',
 );
 assertHasPattern(
   requestLogoutSection,
@@ -135,10 +151,16 @@ assertSelectorBlockHas(
   [
     /grid-auto-flow:\s*column;/,
     /overflow-x:\s*auto;/,
-    /scroll-snap-type:\s*x mandatory;/,
+    /scroll-snap-type:\s*none;/,
     /scroll-padding-inline:\s*8px;/,
   ],
   'save slots mobile shell',
+);
+assertSelectorBlockHas(
+  frontendUpgradeCss,
+  '#save-slots-modal .save-slots-footer',
+  [/display:\s*flex;/],
+  'save slots mobile footer',
 );
 
 assertSelectorBlockHas(
@@ -191,8 +213,13 @@ const rewardRunPathSection = sliceBetween(rewardViewSource, 'renderRewardRunPath
 
 assertHasPattern(
   rewardExpeditionSection,
-  /panel\.open\s*=\s*typeof window === 'undefined' \|\| !window\.matchMedia\('\(max-width: 840px\)'\)\.matches;/,
-  'reward expedition disclosure should default open only off mobile',
+  /panel\.open\s*=\s*typeof window === 'undefined'\s*\|\|\s*!window\.matchMedia\('\(max-width: 840px\)'\)\.matches;/,
+  'reward expedition disclosure should default closed on mobile',
+);
+assertHasPattern(
+  browserFrontendLayoutAudit,
+  /panelInitiallyOpen[\s\S]{0,240}panel\.querySelector\(':scope > summary'\)\?\.click\(\)/,
+  'reward layout audit should expand the disclosure through its summary before checking mobile CTAs',
 );
 assertHasPattern(
   rewardExpeditionSection,

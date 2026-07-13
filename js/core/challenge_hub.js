@@ -4311,14 +4311,9 @@ const challengeHubMethods = Object.create(null);
   challengeHubMethods.openPvpLivePracticeReturn = function () {
     const receipt = this.getPvpLivePracticeReturnReceipt();
     if (!receipt) return false;
-    if (typeof this.showScreen === 'function') {
-      this.showScreen('pvp-screen');
-    }
-    const scene = typeof PVPScene !== 'undefined' && PVPScene ? PVPScene : typeof window !== 'undefined' && window.PVPScene ? window.PVPScene : null;
-    if (scene && typeof scene.switchTab === 'function') {
-      scene.switchTab('live', { skipLoad: true });
-    }
-    if (scene) {
+    const applyReturnState = scene => {
+      if (!scene) return;
+      if (typeof scene.switchTab === 'function') scene.switchTab('live', { skipLoad: true });
       const loadoutId = String(receipt.recommendedLoadoutId || '').trim();
       if (loadoutId && typeof scene.setLiveLoadoutPreset === 'function') {
         scene.setLiveLoadoutPreset(loadoutId);
@@ -4333,6 +4328,13 @@ const challengeHubMethods = Object.create(null);
       if (typeof scene.renderLivePanel === 'function') {
         scene.renderLivePanel();
       }
+    };
+    if (typeof this.showPvpScreen === 'function') {
+      this.showPvpScreen().then(applyReturnState);
+    } else {
+      if (typeof this.showScreen === 'function') this.showScreen('pvp-screen');
+      const scene = typeof window !== 'undefined' ? window.PVPScene : null;
+      applyReturnState(scene);
     }
     if (typeof Utils !== 'undefined' && Utils && typeof Utils.showBattleLog === 'function') {
       Utils.showBattleLog(`${receipt.summaryLine} 本次训练不写正式积分；回排不会自动入队。`);

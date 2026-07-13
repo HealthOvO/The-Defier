@@ -32,6 +32,26 @@ async function showCharacterSelectionWithLoadedPortraits(page) {
     game.guestMode = true;
     game.showCharacterSelection();
   });
+  await page.waitForSelector('.character-card .char-avatar-img');
+  const portraitResponses = await page.evaluate(async () => {
+    const sources = [...new Set(Array.from(document.querySelectorAll('.character-card .char-avatar-img'))
+      .map((image) => image.currentSrc || image.src)
+      .filter(Boolean))];
+    return Promise.all(sources.map(async (source) => {
+      const response = await fetch(source, { method: 'HEAD', cache: 'no-store' });
+      return {
+        source,
+        ok: response.ok,
+        contentType: response.headers.get('content-type') || '',
+      };
+    }));
+  });
+  const invalidPortraitResponses = portraitResponses.filter((response) =>
+    !response.ok || !response.contentType.toLowerCase().startsWith('image/')
+  );
+  if (invalidPortraitResponses.length > 0) {
+    throw new Error(`Character portrait response mismatch: ${JSON.stringify(invalidPortraitResponses)}`);
+  }
   await page.waitForFunction(() => {
     const images = Array.from(document.querySelectorAll('.character-card .char-avatar-img'));
     return images.length >= 4 && images.every((image) => image.complete && image.naturalWidth >= 256 && image.naturalHeight >= 256);
@@ -636,9 +656,9 @@ function collectCoreLoopDesignSystemProbe(options = {}) {
   await page.setViewportSize({ width: 1440, height: 960 });
 
   await boot(page);
-  const challengeProbe = await page.evaluate(() => {
+  const challengeProbe = await page.evaluate(async () => {
     if (!window.game || typeof game.showChallengeHub !== 'function') return { ok: false, reason: 'no_challenge_api' };
-    game.showChallengeHub('weekly');
+    await game.showChallengeHub('weekly');
     const shell = document.querySelector('#challenge-screen .challenge-shell');
     const scroll = document.querySelector('#challenge-screen .challenge-scroll-container');
     if (!shell || !scroll) return { ok: false, reason: 'missing_challenge_nodes' };
@@ -1085,17 +1105,9 @@ function collectCoreLoopDesignSystemProbe(options = {}) {
 
   await boot(page);
   const pvpProbe = await page.evaluate(async () => {
-    if (!window.game || typeof window.PVPScene === 'undefined') return { ok: false, reason: 'no_pvp_api' };
-    game.showScreen('pvp-screen');
-    if (typeof PVPScene.onShow === 'function') {
-      const pending = PVPScene.onShow();
-      if (pending && typeof pending.then === 'function') {
-        await Promise.race([
-          pending,
-          new Promise((resolve) => setTimeout(resolve, 800)),
-        ]);
-      }
-    }
+    if (!window.game || typeof game.showPvpScreen !== 'function') return { ok: false, reason: 'no_pvp_api' };
+    const scene = await game.showPvpScreen();
+    if (!scene) return { ok: false, reason: 'pvp_load_failed' };
     const layout = document.querySelector('#pvp-screen .pvp-layout-split');
     if (!layout) return { ok: false, reason: 'missing_pvp_layout' };
     const rect = layout.getBoundingClientRect();
@@ -1387,10 +1399,9 @@ function collectCoreLoopDesignSystemProbe(options = {}) {
   );
 
   await boot(page);
-  await page.evaluate(() => {
-    if (!window.game || typeof window.PVPScene === 'undefined') return;
-    game.showScreen('pvp-screen');
-    if (typeof PVPScene.onShow === 'function') PVPScene.onShow();
+  await page.evaluate(async () => {
+    if (!window.game || typeof game.showPvpScreen !== 'function') return;
+    await game.showPvpScreen();
   });
   const pvpDesignSystemProbe = await page.evaluate(collectDesignSystemProbe, {
     activeScreenId: 'pvp-screen',

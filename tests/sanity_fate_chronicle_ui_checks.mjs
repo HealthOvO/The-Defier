@@ -26,18 +26,22 @@ const cssSource = read("css/fate-chronicle.css");
 
 [
   "export class FateChronicleView",
+  "export function loadFateChronicleStyles",
   "export function normalizeChronicleModel",
   "FateChronicleService.reset();",
   "this.runPanel.clearRun();",
   "result.suppressed",
   "archiveResult.suppressed",
   "authoritative-return-chronicle",
+  "renderStateShell",
+  "fate-chronicle-state-back",
   "aria-pressed=",
   "claim.carryoverCycle",
   "foundationCycleId"
 ].forEach(marker => {
   assert.ok(viewSource.includes(marker), `fate chronicle view should pin ${marker}`);
 });
+assert.ok(!viewSource.includes('fate-chronicle-stylesheet'), 'fate chronicle should not request a second stylesheet after deferred loading');
 
 [
   "requestGeneration",
@@ -73,24 +77,27 @@ const cssSource = read("css/fate-chronicle.css");
 });
 
 [
-  'import { FateChronicleView }',
+  "ensureFateChronicleViewLoaded()",
+  "import('./views/FateChronicleView.js')",
   "showFateChronicle()",
   "showScreen('fate-chronicle-screen')"
 ].forEach(marker => {
   assert.ok(gameSource.includes(marker), `game shell should pin ${marker}`);
 });
+assert.ok(!gameSource.includes('import { FateChronicleView }'), 'fate chronicle should not stay in the eager game bundle');
 
 [
-  'id="fate-chronicle-stylesheet"',
   'data-boot-action="open-chronicle"',
   'id="fate-chronicle-screen"',
   "V11"
 ].forEach(marker => {
   assert.ok(indexSource.includes(marker), `index should pin ${marker}`);
 });
+assert.ok(!indexSource.includes('href="css/fate-chronicle.css"'), 'fate chronicle stylesheet should load with its deferred view');
 
 [
   ".fate-chronicle-shell",
+  ".fate-chronicle-state-nav",
   ".fate-chronicle-chapter-grid",
   ".fate-chronicle-vow-btn",
   "overflow-wrap: anywhere",

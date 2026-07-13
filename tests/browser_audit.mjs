@@ -731,6 +731,11 @@ async function openNewGameEntry(page) {
       const lowestHp = Math.max(0, Math.floor(Number(lowest?.currentHp) || 0));
       return enemyHp < lowestHp ? enemy : lowest;
     }, null);
+    if (target) {
+      target.buffs = target.buffs || {};
+      target.buffs.dodge = 0;
+      target.buffs.dodgeChance = 0;
+    }
     const targetIndex = Array.isArray(game.battle.enemies) ? game.battle.enemies.indexOf(target) : -1;
     const hpBefore = Math.max(0, Math.floor(Number(target?.currentHp) || 0));
     const blockBefore = Math.max(0, Math.floor(Number(target?.block) || 0));

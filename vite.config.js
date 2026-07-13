@@ -3,9 +3,18 @@ import { defineConfig } from 'vite';
 export default defineConfig({
   build: {
     outDir: 'dist',
-    minify: false,
+    minify: 'terser',
+    manifest: true,
     terserOptions: {
-      mangle: false, // Will enable mangle to true once ESM migration is fully completed
+      mangle: false,
+      keep_classnames: true,
+      keep_fnames: true,
+      compress: {
+        passes: 2,
+      },
+      format: {
+        comments: false,
+      },
     },
     rollupOptions: {
       output: {

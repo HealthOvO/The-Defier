@@ -374,14 +374,13 @@ async function runPvpDeferredSaveSlotSelectionProbe(browser) {
   try {
     await configurePage(page);
     await waitForGame(page);
-    await page.evaluate(() => {
+    await page.evaluate(async () => {
       sessionStorage.removeItem('currentSaveSlot');
       localStorage.removeItem('lastSaveSlot');
       window.game.currentSaveSlot = null;
       window.game.pendingSaveSlotSelection = false;
       window.game.saveSlotsSynced = false;
-      window.game.showScreen('pvp-screen');
-      window.PVPScene?.onShow?.();
+      await window.game.showPvpScreen();
       window.game.showLoginModal();
     });
     await page.waitForSelector('#auth-modal.active', { timeout: uiWaitTimeoutMs });
@@ -1745,6 +1744,14 @@ async function runSmoke(page, browser) {
     loginPage.on('request', countLogoutAllRequest);
     await loginPage.click('#login-btn');
     await loginPage.waitForSelector('#social-screen.active', { timeout: uiWaitTimeoutMs });
+    await loginPage.waitForFunction(() => {
+      const screen = document.getElementById('social-screen');
+      const tabs = [...document.querySelectorAll('[data-social-tab]')];
+      return !!window.game?.socialView
+        && screen?.getAttribute('aria-busy') === 'false'
+        && tabs.length > 0
+        && tabs.every(tab => !tab.disabled);
+    }, { timeout: uiWaitTimeoutMs });
     await loginPage.click('[data-social-tab="security"]');
     await loginPage.waitForSelector('[data-social-action="logout-all"]', { timeout: uiWaitTimeoutMs });
     const hubProbe = await loginPage.evaluate(() => ({

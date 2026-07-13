@@ -34,7 +34,6 @@ import './core/battle.js';
 import './core/map.js';
 import './core/fateRing.js';
 import './core/player.js';
-import './scenes/pvp-scene.js';
 import './managers/SaveManager.js';
 import './managers/SeasonBoardManager.js';
 import './managers/SanctumAgendaManager.js';

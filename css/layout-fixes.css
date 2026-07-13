@@ -180,7 +180,7 @@
 
 #pvp-screen .pvp-layout-split {
     height: auto;
-    min-height: calc(100dvh - 136px);
+    min-height: calc(100dvh - 144px);
 }
 
 #pvp-screen .screen-header.transparent {

@@ -322,6 +322,10 @@ export class MapView {
           shell.classList.remove('show-map-tools');
         }
         this.syncMapChrome(container);
+        if (shell.classList.contains('show-map-intel')) {
+          const intelDrawer = container.querySelector('#map-intel-drawer');
+          requestAnimationFrame(() => intelDrawer?.scrollTo({ top: 0, left: 0, behavior: 'auto' }));
+        }
         requestAnimationFrame(() => this.scrollCurrentMapRowIntoView({ behavior: 'auto' }));
         setTimeout(() => this.scrollCurrentMapRowIntoView({ behavior: 'auto' }), 220);
         return;

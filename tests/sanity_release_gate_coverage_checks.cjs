@@ -811,6 +811,7 @@ const layoutAudit = read('tests/browser_frontend_layout_audit.mjs');
 const browserAutomationBootAudit = read('tests/browser_automation_boot_audit.mjs');
 [
   "id: 'public-replay-share-viewer'",
+  "id: 'public-replay-share-loading-exit'",
   '?autotest=guest-map&pvpReplayShare=',
   'mockReplayShare',
   'public replay share mobile viewer keeps key moments readable before auth or automation boot',
@@ -820,6 +821,11 @@ const browserAutomationBootAudit = read('tests/browser_automation_boot_audit.mjs
   'probe.authModalActive',
   'probe.saveSlotsModalActive',
   'probe.publicReplayViewerVisible',
+  'verifyReplayExit: true',
+  'public replay viewer can return to normal live PVP without reload',
+  'public replay viewer loading state stays closed after a delayed response',
+  'verifyReplayExitWhileLoading: true',
+  "page.locator('[data-live-replay-share-close]').click()",
   'payload?.pvp?.live === null',
   'payload?.pvp?.replayShareViewer?.status === \'ready\'',
   'pvpm-browser-raw-should-not-render',
@@ -4414,6 +4420,11 @@ assert.ok(
 
 [
   'getLiveReplayShareHighlights(',
+  'liveReplayShareViewerRequestId',
+  'requestId !== this.liveReplayShareViewerRequestId',
+  'clearLiveReplayShareViewer(',
+  'closeLiveReplayShareViewer(',
+  'data-live-replay-share-close',
   'data-live-replay-share-highlight-list',
 ].forEach((needle) => {
   assert.ok(
@@ -4425,6 +4436,7 @@ assert.ok(
 [
   '.pvp-live-replay-share-highlights',
   '.pvp-live-replay-share-highlight',
+  '.pvp-live-replay-share-viewer-actions',
 ].forEach((needle) => {
   assert.ok(
     pvpCss.includes(needle),
@@ -4509,6 +4521,12 @@ assert.ok(
   'share_replay action should copy the front-end public replay viewer link',
   'public replay viewer should fetch by opaque share token only',
   'public replay viewer should not render raw match ids or seat-specific payload fields',
+  'public replay viewer close control should clear viewer state',
+  'public replay viewer close control should restore the normal live panel surface',
+  'public replay viewer should discard a response that arrives after the player exits',
+  'a delayed public replay response should not reopen a closed viewer',
+  'switching away from live PVP should clear an active public replay viewer',
+  'switching tabs should remove only the public replay share parameter from the URL',
   'public replay share receipt should expose a revoke control',
   'replay share revoke control should call session revoke API',
   'revoked replay share receipt should hide the revoke control',

@@ -12,6 +12,7 @@ LOG_FILE="${LOG_FILE:-/tmp/the-defier-vite-preview-${PORT}.log}"
 echo "[local-release-gate] Running local pre-deploy checks only; this does not deploy or verify https://080305.xyz."
 
 npm run build:pages
+npm run test:frontend:budget -- dist
 npm run test:node
 
 npx vite preview --host 127.0.0.1 --port "$PORT" --strictPort --outDir .site >"$LOG_FILE" 2>&1 &

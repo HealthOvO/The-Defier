@@ -143,6 +143,8 @@
     #save-slots-modal .save-slots-view {
         width: calc(100vw - 16px);
         max-width: calc(100vw - 16px);
+        height: auto;
+        min-height: 0;
         max-height: calc(100dvh - 16px);
         padding: 12px;
     }
@@ -163,6 +165,9 @@
 
     #save-slots-modal .slots-container {
         width: 100%;
+        max-width: 100%;
+        flex: 0 1 auto;
+        box-sizing: border-box;
         padding: 10px 8px 12px;
         display: grid;
         grid-template-columns: none;
@@ -171,7 +176,7 @@
         gap: 12px;
         overflow-x: auto;
         overflow-y: hidden;
-        scroll-snap-type: x mandatory;
+        scroll-snap-type: none;
         scroll-padding-inline: 8px;
         scrollbar-width: thin;
     }
@@ -182,8 +187,7 @@
         min-height: 0;
         padding: 2px;
         margin: 0;
-        scroll-snap-align: center;
-        scroll-snap-stop: always;
+        scroll-snap-align: none;
     }
 
     #save-slots-modal .save-slot:hover {
@@ -232,7 +236,16 @@
     }
 
     #save-slots-modal .save-slots-footer {
-        display: none;
+        display: flex;
+        margin-top: 8px;
+        padding-top: 8px;
+        border-top: 1px solid rgba(207, 170, 112, 0.18);
+    }
+
+    #save-slots-modal .save-slots-footer .talisman-btn {
+        min-height: 42px;
+        margin: 0;
+        transform: none;
     }
 
     #character-selection-screen .character-selection-container {
@@ -459,6 +472,155 @@
 [data-boot-click-queued="true"] {
     cursor: progress !important;
     filter: saturate(0.78) brightness(0.92);
+}
+
+.runtime-load-status {
+    position: fixed;
+    left: 50%;
+    bottom: max(18px, env(safe-area-inset-bottom));
+    z-index: 100000;
+    width: min(92vw, 420px);
+    min-height: 48px;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 10px 14px;
+    border: 1px solid rgba(214, 182, 104, 0.58);
+    border-radius: 8px;
+    background: rgba(6, 14, 29, 0.96);
+    color: #f5ecd7;
+    box-shadow: 0 12px 28px rgba(0, 0, 0, 0.42);
+    font-size: 0.92rem;
+    line-height: 1.35;
+    text-align: center;
+}
+
+.runtime-load-status[hidden] {
+    display: none !important;
+}
+
+.runtime-load-status[data-state="error"] {
+    border-color: rgba(236, 127, 112, 0.72);
+}
+
+.runtime-load-spinner {
+    width: 18px;
+    height: 18px;
+    flex: 0 0 18px;
+    border: 2px solid rgba(245, 236, 215, 0.28);
+    border-top-color: #e3c779;
+    border-radius: 50%;
+    animation: runtime-load-spin 0.78s linear infinite;
+}
+
+.runtime-load-status[data-state="error"] .runtime-load-spinner {
+    animation: none;
+    border-color: #ec7f70;
+}
+
+.runtime-load-retry {
+    flex: 0 0 auto;
+    min-height: 32px;
+    padding: 5px 12px;
+    border: 1px solid rgba(227, 199, 121, 0.78);
+    border-radius: 6px;
+    background: #17233a;
+    color: #fff4d6;
+    cursor: pointer;
+}
+
+.runtime-load-retry:hover,
+.runtime-load-retry:focus-visible {
+    border-color: #ffe39a;
+    background: #223454;
+}
+
+@keyframes runtime-load-spin {
+    to { transform: rotate(360deg); }
+}
+
+#season-ops-screen .deferred-screen-shell,
+#fate-chronicle-screen .deferred-screen-shell {
+    position: relative;
+    display: grid;
+    min-height: 100svh;
+    place-items: center;
+    padding: 88px 24px 120px;
+    color: #f1e6c8;
+    background:
+        radial-gradient(circle at 50% 36%, rgba(180, 142, 71, 0.12), transparent 32%),
+        linear-gradient(180deg, #07101f 0%, #050a12 100%);
+}
+
+#season-ops-screen .deferred-screen-back,
+#fate-chronicle-screen .deferred-screen-back {
+    position: absolute;
+    top: max(20px, env(safe-area-inset-top));
+    left: max(20px, env(safe-area-inset-left));
+    width: 48px;
+    height: 48px;
+    border: 1px solid rgba(217, 178, 92, 0.42);
+    border-radius: 8px;
+    color: #f1e6c8;
+    background: rgba(8, 16, 31, 0.92);
+    font-size: 24px;
+    line-height: 1;
+    cursor: pointer;
+}
+
+#season-ops-screen .deferred-screen-state,
+#fate-chronicle-screen .deferred-screen-state {
+    width: min(100%, 420px);
+    padding: 32px 28px;
+    border: 1px solid rgba(217, 178, 92, 0.32);
+    border-radius: 8px;
+    background: rgba(8, 16, 31, 0.9);
+    text-align: center;
+}
+
+#season-ops-screen .deferred-screen-spinner,
+#fate-chronicle-screen .deferred-screen-spinner {
+    display: block;
+    width: 32px;
+    height: 32px;
+    margin: 0 auto 20px;
+    border: 2px solid rgba(217, 178, 92, 0.22);
+    border-top-color: #d9b25c;
+    border-radius: 50%;
+    animation: runtime-load-spin 0.9s linear infinite;
+}
+
+#season-ops-screen [data-season-ops-loading-shell][data-load-state="error"] .deferred-screen-spinner,
+#fate-chronicle-screen [data-fate-chronicle-loading-shell][data-load-state="error"] .deferred-screen-spinner {
+    animation: none;
+    border-color: rgba(236, 127, 112, 0.42);
+    border-top-color: #ec7f70;
+}
+
+#season-ops-screen .deferred-screen-kicker,
+#fate-chronicle-screen .deferred-screen-kicker {
+    margin: 0 0 8px;
+    color: #d9b25c;
+    font-size: 13px;
+    font-weight: 700;
+}
+
+#season-ops-screen .deferred-screen-state h2,
+#fate-chronicle-screen .deferred-screen-state h2 {
+    margin: 0;
+    color: #fff8e8;
+    font-size: 24px;
+    letter-spacing: 0;
+}
+
+#season-ops-screen .deferred-screen-state p:last-child,
+#fate-chronicle-screen .deferred-screen-state p:last-child {
+    margin: 12px 0 0;
+    color: #aebbd0;
+    font-size: 14px;
+    line-height: 1.65;
 }
 
 /* Keep archive summaries in their own rail on landscape tablets. */
@@ -1098,8 +1260,8 @@
     }
 
     #map-screen #map-expedition-panels .expedition-branch-card {
-        gap: 6px;
-        padding: 10px 12px;
+        gap: 4px;
+        padding: 8px 10px;
     }
 
     #map-screen #map-expedition-panels .expedition-branch-card .expedition-card-kicker {
@@ -1112,12 +1274,12 @@
     }
 
     #map-screen #map-expedition-panels .expedition-branch-card .expedition-choice-list {
-        gap: 6px;
+        gap: 4px;
     }
 
     #map-screen #map-expedition-panels .expedition-branch-card .expedition-choice-card {
-        gap: 4px;
-        padding: 7px 8px;
+        gap: 3px;
+        padding: 5px 7px;
     }
 
     #map-screen #map-expedition-panels .expedition-branch-card .expedition-choice-head {
@@ -2613,16 +2775,16 @@ body:has(.modal-overlay.active) .battle-log-panel {
         order: 0;
     }
 
-    #map-screen .map-screen-v3.show-map-intel #map-expedition-panels > .expedition-branch-card {
-        order: -40;
+    #map-screen .map-screen-v3.show-map-intel #map-situation-overview {
+        order: -60;
     }
 
     #map-screen .map-screen-v3.show-map-intel #map-chapter-risk-card {
-        order: -50;
+        order: -70;
     }
 
-    #map-screen .map-screen-v3.show-map-intel #map-situation-overview {
-        order: -60;
+    #map-screen .map-screen-v3.show-map-intel #map-expedition-panels > .expedition-branch-card {
+        order: -80;
     }
 
     #map-screen .map-screen-v3.show-map-intel #map-expedition-panels > .expedition-bounty-card {
@@ -3887,6 +4049,28 @@ body:has(.modal-overlay.active) .battle-log-panel {
     display: none;
 }
 
+#pvp-screen #tab-live[data-live-public-replay="true"] .pvp-risk-kicker,
+#pvp-screen #tab-live[data-live-public-replay="true"] .pvp-risk-header,
+#pvp-screen #tab-live[data-live-public-replay="true"] .pvp-live-meta-grid,
+#pvp-screen #tab-live[data-live-public-replay="true"] .pvp-live-trust-grid,
+#pvp-screen #tab-live[data-live-public-replay="true"] .pvp-live-social-panel,
+#pvp-screen #tab-live[data-live-public-replay="true"] .pvp-live-first-guide,
+#pvp-screen #tab-live[data-live-public-replay="true"] .pvp-live-waiting-report,
+#pvp-screen #tab-live[data-live-public-replay="true"] > .pvp-live-secondary-grid,
+#pvp-screen #tab-live[data-live-public-replay="true"] > .pvp-live-board,
+#pvp-screen #tab-live[data-live-public-replay="true"] > .pvp-live-footer {
+    display: none !important;
+}
+
+#pvp-screen #tab-live[data-live-public-replay="true"] .pvp-live-status-card {
+    width: min(100% - 20px, 980px);
+    margin: 0 auto;
+}
+
+#pvp-screen #tab-live[data-live-public-replay="true"] .pvp-live-replay-share-viewer {
+    margin-top: 0;
+}
+
 #pvp-screen #tab-live[data-live-phase="idle"] .pvp-risk-header {
     margin-top: 5px;
     align-items: center;
@@ -4104,6 +4288,16 @@ body:has(.modal-overlay.active) .battle-log-panel {
 
     #character-selection-screen .character-card.selected {
         transform: none;
+    }
+
+    #character-selection-screen .character-card .char-avatar-wrapper {
+        flex: 0 0 96px;
+        width: 96px;
+        min-width: 96px;
+        max-width: 96px;
+        height: 96px;
+        min-height: 96px;
+        max-height: 96px;
     }
 
     #character-selection-screen .run-destiny-grid {

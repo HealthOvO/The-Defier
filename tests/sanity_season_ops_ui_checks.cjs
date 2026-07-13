@@ -14,26 +14,26 @@ const challengeRules = read('js/data/challenge_rules.js');
 
 [
   'id="season-ops-screen"',
-  'id="season-ops-stylesheet"',
-  'href="css/season-ops.css"',
   "game.showSeasonOps('contracts')",
   'aria-label="赛季司"',
 ].forEach(marker => {
   assert.ok(html.includes(marker), `season ops entry should include ${marker}`);
 });
-assert.equal((html.match(/id="season-ops-stylesheet"/g) || []).length, 1, 'season ops should preload exactly one named stylesheet');
+assert.equal((html.match(/href="css\/season-ops\.css"/g) || []).length, 0, 'season ops stylesheet should not load on the main menu');
 
 [
-  'import { SeasonOpsView }',
+  "import('./views/SeasonOpsView.js')",
+  'ensureSeasonOpsViewLoaded()',
   "showSeasonOps(tab = 'contracts')",
   "this.showScreen('season-ops-screen')",
-  'this.seasonOpsView.show({ tab })',
+  'return view.show({ tab: safeTab })',
   'this.seasonOpsView.handleAuthStateChanged()',
 ].forEach(marker => {
   assert.ok(game.includes(marker), `game integration should include ${marker}`);
 });
 
 [
+  "import('../../css/season-ops.css')",
   'const TAB_ORDER = ["contracts", "store", "leaderboard", "ledger"]',
   'getSeasonOpsDashboard({ expectedUserId })',
   'claimProgressionReward(safeObjectiveId, safeCycleId)',

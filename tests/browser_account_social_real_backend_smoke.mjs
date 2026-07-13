@@ -154,6 +154,14 @@ async function openAs(page, account) {
   await page.waitForFunction(() => window.game && document.querySelector('#login-btn'));
   await page.locator('#login-btn').click();
   await page.waitForSelector('#social-screen.active');
+  await page.waitForFunction(() => {
+    const screen = document.getElementById('social-screen');
+    const tabs = [...document.querySelectorAll('[data-social-tab]')];
+    return !!window.game?.socialView
+      && screen?.getAttribute('aria-busy') === 'false'
+      && tabs.length > 0
+      && tabs.every(tab => !tab.disabled);
+  });
   await page.waitForSelector('#social-content .social-row');
 }
 

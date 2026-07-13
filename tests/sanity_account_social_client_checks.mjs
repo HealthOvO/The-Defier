@@ -29,6 +29,8 @@ assert.match(authService, /revokeSession\(/);
 assert.match(authService, /logoutAll\(/);
 assert.doesNotMatch(game, /const loginRes = await AuthService\.login\(username, password\)/, 'registration must not create a second login session');
 assert.match(game, /showSocialHub\(tab = 'friends'\)/);
+assert.match(game, /import\('\.\/views\/SocialView\.js'\)/, 'social view should load only when the account hub opens');
+assert.doesNotMatch(game, /import \{ SocialView \}/, 'social view should not stay in the eager game bundle');
 assert.match(game, /handleLoginMenuAction\(\)[\s\S]*?this\.showSocialHub\('friends'\)/, 'logged-in account control should open the account hub through the delegated boot action');
 assert.doesNotMatch(game, /btn\.onclick = \(\) => this\.showSocialHub\('friends'\)/, 'logged-in account control should not install a competing click handler');
 
@@ -40,6 +42,8 @@ assert.match(socialView, /每人仅取最佳一次真实贡献/, 'squad UI shoul
 assert.match(socialView, /不增加次数、伤害或战力/, 'squad UI should state the no-power boundary');
 assert.match(socialView, /尚无贡献/, 'zero score should not be presented as real participation');
 assert.match(socialView, /account_social_account_changed[\s\S]*this\.dashboard = null[\s\S]*this\.security = null/, 'account switching should clear stale social and security data');
+assert.match(socialView, /export function loadSocialViewStyles/, 'social styles should load with the deferred social view');
+assert.doesNotMatch(html, /href="css\/account-social\.css"/, 'social stylesheet should not load on the idle main menu');
 assert.doesNotMatch(backendClient, /leaveRiftSquad[\s\S]{0,220}milestoneId/, 'leaving a squad must not reference an undefined reward milestone');
 assert.doesNotMatch(socialView, /机器人道友|模拟小队成员|假在线/, 'client must not create simulated social facts');
 assert.match(css, /@media \(max-width: 720px\)/, 'social hub should include a narrow viewport layout');

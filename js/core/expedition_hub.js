@@ -7,6 +7,7 @@ const ExpeditionHubModule = (() => {
 const expeditionHubMethods = Object.create(null);
   const ACTIVE_EXPEDITION_STATE_KEY = 'theDefierActiveExpeditionStateV1';
   const RUN_SLATE_ARCHIVE_KEY = 'theDefierRunSlateArchiveV1';
+  const OBSERVATORY_GUIDE_STATE_KEY = 'theDefierObservatoryGuideStateV1';
   const MAX_ACTIVE_BOUNTIES = 2;
   const MAX_FACTION_HISTORY = 12;
   const MAX_NEMESIS_HISTORY = 12;
@@ -78,6 +79,59 @@ const expeditionHubMethods = Object.create(null);
     return pool.slice(0, Math.max(0, count));
   };
   const readArray = value => Array.isArray(value) ? value.filter(Boolean) : [];
+  const normalizeObservatoryTrainingFocusBridge = (focus = null) => {
+    const source = focus && typeof focus === 'object' ? focus : null;
+    const trainingAdvice = String(source?.trainingAdvice || '').trim();
+    if (!source || !trainingAdvice) return null;
+    const uniqueStrings = (items = [], limit = 4) => Array.from(new Set(readArray(items).map(item => String(item || '').trim()).filter(Boolean))).slice(0, limit);
+    return {
+      sourceRunId: String(source.sourceRunId || source.id || ''),
+      chapterName: String(source.chapterName || ''),
+      sourceTitle: String(source.sourceTitle || ''),
+      guideRecordId: String(source.guideRecordId || source.sourceRecordId || ''),
+      themeKey: String(source.themeKey || ''),
+      themeLabel: String(source.themeLabel || ''),
+      ratingLabel: String(source.ratingLabel || ''),
+      ratingTone: ['completed', 'selected', 'suggested', 'idle'].includes(String(source.ratingTone || '')) ? String(source.ratingTone) : 'selected',
+      trainingAdvice,
+      highlightLine: String(source.highlightLine || ''),
+      branchName: String(source.branchName || ''),
+      routeFocusLine: String(source.routeFocusLine || ''),
+      compareHint: String(source.compareHint || ''),
+      trainingTags: uniqueStrings(source.trainingTags, 4),
+      goalHighlights: uniqueStrings(source.goalHighlights, 3),
+      updatedAt: clampInt(source.updatedAt, 0) || Date.now()
+    };
+  };
+  const normalizeObservatoryGuideStateBridge = (rawState = null) => {
+    const source = rawState && typeof rawState === 'object' ? rawState : {};
+    return {
+      selectedRecordId: String(source.selectedRecordId || ''),
+      trainingFocus: normalizeObservatoryTrainingFocusBridge(source.trainingFocus),
+      updatedAt: clampInt(source.updatedAt, 0)
+    };
+  };
+  const ensureObservatoryGuideStateBridge = game => {
+    if (game?.observatoryGuideState && typeof game.observatoryGuideState === 'object') {
+      game.observatoryGuideState = normalizeObservatoryGuideStateBridge(game.observatoryGuideState);
+      return game.observatoryGuideState;
+    }
+    try {
+      const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(OBSERVATORY_GUIDE_STATE_KEY) : null;
+      game.observatoryGuideState = normalizeObservatoryGuideStateBridge(raw ? JSON.parse(raw) : null);
+    } catch (error) {
+      game.observatoryGuideState = normalizeObservatoryGuideStateBridge();
+    }
+    return game.observatoryGuideState;
+  };
+  const persistObservatoryGuideStateBridge = game => {
+    try {
+      if (typeof localStorage === 'undefined') return;
+      localStorage.setItem(OBSERVATORY_GUIDE_STATE_KEY, JSON.stringify(normalizeObservatoryGuideStateBridge(game?.observatoryGuideState)));
+    } catch (error) {
+      console.warn('Persist observatory guide bridge failed:', error);
+    }
+  };
   const EXPEDITION_NODE_LABELS = {
     enemy: '敌阵',
     elite: '精英',
@@ -3890,6 +3944,28 @@ const expeditionHubMethods = Object.create(null);
         rewardTrackIcon: String(agendaResolution.rewardTrackIcon || '')
       } : null
     };
+  };
+  // Expedition settlement must preserve this cross-mode handoff even before the deferred challenge hub loads.
+  expeditionHubMethods.getObservatoryTrainingFocus = function () {
+    const state = ensureObservatoryGuideStateBridge(this);
+    return state.trainingFocus ? normalizeObservatoryTrainingFocusBridge(state.trainingFocus) : null;
+  };
+  expeditionHubMethods.setObservatoryTrainingFocus = function (focus = null, options = {}) {
+    const state = ensureObservatoryGuideStateBridge(this);
+    const nextFocus = normalizeObservatoryTrainingFocusBridge(focus);
+    this.observatoryGuideState = normalizeObservatoryGuideStateBridge({
+      ...state,
+      trainingFocus: nextFocus,
+      updatedAt: Date.now()
+    });
+    persistObservatoryGuideStateBridge(this);
+    if (!options.silent && nextFocus && Utils?.showBattleLog) {
+      Utils.showBattleLog(`观星台已记下【${nextFocus.chapterName || '最新章节'}】的主练建议。`, {
+        category: 'system',
+        duration: 2400
+      });
+    }
+    return nextFocus;
   };
   expeditionHubMethods.buildObservatoryTrainingFocusFromSlate = function (slate = null) {
     const source = slate && typeof slate === 'object' ? slate : this.getLatestRunSlate();

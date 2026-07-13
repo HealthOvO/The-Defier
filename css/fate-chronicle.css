@@ -55,6 +55,30 @@
   align-items: flex-start;
 }
 
+#fate-chronicle-screen .fate-chronicle-state-nav {
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+#fate-chronicle-screen .fate-chronicle-state-nav > div {
+  display: grid;
+  gap: 2px;
+}
+
+#fate-chronicle-screen .fate-chronicle-state-nav strong {
+  color: #f6ebd1;
+  font-size: 1rem;
+}
+
+#fate-chronicle-screen .fate-chronicle-state-back {
+  width: 48px;
+  min-width: 48px;
+  min-height: 48px;
+  padding: 0;
+}
+
 #fate-chronicle-screen .fate-chronicle-title-group,
 #fate-chronicle-screen .fate-chronicle-section-head > div:first-child,
 #fate-chronicle-screen .fate-chronicle-header-side {

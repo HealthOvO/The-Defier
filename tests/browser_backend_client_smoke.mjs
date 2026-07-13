@@ -19,6 +19,7 @@ fs.mkdirSync(outDir, { recursive: true });
 
 const findings = [];
 const consoleErrors = [];
+const expectedCurrentState404Checks = [];
 
 function usesHttpsAppWithLoopbackApi(targetApiUrl = apiUrl) {
   try {
@@ -53,7 +54,40 @@ function recordConsoleError(text) {
   if (/ERR_CONNECTION_(CLOSED|RESET)/.test(message)) return;
   if (/ERR_NETWORK_CHANGED/.test(message)) return;
   if (/Failed to load resource: net::ERR_FILE_NOT_FOUND/.test(message)) return;
+  if (/Failed to load resource: the server responded with a status of 404 \(Not Found\).*\/api\/pvp\/live\/(?:matches|invites)\/current/.test(message)) return;
   consoleErrors.push(message);
+}
+
+function recordPageConsoleError(message) {
+  const location = message.location?.();
+  const suffix = location?.url
+    ? ` @ ${location.url}${Number.isFinite(location.lineNumber) ? `:${location.lineNumber + 1}` : ''}`
+    : '';
+  recordConsoleError(`${message.text()}${suffix}`);
+}
+
+function trackExpectedCurrentState404s(page) {
+  page.on('response', (response) => {
+    let url;
+    try {
+      url = new URL(response.url());
+    } catch {
+      return;
+    }
+    if (response.status() !== 404 || !/^\/api\/pvp\/live\/(?:matches|invites)\/current$/.test(url.pathname)) return;
+    expectedCurrentState404Checks.push(
+      response.json()
+        .then((payload) => ({
+          path: url.pathname,
+          valid: payload?.success === false && (
+            (url.pathname.endsWith('/matches/current') && /当前没有进行中的实时论道/.test(String(payload?.message || '')))
+            || (url.pathname.endsWith('/invites/current') && payload?.reason === 'no_current_invite')
+          ),
+          payload,
+        }))
+        .catch((error) => ({ path: url.pathname, valid: false, error: String(error) })),
+    );
+  });
 }
 
 function startBackend(options = {}) {
@@ -127,6 +161,33 @@ function writeReport() {
   fs.writeFileSync(path.join(outDir, 'report.json'), JSON.stringify(report, null, 2));
 }
 
+async function waitForBrowserRuntime(page, label) {
+  try {
+    await page.waitForFunction(
+      () => document.documentElement.getAttribute('data-runtime-ready') === 'true',
+      null,
+      { timeout: 20000 },
+    );
+  } catch {}
+  const probe = await page.evaluate(() => ({
+    documentReadyState: document.readyState,
+    runtimeReady: document.documentElement.getAttribute('data-runtime-ready') === 'true',
+    bootReady: window.__THE_DEFIER_BOOT_CLICK_STATE__?.ready === true,
+    hasGame: !!window.game,
+    currentScreen: window.game?.currentScreen || '',
+    debugMode: window.game?.debugMode === true,
+    hasBackendClient: !!window.__THE_DEFIER_SERVICES__?.BackendClient,
+    hasPvpService: !!window.PVPService,
+    loadStatusVisible: !document.getElementById('runtime-load-status')?.hidden,
+    loadStatusState: document.getElementById('runtime-load-status')?.dataset.state || '',
+    loadStatusText: document.querySelector('[data-runtime-load-text]')?.textContent || '',
+  }));
+  if (!probe.runtimeReady || !probe.hasGame || !probe.hasBackendClient || !probe.hasPvpService) {
+    throw new Error(`${label} browser runtime was incomplete: ${JSON.stringify(probe)}`);
+  }
+  return probe;
+}
+
 async function runBrowserSmoke(page, targetApiUrl = apiUrl) {
   await page.addInitScript((targetApiUrl) => {
     try {
@@ -147,11 +208,7 @@ async function runBrowserSmoke(page, targetApiUrl = apiUrl) {
   }, targetApiUrl);
 
   await page.goto(appUrl, { waitUntil: 'domcontentloaded', timeout: navigationTimeoutMs });
-  await page.waitForFunction(
-    () => !!window.game && !!window.__THE_DEFIER_SERVICES__?.BackendClient && !!window.PVPService,
-    null,
-    { timeout: 12000 }
-  );
+  await waitForBrowserRuntime(page, 'primary backend smoke');
 
   const result = await page.evaluate(async ({ runId, password, realm }) => {
     const services = window.__THE_DEFIER_SERVICES__;
@@ -631,8 +688,9 @@ async function runAuthoritativePvpSettlementSmoke(browser) {
   try {
     await waitForHealth(server, authorityApiUrl);
     page = await browser.newPage({ viewport: { width: 1280, height: 860 } });
+    trackExpectedCurrentState404s(page);
     page.on('console', (msg) => {
-      if (msg.type() === 'error') recordConsoleError(msg.text());
+      if (msg.type() === 'error') recordPageConsoleError(msg);
     });
     page.on('pageerror', err => recordConsoleError(String(err)));
     await page.addInitScript((targetApiUrl) => {
@@ -653,11 +711,7 @@ async function runAuthoritativePvpSettlementSmoke(browser) {
       } catch {}
     }, authorityApiUrl);
     await page.goto(appUrl, { waitUntil: 'domcontentloaded', timeout: navigationTimeoutMs });
-    await page.waitForFunction(
-      () => !!window.game && !!window.__THE_DEFIER_SERVICES__?.BackendClient && !!window.PVPService,
-      null,
-      { timeout: 12000 }
-    );
+    await waitForBrowserRuntime(page, 'authoritative backend smoke');
 
     const result = await page.evaluate(async ({ runId, password, realm }) => {
       const services = window.__THE_DEFIER_SERVICES__;
@@ -773,12 +827,13 @@ async function runAuthoritativePvpSettlementSmoke(browser) {
       assertStep(localWallet?.coins === economyAfter.wallet?.coins, 'authority local PVP economy snapshot diverged from server wallet', { localWallet, economyAfter });
       assertStep(economyAfter.wallet.coins === economyBefore.wallet.coins + settlement.coinsAwarded, 'authority settlement appears to have double-awarded or missed coins', { economyBefore, economyAfter, settlement });
 
-      if (typeof window.game?.showScreen === 'function') {
-        window.game.showScreen('pvp-screen');
-      }
-      if (typeof window.PVPScene?.switchTab === 'function') {
-        window.PVPScene.switchTab('ranking');
-      }
+      assertStep(typeof window.game?.showPvpScreen === 'function', 'authority PVP lazy route was not exposed');
+      const pvpScene = await window.game.showPvpScreen();
+      assertStep(pvpScene && typeof pvpScene.switchTab === 'function', 'authority PVP lazy route failed to initialize', {
+        currentScreen: window.game?.currentScreen,
+        hasGlobalScene: !!window.PVPScene,
+      });
+      pvpScene.switchTab('ranking');
       return {
         mainName,
         opponentName,
@@ -920,13 +975,20 @@ try {
     args: chromiumLaunchArgsForLocalApi(apiUrl, ['--use-gl=angle', '--use-angle=swiftshader']),
   });
   const page = await browser.newPage({ viewport: { width: 1280, height: 860 } });
+  trackExpectedCurrentState404s(page);
   page.on('console', (msg) => {
-    if (msg.type() === 'error') recordConsoleError(msg.text());
+    if (msg.type() === 'error') recordPageConsoleError(msg);
   });
   page.on('pageerror', err => recordConsoleError(String(err)));
 
   const result = await runBrowserSmoke(page);
   const authorityResult = await runAuthoritativePvpSettlementSmoke(browser);
+  const expected404s = await Promise.all(expectedCurrentState404Checks);
+  add(
+    'expected empty live-PVP resume probes return the documented 404 payloads',
+    expected404s.length >= 1 && expected404s.every((entry) => entry.valid),
+    JSON.stringify(expected404s),
+  );
   add(
     'browser BackendClient register/login/save/global/ghost/fetch chain reaches ghost duel battle UI',
     !!result.ghostBattleProbe?.battleScreenActive
@@ -988,9 +1050,10 @@ try {
     JSON.stringify(authorityResult || null)
   );
 } catch (error) {
-  add('browser BackendClient register/login/save/global/ghost/fetch chain reaches ghost duel battle UI', false, error?.message || String(error));
-  add('browser PVPService uses Node backend rank defense matchmaking and local authority-gate settlement fallback', false, error?.message || String(error));
-  add('browser PVPService completes authoritative Node settlement when local test server allows client result', false, error?.message || String(error));
+  const errorDetail = error?.stack || error?.message || String(error);
+  add('browser BackendClient register/login/save/global/ghost/fetch chain reaches ghost duel battle UI', false, errorDetail);
+  add('browser PVPService uses Node backend rank defense matchmaking and local authority-gate settlement fallback', false, errorDetail);
+  add('browser PVPService completes authoritative Node settlement when local test server allows client result', false, errorDetail);
 } finally {
   if (browser) await browser.close().catch(() => {});
   await stopBackend(server);

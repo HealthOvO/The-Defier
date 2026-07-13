@@ -1,4 +1,3 @@
-import { PVPScene } from "../scenes/pvp-scene.js";
 import { PVPService } from "../services/pvp-service.js";
 export class MetaProgressionManager {
   constructor(gameInstance) {
@@ -993,14 +992,8 @@ export class MetaProgressionManager {
       return true;
     }
     if (normalizedAnchor === 'pvp') {
-      this.game.showScreen('pvp-screen');
-      if (typeof PVPScene !== 'undefined' && PVPScene) {
-        if (typeof PVPScene.onShow === 'function') {
-          PVPScene.onShow();
-        } else if (typeof PVPScene.loadRankings === 'function') {
-          PVPScene.loadRankings();
-        }
-      }
+      if (typeof this.game.showPvpScreen === 'function') this.game.showPvpScreen();
+      else this.game.showScreen('pvp-screen');
       return true;
     }
     if (normalizedAnchor === 'endless') {

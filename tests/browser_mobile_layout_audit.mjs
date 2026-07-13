@@ -727,6 +727,8 @@ function add(name, pass, detail = '') {
       .filter((entry) => !!entry.rect)
       .sort((a, b) => a.rect.top - b.rect.top);
     const firstVisualCard = visualCards.find((entry) => entry.rect.bottom > 0 && entry.rect.top < window.innerHeight) || visualCards[0] || null;
+    const branchCardRect = rectObj(panels?.querySelector('.expedition-branch-card'));
+    const branchCardVisibleRatio = visibleRatio(branchCardRect);
     const initialPanelRect = visualCards.length > 0 ? {
       left: Math.min(...visualCards.map((entry) => entry.rect.left)),
       right: Math.max(...visualCards.map((entry) => entry.rect.right)),
@@ -841,6 +843,8 @@ function add(name, pass, detail = '') {
       scrolledPanelRect,
       firstVisualCardSelector: firstVisualCard?.selector || '',
       firstCardRect,
+      branchCardRect,
+      branchCardVisibleRatio: Number(branchCardVisibleRatio.toFixed(3)),
       headerRect,
       firstCardVisibleRatio: Number(visibleRatio(firstCardRect).toFixed(3)),
       firstCardHeaderOverlap: Math.round(firstCardHeaderOverlap),
@@ -875,6 +879,9 @@ function add(name, pass, detail = '') {
         branchButtons.length >= 1 &&
         bountyButtons.length >= 1 &&
         initialPrimaryCtaOk &&
+        branchCardVisibleRatio >= 0.32 &&
+        !!branchCardRect &&
+        branchCardRect.top <= safeBottomLimit - 120 &&
         firstCardReadable &&
         firstCardHeaderOverlap <= 12 &&
         branchReach.reachable &&

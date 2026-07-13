@@ -175,7 +175,7 @@ async function safeScreenshot(page, outPath) {
       rewardCardAriaDisabled: firstRewardCard?.getAttribute('aria-disabled') || '',
       rewardCardAriaLabel: firstRewardCard?.getAttribute('aria-label') || '',
       summary: panel?.querySelector('.reward-disclosure-summary')?.textContent?.replace(/\s+/g, ' ').trim() || '',
-      status: document.querySelector('.reward-run-path-status')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+      status: panel?.querySelector('.reward-run-path-status')?.textContent?.replace(/\s+/g, ' ').trim() || '',
       entries: entries.map((entry) => ({
         text: entry.textContent?.replace(/\s+/g, ' ').trim() || '',
         completed: entry.classList.contains('completed')
@@ -767,7 +767,9 @@ async function safeScreenshot(page, outPath) {
     const screen = document.getElementById('reward-screen');
     const sideColumn = document.querySelector('.reward-side-column');
     const panel = document.getElementById('reward-expedition-meta');
-    if (panel && !panel.open) panel.open = true;
+    const isDetails = panel instanceof HTMLDetailsElement;
+    const collapsedInitially = isDetails && !panel.open;
+    if (isDetails) panel.open = true;
     const chapterArcNode = panel?.querySelector('[data-season-board-chapter-arc-reward="true"]') || null;
     const drillButtons = Array.from(chapterArcNode?.querySelectorAll('[data-season-board-chapter-drill-cta="true"]') || []);
     const chapterArcRect = chapterArcNode?.getBoundingClientRect() || null;
@@ -789,6 +791,9 @@ async function safeScreenshot(page, outPath) {
 
     return {
       ok: !!screen && !!panel && !!sideColumn,
+      isDetails,
+      collapsedInitially,
+      expandedForInspection: isDetails && panel.open,
       panelVisible: !!panel && getComputedStyle(panel).display !== 'none' && getComputedStyle(panel).visibility !== 'hidden',
       viewportWidth: window.innerWidth,
       screenScrollWidth: screen?.scrollWidth || 0,
@@ -811,6 +816,9 @@ async function safeScreenshot(page, outPath) {
   add(
     'mobile reward rail keeps expedition settlement card readable without horizontal overflow',
     !!expeditionMobileProbe?.ok
+      && expeditionMobileProbe.isDetails === true
+      && expeditionMobileProbe.collapsedInitially === true
+      && expeditionMobileProbe.expandedForInspection === true
       && !!expeditionMobileProbe.panelVisible
       && !!expeditionMobileProbe.narrativeVisible
       && expeditionMobileProbe.screenScrollWidth <= expeditionMobileProbe.screenClientWidth + 2

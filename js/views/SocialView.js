@@ -2,6 +2,11 @@ import { AuthService } from '../services/authService.js';
 import { BackendClient } from '../services/backend-client.js';
 import { RelayExpeditionService } from '../services/relay-expedition-service.js';
 
+export function loadSocialViewStyles() {
+  if (typeof import.meta.env !== 'object') return Promise.resolve();
+  return import('../../css/account-social.css');
+}
+
 const TABS = new Set(['friends', 'requests', 'squad', 'security']);
 const RELAY_TACTIC_META = Object.freeze({
   vanguard: {

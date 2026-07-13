@@ -1,4 +1,3 @@
-import { PVPScene } from "./scenes/pvp-scene.js";
 import { PVPService } from "./services/pvp-service.js";
 import { Player } from "./core/player.js";
 import { Battle } from "./core/battle.js";
@@ -42,9 +41,6 @@ import { MetaProgressionManager } from "./managers/MetaProgressionManager.js";
 import { SeasonBoardManager } from "./managers/SeasonBoardManager.js";
 import { SanctumAgendaManager } from "./managers/SanctumAgendaManager.js";
 import { CampfireView } from "./views/CampfireView.js";
-import { SeasonOpsView } from "./views/SeasonOpsView.js";
-import { FateChronicleView } from "./views/FateChronicleView.js";
-import { SocialView } from "./views/SocialView.js";
 import { attachRegisteredHubControllers } from "./runtime/hub-registry.js";
 
 const PENDING_CHALLENGE_SLOT_RELOAD_KEY = 'theDefierPendingChallengeSlotReloadV1';
@@ -82,11 +78,6 @@ export class Game {
         game: this,
         authService: AuthService,
         utils: Utils
-      });
-    }
-    if (PVPScene && typeof PVPScene.init === 'function') {
-      PVPScene.init({
-        game: this
       });
     }
     this.sanctumAgendaState = this.createDefaultSanctumAgendaState();
@@ -163,6 +154,15 @@ export class Game {
     this.eventView = new EventView(this);
     this.seasonOpsView = null;
     this.fateChronicleView = null;
+    this.socialView = null;
+    this.pvpScene = null;
+    this.pvpSceneLoadPromise = null;
+    this.seasonOpsViewLoadPromise = null;
+    this.fateChronicleViewLoadPromise = null;
+    this.socialViewLoadPromise = null;
+    this.deferredModuleActionSequence = 0;
+    this.activeDeferredModuleAction = null;
+    this.deferredModuleWarmupFailures = new Set();
     this.publicReplayShareConfig = this.parsePublicReplayShareConfig();
     this.automationBootConfig = this.parseAutomationBootConfig();
     this.boundGlobalEvents = false;
@@ -231,6 +231,241 @@ export class Game {
       this.rewardView = new RewardView(this);
     }
     return this.rewardView;
+  }
+  getPvpScene() {
+    if (this.pvpScene) return this.pvpScene;
+    if (typeof window !== 'undefined' && window.PVPScene) {
+      this.pvpScene = window.PVPScene;
+    }
+    return this.pvpScene;
+  }
+  ensurePvpSceneLoaded() {
+    const existing = this.getPvpScene();
+    if (existing) return Promise.resolve(existing);
+    if (!this.pvpSceneLoadPromise) {
+      this.pvpSceneLoadPromise = import('./scenes/pvp-scene.js')
+        .then(async module => {
+          if (typeof module.loadPvpSceneStyles === 'function') await module.loadPvpSceneStyles();
+          const scene = module && module.PVPScene ? module.PVPScene : this.getPvpScene();
+          if (!scene) throw new Error('PVP scene did not register');
+          this.pvpScene = scene;
+          if (typeof scene.init === 'function') scene.init({ game: this });
+          return scene;
+        })
+        .catch(error => {
+          this.pvpSceneLoadPromise = null;
+          throw error;
+        });
+    }
+    return this.pvpSceneLoadPromise;
+  }
+  ensureSeasonOpsViewLoaded() {
+    if (this.seasonOpsView) return Promise.resolve(this.seasonOpsView);
+    if (!this.seasonOpsViewLoadPromise) {
+      this.seasonOpsViewLoadPromise = import('./views/SeasonOpsView.js')
+        .then(async module => {
+          if (typeof module.loadSeasonOpsStyles === 'function') await module.loadSeasonOpsStyles();
+          const View = module && module.SeasonOpsView;
+          if (typeof View !== 'function') throw new Error('Season ops view did not register');
+          this.seasonOpsView = new View(this);
+          return this.seasonOpsView;
+        })
+        .catch(error => {
+          this.seasonOpsViewLoadPromise = null;
+          throw error;
+        });
+    }
+    return this.seasonOpsViewLoadPromise;
+  }
+  ensureFateChronicleViewLoaded() {
+    if (this.fateChronicleView) return Promise.resolve(this.fateChronicleView);
+    if (!this.fateChronicleViewLoadPromise) {
+      this.fateChronicleViewLoadPromise = import('./views/FateChronicleView.js')
+        .then(async module => {
+          if (typeof module.loadFateChronicleStyles === 'function') await module.loadFateChronicleStyles();
+          const View = module && module.FateChronicleView;
+          if (typeof View !== 'function') throw new Error('Fate chronicle view did not register');
+          this.fateChronicleView = new View(this);
+          return this.fateChronicleView;
+        })
+        .catch(error => {
+          this.fateChronicleViewLoadPromise = null;
+          throw error;
+        });
+    }
+    return this.fateChronicleViewLoadPromise;
+  }
+  ensureSocialViewLoaded() {
+    if (this.socialView) return Promise.resolve(this.socialView);
+    if (!this.socialViewLoadPromise) {
+      this.socialViewLoadPromise = import('./views/SocialView.js')
+        .then(async module => {
+          if (typeof module.loadSocialViewStyles === 'function') await module.loadSocialViewStyles();
+          const View = module && module.SocialView;
+          if (typeof View !== 'function') throw new Error('Social view did not register');
+          this.socialView = new View(this);
+          return this.socialView;
+        })
+        .catch(error => {
+          this.socialViewLoadPromise = null;
+          throw error;
+        });
+    }
+    return this.socialViewLoadPromise;
+  }
+  showDeferredLoadStatus(owner, message, options = {}) {
+    const controller = typeof window !== 'undefined' ? window.__THE_DEFIER_LOAD_STATUS__ : null;
+    if (controller && typeof controller.show === 'function') {
+      controller.show(message, {
+        owner,
+        state: options.state || 'loading',
+        retry: typeof options.retry === 'function' ? options.retry : null
+      });
+    }
+  }
+  hideDeferredLoadStatus(owner) {
+    const controller = typeof window !== 'undefined' ? window.__THE_DEFIER_LOAD_STATUS__ : null;
+    if (controller && typeof controller.hide === 'function') controller.hide(owner);
+  }
+  updateDeferredModuleSurface(owner, state = 'loading') {
+    if (typeof document === 'undefined') return;
+    const surfaceByOwner = {
+      season: {
+        selector: '[data-season-ops-loading-shell]',
+        loadingTitle: '正在展开卷宗',
+        errorTitle: '卷宗未能展开',
+        loadingDescription: '契约、外观与权威战绩将在载入后显示。'
+      },
+      chronicle: {
+        selector: '[data-fate-chronicle-loading-shell]',
+        loadingTitle: '正在展开命途长卷',
+        errorTitle: '命途长卷未能展开',
+        loadingDescription: '章节、誓约与归卷记录将在载入后显示。'
+      }
+    };
+    const surface = surfaceByOwner[owner];
+    if (!surface) return;
+    const shell = document.querySelector(surface.selector);
+    if (!shell) return;
+    const isError = state === 'error';
+    shell.dataset.loadState = isError ? 'error' : 'loading';
+    const title = shell.querySelector('h2');
+    const description = shell.querySelector('.deferred-screen-state > p:last-child');
+    if (title) title.textContent = isError ? surface.errorTitle : surface.loadingTitle;
+    if (description) {
+      description.textContent = isError
+        ? '连接暂时中断，可重新载入或返回主菜单。'
+        : surface.loadingDescription;
+    }
+  }
+  reloadDeferredModuleAction(owner) {
+    const actionByOwner = {
+      pvp: 'open-pvp',
+      season: 'open-season',
+      challenge: 'open-challenges',
+      chronicle: 'open-chronicle',
+      social: 'open-social'
+    };
+    const actionId = actionByOwner[owner];
+    try {
+      if (actionId && typeof sessionStorage !== 'undefined') {
+        sessionStorage.setItem('theDefierDeferredRetryActionV1', actionId);
+      }
+    } catch (error) {}
+    if (typeof window !== 'undefined' && window.location && typeof window.location.reload === 'function') {
+      window.location.reload();
+    }
+  }
+  recoverDeferredModuleWarmup(actionId, owner) {
+    if (!(this.deferredModuleWarmupFailures instanceof Set)) {
+      this.deferredModuleWarmupFailures = new Set();
+    }
+    if (!this.deferredModuleWarmupFailures.has(actionId)) return false;
+    this.deferredModuleWarmupFailures.delete(actionId);
+    if (this.currentScreen !== 'main-menu') return false;
+    this.reloadDeferredModuleAction(owner);
+    return true;
+  }
+  runDeferredModuleAction({ owner, loadingMessage, errorMessage, load, action, retry = null, onError = null }) {
+    const requestId = this.deferredModuleActionSequence + 1;
+    const startScreen = this.currentScreen;
+    this.deferredModuleActionSequence = requestId;
+    this.activeDeferredModuleAction = { owner, requestId, startScreen };
+    const isCurrentRequest = () => this.activeDeferredModuleAction?.requestId === requestId;
+    const attempt = () => {
+      this.updateDeferredModuleSurface(owner, 'loading');
+      this.showDeferredLoadStatus(owner, loadingMessage);
+      return Promise.resolve()
+        .then(load)
+        .then(resource => {
+          if (!isCurrentRequest()) return resource;
+          if (this.currentScreen !== startScreen) {
+            this.hideDeferredLoadStatus(owner);
+            this.activeDeferredModuleAction = null;
+            return resource;
+          }
+          this.hideDeferredLoadStatus(owner);
+          return Promise.resolve(action(resource)).then(result => {
+            if (isCurrentRequest()) this.activeDeferredModuleAction = null;
+            return result;
+          });
+        })
+        .catch(error => {
+          if (!isCurrentRequest()) {
+            console.warn(`[DeferredModule:${owner}] ignored stale failure`, error);
+            return null;
+          }
+          if (this.currentScreen !== startScreen) {
+            this.hideDeferredLoadStatus(owner);
+            this.activeDeferredModuleAction = null;
+            console.warn(`[DeferredModule:${owner}] ignored background failure`, error);
+            return null;
+          }
+          console.error(`[DeferredModule:${owner}]`, error);
+          if (typeof onError === 'function') onError(error);
+          this.updateDeferredModuleSurface(owner, 'error');
+          this.showDeferredLoadStatus(owner, errorMessage, {
+            state: 'error',
+            retry: typeof retry === 'function' ? retry : () => this.reloadDeferredModuleAction(owner)
+          });
+          return null;
+        });
+    };
+    return attempt();
+  }
+  setSocialHubLoadingState(state = 'loading') {
+    if (typeof document === 'undefined') return;
+    const screen = document.getElementById('social-screen');
+    if (!screen) return;
+    const loading = state === 'loading';
+    const ready = state === 'ready';
+    screen.setAttribute('aria-busy', loading ? 'true' : 'false');
+    screen.querySelectorAll('[data-social-tab]').forEach(button => {
+      button.disabled = !ready;
+    });
+    if (this.socialView) return;
+    const content = document.getElementById('social-content');
+    if (!content) return;
+    content.innerHTML = state === 'error'
+      ? '<div class="social-empty error">道友录暂时无法开启。</div>'
+      : '<div class="social-empty">正在校验关系与会话...</div>';
+  }
+  showPvpScreen() {
+    if (this.recoverDeferredModuleWarmup('open-pvp', 'pvp')) return Promise.resolve(null);
+    this.showScreen('pvp-screen');
+    if (typeof window === 'undefined' || !window.__THE_DEFIER_BOOT__) {
+      return Promise.resolve(this.getPvpScene());
+    }
+    return this.runDeferredModuleAction({
+      owner: 'pvp',
+      loadingMessage: '正在接通天道榜...',
+      errorMessage: '天道榜暂时无法开启。',
+      load: () => this.ensurePvpSceneLoaded(),
+      action: async scene => {
+        if (scene && typeof scene.onShow === 'function') await scene.onShow();
+        return scene;
+      }
+    });
   }
   ensureEventManager() {
     if (typeof this.getOrCreateManager === 'function') {
@@ -431,10 +666,18 @@ export class Game {
       return Promise.resolve(this.challengeHub);
     }
     if (!this.challengeHubLoadPromise) {
-      this.challengeHubLoadPromise = import('./core/challenge_hub.js').then(() => {
-        this.attachHubControllers();
-        return this.challengeHub;
-      });
+      this.challengeHubLoadPromise = import('./core/challenge_hub.js')
+        .then(() => {
+          this.attachHubControllers();
+          if (!this.challengeHub || typeof this.challengeHub.showChallengeHub !== 'function') {
+            throw new Error('Challenge hub did not register');
+          }
+          return this.challengeHub;
+        })
+        .catch(error => {
+          this.challengeHubLoadPromise = null;
+          throw error;
+        });
     }
     return this.challengeHubLoadPromise;
   }
@@ -445,25 +688,40 @@ export class Game {
     return this.deferredHubWarmupPromise;
   }
   scheduleDeferredHubWarmup() {
-    if (this.deferredHubWarmupScheduled) return;
-    this.deferredHubWarmupScheduled = true;
-    const runWarmup = () => {
-      void this.warmupDeferredHubControllers();
+    this.bindDeferredModuleIntentWarmup();
+  }
+  bindDeferredModuleIntentWarmup() {
+    if (this.deferredModuleIntentWarmupBound || typeof document === 'undefined') return;
+    this.deferredModuleIntentWarmupBound = true;
+    const warmedActions = new Set();
+    const warmupForTarget = event => {
+      const target = event.target instanceof Element ? event.target.closest('[data-boot-action]') : null;
+      const action = String(target?.dataset.bootAction || '');
+      if (!action || warmedActions.has(action)) return;
+      const loaders = {
+        'open-challenges': () => this.ensureChallengeHubLoaded(),
+        'open-season': () => this.ensureSeasonOpsViewLoaded(),
+        'open-chronicle': () => this.ensureFateChronicleViewLoaded(),
+        'open-social': () => this.ensureSocialViewLoaded(),
+        'open-pvp': () => this.ensurePvpSceneLoaded()
+      };
+      const loader = loaders[action];
+      if (!loader) return;
+      warmedActions.add(action);
+      Promise.resolve().then(loader).catch(() => {
+        this.deferredModuleWarmupFailures.add(action);
+        warmedActions.delete(action);
+      });
     };
-    if (typeof window !== 'undefined' && typeof window.requestIdleCallback === 'function') {
-      window.requestIdleCallback(runWarmup);
-    } else if (typeof window !== 'undefined' && typeof window.setTimeout === 'function') {
-      window.setTimeout(runWarmup, 0);
-    } else {
-      runWarmup();
-    }
+    document.addEventListener('pointerover', warmupForTarget, { passive: true });
+    document.addEventListener('focusin', warmupForTarget);
   }
 
   // 初始化
   init() {
     this.bindGlobalEvents();
     this.initRuntimeHooks();
-    this.scheduleDeferredHubWarmup();
+    this.bindDeferredModuleIntentWarmup();
     // Initialize Auth
     if (typeof AuthService !== 'undefined') {
       AuthService.init();
@@ -629,12 +887,18 @@ export class Game {
         if (el) el.classList.remove('active');
       });
     }
-    this.showScreen('pvp-screen');
-    if (typeof window !== 'undefined' && PVPScene && typeof PVPScene.openLiveReplayShareViewer === 'function') {
-      PVPScene.openLiveReplayShareViewer(config.shareToken);
-      return true;
-    }
-    return false;
+    return this.runDeferredModuleAction({
+      owner: 'pvp',
+      loadingMessage: '正在读取公开战报...',
+      errorMessage: '公开战报暂时无法开启。',
+      load: () => this.ensurePvpSceneLoaded(),
+      action: scene => {
+        this.showScreen('pvp-screen');
+        if (!scene || typeof scene.openLiveReplayShareViewer !== 'function') return false;
+        scene.openLiveReplayShareViewer(config.shareToken);
+        return true;
+      }
+    });
   }
   parseAutomationBootConfig() {
     if (typeof window === 'undefined' || !window.location || !window.location.search) return null;
@@ -696,11 +960,7 @@ export class Game {
       return true;
     }
     if (config.mode === 'guest-pvp') {
-      this.showScreen('pvp-screen');
-      if (typeof window !== 'undefined' && PVPScene && typeof PVPScene.onShow === 'function') {
-        PVPScene.onShow();
-      }
-      return true;
+      return this.showPvpScreen().then(() => true);
     }
     return false;
   }
@@ -734,9 +994,10 @@ export class Game {
       return profile;
     };
     const pvpMyRank = typeof PVPService !== 'undefined' && PVPService && PVPService.currentRankData ? PVPService.currentRankData : null;
-    const pvpFocus = typeof window !== 'undefined' && typeof PVPScene !== 'undefined' && PVPScene && typeof PVPScene.getRankingFocusSnapshot === 'function' ? PVPScene.getRankingFocusSnapshot() : null;
-    const pvpReplayShareViewer = typeof window !== 'undefined' && typeof PVPScene !== 'undefined' && PVPScene && typeof PVPScene.getLiveReplayShareViewerSnapshot === 'function' ? PVPScene.getLiveReplayShareViewerSnapshot() : null;
-    const pvpLive = !pvpReplayShareViewer && typeof window !== 'undefined' && typeof PVPScene !== 'undefined' && PVPScene && typeof PVPScene.getLiveSnapshot === 'function' ? PVPScene.getLiveSnapshot() : null;
+    const pvpScene = this.getPvpScene();
+    const pvpFocus = pvpScene && typeof pvpScene.getRankingFocusSnapshot === 'function' ? pvpScene.getRankingFocusSnapshot() : null;
+    const pvpReplayShareViewer = pvpScene && typeof pvpScene.getLiveReplayShareViewerSnapshot === 'function' ? pvpScene.getLiveReplayShareViewerSnapshot() : null;
+    const pvpLive = !pvpReplayShareViewer && pvpScene && typeof pvpScene.getLiveSnapshot === 'function' ? pvpScene.getLiveSnapshot() : null;
     const pvpDangerProfile = normalizePvpDanger(this.pvpDangerProfile);
     const pvpMatchIntent = this.pvpMatchIntent && typeof this.pvpMatchIntent === 'object' ? {
       targetName: String(this.pvpMatchIntent.targetName || ''),
@@ -779,7 +1040,7 @@ export class Game {
       dangerProfile: normalizePvpDanger(this.pvpResultReview.dangerProfile || null)
     } : null;
     const pvpPayload = mode === 'pvp-screen' || this.mode === 'pvp' || !!pvpFocus || !!this.pvpOpponentRank || !!pvpDangerProfile || !!pvpResultReview ? {
-      activeTab: typeof window !== 'undefined' && PVPScene ? PVPScene.activeTab || null : null,
+      activeTab: pvpScene ? pvpScene.activeTab || null : null,
       live: pvpLive,
       replayShareViewer: pvpReplayShareViewer,
       myRank: pvpMyRank ? {
@@ -4835,7 +5096,8 @@ export class Game {
     this.inventoryView.showCollection();
   }
   showChallengeHub(tab = 'daily') {
-    const safeTab = ['daily', 'weekly', 'global'].includes(tab) ? tab : 'daily';
+    const safeTab = ['daily', 'weekly', 'global', 'rift'].includes(tab) ? tab : 'daily';
+    if (this.recoverDeferredModuleWarmup('open-challenges', 'challenge')) return Promise.resolve(null);
     if (this.challengeHub && typeof this.challengeHub.showChallengeHub === 'function') {
       return Promise.resolve(this.challengeHub.showChallengeHub(safeTab));
     }
@@ -4848,16 +5110,17 @@ export class Game {
       : {
           tab: safeTab
         };
-    const routeToLoadedHub = () => this.ensureChallengeHubLoaded().then(hub => {
-      if (hub && typeof hub.showChallengeHub === 'function') {
-        hub.showChallengeHub(safeTab);
-      } else {
-        this.showScreen('challenge-screen');
-      }
-      return hub;
-    });
     this.showScreen('challenge-screen');
-    return routeToLoadedHub();
+    return this.runDeferredModuleAction({
+      owner: 'challenge',
+      loadingMessage: '正在校准观星台...',
+      errorMessage: '观星台暂时无法开启。',
+      load: () => this.ensureChallengeHubLoaded(),
+      action: hub => {
+        if (hub && typeof hub.showChallengeHub === 'function') hub.showChallengeHub(safeTab);
+        return hub;
+      }
+    });
   }
   initChallengeHub() {
     if (this.challengeHub && typeof this.challengeHub.initChallengeHub === 'function') {
@@ -5385,26 +5648,120 @@ export class Game {
     return result;
   }
 
+  ensureSeasonOpsLoadingShell() {
+    if (this.seasonOpsView || typeof document === 'undefined') return;
+    const container = document.getElementById('season-ops-screen');
+    if (!container || container.querySelector('[data-season-ops-loading-shell]')) return;
+    container.innerHTML = `
+      <div class="deferred-screen-shell" data-season-ops-loading-shell>
+        <button type="button" class="deferred-screen-back" data-season-ops-loading-back aria-label="返回主菜单">&larr;</button>
+        <div class="deferred-screen-state" role="status" aria-live="polite">
+          <span class="deferred-screen-spinner" aria-hidden="true"></span>
+          <p class="deferred-screen-kicker">赛季司</p>
+          <h2>正在展开卷宗</h2>
+          <p>契约、外观与权威战绩将在载入后显示。</p>
+        </div>
+      </div>
+    `;
+    container.querySelector('[data-season-ops-loading-back]')?.addEventListener('click', () => {
+      this.showScreen('main-menu');
+      window.__THE_DEFIER_LOAD_STATUS__?.hide?.('season');
+    });
+    this.updateDeferredModuleSurface('season', 'loading');
+  }
+
+  ensureFateChronicleLoadingShell() {
+    if (this.fateChronicleView || typeof document === 'undefined') return;
+    const container = document.getElementById('fate-chronicle-screen');
+    if (!container || container.querySelector('[data-fate-chronicle-loading-shell]')) return;
+    container.innerHTML = `
+      <div class="deferred-screen-shell" data-fate-chronicle-loading-shell>
+        <button type="button" class="deferred-screen-back" data-fate-chronicle-loading-back aria-label="返回主菜单">&larr;</button>
+        <div class="deferred-screen-state" role="status" aria-live="polite">
+          <span class="deferred-screen-spinner" aria-hidden="true"></span>
+          <p class="deferred-screen-kicker">命途长卷</p>
+          <h2>正在展开命途长卷</h2>
+          <p>章节、誓约与归卷记录将在载入后显示。</p>
+        </div>
+      </div>
+    `;
+    container.querySelector('[data-fate-chronicle-loading-back]')?.addEventListener('click', () => {
+      this.showScreen('main-menu');
+      window.__THE_DEFIER_LOAD_STATUS__?.hide?.('chronicle');
+    });
+    this.updateDeferredModuleSurface('chronicle', 'loading');
+  }
+
   showSeasonOps(tab = 'contracts') {
+    const safeTab = ['contracts', 'store', 'leaderboard', 'ledger', 'authoritative'].includes(tab) ? tab : 'contracts';
+    if (this.recoverDeferredModuleWarmup('open-season', 'season')) return Promise.resolve(null);
+    this.ensureSeasonOpsLoadingShell();
     this.showScreen('season-ops-screen');
-    if (!this.seasonOpsView) this.seasonOpsView = new SeasonOpsView(this);
-    return this.seasonOpsView.show({ tab });
+    if (typeof window === 'undefined' || !window.__THE_DEFIER_BOOT__) {
+      return Promise.resolve(this.seasonOpsView);
+    }
+    return this.runDeferredModuleAction({
+      owner: 'season',
+      loadingMessage: '正在展开赛季卷宗...',
+      errorMessage: '赛季司暂时无法开启。',
+      load: () => this.ensureSeasonOpsViewLoaded(),
+      action: view => {
+        return view.show({ tab: safeTab });
+      }
+    });
   }
 
   showFateChronicle() {
+    if (this.recoverDeferredModuleWarmup('open-chronicle', 'chronicle')) return Promise.resolve(null);
+    this.ensureFateChronicleLoadingShell();
     this.showScreen('fate-chronicle-screen');
-    if (!this.fateChronicleView) this.fateChronicleView = new FateChronicleView(this);
-    return this.fateChronicleView.show();
+    if (typeof window === 'undefined' || !window.__THE_DEFIER_BOOT__) {
+      return Promise.resolve(this.fateChronicleView);
+    }
+    return this.runDeferredModuleAction({
+      owner: 'chronicle',
+      loadingMessage: '正在展开命途长卷...',
+      errorMessage: '命途长卷暂时无法开启。',
+      load: () => this.ensureFateChronicleViewLoaded(),
+      action: view => view.show()
+    });
   }
 
   showSocialHub(tab = 'friends') {
     if (!AuthService.isLoggedIn()) {
       this.showLoginModal();
-      return;
+      return Promise.resolve(null);
     }
+    const safeTab = ['friends', 'requests', 'squad', 'security'].includes(tab) ? tab : 'friends';
+    const socialWarmupFailed = this.deferredModuleWarmupFailures?.has('open-social');
+    if (socialWarmupFailed && this.currentScreen === 'main-menu') {
+      try {
+        sessionStorage.setItem('theDefierDeferredSocialTabV1', safeTab);
+      } catch (error) {}
+    }
+    if (this.recoverDeferredModuleWarmup('open-social', 'social')) return Promise.resolve(null);
     this.showScreen('social-screen');
-    if (!this.socialView) this.socialView = new SocialView(this);
-    return this.socialView.show(tab);
+    if (typeof window === 'undefined' || !window.__THE_DEFIER_BOOT__) {
+      return Promise.resolve(this.socialView);
+    }
+    this.setSocialHubLoadingState('loading');
+    return this.runDeferredModuleAction({
+      owner: 'social',
+      loadingMessage: '正在打开道友录...',
+      errorMessage: '道友录暂时无法开启。',
+      load: () => this.ensureSocialViewLoaded(),
+      action: view => {
+        this.setSocialHubLoadingState('ready');
+        return view.show(safeTab);
+      },
+      onError: () => this.setSocialHubLoadingState('error'),
+      retry: () => {
+        try {
+          sessionStorage.setItem('theDefierDeferredSocialTabV1', safeTab);
+        } catch (error) {}
+        this.reloadDeferredModuleAction('social');
+      }
+    });
   }
 
   // 更新角色信息界面
@@ -6195,17 +6552,12 @@ export class Game {
       PVPService.clearActiveMatch();
     }
 
-    // Return to PVP Screen
     this.showScreen('pvp-screen');
-    // Refresh Rank
-    if (PVPScene && typeof PVPScene.loadRankings === 'function') {
-      PVPScene.loadRankings();
-    } else if (PVPScene && typeof PVPScene.loadRanking === 'function') {
-      // Fallback/Correction just in case
-      PVPScene.loadRanking();
-    } else {
-      // Direct call if available globally or assume standard name
-      if (typeof PVPScene !== 'undefined') PVPScene.loadRankings();
+    const scene = this.getPvpScene();
+    if (scene && typeof scene.loadRankings === 'function') {
+      scene.loadRankings();
+    } else if (scene && typeof scene.loadRanking === 'function') {
+      scene.loadRanking();
     }
   }
 
@@ -8959,8 +9311,9 @@ export class Game {
           console.warn('Fate chronicle auth refresh failed:', error);
         });
       }
-      if (PVPScene && typeof PVPScene.handleAuthStateChanged === 'function') {
-        PVPScene.handleAuthStateChanged().catch(error => {
+      const pvpScene = this.getPvpScene();
+      if (pvpScene && typeof pvpScene.handleAuthStateChanged === 'function') {
+        pvpScene.handleAuthStateChanged().catch(error => {
           console.warn('PVP auth refresh failed:', error);
         });
       }
@@ -9130,13 +9483,15 @@ export class Game {
     });
   }
   async prepareForAuthLogout() {
-    if (PVPScene && typeof PVPScene.prepareForAuthLogout === 'function') {
-      await PVPScene.prepareForAuthLogout();
+    const pvpScene = this.getPvpScene();
+    if (pvpScene && typeof pvpScene.prepareForAuthLogout === 'function') {
+      await pvpScene.prepareForAuthLogout();
     }
   }
   async resumeAfterAuthLogoutFailure() {
-    if (PVPScene && typeof PVPScene.resumeAfterAuthLogoutFailure === 'function') {
-      await PVPScene.resumeAfterAuthLogoutFailure();
+    const pvpScene = this.getPvpScene();
+    if (pvpScene && typeof pvpScene.resumeAfterAuthLogoutFailure === 'function') {
+      await pvpScene.resumeAfterAuthLogoutFailure();
     }
   }
   async checkForCloudSave() {
@@ -9647,7 +10002,14 @@ function initializeGameInstance() {
     if (typeof Utils !== 'undefined' && Utils && typeof Utils.showBattleLog === 'function') {
       Utils.showBattleLog('游戏初始化失败，请检查控制台');
     }
-    if (typeof alert === 'function') {
+    const loadStatus = typeof window !== 'undefined' ? window.__THE_DEFIER_LOAD_STATUS__ : null;
+    if (loadStatus && typeof loadStatus.show === 'function') {
+      loadStatus.show('轮回载入失败，请重试。', {
+        owner: 'boot',
+        state: 'error',
+        retry: () => window.location.reload()
+      });
+    } else if (typeof alert === 'function') {
       alert('游戏初始化失败: ' + error.message);
     }
   }

@@ -8738,10 +8738,25 @@ async function clickVisiblePostReviewAction(page, actionId) {
     const practicePlan = drillScenario?.practicePlan || null;
     const targetReach = [];
     const measureReach = async (name, el) => {
-      if (!el || typeof el.scrollIntoView !== 'function') {
+      if (!el || !container) {
         return { name, rect: null, footerRect: rectObject(footer?.getBoundingClientRect() || null), reachable: false };
       }
-      el.scrollIntoView({ block: 'center', inline: 'nearest' });
+      const scrollTopBefore = Math.round(container?.scrollTop || 0);
+      const targetRectBefore = el.getBoundingClientRect();
+      const containerRectBefore = container.getBoundingClientRect();
+      const footerRectBefore = footer?.getBoundingClientRect() || null;
+      const visibleTop = containerRectBefore.top + 4;
+      const visibleBottom = Math.min(
+        containerRectBefore.bottom,
+        footerRectBefore?.top ?? containerRectBefore.bottom,
+      ) - 4;
+      const visibleHeight = Math.max(0, visibleBottom - visibleTop);
+      const centeredTop = visibleTop + Math.max(0, (visibleHeight - targetRectBefore.height) / 2);
+      const requestedScrollTop = Math.min(
+        Math.max(0, container.scrollHeight - container.clientHeight),
+        Math.max(0, container.scrollTop + targetRectBefore.top - centeredTop),
+      );
+      container.scrollTo({ top: requestedScrollTop, behavior: 'auto' });
       await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
       const rect = rectObject(el.getBoundingClientRect());
       const footerRect = rectObject(footer?.getBoundingClientRect() || null);
@@ -8749,6 +8764,9 @@ async function clickVisiblePostReviewAction(page, actionId) {
         name,
         rect,
         footerRect,
+        scrollTopBefore,
+        requestedScrollTop: Math.round(requestedScrollTop),
+        scrollTopAfter: Math.round(container?.scrollTop || 0),
         reachable: !!rect
           && !!footerRect
           && rect.left >= -1
@@ -8785,6 +8803,17 @@ async function clickVisiblePostReviewAction(page, actionId) {
       docScrollWidth: Math.round(document.documentElement?.scrollWidth || 0),
       containerScrollWidth: Math.round(container?.scrollWidth || 0),
       containerClientWidth: Math.round(container?.clientWidth || 0),
+      containerScrollHeight: Math.round(container?.scrollHeight || 0),
+      containerClientHeight: Math.round(container?.clientHeight || 0),
+      containerScrollTop: Math.round(container?.scrollTop || 0),
+      containerMaxScrollTop: Math.round(Math.max(0, (container?.scrollHeight || 0) - (container?.clientHeight || 0))),
+      containerRect: rectObject(container?.getBoundingClientRect() || null),
+      containerContainsPlan: !!(container && plan && container.contains(plan)),
+      containerContainsTargets: [...turnRows, ...focusRows, guard].filter(Boolean).every((target) => container?.contains(target)),
+      bannerOpen: document.getElementById('challenge-selection-banner')?.open ?? null,
+      planDisplay: plan ? getComputedStyle(plan).display : '',
+      planOffsetParent: plan?.offsetParent?.id || plan?.offsetParent?.className || '',
+      containerOverflowY: container ? getComputedStyle(container).overflowY : '',
       confirmRect,
       footerRect,
       viewportWidth: window.innerWidth,

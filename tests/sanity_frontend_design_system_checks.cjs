@@ -65,6 +65,7 @@ assert.ok(systemView.includes('system-prompt-content'), 'system prompt sizing sh
 [
   '__THE_DEFIER_BOOT_CLICK_STATE__',
   '__THE_DEFIER_BOOT__',
+  '__THE_DEFIER_LOAD_STATUS__',
   'the-defier:runtime-ready',
   'pendingActionId',
   "event.target.closest('[data-boot-action]')",
@@ -81,8 +82,16 @@ assert.ok(systemView.includes('system-prompt-content'), 'system prompt sizing sh
 });
 assert.ok(gameSource.includes("window.dispatchEvent(new Event('the-defier:runtime-ready'))"), 'Game initialization should release queued cold-start clicks');
 assert.ok(frontendUpgradeCss.includes('[data-boot-click-queued="true"]'), 'queued cold-start actions should expose visible busy feedback');
+assert.ok(indexHtml.includes('id="runtime-load-status"'), 'cold-start and lazy modules should share an accessible status surface');
+assert.ok(indexHtml.includes('载入时间较长，可以重试。'), 'slow cold starts should expose a retry action');
+assert.ok(frontendUpgradeCss.includes('.runtime-load-status'), 'runtime loading feedback should have a stable responsive layout');
 [
   'cold-start ${label} action queues before runtime and runs after Game initialization',
+  'cold-start timeout exposes a visible retry action and clears it after recovery',
+  'deferred ${readyKind} module failure can reload and resume the requested screen',
+  "scenarioId: 'season-module-recovery'",
+  "scenarioId: 'pvp-module-recovery'",
+  "scenarioId: 'challenge-module-recovery'",
   "scenarioId: 'cold-start-new-game-action'",
   "scenarioId: 'cold-start-pvp-action'",
   "actionId: 'open-pvp'",
