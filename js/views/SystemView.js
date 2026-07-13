@@ -685,6 +685,11 @@ export class SystemView {
     modal.classList.add('active');
   }
   showLoginModal() {
+    const modal = document.getElementById('auth-modal');
+    if (AuthService.isLoggedIn?.()) {
+      modal?.classList.remove('active');
+      return false;
+    }
     if (typeof AuthService !== 'undefined' && AuthService.isCloudEnabled && !AuthService.isCloudEnabled()) {
       const modalMsg = document.getElementById('auth-message');
       if (modalMsg) modalMsg.innerText = '云存档未配置，当前仅可离线游玩';
@@ -695,7 +700,6 @@ export class SystemView {
       }
       return;
     }
-    const modal = document.getElementById('auth-modal');
     if (modal) {
       modal.classList.add('active');
       // Clear inputs

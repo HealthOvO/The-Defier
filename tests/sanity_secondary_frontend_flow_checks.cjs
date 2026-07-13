@@ -10,6 +10,7 @@ const gameSource = read('js/game.js');
 const frontendUpgradeCss = read('css/frontend-upgrade.css');
 const challengeHubSource = read('js/core/challenge_hub.js');
 const rewardViewSource = read('js/views/RewardView.js');
+const systemViewSource = read('js/views/SystemView.js');
 
 function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -64,6 +65,8 @@ assertHasPattern(
 const checkLoginStatusSection = sliceBetween(gameSource, 'checkLoginStatus() {', '\n  handleLoginMenuAction() {');
 const handleLoginMenuActionSection = sliceBetween(gameSource, 'handleLoginMenuAction() {', '\n  requestLogout() {');
 const requestLogoutSection = sliceBetween(gameSource, 'requestLogout() {', '\n  async checkForCloudSave() {');
+const gameShowLoginSection = sliceBetween(gameSource, 'showLoginModal() {', '\n  async handleLogin() {');
+const systemShowLoginSection = sliceBetween(systemViewSource, '  showLoginModal() {', '\n  renderSaveSlots(slots) {');
 
 assertHasPattern(
   checkLoginStatusSection,
@@ -95,6 +98,26 @@ assertHasPattern(
   /this\.showConfirmModal\(/,
   'requestLogout should remain implemented as a dedicated logout flow',
 );
+assertHasPattern(
+  requestLogoutSection,
+  /document\.getElementById\('auth-modal'\)\?\.classList\.remove\('active'\);/,
+  'requestLogout should close any stale auth modal before opening logout confirmation',
+);
+[
+  ['game showLoginModal', gameShowLoginSection],
+  ['SystemView showLoginModal', systemShowLoginSection],
+].forEach(([label, source]) => {
+  assertHasPattern(
+    source,
+    /AuthService\.isLoggedIn\?\.\(\)/,
+    `${label} should refuse to open the auth form for an authenticated account`,
+  );
+  assertHasPattern(
+    source,
+    /classList\.remove\('active'\)/,
+    `${label} should clear a stale auth modal when the account is already authenticated`,
+  );
+});
 
 assertHasPattern(
   indexHtml,
