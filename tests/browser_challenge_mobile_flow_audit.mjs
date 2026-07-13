@@ -57,6 +57,152 @@ async function waitForChallengeHubReady(page, expectedTab = 'daily') {
   }, expectedTab, { timeout: 8000 });
 }
 
+async function runChallengeSlotReloadResumeProbe(browser) {
+  const context = await browser.newContext({
+    viewport: { width: 390, height: 844 },
+    isMobile: true,
+    hasTouch: true,
+  });
+  const page = await context.newPage();
+  page.on('console', (msg) => {
+    if (msg.type() === 'error') consoleErrors.push(msg.text());
+  });
+  page.on('pageerror', (err) => {
+    consoleErrors.push(String(err));
+  });
+
+  try {
+    await page.addInitScript(() => {
+      try {
+        if (sessionStorage.getItem('theDefierPendingChallengeSlotReloadV1')) {
+          sessionStorage.setItem('challengeSlotResumeMarkerWitness', 'true');
+        }
+        if (sessionStorage.getItem('challengeSlotResumePrepared') !== 'true') {
+          localStorage.removeItem('theDefierSave');
+          localStorage.removeItem('lastSaveSlot');
+          sessionStorage.removeItem('currentSaveSlot');
+          sessionStorage.removeItem('justLoadedSave');
+          sessionStorage.removeItem('theDefierPendingChallengeSlotReloadV1');
+          sessionStorage.removeItem('challengeSlotResumeMarkerWitness');
+          sessionStorage.setItem('challengeSlotResumePrepared', 'true');
+        }
+      } catch {}
+    });
+    await page.goto(url, { waitUntil: 'domcontentloaded' });
+    await page.waitForFunction(() => !!window.game, null, { timeout: 8000 });
+    await page.evaluate(async () => {
+      if (typeof AuthService !== 'undefined') {
+        AuthService.cloudEnabled = false;
+        AuthService.isInitialized = false;
+        AuthService.currentUser = null;
+      }
+      window.game.currentSaveSlot = 0;
+      sessionStorage.setItem('currentSaveSlot', '0');
+      localStorage.setItem('lastSaveSlot', '0');
+      window.game.saveGame();
+      const raw = localStorage.getItem('theDefierSave');
+      const saved = raw ? JSON.parse(raw) : null;
+      if (!saved) throw new Error('challenge slot resume probe could not create a local save');
+      await window.game.ensureChallengeHubLoaded();
+      window.game.beginChallengeStart('daily');
+      document.getElementById('generic-confirm-modal')?.classList.remove('active');
+      window.game.cachedSlots = [saved, null, null, null];
+      window.game.renderSaveSlots(window.game.cachedSlots);
+    });
+
+    const loadSelector = '#save-slots-modal [data-system-action="select-slot"][data-slot-index="0"][data-slot-mode="load"]';
+    await page.waitForSelector(loadSelector, { timeout: 8000 });
+    const before = await page.evaluate(() => {
+      const pending = window.game?.pendingChallengeStart || null;
+      return {
+        screen: window.game?.currentScreen || '',
+        pendingMode: pending?.mode || '',
+        pendingSnapshot: pending ? JSON.parse(JSON.stringify(pending)) : null,
+        saveSlotsActive: !!document.getElementById('save-slots-modal')?.classList.contains('active'),
+        reloadMarkerPresent: !!sessionStorage.getItem('theDefierPendingChallengeSlotReloadV1'),
+      };
+    });
+
+    const navigation = page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 10000 })
+      .then(() => true)
+      .catch(() => false);
+    await page.click(loadSelector);
+    const reloadObserved = await navigation;
+    await page.waitForFunction(() => {
+      const banner = document.getElementById('challenge-selection-banner');
+      return window.game?.currentScreen === 'character-selection-screen'
+        && window.game?.pendingChallengeStart?.mode === 'daily'
+        && banner?.tagName === 'DETAILS';
+    }, null, { timeout: 12000 });
+
+    const after = await page.evaluate(() => {
+      const banner = document.getElementById('challenge-selection-banner');
+      const summary = banner?.querySelector(':scope > summary');
+      const confirm = document.getElementById('confirm-character-btn');
+      const pending = window.game?.pendingChallengeStart || null;
+      const toRect = (rect) => rect ? {
+        left: Math.round(rect.left),
+        right: Math.round(rect.right),
+        top: Math.round(rect.top),
+        bottom: Math.round(rect.bottom),
+        width: Math.round(rect.width),
+        height: Math.round(rect.height),
+      } : null;
+      return {
+        screen: window.game?.currentScreen || '',
+        pendingMode: pending?.mode || '',
+        pendingSnapshot: pending ? JSON.parse(JSON.stringify(pending)) : null,
+        currentSaveSlot: window.game?.currentSaveSlot ?? null,
+        bannerTag: banner?.tagName || '',
+        bannerOpen: banner?.open === true,
+        bannerRect: toRect(banner?.getBoundingClientRect() || null),
+        summaryRect: toRect(summary?.getBoundingClientRect() || null),
+        confirmRect: toRect(confirm?.getBoundingClientRect() || null),
+        saveSlotsActive: !!document.getElementById('save-slots-modal')?.classList.contains('active'),
+        reloadMarkerPresent: !!sessionStorage.getItem('theDefierPendingChallengeSlotReloadV1'),
+        reloadMarkerWitness: sessionStorage.getItem('challengeSlotResumeMarkerWitness') === 'true',
+        pageOverflow: Math.max(0, document.documentElement.scrollWidth - document.documentElement.clientWidth),
+      };
+    });
+    await safeAuditScreenshot(page, path.join(outDir, 'challenge-mobile-slot-reload-resume.png'), 'browser_challenge_mobile_flow_audit', { timeout: 9000 });
+
+    const temporalRejections = [];
+    const temporalCases = [
+      { name: 'expired', savedAt: Date.now() - (6 * 60 * 1000) },
+      { name: 'future', savedAt: Date.now() + (60 * 1000) },
+    ];
+    for (const temporalCase of temporalCases) {
+      await page.evaluate(({ pending, savedAt }) => {
+        sessionStorage.setItem('theDefierPendingChallengeSlotReloadV1', JSON.stringify({
+          version: 1,
+          savedAt,
+          slotIndex: 0,
+          userId: '',
+          pending,
+        }));
+      }, { pending: before.pendingSnapshot, savedAt: temporalCase.savedAt });
+      await page.reload({ waitUntil: 'domcontentloaded', timeout: 10000 });
+      await page.waitForFunction(() => {
+        return !!window.game
+          && window.game.currentScreen === 'main-menu'
+          && !sessionStorage.getItem('theDefierPendingChallengeSlotReloadV1');
+      }, null, { timeout: 12000 });
+      const state = await page.evaluate(() => ({
+        screen: window.game?.currentScreen || '',
+        currentSaveSlot: window.game?.currentSaveSlot ?? null,
+        loadGameResult: window.game?.loadGameResult === true,
+        pendingPresent: !!window.game?.pendingChallengeStart,
+        markerPresent: !!sessionStorage.getItem('theDefierPendingChallengeSlotReloadV1'),
+        characterSelectionActive: !!document.getElementById('character-selection-screen')?.classList.contains('active'),
+      }));
+      temporalRejections.push({ name: temporalCase.name, reloaded: true, ...state });
+    }
+    return { before, after, reloadObserved, temporalRejections };
+  } finally {
+    await context.close();
+  }
+}
+
 (async () => {
   const browser = await chromium.launch({
     headless: true,
@@ -639,36 +785,6 @@ async function waitForChallengeHubReady(page, expectedTab = 'daily') {
     await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
     const footerRect = rectObject(footer?.getBoundingClientRect() || null);
     const confirmRect = rectObject(confirmBtn?.getBoundingClientRect() || null);
-    const measureReach = async (name, el) => {
-      if (!el || typeof el.scrollIntoView !== 'function') {
-        return { name, rect: null, footerRect: rectObject(footer?.getBoundingClientRect() || null), reachable: false };
-      }
-      el.scrollIntoView({ block: 'center', inline: 'nearest' });
-      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-      const rect = rectObject(el.getBoundingClientRect());
-      const freshFooterRect = rectObject(footer?.getBoundingClientRect() || null);
-      return {
-        name,
-        rect,
-        footerRect: freshFooterRect,
-        reachable: !!rect
-          && !!freshFooterRect
-          && rect.left >= -1
-          && rect.right <= window.innerWidth + 2
-          && rect.top >= 0
-          && rect.bottom <= freshFooterRect.top - 4,
-      };
-    };
-    const targetReach = [];
-    for (const [name, el] of [
-      ['first-turn', turnRows[0]],
-      ['last-turn', turnRows[turnRows.length - 1]],
-      ['first-focus', focusRows[0]],
-      ['last-focus', focusRows[focusRows.length - 1]],
-      ['guardrail', guard],
-    ]) {
-      targetReach.push(await measureReach(name, el));
-    }
     return {
       mode: payload?.mode || '',
       pending: payload?.challenge?.pending || null,
@@ -687,7 +803,11 @@ async function waitForChallengeHubReady(page, expectedTab = 'daily') {
       bodyScrollWidth: Math.round(document.body?.scrollWidth || 0),
       containerScrollWidth: Math.round(container?.scrollWidth || 0),
       containerClientWidth: Math.round(container?.clientWidth || 0),
+      containerScrollHeight: Math.round(container?.scrollHeight || 0),
+      containerClientHeight: Math.round(container?.clientHeight || 0),
       containerScrollTop: Math.round(container?.scrollTop || 0),
+      containerOverflowY: container ? getComputedStyle(container).overflowY : '',
+      containerRect: rectObject(container?.getBoundingClientRect() || null),
       beforeScrollTop: Math.round(beforeScrollTop),
       planRect: rectObject(plan?.getBoundingClientRect() || null),
       firstTurnRect: rectObject(turnRows[0]?.getBoundingClientRect() || null),
@@ -695,7 +815,7 @@ async function waitForChallengeHubReady(page, expectedTab = 'daily') {
       lastTurnRect: rectObject(turnRows[turnRows.length - 1]?.getBoundingClientRect() || null),
       lastFocusRect: rectObject(focusRows[focusRows.length - 1]?.getBoundingClientRect() || null),
       guardRect: rectObject(guard?.getBoundingClientRect() || null),
-      targetReach,
+      targetReach: [],
       rowOverflow: allRows.map((row) => {
         const rect = rectObject(row.getBoundingClientRect());
         return {
@@ -709,6 +829,41 @@ async function waitForChallengeHubReady(page, expectedTab = 'daily') {
       confirmRect,
     };
   });
+  for (const [name, locator] of [
+    ['first-turn', page.locator('[data-pvp-live-practice-plan-turn]').first()],
+    ['last-turn', page.locator('[data-pvp-live-practice-plan-turn]').last()],
+    ['first-focus', page.locator('[data-pvp-live-practice-plan-focus]').first()],
+    ['last-focus', page.locator('[data-pvp-live-practice-plan-focus]').last()],
+    ['guardrail', page.locator('.challenge-selection-practice-guard')],
+  ]) {
+    await locator.scrollIntoViewIfNeeded();
+    await page.waitForTimeout(80);
+    pvpPracticeSelectionProbe.targetReach.push(await locator.evaluate((el, targetName) => {
+      const rectObject = (rect) => rect ? {
+        left: Math.round(rect.left),
+        right: Math.round(rect.right),
+        top: Math.round(rect.top),
+        bottom: Math.round(rect.bottom),
+        width: Math.round(rect.width),
+        height: Math.round(rect.height),
+      } : null;
+      const footer = document.querySelector('.character-selection-footer');
+      const rect = rectObject(el.getBoundingClientRect());
+      const footerRect = rectObject(footer?.getBoundingClientRect() || null);
+      return {
+        name: targetName,
+        rect,
+        footerRect,
+        reachable: !!rect
+          && !!footerRect
+          && rect.left >= -1
+          && rect.right <= window.innerWidth + 2
+          && rect.top >= 0
+          && rect.bottom <= footerRect.top,
+      };
+    }, name));
+  }
+  pvpPracticeSelectionProbe.containerScrollTop = await page.locator('#character-selection-container').evaluate((container) => Math.round(container.scrollTop || 0));
   const pvpPracticeForbiddenTokens = /payload|\bhand\b|\bcard\b|hidden|deck|cardId|instanceId|cardInstanceId|loadoutSnapshot|rawPayload|reward|rating|elo|token/i;
   add(
     'challenge mobile live PVP practice selection keeps public plan readable, accessible, and confirmable',
@@ -1022,6 +1177,43 @@ async function waitForChallengeHubReady(page, expectedTab = 'daily') {
     'challenge mobile weekly trajectory filter narrows to the carry-forward map verdict',
     !!weeklyTrajectoryFilterProbe?.ok,
     JSON.stringify(weeklyTrajectoryFilterProbe || null)
+  );
+
+  const slotReloadResumeProbe = await runChallengeSlotReloadResumeProbe(browser);
+  add(
+    'challenge cloud slot reload resumes the pending mobile selection instead of returning to the menu',
+    !!slotReloadResumeProbe?.reloadObserved
+      && slotReloadResumeProbe.before?.pendingMode === 'daily'
+      && !!slotReloadResumeProbe.before?.pendingSnapshot?.rotationKey
+      && !!slotReloadResumeProbe.before?.pendingSnapshot?.rule?.id
+      && slotReloadResumeProbe.before?.saveSlotsActive
+      && !slotReloadResumeProbe.before?.reloadMarkerPresent
+      && slotReloadResumeProbe.after?.screen === 'character-selection-screen'
+      && slotReloadResumeProbe.after?.pendingMode === 'daily'
+      && JSON.stringify(slotReloadResumeProbe.after?.pendingSnapshot) === JSON.stringify(slotReloadResumeProbe.before?.pendingSnapshot)
+      && slotReloadResumeProbe.after?.currentSaveSlot === 0
+      && slotReloadResumeProbe.after?.bannerTag === 'DETAILS'
+      && slotReloadResumeProbe.after?.bannerOpen === false
+      && rectFitsWidth(slotReloadResumeProbe.after?.bannerRect, 390)
+      && rectFitsWidth(slotReloadResumeProbe.after?.summaryRect, 390)
+      && rectFitsWidth(slotReloadResumeProbe.after?.confirmRect, 390)
+      && !slotReloadResumeProbe.after?.saveSlotsActive
+      && !slotReloadResumeProbe.after?.reloadMarkerPresent
+      && slotReloadResumeProbe.after?.reloadMarkerWitness
+      && slotReloadResumeProbe.after?.pageOverflow === 0,
+    JSON.stringify(slotReloadResumeProbe || null)
+  );
+  add(
+    'challenge slot reload rejects expired and future pending handoffs',
+    slotReloadResumeProbe.temporalRejections?.length === 2
+      && slotReloadResumeProbe.temporalRejections.every((entry) => entry?.reloaded
+        && entry.screen === 'main-menu'
+        && entry.currentSaveSlot === 0
+        && entry.loadGameResult
+        && !entry.pendingPresent
+        && !entry.markerPresent
+        && !entry.characterSelectionActive),
+    JSON.stringify(slotReloadResumeProbe.temporalRejections || null)
   );
 
   add('no console errors were emitted during challenge mobile flow audit', consoleErrors.length === 0, JSON.stringify(consoleErrors));
