@@ -1,7 +1,9 @@
 import { AuthoritativeRunService } from "../services/authoritative-run-service.js";
+import { ChallengeLadderService } from "../services/challenge-ladder-service.js";
+import { WorldRiftService } from "../services/world-rift-service.js";
 import { buildDataAttributes, escapeHtml } from "../ui/render-safe.js";
 
-const MODES = ["pve", "challenge", "expedition"];
+const MODES = ["pve", "challenge", "expedition", "challenge_ladder", "world_rift"];
 const FOCUS_KEYS = Object.freeze({
   refresh: "authoritative:refresh",
   begin: "authoritative:begin",
@@ -28,6 +30,18 @@ const MODE_META = Object.freeze({
     shortLabel: "远征",
     summary: "跨战会整备恢复，但后段更硬，考验整段资源规划。",
     tags: ["战后恢复", "后段加压"]
+  },
+  challenge_ladder: {
+    label: "众生试炼",
+    shortLabel: "权威榜",
+    summary: "全服统一种子槽与有限正式次数，只认服务端完整重放成绩。",
+    tags: ["真实榜单", "每周三次", "统一种子"]
+  },
+  world_rift: {
+    label: "天穹裂隙",
+    shortLabel: "共斗",
+    summary: "用服务端完整重放推进真实全服首领；每周五次，最佳三次进入贡献榜。",
+    tags: ["异步共斗", "全服阶段", "最佳三次"]
   }
 });
 
@@ -149,12 +163,16 @@ function renderChip(label = "", extraClass = "") {
 export class AuthoritativeRunPanel {
   constructor({
     service = AuthoritativeRunService,
+    challengeLadderService = typeof ChallengeLadderService !== "undefined" ? ChallengeLadderService : null,
+    worldRiftService = typeof WorldRiftService !== "undefined" ? WorldRiftService : null,
     getCurrentUserId = () => "",
     requestRender = () => {},
     requestLogin = () => {},
     requestConfirm = async () => false
   } = {}) {
     this.service = service;
+    this.challengeLadderService = challengeLadderService;
+    this.worldRiftService = worldRiftService;
     this.getCurrentUserId = getCurrentUserId;
     this.requestRender = requestRender;
     this.requestLogin = requestLogin;
@@ -165,9 +183,27 @@ export class AuthoritativeRunPanel {
     this.lastEnvelope = null;
     this.lastReceipt = null;
     this.lastLoadedKey = "";
+    this.challengeLadderState = this.challengeLadderService && typeof this.challengeLadderService.getState === "function"
+      ? this.challengeLadderService.getState()
+      : {};
+    this.worldRiftState = this.worldRiftService && typeof this.worldRiftService.getState === "function"
+      ? this.worldRiftService.getState()
+      : {};
     this.unsubscribe = this.service && typeof this.service.subscribe === "function"
       ? this.service.subscribe(snapshot => {
         this.serviceState = snapshot || {};
+        this.requestRender();
+      }, { emitCurrent: false })
+      : () => {};
+    this.unsubscribeChallengeLadder = this.challengeLadderService && typeof this.challengeLadderService.subscribe === "function"
+      ? this.challengeLadderService.subscribe(snapshot => {
+        this.challengeLadderState = snapshot || {};
+        this.requestRender();
+      }, { emitCurrent: false })
+      : () => {};
+    this.unsubscribeWorldRift = this.worldRiftService && typeof this.worldRiftService.subscribe === "function"
+      ? this.worldRiftService.subscribe(snapshot => {
+        this.worldRiftState = snapshot || {};
         this.requestRender();
       }, { emitCurrent: false })
       : () => {};
@@ -175,10 +211,16 @@ export class AuthoritativeRunPanel {
 
   destroy() {
     if (typeof this.unsubscribe === "function") this.unsubscribe();
+    if (typeof this.unsubscribeChallengeLadder === "function") this.unsubscribeChallengeLadder();
+    if (typeof this.unsubscribeWorldRift === "function") this.unsubscribeWorldRift();
   }
 
   isBusy() {
-    return !!(this.serviceState && (this.serviceState.pending || this.serviceState.pendingReplay));
+    return !!(
+      (this.serviceState && (this.serviceState.pending || this.serviceState.pendingReplay))
+      || (this.getCurrentMode() === "challenge_ladder" && this.challengeLadderState && this.challengeLadderState.pending)
+      || (this.getCurrentMode() === "world_rift" && this.worldRiftState && this.worldRiftState.pending)
+    );
   }
 
   getCurrentMode() {
@@ -258,6 +300,16 @@ export class AuthoritativeRunPanel {
     } else {
       this.serviceState = {};
     }
+    if (this.challengeLadderService && typeof this.challengeLadderService.reset === "function") {
+      this.challengeLadderState = this.challengeLadderService.reset();
+    } else {
+      this.challengeLadderState = {};
+    }
+    if (this.worldRiftService && typeof this.worldRiftService.reset === "function") {
+      this.worldRiftState = this.worldRiftService.reset();
+    } else {
+      this.worldRiftState = {};
+    }
     this.requestRender();
     if (active) {
       return this.activate({ force: true });
@@ -270,6 +322,18 @@ export class AuthoritativeRunPanel {
     if (!expectedUserId) {
       return this.handleAuthStateChanged({ active: false });
     }
+    if (this.getCurrentMode() === "challenge_ladder"
+      && this.challengeLadderService
+      && typeof this.challengeLadderService.current === "function") {
+      await this.challengeLadderService.current({ expectedUserId });
+      this.challengeLadderState = this.challengeLadderService.getState();
+    }
+    if (this.getCurrentMode() === "world_rift"
+      && this.worldRiftService
+      && typeof this.worldRiftService.current === "function") {
+      await this.worldRiftService.current({ expectedUserId });
+      this.worldRiftState = this.worldRiftService.getState();
+    }
     const result = await this.service.current({
       mode: this.getCurrentMode(),
       expectedUserId
@@ -281,6 +345,18 @@ export class AuthoritativeRunPanel {
     const expectedUserId = normalizeText(this.getCurrentUserId());
     if (!expectedUserId) {
       return this.handleAuthStateChanged({ active: false });
+    }
+    if (this.getCurrentMode() === "challenge_ladder"
+      && this.challengeLadderService
+      && typeof this.challengeLadderService.current === "function") {
+      await this.challengeLadderService.current({ expectedUserId });
+      this.challengeLadderState = this.challengeLadderService.getState();
+    }
+    if (this.getCurrentMode() === "world_rift"
+      && this.worldRiftService
+      && typeof this.worldRiftService.current === "function") {
+      await this.worldRiftService.current({ expectedUserId });
+      this.worldRiftState = this.worldRiftService.getState();
     }
     const runId = this.getActiveRunId();
     const result = runId
@@ -295,11 +371,41 @@ export class AuthoritativeRunPanel {
       this.requestLogin();
       return { success: false, reason: "not_logged_in" };
     }
-    const result = await this.service.begin({
-      mode: this.getCurrentMode(),
-      forceNew,
-      expectedUserId
-    });
+    if (this.getCurrentMode() === "challenge_ladder"
+      && (!this.challengeLadderService || typeof this.challengeLadderService.start !== "function")) {
+      return { success: false, reason: "challenge_ladder_unavailable", message: "众生试炼服务尚未就绪。" };
+    }
+    if (this.getCurrentMode() === "world_rift"
+      && (!this.worldRiftService || typeof this.worldRiftService.start !== "function")) {
+      return { success: false, reason: "world_rift_unavailable", message: "天穹裂隙服务尚未就绪。" };
+    }
+    const isChallengeLadder = this.getCurrentMode() === "challenge_ladder";
+    const isWorldRift = this.getCurrentMode() === "world_rift";
+    const result = isChallengeLadder
+      ? await this.challengeLadderService.start({
+        forceNew,
+        expectedUserId
+      })
+      : isWorldRift
+        ? await this.worldRiftService.start({
+          forceNew,
+          expectedUserId
+        })
+        : await this.service.begin({
+          mode: this.getCurrentMode(),
+          forceNew,
+          expectedUserId
+        });
+    if (isChallengeLadder && result && result.success !== false
+      && typeof this.challengeLadderService.current === "function") {
+      await this.challengeLadderService.current({ expectedUserId });
+      this.challengeLadderState = this.challengeLadderService.getState();
+    }
+    if (isWorldRift && result && result.success !== false
+      && typeof this.worldRiftService.current === "function") {
+      await this.worldRiftService.current({ expectedUserId });
+      this.worldRiftState = this.worldRiftService.getState();
+    }
     return this.applyResult(result, { kind: "begin", userId: expectedUserId, force: true });
   }
 
@@ -330,7 +436,32 @@ export class AuthoritativeRunPanel {
       expectedVersion: this.getExpectedVersion(),
       expectedUserId
     });
-    return this.applyResult(result, { kind: "settle", userId: expectedUserId, force: true });
+    const applied = this.applyResult(result, { kind: "settle", userId: expectedUserId, force: true });
+    if (result && result.success !== false && this.getCurrentMode() === "challenge_ladder") {
+      if (!this.challengeLadderService || typeof this.challengeLadderService.submit !== "function") {
+        return { ...applied, ladderSubmission: { success: false, reason: "challenge_ladder_unavailable" } };
+      }
+      const ladderSubmission = await this.challengeLadderService.submit({ runId, expectedUserId });
+      if (ladderSubmission && ladderSubmission.success !== false
+        && typeof this.challengeLadderService.current === "function") {
+        await this.challengeLadderService.current({ expectedUserId });
+      }
+      this.challengeLadderState = this.challengeLadderService.getState();
+      return { ...applied, ladderSubmission };
+    }
+    if (result && result.success !== false && this.getCurrentMode() === "world_rift") {
+      if (!this.worldRiftService || typeof this.worldRiftService.submit !== "function") {
+        return { ...applied, riftSubmission: { success: false, reason: "world_rift_unavailable" } };
+      }
+      const riftSubmission = await this.worldRiftService.submit({ runId, expectedUserId });
+      if (riftSubmission && riftSubmission.success !== false
+        && typeof this.worldRiftService.current === "function") {
+        await this.worldRiftService.current({ expectedUserId });
+      }
+      this.worldRiftState = this.worldRiftService.getState();
+      return { ...applied, riftSubmission };
+    }
+    return applied;
   }
 
   async abandonRun() {
@@ -350,6 +481,20 @@ export class AuthoritativeRunPanel {
     if (nextMode === this.getCurrentMode()) return { success: true, skipped: true };
     this.activeMode = nextMode;
     this.requestRender();
+    if (nextMode === "challenge_ladder" && normalizeText(this.getCurrentUserId())) {
+      if (!this.challengeLadderService || typeof this.challengeLadderService.current !== "function") {
+        return { success: false, reason: "challenge_ladder_unavailable", message: "众生试炼服务尚未就绪。" };
+      }
+      await this.challengeLadderService.current({ expectedUserId: normalizeText(this.getCurrentUserId()) });
+      this.challengeLadderState = this.challengeLadderService.getState();
+    }
+    if (nextMode === "world_rift" && normalizeText(this.getCurrentUserId())) {
+      if (!this.worldRiftService || typeof this.worldRiftService.current !== "function") {
+        return { success: false, reason: "world_rift_unavailable", message: "天穹裂隙服务尚未就绪。" };
+      }
+      await this.worldRiftService.current({ expectedUserId: normalizeText(this.getCurrentUserId()) });
+      this.worldRiftState = this.worldRiftService.getState();
+    }
     return this.activate({ force: false });
   }
 
@@ -527,7 +672,10 @@ export class AuthoritativeRunPanel {
       );
     }
     const projection = this.getCurrentProjection();
-    const error = this.serviceState && this.serviceState.lastError;
+    const error = this.serviceState && this.serviceState.lastError
+      || (this.getCurrentMode() === "challenge_ladder" && this.challengeLadderState && this.challengeLadderState.lastError)
+      || (this.getCurrentMode() === "world_rift" && this.worldRiftState && this.worldRiftState.lastError)
+      || null;
     if (this.isBusy() && !projection) {
       return this.renderStateCard(
         "加载中",
@@ -580,6 +728,9 @@ export class AuthoritativeRunPanel {
 
   renderNoRunCard() {
     const modeMeta = MODE_META[this.getCurrentMode()];
+    const ladderContext = this.getCurrentMode() === "challenge_ladder" ? this.renderChallengeLadderContext() : "";
+    const worldRiftContext = this.getCurrentMode() === "world_rift" ? this.renderWorldRiftContext() : "";
+    const isBoundFormalMode = ["challenge_ladder", "world_rift"].includes(this.getCurrentMode());
     return `
       <section class="season-ops-section-card season-ops-authoritative-section">
         <div class="season-ops-section-head">
@@ -590,8 +741,14 @@ export class AuthoritativeRunPanel {
           <div class="season-ops-counter-chip">无进行中 run</div>
         </div>
         <div class="season-ops-inline-note">
-          当前模式没有可恢复的服务器卷面。开始后每一步都只以服务器投影为准，网络失败也不会本地前推。
+          ${this.getCurrentMode() === "challenge_ladder"
+            ? "当前没有可恢复的正式赛道卷面。发车会消耗一次本周额度，并绑定全服一致的种子槽。"
+            : this.getCurrentMode() === "world_rift"
+              ? "当前没有可恢复的裂隙卷面。发车会消耗一次本周额度，并把完整重放贡献原子写入真实全服首领。"
+              : "当前模式没有可恢复的服务器卷面。开始后每一步都只以服务器投影为准，网络失败也不会本地前推。"}
         </div>
+        ${ladderContext}
+        ${worldRiftContext}
         <div class="season-ops-state-actions season-ops-authoritative-inline-actions">
           <button
             type="button"
@@ -599,7 +756,7 @@ export class AuthoritativeRunPanel {
             data-season-ops-action="authoritative-begin"
             data-season-ops-focus-key="${escapeHtml(FOCUS_KEYS.begin)}"
             ${this.isBusy() ? "disabled" : ""}
-          >${this.isBusy() ? "发车中..." : "开始本模式试炼"}</button>
+          >${this.isBusy() ? "发车中..." : isBoundFormalMode ? "消耗一次正式额度发车" : "开始本模式试炼"}</button>
           <button
             type="button"
             class="season-ops-inline-btn"
@@ -609,6 +766,76 @@ export class AuthoritativeRunPanel {
           >${this.isBusy() ? "恢复中..." : "恢复服务器卷面"}</button>
         </div>
       </section>
+    `;
+  }
+
+  renderChallengeLadderContext() {
+    const current = this.challengeLadderState && this.challengeLadderState.current;
+    if (!current || typeof current !== "object") {
+      return `<div class="season-ops-inline-note">正在等待本周权威轮换；正式榜不可用时仍可返回挑战观察站进行离线练习。</div>`;
+    }
+    const rotation = current.rotation && typeof current.rotation === "object" ? current.rotation : current;
+    const attemptLimit = clampInt(current.allowance?.attemptLimit ?? current.attemptLimit ?? rotation.attemptLimit, 3);
+    const remainingAttempts = clampInt(
+      current.allowance?.remainingAttempts
+        ?? current.remainingAttempts
+        ?? current.attempts?.remaining
+        ?? Math.max(0, attemptLimit - clampInt(current.allowance?.usedAttempts ?? current.attemptsUsed ?? current.attempts?.used)),
+      0
+    );
+    const personalBest = current.personalBest || current.self || null;
+    const score = clampInt(personalBest && (personalBest.officialScore ?? personalBest.score));
+    const rank = clampInt(current.leaderboard?.myRank?.rank ?? personalBest?.rank ?? current.myRank?.rank ?? current.myRank);
+    return `
+      <div class="season-ops-authoritative-meta-row" data-challenge-ladder-context>
+        ${renderChip(normalizeText(rotation.title, "本周众生试炼"))}
+        ${renderChip(`正式次数 ${remainingAttempts}/${attemptLimit}`)}
+        ${renderChip(score > 0 ? `个人最佳 ${score}` : "尚无正式成绩")}
+        ${rank > 0 ? renderChip(`当前第 ${rank} 名`) : ""}
+        ${renderChip("离线练习不计榜")}
+      </div>
+    `;
+  }
+
+  renderWorldRiftContext() {
+    const current = this.worldRiftState && this.worldRiftState.current;
+    if (!current || typeof current !== "object") {
+      return `<div class="season-ops-inline-note">正在等待本周天穹裂隙；正式世界状态不可用时不会回退到本地模拟数据。</div>`;
+    }
+    const rotation = current.rotation && typeof current.rotation === "object" ? current.rotation : current;
+    const world = current.world && typeof current.world === "object"
+      ? current.world
+      : current.worldState && typeof current.worldState === "object"
+        ? current.worldState
+        : this.worldRiftState.world && typeof this.worldRiftState.world === "object"
+          ? this.worldRiftState.world
+          : {};
+    const attemptLimit = clampInt(current.allowance?.attemptLimit ?? current.attemptLimit ?? rotation.attemptLimit, 5);
+    const remainingAttempts = clampInt(
+      current.allowance?.remainingAttempts
+        ?? current.remainingAttempts
+        ?? current.attempts?.remaining
+        ?? Math.max(0, attemptLimit - clampInt(current.allowance?.usedAttempts ?? current.attemptsUsed ?? current.attempts?.used)),
+      0
+    );
+    const personal = current.personal || current.personalContribution || current.entry || current.self
+      || this.worldRiftState.contribution
+      || this.worldRiftState.leaderboard?.self
+      || null;
+    const ranked = clampInt(personal && (personal.rankedContribution ?? personal.rankScore ?? personal.score));
+    const totalHp = clampInt(world.totalHp ?? rotation.totalHp, 10000);
+    const appliedDamage = clampInt(world.appliedDamage ?? world.damage, 0, totalHp);
+    const remainingHp = clampInt(world.remainingHp ?? Math.max(0, totalHp - appliedDamage), 0, totalHp);
+    const phaseLabel = normalizeText(world.phaseTitle || world.currentPhase?.title || world.phaseName,
+      world.cleared || String(world.status || "").startsWith("echo") ? "余响阶段" : `第 ${clampInt(world.currentPhaseIndex, 1, 3)} 阶段`);
+    return `
+      <div class="season-ops-authoritative-meta-row" data-world-rift-context>
+        ${renderChip(normalizeText(rotation.title, "本周天穹裂隙"))}
+        ${renderChip(`正式次数 ${remainingAttempts}/${attemptLimit}`)}
+        ${renderChip(`${phaseLabel} · 剩余 ${remainingHp}/${totalHp}`)}
+        ${renderChip(ranked > 0 ? `最佳三次 ${ranked}` : "尚无正式贡献")}
+        ${renderChip(world.cleared || String(world.status || "").startsWith("echo") ? "已击破 · 余响可继续" : "全服真实推进")}
+      </div>
     `;
   }
 
@@ -653,6 +880,8 @@ export class AuthoritativeRunPanel {
           ${renderChip(`链首 ${shortHash(integrity.chainHead)}`)}
           ${renderChip(`信任 ${this.lastRunMeta.trustTier || "server_authoritative"}`)}
         </div>
+        ${this.getCurrentMode() === "challenge_ladder" ? this.renderChallengeLadderContext() : ""}
+        ${this.getCurrentMode() === "world_rift" ? this.renderWorldRiftContext() : ""}
       </section>
     `;
   }

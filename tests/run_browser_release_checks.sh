@@ -164,6 +164,7 @@ run_selected_audit ui-gallery node tests/browser_ui_gallery_audit.mjs "$BASE_URL
 run_selected_audit frontend-layout node tests/browser_frontend_layout_audit.mjs "$BASE_URL" "$OUTPUT_ROOT/frontend-layout"
 run_selected_audit backend-client node tests/browser_backend_client_smoke.mjs "$BASE_URL" "$OUTPUT_ROOT/backend-client"
 run_selected_audit auth-ui-cloud node tests/browser_auth_ui_cloud_smoke.mjs "$BASE_URL" "$OUTPUT_ROOT/auth-ui-cloud"
+run_selected_audit account-social-real node tests/browser_account_social_real_backend_smoke.mjs "$BASE_URL" "$OUTPUT_ROOT/account-social-real"
 run_selected_audit mobile node tests/browser_mobile_layout_audit.mjs "$BASE_URL" "$OUTPUT_ROOT/mobile"
 run_selected_audit reward-mobile node tests/browser_reward_meta_mobile_audit.mjs "$BASE_URL" "$OUTPUT_ROOT/reward-mobile"
 run_selected_audit meta node tests/browser_meta_screen_audit.mjs "$BASE_URL" "$OUTPUT_ROOT/meta"

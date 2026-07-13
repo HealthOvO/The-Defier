@@ -90,8 +90,8 @@ assertHasPattern(
 );
 assertHasPattern(
   handleLoginMenuActionSection,
-  /this\.requestLogout\(\);/,
-  'handleLoginMenuAction should delegate logout to requestLogout when already logged in',
+  /this\.showSocialHub\('friends'\);/,
+  'handleLoginMenuAction should open the account and social hub when already logged in',
 );
 assertHasPattern(
   requestLogoutSection,

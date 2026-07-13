@@ -41,12 +41,18 @@ function generateSignature(dataStr, salt) {
         .digest('hex');
 }
 
-function generateSessionSignature(dataStr, salt, sessionToken) {
+function normalizeSignedRoute(route) {
+    return String(route || '').trim().replace(/\s+/g, ' ');
+}
+
+function generateSessionSignature(dataStr, salt, sessionToken, route = '') {
     if (typeof sessionToken !== 'string' || sessionToken.length < 16) {
         throw new Error('session token is required for session integrity signatures');
     }
+    const signedRoute = normalizeSignedRoute(route);
     return crypto.createHmac('sha256', sessionToken)
-        .update('session-v1', 'utf8')
+        .update(signedRoute ? 'session-v2' : 'session-v1', 'utf8')
+        .update(signedRoute ? `\n${signedRoute}` : '', 'utf8')
         .update('\n', 'utf8')
         .update(String(salt), 'utf8')
         .update('\n', 'utf8')
@@ -65,11 +71,11 @@ function verifySignature(dataStr, salt, signature) {
         && crypto.timingSafeEqual(expectedBuffer, signatureBuffer);
 }
 
-function verifySessionSignature(dataStr, salt, signature, sessionToken) {
+function verifySessionSignature(dataStr, salt, signature, sessionToken, route = '') {
     if (typeof sessionToken !== 'string' || sessionToken.length < 16) return false;
     const input = validateSignatureInput(salt, signature);
     if (!input.valid) return false;
-    const expected = generateSessionSignature(dataStr, salt, sessionToken);
+    const expected = generateSessionSignature(dataStr, salt, sessionToken, route);
     const expectedBuffer = Buffer.from(expected, 'hex');
     const signatureBuffer = Buffer.from(String(signature), 'hex');
     return expectedBuffer.length === signatureBuffer.length
@@ -109,9 +115,12 @@ function verifyRequestIntegrity(dataStr, salt, signature, context = {}) {
     }
 
     if (!isSignatureConfigured()) {
-        if (signatureMode === 'session') {
-            if (verifySessionSignature(dataStr, salt, signature, sessionToken)) {
-                return { ok: true, mode: 'session' };
+        if (signatureMode === 'session' || signatureMode === 'session-v2') {
+            if (signatureMode === 'session-v2' && !normalizeSignedRoute(route)) {
+                return { ok: false, status: 400, reason: 'missing-signed-route', message: '会话完整性签名缺少请求路径' };
+            }
+            if (verifySessionSignature(dataStr, salt, signature, sessionToken, signatureMode === 'session-v2' ? route : '')) {
+                return { ok: true, mode: signatureMode };
             }
             return { ok: false, status: 403, reason: 'session-signature-mismatch', message: '会话完整性签名校验失败' };
         }
@@ -119,9 +128,12 @@ function verifyRequestIntegrity(dataStr, salt, signature, context = {}) {
         return { ok: false, status: 403, reason: 'hmac-not-configured', message: '服务端完整性校验未配置' };
     }
 
-    if (signatureMode === 'session') {
-        if (verifySessionSignature(dataStr, salt, signature, sessionToken)) {
-            return { ok: true, mode: 'session' };
+    if (signatureMode === 'session' || signatureMode === 'session-v2') {
+        if (signatureMode === 'session-v2' && !normalizeSignedRoute(route)) {
+            return { ok: false, status: 400, reason: 'missing-signed-route', message: '会话完整性签名缺少请求路径' };
+        }
+        if (verifySessionSignature(dataStr, salt, signature, sessionToken, signatureMode === 'session-v2' ? route : '')) {
+            return { ok: true, mode: signatureMode };
         }
         return { ok: false, status: 403, reason: 'session-signature-mismatch', message: '会话完整性签名校验失败' };
     }

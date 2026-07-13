@@ -153,7 +153,7 @@ async function signedRequest(pathname, { token, data, method = 'POST' }) {
 }
 
 async function registerAndLogin() {
-  const username = `${nextId('user')}-${Date.now()}`;
+  const username = `author-${Date.now().toString(36)}-${nextId('u').slice(-4)}`;
   const password = 'pwd123456';
   const registered = await request('/api/auth/register', {
     method: 'POST',
@@ -346,8 +346,8 @@ async function main() {
 
     const version = await request('/api/version');
     assert.strictEqual(version.status, 200, JSON.stringify(version.payload));
-    assert.strictEqual(version.payload?.schema?.version, 6);
-    assert.strictEqual(version.payload?.schema?.currentMigrationId, '0006_authoritative_runs_v2');
+    assert.strictEqual(version.payload?.schema?.version, 9);
+    assert.strictEqual(version.payload?.schema?.currentMigrationId, '0009_account_social_coop');
     assert.deepStrictEqual(
       version.payload?.schema?.appliedMigrations?.map(entry => entry.id),
       [
@@ -356,7 +356,10 @@ async function main() {
         '0003_verified_runs',
         '0004_cloud_state_v2',
         '0005_season_ops_economy',
-        '0006_authoritative_runs_v2'
+        '0006_authoritative_runs_v2',
+        '0007_authoritative_challenge_ladder',
+        '0008_authoritative_world_rift',
+        '0009_account_social_coop'
       ]
     );
 

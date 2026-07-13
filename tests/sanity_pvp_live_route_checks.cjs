@@ -334,6 +334,18 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
         const tokenI = generateToken({ id: 'live-user-i', username: '壬' });
         const tokenJ = generateToken({ id: 'live-user-j', username: '癸' });
         const tokenK = generateToken({ id: 'live-user-k', username: '子' });
+        for (const [userId, username] of [
+            ['live-user-a', '甲'], ['live-user-b', '乙'], ['live-user-c', '丙'], ['live-user-d', '丁'],
+            ['live-user-e', '戊'], ['live-user-f', '己'], ['live-user-g', '庚'], ['live-user-h', '辛'],
+            ['live-user-i', '壬'], ['live-user-j', '癸'], ['live-user-k', '子']
+        ]) {
+            await dbRun(
+                `INSERT INTO users (id, username, username_normalized, password_hash, created_at, global_updated_at, auth_version, password_changed_at, disabled_at)
+                 VALUES (?, ?, ?, 'pvp-live-route-auth-test', ?, 0, 1, 0, 0)
+                 ON CONFLICT(id) DO UPDATE SET username = excluded.username, username_normalized = excluded.username_normalized`,
+                [userId, username, username, Date.now()]
+            );
+        }
         pvpLiveRoutes.__attachServices({
             userDirectory: {
                 async findUserByUsername(username) {
@@ -1031,7 +1043,7 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
             body: { displayName: '庚', targetUsername: '不存在道友', loadout: loadoutA }
         });
         assert.equal(missingTargetInvite.status, 404, 'targeted private invite should reject an unknown target username');
-        assert.equal(missingTargetInvite.payload.reason, 'target_user_not_found', 'unknown targeted private invite should expose stable reason');
+        assert.equal(missingTargetInvite.payload.reason, 'target_unavailable', 'unknown targeted private invite should use the generic unavailable reason');
 
         const selfTargetInvite = await request(baseUrl, '/api/pvp/live/invites', {
             method: 'POST',
@@ -1040,6 +1052,14 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
         });
         assert.equal(selfTargetInvite.status, 409, 'targeted private invite should reject targeting self');
         assert.equal(selfTargetInvite.payload.reason, 'invite_self_target', 'self targeted private invite should expose stable reason');
+
+        const [targetedFriendLowId, targetedFriendHighId] = ['live-user-g', 'live-user-h'].sort();
+        await dbRun(
+            `INSERT OR IGNORE INTO social_friendships
+                (friendship_id, user_low_id, user_high_id, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?)`,
+            ['friend-live-g-h', targetedFriendLowId, targetedFriendHighId, Date.now(), Date.now()]
+        );
 
         const targetedInvite = await request(baseUrl, '/api/pvp/live/invites', {
             method: 'POST',

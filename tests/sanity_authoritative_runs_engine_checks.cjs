@@ -156,7 +156,7 @@ for (const mode of Object.keys(golden)) {
   assert.strictEqual(stableStringify(replayed), stableStringify(result.state), `${mode} replay must be byte-identical`);
 }
 
-for (const mode of ['pve', 'challenge', 'expedition']) {
+for (const mode of ['pve', 'challenge', 'expedition', 'challenge_ladder', 'world_rift']) {
   for (let index = 0; index < 40; index += 1) {
     const label = `${mode}:property:${index}`;
     const runId = `property-${mode}-${String(index).padStart(8, '0')}`;
@@ -170,6 +170,56 @@ for (const mode of ['pve', 'challenge', 'expedition']) {
     assert.strictEqual(hashCanonical(replayed), hashCanonical(result.state), `${mode}/${index} replay hash must match`);
   }
 }
+
+const sharedLadderSeed = seed('challenge-ladder:shared-slot');
+const ladderInitialA = createInitialState({
+  runId: 'ladder-shared-run-0001',
+  userId: 'ladder-user-a',
+  mode: 'challenge_ladder',
+  seedHex: sharedLadderSeed,
+  content: CONTENT_SNAPSHOT,
+});
+const ladderInitialB = createInitialState({
+  runId: 'ladder-shared-run-0002',
+  userId: 'ladder-user-b',
+  mode: 'challenge_ladder',
+  seedHex: sharedLadderSeed,
+  content: CONTENT_SNAPSHOT,
+});
+assert.strictEqual(ladderInitialA.scenarioId, CONTENT_SNAPSHOT.scenarios.challenge.scenarioId);
+const { runId: ladderRunIdA, ...ladderComparableA } = ladderInitialA;
+const { runId: ladderRunIdB, ...ladderComparableB } = ladderInitialB;
+assert.notStrictEqual(ladderRunIdA, ladderRunIdB, 'fairness check must compare distinct account runs');
+assert.strictEqual(
+  stableStringify(ladderComparableA),
+  stableStringify(ladderComparableB),
+  'same official seed slot must produce a byte-identical ladder genesis across accounts',
+);
+
+const sharedRiftSeed = seed('world-rift:shared-slot');
+const riftInitialA = createInitialState({
+  runId: 'rift-shared-run-0001',
+  userId: 'rift-user-a',
+  mode: 'world_rift',
+  seedHex: sharedRiftSeed,
+  content: CONTENT_SNAPSHOT,
+});
+const riftInitialB = createInitialState({
+  runId: 'rift-shared-run-0002',
+  userId: 'rift-user-b',
+  mode: 'world_rift',
+  seedHex: sharedRiftSeed,
+  content: CONTENT_SNAPSHOT,
+});
+assert.strictEqual(riftInitialA.scenarioId, CONTENT_SNAPSHOT.scenarios.challenge.scenarioId);
+const { runId: riftRunIdA, ...riftComparableA } = riftInitialA;
+const { runId: riftRunIdB, ...riftComparableB } = riftInitialB;
+assert.notStrictEqual(riftRunIdA, riftRunIdB, 'world-rift fairness check must compare distinct account runs');
+assert.strictEqual(
+  stableStringify(riftComparableA),
+  stableStringify(riftComparableB),
+  'same official seed slot must produce a byte-identical world-rift genesis across accounts',
+);
 
 const seedA = create('pve', 'seed-a', 'seed-run-00000001');
 const seedB = create('pve', 'seed-b', 'seed-run-00000001');

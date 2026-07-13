@@ -8,6 +8,7 @@ const { recordPvpLiveOpsEvent } = require('../pvp-live/live-ops-events');
 const { buildMatchReplay, normalizeReplayVisibility } = require('../pvp-live/replay');
 const { sanitizePublicEvent } = require('../pvp-live/engine/state-view');
 const { RULE_VERSION } = require('../pvp-live/engine/rules');
+const defaultSocialService = require('../account-social/social-service');
 
 const router = express.Router();
 const livePvpStore = createLivePvpStore({
@@ -23,6 +24,7 @@ const livePvpStore = createLivePvpStore({
     ratingProvider: makeDefaultRatingProvider()
 });
 let userDirectory = makeDefaultUserDirectory();
+let socialService = defaultSocialService;
 let opsEventRecorder = (event) => recordPvpLiveOpsEvent(db, event);
 
 function asyncHandler(fn) {
@@ -1196,35 +1198,46 @@ function getTargetUsername(req) {
     return String(req.body && req.body.targetUsername || '').trim();
 }
 
+function getTargetProfileId(req) {
+    return String(req.body && req.body.targetProfileId || '').trim();
+}
+
 function isLivePvpTestModeEnabled() {
     if (String(process.env.NODE_ENV || '').toLowerCase() === 'production') return false;
     return ['1', 'true', 'yes', 'on'].includes(String(process.env.DEFIER_PVP_TEST_MODE || '').toLowerCase());
 }
 
 async function resolveInviteTarget(req, res) {
+    const targetProfileId = getTargetProfileId(req);
     const targetUsername = getTargetUsername(req);
-    if (!targetUsername) return null;
-    if (targetUsername === (req.user && req.user.username)) {
-        res.status(409).json({ success: false, reason: 'invite_self_target', message: '不能邀请自己进行好友约战' });
+    if (!targetProfileId && !targetUsername) return null;
+    if (!socialService || typeof socialService.resolveFriendlyInviteTarget !== 'function') {
+        res.status(404).json({ success: false, reason: 'target_unavailable', message: '目标当前不可用' });
         return false;
     }
-    if (!userDirectory || typeof userDirectory.findUserByUsername !== 'function') {
-        res.status(404).json({ success: false, reason: 'target_user_not_found', message: '没有找到该道友' });
+    try {
+        const target = await socialService.resolveFriendlyInviteTarget(
+            { userId: req.user && req.user.id },
+            { targetProfileId, targetUsername }
+        );
+        if (!target || !target.userId) {
+            res.status(404).json({ success: false, reason: 'target_unavailable', message: '目标当前不可用' });
+            return false;
+        }
+        return {
+            userId: String(target.userId),
+            profileId: String(target.profileId || ''),
+            displayName: String(target.displayName || target.username || target.userId).trim().slice(0, 40) || String(target.userId)
+        };
+    } catch (error) {
+        const reason = String(error && error.reason || '');
+        if (reason === 'invite_self_target' || reason === 'self_target_forbidden') {
+            res.status(409).json({ success: false, reason: 'invite_self_target', message: '不能邀请自己进行好友约战' });
+            return false;
+        }
+        res.status(404).json({ success: false, reason: 'target_unavailable', message: '目标当前不可用' });
         return false;
     }
-    const targetUser = await userDirectory.findUserByUsername(targetUsername);
-    if (!targetUser || !targetUser.id) {
-        res.status(404).json({ success: false, reason: 'target_user_not_found', message: '没有找到该道友' });
-        return false;
-    }
-    if (targetUser.id === req.user.id) {
-        res.status(409).json({ success: false, reason: 'invite_self_target', message: '不能邀请自己进行好友约战' });
-        return false;
-    }
-    return {
-        userId: String(targetUser.id),
-        displayName: String(targetUser.username || targetUsername).trim().slice(0, 40) || targetUsername
-    };
 }
 
 router.post('/test/matches/:matchId/seats/:seatId', authenticate, asyncHandler(async (req, res) => {
@@ -1330,6 +1343,20 @@ router.post('/invites/:inviteCode/join', authenticate, asyncHandler(async (req, 
     const result = await livePvpStore.joinInvite(req.user.id, req.params.inviteCode, {
         displayName: getDisplayName(req),
         loadout: req.body && req.body.loadout
+    }, {
+        validateJoin: async ({ hostUserId, guestUserId, targeted }) => {
+            if (!socialService || typeof socialService.assertFriendlyInviteJoinAllowed !== 'function') return false;
+            try {
+                await socialService.assertFriendlyInviteJoinAllowed(
+                    { userId: hostUserId },
+                    { userId: guestUserId },
+                    { targeted }
+                );
+                return true;
+            } catch (error) {
+                return false;
+            }
+        }
     });
     if (!result) {
         return res.status(404).json({ success: false, reason: 'invite_not_found', message: '实时论道邀请不存在或已失效' });
@@ -2427,11 +2454,12 @@ router.__attachPersistence = (persistence) => {
 router.__attachSettlement = (settlement) => {
     livePvpStore.setSettlement(settlement);
 };
-router.__attachServices = ({ persistence, settlement, ratingProvider, userDirectory: nextUserDirectory, opsEventRecorder: nextOpsEventRecorder } = {}) => {
+router.__attachServices = ({ persistence, settlement, ratingProvider, userDirectory: nextUserDirectory, socialService: nextSocialService, opsEventRecorder: nextOpsEventRecorder } = {}) => {
     if (persistence !== undefined) livePvpStore.setPersistence(persistence);
     if (settlement !== undefined) livePvpStore.setSettlement(settlement);
     if (ratingProvider !== undefined) livePvpStore.setRatingProvider(ratingProvider);
     if (nextUserDirectory !== undefined) userDirectory = nextUserDirectory || makeDefaultUserDirectory();
+    if (nextSocialService !== undefined) socialService = nextSocialService || defaultSocialService;
     if (nextOpsEventRecorder !== undefined) {
         opsEventRecorder = typeof nextOpsEventRecorder === 'function'
             ? nextOpsEventRecorder

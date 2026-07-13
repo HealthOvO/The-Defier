@@ -21,6 +21,7 @@ const EXPECTED_RELEASE_MODULES = [
   'frontend-layout',
   'backend-client',
   'auth-ui-cloud',
+  'account-social-real',
   'mobile',
   'reward-mobile',
   'meta',

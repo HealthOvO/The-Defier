@@ -240,8 +240,8 @@ async function main() {
     await waitForHealth(server, 'fresh-start');
     const version = await request(PORT, '/api/version');
     assert.strictEqual(version.status, 200, JSON.stringify(version.payload));
-    assert.strictEqual(version.payload?.schema?.version, 6);
-    assert.strictEqual(version.payload?.schema?.currentMigrationId, '0006_authoritative_runs_v2');
+    assert.strictEqual(version.payload?.schema?.version, 9);
+    assert.strictEqual(version.payload?.schema?.currentMigrationId, '0009_account_social_coop');
     assert.deepStrictEqual(
       version.payload?.schema?.appliedMigrations?.map(entry => entry.id),
       [
@@ -250,7 +250,10 @@ async function main() {
         '0003_verified_runs',
         '0004_cloud_state_v2',
         '0005_season_ops_economy',
-        '0006_authoritative_runs_v2'
+        '0006_authoritative_runs_v2',
+        '0007_authoritative_challenge_ladder',
+        '0008_authoritative_world_rift',
+        '0009_account_social_coop'
       ]
     );
 
@@ -387,6 +390,40 @@ async function main() {
     );
 
     await stopServer(server);
+    server = null;
+
+    for (const table of [
+      'world_rift_ops_counters',
+      'world_rift_ops_events',
+      'world_rift_mutations',
+      'world_rift_reward_claims',
+      'world_rift_entries',
+      'world_rift_contributions',
+      'world_rift_attempts',
+      'world_rift_states',
+      'world_rift_rotations'
+    ]) {
+      await dbRun(DB_PATH, `DROP TABLE ${table}`);
+    }
+    await dbRun(DB_PATH, `DELETE FROM schema_migrations WHERE id = '0008_authoritative_world_rift'`);
+    server = startServer({ port: PORT, dbPath: DB_PATH, gitSha: 'authoritative-runs-v7-to-v8' });
+    await waitForHealth(server, 'v7-to-v8-restart');
+    const v7ToV8Version = await request(PORT, '/api/version');
+    assert.strictEqual(v7ToV8Version.payload?.schema?.currentMigrationId, '0009_account_social_coop');
+    const preservedRuns = await dbGet(
+      DB_PATH,
+      `SELECT COUNT(*) AS count
+       FROM progression_authoritative_runs
+       WHERE run_id IN ('ar-run-active-1', 'ar-run-terminal-1')`
+    );
+    assert.strictEqual(Number(preservedRuns?.count), 2, 'v7 to v8 restart must preserve live authoritative-run data while adding world-rift tables');
+    const restoredWorldTable = await dbGet(
+      DB_PATH,
+      `SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'world_rift_attempts'`
+    );
+    assert.strictEqual(restoredWorldTable?.name, 'world_rift_attempts', 'v7 to v8 restart must bootstrap world-rift storage');
+    await stopServer(server);
+    server = null;
 
     await dbRun(
       DB_PATH,
@@ -432,7 +469,22 @@ async function main() {
     server = startServer({ port: PORT, dbPath: DB_PATH, gitSha: 'authoritative-runs-v2-reapply' });
     await waitForHealth(server, 'upgrade-reapply');
     const upgraded = await request(PORT, '/api/version');
-    assert.strictEqual(upgraded.payload?.schema?.currentMigrationId, '0006_authoritative_runs_v2');
+    assert.strictEqual(upgraded.payload?.schema?.currentMigrationId, '0009_account_social_coop');
+    assert.deepStrictEqual(
+      upgraded.payload?.schema?.appliedMigrations?.map(entry => entry.id),
+      [
+        '0001_startup_schema',
+        '0002_progression_platform',
+        '0003_verified_runs',
+        '0004_cloud_state_v2',
+        '0005_season_ops_economy',
+        '0006_authoritative_runs_v2',
+        '0007_authoritative_challenge_ladder',
+        '0008_authoritative_world_rift',
+        '0009_account_social_coop'
+      ],
+      'reapplying authoritative runs should still converge on the full schema chain'
+    );
     await assertTablesExist(DB_PATH);
     const migrationCount = await dbGet(
       DB_PATH,
@@ -441,6 +493,20 @@ async function main() {
        WHERE id = '0006_authoritative_runs_v2'`
     );
     assert.strictEqual(Number(migrationCount?.count), 1, 'migration row should stay single after reapply');
+    const challengeLadderMigrationCount = await dbGet(
+      DB_PATH,
+      `SELECT COUNT(*) AS count
+       FROM schema_migrations
+       WHERE id = '0007_authoritative_challenge_ladder'`
+    );
+    assert.strictEqual(Number(challengeLadderMigrationCount?.count), 1, 'challenge ladder migration row should remain present after reapplying 0006');
+    const worldRiftMigrationCount = await dbGet(
+      DB_PATH,
+      `SELECT COUNT(*) AS count
+       FROM schema_migrations
+       WHERE id = '0008_authoritative_world_rift'`
+    );
+    assert.strictEqual(Number(worldRiftMigrationCount?.count), 1, 'world rift migration row should remain present after reapplying 0006');
 
     await stopServer(server);
     server = null;
@@ -475,6 +541,20 @@ async function main() {
          WHERE id = '0006_authoritative_runs_v2'`
       );
       assert.strictEqual(Number(concurrentMigrationCount?.count), 1, 'concurrent startup should keep one migration row');
+      const concurrentChallengeLadderMigrationCount = await dbGet(
+        CONCURRENT_DB_PATH,
+        `SELECT COUNT(*) AS count
+         FROM schema_migrations
+         WHERE id = '0007_authoritative_challenge_ladder'`
+      );
+      assert.strictEqual(Number(concurrentChallengeLadderMigrationCount?.count), 1, 'concurrent startup should keep one challenge ladder migration row');
+      const concurrentWorldRiftMigrationCount = await dbGet(
+        CONCURRENT_DB_PATH,
+        `SELECT COUNT(*) AS count
+         FROM schema_migrations
+         WHERE id = '0008_authoritative_world_rift'`
+      );
+      assert.strictEqual(Number(concurrentWorldRiftMigrationCount?.count), 1, 'concurrent startup should keep one world rift migration row');
       const concurrentIndices = await dbAll(
         CONCURRENT_DB_PATH,
         `SELECT name
