@@ -232,12 +232,16 @@ async function waitForChallengeHubReady(page, expectedTab = 'daily') {
       ? JSON.parse(window.render_game_to_text())
       : null;
     const banner = document.getElementById('challenge-selection-banner');
+    const bannerSummary = banner?.querySelector(':scope > summary');
     const confirmBtn = document.getElementById('confirm-character-btn');
     return {
       mode: payload?.mode || '',
       pending: payload?.challenge?.pending || null,
+      bannerTag: banner?.tagName || '',
+      bannerOpen: banner?.open === true,
       bannerText: banner?.textContent?.replace(/\s+/g, ' ').trim() || '',
       bannerRect: rectObject(banner?.getBoundingClientRect() || null),
+      bannerSummaryRect: rectObject(bannerSummary?.getBoundingClientRect() || null),
       confirmText: confirmBtn?.textContent?.replace(/\s+/g, ' ').trim() || '',
       confirmRect: rectObject(confirmBtn?.getBoundingClientRect() || null),
       lockedCount: document.querySelectorAll('.character-card.challenge-card-locked').length,
@@ -249,6 +253,8 @@ async function waitForChallengeHubReady(page, expectedTab = 'daily') {
     !!startSelectionProbe
       && startSelectionProbe.mode === 'character-selection-screen'
       && startSelectionProbe.pending?.mode === 'daily'
+      && startSelectionProbe.bannerTag === 'DETAILS'
+      && startSelectionProbe.bannerOpen === false
       && /今日天机|第1章/.test(startSelectionProbe.bannerText || '')
       && /DRI|主轴/.test(startSelectionProbe.bannerText || '')
       && /开局/.test(startSelectionProbe.confirmText || '')
@@ -257,12 +263,51 @@ async function waitForChallengeHubReady(page, expectedTab = 'daily') {
       && !!startSelectionProbe.bannerRect
       && startSelectionProbe.bannerRect.left >= 0
       && startSelectionProbe.bannerRect.right <= 390
+      && !!startSelectionProbe.bannerSummaryRect
+      && startSelectionProbe.bannerSummaryRect.left >= 0
+      && startSelectionProbe.bannerSummaryRect.right <= 390
       && !!startSelectionProbe.confirmRect
       && startSelectionProbe.confirmRect.left >= 0
       && startSelectionProbe.confirmRect.right <= 390,
     JSON.stringify(startSelectionProbe || null)
   );
   await safeAuditScreenshot(page, path.join(outDir, 'challenge-mobile-start-selection.png'), 'browser_challenge_mobile_flow_audit', { timeout: 9000 });
+
+  const challengeSummary = page.locator('#challenge-selection-banner > summary');
+  await challengeSummary.scrollIntoViewIfNeeded();
+  await challengeSummary.click();
+  await page.waitForTimeout(120);
+  const expandedSelectionProbe = await page.evaluate(() => {
+    const banner = document.getElementById('challenge-selection-banner');
+    const detail = banner?.querySelector('.challenge-selection-detail');
+    const detailStyle = detail ? getComputedStyle(detail) : null;
+    return {
+      open: banner?.open === true,
+      height: Math.round(banner?.getBoundingClientRect().height || 0),
+      detailVisible: !!detailStyle && detailStyle.display !== 'none' && detailStyle.visibility !== 'hidden',
+      detailText: detail?.textContent?.replace(/\s+/g, ' ').trim() || '',
+    };
+  });
+  await challengeSummary.click();
+  await page.waitForTimeout(120);
+  const collapsedSelectionProbe = await page.evaluate(() => {
+    const banner = document.getElementById('challenge-selection-banner');
+    return {
+      open: banner?.open === true,
+      height: Math.round(banner?.getBoundingClientRect().height || 0),
+    };
+  });
+  add(
+    'challenge mobile selection disclosure expands and collapses through real summary clicks',
+    startSelectionProbe.bannerOpen === false
+      && expandedSelectionProbe.open === true
+      && expandedSelectionProbe.detailVisible
+      && /角色|章节|压强|主轴/.test(expandedSelectionProbe.detailText || '')
+      && expandedSelectionProbe.height > startSelectionProbe.bannerRect.height + 24
+      && collapsedSelectionProbe.open === false
+      && Math.abs(collapsedSelectionProbe.height - startSelectionProbe.bannerRect.height) <= 4,
+    JSON.stringify({ initial: startSelectionProbe, expanded: expandedSelectionProbe, collapsed: collapsedSelectionProbe })
+  );
 
   await page.evaluate(() => {
     document.getElementById('confirm-character-btn')?.click();

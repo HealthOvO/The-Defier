@@ -4050,27 +4050,31 @@ const challengeHubMethods = Object.create(null);
       : '';
     let banner = document.getElementById('challenge-selection-banner');
     if (!banner) {
-      banner = document.createElement('div');
+      banner = document.createElement('details');
       banner.id = 'challenge-selection-banner';
       banner.className = 'challenge-selection-banner';
       container.prepend(banner);
     }
+    banner.open = typeof window === 'undefined' || !window.matchMedia('(max-width: 780px)').matches;
     banner.innerHTML = `
-            <div class="challenge-selection-head">
+            <summary class="challenge-selection-head">
                 <span class="challenge-run-chip">${escapeHtml(pending.modeLabel || HUB_META[pending.mode]?.label || '周挑战')}</span>
                 <strong>${escapeHtml(pending.rule.name || '挑战轮换')}</strong>
-            </div>
-            <p>${escapeHtml(pending.rule.objective || '本轮将使用固定命盘直接开局。')}</p>
-            <div class="challenge-selection-meta">
-                <span>角色：${escapeHtml(this.getCharacterDisplayName(pending.rule.characterId))}</span>
-                <span>章节：${escapeHtml(pending.rule.targetChapter || `完成至第 ${pending.rule.goalRealm} 重`)}</span>
-                <span>压强：DRI ${dangerProfile.index} · ${escapeHtml(dangerProfile.tierLabel)}</span>
-                <span>主轴：${escapeHtml(dangerProfile.dominantAxisLabel)}</span>
-            </div>
-            ${renderChallengeInsightMarkup(archiveInsight, {
+                <span class="challenge-selection-summary-meta">DRI ${dangerProfile.index} · ${escapeHtml(dangerProfile.tierLabel)}</span>
+            </summary>
+            <div class="challenge-selection-detail">
+                <p>${escapeHtml(pending.rule.objective || '本轮将使用固定命盘直接开局。')}</p>
+                <div class="challenge-selection-meta">
+                    <span>角色：${escapeHtml(this.getCharacterDisplayName(pending.rule.characterId))}</span>
+                    <span>章节：${escapeHtml(pending.rule.targetChapter || `完成至第 ${pending.rule.goalRealm} 重`)}</span>
+                    <span>压强：DRI ${dangerProfile.index} · ${escapeHtml(dangerProfile.tierLabel)}</span>
+                    <span>主轴：${escapeHtml(dangerProfile.dominantAxisLabel)}</span>
+                </div>
+                ${renderChallengeInsightMarkup(archiveInsight, {
       compact: true
     })}
-            ${practicePlanMarkup}
+                ${practicePlanMarkup}
+            </div>
         `;
     document.querySelectorAll('.character-card').forEach(card => {
       const locked = card.dataset.id !== pending.rule.characterId;

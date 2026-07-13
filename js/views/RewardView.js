@@ -1047,12 +1047,16 @@ export class RewardView {
     panel.dataset.seasonBoardFrontierChronicle = seasonBoardFrontierChronicle?.id || '';
     panel.dataset.seasonBoardFrontierCouncil = seasonBoardFrontierCouncil?.id || '';
     panel.dataset.seasonBoardChapterArc = seasonBoardChapterArc?.id || '';
+    panel.open = typeof window === 'undefined' || !window.matchMedia('(max-width: 840px)').matches;
     panel.innerHTML = `
-            <div class="reward-expedition-kicker">观星回响总结</div>
-            <div class="reward-expedition-header">
-                <div class="reward-expedition-badge">${escape(meta.endingIcon || '🧭')} ${escape(meta.chapterName || '章节归卷')}</div>
-                <div class="reward-expedition-score">${escape(meta.scoreLabel || `命盘评分 ${meta.score}`)}</div>
-            </div>
+            <summary class="reward-disclosure-summary">
+                <span>
+                    <span class="reward-expedition-kicker">观星回响总结</span>
+                    <strong>${escape(meta.endingIcon || '🧭')} ${escape(meta.chapterName || '章节归卷')}</strong>
+                </span>
+                <span class="reward-expedition-score">${escape(meta.scoreLabel || `命盘评分 ${meta.score}`)}</span>
+            </summary>
+            <div class="reward-disclosure-body">
             <div class="reward-expedition-title">${escape(titleText || '章节归卷已整理')}</div>
             ${meta.highlightLine ? `<div class="reward-expedition-summary">${escape(meta.highlightLine)}</div>` : ''}
             ${diagnosticLines.length > 0 ? `
@@ -1117,6 +1121,7 @@ export class RewardView {
                 </div>
             ` : ''}
             ${chips.length > 0 ? `<div class="reward-expedition-chip-row">${chips.join('')}</div>` : ''}
+            </div>
         `;
   }
   renderRewardRunPathMeta() {
@@ -1165,15 +1170,20 @@ export class RewardView {
     panel.setAttribute('aria-live', 'polite');
     panel.style.display = 'block';
     panel.classList.toggle('is-complete', !!meta.completed);
+    panel.open = typeof window === 'undefined' || !window.matchMedia('(max-width: 840px)').matches;
     panel.innerHTML = `
-            <div class="reward-run-path-kicker">命途结算回响</div>
-            <div class="reward-run-path-header">
-                <div class="reward-run-path-badge">${escape(meta.icon || '✦')} ${escape(meta.name || '未知道途')}</div>
-                <div class="reward-run-path-status ${meta.completed ? 'is-complete' : ''}">${escape(statusText)}</div>
-            </div>
+            <summary class="reward-disclosure-summary">
+                <span>
+                    <span class="reward-run-path-kicker">命途结算回响</span>
+                    <strong>${escape(meta.icon || '✦')} ${escape(meta.name || '未知道途')}</strong>
+                </span>
+                <span class="reward-run-path-status ${meta.completed ? 'is-complete' : ''}">${escape(statusText)}</span>
+            </summary>
+            <div class="reward-disclosure-body">
             ${finaleMarkup}
             ${archiveMarkup}
             <div class="reward-run-path-entries">${entryMarkup}</div>
+            </div>
         `;
   }
   updateRewardNextStepCard(state = 'pending', detail = '') {
