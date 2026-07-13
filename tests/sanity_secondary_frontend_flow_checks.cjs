@@ -192,6 +192,19 @@ assertHasPattern(
   'challenge banner should render a summary disclosure header',
 );
 assertHasPattern(
+  challengeHubSource,
+  /<span class="challenge-tag">天道裁定<\/span>/,
+  'challenge authority tags should use player-facing copy',
+);
+assert.ok(
+  !challengeHubSource.includes('<span class="challenge-tag">server_authoritative</span>'),
+  'challenge screens should not expose internal trust-tier labels',
+);
+assert.ok(
+  !challengeHubSource.includes('准入条件：server_authoritative + server_replayed + fullReplayPassed'),
+  'challenge admission rules should not expose internal implementation flags',
+);
+assertHasPattern(
   frontendUpgradeCss,
   /\.challenge-selection-banner\s*>\s*summary/,
   'challenge banner styles should target the summary trigger',

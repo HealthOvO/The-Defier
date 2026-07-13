@@ -2720,7 +2720,7 @@ const challengeHubMethods = Object.create(null);
             <div class="challenge-danger-foot"><span>无末刀奖励</span><span>状态版本 ${clampInt(world.stateVersion, 0)}</span></div>
           </div>
           <div class="challenge-tag-strip">
-            <span class="challenge-tag">server_authoritative</span>
+            <span class="challenge-tag">天道裁定</span>
             <span class="challenge-tag">每周 ${view.attemptLimit} 次</span>
             <span class="challenge-tag">最佳 3 次计榜</span>
             <span class="challenge-tag">固定牌组与统一种子</span>
@@ -2976,7 +2976,7 @@ const challengeHubMethods = Object.create(null);
               <div class="challenge-meta-chip"><strong>${selfRank > 0 ? `#${selfRank}` : completedAttempts}</strong><span>${selfRank > 0 ? '当前正式名次' : '正式完成次数'}</span></div>
             </div>
             <div class="challenge-tag-strip">
-              <span class="challenge-tag">server_authoritative</span>
+              <span class="challenge-tag">天道裁定</span>
               <span class="challenge-tag">UTC 周轮换</span>
               <span class="challenge-tag">每周 ${officialLadder.attemptLimit} 次</span>
               <span class="challenge-tag">荣誉仅用于外观</span>
@@ -3063,7 +3063,7 @@ const challengeHubMethods = Object.create(null);
           `正式次数：每账号每轮 ${officialLadder.attemptLimit} 次，预留 attempt 即消耗额度`,
           '统一种子：各账号第 N 次正式尝试共享第 N 号服务端种子槽',
           `正式计分：${scoring.formulaText || '以服务端权威结算分为准'}`,
-          '准入条件：server_authoritative + server_replayed + fullReplayPassed',
+          '准入条件：天道裁定、完整复演且全程校验通过',
           '并列顺序：分数降序、回合升序、剩余生命降序、提交时间升序',
           '离线边界：本地练习不限次数，但不计榜、不占正式额度、不发权威奖励'
         ];
@@ -3574,7 +3574,7 @@ const challengeHubMethods = Object.create(null);
                         <div class="challenge-record-tags">
                           <span class="challenge-tag">正式次数 ${officialLadder.remainingAttempts}/${officialLadder.attemptLimit}</span>
                           ${ladderBestScore > 0 ? `<span class="challenge-tag">个人最佳 ${ladderBestScore}${ladderSelfRank > 0 ? ` · #${ladderSelfRank}` : ''}</span>` : ''}
-                          <span class="challenge-tag">server_authoritative</span>
+                          <span class="challenge-tag">天道裁定</span>
                           <span class="challenge-tag">并列：回合 / 血量 / 时间</span>
                         </div>
                         <div class="challenge-leaderboard">

@@ -91,6 +91,15 @@ function normalizeText(value, fallback = "") {
   return text || fallback;
 }
 
+function formatChronicleTrustTier(value = "") {
+  const labels = {
+    server_authoritative: "天道校验 已通过",
+    server_replayed: "复演校验 已通过",
+    verified_envelope: "凭证校验 已通过"
+  };
+  return labels[normalizeText(value)] || "天道校验 已通过";
+}
+
 function normalizeArray(value) {
   return Array.isArray(value) ? value : [];
 }
@@ -627,7 +636,7 @@ class FateChronicleRunPanel extends AuthoritativeRunPanel {
           ${chronicleChip(`内容哈希 ${shortHash(this.lastRunMeta.contentHash)}`)}
           ${chronicleChip(`状态哈希 ${shortHash(integrity.stateHash)}`)}
           ${chronicleChip(`链首 ${shortHash(integrity.chainHead)}`)}
-          ${chronicleChip(`信任 ${this.lastRunMeta.trustTier || "server_authoritative"}`)}
+          ${chronicleChip(formatChronicleTrustTier(this.lastRunMeta.trustTier))}
         </div>
       </section>
     `;
@@ -1171,7 +1180,7 @@ export class FateChronicleView {
       <section class="fate-chronicle-header" data-fate-chronicle-state="ready">
         <button type="button" class="back-btn" data-fate-chronicle-action="return-menu" aria-label="返回主菜单" title="返回主菜单">↩</button>
         <div class="fate-chronicle-title-group">
-          <div class="fate-chronicle-kicker">server_authoritative</div>
+          <div class="fate-chronicle-kicker">天道见证</div>
           <h1>命途长卷</h1>
           <p>三章顺序解锁、双誓约固定周种子、失败不扣次数，结算后再把长卷证折进本周三证归卷。</p>
         </div>

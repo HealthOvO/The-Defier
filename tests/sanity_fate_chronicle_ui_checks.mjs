@@ -42,6 +42,10 @@ const cssSource = read("css/fate-chronicle.css");
   assert.ok(viewSource.includes(marker), `fate chronicle view should pin ${marker}`);
 });
 assert.ok(!viewSource.includes('fate-chronicle-stylesheet'), 'fate chronicle should not request a second stylesheet after deferred loading');
+assert.ok(viewSource.includes('fate-chronicle-kicker">天道见证'), 'fate chronicle should use player-facing authority copy');
+assert.ok(viewSource.includes('server_authoritative: "天道校验 已通过"'), 'fate chronicle trust tiers should map to player-facing copy');
+assert.ok(viewSource.includes('chronicleChip(formatChronicleTrustTier(this.lastRunMeta.trustTier))'), 'fate chronicle run metadata should render the mapped trust copy');
+assert.ok(!viewSource.includes('fate-chronicle-kicker">server_authoritative'), 'fate chronicle should not expose an internal trust-tier label');
 
 [
   "requestGeneration",
@@ -63,6 +67,10 @@ assert.ok(!viewSource.includes('fate-chronicle-stylesheet'), 'fate chronicle sho
 ].forEach(marker => {
   assert.ok(panelSource.includes(marker), `authoritative run panel should pin ${marker}`);
 });
+assert.ok(panelSource.includes('season-ops-counter-chip">天道裁定'), 'authoritative run panel should use player-facing authority copy');
+assert.ok(panelSource.includes('server_authoritative: "天道校验 已通过"'), 'authoritative run trust tiers should map to player-facing copy');
+assert.ok(panelSource.includes('renderChip(formatTrustTier(this.lastRunMeta.trustTier))'), 'authoritative run metadata should render the mapped trust copy');
+assert.ok(!panelSource.includes('season-ops-counter-chip">server_authoritative'), 'authoritative run panel should not expose an internal trust-tier label');
 
 [
   "getFateChronicleCurrent",

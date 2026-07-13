@@ -88,6 +88,15 @@ function normalizeText(value, fallback = "") {
   return text || fallback;
 }
 
+function formatTrustTier(value = "") {
+  const labels = {
+    server_authoritative: "天道校验 已通过",
+    server_replayed: "复演校验 已通过",
+    verified_envelope: "凭证校验 已通过"
+  };
+  return labels[normalizeText(value)] || "天道校验 已通过";
+}
+
 function normalizeArray(value) {
   return Array.isArray(value) ? value : [];
 }
@@ -929,7 +938,7 @@ export class AuthoritativeRunPanel {
             <h3>权威试炼</h3>
             <p>浏览器只提交命令，路线、敌意、伤害、奖励、终态与结算都由服务器裁定。</p>
           </div>
-          <div class="season-ops-counter-chip">server_authoritative</div>
+          <div class="season-ops-counter-chip">天道裁定</div>
         </div>
         <div class="season-ops-authoritative-mode-picker" role="group" aria-label="权威试炼模式">
           ${buttons}
@@ -1260,7 +1269,7 @@ export class AuthoritativeRunPanel {
           ${renderChip(`内容哈希 ${shortHash(this.lastRunMeta.contentHash)}`)}
           ${renderChip(`状态哈希 ${shortHash(integrity.stateHash)}`)}
           ${renderChip(`链首 ${shortHash(integrity.chainHead)}`)}
-          ${renderChip(`信任 ${this.lastRunMeta.trustTier || "server_authoritative"}`)}
+          ${renderChip(formatTrustTier(this.lastRunMeta.trustTier))}
           ${this.isRelayExpeditionMode() && relayLeg ? renderChip(`第 ${clampInt(relayLeg.legIndex, 1)} 棒`) : ""}
           ${this.isRelayExpeditionMode() && relayLeg && relayLeg.tacticId ? renderChip(`接力谱 ${relayLeg.tacticId}`) : ""}
         </div>
