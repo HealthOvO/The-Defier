@@ -295,6 +295,8 @@ function recordConsoleError(text) {
       summaryRect: toRect(summary),
       actionsRect: toRect(actions),
       expeditionPanelRect: toRect(expeditionPanel),
+      expeditionPanelOpen: expeditionPanel?.open === true,
+      runPathPanelOpen: document.getElementById('reward-run-path-meta')?.open === true,
       cardRailRect: toRect(cardRail),
       chapterArcRect: toRect(chapterArcNode),
       laneRewardButtonRect: toRect(laneRewardButton),
@@ -331,6 +333,8 @@ function recordConsoleError(text) {
       && rewardProbe.actionsRect?.left >= 0
       && rewardProbe.actionsRect?.right <= rewardProbe.viewportWidth + 2
       && rewardProbe.summaryRect?.bottom <= rewardProbe.actionsRect?.top + 32
+      && rewardProbe.expeditionPanelOpen === false
+      && rewardProbe.runPathPanelOpen === false
       && rewardProbe.cardRailRect?.left >= rewardProbe.mainRect.left - 2
       && rewardProbe.cardRailRect?.right <= rewardProbe.mainRect.right + 2
       && ['auto', 'scroll'].includes(rewardProbe.cardRailOverflowX)
@@ -364,6 +368,51 @@ function recordConsoleError(text) {
     JSON.stringify(rewardProbe || null)
   );
   await safeAuditScreenshot(page, path.join(outDir, 'reward-mobile-390.png'), 'browser_reward_meta_mobile_audit', { timeout: 9000 });
+
+  const rewardDisclosureBefore = await page.evaluate(() => {
+    const expedition = document.getElementById('reward-expedition-meta');
+    const runPath = document.getElementById('reward-run-path-meta');
+    return {
+      expeditionOpen: expedition?.open === true,
+      expeditionHeight: Math.round(expedition?.getBoundingClientRect().height || 0),
+      runPathOpen: runPath?.open === true,
+      runPathHeight: Math.round(runPath?.getBoundingClientRect().height || 0),
+    };
+  });
+  const expeditionSummary = page.locator('#reward-expedition-meta > summary');
+  const runPathSummary = page.locator('#reward-run-path-meta > summary');
+  await expeditionSummary.scrollIntoViewIfNeeded();
+  await expeditionSummary.click();
+  await page.waitForTimeout(120);
+  await runPathSummary.scrollIntoViewIfNeeded();
+  await runPathSummary.click();
+  await page.waitForTimeout(120);
+  const rewardDisclosureAfter = await page.evaluate(() => {
+    const expedition = document.getElementById('reward-expedition-meta');
+    const runPath = document.getElementById('reward-run-path-meta');
+    const expeditionSummary = expedition?.querySelector(':scope > summary');
+    const runPathSummary = runPath?.querySelector(':scope > summary');
+    return {
+      expeditionOpen: expedition?.open === true,
+      expeditionHeight: Math.round(expedition?.getBoundingClientRect().height || 0),
+      expeditionSummaryVisible: !!expeditionSummary && getComputedStyle(expeditionSummary).visibility !== 'hidden',
+      runPathOpen: runPath?.open === true,
+      runPathHeight: Math.round(runPath?.getBoundingClientRect().height || 0),
+      runPathSummaryVisible: !!runPathSummary && getComputedStyle(runPathSummary).visibility !== 'hidden',
+    };
+  });
+  add(
+    'reward mobile metadata disclosures default closed and expand through real summary clicks',
+    rewardDisclosureBefore.expeditionOpen === false
+      && rewardDisclosureBefore.runPathOpen === false
+      && rewardDisclosureAfter.expeditionOpen === true
+      && rewardDisclosureAfter.runPathOpen === true
+      && rewardDisclosureAfter.expeditionSummaryVisible
+      && rewardDisclosureAfter.runPathSummaryVisible
+      && rewardDisclosureAfter.expeditionHeight > rewardDisclosureBefore.expeditionHeight + 24
+      && rewardDisclosureAfter.runPathHeight > rewardDisclosureBefore.runPathHeight + 24,
+    JSON.stringify({ before: rewardDisclosureBefore, after: rewardDisclosureAfter })
+  );
 
   const rewardCtaViewportProbe = await page.evaluate(async () => {
     const toRect = (el) => {
@@ -513,6 +562,11 @@ function recordConsoleError(text) {
     rewardSeasonHandoffClickProbe = { ok: false, reason: 'missing_reward_handoff_button' };
   } else {
     try {
+      const expeditionPanelOpen = await page.locator('#reward-expedition-meta').evaluate((panel) => panel.open === true);
+      if (!expeditionPanelOpen) {
+        await page.locator('#reward-expedition-meta > summary').scrollIntoViewIfNeeded();
+        await page.locator('#reward-expedition-meta > summary').click();
+      }
       const rewardSeasonHandoffBefore = await rewardSeasonHandoffButton.evaluate((btn) => ({
         dataset: { ...btn.dataset },
         text: (btn.textContent || '').replace(/\s+/g, ' ').trim(),
@@ -569,6 +623,11 @@ function recordConsoleError(text) {
     window.scrollTo(0, 0);
   });
   await page.waitForTimeout(180);
+  await page.locator('#reward-expedition-meta > summary').scrollIntoViewIfNeeded();
+  await page.locator('#reward-expedition-meta > summary').click();
+  await page.locator('#reward-run-path-meta > summary').scrollIntoViewIfNeeded();
+  await page.locator('#reward-run-path-meta > summary').click();
+  await page.waitForTimeout(120);
 
   await page.setViewportSize({ width: 360, height: 780 });
   await page.waitForTimeout(180);

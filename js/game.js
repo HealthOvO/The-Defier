@@ -8876,40 +8876,23 @@ export class Game {
     const btn = document.getElementById('login-btn');
     if (!btn) return;
     const cloudEnabled = !AuthService.isCloudEnabled || AuthService.isCloudEnabled();
+    btn.onclick = null;
+    btn.dataset.bootAction = 'open-login';
     if (cloudEnabled && AuthService.isLoggedIn()) {
       const user = AuthService.getCurrentUser();
-      // Change button to show name or Logout
       const username = user && user.username ? user.username : '已登录';
+      btn.setAttribute('aria-label', `账户：${username}，点击退出登录`);
       btn.innerHTML = `
                 <div class="talisman-paper"></div>
                 <div class="talisman-content">
                     <span class="btn-icon">👤</span>
-                    <span class="btn-text" style="font-size:0.8rem">${username}</span>
+                    <span class="btn-text" style="font-size:0.8rem"></span>
                 </div>
             `;
-      btn.onclick = () => {
-        // Muted/Audio handling (delayed slightly for feel)
-        setTimeout(() => {
-          this.showConfirmModal('确定要退出登录吗？\n(退出前将自动上传当前进度)', async () => {
-            // 退出前强制尝试上传一次本地存档
-            const localSave = localStorage.getItem('theDefierSave');
-            // Fix: Check if we have a valid slot before syncing
-            if (localSave && this.currentSaveSlot !== null && this.currentSaveSlot !== undefined) {
-              try {
-                const data = JSON.parse(localSave);
-                await AuthService.saveCloudData(data, this.currentSaveSlot);
-                console.log('Logout sync complete');
-              } catch (e) {
-                console.error('Logout sync failed', e);
-              }
-            }
-            AuthService.logout();
-            this.checkLoginStatus();
-            location.reload();
-          });
-        }, 50);
-      };
+      const label = btn.querySelector('.btn-text');
+      if (label) label.textContent = username;
     } else {
+      btn.setAttribute('aria-label', '登录或注册');
       btn.innerHTML = `
                     <div class="talisman-paper"></div>
                     <div class="talisman-content">
@@ -8917,8 +8900,8 @@ export class Game {
                         <span class="btn-text">登入轮回</span>
                     </div>
                 `;
-      btn.onclick = () => this.showLoginModal();
       if (!cloudEnabled) {
+        btn.setAttribute('aria-label', '离线模式');
         btn.innerHTML = `
                     <div class="talisman-paper"></div>
                     <div class="talisman-content">
@@ -8926,11 +8909,37 @@ export class Game {
                         <span class="btn-text">离线模式</span>
                     </div>
                 `;
-        btn.onclick = () => {
-          Utils.showBattleLog('云存档未配置，当前为离线模式');
-        };
       }
     }
+  }
+  handleLoginMenuAction() {
+    const cloudEnabled = !AuthService.isCloudEnabled || AuthService.isCloudEnabled();
+    if (!cloudEnabled) {
+      Utils.showBattleLog('云存档未配置，当前为离线模式');
+      return;
+    }
+    if (AuthService.isLoggedIn()) {
+      this.requestLogout();
+      return;
+    }
+    this.showLoginModal();
+  }
+  requestLogout() {
+    this.showConfirmModal('确定要退出登录吗？\n(退出前将自动上传当前进度)', async () => {
+      const localSave = localStorage.getItem('theDefierSave');
+      if (localSave && this.currentSaveSlot !== null && this.currentSaveSlot !== undefined) {
+        try {
+          const data = JSON.parse(localSave);
+          await AuthService.saveCloudData(data, this.currentSaveSlot);
+          console.log('Logout sync complete');
+        } catch (e) {
+          console.error('Logout sync failed', e);
+        }
+      }
+      AuthService.logout();
+      this.checkLoginStatus();
+      location.reload();
+    });
   }
   async checkForCloudSave() {
     // 如果是刚刚手动加载的存档，跳过冲突检测，并清除标记

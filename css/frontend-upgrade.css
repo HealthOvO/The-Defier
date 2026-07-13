@@ -12,6 +12,449 @@
     box-shadow: var(--fd-shadow-panel);
 }
 
+/* ===================================
+   Secondary flow density and disclosure pass
+   =================================== */
+
+#save-slots-modal .save-slots-view {
+    width: min(1200px, 95vw);
+    max-width: 95vw;
+    max-height: min(90vh, 760px);
+    padding: 22px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+#save-slots-modal .save-slots-header {
+    position: relative;
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 24px;
+    padding: 0 44px 16px 4px;
+    border-bottom: 1px solid rgba(207, 170, 112, 0.18);
+}
+
+#save-slots-modal .save-slots-kicker {
+    color: rgba(246, 212, 151, 0.78);
+    font-size: 0.74rem;
+}
+
+#save-slots-modal .save-slots-header h2 {
+    margin: 4px 0 0;
+    color: var(--accent-gold);
+    font-family: var(--font-display);
+    font-size: 1.55rem;
+}
+
+#save-slots-modal .save-slots-header p {
+    margin: 6px 0 0;
+    color: var(--text-secondary);
+    font-size: 0.86rem;
+}
+
+#save-slots-modal .slots-container {
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+
+#save-slots-modal .save-slots-footer {
+    flex: 0 0 auto;
+    margin-top: 12px;
+    display: flex;
+    justify-content: center;
+}
+
+.challenge-selection-banner > summary,
+.reward-disclosure-summary {
+    list-style: none;
+    cursor: pointer;
+}
+
+.challenge-selection-banner > summary::-webkit-details-marker,
+.reward-disclosure-summary::-webkit-details-marker {
+    display: none;
+}
+
+.challenge-selection-summary-meta {
+    margin-left: auto;
+    color: rgba(205, 220, 248, 0.72);
+    font-size: 0.78rem;
+    white-space: nowrap;
+}
+
+.challenge-selection-banner > summary::after,
+.reward-disclosure-summary::after {
+    content: "+";
+    display: grid;
+    width: 28px;
+    height: 28px;
+    flex: 0 0 28px;
+    place-items: center;
+    border: 1px solid rgba(207, 170, 112, 0.3);
+    border-radius: 50%;
+    color: var(--accent-gold);
+}
+
+.challenge-selection-banner[open] > summary::after,
+.reward-expedition-meta[open] > .reward-disclosure-summary::after,
+.reward-run-path-meta[open] > .reward-disclosure-summary::after {
+    content: "-";
+}
+
+.challenge-selection-detail {
+    padding-top: 2px;
+}
+
+.reward-disclosure-summary {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.reward-disclosure-summary > span:first-child {
+    min-width: 0;
+    display: grid;
+    gap: 5px;
+}
+
+.reward-disclosure-summary strong {
+    color: rgba(250, 241, 220, 0.96);
+    line-height: 1.35;
+}
+
+.reward-disclosure-summary > :nth-child(2) {
+    margin-left: auto;
+}
+
+.reward-disclosure-body {
+    display: grid;
+    gap: 10px;
+    padding-top: 12px;
+}
+
+@media (max-width: 768px) {
+    #save-slots-modal {
+        padding: 8px;
+    }
+
+    #save-slots-modal .save-slots-view {
+        width: calc(100vw - 16px);
+        max-width: calc(100vw - 16px);
+        max-height: calc(100dvh - 16px);
+        padding: 12px;
+    }
+
+    #save-slots-modal .save-slots-header {
+        gap: 12px;
+        padding: 0 42px 10px 2px;
+    }
+
+    #save-slots-modal .save-slots-header h2 {
+        font-size: 1.25rem;
+    }
+
+    #save-slots-modal .save-slots-header p {
+        margin-top: 3px;
+        font-size: 0.76rem;
+    }
+
+    #save-slots-modal .slots-container {
+        width: 100%;
+        padding: 10px 8px 12px;
+        display: grid;
+        grid-template-columns: none;
+        grid-auto-flow: column;
+        grid-auto-columns: min(78vw, 300px);
+        gap: 12px;
+        overflow-x: auto;
+        overflow-y: hidden;
+        scroll-snap-type: x mandatory;
+        scroll-padding-inline: 8px;
+        scrollbar-width: thin;
+    }
+
+    #save-slots-modal .save-slot {
+        width: 100%;
+        height: 336px;
+        min-height: 0;
+        padding: 2px;
+        margin: 0;
+        scroll-snap-align: center;
+        scroll-snap-stop: always;
+    }
+
+    #save-slots-modal .save-slot:hover {
+        transform: none;
+    }
+
+    #save-slots-modal .slot-header {
+        padding: 10px 0;
+        font-size: 1.1rem;
+    }
+
+    #save-slots-modal .slot-content {
+        padding: 10px 12px;
+        gap: 5px;
+    }
+
+    #save-slots-modal .slot-visual {
+        width: 62px;
+        height: 62px;
+        margin-bottom: 6px;
+        font-size: 2rem;
+    }
+
+    #save-slots-modal .slot-actions {
+        padding: 10px 12px 12px;
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+    }
+
+    #save-slots-modal .save-slot.empty .slot-actions {
+        grid-template-columns: 1fr;
+    }
+
+    #save-slots-modal .slot-actions .talisman-btn,
+    #save-slots-modal .slot-actions .save-history-btn {
+        width: 100% !important;
+        min-width: 0;
+        min-height: 42px;
+        margin: 0 !important;
+        transform: none !important;
+    }
+
+    #save-slots-modal .slot-actions .save-history-btn {
+        grid-column: 1 / -1;
+    }
+
+    #save-slots-modal .save-slots-footer {
+        display: none;
+    }
+
+    #character-selection-screen .character-selection-container {
+        align-items: stretch;
+        gap: 14px;
+        padding: 8px 10px 18px;
+    }
+
+    #character-selection-screen .story-intro {
+        margin-bottom: 0;
+    }
+
+    #character-selection-screen .character-cards-wrapper {
+        width: 100%;
+        max-width: none;
+        min-height: 520px;
+        flex: 0 0 auto;
+        margin: 0;
+        padding: 0 18px 12px;
+        display: grid;
+        grid-template-columns: none;
+        grid-auto-flow: column;
+        grid-auto-columns: calc(100% - 34px);
+        justify-content: start;
+        gap: 12px;
+        overflow-x: auto;
+        overflow-y: hidden;
+        scroll-snap-type: x mandatory;
+        scroll-padding-inline: 18px;
+        overscroll-behavior-x: contain;
+        scrollbar-width: thin;
+    }
+
+    #character-selection-screen .character-card {
+        width: 100%;
+        max-width: none;
+        min-height: 430px;
+        margin: 0;
+        scroll-snap-align: center;
+        scroll-snap-stop: always;
+    }
+
+    #character-selection-screen .character-card.selected {
+        transform: none;
+    }
+
+    #character-selection-screen .character-card .char-header {
+        height: 126px;
+        min-height: 126px;
+        flex-basis: 126px;
+    }
+
+    #character-selection-screen .character-card .char-avatar-wrapper {
+        width: 88px;
+        height: 88px;
+    }
+
+    #character-selection-screen .character-card .char-body {
+        gap: 7px;
+        padding: 12px 14px;
+    }
+
+    #character-selection-screen .character-card .char-name {
+        font-size: 1.65rem;
+    }
+
+    #character-selection-screen .character-card .char-desc {
+        margin: 4px 0 2px;
+    }
+
+    #character-selection-screen .character-card .char-relic-info {
+        padding: 8px 10px;
+    }
+
+    #character-selection-screen .character-card .char-stats-preview {
+        padding-top: 8px;
+        gap: 24px;
+    }
+
+    #character-selection-screen .run-destiny-section {
+        gap: 10px;
+        margin-top: 0;
+        padding-bottom: 8px;
+    }
+
+    #character-selection-screen .run-destiny-header {
+        gap: 8px;
+        padding: 14px;
+    }
+
+    #character-selection-screen .run-destiny-header h3 {
+        font-size: 1.15rem;
+    }
+
+    #character-selection-screen .run-destiny-header p {
+        display: -webkit-box;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 2;
+        overflow: hidden;
+        font-size: 0.8rem;
+        line-height: 1.45;
+    }
+
+    #character-selection-screen .run-destiny-grid {
+        width: 100%;
+        min-height: 210px;
+        flex: 0 0 auto;
+        padding: 0 14px 10px;
+        display: grid;
+        grid-template-columns: none;
+        grid-auto-flow: column;
+        grid-auto-columns: calc(100% - 28px);
+        justify-content: start;
+        gap: 10px;
+        overflow-x: auto;
+        overflow-y: hidden;
+        scroll-snap-type: x mandatory;
+        scroll-padding-inline: 14px;
+        overscroll-behavior-x: contain;
+        scrollbar-width: thin;
+    }
+
+    #character-selection-screen .run-destiny-card,
+    #character-selection-screen .run-destiny-empty {
+        min-height: 190px;
+        scroll-snap-align: center;
+    }
+
+    #character-selection-screen .character-card.challenge-card-locked {
+        display: none;
+    }
+
+    #character-selection-screen .challenge-selection-banner {
+        margin: 0;
+        padding: 12px 14px;
+        border-radius: 14px;
+    }
+
+    #character-selection-screen .challenge-selection-head {
+        gap: 8px;
+    }
+
+    #character-selection-screen .challenge-selection-head strong {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    #character-selection-screen .challenge-selection-summary-meta {
+        display: none;
+    }
+
+    #collection .collection-tab-bar {
+        gap: 8px;
+        padding: 8px 10px 10px;
+        scroll-snap-type: x proximity;
+        scroll-padding-inline: 10px;
+        scrollbar-width: none;
+    }
+
+    #collection .collection-tab-bar::-webkit-scrollbar {
+        display: none;
+    }
+
+    #collection .collection-tab-btn {
+        flex: 0 0 auto;
+        min-width: 68px;
+        min-height: 44px;
+        padding: 8px 10px;
+        scroll-snap-align: start;
+    }
+
+    #collection .codex-layout {
+        gap: 12px;
+    }
+
+    #collection .codex-main-column,
+    #collection .codex-side-column {
+        gap: 12px;
+    }
+
+    #collection .codex-toolbar,
+    #collection .compendium-toolbar {
+        gap: 8px;
+        padding: 10px;
+        border-radius: 14px;
+    }
+
+    #collection .codex-section {
+        padding: 14px 12px 16px;
+        border-radius: 14px;
+    }
+
+    #collection .codex-section-header p {
+        display: -webkit-box;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 2;
+        overflow: hidden;
+    }
+
+    #reward-screen .reward-expedition-meta,
+    #reward-screen .reward-run-path-meta {
+        display: block;
+        padding: 10px;
+    }
+
+    #reward-screen .reward-disclosure-summary {
+        min-height: 48px;
+    }
+
+    #reward-screen .reward-disclosure-summary > :nth-child(2) {
+        max-width: 42%;
+        overflow-wrap: anywhere;
+    }
+
+    #reward-screen .reward-expedition-meta:not([open]) .reward-disclosure-body,
+    #reward-screen .reward-run-path-meta:not([open]) .reward-disclosure-body {
+        display: none;
+    }
+}
+
 [data-boot-click-queued="true"] {
     cursor: progress !important;
     filter: saturate(0.78) brightness(0.92);
@@ -3618,5 +4061,93 @@ body:has(.modal-overlay.active) .battle-log-panel {
     #battle-screen .candy-text {
         flex: 0 0 auto;
         font-size: 0.72rem;
+    }
+}
+
+/* Keep the mobile selection rails authoritative over older closure rules above. */
+@media (max-width: 768px) {
+    #character-selection-screen .character-selection-container {
+        align-items: stretch;
+        gap: 14px;
+        padding: 8px 10px 18px;
+    }
+
+    #character-selection-screen .character-cards-wrapper {
+        width: 100%;
+        max-width: none;
+        min-height: 520px;
+        flex: 0 0 auto;
+        margin: 0;
+        padding: 0 18px 12px;
+        display: grid;
+        grid-template-columns: none;
+        grid-auto-flow: column;
+        grid-auto-columns: calc(100% - 34px);
+        justify-content: start;
+        gap: 12px;
+        overflow-x: auto;
+        overflow-y: hidden;
+        scroll-snap-type: x mandatory;
+        scroll-padding-inline: 18px;
+        overscroll-behavior-x: contain;
+        scrollbar-width: thin;
+    }
+
+    #character-selection-screen .character-card {
+        width: 100%;
+        max-width: none;
+        min-height: 430px;
+        margin: 0;
+        scroll-snap-align: center;
+        scroll-snap-stop: always;
+    }
+
+    #character-selection-screen .character-card.selected {
+        transform: none;
+    }
+
+    #character-selection-screen .run-destiny-grid {
+        width: 100%;
+        min-height: 210px;
+        flex: 0 0 auto;
+        padding: 0 14px 10px;
+        display: grid;
+        grid-template-columns: none;
+        grid-auto-flow: column;
+        grid-auto-columns: calc(100% - 28px);
+        justify-content: start;
+        gap: 10px;
+        overflow-x: auto;
+        overflow-y: hidden;
+        scroll-snap-type: x mandatory;
+        scroll-padding-inline: 14px;
+        overscroll-behavior-x: contain;
+        scrollbar-width: thin;
+    }
+
+    #character-selection-screen .run-destiny-card,
+    #character-selection-screen .run-destiny-empty {
+        min-height: 190px;
+        scroll-snap-align: center;
+    }
+
+    #character-selection-screen .character-card.challenge-card-locked {
+        display: none;
+    }
+}
+
+@media (min-width: 769px) {
+    #character-selection-screen .character-card .char-header {
+        height: 170px;
+        min-height: 170px;
+        flex-basis: 170px;
+    }
+
+    #character-selection-screen .character-selection-footer {
+        padding: 4px 16px 6px;
+    }
+
+    #character-selection-screen .character-selection-footer .menu-btn {
+        min-height: 48px;
     }
 }

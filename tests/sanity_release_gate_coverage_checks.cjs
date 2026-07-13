@@ -16,6 +16,7 @@ const browserReleaseSummary = read('tests/summarize_browser_release_reports.cjs'
 const backendSecurityChecks = read('tests/backend_security_checks.cjs');
 const backendClientSmoke = read('tests/browser_backend_client_smoke.mjs');
 const browserAuthUiCloudSmoke = read('tests/browser_auth_ui_cloud_smoke.mjs');
+const browserRewardMetaMobileAudit = read('tests/browser_reward_meta_mobile_audit.mjs');
 const backendClientSource = read('js/services/backend-client.js');
 const browserAudit = read('tests/browser_audit.mjs');
 const browserPvpAudit = read('tests/browser_pvp_audit.mjs');
@@ -991,6 +992,32 @@ assert.strictEqual(
 });
 
 [
+  'logged-in account control opens one logout confirmation without reopening auth and completes logout',
+  "await loginPage.click('#login-btn')",
+  "await loginPage.click('#generic-cancel-btn')",
+  "loginPage.click('#generic-confirm-btn')",
+  'requestCount: Number(window.__logoutRequestCount || 0)',
+].forEach((needle) => {
+  assert.ok(
+    browserAuthUiCloudSmoke.includes(needle),
+    `auth UI cloud smoke should exercise the logged-in logout control through real clicks: ${needle}`,
+  );
+});
+
+[
+  'reward mobile metadata disclosures default closed and expand through real summary clicks',
+  "page.locator('#reward-expedition-meta > summary')",
+  "page.locator('#reward-run-path-meta > summary')",
+  'await expeditionSummary.click()',
+  'await runPathSummary.click()',
+].forEach((needle) => {
+  assert.ok(
+    browserRewardMetaMobileAudit.includes(needle),
+    `reward mobile audit should exercise disclosures through real clicks: ${needle}`,
+  );
+});
+
+[
   'audits: frontend-layout,season-ops,authoritative-runs-real',
   'audits: expedition,events,vow-choice,guide,inheritance,pvp,pvp-live,pvp-live-real,pvp-live-mobile-real,pvp-mobile,pvp-mobile-result,challenge-mobile-flow',
   "if: contains(matrix.audits, 'backend-client') || contains(matrix.audits, 'auth-ui-cloud') || contains(matrix.audits, 'pvp-live-real') || contains(matrix.audits, 'pvp-live-mobile-real') || contains(matrix.audits, 'authoritative-runs-real')",
@@ -1154,6 +1181,7 @@ assert.ok(
   'node tests/sanity_codex_sanctum_checks.cjs',
   'node tests/sanity_frontend_upgrade_asset_checks.cjs',
   'node tests/sanity_frontend_design_system_checks.cjs',
+  'node tests/sanity_secondary_frontend_flow_checks.cjs',
   'node tests/sanity_pvp_trusted_control_surface_checks.cjs',
   'node tests/sanity_mobile_interaction_system_checks.cjs',
   'node tests/sanity_intro_progress_sync_checks.cjs',
@@ -4687,6 +4715,10 @@ assert.ok(
 });
 
 [
+  'challenge mobile selection disclosure expands and collapses through real summary clicks',
+  "page.locator('#challenge-selection-banner > summary')",
+  'await challengeSummary.click()',
+  'startSelectionProbe.bannerOpen === false',
   'challenge mobile active banner keeps shared danger axis and training focus visible after launch',
   'challenge mobile replay banner preserves replay-only state and sample focus without overflow',
   'challenge mobile live PVP practice selection keeps public plan readable, accessible, and confirmable',

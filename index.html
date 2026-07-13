@@ -21,7 +21,7 @@
                     window.game.showScreen('pvp-screen');
                     window.PVPScene.onShow();
                 },
-                'open-login': () => window.game.showLoginModal(),
+                'open-login': () => window.game.handleLoginMenuAction(),
                 'open-player-info': () => window.game.showPlayerInfo(),
                 'open-collection': () => window.game.showCollection(),
                 'open-challenges': () => window.game.showChallengeHub('daily'),
@@ -1758,8 +1758,8 @@
                             </div>
                             <div id="reward-battle-meta" class="reward-battle-meta" style="display:none;"></div>
                             <div id="reward-narrative-brief" class="reward-narrative-brief" style="display:none;"></div>
-                            <div id="reward-expedition-meta" class="reward-expedition-meta" style="display:none;"></div>
-                            <div id="reward-run-path-meta" class="reward-run-path-meta" style="display:none;"></div>
+                            <details id="reward-expedition-meta" class="reward-expedition-meta" style="display:none;"></details>
+                            <details id="reward-run-path-meta" class="reward-run-path-meta" style="display:none;"></details>
                         </div>
                         <div class="reward-actions reward-panel">
                             <div id="reward-next-step-card" class="reward-next-step-card" role="status" aria-live="polite"></div>
@@ -2081,15 +2081,22 @@
 
     <!-- Save Slots Modal -->
     <div id="save-slots-modal" class="modal">
-        <div class="modal-content large" style="width: 1200px; max-width: 95%;">
-            <!-- Header removed for compact layout -->
-            <div style="margin-top: 20px;"></div>
+        <div class="modal-content large save-slots-view">
+            <header class="save-slots-header">
+                <div>
+                    <span class="save-slots-kicker">轮回存档</span>
+                    <h2>选择命牌</h2>
+                    <p>横向浏览命牌，继续旧轮回或开启新的历程。</p>
+                </div>
+                <button class="modal-close" type="button" aria-label="关闭命牌选择"
+                    onclick="document.getElementById('save-slots-modal').classList.remove('active')">×</button>
+            </header>
 
             <div class="slots-container" id="slots-container">
                 <!-- Slots will be injected here -->
             </div>
 
-            <div class="modal-footer" style="margin-top: 20px; display: flex; justify-content: center;">
+            <div class="modal-footer save-slots-footer">
                 <button class="talisman-btn small"
                     onclick="document.getElementById('save-slots-modal').classList.remove('active')"
                     style="width: 120px;">

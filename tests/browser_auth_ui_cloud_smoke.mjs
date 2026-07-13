@@ -25,6 +25,7 @@ fs.mkdirSync(outDir, { recursive: true });
 const findings = [];
 const consoleErrors = [];
 const AUTH_UI_CLOUD_FINDING = 'real auth UI register/login syncs global progress, loads cloud slot, and writes save back to cloud';
+const LOGOUT_UI_FINDING = 'logged-in account control opens one logout confirmation without reopening auth and completes logout';
 const SAVE_CONFLICT_FINDING = 'real save CAS conflict modal rebases explicit local or cloud choices without silent overwrite';
 const CLOUD_HISTORY_FINDING = 'cloud save history restores an immutable revision through the real UI';
 
@@ -1247,6 +1248,7 @@ async function runSmoke(page, browser) {
   let cleanCloudRestoreProbe = null;
   let rewardCloudRestoreProbe = null;
   let cloudHistoryProbe = null;
+  let logoutProbe = null;
   try {
     await configurePage(loginPage);
     await loginPage.addInitScript(({ localAchievementId, localCardBackId, localUnlockId }) => {
@@ -1470,6 +1472,64 @@ async function runSmoke(page, browser) {
       local: await runConflictDecisionProbe(browser, loginToken, serverSession, 'local', 2),
       cloud: await runConflictDecisionProbe(browser, loginToken, serverSession, 'cloud', 3),
     };
+
+    await loginPage.evaluate(() => {
+      document.getElementById('auth-modal')?.classList.remove('active');
+      document.getElementById('save-slots-modal')?.classList.remove('active');
+      document.getElementById('generic-confirm-modal')?.classList.remove('active');
+      window.game?.showScreen?.('main-menu');
+      window.__logoutRequestCount = 0;
+      const originalRequestLogout = window.game?.requestLogout?.bind(window.game);
+      if (!originalRequestLogout) throw new Error('game.requestLogout is unavailable');
+      window.game.requestLogout = (...args) => {
+        window.__logoutRequestCount += 1;
+        return originalRequestLogout(...args);
+      };
+    });
+    await loginPage.click('#login-btn');
+    await loginPage.waitForSelector('#generic-confirm-modal.active', { timeout: uiWaitTimeoutMs });
+    const firstPrompt = await loginPage.evaluate(() => ({
+      requestCount: Number(window.__logoutRequestCount || 0),
+      confirmModalCount: document.querySelectorAll('#generic-confirm-modal').length,
+      confirmActive: !!document.getElementById('generic-confirm-modal')?.classList.contains('active'),
+      confirmMessage: document.getElementById('generic-confirm-message')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+      authActive: !!document.getElementById('auth-modal')?.classList.contains('active'),
+      sessionPresent: !!localStorage.getItem('theDefierServerSession'),
+    }));
+    await loginPage.click('#generic-cancel-btn');
+    await loginPage.waitForFunction(
+      () => !document.getElementById('generic-confirm-modal')?.classList.contains('active'),
+      null,
+      { timeout: uiWaitTimeoutMs }
+    );
+    const afterCancel = await loginPage.evaluate(() => ({
+      requestCount: Number(window.__logoutRequestCount || 0),
+      confirmActive: !!document.getElementById('generic-confirm-modal')?.classList.contains('active'),
+      authActive: !!document.getElementById('auth-modal')?.classList.contains('active'),
+      sessionPresent: !!localStorage.getItem('theDefierServerSession'),
+    }));
+
+    await loginPage.click('#login-btn');
+    await loginPage.waitForSelector('#generic-confirm-modal.active', { timeout: uiWaitTimeoutMs });
+    const secondPrompt = await loginPage.evaluate(() => ({
+      requestCount: Number(window.__logoutRequestCount || 0),
+      confirmActive: !!document.getElementById('generic-confirm-modal')?.classList.contains('active'),
+      authActive: !!document.getElementById('auth-modal')?.classList.contains('active'),
+    }));
+    await Promise.all([
+      loginPage.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: navigationTimeoutMs }),
+      loginPage.click('#generic-confirm-btn'),
+    ]);
+    await waitForGame(loginPage);
+    await loginPage.waitForTimeout(900);
+    const afterConfirm = await loginPage.evaluate(() => ({
+      sessionPresent: !!localStorage.getItem('theDefierServerSession'),
+      authLoggedIn: !!window.AuthService?.isLoggedIn?.(),
+      loginButtonText: document.getElementById('login-btn')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+      confirmActive: !!document.getElementById('generic-confirm-modal')?.classList.contains('active'),
+      authActive: !!document.getElementById('auth-modal')?.classList.contains('active'),
+    }));
+    logoutProbe = { firstPrompt, afterCancel, secondPrompt, afterConfirm };
   } finally {
     await loginContext.close();
   }
@@ -1492,6 +1552,7 @@ async function runSmoke(page, browser) {
     rewardCloudRestoreProbe,
     cloudHistoryProbe,
     saveConflictProbe,
+    logoutProbe,
   };
 }
 
@@ -1603,8 +1664,30 @@ try {
 	      && result.rewardCloudRestoreProbe?.restoreProbe?.after?.runtimeHasCard
 	      && result.rewardCloudRestoreProbe?.restoreProbe?.after?.continueVisible
 	      && !result.rewardCloudRestoreProbe?.restoreProbe?.after?.continueDisabled,
-	    JSON.stringify(result)
-	  );
+    JSON.stringify(result)
+  );
+  add(
+    LOGOUT_UI_FINDING,
+    result.logoutProbe?.firstPrompt?.requestCount === 1
+      && result.logoutProbe.firstPrompt.confirmModalCount === 1
+      && result.logoutProbe.firstPrompt.confirmActive
+      && /退出登录/.test(result.logoutProbe.firstPrompt.confirmMessage || '')
+      && !result.logoutProbe.firstPrompt.authActive
+      && result.logoutProbe.firstPrompt.sessionPresent
+      && result.logoutProbe.afterCancel?.requestCount === 1
+      && !result.logoutProbe.afterCancel.confirmActive
+      && !result.logoutProbe.afterCancel.authActive
+      && result.logoutProbe.afterCancel.sessionPresent
+      && result.logoutProbe.secondPrompt?.requestCount === 2
+      && result.logoutProbe.secondPrompt.confirmActive
+      && !result.logoutProbe.secondPrompt.authActive
+      && !result.logoutProbe.afterConfirm?.sessionPresent
+      && !result.logoutProbe.afterConfirm?.authLoggedIn
+      && /登入轮回|登录/.test(result.logoutProbe.afterConfirm?.loginButtonText || '')
+      && !result.logoutProbe.afterConfirm?.confirmActive
+      && !result.logoutProbe.afterConfirm?.authActive,
+    JSON.stringify(result.logoutProbe || null)
+  );
   add(
     SAVE_CONFLICT_FINDING,
     invalidSlotConflict
@@ -1710,6 +1793,7 @@ try {
   );
 } catch (error) {
   add(AUTH_UI_CLOUD_FINDING, false, error?.message || String(error));
+  add(LOGOUT_UI_FINDING, false, error?.message || String(error));
   add(SAVE_CONFLICT_FINDING, false, error?.message || String(error));
   add(CLOUD_HISTORY_FINDING, false, error?.message || String(error));
 } finally {
