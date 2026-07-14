@@ -244,6 +244,7 @@ async function main() {
   const { initDb } = require('../server/db/database');
   const relay = require('../server/relay-expedition/service');
   const authoritativeRuns = require('../server/progression/authoritative-runs/service');
+  const { hashCanonical } = require('../server/progression/authoritative-runs/canonical');
 
   await initDb();
 
@@ -338,22 +339,24 @@ async function main() {
   const reserveLegId = reserveSession.currentLeg.legId;
   const reserveRunClientId = 'relay-cp-run-reserve-launch';
   const reserveRecoveryNow = baseNow + 102;
+  const reserveRequest = relay.normalizeClaimRequest({
+    protocolVersion: relay.PROTOCOL_VERSION,
+    sessionId: reserveSession.session.sessionId,
+    legIndex: 1,
+    tacticId: 'vanguard',
+    clientLegId: 'relay-cp-client-leg-reserve',
+    mutationId: 'relay-cp-claim-reserve'
+  });
   await dbRun(
     `UPDATE relay_expedition_legs
      SET runner_user_id = 'user-recover1', tactic_id = 'vanguard', client_leg_id = 'relay-cp-client-leg-reserve',
-         client_run_id = ?, status = 'reserved', request_hash = 'hash', request_body_json = ?,
+         client_run_id = ?, status = 'reserved', request_hash = ?, request_body_json = ?,
          reserved_at = ?, active_lease_until = ?, updated_at = ?
      WHERE leg_id = ?`,
     [
       reserveRunClientId,
-      JSON.stringify({
-        protocolVersion: relay.PROTOCOL_VERSION,
-        sessionId: reserveSession.session.sessionId,
-        legIndex: 1,
-        tacticId: 'vanguard',
-        clientLegId: 'relay-cp-client-leg-reserve',
-        mutationId: 'relay-cp-claim-reserve'
-      }),
+      hashCanonical(reserveRequest),
+      JSON.stringify(reserveRequest),
       reserveRecoveryNow,
       reserveRecoveryNow + 60 * 60 * 1000,
       reserveRecoveryNow,
@@ -368,12 +371,30 @@ async function main() {
     `UPDATE relay_expedition_sessions SET active_leg_id = ?, updated_at = ? WHERE session_id = ?`,
     [reserveLegId, reserveRecoveryNow, reserveSession.session.sessionId]
   );
-  const reserveRecovered = await spawnChild({
-    action: 'current',
-    userId: 'user-recover1',
+  const racedReserveClaim = await spawnChild({
+    action: 'claim',
+    userId: 'user-recover2',
+    request: reserveRequest,
     now: reserveRecoveryNow + 1
   });
+  assert.strictEqual(racedReserveClaim.ok, false, JSON.stringify(racedReserveClaim));
+  assert.strictEqual(racedReserveClaim.error.reason, 'relay_leg_claim_raced', 'another member must not recover an owned reservation');
+  const reserveAfterRace = await dbGet(
+    `SELECT runner_user_id, status, run_id FROM relay_expedition_legs WHERE leg_id = ?`,
+    [reserveLegId]
+  );
+  assert.strictEqual(reserveAfterRace?.runner_user_id, 'user-recover1');
+  assert.strictEqual(reserveAfterRace?.status, 'reserved', 'raced retry must leave the rightful reservation intact');
+  assert(!reserveAfterRace?.run_id, 'raced retry must not launch an authoritative run');
+
+  const reserveRecovered = await spawnChild({
+    action: 'claim',
+    userId: 'user-recover1',
+    request: reserveRequest,
+    now: reserveRecoveryNow + 2
+  });
   assert.strictEqual(reserveRecovered.ok, true, JSON.stringify(reserveRecovered));
+  assert.strictEqual(reserveRecovered.response.leg.status, 'active', 'rightful retry should launch the reserved leg');
   const reserveLegAfter = await dbGet(
     `SELECT status, run_id FROM relay_expedition_legs WHERE leg_id = ?`,
     [reserveLegId]

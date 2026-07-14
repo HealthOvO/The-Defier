@@ -1351,7 +1351,14 @@ async function claimRelayExpeditionLeg(userId, rawRequest, nowInput) {
         if (!session) throw makeError(404, 'relay_session_not_found', '同道远征 session 不存在');
         const reconciled = await reconcileSession(connection, session, now);
         session = reconciled.session;
-        if (reconciled.launch) return { type: 'launch', launch: reconciled.launch };
+        if (reconciled.launch) {
+            const ownsReservation = String(reconciled.launch.runnerUserId || '') === identity
+                && hashCanonical(reconciled.launch.request || {}) === requestHash;
+            if (!ownsReservation) {
+                throw makeError(409, 'relay_leg_claim_raced', '接力棒已被其他成员领取，请刷新');
+            }
+            return { type: 'launch', launch: reconciled.launch };
+        }
         if (String(session.status || '') !== 'active') throw makeError(409, 'relay_session_terminal', '同道远征已结束');
         if (clampInt(session.current_leg_index) !== request.legIndex) throw makeError(409, 'relay_leg_not_current', '该棒次不是当前接力棒');
         const leg = await loadLeg(connection, session.session_id, request.legIndex);
