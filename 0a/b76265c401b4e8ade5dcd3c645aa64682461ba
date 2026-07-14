@@ -1,0 +1,23 @@
+tests/browser_automation_boot_audit.mjs
+  s_bae69f1b7fab46::t_ce059f94462477 324,326,332-350,355
+tests/sanity_release_gate_coverage_checks.cjs
+  s_bae69f1b7fab46::t_234b27eb508e49 906-920
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "0ab76265c401b4e8ade5dcd3c645aa64682461ba",
+  "prompts": {},
+  "sessions": {
+    "s_bae69f1b7fab46": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ed4f6-e7ac-73e0-a29e-119f3eddb407",
+        "model": "unknown"
+      },
+      "human_author": "AI Agent <bot@example.com>"
+    }
+  },
+  "attestation_metadata": {},
+  "remote_transcripts": {}
+}
