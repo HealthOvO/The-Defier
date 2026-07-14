@@ -90,6 +90,13 @@ async function clickVisiblePostReviewAction(page, actionId) {
   throw lastError;
 }
 
+async function openDisclosure(page, selector) {
+  await page.evaluate((targetSelector) => {
+    const disclosure = document.querySelector(targetSelector);
+    if (disclosure && 'open' in disclosure) disclosure.open = true;
+  }, selector);
+}
+
 (async () => {
   const executablePath = process.env.PLAYWRIGHT_EXECUTABLE_PATH || undefined;
   const browser = await chromium.launch({
@@ -1691,7 +1698,8 @@ async function clickVisiblePostReviewAction(page, actionId) {
   });
 
   await page.click('#pvp-btn', { timeout: 5000, force: true });
-  await page.waitForTimeout(400);
+  await page.waitForFunction(() => !!window.PVPScene?.handleAuthStateChanged, null, { timeout: 5000 });
+  await page.waitForTimeout(120);
 
   const defaultEntryProbe = await page.evaluate(() => ({
     activeTab: JSON.parse(window.render_game_to_text()).pvp?.activeTab || '',
@@ -1724,21 +1732,51 @@ async function clickVisiblePostReviewAction(page, actionId) {
 
   const idleAuthenticatedProbe = await page.evaluate(() => {
     const readText = (selector) => document.querySelector(selector)?.textContent?.replace(/\s+/g, ' ').trim() || '';
+    const isVisible = (selector) => {
+      const element = document.querySelector(selector);
+      if (!element) return false;
+      const style = getComputedStyle(element);
+      const rect = element.getBoundingClientRect();
+      return style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0;
+    };
     const root = document.querySelector('[data-live-pvp-root]');
     return {
       authState: root?.getAttribute('data-live-auth-state') || '',
       accountStatus: readText('[data-live-account-status]'),
       joinText: readText('[data-live-action="join-queue"]'),
+      inviteOpen: !!document.querySelector('[data-live-invite-panel]')?.open,
+      detailOpen: !!document.querySelector('[data-live-detail-drawer]')?.open,
+      visibleRegions: {
+        footer: isVisible('.pvp-live-footer'),
+        loadout: isVisible('.pvp-live-loadout-selector'),
+        invite: isVisible('[data-live-invite-panel]'),
+        status: isVisible('.pvp-live-status-card'),
+        board: isVisible('.pvp-live-board'),
+        self: isVisible('[data-live-self]'),
+        opponent: isVisible('[data-live-opponent]'),
+        events: isVisible('[data-live-event-panel]'),
+        social: isVisible('[data-live-social-panel]'),
+        review: isVisible('[data-live-post-match-review]'),
+        technicalMeta: isVisible('.pvp-live-meta-grid'),
+      },
+      visibleActions: Array.from(document.querySelectorAll('[data-live-action]'))
+        .filter((button) => {
+          const style = getComputedStyle(button);
+          const rect = button.getBoundingClientRect();
+          return style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0;
+        })
+        .map(button => button.getAttribute('data-live-action')),
       visibleText: [
-        readText('[data-live-account-status]'),
-        readText('[data-live-summary]'),
-        readText('[data-live-match-quality]'),
-        readText('[data-live-mode-boundary]'),
-        readText('[data-live-connection-status]'),
-        readText('[data-live-realtime-status]'),
-        readText('[data-live-social-status]'),
-        readText('[data-live-action="join-queue"]'),
-      ].join(' ').trim(),
+        '[data-live-account-status]',
+        '[data-live-summary]',
+        '[data-live-match-quality]',
+        '[data-live-mode-boundary]',
+        '[data-live-connection-status]',
+        '[data-live-realtime-status]',
+        '[data-live-social-status]',
+        '[data-live-last-error]',
+        '[data-live-action="join-queue"]',
+      ].map(selector => isVisible(selector) ? readText(selector) : '').filter(Boolean).join(' ').trim(),
     };
   });
   add(
@@ -1747,6 +1785,25 @@ async function clickVisiblePostReviewAction(page, actionId) {
       && /已就绪/.test(idleAuthenticatedProbe.accountStatus)
       && idleAuthenticatedProbe.joinText === '开始匹配'
       && !forbiddenIdlePlayerCopyPattern.test(idleAuthenticatedProbe.visibleText),
+    JSON.stringify(idleAuthenticatedProbe),
+  );
+  add(
+    'live idle phase shows only entry decisions and keeps secondary controls collapsed',
+    idleAuthenticatedProbe.inviteOpen === false
+      && idleAuthenticatedProbe.detailOpen === false
+      && idleAuthenticatedProbe.visibleRegions.footer
+      && idleAuthenticatedProbe.visibleRegions.loadout
+      && idleAuthenticatedProbe.visibleRegions.invite
+      && idleAuthenticatedProbe.visibleRegions.status
+      && !idleAuthenticatedProbe.visibleRegions.board
+      && !idleAuthenticatedProbe.visibleRegions.self
+      && !idleAuthenticatedProbe.visibleRegions.opponent
+      && !idleAuthenticatedProbe.visibleRegions.events
+      && !idleAuthenticatedProbe.visibleRegions.social
+      && !idleAuthenticatedProbe.visibleRegions.review
+      && !idleAuthenticatedProbe.visibleRegions.technicalMeta
+      && idleAuthenticatedProbe.visibleActions.length === 1
+      && idleAuthenticatedProbe.visibleActions[0] === 'join-queue',
     JSON.stringify(idleAuthenticatedProbe),
   );
 
@@ -3250,11 +3307,12 @@ async function clickVisiblePostReviewAction(page, actionId) {
   add(
     'live UI renders ranked opponent public profile without build reveal',
     /破阵斗法谱/.test(matchedProbe.selfLoadout)
-      && /sword/.test(matchedProbe.selfLoadout)
+      && /20 张/.test(matchedProbe.selfLoadout)
       && /已锁定/.test(matchedProbe.selfLoadout)
-      && /公开画像/.test(matchedProbe.opponentLoadout)
+      && !/sword|hash-self/.test(matchedProbe.selfLoadout)
+      && /对手流派/.test(matchedProbe.opponentLoadout)
       && /流派待观察/.test(matchedProbe.opponentLoadout)
-      && /构筑隐藏/.test(matchedProbe.opponentLoadout)
+      && /构筑保密/.test(matchedProbe.opponentLoadout)
       && !/守势斗法谱|shield|hash-opponent/.test(matchedProbe.opponentLoadout)
       && matchedProbe.payload?.self?.loadout?.loadoutHash === 'hash-self-sword-123456'
       && matchedProbe.payload?.opponent?.publicProfile?.reportVersion === 'pvp-live-ranked-opponent-profile-v1'
@@ -3374,6 +3432,81 @@ async function clickVisiblePostReviewAction(page, actionId) {
     calls: window.__livePvpAuditCalls,
     payload: JSON.parse(window.render_game_to_text()).pvp?.live || null,
   }));
+  const activeLayoutProbe = await page.evaluate(() => {
+    const isVisible = (selector) => {
+      const element = document.querySelector(selector);
+      if (!element) return false;
+      const style = getComputedStyle(element);
+      const rect = element.getBoundingClientRect();
+      return style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0;
+    };
+    const root = document.querySelector('[data-live-pvp-root]');
+    const statusRect = document.querySelector('.pvp-live-status-card')?.getBoundingClientRect();
+    const boardRect = document.querySelector('.pvp-live-board')?.getBoundingClientRect();
+    const footerRect = document.querySelector('.pvp-live-footer')?.getBoundingClientRect();
+    return {
+      detailOpen: !!document.querySelector('[data-live-detail-drawer]')?.open,
+      statusVisible: isVisible('.pvp-live-status-card'),
+      boardVisible: isVisible('.pvp-live-board'),
+      footerVisible: isVisible('.pvp-live-footer'),
+      secondaryVisible: isVisible('.pvp-live-secondary-grid'),
+      fairnessVisible: isVisible('[data-live-opening-safeguard]'),
+      technicalMetaVisible: isVisible('.pvp-live-meta-grid'),
+      statusBeforeBoard: !!(statusRect && boardRect && statusRect.bottom <= boardRect.top + 2),
+      boardBeforeFooter: !!(boardRect && footerRect && boardRect.bottom <= footerRect.top + 2),
+      rootFits: !!root && root.scrollWidth <= root.clientWidth + 2,
+    };
+  });
+  add(
+    'live active phase prioritizes the battlefield and hides idle-only sections',
+    activeLayoutProbe.detailOpen === false
+      && activeLayoutProbe.statusVisible
+      && activeLayoutProbe.boardVisible
+      && activeLayoutProbe.footerVisible
+      && !activeLayoutProbe.secondaryVisible
+      && !activeLayoutProbe.fairnessVisible
+      && !activeLayoutProbe.technicalMetaVisible
+      && activeLayoutProbe.statusBeforeBoard
+      && activeLayoutProbe.boardBeforeFooter
+      && activeLayoutProbe.rootFits,
+    JSON.stringify(activeLayoutProbe),
+  );
+  await safeElementScreenshot(page, '[data-live-pvp-root]', path.join(outDir, 'pvp-live-panel-active.png'));
+  await openDisclosure(page, '[data-live-detail-drawer]');
+  const activeDetailProbe = await page.evaluate(() => {
+    const isVisible = (selector) => {
+      const element = document.querySelector(selector);
+      if (!element) return false;
+      const style = getComputedStyle(element);
+      const rect = element.getBoundingClientRect();
+      return style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0;
+    };
+    const root = document.querySelector('[data-live-pvp-root]');
+    return {
+      open: !!document.querySelector('[data-live-detail-drawer]')?.open,
+      fairnessVisible: isVisible('[data-live-opening-safeguard]'),
+      momentumVisible: isVisible('[data-live-duel-momentum]'),
+      intentVisible: isVisible('[data-live-intent-signal]'),
+      guideVisible: isVisible('[data-live-first-guide]'),
+      technicalMetaVisible: isVisible('.pvp-live-meta-grid'),
+      rootFits: !!root && root.scrollWidth <= root.clientWidth + 2,
+    };
+  });
+  add(
+    'live battle detail disclosure opens player guidance without exposing technical identifiers',
+    activeDetailProbe.open
+      && activeDetailProbe.fairnessVisible
+      && activeDetailProbe.momentumVisible
+      && activeDetailProbe.intentVisible
+      && activeDetailProbe.guideVisible
+      && !activeDetailProbe.technicalMetaVisible
+      && activeDetailProbe.rootFits,
+    JSON.stringify(activeDetailProbe),
+  );
+  await page.evaluate(() => {
+    const disclosure = document.querySelector('[data-live-detail-drawer]');
+    if (disclosure && 'open' in disclosure) disclosure.open = false;
+  });
   add(
     'live UI completes setup mulligan and ready before battle actions',
     setupProbe.phase === 'active'
@@ -3395,12 +3528,12 @@ async function clickVisiblePostReviewAction(page, actionId) {
     'live UI renders active opening safeguard report without hidden payloads',
     setupProbe.phase === 'active'
       && /首动预算/.test(setupProbe.openingSafeguard)
-      && /当前 A/.test(setupProbe.openingSafeguard)
+      && /你：18/.test(setupProbe.openingSafeguard)
       && /18/.test(setupProbe.openingSafeguard)
       && /开局护体/.test(setupProbe.openingSafeguard)
       && /保底 1 血/.test(setupProbe.openingSafeguard)
       && /后手护盾/.test(setupProbe.openingSafeguard)
-      && /B \+3/.test(setupProbe.openingSafeguard)
+      && /后手 \+3/.test(setupProbe.openingSafeguard)
       && /我方先手|对方先手/.test(setupProbe.openerAssignment)
       && /服务端种子/.test(setupProbe.openerAssignment)
       && /不绑定排队|不绑定房主/.test(setupProbe.openerAssignment)
@@ -3450,7 +3583,7 @@ async function clickVisiblePostReviewAction(page, actionId) {
       && /公开压迫/.test(setupProbe.intentSignal)
       && /公开牌池上限/.test(setupProbe.intentSignal)
       && /反制窗口/.test(setupProbe.intentSignal)
-      && /不含隐藏信息/.test(setupProbe.intentSignal)
+      && /不读取隐藏信息/.test(setupProbe.intentSignal)
       && setupProbe.intentSignalState === 'opening_pressure'
       && setupProbe.intentSignalHidden === 'false'
       && setupProbe.payload?.intentSignalReport?.reportVersion === 'pvp-live-intent-signal-v1'
@@ -3892,9 +4025,9 @@ async function clickVisiblePostReviewAction(page, actionId) {
     openingEndTurnConfirmProbe.phase === 'active'
       && openingEndTurnConfirmProbe.currentSeat === 'A'
       && /再次点击确认结束回合/.test(openingEndTurnConfirmProbe.hint)
-      && /交给\s*B/.test(openingEndTurnConfirmProbe.hint)
+      && /交给\s*对手/.test(openingEndTurnConfirmProbe.hint)
       && /首动预算\s*18/.test(openingEndTurnConfirmProbe.hint)
-      && /后手护盾\s*B\s*\+3/.test(openingEndTurnConfirmProbe.hint)
+      && /后手护盾\s*对手\s*\+3/.test(openingEndTurnConfirmProbe.hint)
       && /反打缓冲\s*\+8/.test(openingEndTurnConfirmProbe.hint)
       && /确认结束/.test(openingEndTurnConfirmProbe.endTurnText)
       && !/end_turn/.test(JSON.stringify(openingEndTurnConfirmProbe.calls)),
@@ -3923,7 +4056,7 @@ async function clickVisiblePostReviewAction(page, actionId) {
       && /预算后\s*8/.test(openingCardPreClickPreviewProbe.previewText)
       && /破盾\s*3/.test(openingCardPreClickPreviewProbe.previewText)
       && /生命伤害\s*5/.test(openingCardPreClickPreviewProbe.previewText)
-      && /B\s*预计\s*45\s*血/.test(openingCardPreClickPreviewProbe.previewText)
+      && /对手\s*预计\s*45\s*血/.test(openingCardPreClickPreviewProbe.previewText)
       && openingCardPreClickPreviewProbe.previewSource === 'viewer_public_state'
       && openingCardPreClickPreviewProbe.previewHidden === 'false'
       && openingCardPreClickPreviewProbe.previewImpact === 'none'
@@ -3955,12 +4088,12 @@ async function clickVisiblePostReviewAction(page, actionId) {
       && /再次点击确认出牌/.test(openingCardConfirmProbe.hint)
       && /首动预算\s*18/.test(openingCardConfirmProbe.hint)
       && /保底\s*1\s*血/.test(openingCardConfirmProbe.hint)
-      && /后手护盾\s*B\s*\+3/.test(openingCardConfirmProbe.hint)
+      && /后手护盾\s*对手\s*\+3/.test(openingCardConfirmProbe.hint)
       && /反打缓冲\s*\+8/.test(openingCardConfirmProbe.hint)
       && /预算后\s*8/.test(openingCardConfirmProbe.hint)
       && /破盾\s*3/.test(openingCardConfirmProbe.hint)
       && /生命伤害\s*5/.test(openingCardConfirmProbe.hint)
-      && /B\s*预计\s*45\s*血/.test(openingCardConfirmProbe.hint)
+      && /对手\s*预计\s*45\s*血/.test(openingCardConfirmProbe.hint)
       && /confirming/.test(openingCardConfirmProbe.cardClass)
       && /确认/.test(openingCardConfirmProbe.cardText)
       && !/play_card/.test(JSON.stringify(openingCardConfirmProbe.calls)),
@@ -4088,7 +4221,7 @@ async function clickVisiblePostReviewAction(page, actionId) {
     'live UI submits opening-window card intent through live service only after confirmation',
     /4/.test(actionProbe.stateVersion)
       && /B/.test(actionProbe.currentSeat)
-      && /B/.test(actionProbe.turnTimer)
+      && /对手/.test(actionProbe.turnTimer)
       && /play_card/.test(JSON.stringify(actionProbe.calls))
       && !/didWin|matchTicket/.test(JSON.stringify(actionProbe.calls)),
     JSON.stringify(actionProbe),
@@ -4096,7 +4229,7 @@ async function clickVisiblePostReviewAction(page, actionId) {
   add(
     'live UI renders opening protection public event details',
     /开局护体触发/.test(actionProbe.events)
-      && /护住 B/.test(actionProbe.events)
+      && /护住对手/.test(actionProbe.events)
       && /保底 1 血/.test(actionProbe.events)
       && /挡下 6 点致命伤害/.test(actionProbe.events)
       && !/opening_protection_triggered/.test(actionProbe.events),
@@ -4107,12 +4240,12 @@ async function clickVisiblePostReviewAction(page, actionId) {
     /后手护盾发放/.test(actionProbe.events)
       && /护盾 \+3/.test(actionProbe.events)
       && /反打缓冲发放/.test(actionProbe.events)
-      && /给 B/.test(actionProbe.events)
+      && /给对手/.test(actionProbe.events)
       && /护盾 \+8/.test(actionProbe.events)
       && /后手护盾/.test(actionProbe.openingSafeguard)
-      && /B \+3/.test(actionProbe.openingSafeguard)
+      && /后手 \+3/.test(actionProbe.openingSafeguard)
       && /反打缓冲/.test(actionProbe.openingSafeguard)
-      && /已发放 B/.test(actionProbe.openingSafeguard)
+      && /已发放后手|已发放 后手/.test(actionProbe.openingSafeguard)
       && actionProbe.payload?.openingSafeguardReport?.secondSeatBuffer?.seatId === 'B'
       && actionProbe.payload?.openingSafeguardReport?.secondSeatBuffer?.block === 3
       && actionProbe.payload?.openingSafeguardReport?.counterplay?.grantedSeats?.includes('B')
@@ -4122,12 +4255,12 @@ async function clickVisiblePostReviewAction(page, actionId) {
   add(
     'live UI renders authoritative action receipt after opening card resolves',
     /行动回执/.test(actionProbe.actionReceipt)
-      && /A/.test(actionProbe.actionReceipt)
+      && /你/.test(actionProbe.actionReceipt)
       && /试探斩/.test(actionProbe.actionReceipt)
       && /预算后\s*8/.test(actionProbe.actionReceipt)
       && /破盾\s*3/.test(actionProbe.actionReceipt)
       && /生命伤害\s*5/.test(actionProbe.actionReceipt)
-      && /B\s*剩余\s*1\s*血/.test(actionProbe.actionReceipt)
+      && /对手\s*剩余\s*1\s*血/.test(actionProbe.actionReceipt)
       && actionProbe.actionBudgetClampAttr === 'public_first_action_budget'
       && /首动预算挡下\s*12/.test(actionProbe.actionBudgetClamp)
       && actionProbe.actionOpeningProtectionAttr === 'public_opening_protection'
@@ -4155,7 +4288,7 @@ async function clickVisiblePostReviewAction(page, actionId) {
       && actionProbe.actionSurvivalHidden === 'false'
       && actionProbe.actionSurvivalImpact === 'none'
       && /承伤回执/.test(actionProbe.actionSurvival || '')
-      && /B\s*剩余\s*1\s*血/.test(actionProbe.actionSurvival || '')
+      && /对手\s*剩余\s*1\s*血/.test(actionProbe.actionSurvival || '')
       && /对局继续/.test(actionProbe.actionSurvival || '')
       && !/payload|cardInstanceId|sourceCardId|cardId|instanceId|\bhand\b|hand":\[|deck|loadoutSnapshot|reward|rating|elo|token/i.test(`${actionProbe.actionSurvival || ''} ${JSON.stringify(actionProbe.payload?.actionReceiptReport || {})}`),
     JSON.stringify(actionProbe),
@@ -4169,7 +4302,7 @@ async function clickVisiblePostReviewAction(page, actionId) {
       && actionProbe.terminalDamageAttr?.hidden === 'false'
       && actionProbe.terminalDamageAttr?.impact === 'none'
       && /终局回执/.test(actionProbe.terminalDamageAttr?.text || '')
-      && /B\s*归零/.test(actionProbe.terminalDamageAttr?.text || '')
+      && /对手生命归零/.test(actionProbe.terminalDamageAttr?.text || '')
       && /公开伤害结算结束本局/.test(actionProbe.terminalDamageAttr?.text || '')
       && !/承伤回执|对局继续/.test(actionProbe.terminalDamageAttr?.survivalText || '')
       && !/payload|cardInstanceId|sourceCardId|cardId|instanceId|\bhand\b|hand":\[|deck|loadoutSnapshot|reward|rating|elo|token/i.test(`${actionProbe.terminalDamageAttr?.text || ''} ${JSON.stringify(actionProbe.terminalDamageAttr || {})}`),
@@ -4606,15 +4739,15 @@ async function clickVisiblePostReviewAction(page, actionId) {
     'live UI formats timeout automation event as low-impact public handoff',
     timeoutAutomationFormatProbe.event?.type === 'automation_action'
       && timeoutAutomationFormatProbe.event?.label === '超时托管'
-      && /B.*系统托管.*防守牌.*第 1 次/.test(timeoutAutomationFormatProbe.event?.detail || '')
-      && /A.*系统托管.*结束回合.*第 2 次/.test(timeoutAutomationFormatProbe.endTurnEvent?.detail || '')
+      && /对手.*系统托管.*防守牌.*第 1 次/.test(timeoutAutomationFormatProbe.event?.detail || '')
+      && /你.*系统托管.*结束回合.*第 2 次/.test(timeoutAutomationFormatProbe.endTurnEvent?.detail || '')
       && !/automation_action|soft_timeout|cardInstanceId|cardId|instanceId|loadoutSnapshot|reward|rating|elo|hand":\[|deck":\[/i.test(`${timeoutAutomationFormatProbe.event?.label || ''} ${timeoutAutomationFormatProbe.event?.detail || ''} ${timeoutAutomationFormatProbe.endTurnEvent?.label || ''} ${timeoutAutomationFormatProbe.endTurnEvent?.detail || ''}`),
     JSON.stringify(timeoutAutomationFormatProbe),
   );
   add(
     'live UI renders handoff receipt label for end-turn action receipt',
     /交权回执/.test(actionProbe.handoffReceipt)
-      && /行动权交给 B/.test(actionProbe.handoffReceipt)
+      && /行动权交给对手|行动权交给 对手/.test(actionProbe.handoffReceipt)
       && /抽 3 张/.test(actionProbe.handoffReceipt)
       && /反打缓冲 \+8/.test(actionProbe.handoffReceipt)
       && !/cardInstanceId|sourceCardId|deck|rating|reward/i.test(actionProbe.handoffReceipt),
@@ -4630,7 +4763,7 @@ async function clickVisiblePostReviewAction(page, actionId) {
       && actionProbe.handoffTurnAttr?.hidden === 'false'
       && actionProbe.handoffTurnAttr?.impact === 'none'
       && /接手回执/.test(actionProbe.handoffTurnAttr?.text || '')
-      && /B\s*接手/.test(actionProbe.handoffTurnAttr?.text || '')
+      && /对手\s*接手/.test(actionProbe.handoffTurnAttr?.text || '')
       && /抽\s*3/.test(actionProbe.handoffTurnAttr?.text || '')
       && /反打缓冲\s*\+8/.test(actionProbe.handoffTurnAttr?.text || '')
       && !/payload|cardInstanceId|sourceCardId|cardId|instanceId|\bhand\b|hand":\[|deck|loadoutSnapshot|reward|rating|elo|token/i.test(`${actionProbe.handoffTurnAttr?.text || ''} ${JSON.stringify(actionProbe.handoffTurnAttr || {})}`),
@@ -4985,7 +5118,7 @@ async function clickVisiblePostReviewAction(page, actionId) {
       && statusResponseEndTurnProbe.afterConfirm?.handoffRiskStatusCount === '1'
       && /交权风险/.test(statusResponseEndTurnProbe.afterConfirm?.handoffRiskText || '')
       && /破绽仍在|后续兑现/.test(statusResponseEndTurnProbe.afterConfirm?.handoffRiskText || '')
-      && /行动权交给 B/.test(statusResponseEndTurnProbe.afterConfirm?.actionReceiptText || '')
+      && /行动权交给对手|行动权交给 对手/.test(statusResponseEndTurnProbe.afterConfirm?.actionReceiptText || '')
       && /public_status_handoff_risk/.test(JSON.stringify(statusResponseEndTurnProbe.afterConfirm?.payload?.actionReceiptReport?.safeguards || []))
       && !/cardInstanceId|cardId|instanceId|\bhand\b|hand":\[|deck|loadoutSnapshot|reward|rating|elo|token|opponentHand|opponentDeck/i.test(`${statusResponseEndTurnProbe.afterConfirm?.actionReceiptText || ''} ${statusResponseEndTurnProbe.afterConfirm?.handoffRiskText || ''} ${JSON.stringify(statusResponseEndTurnProbe.afterConfirm?.payload?.actionReceiptReport?.handoffRisk || {})}`),
     JSON.stringify(statusResponseEndTurnProbe.afterConfirm || null),
@@ -5039,14 +5172,14 @@ async function clickVisiblePostReviewAction(page, actionId) {
     /emote/.test(JSON.stringify(ownEmoteProbe.calls))
       && /预设表情/.test(ownEmoteProbe.events)
       && /抱拳/.test(ownEmoteProbe.events)
-      && /B · 思考/.test(opponentEmoteProbe.events)
+      && /对手 · 思考/.test(opponentEmoteProbe.events)
       && /已静音/.test(mutedEmoteProbe.status)
       && /对手表情/.test(mutedEmoteProbe.status)
       && mutedEmoteProbe.payload?.muted === true
       && mutedEmoteProbe.payload?.preferenceScope === 'local_only'
       && mutedEmoteProbe.payload?.sourceVisibility === 'local_preference'
       && mutedEmoteProbe.payload?.rankedImpact === 'none'
-      && !/B · 思考/.test(mutedEmoteProbe.events)
+      && !/对手 · 思考/.test(mutedEmoteProbe.events)
       && !/自由文本/.test(JSON.stringify(ownEmoteProbe.calls)),
     JSON.stringify({ ownEmoteProbe, opponentEmoteProbe, mutedEmoteProbe }),
   );
@@ -5061,7 +5194,7 @@ async function clickVisiblePostReviewAction(page, actionId) {
       && mutedPersistProbe.payload?.sourceVisibility === 'local_preference'
       && mutedPersistProbe.payload?.rankedImpact === 'none'
       && mutedPersistProbe.payload?.persistence === 'local_storage'
-      && !/B · 思考/.test(mutedPersistProbe.events)
+      && !/对手 · 思考/.test(mutedPersistProbe.events)
       && !/reward|rating|elo|settlement|matchTicket/i.test(JSON.stringify(mutedPersistProbe)),
     JSON.stringify({ mutedPersistProbe }),
   );
@@ -5160,6 +5293,60 @@ async function clickVisiblePostReviewAction(page, actionId) {
   );
   await page.click('[data-live-action="surrender"]', { timeout: 5000, force: true });
   await page.waitForTimeout(200);
+  const finishedDefaultProbe = await page.evaluate(() => {
+    const isVisible = (selector) => {
+      const element = document.querySelector(selector);
+      if (!element) return false;
+      const style = getComputedStyle(element);
+      const rect = element.getBoundingClientRect();
+      return style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0;
+    };
+    const root = document.querySelector('[data-live-pvp-root]');
+    const review = document.querySelector('[data-live-post-match-review]');
+    const reviewRect = review?.getBoundingClientRect();
+    return {
+      phase: root?.getAttribute('data-live-phase') || '',
+      reviewOpen: !!document.querySelector('[data-live-post-review-details]')?.open,
+      settlementOpen: !!document.querySelector('[data-live-settlement-details]')?.open,
+      reviewVisible: isVisible('[data-live-post-match-review]'),
+      settlementVisible: isVisible('[data-live-settlement-report]'),
+      actionsVisible: isVisible('.pvp-live-review-actions'),
+      statusVisible: isVisible('.pvp-live-status-card'),
+      boardVisible: isVisible('.pvp-live-board'),
+      footerVisible: isVisible('.pvp-live-footer'),
+      loadoutVisible: isVisible('.pvp-live-loadout-selector'),
+      inviteVisible: isVisible('[data-live-invite-panel]'),
+      deepReviewVisible: isVisible('.pvp-live-review-detail-body'),
+      settlementDetailVisible: isVisible('.pvp-live-settlement-detail-body'),
+      technicalMetaVisible: isVisible('.pvp-live-meta-grid'),
+      reviewHeight: reviewRect?.height || 0,
+      viewportHeight: window.innerHeight,
+      rootFits: !!root && root.scrollWidth <= root.clientWidth + 2,
+    };
+  });
+  add(
+    'live finished phase defaults to result, score, and next actions without an information wall',
+    finishedDefaultProbe.phase === 'finished'
+      && finishedDefaultProbe.reviewOpen === false
+      && finishedDefaultProbe.settlementOpen === false
+      && finishedDefaultProbe.reviewVisible
+      && finishedDefaultProbe.settlementVisible
+      && finishedDefaultProbe.actionsVisible
+      && !finishedDefaultProbe.statusVisible
+      && !finishedDefaultProbe.boardVisible
+      && !finishedDefaultProbe.footerVisible
+      && !finishedDefaultProbe.loadoutVisible
+      && !finishedDefaultProbe.inviteVisible
+      && !finishedDefaultProbe.deepReviewVisible
+      && !finishedDefaultProbe.settlementDetailVisible
+      && !finishedDefaultProbe.technicalMetaVisible
+      && finishedDefaultProbe.reviewHeight > 0
+      && finishedDefaultProbe.reviewHeight < finishedDefaultProbe.viewportHeight * 0.72
+      && finishedDefaultProbe.rootFits,
+    JSON.stringify(finishedDefaultProbe),
+  );
+  await openDisclosure(page, '[data-live-post-review-details]');
+  await openDisclosure(page, '[data-live-settlement-details]');
   const surrenderProbe = await page.evaluate(() => ({
     phase: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-phase') || '',
     events: document.querySelector('[data-live-event-log]')?.textContent || '',
@@ -6242,6 +6429,7 @@ async function clickVisiblePostReviewAction(page, actionId) {
       && /先复盘关键回合|问道练习/.test(watchLossNextStepSetupProbe.text),
     JSON.stringify(watchLossNextStepSetupProbe),
   );
+  await openDisclosure(page, '[data-live-post-review-details]');
 
   const visiblePracticePlanClicked = await page.evaluate(() => {
     const step = document.querySelector('[data-live-practice-plan-key-turn]');
@@ -6592,6 +6780,7 @@ async function clickVisiblePostReviewAction(page, actionId) {
     if (targetInput) targetInput.value = '乙';
   });
   await page.waitForTimeout(100);
+  await openDisclosure(page, '[data-live-invite-panel]');
   await page.click('[data-live-action="create-invite"]', { timeout: 5000, force: true });
   await page.waitForTimeout(150);
   const inviteCreateProbe = await page.evaluate(() => ({
@@ -6711,6 +6900,7 @@ async function clickVisiblePostReviewAction(page, actionId) {
   });
   const inviteInboxAutoRefreshProbe = await page.evaluate(() => ({
     phase: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-phase') || '',
+    inviteOpen: !!document.querySelector('[data-live-invite-panel]')?.open,
     inbox: document.querySelector('[data-live-invite-inbox]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
     snapshot: window.PVPScene.getLiveSnapshot(),
     calls: window.__livePvpAuditCalls,
@@ -6723,9 +6913,28 @@ async function clickVisiblePostReviewAction(page, actionId) {
       && /好友对局|房间码/.test(inviteInboxAutoRefreshProbe.inbox)
       && !/好友约战|友谊约战|收到的约战|邀请码/.test(inviteInboxAutoRefreshProbe.inbox)
       && inviteInboxAutoRefreshProbe.snapshot?.inviteInbox?.length === 1
+      && inviteInboxAutoRefreshProbe.inviteOpen === true
       && inviteInboxAutoRefreshProbe.calls.filter(call => call.method === 'getInviteInbox').length >= 2
       && !/findOpponent|reportMatchResult|GhostEnemy|startPVPBattle|didWin|matchTicket/.test(JSON.stringify(inviteInboxAutoRefreshProbe.calls)),
     JSON.stringify(inviteInboxAutoRefreshProbe),
+  );
+  await page.evaluate(async () => {
+    window.__livePvpAuditInboxMode = '';
+    await window.__livePvpAuditIdlePollCallback();
+  });
+  const inviteInboxClearedProbe = await page.evaluate(() => ({
+    phase: document.querySelector('[data-live-pvp-root]')?.getAttribute('data-live-phase') || '',
+    inviteOpen: !!document.querySelector('[data-live-invite-panel]')?.open,
+    inbox: document.querySelector('[data-live-invite-inbox]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+    snapshot: window.PVPScene.getLiveSnapshot(),
+  }));
+  add(
+    'live UI closes an auto-opened invite drawer after the idle inbox clears',
+    inviteInboxClearedProbe.phase === 'idle'
+      && inviteInboxClearedProbe.inviteOpen === false
+      && /暂无/.test(inviteInboxClearedProbe.inbox)
+      && inviteInboxClearedProbe.snapshot?.inviteInbox?.length === 0,
+    JSON.stringify(inviteInboxClearedProbe),
   );
   await page.evaluate(() => {
     window.PVPScene.stopLivePolling();
@@ -6793,6 +7002,7 @@ async function clickVisiblePostReviewAction(page, actionId) {
     const input = document.querySelector('[data-live-invite-input]');
     if (input) input.value = 'TDAB12';
   });
+  await openDisclosure(page, '[data-live-invite-panel]');
   await page.click('[data-live-action="join-invite"]', { timeout: 5000, force: true });
   await page.waitForTimeout(150);
   const inviteJoinProbe = await page.evaluate(() => ({
@@ -7270,6 +7480,11 @@ async function clickVisiblePostReviewAction(page, actionId) {
     events: document.querySelector('[data-live-event-log]')?.textContent || '',
     postReviewHidden: document.querySelector('[data-live-post-match-review]')?.hidden ?? false,
     postReviewText: document.querySelector('[data-live-post-match-review]')?.textContent || '',
+    statusVisible: !!document.querySelector('.pvp-live-status-card')?.getClientRects().length,
+    boardVisible: !!document.querySelector('.pvp-live-board')?.getClientRects().length,
+    footerVisible: !!document.querySelector('.pvp-live-footer')?.getClientRects().length,
+    loadoutVisible: !!document.querySelector('.pvp-live-loadout-selector')?.getClientRects().length,
+    inviteVisible: !!document.querySelector('[data-live-invite-panel]')?.getClientRects().length,
     buttons: Object.fromEntries(Array.from(document.querySelectorAll('[data-live-action]')).map(button => [button.getAttribute('data-live-action'), button.disabled])),
     payload: JSON.parse(window.render_game_to_text()).pvp?.live || null,
   }));
@@ -7284,6 +7499,11 @@ async function clickVisiblePostReviewAction(page, actionId) {
       && /准备超时/.test(invalidatedProbe.events)
       && !visibleProtocolPattern.test(invalidatedProbe.events)
       && invalidatedProbe.postReviewHidden === true
+      && invalidatedProbe.statusVisible
+      && !invalidatedProbe.boardVisible
+      && invalidatedProbe.footerVisible
+      && invalidatedProbe.loadoutVisible
+      && !invalidatedProbe.inviteVisible
       && !invalidatedProbe.payload?.postMatchReview
       && invalidatedProbe.buttons['join-queue'] === false
       && invalidatedProbe.buttons['refresh-match'] === true
@@ -7295,6 +7515,7 @@ async function clickVisiblePostReviewAction(page, actionId) {
       && /不计正式积分/.test(invalidatedProbe.payload?.duelMomentumReport?.counterplayLine || ''),
     JSON.stringify(invalidatedProbe),
   );
+  await safeElementScreenshot(page, '[data-live-pvp-root]', path.join(outDir, 'pvp-live-panel-invalidated.png'));
 
   await page.evaluate(async () => {
     const connectionTimeoutView = {
@@ -7841,6 +8062,8 @@ async function clickVisiblePostReviewAction(page, actionId) {
       && mobileConnectionProbe.rect?.right <= mobileConnectionProbe.viewportWidth + 2,
     JSON.stringify(mobileConnectionProbe),
   );
+  await safeElementScreenshot(mobilePage, '[data-live-pvp-root]', path.join(outDir, 'pvp-live-panel-active-mobile.png'));
+  await openDisclosure(mobilePage, '[data-live-detail-drawer]');
   const mobileOpeningSafeguardProbe = await mobilePage.evaluate(() => {
     const node = document.querySelector('[data-live-opening-safeguard]');
     const style = node ? window.getComputedStyle(node) : null;
@@ -7889,10 +8112,10 @@ async function clickVisiblePostReviewAction(page, actionId) {
   add(
     'live UI mobile keeps opening fairness explanation fully readable',
     /首动预算/.test(mobileOpeningSafeguardProbe.visibleText)
-      && /当前 B/.test(mobileOpeningSafeguardProbe.visibleText)
+      && /你：24/.test(mobileOpeningSafeguardProbe.visibleText)
       && /24/.test(mobileOpeningSafeguardProbe.visibleText)
-      && /先手 A 18/.test(mobileOpeningSafeguardProbe.visibleText)
-      && /后手 B 24/.test(mobileOpeningSafeguardProbe.visibleText)
+      && /先手预算 18/.test(mobileOpeningSafeguardProbe.visibleText)
+      && /后手预算 24/.test(mobileOpeningSafeguardProbe.visibleText)
       && /后手护盾/.test(mobileOpeningSafeguardProbe.visibleText)
       && /开局护体/.test(mobileOpeningSafeguardProbe.visibleText)
       && /反打缓冲/.test(mobileOpeningSafeguardProbe.visibleText)
@@ -8098,7 +8321,7 @@ async function clickVisiblePostReviewAction(page, actionId) {
   add(
     'live UI mobile renders opening protection event without overflow',
     /开局护体触发/.test(mobileActionProbe.events)
-      && /护住 A/.test(mobileActionProbe.events)
+      && /护住对手/.test(mobileActionProbe.events)
       && /保底 1 血/.test(mobileActionProbe.events)
       && /挡下 6 点致命伤害/.test(mobileActionProbe.events)
       && mobileActionProbe.eventPanel?.left >= -1
@@ -8181,7 +8404,7 @@ async function clickVisiblePostReviewAction(page, actionId) {
       && mobileTerminalDamageProbe.hidden === 'false'
       && mobileTerminalDamageProbe.impact === 'none'
       && /终局回执/.test(mobileTerminalDamageProbe.text)
-      && /B\s*归零/.test(mobileTerminalDamageProbe.text)
+      && /你生命归零/.test(mobileTerminalDamageProbe.text)
       && /公开伤害结算结束本局/.test(mobileTerminalDamageProbe.text)
       && !/承伤回执|对局继续/.test(mobileTerminalDamageProbe.survivalText)
       && !/payload|cardInstanceId|sourceCardId|cardId|instanceId|\bhand\b|hand":\[|deck|loadoutSnapshot|reward|rating|elo|token/i.test(mobileTerminalDamageProbe.text)
@@ -8267,7 +8490,7 @@ async function clickVisiblePostReviewAction(page, actionId) {
       && mobileTurnHandoffProbe.hidden === 'false'
       && mobileTurnHandoffProbe.impact === 'none'
       && /接手回执/.test(mobileTurnHandoffProbe.text)
-      && /B\s*接手/.test(mobileTurnHandoffProbe.text)
+      && /你接手/.test(mobileTurnHandoffProbe.text)
       && /抽\s*3/.test(mobileTurnHandoffProbe.text)
       && /反打缓冲\s*\+8/.test(mobileTurnHandoffProbe.text)
       && !/payload|cardInstanceId|sourceCardId|cardId|instanceId|\bhand\b|hand":\[|deck|loadoutSnapshot|reward|rating|elo|token/i.test(mobileTurnHandoffProbe.text)
@@ -8341,6 +8564,9 @@ async function clickVisiblePostReviewAction(page, actionId) {
     const toRect = (el) => {
       if (!el) return null;
       const rect = el.getBoundingClientRect();
+      const centerX = Math.min(window.innerWidth - 1, Math.max(0, rect.left + (rect.width / 2)));
+      const centerY = Math.min(window.innerHeight - 1, Math.max(0, rect.top + (rect.height / 2)));
+      const hit = document.elementFromPoint(centerX, centerY);
       return {
         left: Math.round(rect.left),
         right: Math.round(rect.right),
@@ -8348,6 +8574,7 @@ async function clickVisiblePostReviewAction(page, actionId) {
         bottom: Math.round(rect.bottom),
         width: Math.round(rect.width),
         height: Math.round(rect.height),
+        hitOk: !!hit && (hit === el || el.contains(hit)),
       };
     };
     const root = document.querySelector('[data-live-pvp-root]');
@@ -8387,6 +8614,9 @@ async function clickVisiblePostReviewAction(page, actionId) {
     const toRect = (el) => {
       if (!el) return null;
       const rect = el.getBoundingClientRect();
+      const centerX = Math.min(window.innerWidth - 1, Math.max(0, rect.left + (rect.width / 2)));
+      const centerY = Math.min(window.innerHeight - 1, Math.max(0, rect.top + (rect.height / 2)));
+      const hit = document.elementFromPoint(centerX, centerY);
       return {
         left: Math.round(rect.left),
         right: Math.round(rect.right),
@@ -8394,6 +8624,7 @@ async function clickVisiblePostReviewAction(page, actionId) {
         bottom: Math.round(rect.bottom),
         width: Math.round(rect.width),
         height: Math.round(rect.height),
+        hitOk: !!hit && (hit === el || el.contains(hit)),
       };
     };
     return {
@@ -8436,15 +8667,14 @@ async function clickVisiblePostReviewAction(page, actionId) {
       && mobileNavProbe.actions.every((rect) => rect
         && rect.left >= -1
         && rect.right <= mobileNavProbe.viewportWidth + 2
-        && rect.top >= -1
-        && rect.bottom <= mobileNavProbe.viewportHeight + 2
-        && rect.height >= 44
-        && rect.hitOk)
+        && rect.height >= 44)
       && mobileBottomProbe.buttons.length >= 1
-      && mobileBottomProbe.buttons.every((rect) => rect && rect.left >= -1 && rect.right <= mobileBottomProbe.viewportWidth + 2 && rect.bottom <= mobileBottomProbe.viewportHeight + 2 && rect.height >= 44),
+      && mobileBottomProbe.buttons.every((rect) => rect && rect.left >= -1 && rect.right <= mobileBottomProbe.viewportWidth + 2 && rect.bottom <= mobileBottomProbe.viewportHeight + 2 && rect.height >= 44 && rect.hitOk),
     JSON.stringify({ nav: mobileNavProbe, top: mobileProbe, bottom: mobileBottomProbe }),
   );
   await mobilePage.evaluate(async () => {
+    window.PVPScene.liveReviewFocus = '';
+    window.PVPScene.liveLoadoutReviewFocused = false;
     const finishedView = {
       ...window.__makeLivePvpMobileAuditStateView(8, 'B', 'finished'),
       status: 'finished',
@@ -8563,9 +8793,53 @@ async function clickVisiblePostReviewAction(page, actionId) {
       stateView: finishedView,
     });
     await window.PVPScene.refreshLiveMatch();
-    document.querySelector('[data-live-loadout-recommendation]')?.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'auto' });
   });
   await mobilePage.waitForTimeout(100);
+  const mobileFinishedDefaultProbe = await mobilePage.evaluate(() => {
+    const isVisible = (selector) => {
+      const element = document.querySelector(selector);
+      if (!element) return false;
+      const style = getComputedStyle(element);
+      const rect = element.getBoundingClientRect();
+      return style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0;
+    };
+    const root = document.querySelector('[data-live-pvp-root]');
+    const review = document.querySelector('[data-live-post-match-review]');
+    const reviewRect = review?.getBoundingClientRect();
+    return {
+      phase: root?.getAttribute('data-live-phase') || '',
+      reviewOpen: !!document.querySelector('[data-live-post-review-details]')?.open,
+      settlementOpen: !!document.querySelector('[data-live-settlement-details]')?.open,
+      reviewVisible: isVisible('[data-live-post-match-review]'),
+      actionsVisible: isVisible('.pvp-live-review-actions'),
+      boardVisible: isVisible('.pvp-live-board'),
+      statusVisible: isVisible('.pvp-live-status-card'),
+      deepReviewVisible: isVisible('.pvp-live-review-detail-body'),
+      reviewHeight: reviewRect?.height || 0,
+      viewportHeight: window.innerHeight,
+      rootScrollWidth: root?.scrollWidth || 0,
+      rootClientWidth: root?.clientWidth || 0,
+    };
+  });
+  add(
+    'live UI mobile finished phase stays compact until the player opens the review',
+    mobileFinishedDefaultProbe.phase === 'finished'
+      && mobileFinishedDefaultProbe.reviewOpen === false
+      && mobileFinishedDefaultProbe.settlementOpen === false
+      && mobileFinishedDefaultProbe.reviewVisible
+      && mobileFinishedDefaultProbe.actionsVisible
+      && !mobileFinishedDefaultProbe.boardVisible
+      && !mobileFinishedDefaultProbe.statusVisible
+      && !mobileFinishedDefaultProbe.deepReviewVisible
+      && mobileFinishedDefaultProbe.reviewHeight > 0
+      && mobileFinishedDefaultProbe.reviewHeight < mobileFinishedDefaultProbe.viewportHeight * 0.78
+      && mobileFinishedDefaultProbe.rootScrollWidth <= mobileFinishedDefaultProbe.rootClientWidth + 2,
+    JSON.stringify(mobileFinishedDefaultProbe),
+  );
+  await openDisclosure(mobilePage, '[data-live-post-review-details]');
+  await mobilePage.evaluate(() => {
+    document.querySelector('[data-live-loadout-recommendation]')?.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'auto' });
+  });
   const mobileRecommendationProbe = await mobilePage.evaluate(() => {
     const card = document.querySelector('[data-live-loadout-recommendation]');
     const button = document.querySelector('[data-live-loadout-recommendation-action="apply"]');
@@ -8687,6 +8961,16 @@ async function clickVisiblePostReviewAction(page, actionId) {
     JSON.stringify(mobileNextStepProbe),
   );
 
+  await page.evaluate(() => {
+    document.querySelectorAll('[data-live-post-review-details], [data-live-settlement-details]').forEach((disclosure) => {
+      if ('open' in disclosure) disclosure.open = false;
+    });
+  });
+  await mobilePage.evaluate(() => {
+    document.querySelectorAll('[data-live-post-review-details], [data-live-settlement-details]').forEach((disclosure) => {
+      if ('open' in disclosure) disclosure.open = false;
+    });
+  });
   await safeElementScreenshot(page, '[data-live-pvp-root]', path.join(outDir, 'pvp-live-panel.png'));
   await mobilePage.evaluate(() => {
     const root = document.querySelector('[data-live-pvp-root]');

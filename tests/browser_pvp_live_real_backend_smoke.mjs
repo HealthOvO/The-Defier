@@ -674,7 +674,12 @@ async function assertMobileActionable(page, selector, label) {
 }
 
 async function clickLiveControl(page, selector, label) {
-  await page.waitForSelector(selector, { timeout: 5000 });
+  await page.waitForSelector(selector, { state: 'attached', timeout: 5000 });
+  await page.evaluate((targetSelector) => {
+    const target = document.querySelector(targetSelector);
+    const disclosure = target?.closest('details');
+    if (disclosure && 'open' in disclosure) disclosure.open = true;
+  }, selector);
   const waitForActionableControl = async () => {
     const deadline = Date.now() + 5000;
     let actionability = null;
@@ -687,6 +692,8 @@ async function clickLiveControl(page, selector, label) {
         let fallback = null;
         for (let index = 0; index < targets.length; index += 1) {
           const target = targets[index];
+          const disclosure = target.closest('details');
+          if (disclosure && 'open' in disclosure) disclosure.open = true;
           const scrollBlocks = ['nearest', 'start', 'center', 'end'];
           for (const scrollBlock of scrollBlocks) {
             target.scrollIntoView({ block: scrollBlock, inline: 'nearest' });
@@ -3268,8 +3275,8 @@ async function writeReport() {
       visibilityProbe.hasSnapshotLocked
         && !visibilityProbe.opponentHasSnapshot
         && !visibilityProbe.opponentHandArray
-        && /公开画像/.test(visibilityProbe.renderedOpponentLoadout)
-        && /构筑隐藏/.test(visibilityProbe.renderedOpponentLoadout)
+        && /对手流派/.test(visibilityProbe.renderedOpponentLoadout)
+        && /构筑保密/.test(visibilityProbe.renderedOpponentLoadout)
         && !/shield|hash|斗法谱/.test(visibilityProbe.renderedOpponentLoadout),
       JSON.stringify(visibilityProbe),
     );
@@ -3547,7 +3554,7 @@ async function writeReport() {
       return snapshot?.turnTimer?.phase === 'active'
         && snapshot?.turnTimer?.currentSeat === expectedSeat
         && /行动倒计时/.test(text)
-        && new RegExp(expectedSeat).test(text);
+        && /你/.test(text);
     }, activeFirstSeat);
     const activeTimerProbe = await firstSeatClient.page.evaluate(() => ({
       text: document.querySelector('[data-live-turn-timer]')?.textContent || '',
@@ -3556,7 +3563,7 @@ async function writeReport() {
     add(
       'real browser live match renders authoritative active action countdown',
       /行动倒计时/.test(activeTimerProbe.text)
-        && new RegExp(activeFirstSeat).test(activeTimerProbe.text)
+        && /你/.test(activeTimerProbe.text)
         && activeTimerProbe.payload?.reportVersion === 'pvp-live-turn-timer-v1'
         && activeTimerProbe.payload?.phase === 'active'
         && activeTimerProbe.payload?.currentSeat === activeFirstSeat
@@ -3694,9 +3701,9 @@ async function writeReport() {
     add(
       'real browser live match previews protected lethal opening without hidden opponent payloads',
       /首动预算/.test(activeOpeningPreviewProbe.openingText)
-        && new RegExp(`当前\\s*${activeFirstSeat}`).test(activeOpeningPreviewProbe.openingText)
+        && /你/.test(activeOpeningPreviewProbe.openingText)
         && /后手护盾/.test(activeOpeningPreviewProbe.openingText)
-        && new RegExp(`${activeSecondSeat}\\s*\\+3`).test(activeOpeningPreviewProbe.openingText)
+        && /(?:后手|对手)\s*\+3/.test(activeOpeningPreviewProbe.openingText)
         && activeOpeningPreviewProbe.actionPreview?.reportVersion === 'pvp-live-action-preview-v1'
         && activeOpeningPreviewProbe.actionPreview?.sourceVisibility === 'viewer_public_state'
         && activeOpeningPreviewProbe.actionPreview?.usesHiddenInformation === false
@@ -3786,9 +3793,9 @@ async function writeReport() {
         && realOpeningEndTurnConfirmProbe.after?.currentSeat === realOpeningEndTurnConfirmProbe.before?.currentSeat
         && realOpeningEndTurnConfirmProbe.after?.stateVersion === realOpeningEndTurnConfirmProbe.before?.stateVersion
         && /再次点击确认结束回合/.test(realOpeningEndTurnConfirmProbe.hint)
-        && new RegExp(`交给\\s*${activeSecondSeat}`).test(realOpeningEndTurnConfirmProbe.hint)
+        && /交给\s*对手/.test(realOpeningEndTurnConfirmProbe.hint)
         && /首动预算\s*18/.test(realOpeningEndTurnConfirmProbe.hint)
-        && new RegExp(`后手护盾\\s*${activeSecondSeat}\\s*\\+3`).test(realOpeningEndTurnConfirmProbe.hint)
+        && /后手护盾\s*对手\s*\+3/.test(realOpeningEndTurnConfirmProbe.hint)
         && /反打缓冲\s*\+8/.test(realOpeningEndTurnConfirmProbe.hint)
         && /确认结束/.test(realOpeningEndTurnConfirmProbe.endTurnText),
       JSON.stringify({ activeFirstSeat, activeSecondSeat, realOpeningEndTurnConfirmProbe, openingEndTurnTouchActionable }),
@@ -3803,7 +3810,7 @@ async function writeReport() {
         const ack = state.lastRealtimeIntentResult || null;
         const events = document.querySelector('[data-live-event-log]')?.textContent || '';
         return (ack?.result === 'accepted' && /emote/i.test(String(ack.intentId || '')))
-          || /B · (思考|thinking)/.test(events);
+          || /你 · (思考|thinking)/.test(events);
       },
       null,
       { timeout: 5000 },
@@ -3830,7 +3837,7 @@ async function writeReport() {
         snapshot: window.PVPScene.getLiveSnapshot() || null,
         sessionState: window.PVPScene.getLiveSession().getState(),
       }));
-      if (/B · (思考|thinking)/.test(realSocialUnmutedProbe.events || '')) break;
+      if (/对手 · (思考|thinking)/.test(realSocialUnmutedProbe.events || '')) break;
     }
     const socialMuteTouchActionables = [];
     const socialMuteStateProbes = [];
@@ -3887,10 +3894,10 @@ async function writeReport() {
       'real browser persists local social mute without ranked impact',
       realSocialSubmitProbe.lastRealtimeIntentResult?.result === 'accepted'
         && !/sync_required|conflicting_state_version/i.test(JSON.stringify(realSocialSubmitProbe))
-        && /B · (思考|thinking)/.test(realSocialUnmutedProbe.events)
+        && /对手 · (思考|thinking)/.test(realSocialUnmutedProbe.events)
         && /已静音/.test(realSocialMutedProbe.status)
         && /对手表情/.test(realSocialMutedProbe.status)
-        && !/B · (思考|thinking)/.test(realSocialMutedProbe.events)
+        && !/对手 · (思考|thinking)/.test(realSocialMutedProbe.events)
         && /"socialMuted":true/.test(realSocialMutedProbe.storage)
         && realSocialMutedProbe.liveSocialMuted === true
         && realSocialMutedProbe.payload?.muted === true
@@ -3918,7 +3925,11 @@ async function writeReport() {
     });
     const openingCardSelector = liveCardSelector(openingCardBeforeProbe.card.instanceId);
     const openingCardConfirmTouchActionable = await clickLiveControl(firstSeatClient.page, openingCardSelector, `${seatSlug(activeFirstSeat)}-opening-card-confirm`);
-    await firstSeatClient.page.waitForTimeout(300);
+    await firstSeatClient.page.waitForFunction(({ cardSelector }) => {
+      const card = document.querySelector(cardSelector);
+      const hint = document.querySelector('[data-live-last-error]')?.textContent || '';
+      return card?.classList.contains('confirming') && /再次点击确认出牌/.test(hint);
+    }, { cardSelector: openingCardSelector }, { timeout: 5000 });
     const realOpeningCardConfirmProbe = await firstSeatClient.page.evaluate(({ before, card, preview, cardSelector }) => {
       const after = window.PVPScene.getLiveSnapshot();
       const selectedCard = document.querySelector(cardSelector);
@@ -3953,12 +3964,12 @@ async function writeReport() {
         && /再次点击确认出牌/.test(realOpeningCardConfirmProbe.hint)
         && /首动预算\s*18/.test(realOpeningCardConfirmProbe.hint)
         && /保底\s*1\s*血/.test(realOpeningCardConfirmProbe.hint)
-        && new RegExp(`后手护盾\\s*${activeSecondSeat}\\s*\\+3`).test(realOpeningCardConfirmProbe.hint)
+        && /后手护盾\s*对手\s*\+3/.test(realOpeningCardConfirmProbe.hint)
         && /反打缓冲\s*\+8/.test(realOpeningCardConfirmProbe.hint)
         && new RegExp(`预算后\\s*${confirmedCardPreview.budgetedDamage}`).test(confirmedHint)
         && new RegExp(`破盾\\s*${confirmedCardPreview.blockedDamage}`).test(confirmedHint)
         && new RegExp(`生命伤害\\s*${confirmedCardPreview.hpDamage}`).test(confirmedHint)
-        && new RegExp(`${confirmedCardPreview.targetSeat}\\s*预计\\s*${confirmedCardPreview.targetHpAfter}\\s*血`).test(confirmedHint)
+        && new RegExp(`对手\\s*预计\\s*${confirmedCardPreview.targetHpAfter}\\s*血`).test(confirmedHint)
         && realOpeningCardConfirmProbe.selectedCardInstanceId === realOpeningCardConfirmProbe.card?.instanceId
         && realOpeningCardConfirmProbe.confirmingCardInstanceId === realOpeningCardConfirmProbe.card?.instanceId
         && /confirming/.test(realOpeningCardConfirmProbe.cardClass)
@@ -4140,7 +4151,7 @@ async function writeReport() {
       return snapshot?.turnTimer?.phase === 'active'
         && snapshot?.turnTimer?.currentSeat === expectedSeat
         && /行动倒计时/.test(text)
-        && new RegExp(expectedSeat).test(text);
+        && /你/.test(text);
     }, activeSecondSeat);
     const secondSeatTimerProbe = await secondSeatClient.page.evaluate(() => ({
       text: document.querySelector('[data-live-turn-timer]')?.textContent || '',
@@ -4166,7 +4177,7 @@ async function writeReport() {
       'real browser end turn switches authoritative action countdown to opponent',
       afterEndTurnSecond.currentSeat === activeSecondSeat
         && /行动倒计时/.test(secondSeatTimerProbe.text)
-        && new RegExp(activeSecondSeat).test(secondSeatTimerProbe.text)
+        && /你/.test(secondSeatTimerProbe.text)
         && secondSeatTimerProbe.payload?.currentSeat === activeSecondSeat
         && secondSeatTimerProbe.payload?.isViewerTurn === true,
       JSON.stringify({ activeFirstSeat, activeSecondSeat, endTurnAfterPlayConfirmProbe, afterEndTurnSecond, secondSeatTimerProbe, endTurnAfterPlayTouchActionable, endTurnAfterPlaySecondTouchActionable }),
@@ -4174,7 +4185,7 @@ async function writeReport() {
     add(
       'real browser end turn renders authoritative handoff receipt',
       /交权回执/.test(afterEndTurnReceiptProbe.text)
-        && new RegExp(`行动权交给\\s*${activeSecondSeat}`).test(afterEndTurnReceiptProbe.text)
+        && /行动权交给\s*你/.test(afterEndTurnReceiptProbe.text)
         && /抽\s*\d+\s*张/.test(afterEndTurnReceiptProbe.text)
         && afterEndTurnReceiptProbe.typeAttr === 'end_turn'
         && afterEndTurnReceiptProbe.actorAttr === activeFirstSeat
@@ -4591,7 +4602,7 @@ async function writeReport() {
         && lethalFinishProbe.terminalHidden === 'false'
         && lethalFinishProbe.terminalImpact === 'none'
         && /终局回执/.test(lethalFinishProbe.terminalText)
-        && new RegExp(`${loserSeat}\\s*归零`).test(lethalFinishProbe.terminalText)
+        && /对手生命归零/.test(lethalFinishProbe.terminalText)
         && /公开伤害结算结束本局/.test(lethalFinishProbe.terminalText)
         && !/payload|cardInstanceId|sourceCardId|cardId|instanceId|\bhand\b|hand":\[|deck|loadoutSnapshot|reward|rating|elo|token/i.test(`${lethalFinishProbe.terminalText} ${JSON.stringify(lethalFinishProbe.snapshot?.actionReceiptReport || {})}`),
       JSON.stringify({ loserSeat, winnerSeat, lethalFinishProbe }),
@@ -4610,7 +4621,7 @@ async function writeReport() {
         && lethalLoserReceiptProbe.terminalHidden === 'false'
         && lethalLoserReceiptProbe.terminalImpact === 'none'
         && /终局回执/.test(lethalLoserReceiptProbe.terminalText)
-        && new RegExp(`${loserSeat}\\s*归零`).test(lethalLoserReceiptProbe.terminalText)
+        && /你生命归零/.test(lethalLoserReceiptProbe.terminalText)
         && /公开伤害结算结束本局/.test(lethalLoserReceiptProbe.terminalText)
         && !/payload|cardInstanceId|sourceCardId|cardId|instanceId|\bhand\b|hand":\[|deck|loadoutSnapshot|reward|rating|elo|token/i.test(`${lethalLoserReceiptProbe.terminalText} ${JSON.stringify(lethalLoserReceiptProbe.actionReceiptReport || {})}`),
       JSON.stringify({ loserSeat, winnerSeat, lethalLoserReceiptProbe }),
@@ -4747,6 +4758,52 @@ async function writeReport() {
       JSON.stringify({ winnerSeat, loserSeat, finishedWinner, finishedLoser, postMatchProbe, postMatchParity }),
     );
     if (isMobileViewport) {
+      const mobileRealDefaultProbe = await loserClient.page.evaluate(() => {
+        const isVisible = (selector) => {
+          const element = document.querySelector(selector);
+          if (!element) return false;
+          const style = getComputedStyle(element);
+          const rect = element.getBoundingClientRect();
+          return style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0;
+        };
+        const root = document.querySelector('[data-live-pvp-root]');
+        const review = document.querySelector('[data-live-post-match-review]');
+        const reviewRect = review?.getBoundingClientRect();
+        return {
+          phase: root?.getAttribute('data-live-phase') || '',
+          reviewOpen: !!document.querySelector('[data-live-post-review-details]')?.open,
+          settlementOpen: !!document.querySelector('[data-live-settlement-details]')?.open,
+          reviewVisible: isVisible('[data-live-post-match-review]'),
+          actionsVisible: isVisible('.pvp-live-review-actions'),
+          deepReviewVisible: isVisible('.pvp-live-review-detail-body'),
+          statusVisible: isVisible('.pvp-live-status-card'),
+          boardVisible: isVisible('.pvp-live-board'),
+          reviewHeight: reviewRect?.height || 0,
+          viewportHeight: window.innerHeight,
+          rootScrollWidth: root?.scrollWidth || 0,
+          rootClientWidth: root?.clientWidth || 0,
+        };
+      });
+      add(
+        'real mobile browser live post-match defaults to compact result and actions',
+        mobileRealDefaultProbe.phase === 'finished'
+          && mobileRealDefaultProbe.reviewOpen === false
+          && mobileRealDefaultProbe.settlementOpen === false
+          && mobileRealDefaultProbe.reviewVisible
+          && mobileRealDefaultProbe.actionsVisible
+          && !mobileRealDefaultProbe.deepReviewVisible
+          && !mobileRealDefaultProbe.statusVisible
+          && !mobileRealDefaultProbe.boardVisible
+          && mobileRealDefaultProbe.reviewHeight > 0
+          && mobileRealDefaultProbe.reviewHeight < mobileRealDefaultProbe.viewportHeight * 0.78
+          && mobileRealDefaultProbe.rootScrollWidth <= mobileRealDefaultProbe.rootClientWidth + 2,
+        JSON.stringify(mobileRealDefaultProbe),
+      );
+      await loserClient.page.evaluate(() => {
+        document.querySelectorAll('[data-live-post-review-details], [data-live-settlement-details]').forEach((disclosure) => {
+          if ('open' in disclosure) disclosure.open = true;
+        });
+      });
       await loserClient.page.evaluate(() => {
         document.querySelector('[data-live-post-match-review]')?.scrollIntoView({ block: 'start', inline: 'nearest' });
       });
@@ -5574,6 +5631,11 @@ async function writeReport() {
         seasonHonorText: document.querySelector('[data-live-season-honor]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
         seasonHonorRewardText: document.querySelector('[data-live-season-honor-reward]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
         seasonHonorRewardPresent: !!document.querySelector('[data-live-season-honor-reward]'),
+        statusVisible: !!document.querySelector('.pvp-live-status-card')?.getClientRects().length,
+        boardVisible: !!document.querySelector('.pvp-live-board')?.getClientRects().length,
+        footerVisible: !!document.querySelector('.pvp-live-footer')?.getClientRects().length,
+        loadoutVisible: !!document.querySelector('.pvp-live-loadout-selector')?.getClientRects().length,
+        inviteVisible: !!document.querySelector('[data-live-invite-panel]')?.getClientRects().length,
         snapshot,
         textPayload,
         matchRead,
@@ -5592,6 +5654,11 @@ async function writeReport() {
         && invalidatedNoSeasonHonorProbe.eventTypes.includes('ready_timeout')
         && invalidatedNoSeasonHonorProbe.eventTypes.includes('match_invalidated')
         && invalidatedNoSeasonHonorProbe.postReviewHidden === true
+        && invalidatedNoSeasonHonorProbe.statusVisible
+        && !invalidatedNoSeasonHonorProbe.boardVisible
+        && invalidatedNoSeasonHonorProbe.footerVisible
+        && invalidatedNoSeasonHonorProbe.loadoutVisible
+        && !invalidatedNoSeasonHonorProbe.inviteVisible
         && !/正式积分|天道币|赛季荣誉/.test(`${invalidatedNoSeasonHonorProbe.postReviewText} ${invalidatedNoSeasonHonorProbe.settlementText} ${invalidatedNoSeasonHonorProbe.seasonHonorText}`)
         && invalidatedNoSeasonHonorProbe.seasonHonorRewardText === ''
         && !invalidatedNoSeasonHonorProbe.seasonHonorRewardPresent

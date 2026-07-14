@@ -119,6 +119,52 @@ const challengeHubMethods = Object.create(null);
     }
     return key || '当前轮换';
   };
+  const describeOfficialScoring = (scoring = {}) => {
+    const presentations = {
+      balanced: {
+        modeLabel: '均衡计分',
+        formulaLabel: '正式得分按基础表现结算'
+      },
+      tempo: {
+        modeLabel: '速攻计分',
+        formulaLabel: '正式得分由基础表现与回合节奏奖励共同结算'
+      },
+      survival: {
+        modeLabel: '生存计分',
+        formulaLabel: '正式得分由基础表现与剩余生命奖励共同结算'
+      }
+    };
+    return presentations[String(scoring?.mode || 'balanced')] || {
+      modeLabel: '天道计分',
+      formulaLabel: '正式得分由服务器按本轮规则结算'
+    };
+  };
+  const describeWorldRiftContribution = () => '贡献由基础表现、战斗得分、生存状态与回合节奏共同结算，单次上下限由本轮规则固定';
+  const toPlayerFacingLabel = (value = '', fallback = '') => {
+    const text = String(value || '').trim();
+    return text && !/^[a-z0-9:_-]+$/i.test(text) ? text : fallback;
+  };
+  const describePvpPracticeEvent = (eventType = '') => ({
+    snapshot_locked: '战局已锁定',
+    mulligan_completed: '起手调整完成',
+    player_ready: '双方就绪',
+    battle_started: '战斗开始',
+    card_played: '卡牌打出',
+    turn_ended: '回合结束',
+    block_gained: '获得格挡',
+    damage_applied: '伤害结算',
+    status_applied: '状态生效',
+    status_mitigated: '状态化解',
+    player_surrendered: '一方认输',
+    match_finished: '战斗结束',
+    turn_timeout: '行动超时',
+    connection_timeout: '连接超时'
+  })[String(eventType || '')] || '公开战况';
+  const describePracticeFocusStatus = (status = '') => ({
+    passed: '已通过',
+    watch: '需关注',
+    failed: '未通过'
+  })[String(status || '')] || '待复查';
   const createProgressEntry = () => ({
     attempts: 0,
     completions: 0,
@@ -425,7 +471,7 @@ const challengeHubMethods = Object.create(null);
     if (debtStatus) {
       return {
         key: `debt:${debtStatus}`,
-        label: `债账·${debtStatus}`
+        label: '债账待复核'
       };
     }
     const settlementOutcomeId = String(source.settlementOutcomeId || '').trim();
@@ -433,7 +479,7 @@ const challengeHubMethods = Object.create(null);
     if (settlementOutcomeId || settlementOutcomeLabel) {
       return {
         key: `settlement:${settlementOutcomeId || settlementOutcomeLabel}`,
-        label: settlementOutcomeLabel || `结算·${settlementOutcomeId}`
+        label: toPlayerFacingLabel(settlementOutcomeLabel, '结算待复核')
       };
     }
     const writebackMode = String(source.writebackMode || '').trim();
@@ -448,7 +494,7 @@ const challengeHubMethods = Object.create(null);
     if (writebackMode) {
       return {
         key: `writeback:${writebackMode}`,
-        label: writebackLabelMap[writebackMode] || `回写·${writebackMode}`
+        label: writebackLabelMap[writebackMode] || '回写待复核'
       };
     }
     return {
@@ -1085,7 +1131,7 @@ const challengeHubMethods = Object.create(null);
                         ${tempoScript.map(item => `
                             <div class="challenge-selection-practice-row" data-pvp-live-practice-plan-turn="${escapeHtml(item.id)}">
                                 <strong>${escapeHtml(item.label)}</strong>
-                                <span>${escapeHtml(`#${item.sequence !== null && typeof item.sequence !== 'undefined' ? item.sequence : '-'} · ${item.eventType || '公开事件'}${item.actingSeat ? ` · ${item.actingSeat}` : ''}`)}</span>
+                                <span>${escapeHtml(`${item.sequence !== null && typeof item.sequence !== 'undefined' ? `第 ${item.sequence} 手` : '关键回合'} · ${describePvpPracticeEvent(item.eventType)}`)}</span>
                                 <p>${escapeHtml(item.lesson)}</p>
                                 ${item.drillPrompt ? `<em>${escapeHtml(item.drillPrompt)}</em>` : ''}
                             </div>
@@ -1096,7 +1142,7 @@ const challengeHubMethods = Object.create(null);
                         ${fairnessFocus.map(item => `
                             <div class="challenge-selection-practice-row" data-pvp-live-practice-plan-focus="${escapeHtml(item.id)}">
                                 <strong>${escapeHtml(item.label)}</strong>
-                                <span>${escapeHtml(item.status || 'watch')}</span>
+                                <span>${escapeHtml(describePracticeFocusStatus(item.status))}</span>
                                 <p>${escapeHtml(item.detail)}</p>
                             </div>
                         `).join('')}
@@ -1523,7 +1569,10 @@ const challengeHubMethods = Object.create(null);
     entries.forEach(entry => {
       const sourceMode = String(entry.sourceMode || '').trim();
       if (!sourceMode || sourceModeLabels.has(sourceMode)) return;
-      const label = String(entry.sourceModeLabel || entry.sourceLabel || SEASON_VERIFICATION_ARCHIVE_SOURCE_MODE_META[sourceMode]?.label || sourceMode).trim();
+      const label = toPlayerFacingLabel(
+        entry.sourceModeLabel || entry.sourceLabel || SEASON_VERIFICATION_ARCHIVE_SOURCE_MODE_META[sourceMode]?.label,
+        '其他验证来源'
+      );
       if (label) {
         sourceModeLabels.set(sourceMode, label);
       }
@@ -1531,7 +1580,7 @@ const challengeHubMethods = Object.create(null);
     entries.forEach(entry => {
       const phaseKey = String(entry.phaseId || '').trim();
       if (!phaseKey || phaseLabels.has(phaseKey)) return;
-      const label = String(entry.phaseLabel || phaseKey).trim();
+      const label = toPlayerFacingLabel(entry.phaseLabel, '其他阶段');
       if (label) {
         phaseLabels.set(phaseKey, label);
       }
@@ -1586,7 +1635,7 @@ const challengeHubMethods = Object.create(null);
     if (normalizedState.sourceMode !== 'all' && !sourceModeLabels.has(normalizedState.sourceMode)) {
       sourceModeOptions.push({
         value: normalizedState.sourceMode,
-        label: normalizedState.sourceMode
+        label: '其他验证来源'
       });
     }
     const phaseOptions = [{
@@ -1602,7 +1651,7 @@ const challengeHubMethods = Object.create(null);
     if (normalizedState.phaseKey !== 'all' && !phaseLabels.has(normalizedState.phaseKey)) {
       phaseOptions.push({
         value: normalizedState.phaseKey,
-        label: normalizedState.phaseKey
+        label: '其他阶段'
       });
     }
     const trajectoryOptions = [{
@@ -1618,13 +1667,13 @@ const challengeHubMethods = Object.create(null);
     if (normalizedState.trajectoryKey !== 'all' && !trajectoryLabels.has(normalizedState.trajectoryKey)) {
       trajectoryOptions.push({
         value: normalizedState.trajectoryKey,
-        label: normalizedState.trajectoryKey
+        label: '去向待复核'
       });
     }
-    const sourceModeLabel = normalizedState.sourceMode === 'all' ? SEASON_VERIFICATION_ARCHIVE_SOURCE_MODE_META.all.label : sourceModeOptions.find(item => item.value === normalizedState.sourceMode)?.label || normalizedState.sourceMode;
+    const sourceModeLabel = normalizedState.sourceMode === 'all' ? SEASON_VERIFICATION_ARCHIVE_SOURCE_MODE_META.all.label : sourceModeOptions.find(item => item.value === normalizedState.sourceMode)?.label || '其他验证来源';
     const resultStatusLabel = SEASON_VERIFICATION_ARCHIVE_RESULT_META[normalizedState.resultStatus]?.label || SEASON_VERIFICATION_ARCHIVE_RESULT_META.all.label;
-    const phaseLabel = normalizedState.phaseKey === 'all' ? '全部阶段' : phaseOptions.find(item => item.value === normalizedState.phaseKey)?.label || normalizedState.phaseKey;
-    const trajectoryLabel = normalizedState.trajectoryKey === 'all' ? SEASON_VERIFICATION_ARCHIVE_TRAJECTORY_META.all.label : trajectoryOptions.find(item => item.value === normalizedState.trajectoryKey)?.label || normalizedState.trajectoryKey;
+    const phaseLabel = normalizedState.phaseKey === 'all' ? '全部阶段' : phaseOptions.find(item => item.value === normalizedState.phaseKey)?.label || '其他阶段';
+    const trajectoryLabel = normalizedState.trajectoryKey === 'all' ? SEASON_VERIFICATION_ARCHIVE_TRAJECTORY_META.all.label : trajectoryOptions.find(item => item.value === normalizedState.trajectoryKey)?.label || '去向待复核';
     const roleLabel = SEASON_VERIFICATION_ARCHIVE_ROLE_META[normalizedState.role]?.label || SEASON_VERIFICATION_ARCHIVE_ROLE_META.all.label;
     const sortLabel = SEASON_VERIFICATION_ARCHIVE_SORT_META[normalizedState.sortBy]?.label || SEASON_VERIFICATION_ARCHIVE_SORT_META.recent.label;
     const defaultState = createSeasonVerificationArchiveFilterState();
@@ -2717,7 +2766,7 @@ const challengeHubMethods = Object.create(null);
             <div class="challenge-danger-head"><strong>${escapeHtml(cleared ? '裂隙余响' : phaseTitle)}</strong><span>${progressPercent}%</span></div>
             <div class="world-rift-progress-track" role="progressbar" aria-label="全服裂隙进度" aria-valuemin="0" aria-valuemax="${totalHp}" aria-valuenow="${appliedDamage}"><span style="width:${progressPercent}%"></span></div>
             <p class="challenge-danger-summary">全服已推进 ${appliedDamage}/${totalHp}；溢出会穿透到下一阶段，击破后贡献转入余响。</p>
-            <div class="challenge-danger-foot"><span>无末刀奖励</span><span>状态版本 ${clampInt(world.stateVersion, 0)}</span></div>
+            <div class="challenge-danger-foot"><span>无末刀奖励</span><span>全服同步 · 第 ${clampInt(world.stateVersion, 0)} 刻</span></div>
           </div>
           <div class="challenge-tag-strip">
             <span class="challenge-tag">天道裁定</span>
@@ -2728,12 +2777,11 @@ const challengeHubMethods = Object.create(null);
         </article>`;
     }
     if (rulesEl) {
-      const formula = String(rotation.contributionFormula?.formulaText || rotation.contribution?.formulaText || rotation.scoring?.formulaText || 'contribution = clamp(300 + score * 2 + 生存加成 + 节奏加成, 300, 2400)');
       const rules = [
         `轮换窗口：${rotation.rotationId || '等待服务器'} · UTC 周轮换`,
         `正式额度：每账号每轮 ${view.attemptLimit} 次，发车即消耗；失败、放弃和过期不返还`,
         '统一命盘：第 N 次出征对所有账号使用相同的第 N 号服务端种子',
-        `贡献公式：${formula}`,
+        `贡献结算：${describeWorldRiftContribution()}`,
         '世界推进：贡献可跨阶段溢出；击破后进入余响，不产生负生命',
         '榜单规则：贡献最高三次之和，再比较最佳单次、血量与回合；不使用提交时间',
         '奖励边界：个人与全服里程碑只发外观用途荣誉；没有末刀、首杀或战力奖励'
@@ -2951,7 +2999,7 @@ const challengeHubMethods = Object.create(null);
         const bestScore = clampInt(officialLadder.personalBest?.officialScore ?? officialLadder.personalBest?.score, 0);
         const completedAttempts = clampInt(officialLadder.personalBest?.completedAttempts, 0);
         const selfRank = clampInt(officialLadder.myRank?.rank, 0);
-        const formulaText = String(scoring.formulaText || 'officialScore = server authoritative score');
+        const scoringPresentation = describeOfficialScoring(scoring);
         const phaseMessage = officialLadder.phase === 'login_required'
           ? '登录后才能读取正式轮换、次数、成绩和奖励。'
           : officialLadder.phase === 'error'
@@ -2988,9 +3036,9 @@ const challengeHubMethods = Object.create(null);
             <div class="challenge-danger-band">
               <div class="challenge-danger-head">
                 <strong>服务端正式计分</strong>
-                <span>${escapeHtml(String(scoring.mode || 'balanced'))}</span>
+                <span>${escapeHtml(scoringPresentation.modeLabel)}</span>
               </div>
-              <p class="challenge-danger-summary">${escapeHtml(formulaText)}</p>
+              <p class="challenge-danger-summary">${escapeHtml(scoringPresentation.formulaLabel)}</p>
               <div class="challenge-danger-foot">
                 <span>只接受完整重放回执</span>
                 <span>并列顺序：回合更少 / 剩余生命更高 / 更早提交</span>
@@ -3060,9 +3108,9 @@ const challengeHubMethods = Object.create(null);
         const scoring = rotation.scoring || {};
         rules = [
           `轮换窗口：${rotation.rotationId || '等待服务器'} · UTC 周轮换`,
-          `正式次数：每账号每轮 ${officialLadder.attemptLimit} 次，预留 attempt 即消耗额度`,
+          `正式次数：每账号每轮 ${officialLadder.attemptLimit} 次，确认出战即占用一次正式次数`,
           '统一种子：各账号第 N 次正式尝试共享第 N 号服务端种子槽',
-          `正式计分：${scoring.formulaText || '以服务端权威结算分为准'}`,
+          `正式计分：${describeOfficialScoring(scoring).formulaLabel}`,
           '准入条件：天道裁定、完整复演且全程校验通过',
           '并列顺序：分数降序、回合升序、剩余生命降序、提交时间升序',
           '离线边界：本地练习不限次数，但不计榜、不占正式额度、不发权威奖励'
@@ -3419,7 +3467,7 @@ const challengeHubMethods = Object.create(null);
             <h3>${escapeHtml(rotation.title || '等待本周轮换')}</h3>
             <p>${escapeHtml(rotation.description || '正式规则由服务器统一下发，不读取本地伪榜。')}</p>
             <div class="challenge-record-tags">
-              <span class="challenge-tag">${escapeHtml(String(scoring.mode || 'balanced'))}</span>
+              <span class="challenge-tag">${escapeHtml(describeOfficialScoring(scoring).modeLabel)}</span>
               <span class="challenge-tag">UTC 周轮换</span>
               <span class="challenge-tag">完整重放</span>
             </div>

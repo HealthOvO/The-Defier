@@ -204,6 +204,21 @@ assert.ok(
   !challengeHubSource.includes('准入条件：server_authoritative + server_replayed + fullReplayPassed'),
   'challenge admission rules should not expose internal implementation flags',
 );
+[
+  '均衡计分',
+  '正式得分按基础表现结算',
+  '确认出战即占用一次正式次数',
+  '贡献由基础表现、战斗得分、生存状态与回合节奏共同结算',
+].forEach((copy) => {
+  assert.ok(challengeHubSource.includes(copy), `challenge screens should pin player-facing scoring copy: ${copy}`);
+});
+[
+  'officialScore = server authoritative score',
+  '预留 attempt 即消耗额度',
+  'contribution = clamp(300 + score * 2',
+].forEach((copy) => {
+  assert.ok(!challengeHubSource.includes(copy), `challenge screens should not expose scoring implementation text: ${copy}`);
+});
 assertHasPattern(
   frontendUpgradeCss,
   /\.challenge-selection-banner\s*>\s*summary/,

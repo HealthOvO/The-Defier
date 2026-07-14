@@ -409,118 +409,6 @@
                 <!-- Live PVP Tab -->
                 <div id="tab-live" class="pvp-tab-pane pvp-live-shell active" role="tabpanel"
                     aria-labelledby="pvp-tab-live" data-live-pvp-root data-live-phase="idle">
-                    <div class="pvp-risk-brief pvp-live-status-card">
-                        <div class="pvp-risk-kicker">真人对决 · 开天赛季</div>
-                        <div class="pvp-risk-header">
-                            <div class="pvp-risk-heading">
-                                <div class="pvp-risk-title" data-live-phase-label>等待挑战</div>
-                                <div class="pvp-risk-subtitle" data-live-summary>登录后选择斗法谱，匹配实力接近的真人对手。</div>
-                            </div>
-                            <div class="pvp-risk-dri" data-live-status-chip>待命</div>
-                        </div>
-                        <div class="pvp-live-meta-grid" aria-hidden="true">
-                            <div class="pvp-live-meta">
-                                <span class="label">队列</span>
-                                <span class="value" data-live-queue-ticket>--</span>
-                            </div>
-                            <div class="pvp-live-meta">
-                                <span class="label">战局</span>
-                                <span class="value" data-live-match-id>--</span>
-                            </div>
-                            <div class="pvp-live-meta">
-                                <span class="label">席位</span>
-                                <span class="value" data-live-seat>--</span>
-                            </div>
-                            <div class="pvp-live-meta">
-                                <span class="label">版本</span>
-                                <span class="value" data-live-state-version>--</span>
-                            </div>
-                            <div class="pvp-live-meta">
-                                <span class="label">行动</span>
-                                <span class="value" data-live-current-seat>--</span>
-                            </div>
-                        </div>
-                        <div class="pvp-live-trust-grid" data-live-trust-grid aria-label="真人对局状态">
-                            <div class="pvp-live-quality" data-live-trust-item="match-quality" data-live-match-quality>匹配状态：等待开始</div>
-                            <div class="pvp-live-mode-boundary" data-live-trust-item="mode-boundary" data-live-mode-boundary>真人排位会记录胜负与积分；好友对局和练习模式不计分。</div>
-                            <div class="pvp-live-turn-timer" data-live-trust-item="turn-timer" data-live-turn-timer>倒计时：--</div>
-                            <div class="pvp-live-timeout-forecast" data-live-trust-item="timeout-forecast" data-live-timeout-forecast data-live-timeout-forecast-state="idle" data-live-timeout-forecast-source="" data-live-timeout-forecast-hidden="" data-live-timeout-forecast-impact="" data-live-timeout-forecast-automation-count="0" data-live-timeout-forecast-advisory-only="true" role="status" aria-live="polite" hidden>超时预告：等待行动窗口</div>
-                            <div class="pvp-live-connection-status" data-live-trust-item="connection" data-live-connection-status role="status" aria-live="polite">联机：等待对局</div>
-                            <div class="pvp-live-connection-tempo" data-live-trust-item="connection-tempo" data-live-connection-tempo data-live-connection-tempo-state="stable" data-live-connection-tempo-actor="" data-live-connection-tempo-severity="normal" role="status" aria-live="polite" hidden>连接节奏：双方在线，按当前行动窗口继续。</div>
-                            <div class="pvp-live-realtime-status" data-live-trust-item="realtime" data-live-realtime-status role="status" aria-live="polite">同步：等待对局</div>
-                            <div class="pvp-live-opening-safeguard" data-live-trust-item="fairness" data-live-opening-safeguard>公平保护：等待权威状态</div>
-                            <div class="pvp-live-action-receipt" data-live-trust-item="action-receipt" data-live-action-receipt data-live-action-receipt-source="" data-live-action-receipt-hidden="" data-live-action-receipt-seq="" data-live-action-receipt-type="" data-live-action-receipt-acting="" data-live-action-receipt-next-seat="" role="status" aria-live="polite">行动回执：等待首个权威行动</div>
-                            <div class="pvp-live-duel-momentum" data-live-trust-item="momentum" data-live-duel-momentum data-live-duel-momentum-state="idle" data-live-duel-momentum-source="" data-live-duel-momentum-hidden="">局势：等待权威状态</div>
-                            <div class="pvp-live-intent-signal" data-live-trust-item="intent" data-live-intent-signal data-live-intent-signal-state="idle" data-live-intent-signal-source="" data-live-intent-signal-hidden="" data-live-intent-signal-current-seat="">读牌：等待公开意图</div>
-                            <div class="pvp-live-counterplay-guide" data-live-trust-item="counterplay" data-live-counterplay-guide data-live-counterplay-guide-state="idle" data-live-counterplay-guide-source="" data-live-counterplay-guide-hidden="" data-live-counterplay-guide-impact="" data-live-counterplay-guide-response-cards="0" data-live-counterplay-guide-advisory-only="true" hidden>反制建议：等待公开行动窗口</div>
-                            <div class="pvp-live-action-window-receipt" data-live-trust-item="action-window-receipt" data-live-action-window-receipt data-live-action-window-receipt-state="idle" data-live-action-window-receipt-source="" data-live-action-window-receipt-hidden="" data-live-action-window-receipt-impact="" data-live-action-window-receipt-response-cards="0" data-live-action-window-receipt-advisory-only="true" role="status" aria-live="polite" hidden>行动窗口回执：等待有效行动窗口</div>
-                        </div>
-                        <div class="pvp-live-social-panel" data-live-social-panel>
-                            <div class="pvp-live-emote-row">
-                                <button class="pvp-live-emote-button" data-live-emote="respect" onclick="PVPScene.submitLiveEmote('respect')" disabled>抱拳</button>
-                                <button class="pvp-live-emote-button" data-live-emote="thinking" onclick="PVPScene.submitLiveEmote('thinking')" disabled>思考</button>
-                                <button class="pvp-live-emote-button" data-live-emote="well_played" onclick="PVPScene.submitLiveEmote('well_played')" disabled>妙手</button>
-                                <button class="pvp-live-emote-button secondary" data-live-action="toggle-social-mute" onclick="PVPScene.toggleLiveSocialMute()">静音表情</button>
-                            </div>
-                            <div class="pvp-live-social-status" data-live-social-status>对局表情已开启</div>
-                        </div>
-                        <div class="pvp-live-first-guide" data-live-first-guide data-live-first-match-guide>对局提示：匹配后先确认斗法谱与起手牌。</div>
-                        <div class="pvp-live-waiting-report" data-live-waiting-report hidden>等待真人：未进入长等待分支</div>
-                        <div class="pvp-live-replay-share-viewer" data-live-replay-share-viewer-root hidden></div>
-                    </div>
-                    <div class="pvp-live-secondary-grid">
-                        <div class="pvp-live-loadout-selector">
-                            <div class="pvp-live-seat-head">
-                                <span class="pvp-live-seat-title">出战斗法谱</span>
-                                <span class="pvp-live-seat-badge" data-live-selected-loadout>当前：默认斗法谱</span>
-                            </div>
-                            <div class="pvp-live-loadout-presets" data-live-loadout-presets></div>
-                        </div>
-                        <div class="pvp-live-invite-panel" data-live-invite-panel>
-                            <div class="pvp-live-invite-head">
-                                <span>好友对局</span>
-                                <span class="pvp-live-invite-code" data-live-invite-code>--</span>
-                            </div>
-                            <div class="pvp-live-invite-controls">
-                                <input class="pvp-live-invite-input" data-live-target-username type="text" maxlength="40" placeholder="道友用户名（可选）">
-                                <input class="pvp-live-invite-input" data-live-invite-input type="text" maxlength="16" placeholder="输入房间码">
-                                <button class="challenge-btn secondary" data-live-action="create-invite" onclick="PVPScene.createLiveInvite()">创建房间</button>
-                                <button class="challenge-btn secondary" data-live-action="join-invite" onclick="PVPScene.joinLiveInvite()">加入房间</button>
-                                <button class="challenge-btn secondary" data-live-action="cancel-invite" onclick="PVPScene.cancelLiveInvite()">取消房间</button>
-                            </div>
-                            <div class="pvp-live-invite-report" data-live-invite-report>好友对局不计排位积分。</div>
-                            <div class="pvp-live-invite-inbox" data-live-invite-inbox>收到的邀请：暂无</div>
-                        </div>
-                        <div class="pvp-live-post-review" data-live-post-match-review hidden>赛后复盘：等待对局结束</div>
-                    </div>
-                    <div class="pvp-live-board ranking-scroll-area">
-                        <div class="pvp-live-duel-grid">
-                            <section class="pvp-live-seat-panel" data-live-self>
-                                <div class="pvp-live-seat-head">
-                                    <span class="pvp-live-seat-title">我方席位</span>
-                                <span class="pvp-live-seat-badge" data-live-self-seat>--</span>
-                            </div>
-                            <div class="pvp-live-statline" data-live-self-stats>等待权威状态</div>
-                            <div class="pvp-live-public-statuses" data-live-self-statuses>状态：无公开状态</div>
-                            <div class="pvp-live-loadout" data-live-self-loadout>斗法谱：--</div>
-                            <div class="pvp-live-card-row" data-live-hand></div>
-                        </section>
-                            <section class="pvp-live-seat-panel" data-live-opponent>
-                                <div class="pvp-live-seat-head">
-                                    <span class="pvp-live-seat-title">对方席位</span>
-                                <span class="pvp-live-seat-badge" data-live-opponent-seat>--</span>
-                            </div>
-                            <div class="pvp-live-statline" data-live-opponent-stats>仅显示公开信息</div>
-                            <div class="pvp-live-public-statuses" data-live-opponent-statuses>状态：无公开状态</div>
-                            <div class="pvp-live-loadout" data-live-opponent-loadout>公开谱：--</div>
-                                <div class="pvp-live-hidden-hand" data-live-opponent-hand>手牌：--</div>
-                            </section>
-                        </div>
-                        <div class="pvp-live-event-panel" data-live-event-panel>
-                            <div class="pvp-live-event-title">对局记录</div>
-                            <div class="pvp-live-event-log" data-live-event-log>暂无事件</div>
-                        </div>
-                    </div>
                     <div class="pvp-nav-footer pvp-live-footer">
                         <div class="challenge-intent-line pvp-live-account-line" role="status" aria-live="polite">
                             <strong class="pvp-live-account-status" data-live-account-status>尚未登录</strong>
@@ -562,6 +450,114 @@
                                     <span class="text">认输</span>
                                 </button>
                             </div>
+                        </div>
+                    </div>
+                    <div class="pvp-live-secondary-grid">
+                        <section class="pvp-live-loadout-selector" aria-labelledby="pvp-live-loadout-title">
+                            <div class="pvp-live-seat-head">
+                                <span class="pvp-live-seat-title" id="pvp-live-loadout-title">出战斗法谱</span>
+                                <span class="pvp-live-seat-badge" data-live-selected-loadout>当前：默认斗法谱</span>
+                            </div>
+                            <div class="pvp-live-loadout-presets" data-live-loadout-presets></div>
+                        </section>
+                        <details class="pvp-live-invite-panel" data-live-invite-panel>
+                            <summary class="pvp-live-invite-head">
+                                <span>好友对局</span>
+                                <span class="pvp-live-invite-teaser">创建房间或输入房间码</span>
+                                <span class="pvp-live-invite-code" data-live-invite-code>--</span>
+                            </summary>
+                            <div class="pvp-live-invite-body">
+                                <div class="pvp-live-invite-controls">
+                                    <input class="pvp-live-invite-input" data-live-target-username type="text" maxlength="40" placeholder="道友用户名（可选）">
+                                    <input class="pvp-live-invite-input" data-live-invite-input type="text" maxlength="16" placeholder="输入房间码">
+                                    <button class="challenge-btn secondary" data-live-action="create-invite" onclick="PVPScene.createLiveInvite()">创建房间</button>
+                                    <button class="challenge-btn secondary" data-live-action="join-invite" onclick="PVPScene.joinLiveInvite()">加入房间</button>
+                                    <button class="challenge-btn secondary" data-live-action="cancel-invite" onclick="PVPScene.cancelLiveInvite()">取消房间</button>
+                                </div>
+                                <div class="pvp-live-invite-report" data-live-invite-report>好友对局不计排位积分。</div>
+                                <div class="pvp-live-invite-inbox" data-live-invite-inbox>收到的邀请：暂无</div>
+                            </div>
+                        </details>
+                        <section class="pvp-live-post-review" data-live-post-match-review hidden>赛后复盘：等待对局结束</section>
+                    </div>
+                    <div class="pvp-risk-brief pvp-live-status-card">
+                        <div class="pvp-risk-kicker">真人对决 · 开天赛季</div>
+                        <div class="pvp-risk-header">
+                            <div class="pvp-risk-heading">
+                                <div class="pvp-risk-title" data-live-phase-label>等待挑战</div>
+                                <div class="pvp-risk-subtitle" data-live-summary>登录后选择斗法谱，匹配实力接近的真人对手。</div>
+                            </div>
+                            <div class="pvp-risk-dri" data-live-status-chip>待命</div>
+                        </div>
+                        <div class="pvp-live-trust-grid" data-live-trust-grid aria-label="真人对局状态">
+                            <div class="pvp-live-quality" data-live-trust-item="match-quality" data-live-match-quality>匹配状态：等待开始</div>
+                            <div class="pvp-live-mode-boundary" data-live-trust-item="mode-boundary" data-live-mode-boundary>真人排位会记录胜负与积分；好友对局和练习模式不计分。</div>
+                            <div class="pvp-live-turn-timer" data-live-trust-item="turn-timer" data-live-turn-timer>倒计时：--</div>
+                            <div class="pvp-live-timeout-forecast" data-live-trust-item="timeout-forecast" data-live-timeout-forecast data-live-timeout-forecast-state="idle" data-live-timeout-forecast-source="" data-live-timeout-forecast-hidden="" data-live-timeout-forecast-impact="" data-live-timeout-forecast-automation-count="0" data-live-timeout-forecast-advisory-only="true" role="status" aria-live="polite" hidden>超时预告：等待行动窗口</div>
+                            <div class="pvp-live-connection-status" data-live-trust-item="connection" data-live-connection-status role="status" aria-live="polite">联机：等待对局</div>
+                            <div class="pvp-live-connection-tempo" data-live-trust-item="connection-tempo" data-live-connection-tempo data-live-connection-tempo-state="stable" data-live-connection-tempo-actor="" data-live-connection-tempo-severity="normal" role="status" aria-live="polite" hidden>连接节奏：双方在线，按当前行动窗口继续。</div>
+                            <div class="pvp-live-realtime-status" data-live-trust-item="realtime" data-live-realtime-status role="status" aria-live="polite">同步：等待对局</div>
+                            <div class="pvp-live-action-receipt" data-live-trust-item="action-receipt" data-live-action-receipt data-live-action-receipt-source="" data-live-action-receipt-hidden="" data-live-action-receipt-seq="" data-live-action-receipt-type="" data-live-action-receipt-acting="" data-live-action-receipt-next-seat="" role="status" aria-live="polite">行动回执：等待首个权威行动</div>
+                            <div class="pvp-live-counterplay-guide" data-live-trust-item="counterplay" data-live-counterplay-guide data-live-counterplay-guide-state="idle" data-live-counterplay-guide-source="" data-live-counterplay-guide-hidden="" data-live-counterplay-guide-impact="" data-live-counterplay-guide-response-cards="0" data-live-counterplay-guide-advisory-only="true" hidden>反制建议：等待公开行动窗口</div>
+                            <div class="pvp-live-action-window-receipt" data-live-trust-item="action-window-receipt" data-live-action-window-receipt data-live-action-window-receipt-state="idle" data-live-action-window-receipt-source="" data-live-action-window-receipt-hidden="" data-live-action-window-receipt-impact="" data-live-action-window-receipt-response-cards="0" data-live-action-window-receipt-advisory-only="true" role="status" aria-live="polite" hidden>行动窗口回执：等待有效行动窗口</div>
+                            <details class="pvp-live-detail-drawer" data-live-detail-drawer>
+                                <summary class="pvp-live-detail-toggle" data-live-detail-toggle>
+                                    <span>战局详情</span>
+                                    <span>公平规则、局势解读与新手提示</span>
+                                </summary>
+                                <div class="pvp-live-detail-content" data-live-detail-content>
+                                    <div class="pvp-live-meta-grid" aria-hidden="true">
+                                        <div class="pvp-live-meta"><span class="label">队列</span><span class="value" data-live-queue-ticket>--</span></div>
+                                        <div class="pvp-live-meta"><span class="label">战局</span><span class="value" data-live-match-id>--</span></div>
+                                        <div class="pvp-live-meta"><span class="label">席位</span><span class="value" data-live-seat>--</span></div>
+                                        <div class="pvp-live-meta"><span class="label">版本</span><span class="value" data-live-state-version>--</span></div>
+                                        <div class="pvp-live-meta"><span class="label">行动</span><span class="value" data-live-current-seat>--</span></div>
+                                    </div>
+                                    <div class="pvp-live-opening-safeguard" data-live-trust-item="fairness" data-live-opening-safeguard>公平保护：等待权威状态</div>
+                                    <div class="pvp-live-duel-momentum" data-live-trust-item="momentum" data-live-duel-momentum data-live-duel-momentum-state="idle" data-live-duel-momentum-source="" data-live-duel-momentum-hidden="">局势：等待权威状态</div>
+                                    <div class="pvp-live-intent-signal" data-live-trust-item="intent" data-live-intent-signal data-live-intent-signal-state="idle" data-live-intent-signal-source="" data-live-intent-signal-hidden="" data-live-intent-signal-current-seat="">读牌：等待公开意图</div>
+                                    <div class="pvp-live-first-guide" data-live-first-guide data-live-first-match-guide>对局提示：匹配后先确认斗法谱与起手牌。</div>
+                                </div>
+                            </details>
+                        </div>
+                        <div class="pvp-live-social-panel" data-live-social-panel>
+                            <div class="pvp-live-emote-row">
+                                <button class="pvp-live-emote-button" data-live-emote="respect" onclick="PVPScene.submitLiveEmote('respect')" disabled>抱拳</button>
+                                <button class="pvp-live-emote-button" data-live-emote="thinking" onclick="PVPScene.submitLiveEmote('thinking')" disabled>思考</button>
+                                <button class="pvp-live-emote-button" data-live-emote="well_played" onclick="PVPScene.submitLiveEmote('well_played')" disabled>妙手</button>
+                                <button class="pvp-live-emote-button secondary" data-live-action="toggle-social-mute" onclick="PVPScene.toggleLiveSocialMute()">静音表情</button>
+                            </div>
+                            <div class="pvp-live-social-status" data-live-social-status>对局表情已开启</div>
+                        </div>
+                        <div class="pvp-live-waiting-report" data-live-waiting-report hidden>等待真人：未进入长等待分支</div>
+                        <div class="pvp-live-replay-share-viewer" data-live-replay-share-viewer-root hidden></div>
+                    </div>
+                    <div class="pvp-live-board">
+                        <div class="pvp-live-duel-grid">
+                            <section class="pvp-live-seat-panel" data-live-self>
+                                <div class="pvp-live-seat-head">
+                                    <span class="pvp-live-seat-title">我方席位</span>
+                                <span class="pvp-live-seat-badge" data-live-self-seat>--</span>
+                            </div>
+                            <div class="pvp-live-statline" data-live-self-stats>等待权威状态</div>
+                            <div class="pvp-live-public-statuses" data-live-self-statuses>状态：无公开状态</div>
+                            <div class="pvp-live-loadout" data-live-self-loadout>斗法谱：--</div>
+                            <div class="pvp-live-card-row" data-live-hand></div>
+                        </section>
+                            <section class="pvp-live-seat-panel" data-live-opponent>
+                                <div class="pvp-live-seat-head">
+                                    <span class="pvp-live-seat-title">对方席位</span>
+                                <span class="pvp-live-seat-badge" data-live-opponent-seat>--</span>
+                            </div>
+                            <div class="pvp-live-statline" data-live-opponent-stats>仅显示公开信息</div>
+                            <div class="pvp-live-public-statuses" data-live-opponent-statuses>状态：无公开状态</div>
+                            <div class="pvp-live-loadout" data-live-opponent-loadout>公开谱：--</div>
+                                <div class="pvp-live-hidden-hand" data-live-opponent-hand>手牌：--</div>
+                            </section>
+                        </div>
+                        <div class="pvp-live-event-panel" data-live-event-panel>
+                            <div class="pvp-live-event-title">对局记录</div>
+                            <div class="pvp-live-event-log" data-live-event-log>暂无事件</div>
                         </div>
                     </div>
                 </div>

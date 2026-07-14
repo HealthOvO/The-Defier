@@ -60,6 +60,7 @@ export const PVPScene = {
   liveReviewFocus: '',
   liveLoadoutReviewFocused: false,
   liveLoadoutReviewFocusReason: 'loadout',
+  liveInviteAutoOpened: false,
   rankingFocusId: null,
   rankingFocusData: null,
   lastLoadedRankings: [],
@@ -986,8 +987,9 @@ export const PVPScene = {
     if (timer.phase === 'setup') {
       return `准备倒计时：${remainingSec}s · 双方确认后开战`;
     }
-    const turnLabel = timer.isViewerTurn ? '我的行动窗口' : `等待 ${timer.currentSeat || '--'} 行动`;
-    const baseText = `行动倒计时：${remainingSec}s · 当前 ${timer.currentSeat || '--'} · ${turnLabel}`;
+    const currentLabel = this.formatLiveSeatPerspectiveLabel(timer.currentSeat, '行动方');
+    const turnLabel = timer.isViewerTurn ? '你的行动窗口' : '等待对手行动';
+    const baseText = `行动倒计时：${remainingSec}s · ${currentLabel} · ${turnLabel}`;
     if (timer.remainingMs <= 0) return `${baseText} · 行动超时，等待服务端处理`;
     if (timer.remainingMs <= 10000) {
       const lowTimeText = timer.isViewerTurn ? '最后 10 秒，请确认行动' : '对手思考中，剩余时间不多';
@@ -1065,10 +1067,10 @@ export const PVPScene = {
     ));
     const remainingSec = Math.max(0, Math.ceil(timer.remainingMs / 1000));
     const forecastState = automationCount > 0 ? repeatTimeoutRiskState : firstSoftTimeoutState;
-    const actorLine = isViewerTurn ? '你' : `${currentSeat} 席`;
+    const actorLine = isViewerTurn ? '你' : this.formatLiveSeatPerspectiveLabel(currentSeat, '对手');
     const primaryLine = forecastState === 'first_soft_timeout'
       ? `超时预告：${actorLine}还有 ${remainingSec}s；首次超时会交给服务端低影响托管，${defenseCardAvailable ? '优先使用公开可见防守牌' : '优先执行防守牌或结束回合'}，不会由前端提前判胜。`
-      : `超时预告：${currentSeat} 已有 ${automationCount} 次超时托管；再次超时将等待服务端按行动超时权威结算，前端不会提前改写胜负。`;
+      : `超时预告：${actorLine}已有 ${automationCount} 次超时托管；再次超时将等待服务端按行动超时权威结算，前端不会提前改写胜负。`;
     const secondaryLine = forecastState === 'first_soft_timeout'
       ? '仍可在倒计时内自行行动；托管只兜底低影响防守或交权，不替玩家寻找最优解。'
       : '重复超时属于正式行动窗口风险；继续对局或终局只看服务端权威事件。';
@@ -1096,7 +1098,7 @@ export const PVPScene = {
       : this.getLiveTimeoutAutomationForecast(view, phase);
     if (!report) return '超时预告：等待行动窗口';
     const boundaryLine = report.boundaryLine || '只提示不代打；超时托管规则不改变正式积分、奖励或结算口径。';
-    const sourceLine = `${report.sourceVisibility} · ${report.usesHiddenInformation ? '含隐藏信息' : '不含隐藏信息'} · ${report.rankedImpact === 'none' ? '不写正式积分' : report.rankedImpact}`;
+    const sourceLine = this.formatLiveSourceBoundaryLine(report);
     return `
       <div class="pvp-live-timeout-forecast-line" data-live-timeout-forecast-line>
         <span class="pvp-live-timeout-forecast-chip" data-live-timeout-forecast-chip>超时预告</span>
@@ -1207,6 +1209,125 @@ export const PVPScene = {
     if (labels[key]) return labels[key];
     if (key === 'none') return '不写正式积分';
     return key ? '公开规则' : '公开规则';
+  },
+  formatLiveSourceVisibilityLabel(sourceVisibility = '') {
+    const key = String(sourceVisibility || '').trim();
+    if (!key) return '依据公开信息';
+    if (key === 'replay_public') return '依据公开战报';
+    if (key === 'local_candidate' || key === 'account_preference' || key === 'local_preference') {
+      return '依据当前可见信息';
+    }
+    if (
+      key.startsWith('public_')
+      || key.includes('_public_')
+      || key.endsWith('_public_state')
+      || key === 'authoritative_public_projection'
+      || key === 'audit_safe_public_state'
+    ) {
+      return '依据公开信息';
+    }
+    return '依据公开信息';
+  },
+  formatLiveHiddenInfoLabel(usesHiddenInformation = false) {
+    return usesHiddenInformation === true ? '可能涉及隐藏信息' : '不读取隐藏信息';
+  },
+  formatLiveRankedImpactLabel(rankedImpact = '') {
+    const key = String(rankedImpact || '').trim();
+    if (
+      !key
+      || key === 'none'
+      || key === 'candidate_only'
+      || key === 'friendly_only'
+      || key === 'practice_only'
+      || key === 'honor_only'
+      || key === 'no_ranked_change'
+    ) {
+      return '不影响正式积分';
+    }
+    if (key === 'official' || key === 'ranked_authoritative') return '影响正式积分';
+    return '正式积分以结算为准';
+  },
+  formatLiveSourceBoundaryLine(report = {}) {
+    return [
+      this.formatLiveSourceVisibilityLabel(report.sourceVisibility),
+      this.formatLiveHiddenInfoLabel(report.usesHiddenInformation),
+      this.formatLiveRankedImpactLabel(report.rankedImpact)
+    ].join(' · ');
+  },
+  getLiveSeatPerspectiveContext() {
+    const session = this.getLiveSession && this.getLiveSession();
+    const state = session && typeof session.getState === 'function' ? session.getState() : null;
+    const view = state && state.stateView && typeof state.stateView === 'object' ? state.stateView : null;
+    const viewerSeat = String(state && (state.seatId || view && view.self && view.self.seatId) || '').trim();
+    let firstSeat = '';
+    if (view && (view.firstSeat === 'A' || view.firstSeat === 'B')) {
+      firstSeat = String(view.firstSeat);
+    }
+    if (!firstSeat) {
+      const opening = this.getLiveOpeningSafeguardReport(view);
+      if (opening && (opening.firstSeat === 'A' || opening.firstSeat === 'B')) {
+        firstSeat = String(opening.firstSeat);
+      }
+    }
+    if (!firstSeat) {
+      const replayViewer = this.liveReplayShareViewer && typeof this.liveReplayShareViewer === 'object'
+        ? this.liveReplayShareViewer
+        : null;
+      const replay = replayViewer && replayViewer.replay && typeof replayViewer.replay === 'object'
+        ? replayViewer.replay
+        : null;
+      const summary = replay && replay.publicSummary && typeof replay.publicSummary === 'object'
+        ? replay.publicSummary
+        : null;
+      if (summary && (summary.firstSeat === 'A' || summary.firstSeat === 'B')) {
+        firstSeat = String(summary.firstSeat);
+      } else if (replay && Array.isArray(replay.events)) {
+        const startedEvent = replay.events.find(item => String(item && item.eventType || '') === 'battle_started');
+        const startedPayload = startedEvent && startedEvent.publicData && typeof startedEvent.publicData === 'object'
+          ? startedEvent.publicData
+          : startedEvent && startedEvent.payload && typeof startedEvent.payload === 'object'
+            ? startedEvent.payload
+            : null;
+        if (startedPayload && (startedPayload.firstSeat === 'A' || startedPayload.firstSeat === 'B')) {
+          firstSeat = String(startedPayload.firstSeat);
+        }
+      }
+    }
+    return {
+      viewerSeat,
+      firstSeat,
+      secondSeat: firstSeat === 'A' ? 'B' : firstSeat === 'B' ? 'A' : ''
+    };
+  },
+  formatLiveSeatPerspectiveLabel(seatId = '', fallback = '一方', options = {}) {
+    const key = String(seatId || '').trim();
+    if (!key) return fallback;
+    const { viewerSeat, firstSeat, secondSeat } = this.getLiveSeatPerspectiveContext();
+    const preferSeatOrder = options && options.preferSeatOrder === true;
+    if (!preferSeatOrder && viewerSeat) {
+      if (key === viewerSeat) return '你';
+      if (key === 'A' || key === 'B') return '对手';
+    }
+    if (firstSeat) {
+      if (key === firstSeat) return '先手';
+      if (secondSeat && key === secondSeat) return '后手';
+    }
+    if (viewerSeat) return key === viewerSeat ? '你' : '对手';
+    return fallback;
+  },
+  formatLiveSeatPerspectiveCopy(value = '') {
+    const line = String(value || '');
+    if (!line) return '';
+    return line.replace(/\b[AB]\b/g, seatId => this.formatLiveSeatPerspectiveLabel(seatId, '一方'));
+  },
+  formatLiveSeatPerspectiveList(seatIds = [], fallback = '双方', options = {}) {
+    const list = Array.isArray(seatIds)
+      ? seatIds.map(item => String(item || '').trim()).filter(Boolean)
+      : [];
+    if (!list.length) return fallback;
+    const labels = Array.from(new Set(list.map(item => this.formatLiveSeatPerspectiveLabel(item, fallback, options)).filter(Boolean)));
+    if (!labels.length) return fallback;
+    return labels.join('/');
   },
   getLiveConnectionTempo(view, sourceState = null) {
     const authoritative = view && view.connectionTempoReport && typeof view.connectionTempoReport === 'object'
@@ -1607,28 +1728,31 @@ export const PVPScene = {
     const openerBoundary = opener
       ? `${openerPerspective} · 服务端种子 · 不绑定排队/不绑定房主`
       : `${openerPerspective} · 等待服务端分配`;
-    const currentSeat = report.damageBudget.currentSeat || report.currentSeat || '--';
+    const currentSeat = report.damageBudget.currentSeat || report.currentSeat || '';
+    const currentSeatLabel = this.formatLiveSeatPerspectiveLabel(currentSeat, '当前行动方');
     const currentBudget = report.damageBudget.currentActionBudget;
     const currentBudgetText = currentBudget === null
-      ? `当前 ${currentSeat}：准备后生效`
-      : `当前 ${currentSeat}：${currentBudget}`;
+      ? `${currentSeatLabel}：准备后生效`
+      : `${currentSeatLabel}：${currentBudget}`;
     const protectedSeats = report.openingProtection.protectedSeats.length
-      ? report.openingProtection.protectedSeats.join('/')
+      ? this.formatLiveSeatPerspectiveList(report.openingProtection.protectedSeats, '受保护方')
       : '无';
     const protectionText = report.openingProtection.active
       ? `保护 ${protectedSeats} · 保底 ${report.openingProtection.minimumHp} 血`
       : '已完成首轮保护窗口';
-    const secondSeatBufferSeat = report.secondSeatBuffer.seatId || report.secondSeat || '--';
+    const secondSeatBufferSeat = this.formatLiveSeatPerspectiveLabel(report.secondSeatBuffer.seatId || report.secondSeat, '后手', { preferSeatOrder: true });
     const secondSeatBufferText = report.secondSeatBuffer.block > 0
       ? `${secondSeatBufferSeat} +${report.secondSeatBuffer.block} · 公开规则`
       : '未启用';
     const counterplaySeats = report.counterplay.pendingSeats.length
-      ? `待发放 ${report.counterplay.pendingSeats.join('/')}`
-      : report.counterplay.grantedSeats.length ? `已发放 ${report.counterplay.grantedSeats.join('/')}` : '待触发';
+      ? `待发放 ${this.formatLiveSeatPerspectiveList(report.counterplay.pendingSeats, '后手', { preferSeatOrder: true })}`
+      : report.counterplay.grantedSeats.length
+        ? `已发放 ${this.formatLiveSeatPerspectiveList(report.counterplay.grantedSeats, '后手', { preferSeatOrder: true })}`
+        : '待触发';
     return `
       <span class="pvp-live-opening-safeguard-chip" data-live-opener-assignment>${this.escapeHtml(openerBoundary)}</span>
       <span class="pvp-live-opening-safeguard-chip" data-live-opening-budget>首动预算 · ${this.escapeHtml(currentBudgetText)}</span>
-      <span class="pvp-live-opening-safeguard-chip" data-live-opening-budget-line>先手 ${this.escapeHtml(report.firstSeat || 'A')} ${report.damageBudget.firstSeat} / 后手 ${this.escapeHtml(report.secondSeat || 'B')} ${report.damageBudget.secondSeat}</span>
+      <span class="pvp-live-opening-safeguard-chip" data-live-opening-budget-line>先手预算 ${report.damageBudget.firstSeat} / 后手预算 ${report.damageBudget.secondSeat}</span>
       <span class="pvp-live-opening-safeguard-chip" data-live-opening-second-seat-buffer>后手护盾 · ${this.escapeHtml(secondSeatBufferText)}</span>
       <span class="pvp-live-opening-safeguard-chip" data-live-opening-protection aria-label="开局护体防先手秒杀">${this.escapeHtml(`防先手秒杀 · 开局护体 · ${protectionText}`)}</span>
       <span class="pvp-live-opening-safeguard-chip" data-live-opening-counterplay aria-label="后手行动窗口反打缓冲">${this.escapeHtml(`后手行动窗口 · 反打缓冲 · 护盾 ${report.counterplay.block} · ${counterplaySeats}`)}</span>
@@ -1726,8 +1850,8 @@ export const PVPScene = {
   },
   formatLiveActionPreviewLine(preview) {
     if (!preview) return '';
-    if (preview.summaryLine) return preview.summaryLine;
-    const targetSeat = preview.targetSeat || '目标';
+    if (preview.summaryLine) return this.formatLiveSeatPerspectiveCopy(preview.summaryLine);
+    const targetSeat = this.formatLiveSeatPerspectiveLabel(preview.targetSeat, '目标');
     const protectionText = preview.openingProtection && preview.openingProtection.willTrigger
       ? `；护体触发，保底 ${preview.openingProtection.minimumHp} 血，挡下 ${preview.openingProtection.preventedDamage}`
       : '';
@@ -1909,14 +2033,10 @@ export const PVPScene = {
   renderLiveActionReceiptReport(view) {
     const report = this.getLiveActionReceiptReport(view);
     if (!report) return '行动回执：等待首个权威行动';
-    const summary = report.summaryLine || (report.actionType === 'end_turn'
+    const summary = this.formatLiveSeatPerspectiveCopy(report.summaryLine || (report.actionType === 'end_turn'
       ? `${report.actingSeat || '--'} 结束回合：行动权交给 ${report.nextSeat || '--'}。`
-      : `${report.actingSeat || '--'} 已完成行动。`);
+      : `${report.actingSeat || '--'} 已完成行动。`));
     const receiptLabel = report.actionType === 'end_turn' ? '交权回执' : '行动回执';
-    const source = report.sourceVisibility === 'authoritative_public_projection'
-      ? '权威公开投影'
-      : report.sourceVisibility === 'public_events' ? '公开事件' : report.sourceVisibility;
-    const hidden = report.usesHiddenInformation ? '含隐藏信息' : '不含隐藏信息';
     const budgetClampChip = !report.usesHiddenInformation && report.damage && report.damage.preventedByBudget > 0
       ? `<span class="pvp-live-action-receipt-chip" data-live-action-budget-clamp="public_first_action_budget">${this.escapeHtml(`首动预算挡下 ${report.damage.preventedByBudget}`)}</span>`
       : '';
@@ -1940,7 +2060,7 @@ export const PVPScene = {
           data-live-action-survival-source="${this.escapeHtml(report.sourceVisibility || '')}"
           data-live-action-survival-hidden="${report.usesHiddenInformation ? 'true' : 'false'}"
           data-live-action-survival-impact="${this.escapeHtml(report.rankedImpact || 'none')}"
-        >${this.escapeHtml(`承伤回执 · ${report.damage.targetSeat} 剩余 ${report.damage.targetHpAfter} 血，对局继续`)}</span>`
+        >${this.escapeHtml(`承伤回执 · ${this.formatLiveSeatPerspectiveLabel(report.damage.targetSeat, '目标')}剩余 ${report.damage.targetHpAfter} 血，对局继续`)}</span>`
       : '';
     const terminalDamageChip = !report.usesHiddenInformation
       && report.actionType === 'play_card'
@@ -1957,7 +2077,7 @@ export const PVPScene = {
           data-live-action-terminal-source="${this.escapeHtml(report.sourceVisibility || '')}"
           data-live-action-terminal-hidden="${report.usesHiddenInformation ? 'true' : 'false'}"
           data-live-action-terminal-impact="${this.escapeHtml(report.rankedImpact || 'none')}"
-        >${this.escapeHtml(`终局回执 · ${report.damage.targetSeat} 归零，公开伤害结算结束本局`)}</span>`
+        >${this.escapeHtml(`终局回执 · ${this.formatLiveSeatPerspectiveLabel(report.damage.targetSeat, '目标')}生命归零，公开伤害结算结束本局`)}</span>`
       : '';
     const handoffDrawCount = report.draw ? Math.max(0, Math.floor(Number(report.draw.count) || 0)) : 0;
     const handoffCounterplayBlock = report.counterplay && report.counterplay.granted
@@ -1979,7 +2099,7 @@ export const PVPScene = {
           data-live-action-turn-handoff-source="${this.escapeHtml(report.sourceVisibility || '')}"
           data-live-action-turn-handoff-hidden="${report.usesHiddenInformation ? 'true' : 'false'}"
           data-live-action-turn-handoff-impact="${this.escapeHtml(report.rankedImpact || 'none')}"
-        >${this.escapeHtml(`接手回执 · ${report.nextSeat} 接手${handoffResourceLine ? `，${handoffResourceLine}` : ''}`)}</span>`
+        >${this.escapeHtml(`接手回执 · ${this.formatLiveSeatPerspectiveLabel(report.nextSeat, '下一行动方')}接手${handoffResourceLine ? `，${handoffResourceLine}` : ''}`)}</span>`
       : '';
     const consumedStatuses = report.statusEffects && Array.isArray(report.statusEffects.consumed)
       ? report.statusEffects.consumed.filter(status => status && status.statusId)
@@ -2030,7 +2150,7 @@ export const PVPScene = {
           data-live-action-status-mitigation-hidden="${report.usesHiddenInformation ? 'true' : 'false'}"
           data-live-action-status-mitigation-impact="${this.escapeHtml(report.rankedImpact || 'none')}"
           data-live-action-status-mitigation-safeguard="public_status_mitigated"
-        >${this.escapeHtml(mitigationText)}</span>`;
+        >${this.escapeHtml(this.formatLiveSeatPerspectiveCopy(mitigationText))}</span>`;
       }).join('')
       : '';
     const guardStanceStatus = report.statusEffects && (
@@ -2067,7 +2187,7 @@ export const PVPScene = {
           data-live-action-handoff-risk-impact="${this.escapeHtml(report.rankedImpact || 'none')}"
           data-live-action-handoff-risk-status-count="${this.escapeHtml(String(handoffRisk.statusCount || handoffRisk.statuses.length || 0))}"
           data-live-action-handoff-risk-safeguard="public_status_handoff_risk"
-        >${this.escapeHtml(`交权风险 · ${handoffRiskText}`)}</span>`
+        >${this.escapeHtml(`交权风险 · ${this.formatLiveSeatPerspectiveCopy(handoffRiskText)}`)}</span>`
       : '';
     return `
       <span class="pvp-live-action-receipt-chip">${this.escapeHtml(receiptLabel)}</span>
@@ -2084,7 +2204,6 @@ export const PVPScene = {
       ${healingChip}
       ${cardDrawChip}
       ${handoffRiskChip}
-      <span class="pvp-live-action-receipt-chip">${this.escapeHtml(source)} · ${this.escapeHtml(hidden)} · ${this.escapeHtml(report.rankedImpact || 'none')}</span>
     `;
   },
   getLiveDuelMomentumReport(view) {
@@ -2119,15 +2238,17 @@ export const PVPScene = {
     if (!report) return '局势：等待权威状态';
     const visibilityText = report.usesHiddenInformation ? '含隐藏信息' : '公开状态';
     const rankedText = report.rankedImpact === 'none' ? '不写正式积分' : report.rankedImpact;
-    const hpText = `血线 ${report.viewerSeat || '--'} ${report.viewerHpPct}% / ${report.opponentSeat || '--'} ${report.opponentHpPct}%`;
+    const viewerLabel = this.formatLiveSeatPerspectiveLabel(report.viewerSeat, '你');
+    const opponentLabel = this.formatLiveSeatPerspectiveLabel(report.opponentSeat, '对手');
+    const hpText = `血线 ${viewerLabel} ${report.viewerHpPct}% / ${opponentLabel} ${report.opponentHpPct}%`;
     return `
       <div class="pvp-live-duel-momentum-line">
         <span class="pvp-live-duel-momentum-chip">${this.escapeHtml(report.pressureLabel)}</span>
-        <span>${this.escapeHtml(report.summaryLine)}</span>
+        <span>${this.escapeHtml(this.formatLiveSeatPerspectiveCopy(report.summaryLine))}</span>
       </div>
       <div class="pvp-live-duel-momentum-line">
         <span class="pvp-live-duel-momentum-chip">${this.escapeHtml(report.agencyLabel || '行动窗口')}</span>
-        <span>${this.escapeHtml(report.counterplayLine)}</span>
+        <span>${this.escapeHtml(this.formatLiveSeatPerspectiveCopy(report.counterplayLine))}</span>
       </div>
       <div class="pvp-live-duel-momentum-line compact">
         <span>${this.escapeHtml(hpText)}</span>
@@ -2187,24 +2308,24 @@ export const PVPScene = {
   renderLiveIntentSignalReport(view) {
     const report = this.getLiveIntentSignalReport(view);
     if (!report) return '读牌：等待公开意图';
-    const visibilityText = report.usesHiddenInformation ? '含隐藏信息' : '不含隐藏信息';
-    const rankedText = report.rankedImpact === 'none' ? '不写正式积分' : report.rankedImpact;
+    const sourceText = this.formatLiveSourceBoundaryLine(report);
     const budgetText = report.threat.damageBudget === null
       ? '无额外预算'
       : `预算 ${report.threat.damageBudget}`;
-    const ceilingText = `公开上限 ${report.threat.publicDamageCeiling} / ${budgetText} / ${report.threat.targetSeat || '--'} 预计 ${report.threat.targetHpAfter} 血`;
+    const targetLabel = this.formatLiveSeatPerspectiveLabel(report.threat.targetSeat, '目标');
+    const ceilingText = `公开上限 ${report.threat.publicDamageCeiling} / ${budgetText} / ${targetLabel}预计 ${report.threat.targetHpAfter} 血`;
     return `
       <div class="pvp-live-intent-signal-line">
         <span class="pvp-live-intent-signal-chip">${this.escapeHtml(report.signalLabel)}</span>
-        <span>${this.escapeHtml(report.intentLine)}</span>
+        <span>${this.escapeHtml(this.formatLiveSeatPerspectiveCopy(report.intentLine))}</span>
       </div>
       <div class="pvp-live-intent-signal-line">
         <span class="pvp-live-intent-signal-chip">反制窗口</span>
-        <span>${this.escapeHtml(report.responseLine)}</span>
+        <span>${this.escapeHtml(this.formatLiveSeatPerspectiveCopy(report.responseLine))}</span>
       </div>
       <div class="pvp-live-intent-signal-line compact">
         <span>${this.escapeHtml(ceilingText)}</span>
-        <span>${this.escapeHtml(report.sourceVisibility)} · ${this.escapeHtml(visibilityText)} · ${this.escapeHtml(rankedText)}</span>
+        <span>${this.escapeHtml(sourceText)}</span>
       </div>
     `;
   },
@@ -2309,7 +2430,7 @@ export const PVPScene = {
     const endTurnLine = report.endTurnLine
       ? `<div class="pvp-live-counterplay-guide-line compact" data-live-counterplay-guide-line><span>${this.escapeHtml(report.endTurnLine)}</span></div>`
       : '';
-    const sourceLine = `${report.sourceVisibility} · ${report.usesHiddenInformation ? '含隐藏信息' : '不含隐藏信息'} · ${report.rankedImpact === 'none' ? '不写正式积分' : report.rankedImpact}`;
+    const sourceLine = this.formatLiveSourceBoundaryLine(report);
     return `
       <div class="pvp-live-counterplay-guide-line" data-live-counterplay-guide-line>
         <span class="pvp-live-counterplay-guide-chip" data-live-counterplay-guide-chip>反制建议</span>
@@ -2390,7 +2511,7 @@ export const PVPScene = {
       ? view
       : this.getLiveActionWindowReceipt(view, phase);
     if (!report) return '行动窗口回执：等待有效行动窗口';
-    const sourceLine = `${report.sourceVisibility} · ${report.usesHiddenInformation ? '含隐藏信息' : '不含隐藏信息'} · ${report.rankedImpact === 'none' ? '不改变正式积分' : report.rankedImpact}`;
+    const sourceLine = this.formatLiveSourceBoundaryLine(report);
     const counterplayLine = report.counterplayLine
       ? `<div class="pvp-live-action-window-receipt-line compact" data-live-action-window-receipt-line><span>${this.escapeHtml(report.counterplayLine)}</span></div>`
       : '';
@@ -3505,42 +3626,50 @@ export const PVPScene = {
           <span>当前 ${this.escapeHtml(report.scoreAfter)}</span>
           <span>天道币 +${this.escapeHtml(report.coinsAwarded)}</span>
         </div>
-        ${reasonMarkup}
-        <div class="pvp-live-settlement-boundary">${this.escapeHtml(report.boundary)}</div>
-        ${honor ? `
-          <div
-            class="pvp-live-season-honor"
-            data-live-season-honor
-            data-live-season-honor-power="${this.escapeHtml(honor.powerImpact)}"
-          >
-            <div class="pvp-live-season-honor-head">
-              <span>赛季荣誉</span>
-              <span>${this.escapeHtml(honor.milestoneLabel)}</span>
-            </div>
-            <div class="pvp-live-season-honor-summary">${this.escapeHtml(honor.summaryLine)}</div>
-            <div class="pvp-live-season-honor-next">${this.escapeHtml(honor.nextMilestone.label)} · ${this.escapeHtml(honor.nextGoalLine)}</div>
-            ${honor.cosmeticReward ? `
+        <details class="pvp-live-settlement-details" data-live-settlement-details>
+          <summary>
+            <span>结算详情</span>
+            <span>计分依据与赛季荣誉</span>
+          </summary>
+          <div class="pvp-live-settlement-detail-body">
+            ${reasonMarkup}
+            <div class="pvp-live-settlement-boundary">${this.escapeHtml(report.boundary)}</div>
+            ${honor ? `
               <div
-                class="pvp-live-season-honor-reward"
-                data-live-season-honor-reward
-                data-live-season-honor-reward-impact="${this.escapeHtml(honor.cosmeticReward.rewardImpact)}"
-                data-live-season-honor-reward-state="${this.escapeHtml(honor.cosmeticReward.rewardState)}"
-                data-live-season-honor-reward-collection="${this.escapeHtml(honor.cosmeticReward.collectionState)}"
+                class="pvp-live-season-honor"
+                data-live-season-honor
+                data-live-season-honor-power="${this.escapeHtml(honor.powerImpact)}"
               >
-                <div class="pvp-live-season-honor-reward-head">
-                  <span>外观目标</span>
-                  <span>${this.escapeHtml(honor.cosmeticReward.rewardState === 'earned' ? '已点亮' : '预览')} · ${this.escapeHtml(getCollectionLabel(honor.cosmeticReward.collectionState))}</span>
+                <div class="pvp-live-season-honor-head">
+                  <span>赛季荣誉</span>
+                  <span>${this.escapeHtml(honor.milestoneLabel)}</span>
                 </div>
-                <div class="pvp-live-season-honor-reward-name">${this.escapeHtml(honor.cosmeticReward.rewardName)}</div>
-                <div class="pvp-live-season-honor-reward-collection">收藏状态：${this.escapeHtml(getCollectionLabel(honor.cosmeticReward.collectionState))} · 本季已入库 ${this.escapeHtml(honor.cosmeticReward.collectionSize)} 项</div>
-                <div class="pvp-live-season-honor-reward-progress">${this.escapeHtml(honor.cosmeticReward.unlockLine)} · ${this.escapeHtml(honor.cosmeticReward.progressLine)}</div>
-                <div class="pvp-live-season-honor-reward-next">${this.escapeHtml(honor.cosmeticReward.nextReward.label)}</div>
-                <div class="pvp-live-season-honor-reward-boundary">${this.escapeHtml(honor.cosmeticReward.boundary)}</div>
+                <div class="pvp-live-season-honor-summary">${this.escapeHtml(honor.summaryLine)}</div>
+                <div class="pvp-live-season-honor-next">${this.escapeHtml(honor.nextMilestone.label)} · ${this.escapeHtml(honor.nextGoalLine)}</div>
+                ${honor.cosmeticReward ? `
+                  <div
+                    class="pvp-live-season-honor-reward"
+                    data-live-season-honor-reward
+                    data-live-season-honor-reward-impact="${this.escapeHtml(honor.cosmeticReward.rewardImpact)}"
+                    data-live-season-honor-reward-state="${this.escapeHtml(honor.cosmeticReward.rewardState)}"
+                    data-live-season-honor-reward-collection="${this.escapeHtml(honor.cosmeticReward.collectionState)}"
+                  >
+                    <div class="pvp-live-season-honor-reward-head">
+                      <span>外观目标</span>
+                      <span>${this.escapeHtml(honor.cosmeticReward.rewardState === 'earned' ? '已点亮' : '预览')} · ${this.escapeHtml(getCollectionLabel(honor.cosmeticReward.collectionState))}</span>
+                    </div>
+                    <div class="pvp-live-season-honor-reward-name">${this.escapeHtml(honor.cosmeticReward.rewardName)}</div>
+                    <div class="pvp-live-season-honor-reward-collection">收藏状态：${this.escapeHtml(getCollectionLabel(honor.cosmeticReward.collectionState))} · 本季已入库 ${this.escapeHtml(honor.cosmeticReward.collectionSize)} 项</div>
+                    <div class="pvp-live-season-honor-reward-progress">${this.escapeHtml(honor.cosmeticReward.unlockLine)} · ${this.escapeHtml(honor.cosmeticReward.progressLine)}</div>
+                    <div class="pvp-live-season-honor-reward-next">${this.escapeHtml(honor.cosmeticReward.nextReward.label)}</div>
+                    <div class="pvp-live-season-honor-reward-boundary">${this.escapeHtml(honor.cosmeticReward.boundary)}</div>
+                  </div>
+                ` : ''}
+                <div class="pvp-live-season-honor-boundary">${this.escapeHtml(honor.boundary)}</div>
               </div>
             ` : ''}
-            <div class="pvp-live-season-honor-boundary">${this.escapeHtml(honor.boundary)}</div>
           </div>
-        ` : ''}
+        </details>
       </div>
     `;
   },
@@ -4990,7 +5119,7 @@ export const PVPScene = {
           <span>${this.escapeHtml(revoked ? '已失效' : expiresText)}</span>
         </div>
         <div class="pvp-live-dispute-receipt-line">${this.escapeHtml(shareUrl)}</div>
-        <div class="pvp-live-dispute-receipt-evidence">只包含 replay_public · 不含原始战局 ID · 不改分不派奖励</div>
+        <div class="pvp-live-dispute-receipt-evidence">只包含公开战报 · 不含原始战局 ID · 不改分不派奖励</div>
         <div class="pvp-live-dispute-receipt-boundary">${this.escapeHtml(receipt.boundary || '公开战报分享只暴露脱敏回放，不读取隐藏手牌、牌库、随机种子或本人结算。')}</div>
         ${revoked ? '' : `
           <div class="pvp-live-replay-share-actions">
@@ -5008,6 +5137,24 @@ export const PVPScene = {
     const matchId = String(view && view.matchId || review.matchId || '');
     const resultLabel = review.result === 'win' ? '胜局' : review.result === 'loss' ? '败局' : '终局';
     const finishLabel = this.formatLiveFinishReasonLabel(review.finishReason);
+    const actionMarkup = review.nextActions.length ? `
+      <div class="pvp-live-review-actions">
+        ${review.nextActions.map(action => {
+          const actionState = this.getLivePostReviewActionRenderState(action.id, action.label, matchId);
+          return `
+            <button
+              type="button"
+              data-live-post-review-action="${this.escapeHtml(action.id)}"
+              data-live-post-review-confirm="${this.escapeHtml(actionState.confirmState)}"
+              data-live-post-review-audit-action="${this.escapeHtml(action.auditActionId || action.id)}"
+              onclick="PVPScene.handleLivePostReviewAction('${this.escapeHtml(action.id)}')"
+              title="${this.escapeHtml(action.detail || action.label)}"
+              ${this.isLivePostReviewActionDisabled(action.id, phase) ? 'disabled' : ''}
+            >${this.escapeHtml(actionState.label)}</button>
+          `;
+        }).join('')}
+      </div>
+    ` : '';
     return `
       <div class="pvp-live-review-head">
         <span class="pvp-live-guide-title">${this.escapeHtml(review.title)}</span>
@@ -5015,46 +5162,39 @@ export const PVPScene = {
       </div>
       <div class="pvp-live-review-summary">${this.escapeHtml(review.summary)}</div>
       ${this.renderLiveSettlementReport(review)}
-      ${review.evidence.length ? `
-        <div class="pvp-live-review-evidence">
-          ${review.evidence.map(event => {
-            const formatted = this.formatLiveEvent(event);
-            return `<span title="${this.escapeHtml(formatted.detail)}">${this.escapeHtml(formatted.label)}${event.sequence !== null ? ` #${this.escapeHtml(event.sequence)}` : ''}</span>`;
-          }).join('')}
+      ${actionMarkup}
+      <details class="pvp-live-review-details" data-live-post-review-details>
+        <summary>
+          <span>完整复盘</span>
+          <span>关键回合、公平说明与调谱建议</span>
+        </summary>
+        <div class="pvp-live-review-detail-body">
+          ${this.renderLivePostReviewNextStepGuide(review, phase)}
+          ${review.evidence.length ? `
+            <div class="pvp-live-review-evidence">
+              ${review.evidence.map(event => {
+                const formatted = this.formatLiveEvent(event);
+                return `<span title="${this.escapeHtml(formatted.detail)}">${this.escapeHtml(formatted.label)}${event.sequence !== null ? ` #${this.escapeHtml(event.sequence)}` : ''}</span>`;
+              }).join('')}
+            </div>
+          ` : ''}
+          ${review.suggestions.length ? `
+            <div class="pvp-live-review-suggestions">
+              ${review.suggestions.map(line => `<span>${this.escapeHtml(line)}</span>`).join('')}
+            </div>
+          ` : ''}
+          ${this.renderLiveFriendlySeries(review.friendlySeries)}
+          ${this.renderLiveFairnessReceipt(review)}
+          ${this.renderLiveExperienceReport(review)}
+          ${this.renderLiveKeyTurnReplay(review)}
+          ${this.renderLivePostReviewPracticePlan(review)}
+          ${this.renderLiveSeasonGoalCard(view, phase)}
+          ${this.renderLiveLoadoutRecommendation(review, phase)}
+          ${this.renderLiveReplayShareReceipt()}
+          ${this.renderLiveDisputeReportReceipt()}
+          ${this.renderLiveAvoidOpponentReceipt()}
         </div>
-      ` : ''}
-      ${review.suggestions.length ? `
-        <div class="pvp-live-review-suggestions">
-          ${review.suggestions.map(line => `<span>${this.escapeHtml(line)}</span>`).join('')}
-        </div>
-      ` : ''}
-      ${this.renderLiveFriendlySeries(review.friendlySeries)}
-	      ${this.renderLiveFairnessReceipt(review)}
-	      ${this.renderLiveExperienceReport(review)}
-	      ${this.renderLiveKeyTurnReplay(review)}
-	      ${this.renderLivePostReviewNextStepGuide(review, phase)}
-	      ${this.renderLivePostReviewPracticePlan(review)}
-	      ${this.renderLiveSeasonGoalCard(view, phase)}
-      ${this.renderLiveLoadoutRecommendation(review, phase)}
-      <div class="pvp-live-review-actions">
-        ${review.nextActions.map(action => {
-          const actionState = this.getLivePostReviewActionRenderState(action.id, action.label, matchId);
-          return `
-          <button
-            type="button"
-            data-live-post-review-action="${this.escapeHtml(action.id)}"
-            data-live-post-review-confirm="${this.escapeHtml(actionState.confirmState)}"
-            data-live-post-review-audit-action="${this.escapeHtml(action.auditActionId || action.id)}"
-            onclick="PVPScene.handleLivePostReviewAction('${this.escapeHtml(action.id)}')"
-            title="${this.escapeHtml(action.detail || action.label)}"
-            ${this.isLivePostReviewActionDisabled(action.id, phase) ? 'disabled' : ''}
-          >${this.escapeHtml(actionState.label)}</button>
-        `;
-        }).join('')}
-      </div>
-      ${this.renderLiveReplayShareReceipt()}
-      ${this.renderLiveDisputeReportReceipt()}
-      ${this.renderLiveAvoidOpponentReceipt()}
+      </details>
     `;
   },
   buildLivePostReviewDrillScenario(state = null) {
@@ -5164,63 +5304,68 @@ export const PVPScene = {
     const payload = event && event.publicData && typeof event.publicData === 'object'
       ? event.publicData
       : event && event.payload && typeof event.payload === 'object' ? event.payload : {};
-    const actor = event && event.actingSeat ? `席位 ${event.actingSeat}` : '';
+    const seatLabel = (seatId, fallback = '一方', options = {}) => this.formatLiveSeatPerspectiveLabel(seatId, fallback, options);
+    const targetLabel = (seatId, fallback = '目标', options = {}) => {
+      const label = seatLabel(seatId, '', options);
+      return label ? `目标${label}` : fallback;
+    };
+    const actor = event && event.actingSeat ? seatLabel(event.actingSeat, '一方') : '';
     let detail = actor;
     if (type === 'opening_protection_triggered') {
       const protectedSeat = String(payload.protectedSeat || '');
       const minimumHp = Math.max(0, Math.floor(Number(payload.minimumHp) || 0));
       const preventedDamage = Math.max(0, Math.floor(Number(payload.preventedDamage) || 0));
-      detail = `${protectedSeat ? `护住 ${protectedSeat}` : '护住未行动方'} · 保底 ${minimumHp || 1} 血 · 挡下 ${preventedDamage} 点致命伤害`;
+      detail = `${protectedSeat ? `护住${seatLabel(protectedSeat, '未行动方')}` : '护住未行动方'} · 保底 ${minimumHp || 1} 血 · 挡下 ${preventedDamage} 点致命伤害`;
     } else if (type === 'opening_second_seat_buffer_granted') {
       const seatId = String(payload.seatId || '');
       const firstSeat = String(payload.firstSeat || '');
       const block = Math.max(0, Math.floor(Number(payload.block) || 0));
       const totalBlock = Math.max(0, Math.floor(Number(payload.totalBlock) || 0));
-      detail = `${seatId ? `给 ${seatId}` : '给后手'} · 护盾 +${block} · 当前护盾 ${totalBlock}${firstSeat ? ` · 先手 ${firstSeat}` : ''}`;
+      detail = `${seatId ? `给${seatLabel(seatId, '后手')}` : '给后手'} · 护盾 +${block} · 当前护盾 ${totalBlock}${firstSeat ? ` · ${seatLabel(firstSeat, '先手', { preferSeatOrder: true })}行动` : ''}`;
     } else if (type === 'opening_counterplay_granted') {
       const seatId = String(payload.seatId || '');
       const block = Math.max(0, Math.floor(Number(payload.block) || 0));
       const totalBlock = Math.max(0, Math.floor(Number(payload.totalBlock) || 0));
-      detail = `${seatId ? `给 ${seatId}` : '受保护方'} · 护盾 +${block} · 当前护盾 ${totalBlock}`;
+      detail = `${seatId ? `给${seatLabel(seatId, '受保护方')}` : '给受保护方'} · 护盾 +${block} · 当前护盾 ${totalBlock}`;
     } else if (type === 'budget_clamped') {
       const targetSeat = String(payload.targetSeat || '');
       const preventedDamage = Math.max(0, Math.floor(Number(payload.preventedDamage) || 0));
-      detail = `${targetSeat ? `目标 ${targetSeat}` : '首动'} · 压下 ${preventedDamage} 点爆发`;
+      detail = `${targetSeat ? targetLabel(targetSeat) : '首动'} · 压下 ${preventedDamage} 点爆发`;
     } else if (type === 'damage_applied') {
       const targetSeat = String(payload.targetSeat || '');
       const hpDamage = Math.max(0, Math.floor(Number(payload.hpDamage) || 0));
       const targetHp = Math.max(0, Math.floor(Number(payload.targetHp) || 0));
-      detail = `${targetSeat ? `目标 ${targetSeat}` : '目标'} · 生命伤害 ${hpDamage} · 剩余 ${targetHp}`;
+      detail = `${targetSeat ? targetLabel(targetSeat) : '目标'} · 生命伤害 ${hpDamage} · 剩余 ${targetHp}`;
     } else if (type === 'status_applied') {
       const label = String(payload.label || '公开状态');
       const seatId = String(payload.seatId || '');
       const earliest = Math.max(0, Math.floor(Number(payload.earliestConsumeTurnIndex) || 0));
       if (payload.statusId === 'guard_stance') {
         const mitigationAmount = Math.max(0, Math.floor(Number(payload.mitigationAmount) || 0));
-        detail = `${seatId || '行动方'} · ${label} · 下次生命伤害 -${mitigationAmount}`;
+        detail = `${seatId ? seatLabel(seatId, '行动方') : '行动方'} · ${label} · 下次生命伤害 -${mitigationAmount}`;
       } else if (payload.statusId === 'weak_focus') {
         const mitigationAmount = Math.max(0, Math.floor(Number(payload.mitigationAmount) || 0));
-        detail = `${seatId ? `目标 ${seatId}` : '目标'} · ${label} · 下次出手伤害 -${mitigationAmount}`;
+        detail = `${seatId ? targetLabel(seatId) : '目标'} · ${label} · 下次出手伤害 -${mitigationAmount}`;
       } else {
-        detail = `${seatId ? `目标 ${seatId}` : '目标'} · ${label} · 反制窗口后可兑现${earliest ? ` · 最早第 ${earliest} 手` : ''}`;
+        detail = `${seatId ? targetLabel(seatId) : '目标'} · ${label} · 反制窗口后可兑现${earliest ? ` · 最早第 ${earliest} 手` : ''}`;
       }
     } else if (type === 'status_consumed') {
       const label = String(payload.label || '公开状态');
       const seatId = String(payload.seatId || '');
       const damageBonus = Math.max(0, Math.floor(Number(payload.damageBonus) || 0));
-      detail = `${seatId ? `目标 ${seatId}` : '目标'} · 消耗${label} · 额外伤害 +${damageBonus}`;
+      detail = `${seatId ? targetLabel(seatId) : '目标'} · 消耗${label} · 额外伤害 +${damageBonus}`;
     } else if (type === 'status_mitigated') {
       const label = String(payload.label || '公开状态');
       const seatId = String(payload.seatId || '');
       const mitigatedBySeat = String(payload.mitigatedBySeat || event.actingSeat || '');
       if (payload.statusId === 'guard_stance' || payload.mitigation === 'guard_stance_damage_reduction') {
         const preventedDamage = Math.max(0, Math.floor(Number(payload.preventedDamage) || 0));
-        detail = `${seatId ? `目标 ${seatId}` : '目标'} · ${label}减伤 ${preventedDamage}`;
+        detail = `${seatId ? targetLabel(seatId) : '目标'} · ${label}减伤 ${preventedDamage}`;
       } else if (payload.statusId === 'weak_focus' || payload.mitigation === 'public_weak_damage_reduction') {
         const preventedDamage = Math.max(0, Math.floor(Number(payload.preventedDamage) || 0));
-        detail = `${seatId ? `目标 ${seatId}` : '目标'} · ${label}削减 ${preventedDamage} · 伤害降低 ${preventedDamage}`;
+        detail = `${seatId ? targetLabel(seatId) : '目标'} · ${label}削减 ${preventedDamage} · 伤害降低 ${preventedDamage}`;
       } else {
-        detail = `${seatId ? `目标 ${seatId}` : '目标'} · ${mitigatedBySeat ? `${mitigatedBySeat} ` : ''}稳住${label} · 阻止后续兑现`;
+        detail = `${seatId ? targetLabel(seatId) : '目标'} · ${mitigatedBySeat ? `${seatLabel(mitigatedBySeat, '一方')} ` : ''}稳住${label} · 阻止后续兑现`;
       }
     } else if (type === 'hp_recovered') {
       const seatId = String(payload.seatId || event.actingSeat || '');
@@ -5229,8 +5374,8 @@ export const PVPScene = {
       const maxHp = Math.max(0, Math.floor(Number(payload.maxHp) || 0));
       const capped = payload.capped === true;
       detail = recoveredHp > 0
-        ? `${seatId || '行动方'} · 恢复 ${recoveredHp} · 当前 ${hp}/${maxHp}`
-        : `${seatId || '行动方'} · 已到上限 · 当前 ${hp}/${maxHp}`;
+        ? `${seatId ? seatLabel(seatId, '行动方') : '行动方'} · 恢复 ${recoveredHp} · 当前 ${hp}/${maxHp}`
+        : `${seatId ? seatLabel(seatId, '行动方') : '行动方'} · 已到上限 · 当前 ${hp}/${maxHp}`;
       if (capped && recoveredHp > 0) detail += ' · 已到上限';
     } else if (type === 'card_cycled') {
       const seatId = String(payload.seatId || event.actingSeat || '');
@@ -5239,33 +5384,37 @@ export const PVPScene = {
       const deckCount = Math.max(0, Math.floor(Number(payload.deckCount) || 0));
       const capped = payload.capped === true;
       detail = capped
-        ? `${seatId || '行动方'} · 手牌已满，抽滤暂停 · 当前手牌 ${handCount} · 牌库 ${deckCount}`
+        ? `${seatId ? seatLabel(seatId, '行动方') : '行动方'} · 手牌已满，抽滤暂停 · 当前手牌 ${handCount} · 牌库 ${deckCount}`
         : count > 0
-          ? `${seatId || '行动方'} · 抽滤 ${count} 张 · 当前手牌 ${handCount} · 牌库 ${deckCount}`
-          : `${seatId || '行动方'} · 牌库已空，抽滤暂停 · 当前手牌 ${handCount} · 牌库 ${deckCount}`;
+          ? `${seatId ? seatLabel(seatId, '行动方') : '行动方'} · 抽滤 ${count} 张 · 当前手牌 ${handCount} · 牌库 ${deckCount}`
+          : `${seatId ? seatLabel(seatId, '行动方') : '行动方'} · 牌库已空，抽滤暂停 · 当前手牌 ${handCount} · 牌库 ${deckCount}`;
     } else if (type === 'match_invalidated' && payload.reason) {
       detail = `原因：${this.formatLiveFinishReasonLabel(payload.reason)}`;
     } else if (type === 'match_finished') {
-      detail = `胜者 ${String(payload.winnerSeat || '--')} · 败者 ${String(payload.loserSeat || '--')}`;
+      detail = `胜者 ${seatLabel(payload.winnerSeat, '一方')} · 败者 ${seatLabel(payload.loserSeat, '一方')}`;
     } else if (type === 'battle_started') {
-      detail = `先手 ${String(payload.firstSeat || '--')}`;
+      detail = `${seatLabel(payload.firstSeat, '先手', { preferSeatOrder: true })}行动`;
     } else if (type === 'mulligan_completed') {
-      detail = `${String(payload.seatId || event.actingSeat || '--')} 调息 ${Math.max(0, Math.floor(Number(payload.count) || 0))} 张`;
+      detail = `${seatLabel(payload.seatId || event.actingSeat || '', '一方')} 调息 ${Math.max(0, Math.floor(Number(payload.count) || 0))} 张`;
     } else if (type === 'turn_ended') {
-      detail = `下一手 ${String(payload.nextSeat || '--')}`;
+      detail = `下一手 ${seatLabel(payload.nextSeat, '待同步')}`;
     } else if (type === 'ready_timeout') {
-      const seats = Array.isArray(payload.unreadySeats) ? payload.unreadySeats.join('/') : '';
+      const seats = Array.isArray(payload.unreadySeats)
+        ? this.formatLiveSeatPerspectiveList(payload.unreadySeats, '双方')
+        : '';
       detail = seats ? `未准备：${seats}` : '准备窗口关闭';
     } else if (type === 'connection_timeout') {
-      const seats = Array.isArray(payload.disconnectedSeats) ? payload.disconnectedSeats.join('/') : String(payload.seatId || '');
-      detail = seats ? `断线席位：${seats}` : '重连宽限结束';
+      const seats = Array.isArray(payload.disconnectedSeats)
+        ? this.formatLiveSeatPerspectiveList(payload.disconnectedSeats, '双方')
+        : seatLabel(payload.seatId, '');
+      detail = seats ? `断线方：${seats}` : '重连宽限结束';
     } else if (type === 'turn_timeout') {
-      const loserSeat = String(payload.loserSeat || payload.seatId || event.actingSeat || '--');
+      const loserSeat = seatLabel(payload.loserSeat || payload.seatId || event.actingSeat || '', '一方');
       detail = payload.finishReason === 'connection_timeout'
         ? `${loserSeat} 重连宽限结束`
         : `${loserSeat} 行动窗口超时`;
     } else if (type === 'automation_action') {
-      const seatId = String(payload.seatId || event.actingSeat || '--');
+      const seatId = seatLabel(payload.seatId || event.actingSeat || '', '一方');
       const actionType = String(payload.actionType || '');
       const automationCount = Math.max(1, Math.floor(Number(payload.automationCount) || 1));
       const actionLabel = actionType === 'defense_card'
@@ -5273,7 +5422,7 @@ export const PVPScene = {
         : actionType === 'end_turn' ? '结束回合' : '保底行动';
       detail = `${seatId} · 系统托管${actionLabel} · 第 ${automationCount} 次超时`;
     } else if (type === 'emote_sent') {
-      const seatId = String(payload.seatId || event.actingSeat || '--');
+      const seatId = seatLabel(payload.seatId || event.actingSeat || '', '一方');
       const label = String(payload.label || payload.emoteId || '预设表情');
       detail = `${seatId} · ${label}`;
     }
@@ -5426,10 +5575,8 @@ export const PVPScene = {
   formatLiveLoadoutSummary(seat, fallback = '斗法谱：--') {
     const summary = this.getLiveLoadoutSummary(seat);
     if (!summary || !summary.loadoutHash) return fallback;
-    const hash = summary.loadoutHash.slice(0, 8);
-    const identity = summary.identitySlot ? ` · ${summary.identitySlot}` : '';
-    const deckSize = summary.deckSize ? ` · ${summary.deckSize}张` : '';
-    return `${summary.label}${identity}${deckSize} · ${hash}${summary.locked ? ' · 已锁定' : ''}`;
+    const deckSize = summary.deckSize ? ` · ${summary.deckSize} 张` : '';
+    return `${summary.label}${deckSize}${summary.locked ? ' · 已锁定' : ' · 可调整'}`;
   },
   getLiveOpponentPublicProfile(seat) {
     const profile = seat && seat.publicProfile && typeof seat.publicProfile === 'object' ? seat.publicProfile : {};
@@ -5449,8 +5596,7 @@ export const PVPScene = {
     if (!seat) return fallback;
     const profile = this.getLiveOpponentPublicProfile(seat);
     const archetype = profile.archetypeLabel || '流派待观察';
-    const bucket = profile.divisionBucket ? ` · ${profile.divisionBucket}` : '';
-    return `公开画像：${archetype}${bucket} · 构筑隐藏`;
+    return `对手流派：${archetype} · 构筑保密`;
   },
   getLiveSnapshot() {
     this.ensureLiveSocialPreferencesLoaded();
@@ -5663,8 +5809,24 @@ export const PVPScene = {
     this.resolveAllLiveIntentInFlight(state);
     const view = state.stateView || null;
     const phase = state.phase || 'idle';
+    const previousPhase = root.getAttribute('data-live-phase') || 'idle';
     root.dataset.livePhase = phase;
     root.setAttribute('data-live-phase', phase);
+    const inviteDisclosure = root.querySelector('[data-live-invite-panel]');
+    if (inviteDisclosure && 'open' in inviteDisclosure) {
+      const hasPendingInvite = phase === 'idle' && Array.isArray(state.inviteInbox) && state.inviteInbox.length > 0;
+      if (phase === 'waiting_invite' || hasPendingInvite) {
+        if (!inviteDisclosure.open) this.liveInviteAutoOpened = true;
+        inviteDisclosure.open = true;
+      } else if (previousPhase === 'waiting_invite' || this.liveInviteAutoOpened) {
+        inviteDisclosure.open = false;
+        this.liveInviteAutoOpened = false;
+      }
+    }
+    const detailDisclosure = root.querySelector('[data-live-detail-drawer]');
+    if (detailDisclosure && 'open' in detailDisclosure && previousPhase !== phase) {
+      detailDisclosure.open = false;
+    }
     const realtimeStatus = String(state.realtimeStatus || 'idle');
     root.dataset.liveRealtimeState = realtimeStatus;
     root.setAttribute('data-live-realtime-state', realtimeStatus);
@@ -5822,12 +5984,22 @@ export const PVPScene = {
     }
     const postReviewEl = root.querySelector('[data-live-post-match-review]');
     if (postReviewEl) {
+      const reviewDetailsWasOpen = !!postReviewEl.querySelector('[data-live-post-review-details]')?.open;
+      const settlementDetailsWasOpen = !!postReviewEl.querySelector('[data-live-settlement-details]')?.open;
       const postReviewMarkup = this.renderLivePostMatchReview(view, phase);
       const rematchReportMarkup = this.renderLiveFriendlySeries(state.rematchReport || view?.friendlySeries);
       postReviewEl.hidden = !(postReviewMarkup || rematchReportMarkup);
       postReviewEl.innerHTML = postReviewMarkup || rematchReportMarkup
         ? `${postReviewMarkup}${rematchReportMarkup}`
         : '赛后复盘：等待对局结束';
+      const reviewDetails = postReviewEl.querySelector('[data-live-post-review-details]');
+      if (reviewDetails && 'open' in reviewDetails) {
+        reviewDetails.open = reviewDetailsWasOpen || !!this.liveReviewFocus || !!this.liveLoadoutReviewFocused;
+      }
+      const settlementDetails = postReviewEl.querySelector('[data-live-settlement-details]');
+      if (settlementDetails && 'open' in settlementDetails) {
+        settlementDetails.open = settlementDetailsWasOpen;
+      }
     }
     if (phase !== 'finished' && phase !== 'waiting_rematch') {
       this.liveReviewFocus = '';
@@ -5870,8 +6042,8 @@ export const PVPScene = {
 
     const self = view && view.self ? view.self : null;
     const opponent = view && view.opponent ? view.opponent : null;
-    setText('[data-live-self-seat]', self && self.seatId ? self.seatId : '--');
-    setText('[data-live-opponent-seat]', opponent && opponent.seatId ? opponent.seatId : '--');
+    setText('[data-live-self-seat]', self && self.seatId ? '你' : '--');
+    setText('[data-live-opponent-seat]', opponent && opponent.seatId ? '对手' : '--');
     setText('[data-live-self-stats]', self ? `生命 ${self.hp}/${self.maxHp} · 灵力 ${self.energy}/${self.maxEnergy} · 护盾 ${self.block || 0} · ${self.ready ? '已准备' : '未准备'}${self.mulliganUsed ? ' · 已调息' : ''}` : '等待权威状态');
     setText('[data-live-opponent-stats]', opponent ? `生命 ${opponent.hp}/${opponent.maxHp} · 灵力 ${opponent.energy}/${opponent.maxEnergy} · 手牌 ${opponent.handCount} · ${opponent.ready ? '已准备' : '未准备'}` : '仅显示公开信息');
     const selfStatusesEl = root.querySelector('[data-live-self-statuses]');
@@ -6359,13 +6531,12 @@ export const PVPScene = {
     const budgetText = currentBudget === null
       ? '首动预算等待权威状态'
       : `首动预算 ${currentBudget}`;
-    const protectedSeats = opening.openingProtection.protectedSeats.length
-      ? opening.openingProtection.protectedSeats.join('/')
-      : '待观察';
+    const protectedSeats = this.formatLiveSeatPerspectiveList(opening.openingProtection.protectedSeats, '待观察');
     const protectionText = `开局护体保护 ${protectedSeats} · 保底 ${opening.openingProtection.minimumHp} 血`;
     const secondSeat = opening.secondSeatBuffer.seatId || opening.secondSeat || '后手';
+    const secondSeatLabel = this.formatLiveSeatPerspectiveLabel(secondSeat, '后手');
     const shieldText = opening.secondSeatBuffer.block > 0
-      ? `后手护盾 ${secondSeat} +${opening.secondSeatBuffer.block}`
+      ? `后手护盾 ${secondSeatLabel} +${opening.secondSeatBuffer.block}`
       : '后手护盾未启用';
     const counterplayText = opening.counterplay.block > 0
       ? `反打缓冲 +${opening.counterplay.block}`
@@ -6375,20 +6546,21 @@ export const PVPScene = {
       const nextSeat = view && view.opponent && view.opponent.seatId
         ? view.opponent.seatId
         : context.currentSeat === 'A' ? 'B' : 'A';
+      const nextSeatLabel = this.formatLiveSeatPerspectiveLabel(nextSeat, '对手');
       const actionPreview = this.getLiveActionPreviewReport(view);
       const endTurnPreview = actionPreview && actionPreview.endTurn && actionPreview.endTurn.summaryLine
-        ? `权威预览：${actionPreview.endTurn.summaryLine}`
+        ? `行动预览：${this.formatLiveSeatPerspectiveCopy(actionPreview.endTurn.summaryLine)}`
         : '';
-      return `再次点击确认结束回合；确认后行动权交给 ${nextSeat}。${publicRulesText}${endTurnPreview}`;
+      return `再次点击确认结束回合；确认后行动权交给 ${nextSeatLabel}。${publicRulesText}${endTurnPreview}`;
     }
     const cardInstanceId = String(payload && payload.cardInstanceId || context.payload && context.payload.cardInstanceId || '');
     const hand = view && view.self && Array.isArray(view.self.hand) ? view.self.hand : [];
     const card = hand.find(item => String(item && item.instanceId || '') === cardInstanceId) || null;
     const cardName = card && (card.name || card.cardId) ? String(card.name || card.cardId) : '当前术式';
     const targetSeat = String(payload && payload.targetSeat || view && view.opponent && view.opponent.seatId || '');
-    const targetText = targetSeat ? `，目标 ${targetSeat}` : '';
+    const targetText = targetSeat ? `，目标 ${this.formatLiveSeatPerspectiveLabel(targetSeat, '对手')}` : '';
     const previewText = this.formatLiveActionPreviewLine(this.getLiveCardActionPreview(view, cardInstanceId));
-    const previewSuffix = previewText ? `权威预览：${previewText}` : '';
+    const previewSuffix = previewText ? `行动预览：${previewText}` : '';
     return `再次点击确认出牌；${cardName}${targetText}。${publicRulesText}${previewSuffix}`;
   },
   isLiveOpeningActionConfirmArmed(state = null, actionType = '', payload = {}) {

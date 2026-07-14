@@ -707,7 +707,7 @@ try {
 
   await page.locator('[data-season-ops-action="switch-tab"][data-tab-id="authoritative"]').click();
   await page.waitForSelector('[data-season-ops-action="authoritative-begin"]');
-  add('authoritative tab exposes server-owned boundary', (await page.locator('.season-ops-authoritative-panel').innerText()).includes('浏览器只提交命令'));
+  add('authoritative tab exposes server-owned boundary', (await page.locator('.season-ops-authoritative-panel').innerText()).includes('每一步战局都会被天道见证'));
   await page.locator('[data-season-ops-action="authoritative-begin"]').click();
   await page.waitForSelector('[data-season-ops-action="authoritative-select-node"]');
   add('authoritative route renders server choices', await page.locator('[data-season-ops-action="authoritative-select-node"]').count() === 1);
@@ -722,7 +722,7 @@ try {
   await page.waitForSelector('[data-season-ops-action="authoritative-settle"]');
   await page.locator('[data-season-ops-action="authoritative-settle"]').click();
   await page.waitForSelector('[data-season-ops-action="authoritative-begin-new"]');
-  add('authoritative settlement exposes full replay receipt', /回放 通过/.test(await page.locator('.season-ops-authoritative-panel').innerText()));
+  add('authoritative settlement exposes full replay receipt', /全程校验 通过/.test(await page.locator('.season-ops-authoritative-panel').innerText()));
   await safeAuditScreenshot(page, path.join(outDir, 'season-ops-authoritative-settled-desktop.png'), 'browser_season_ops_audit', { timeout: 9000 });
   await page.locator('[data-season-ops-action="authoritative-begin-new"]').click();
   await page.waitForSelector('[data-season-ops-action="authoritative-select-node"]');

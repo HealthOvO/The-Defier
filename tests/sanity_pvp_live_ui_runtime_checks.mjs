@@ -186,7 +186,8 @@ assert.match(renderedActionReceipt, /data-live-action-survival-source="authorita
 assert.match(renderedActionReceipt, /data-live-action-survival-hidden="false"/, 'live UI action survival receipt should mark hidden-info safe');
 assert.match(renderedActionReceipt, /data-live-action-survival-impact="none"/, 'live UI action survival receipt should mark no ranked impact');
 assert.match(renderedActionReceipt, /承伤回执|B 剩余 35 血|对局继续/, 'live UI action receipt should explain resolved surviving damage as a continuing duel state');
-assert.match(renderedActionReceipt, /权威公开投影/, 'live UI action receipt should render accurate projection source');
+const renderedActionReceiptText = renderedActionReceipt.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+assert.doesNotMatch(renderedActionReceiptText, /权威公开投影|不含隐藏信息|\bnone\b/, 'live UI action receipt should keep transport and scoring metadata out of player-facing copy');
 assert.doesNotMatch(renderedActionReceipt, /payload|cardInstanceId|sourceCardId|\bhand\b|hand":\[|deck|loadoutSnapshot|rating|reward|token/i, 'live UI action receipt rendering must not expose hidden ids, payloads, decks, rewards, or tokens');
 const renderedTerminalDamageReceipt = PVPScene.renderLiveActionReceiptReport({
   actionReceiptReport: {
@@ -439,7 +440,7 @@ assert.equal(normalizedEndTurnReceipt.actionType, 'end_turn', 'live UI should pr
 assert.equal(normalizedEndTurnReceipt.nextSeat, 'B', 'live UI should preserve public next-seat handoff');
 assert.equal(normalizedEndTurnReceipt.counterplay.block, 8, 'live UI should preserve public counterplay block on handoff receipt');
 assert.match(renderedEndTurnReceipt, /交权回执/, 'live UI should label end-turn receipts as handoff receipts');
-assert.match(renderedEndTurnReceipt, /行动权交给 B/, 'live UI end-turn receipt should render handoff seat');
+assert.match(renderedEndTurnReceipt, /行动权交给 对手/, 'live UI end-turn receipt should render the handoff in player-facing language');
 assert.match(renderedEndTurnReceipt, /抽 3 张/, 'live UI end-turn receipt should render public draw count');
 assert.match(renderedEndTurnReceipt, /反打缓冲 \+8/, 'live UI end-turn receipt should render public counterplay grant');
 assert.match(renderedEndTurnReceipt, /data-live-action-turn-handoff="public_turn_handoff"/, 'live UI end-turn receipt should expose a stable public turn handoff marker');
@@ -449,7 +450,7 @@ assert.match(renderedEndTurnReceipt, /data-live-action-turn-handoff-counterplay-
 assert.match(renderedEndTurnReceipt, /data-live-action-turn-handoff-source="authoritative_public_projection"/, 'live UI end-turn receipt should expose public handoff source');
 assert.match(renderedEndTurnReceipt, /data-live-action-turn-handoff-hidden="false"/, 'live UI end-turn receipt should mark the handoff chip hidden-info safe');
 assert.match(renderedEndTurnReceipt, /data-live-action-turn-handoff-impact="none"/, 'live UI end-turn receipt should mark the handoff chip no-impact');
-assert.match(renderedEndTurnReceipt, /接手回执|B 接手|抽 3|反打缓冲 \+8/, 'live UI end-turn receipt should explain public draw and counterplay resources as the next player takes the turn');
+assert.match(renderedEndTurnReceipt, /接手回执|对手接手|抽 3|反打缓冲 \+8/, 'live UI end-turn receipt should explain public draw and counterplay resources as the next player takes the turn');
 assert.doesNotMatch(renderedEndTurnReceipt, /cardInstanceId|sourceCardId|\bhand\b|hand":\[|deck|loadoutSnapshot|rating|reward|token/i, 'live UI end-turn receipt rendering must not expose hidden ids, hands, decks, rewards, or tokens');
 const renderedPlayCardWithNextSeat = PVPScene.renderLiveActionReceiptReport({
   actionReceiptReport: {
@@ -2410,6 +2411,7 @@ const openingEventLogEl = {
 };
 const openingRenderRoot = {
   dataset: {},
+  getAttribute() { return ''; },
   setAttribute() {},
   removeAttribute() {},
   querySelector(selector) {
@@ -2428,7 +2430,7 @@ assert.match(openingHandEl.innerHTML, /data-live-card-preview/, 'active viewer-t
 assert.match(openingHandEl.innerHTML, /预算后\s*8/, 'pre-click card preview should show budgeted damage');
 assert.match(openingHandEl.innerHTML, /破盾\s*3/, 'pre-click card preview should show public block absorption');
 assert.match(openingHandEl.innerHTML, /生命伤害\s*5/, 'pre-click card preview should show HP damage');
-assert.match(openingHandEl.innerHTML, /B\s*预计\s*45\s*血/, 'pre-click card preview should show target HP after the action');
+assert.match(openingHandEl.innerHTML, /对手\s*预计\s*45\s*血/, 'pre-click card preview should show target HP after the action in player-facing language');
 assert.doesNotMatch(openingHandEl.innerHTML, /cardInstanceId|loadoutSnapshot|rating|elo|opponentHand|opponentDeck/i, 'pre-click card preview must not expose hidden payload markers');
 const statusMitigationPreviewMarkup = PVPScene.renderLiveCardActionPreview({
   actionPreviewReport: {
@@ -2746,12 +2748,12 @@ assert.equal(openingActionIntents.length, 0, 'first opening-window card click sh
 assert.match(PVPScene.liveInlineHint, /再次点击确认出牌/, 'opening-window card confirmation should explain the second click before submitting');
 assert.match(PVPScene.liveInlineHint, /首动预算\s*18/, 'opening-window card confirmation should name the current public first-action budget');
 assert.match(PVPScene.liveInlineHint, /保底\s*1\s*血/, 'opening-window card confirmation should name opening protection minimum HP');
-assert.match(PVPScene.liveInlineHint, /后手护盾\s*B\s*\+3/, 'opening-window card confirmation should name the second-seat public shield');
+assert.match(PVPScene.liveInlineHint, /后手护盾\s*对手\s*\+3/, 'opening-window card confirmation should name the second-seat public shield');
 assert.match(PVPScene.liveInlineHint, /反打缓冲\s*\+8/, 'opening-window card confirmation should name the counterplay buffer before commit');
 assert.match(PVPScene.liveInlineHint, /预算后\s*8/, 'opening-window card confirmation should use server action preview budgeted damage');
 assert.match(PVPScene.liveInlineHint, /破盾\s*3/, 'opening-window card confirmation should use server action preview blocked damage');
 assert.match(PVPScene.liveInlineHint, /生命伤害\s*5/, 'opening-window card confirmation should use server action preview HP damage');
-assert.match(PVPScene.liveInlineHint, /B\s*预计\s*45\s*血/, 'opening-window card confirmation should use server action preview target HP');
+assert.match(PVPScene.liveInlineHint, /对手\s*预计\s*45\s*血/, 'opening-window card confirmation should use player-facing server action preview target HP');
 await PVPScene.submitLiveCard('A-strike-opening');
 assert.equal(openingActionIntents.length, 1, 'second opening-window card click should submit exactly one play_card intent');
 assert.equal(openingActionIntents[0].intentType, 'play_card', 'confirmed opening-window card click should keep the authoritative play_card intent');
@@ -2759,7 +2761,7 @@ const renderedIntentSignal = PVPScene.renderLiveIntentSignalReport(openingAction
 assert.match(renderedIntentSignal, /公开压迫/, 'live UI should render public intent signal label');
 assert.match(renderedIntentSignal, /公开牌池上限/, 'live UI intent signal should frame pressure as public card catalog information');
 assert.match(renderedIntentSignal, /反制窗口/, 'live UI intent signal should show the counterplay window');
-assert.match(renderedIntentSignal, /不含隐藏信息/, 'live UI intent signal should expose no-hidden-information boundary');
+assert.match(renderedIntentSignal, /不读取隐藏信息/, 'live UI intent signal should expose no-hidden-information boundary in player-facing language');
 assert.doesNotMatch(renderedIntentSignal, /cardInstanceId|loadoutSnapshot|rating|elo|reward/i, 'live UI intent signal must not render hidden payload markers');
 const renderedPublicStatuses = PVPScene.renderLivePublicStatuses(openingActionState.stateView.self);
 assert.match(renderedPublicStatuses, /破绽/, 'live UI should render public tactical status labels');
@@ -3050,7 +3052,7 @@ const cardCycleEvent = PVPScene.formatLiveEvent({
   }
 });
 assert.equal(cardCycleEvent.label, '公开抽滤', 'live UI event log should label public card cycle events');
-assert.match(cardCycleEvent.detail, /A.*抽滤 1 张.*当前手牌 4.*牌库 9/, 'live UI event log should render public card cycle counts');
+assert.match(cardCycleEvent.detail, /你.*抽滤 1 张.*当前手牌 4.*牌库 9/, 'live UI event log should render public card cycle counts in player-facing language');
 assert.doesNotMatch(`${cardCycleEvent.label} ${cardCycleEvent.detail}`, /sourceCardId|cardId|instanceId|draw_tag|rating|reward/i, 'live UI card cycle event must not render hidden ids, effect tags, or rewards');
 const timeoutAutomationEvent = PVPScene.formatLiveEvent({
   eventType: 'automation_action',
@@ -3070,7 +3072,7 @@ const timeoutAutomationEvent = PVPScene.formatLiveEvent({
   }
 });
 assert.equal(timeoutAutomationEvent.label, '超时托管', 'live UI event log should label timeout automation as player-facing automation');
-assert.match(timeoutAutomationEvent.detail, /B.*系统托管.*防守牌.*第 1 次/, 'live UI event log should explain low-impact timeout automation');
+assert.match(timeoutAutomationEvent.detail, /对手.*系统托管.*防守牌.*第 1 次/, 'live UI event log should explain low-impact timeout automation in player-facing language');
 assert.doesNotMatch(`${timeoutAutomationEvent.label} ${timeoutAutomationEvent.detail}`, /automation_action|soft_timeout|cardInstanceId|cardId|instanceId|hand|deck|rating|reward/i, 'live UI timeout automation event must not expose protocol codes or hidden ids');
 
 openingActionState = {
@@ -3091,9 +3093,9 @@ PVPScene.liveInlineHint = '';
 await PVPScene.endLiveTurn();
 assert.equal(openingActionIntents.length, 0, 'first opening-window end-turn click should only arm confirmation and must not submit end_turn');
 assert.match(PVPScene.liveInlineHint, /再次点击确认结束回合/, 'opening-window end-turn confirmation should explain the second click before ending the turn');
-assert.match(PVPScene.liveInlineHint, /交给\s*B/, 'opening-window end-turn confirmation should name the next public action seat');
+assert.match(PVPScene.liveInlineHint, /交给\s*对手/, 'opening-window end-turn confirmation should name the next public action seat');
 assert.match(PVPScene.liveInlineHint, /首动预算\s*18/, 'opening-window end-turn confirmation should keep the public budget visible');
-assert.match(PVPScene.liveInlineHint, /后手护盾\s*B\s*\+3/, 'opening-window end-turn confirmation should name the second-seat public shield');
+assert.match(PVPScene.liveInlineHint, /后手护盾\s*对手\s*\+3/, 'opening-window end-turn confirmation should name the second-seat public shield');
 assert.match(PVPScene.liveInlineHint, /反打缓冲\s*\+8/, 'opening-window end-turn confirmation should name the counterplay buffer');
 openingActionState = {
   ...openingActionState,

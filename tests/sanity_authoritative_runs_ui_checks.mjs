@@ -248,10 +248,10 @@ const panel = new AuthoritativeRunPanel({
 });
 
 let html = panel.render();
-assert.match(html, /权威试炼/);
+assert.match(html, /天道试炼/);
 assert.match(html, /平衡试炼/);
 assert.match(html, /开始本模式试炼/);
-assert.match(html, /恢复服务器卷面/);
+assert.match(html, /恢复本次历练/);
 
 service.__setState({
   pending: { kind: "current" },
@@ -260,7 +260,7 @@ service.__setState({
 });
 html = panel.render();
 assert.match(html, /加载中/);
-assert.match(html, /不会本地推演/);
+assert.match(html, /路线、战斗与奖励会保持原样/);
 
 service.__setState({
   pending: null,
@@ -278,10 +278,18 @@ panel.applyResult({
 });
 html = panel.render();
 assert.match(html, /路线选择/);
-assert.match(html, /内容哈希/);
-assert.match(html, /状态哈希/);
-assert.match(html, /链首/);
+assert.match(html, /本轮规则已锁定/);
+assert.match(html, /天道校验 已通过/);
+assert.match(html, /常规战 · 墨痕斥候/);
 assert.match(html, /选择此路/);
+[
+  "authoritative-runs-ui-test-route",
+  "authoritative-run-v2",
+  "state-hash-0001",
+  "chain-head-0001",
+  "ink_scout",
+  "arun-pve-route"
+].forEach(value => assert.doesNotMatch(html, new RegExp(value), `player UI must not render internal value: ${value}`));
 
 panel.applyResult({
   success: true,
@@ -299,7 +307,10 @@ assert.match(html, /敌方下一手意图/);
 assert.match(html, /重裁 10/);
 assert.match(html, /打出此牌/);
 assert.match(html, /结束本回合/);
-assert.match(html, /最近服务器回执/);
+assert.match(html, /最近战况/);
+assert.match(html, /卡牌已打出/);
+assert.match(html, /已打出「破势」/);
+assert.doesNotMatch(html, /play_card|strike/);
 
 panel.applyResult({
   success: true,
@@ -315,6 +326,7 @@ html = panel.render();
 assert.match(html, /战后奖励/);
 assert.match(html, /领取此项/);
 assert.match(html, /整备 5 HP/);
+assert.match(html, /新卡牌/);
 
 panel.applyResult({
   success: true,
@@ -324,7 +336,8 @@ panel.applyResult({
 html = panel.render();
 assert.match(html, /待提交结算/);
 assert.match(html, /提交正式结算/);
-assert.match(html, /只有完整重放与状态哈希一致时/);
+assert.match(html, /只有全程校验通过时/);
+assert.doesNotMatch(html, /状态哈希|完整重放|arun-challenge-completed/);
 
 panel.applyResult({
   success: true,
@@ -346,7 +359,9 @@ html = panel.render();
 assert.match(html, /已结算归档/);
 assert.match(html, /结算回执/);
 assert.match(html, /战斗胜利 \+3/);
+assert.match(html, /天道校验/);
 assert.match(html, /再开一局/);
+assert.doesNotMatch(html, /arreceipt-settled-0001|这条 run/);
 
 panel.applyResult({
   success: true,
@@ -377,6 +392,7 @@ panel.applyResult({
 });
 html = panel.render();
 assert.match(html, /试炼已结束/);
+assert.match(html, /生命耗尽/);
 assert.match(html, /重新开始本模式/);
 
 panel.applyResult({
@@ -387,6 +403,7 @@ panel.applyResult({
 html = panel.render();
 assert.match(html, /试炼已放弃/);
 assert.match(html, /路线留痕/);
+assert.match(html, /常规战 · 墨痕斥候/);
 
 const stableRunId = panel.lastRunMeta.runId;
 panel.applyResult({

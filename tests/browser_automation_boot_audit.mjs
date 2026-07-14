@@ -342,7 +342,14 @@ async function runDeferredModuleRecoveryScenario(browser, scenario) {
       challenge: () => typeof window.game?.challengeHub?.showChallengeHub === 'function',
     }[kind])?.() || false,
     stylesheetLoaded: !stylesheetSource
-      || [...document.styleSheets].some(sheet => new RegExp(stylesheetSource).test(String(sheet.href || ''))),
+      || [...document.styleSheets].some((sheet) => {
+        const owner = sheet.ownerNode;
+        const source = sheet.href
+          || owner?.getAttribute?.('data-vite-dev-id')
+          || owner?.getAttribute?.('href')
+          || '';
+        return new RegExp(stylesheetSource).test(String(source));
+      }),
     retryActionCleared: !sessionStorage.getItem('theDefierDeferredRetryActionV1'),
   }), { kind: readyKind, stylesheetSource: stylesheetPattern?.source || '' });
 

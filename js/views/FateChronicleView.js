@@ -100,19 +100,47 @@ function formatChronicleTrustTier(value = "") {
   return labels[normalizeText(value)] || "天道校验 已通过";
 }
 
+function formatRunStatusLabel(value = "") {
+  const labels = {
+    idle: "待恢复",
+    active: "进行中",
+    completed: "待归卷",
+    settled: "已归卷",
+    defeated: "已败退",
+    abandoned: "已放弃",
+    expired: "已过期"
+  };
+  return labels[normalizeText(value)] || "进行中";
+}
+
+function formatRunPhaseLabel(value = "") {
+  const labels = {
+    route: "路线选择中",
+    battle: "交战中",
+    reward: "奖励选择中",
+    completed: "归卷完成",
+    defeated: "已败退",
+    abandoned: "已放弃"
+  };
+  return labels[normalizeText(value)] || "路线选择中";
+}
+
+function formatTerminalReasonLabel(value = "", fallback = "可继续重试") {
+  const labels = {
+    boss_defeated: "首领已击破",
+    hp_depleted: "气血耗尽",
+    turn_budget_exhausted: "回合耗尽",
+    player_abandoned: "主动封卷"
+  };
+  return labels[normalizeText(value)] || fallback;
+}
+
 function normalizeArray(value) {
   return Array.isArray(value) ? value : [];
 }
 
 function normalizeObject(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : {};
-}
-
-function shortHash(value = "") {
-  const text = normalizeText(value);
-  if (!text) return "未提供";
-  if (text.length <= 16) return text;
-  return `${text.slice(0, 10)}…${text.slice(-6)}`;
 }
 
 function formatUtcDateTime(timestamp = 0, { compact = false, dateOnly = false } = {}) {
@@ -566,7 +594,7 @@ class FateChronicleRunPanel extends AuthoritativeRunPanel {
     const expectedUserId = normalizeText(this.getCurrentUserId());
     const runId = this.getActiveRunId();
     if (!expectedUserId || !runId) {
-      return { success: false, reason: "authoritative_run_missing_id", message: "命途长卷权威 run 尚未恢复。" };
+      return { success: false, reason: "authoritative_run_missing_id", message: "当前没有可继续的长卷战局。" };
     }
     const settled = await this.service.settle({
       runId,
@@ -589,7 +617,7 @@ class FateChronicleRunPanel extends AuthoritativeRunPanel {
     if (!projection || !this.lastRunMeta) {
       return this.transformMarkup(`
         <section class="fate-chronicle-run-shell" data-fate-chronicle-state="idle">
-          ${this.renderStateCard("待恢复", "当前没有可展示的命途长卷 run。")}
+          ${this.renderStateCard("待恢复", "当前无进行中战局。")}
         </section>
       `);
     }
@@ -609,16 +637,15 @@ class FateChronicleRunPanel extends AuthoritativeRunPanel {
   renderRunOverview() {
     const projection = normalizeObject(this.getCurrentProjection());
     const player = normalizeObject(projection.player);
-    const integrity = normalizeObject(this.lastRunMeta && this.lastRunMeta.integrity);
     const recovery = normalizeObject(this.lastRunMeta && this.lastRunMeta.recovery);
-    const status = normalizeText(this.getStatus(), "active");
-    const phase = normalizeText(this.getProjectionPhase(), "battle");
+    const status = formatRunStatusLabel(this.getStatus());
+    const phase = formatRunPhaseLabel(this.getProjectionPhase());
     return `
       <section class="season-ops-section-card season-ops-authoritative-section">
         <div class="season-ops-section-head">
           <div>
-            <h3>命途长卷权威战斗</h3>
-            <p>run ${escapeHtml(this.lastRunMeta.runId)} · ${escapeHtml(this.lastRunMeta.reportVersion || "authoritative-run-v2")}</p>
+            <h3>进行中的长卷战局</h3>
+            <p>本局进度已同步，可继续推进本周固定卷面。</p>
           </div>
           <div class="season-ops-authoritative-status-group">
             <span class="season-ops-counter-chip">${escapeHtml(status)}</span>
@@ -626,16 +653,15 @@ class FateChronicleRunPanel extends AuthoritativeRunPanel {
           </div>
         </div>
         <div class="season-ops-authoritative-stats-grid">
-          ${this.renderStatTile("服务器版本", `v${clampInt(projection.version, 0)}`, `动作 ${clampInt(this.lastRunMeta.actionCount)} · 协议 ${escapeHtml(this.lastRunMeta.protocolVersion || "authoritative-run-v2")}`)}
+          ${this.renderStatTile("长卷进度", `${clampInt(this.lastRunMeta.actionCount)} 步已记卷`, "本局进度已同步")}
           ${this.renderStatTile("玩家状态", `${clampInt(player.hp)}/${clampInt(player.maxHp)} HP`, `格挡 ${clampInt(player.block)} · 能量 ${clampInt(player.energy)}`)}
           ${this.renderStatTile("手牌与牌堆", `${normalizeArray(player.hand).length} 手牌`, `抽牌堆 ${clampInt(player.drawPileCount)} · 弃牌堆 ${clampInt(player.discardPileCount)}`)}
           ${this.renderStatTile("恢复与时效", `${clampInt(recovery.recoveryCount)} 次恢复`, this.lastRunMeta.expiresAt > 0 ? `到期 ${formatUtcDateTime(this.lastRunMeta.expiresAt, { compact: true })}` : "等待服务器时限")}
         </div>
         <div class="season-ops-authoritative-meta-row">
-          ${chronicleChip(`内容 ${this.lastRunMeta.contentVersion || "authoritative-trials-v3"}`)}
-          ${chronicleChip(`内容哈希 ${shortHash(this.lastRunMeta.contentHash)}`)}
-          ${chronicleChip(`状态哈希 ${shortHash(integrity.stateHash)}`)}
-          ${chronicleChip(`链首 ${shortHash(integrity.chainHead)}`)}
+          ${chronicleChip("本局进度已同步")}
+          ${chronicleChip("本周固定卷面")}
+          ${chronicleChip(this.lastRunMeta.expiresAt > 0 ? "跨设备可继续" : "等待卷面记录")}
           ${chronicleChip(formatChronicleTrustTier(this.lastRunMeta.trustTier))}
         </div>
       </section>
@@ -653,7 +679,7 @@ class FateChronicleRunPanel extends AuthoritativeRunPanel {
             <h3>${abandoned ? "本次长卷已放弃" : "本次长卷已败退"}</h3>
             <p>${abandoned ? "这条权威路线已经封卷，不再接受继续推进。" : "本次失败不会扣次数，也不会倒退章节解锁；你可以立刻重试同章同誓约。"}</p>
           </div>
-          <div class="season-ops-counter-chip">${escapeHtml(summary.reason || (abandoned ? "abandon" : "retry"))}</div>
+          <div class="season-ops-counter-chip">${escapeHtml(formatTerminalReasonLabel(summary.reason, abandoned ? "已封卷" : "可重试"))}</div>
         </div>
         ${this.renderSummaryGrid(summary)}
         ${this.renderRouteHistory()}
@@ -1142,7 +1168,7 @@ export class FateChronicleView {
       <section class="fate-chronicle-state-card" data-fate-chronicle-state="guest">
         <div class="fate-chronicle-kicker">账号绑定</div>
         <h2>游客无法恢复长卷</h2>
-        <p>命途长卷与三证归卷都依赖账号签名。登录后才能读取每周章节、恢复 active run 和领取 2/5 基础归卷奖励。</p>
+        <p>命途长卷与三证归卷都依赖账号签名。登录后才能读取每周章节、恢复进行中的长卷战局和领取 2/5 基础归卷奖励。</p>
         <div class="fate-chronicle-actions">
           <button type="button" class="menu-btn primary" data-fate-chronicle-action="login">前往登录</button>
         </div>
@@ -1155,7 +1181,7 @@ export class FateChronicleView {
       <section class="fate-chronicle-state-card" data-fate-chronicle-state="loading">
         <div class="fate-chronicle-kicker">命途长卷</div>
         <h2>正在恢复服务器卷面</h2>
-        <p>章节解锁、双誓约、active run 与三证归卷都以服务端事实为准，客户端不会本地补全。</p>
+        <p>章节解锁、双誓约、进行中的长卷战局与三证归卷都以本周固定卷面为准，客户端不会本地补全。</p>
       </section>
     `;
   }
@@ -1314,13 +1340,13 @@ export class FateChronicleView {
             <p>完成任一誓约即可解锁下一章；同章两条誓约都完成时记为双解，仅影响档案展示与纯外观里程碑。</p>
           </div>
           <div class="fate-chronicle-inline-stack">
-            ${model.activeRunId ? chronicleChip("存在可恢复 active run", "success") : chronicleChip("当前无 active run", "muted")}
+            ${model.activeRunId ? chronicleChip("存在进行中的长卷战局", "success") : chronicleChip("当前无进行中战局", "muted")}
             ${model.credentialCount > 0 ? chronicleChip(`已铸证 ${model.credentialCount}/5`, "info") : ""}
           </div>
         </div>
         ${model.activeRunId ? `
           <div class="fate-chronicle-notice tone-info" data-fate-chronicle-state="active-run">
-            当前账号已有绑定中的长卷 run。页面已自动恢复战斗投影，切号后旧回执不会覆盖新账号状态。
+            当前账号已有进行中的长卷战局。页面已自动恢复当前卷面，切号后旧回执不会覆盖新账号状态。
           </div>
         ` : ""}
         <div class="fate-chronicle-chapter-grid">
@@ -1382,7 +1408,7 @@ export class FateChronicleView {
             <div class="fate-chronicle-inline-stack">
               ${chronicleChip(selectedChapter.unlocked ? "章节可进入" : "章节未解锁", selectedChapter.unlocked ? "success" : "muted")}
               ${chronicleChip(selectedVow.completed ? "本誓约已完成" : "本誓约待完成", selectedVow.completed ? "info" : "warning")}
-              ${model.activeRunId ? chronicleChip("优先恢复 active run", "info") : ""}
+              ${model.activeRunId ? chronicleChip("优先恢复进行中战局", "info") : ""}
             </div>
             <div class="fate-chronicle-actions">
               <button
@@ -1391,7 +1417,7 @@ export class FateChronicleView {
                 data-fate-chronicle-action="start"
                 data-fate-chronicle-start-state="${model.activeRunId ? "resume" : "start"}"
                 ${!selectedChapter.unlocked || startBusy || !!model.activeRunId ? "disabled" : ""}
-              >${startBusy ? "发车中..." : model.activeRunId ? "已有 active run" : "进入本章誓约"}</button>
+              >${startBusy ? "发车中..." : model.activeRunId ? "已有进行中战局" : "进入本章誓约"}</button>
             </div>
           </div>
         ` : ""}
@@ -1405,9 +1431,9 @@ export class FateChronicleView {
       <section class="fate-chronicle-section" data-fate-chronicle-state="run">
         <div class="fate-chronicle-section-head">
           <div>
-            <div class="fate-chronicle-kicker">权威 run</div>
-            <h2>当前战斗投影</h2>
-            <p>路线选择、出牌、结束回合、奖励选择和完整重放结算都继续走 authoritative-runs V2。</p>
+            <div class="fate-chronicle-kicker">本周固定卷面</div>
+            <h2>当前长卷战局</h2>
+            <p>路线选择、出牌、结束回合、奖励选择和完整结算都会直接写入本局进度。</p>
           </div>
         </div>
         ${this.runPanel.render()}

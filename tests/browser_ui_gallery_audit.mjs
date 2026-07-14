@@ -414,6 +414,8 @@ function collectDesignSystemProbe(options = {}) {
         ? parseFloat(style?.minHeight || '0') >= 44 && parseFloat(style?.borderRadius || '0') >= 10
         : kind === 'chip'
             ? parseFloat(style?.borderRadius || '0') >= 20
+            : kind === 'compactChip'
+              ? parseFloat(style?.borderRadius || '0') >= 4 && style?.borderTopWidth !== '0px'
             : kind === 'actionBar'
               ? ['flex', 'grid'].includes(style?.display || '') && parseFloat(style?.columnGap || style?.gap || '0') >= 8
               : kind === 'compactSurface'
@@ -1407,14 +1409,14 @@ function collectCoreLoopDesignSystemProbe(options = {}) {
     activeScreenId: 'pvp-screen',
     surfaceTargets: [
       ['pvpLiveStatus', '#pvp-screen .pvp-live-status-card', 'compactSurface'],
-      ['pvpLiveSeat', '#pvp-screen .pvp-live-seat-panel', 'surface', { optionalWhenHidden: true }],
-      ['pvpLiveEvent', '#pvp-screen .pvp-live-event-panel', 'surface', { optionalWhenHidden: true }],
+      ['pvpLiveSeat', '#pvp-screen .pvp-live-seat-panel', 'compactSurface', { optionalWhenHidden: true }],
+      ['pvpLiveEvent', '#pvp-screen .pvp-live-event-panel', 'compactSurface', { optionalWhenHidden: true }],
       ['pvpRuneTab', '#pvp-screen .rune-tab', 'control'],
       ['pvpLiveActionBar', '#pvp-screen .pvp-live-action-bar', 'actionBar'],
       ['pvpLiveAction', '#pvp-screen .pvp-live-action-bar .challenge-btn[data-live-action="join-queue"]', 'control'],
-      ['pvpModeBoundary', '#pvp-screen .pvp-live-mode-boundary', 'chip'],
-      ['pvpActionReceipt', '#pvp-screen .pvp-live-action-receipt', 'chip', { optionalWhenHidden: true }],
-      ['pvpSeatBadge', '#pvp-screen .pvp-live-seat-badge', 'chip'],
+      ['pvpModeBoundary', '#pvp-screen .pvp-live-mode-boundary', 'compactChip'],
+      ['pvpActionReceipt', '#pvp-screen .pvp-live-action-receipt', 'compactChip', { optionalWhenHidden: true }],
+      ['pvpSeatBadge', '#pvp-screen .pvp-live-seat-badge', 'compactChip'],
     ],
   });
   add(

@@ -75,6 +75,10 @@ const liveBrowserAudit = read('tests/browser_pvp_live_audit.mjs');
   'data-live-waiting-report',
   'data-live-replay-share-viewer-root',
   'data-live-post-match-review',
+  'data-live-invite-panel',
+  'data-live-detail-drawer',
+  'data-live-detail-toggle',
+  'data-live-detail-content',
   'data-live-action="practice-live"',
   'data-live-action="cancel-rematch"',
   'data-live-action="create-invite"',
@@ -886,6 +890,8 @@ assert.ok(!/\.pvp-live-first-guide\s*\{[\s\S]*?max-height:\s*60px[\s\S]*?overflo
   '.pvp-live-invite-inbox',
   '.pvp-live-invite-inbox-item',
   '.pvp-live-post-review',
+  '.pvp-live-review-details',
+  '.pvp-live-review-detail-body',
   '.pvp-live-next-step-guide',
   '.pvp-live-next-step-actions',
   '.pvp-live-key-turns',
@@ -898,6 +904,8 @@ assert.ok(!/\.pvp-live-first-guide\s*\{[\s\S]*?max-height:\s*60px[\s\S]*?overflo
   '.pvp-live-season-goal',
   '.pvp-live-season-goal-actions',
   '.pvp-live-settlement-report',
+  '.pvp-live-settlement-details',
+  '.pvp-live-settlement-detail-body',
   '.pvp-live-settlement-grid',
   '.pvp-live-settlement-reasons',
   '.pvp-live-settlement-reason',
@@ -918,6 +926,38 @@ assert.ok(!/\.pvp-live-first-guide\s*\{[\s\S]*?max-height:\s*60px[\s\S]*?overflo
 ].forEach((needle) => {
   assert.ok(css.includes(needle), `live PVP CSS should include marker: ${needle}`);
 });
+
+assert.ok(
+  /<details class="pvp-live-invite-panel"[^>]*data-live-invite-panel/.test(html),
+  'idle friendly invite controls should live in a native collapsed disclosure'
+);
+assert.ok(
+  /<details class="pvp-live-detail-drawer"[^>]*data-live-detail-drawer/.test(html),
+  'live fairness and guidance diagnostics should live in a native collapsed disclosure'
+);
+assert.ok(
+  scene.includes("const previousPhase = root.getAttribute('data-live-phase') || 'idle';")
+    && scene.includes("detailDisclosure.open = false;")
+    && scene.includes("inviteDisclosure.open = true;"),
+  'phase rendering should reset diagnostics and reveal invite controls only while waiting for a friend'
+);
+assert.ok(
+  scene.includes('data-live-post-review-details')
+    && scene.includes('data-live-settlement-details')
+    && scene.includes('reviewDetails.open = reviewDetailsWasOpen || !!this.liveReviewFocus || !!this.liveLoadoutReviewFocused;')
+    && scene.includes('settlementDetails.open = settlementDetailsWasOpen;'),
+  'post-match deep review and settlement evidence should preserve explicit user disclosure state across renders'
+);
+assert.ok(
+  /#pvp-screen #tab-live \.pvp-live-meta-grid\s*\{[\s\S]*?display:\s*none !important;[\s\S]*?\}/.test(css),
+  'queue tickets, match ids, seat ids, versions, and action ids must never be player-visible diagnostics'
+);
+assert.ok(
+  css.includes('Show only commands that can advance the current phase.')
+    && css.includes('[data-live-command-group="queue"]')
+    && css.includes('[data-live-command-group="turn"]'),
+  'live command rail should expose only controls relevant to the current phase'
+);
 
 [
   'data-live-mode-boundary',
@@ -1025,7 +1065,7 @@ assert.ok(browserGate.includes('node tests/browser_pvp_live_audit.mjs "$BASE_URL
   'live UI updates first-match guide next action after setup',
   'secondSeatBuffer',
   '后手护盾发放',
-  'B \\+3',
+  '后手 \\+3',
   'live UI renders 120s no-real-player waiting branch without ghost fallback',
   'live UI renders post-match review MVP from public finished state',
   'live UI one-click applies post-match loadout recommendation without queueing',

@@ -595,16 +595,17 @@ try {
     && /众生试炼/.test(challengeHubBefore.title)
     && /权威众生榜/.test(challengeHubBefore.rankingText)
     && /正式次数 3\/3/.test(challengeHubBefore.rankingText)
-    && /server_authoritative/.test(challengeHubBefore.rankingText)
+    && /天道裁定/.test(challengeHubBefore.rankingText)
     && challengeHubBefore.summaryText.includes(ladderCurrentBefore.rotation.title)
-    && challengeHubBefore.rulesText.includes(ladderCurrentBefore.rotation.scoring.formulaText)
+    && /正式得分按基础表现结算/.test(challengeHubBefore.rulesText)
     && challengeHubBefore.authoritativeRewardCount === ladderCurrentBefore.milestones.length
     && challengeHubBefore.legacyClaimCount === 0
     && /荣誉/.test(challengeHubBefore.rewardsText)
     && /本周尚无正式成绩/.test(challengeHubBefore.rankingText)
     && /进入权威众生试炼/.test(challengeHubBefore.launchText), JSON.stringify(challengeHubBefore));
   add('global formal surface uses the server rotation and excludes legacy local rewards', challengeHubBefore.summaryText.includes(ladderCurrentBefore.rotation.title)
-    && challengeHubBefore.rulesText.includes(ladderCurrentBefore.rotation.scoring.formulaText)
+    && /均衡计分/.test(challengeHubBefore.summaryText)
+    && /正式得分按基础表现结算/.test(challengeHubBefore.rulesText)
     && challengeHubBefore.authoritativeRewardCount === ladderCurrentBefore.milestones.length
     && challengeHubBefore.legacyClaimCount === 0, JSON.stringify(challengeHubBefore));
   await safeAuditScreenshot(page, path.join(outDir, 'challenge-ladder-hub-before.png'), 'browser_authoritative_runs_real_backend_smoke', { timeout: 9000 });
@@ -741,6 +742,11 @@ try {
     }));
   add('settlement receipt confirms full genesis replay', panel.receipt?.integrity?.fullReplayPassed === true, JSON.stringify(panel.receipt));
   await safeAuditScreenshot(page, path.join(outDir, 'challenge-ladder-settled-desktop.png'), 'browser_authoritative_runs_real_backend_smoke', { timeout: 9000 });
+  const settledPlayerCopy = await page.locator('.season-ops-authoritative-panel').innerText();
+  add('settled challenge UI hides implementation ids enums and hashes', !/\barun-|\barreceipt-|authoritative-(?:run|trials)|server_authoritative|state-hash|chain-head|ink_scout|trial_adjudicator|play_card|choose_reward/.test(settledPlayerCopy), settledPlayerCopy);
+  add('settled challenge UI presents localized route history and verification', /试炼战 · 墨痕斥候/.test(settledPlayerCopy)
+    && /全程校验/.test(settledPlayerCopy)
+    && /天道校验/.test(settledPlayerCopy), settledPlayerCopy);
 
   const replay = await page.evaluate(async targetRunId => {
     const { BackendClient } = window.__THE_DEFIER_SERVICES__;
@@ -811,7 +817,7 @@ try {
     && challengeHubAfter.activeTab === 'global'
     && /权威众生榜/.test(challengeHubAfter.rankingText)
     && /正式次数 2\/3/.test(challengeHubAfter.rankingText)
-    && /server_authoritative/.test(challengeHubAfter.rankingText)
+    && /天道裁定/.test(challengeHubAfter.rankingText)
     && challengeHubAfter.summaryText.includes('个人正式最高分')
     && expectedLadderBestScore > 0
     && challengeHubAfter.summaryText.includes(String(expectedLadderBestScore))
@@ -1132,6 +1138,8 @@ try {
   add('real settled mobile controls meet touch target', mobileLayout.undersized.length === 0, JSON.stringify(mobileLayout.undersized));
   await page.locator('[data-season-ops-action="authoritative-begin-new"]').scrollIntoViewIfNeeded();
   await safeAuditScreenshot(page, path.join(outDir, 'challenge-ladder-settled-mobile.png'), 'browser_authoritative_runs_real_backend_smoke', { timeout: 9000 });
+  const mobileSettledCopy = await page.locator('.season-ops-authoritative-panel').innerText();
+  add('real settled mobile UI keeps internal identifiers out of player copy', !/\barun-|\barreceipt-|authoritative-(?:run|trials)|server_authoritative|state-hash|chain-head|ink_scout|trial_adjudicator/.test(mobileSettledCopy), mobileSettledCopy);
   const riftMobileHub = await openChallengeHubRift(page, 4);
   const riftMobileLayout = await readLayout(page);
   add('real world rift mobile view has no horizontal overflow', riftMobileHub.activeTab === 'rift'

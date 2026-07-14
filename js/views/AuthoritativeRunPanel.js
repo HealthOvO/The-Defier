@@ -35,28 +35,112 @@ const MODE_META = Object.freeze({
   },
   challenge_ladder: {
     label: "众生试炼",
-    shortLabel: "权威榜",
-    summary: "全服统一种子槽与有限正式次数，只认服务端完整重放成绩。",
+    shortLabel: "正式榜",
+    summary: "全服统一试题与有限正式次数，只记录全程校验后的成绩。",
     tags: ["真实榜单", "每周三次", "统一种子"]
   },
   world_rift: {
     label: "天穹裂隙",
     shortLabel: "共斗",
-    summary: "用服务端完整重放推进真实全服首领；每周五次，最佳三次进入贡献榜。",
+    summary: "通过全程校验推进真实全服首领；每周五次，最佳三次进入贡献榜。",
     tags: ["异步共斗", "全服阶段", "最佳三次"]
   },
   relay_expedition: {
     label: "同道远征",
     shortLabel: "接力",
     summary: "共享路线与接力谱，不共享残血、牌组、手牌、弃牌堆或临时状态。",
-    tags: ["四棒共享", "服务端接棒", "权威投影"]
+    tags: ["四棒共享", "天道接棒", "共享结算"]
   },
   fate_chronicle: {
     label: "命途长卷",
     shortLabel: "长卷",
-    summary: "三章双誓约的服务器权威主线；失败不扣次数，当前卷面可跨设备恢复。",
+    summary: "三章双誓约的天道见证主线；失败不扣次数，当前卷面可跨设备恢复。",
     tags: ["单人主线", "双誓约", "失败可重试"]
   }
+});
+
+const NODE_TYPE_LABELS = Object.freeze({
+  enemy: "常规战",
+  elite: "精英战",
+  trial: "试炼战",
+  boss: "首领战",
+  expedition: "远征战",
+  expedition_elite: "远征精英战",
+  relay: "接力战",
+  relay_elite: "接力精英战",
+  chronicle: "长卷战",
+  chronicle_elite: "长卷精英战"
+});
+
+const ENEMY_LABELS = Object.freeze({
+  ink_scout: "墨痕斥候",
+  ash_acolyte: "烬火道童",
+  oath_scribe: "誓文录事",
+  oath_guard: "天契守卫",
+  mirror_seer: "照命术士",
+  chain_colossus: "锁天巨像",
+  fate_warden: "司命镇守",
+  trial_adjudicator: "验算判官",
+  rift_sovereign: "裂界君主",
+  ember_revenant: "照火残影",
+  mirror_duelist: "镜命剑客",
+  void_archivist: "虚卷司书",
+  heaven_breaker: "裂天执卷者"
+});
+
+const CARD_LABELS = Object.freeze({
+  strike: "破势",
+  guard: "守心",
+  insight: "观微",
+  sky_pierce: "穿云",
+  iron_mandate: "铁律",
+  life_siphon: "归息",
+  fracture: "裂隙",
+  flowing_qi: "流炁",
+  ember_riposte: "照火反锋",
+  mirror_breath: "镜息",
+  severing_flow: "截流",
+  archive_surge: "归卷冲霄"
+});
+
+const COMMAND_LABELS = Object.freeze({
+  select_node: "路线已选",
+  play_card: "卡牌已打出",
+  end_turn: "回合已结束",
+  choose_reward: "奖励已领取",
+  settle: "结算已提交",
+  abandon: "历练已放弃"
+});
+
+const REWARD_KIND_LABELS = Object.freeze({
+  card: "新卡牌",
+  heal: "恢复生命",
+  max_hp: "提升根基"
+});
+
+const TERMINAL_REASON_LABELS = Object.freeze({
+  boss_defeated: "首领已击破",
+  hp_depleted: "生命耗尽",
+  turn_budget_exhausted: "回合耗尽",
+  player_abandoned: "主动封卷"
+});
+
+const RELAY_TACTIC_LABELS = Object.freeze({
+  vanguard: "破阵谱",
+  bulwark: "守脉谱",
+  insight: "观星谱"
+});
+
+const RELAY_STATUS_LABELS = Object.freeze({
+  projected: "已归入共享路线",
+  settled: "待写入共享路线",
+  active: "进行中",
+  reserved: "已预留",
+  queued: "待接棒",
+  skipped: "已跳过",
+  expired: "已过期",
+  defeated: "已败退",
+  abandoned: "已放弃"
 });
 
 const STATUS_META = Object.freeze({
@@ -105,11 +189,14 @@ function isMode(value = "") {
   return MODES.includes(normalizeText(value));
 }
 
-function shortHash(value = "") {
-  const text = normalizeText(value);
-  if (!text) return "未提供";
-  if (text.length <= 16) return text;
-  return `${text.slice(0, 10)}…${text.slice(-6)}`;
+function formatMappedLabel(labels = {}, value = "", fallback = "") {
+  return labels[normalizeText(value)] || fallback;
+}
+
+function describeRouteNode(node = {}) {
+  const typeLabel = formatMappedLabel(NODE_TYPE_LABELS, node.nodeType || node.type, "路线战斗");
+  const enemyLabel = normalizeText(node.name) || formatMappedLabel(ENEMY_LABELS, node.enemyId, "未知敌手");
+  return `${typeLabel} · ${enemyLabel}${node.boss ? " · 首领" : ""}`;
 }
 
 function formatUtcDateTime(timestamp = 0, { compact = false } = {}) {
@@ -649,7 +736,7 @@ export class AuthoritativeRunPanel {
     const expectedUserId = normalizeText(this.getCurrentUserId());
     const runId = this.getActiveRunId();
     if (!expectedUserId || !runId) {
-      return { success: false, reason: "authoritative_run_missing_id", message: "权威试炼尚未开始。" };
+      return { success: false, reason: "authoritative_run_missing_id", message: "天道试炼尚未开始。" };
     }
     const result = await this.service.action({
       runId,
@@ -665,7 +752,7 @@ export class AuthoritativeRunPanel {
     const expectedUserId = normalizeText(this.getCurrentUserId());
     const runId = this.getActiveRunId();
     if (!expectedUserId || !runId) {
-      return { success: false, reason: "authoritative_run_missing_id", message: "权威试炼尚未开始。" };
+      return { success: false, reason: "authoritative_run_missing_id", message: "天道试炼尚未开始。" };
     }
     const result = await this.service.settle({
       runId,
@@ -748,10 +835,10 @@ export class AuthoritativeRunPanel {
   async abandonRun() {
     const projection = this.getCurrentProjection();
     if (!projection || !normalizeArray(projection.allowedCommands).includes("abandon")) {
-      return { success: false, reason: "authoritative_run_cannot_abandon", message: "当前状态不能放弃权威试炼。" };
+      return { success: false, reason: "authoritative_run_cannot_abandon", message: "当前状态不能放弃天道试炼。" };
     }
     const confirmed = await this.requestConfirm(
-      "确认放弃这条权威试炼记录？放弃后本次服务器路线、战斗与奖励都会封卷。"
+      "确认放弃本次天道试炼？放弃后当前路线、战斗与奖励都会封卷。"
     );
     if (!confirmed) return { success: false, reason: "cancelled" };
     return this.submitAction("abandon", {});
@@ -935,12 +1022,12 @@ export class AuthoritativeRunPanel {
       <section class="season-ops-section-card season-ops-authoritative-section">
         <div class="season-ops-section-head">
           <div>
-            <h3>权威试炼</h3>
-            <p>浏览器只提交命令，路线、敌意、伤害、奖励、终态与结算都由服务器裁定。</p>
+            <h3>天道试炼</h3>
+            <p>每一步战局都会被天道见证，路线、伤害与奖励无法在途中改写。</p>
           </div>
           <div class="season-ops-counter-chip">天道裁定</div>
         </div>
-        <div class="season-ops-authoritative-mode-picker" role="group" aria-label="权威试炼模式">
+        <div class="season-ops-authoritative-mode-picker" role="group" aria-label="天道试炼模式">
           ${buttons}
         </div>
         <div class="season-ops-authoritative-mode-copy">
@@ -959,7 +1046,7 @@ export class AuthoritativeRunPanel {
     if (!expectedUserId) {
       return this.renderStateCard(
         "未登录",
-        "权威试炼只接受已登录账号的签名命令。登录后才能读取或恢复服务器卷面。",
+        "登录账号后即可开始正式历练，并在其他设备恢复当前进度。",
         `<button type="button" class="menu-btn primary season-ops-state-btn" data-season-ops-action="authoritative-login">前往账号入口</button>`
       );
     }
@@ -973,7 +1060,7 @@ export class AuthoritativeRunPanel {
     if (this.isBusy() && !projection) {
       return this.renderStateCard(
         "加载中",
-        "正在向服务器恢复该模式的权威卷面，客户端不会本地推演任何战斗或奖励。"
+        "正在恢复该模式的历练进度，路线、战斗与奖励会保持原样。"
       );
     }
     if (!projection && error) {
@@ -992,7 +1079,7 @@ export class AuthoritativeRunPanel {
   renderStateCard(title = "", description = "", actions = "") {
     return `
       <div class="season-ops-state-panel season-ops-authoritative-state" role="status" aria-live="polite">
-        <div class="season-ops-state-kicker">权威试炼</div>
+        <div class="season-ops-state-kicker">天道试炼</div>
         <h3>${escapeHtml(title)}</h3>
         <p>${escapeHtml(description)}</p>
         ${actions ? `<div class="season-ops-state-actions">${actions}</div>` : ""}
@@ -1001,10 +1088,10 @@ export class AuthoritativeRunPanel {
   }
 
   renderErrorCard(error = null) {
-    const message = normalizeText(error && error.message, "权威试炼读取失败。");
+    const message = normalizeText(error && error.message, "天道试炼读取失败。");
     return `
       <div class="season-ops-state-panel season-ops-authoritative-state" role="alert" aria-live="assertive">
-        <div class="season-ops-state-kicker">权威试炼</div>
+        <div class="season-ops-state-kicker">天道试炼</div>
         <h3>读取失败</h3>
         <p>${escapeHtml(message)}</p>
         <div class="season-ops-state-actions">
@@ -1038,14 +1125,14 @@ export class AuthoritativeRunPanel {
             <h3>${escapeHtml(modeMeta.label)}</h3>
             <p>${escapeHtml(modeMeta.summary)}</p>
           </div>
-          <div class="season-ops-counter-chip">无进行中 run</div>
+          <div class="season-ops-counter-chip">暂无进行中历练</div>
         </div>
         <div class="season-ops-inline-note">
           ${this.getCurrentMode() === "challenge_ladder"
             ? "当前没有可恢复的正式赛道卷面。发车会消耗一次本周额度，并绑定全服一致的种子槽。"
             : this.getCurrentMode() === "world_rift"
-              ? "当前没有可恢复的裂隙卷面。发车会消耗一次本周额度，并把完整重放贡献原子写入真实全服首领。"
-              : "当前模式没有可恢复的服务器卷面。开始后每一步都只以服务器投影为准，网络失败也不会本地前推。"}
+              ? "当前没有可恢复的裂隙卷面。发车会消耗一次本周额度，结算通过后将贡献计入全服首领。"
+              : "当前模式没有可恢复的历练。开始后每一步都会即时封存，断线重连也不会丢失进度。"}
         </div>
         ${ladderContext}
         ${worldRiftContext}
@@ -1063,7 +1150,7 @@ export class AuthoritativeRunPanel {
             data-season-ops-action="authoritative-refresh"
             data-season-ops-focus-key="${escapeHtml(FOCUS_KEYS.refresh)}"
             ${this.isBusy() ? "disabled" : ""}
-          >${this.isBusy() ? "恢复中..." : "恢复服务器卷面"}</button>
+          >${this.isBusy() ? "恢复中..." : "恢复本次历练"}</button>
         </div>
       </section>
     `;
@@ -1088,7 +1175,7 @@ export class AuthoritativeRunPanel {
     const displayLegIndex = Math.max(1, Math.min(4, currentLegIndex || 1));
     const routeScore = clampInt(session && (session.totalScore ?? session.routeScore));
     const processedLegs = clampInt(session && (session.processedLegs ?? session.completedLegs));
-    const legStatus = normalizeText(leg && leg.status, "queued");
+    const legStatus = formatMappedLabel(RELAY_STATUS_LABELS, leg && leg.status, "待命");
     return `
       <section class="season-ops-section-card season-ops-authoritative-section">
         <div class="season-ops-section-head">
@@ -1107,8 +1194,8 @@ export class AuthoritativeRunPanel {
         </div>
         <div class="season-ops-inline-note">
           ${session
-            ? "接棒、让棒、奖励领取与下一棒调度都在道友录的小队工作区完成；这里仅恢复当前绑定的权威卷面。"
-            : "当前没有可恢复的同道远征权威卷面。请回到道友录的小队页开跑、接棒或查看共享路线。"}
+            ? "接棒、让棒、奖励领取与下一棒调度都在道友录的小队工作区完成；这里仅恢复当前绑定的战斗。"
+            : "当前没有可恢复的同道远征战斗。请回到道友录的小队页开跑、接棒或查看共享路线。"}
         </div>
         <div class="season-ops-state-actions season-ops-authoritative-inline-actions">
           <button
@@ -1139,7 +1226,7 @@ export class AuthoritativeRunPanel {
           </div>
           <div class="season-ops-counter-chip">未发车</div>
         </div>
-        <div class="season-ops-inline-note">长卷不扣正式次数。回到工作区选择已解锁章节与誓约后，服务器才会生成绑定卷面。</div>
+        <div class="season-ops-inline-note">长卷不扣正式次数。回到工作区选择已解锁章节与誓约后，即可生成本次卷面。</div>
         <div class="season-ops-state-actions season-ops-authoritative-inline-actions">
           <button
             type="button"
@@ -1162,7 +1249,7 @@ export class AuthoritativeRunPanel {
   renderChallengeLadderContext() {
     const current = this.challengeLadderState && this.challengeLadderState.current;
     if (!current || typeof current !== "object") {
-      return `<div class="season-ops-inline-note">正在等待本周权威轮换；正式榜不可用时仍可返回挑战观察站进行离线练习。</div>`;
+      return `<div class="season-ops-inline-note">正在等待本周试炼轮换；正式榜不可用时仍可返回挑战观察站进行离线练习。</div>`;
     }
     const rotation = current.rotation && typeof current.rotation === "object" ? current.rotation : current;
     const attemptLimit = clampInt(current.allowance?.attemptLimit ?? current.attemptLimit ?? rotation.attemptLimit, 3);
@@ -1251,7 +1338,7 @@ export class AuthoritativeRunPanel {
         <div class="season-ops-section-head">
           <div>
             <h3>${escapeHtml(MODE_META[this.getCurrentMode()].label)}</h3>
-            <p>run ${escapeHtml(this.lastRunMeta.runId)} · ${escapeHtml(this.lastRunMeta.reportVersion || "authoritative-run-v2")}</p>
+            <p>${escapeHtml(MODE_META[this.getCurrentMode()].summary)}</p>
           </div>
           <div class="season-ops-authoritative-status-group">
             <span class="season-ops-counter-chip tone-${escapeHtml(statusMeta.tone)}">${escapeHtml(statusMeta.label)}</span>
@@ -1259,19 +1346,18 @@ export class AuthoritativeRunPanel {
           </div>
         </div>
         <div class="season-ops-authoritative-stats-grid">
-          ${this.renderStatTile("服务器版本", `v${projection.version}`, `动作 ${this.lastRunMeta.actionCount} · 协议 ${this.lastRunMeta.protocolVersion}`)}
+          ${this.renderStatTile("卷面进度", `第 ${Math.max(1, clampInt(projection.version) + 1)} 刻`, `行动 ${this.lastRunMeta.actionCount} · 天道已确认`)}
           ${this.renderStatTile("玩家状态", `${clampInt(player.hp)}/${clampInt(player.maxHp)} HP`, `格挡 ${clampInt(player.block)} · 能量 ${clampInt(player.energy)}`)}
           ${this.renderStatTile("手牌与牌堆", `${normalizeArray(player.hand).length} 手牌`, `抽牌堆 ${clampInt(player.drawPileCount)} · 弃牌堆 ${clampInt(player.discardPileCount)}`)}
-          ${this.renderStatTile("恢复与时效", `${clampInt(recovery.recoveryCount)} 次恢复`, this.lastRunMeta.expiresAt > 0 ? `到期 ${formatUtcDateTime(this.lastRunMeta.expiresAt, { compact: true })}` : "等待服务器时限")}
+          ${this.renderStatTile("恢复与时效", clampInt(recovery.recoveryCount) > 0 ? `已恢复 ${clampInt(recovery.recoveryCount)} 次` : "首次历练", this.lastRunMeta.expiresAt > 0 ? `到期 ${formatUtcDateTime(this.lastRunMeta.expiresAt, { compact: true })}` : "本次历练持续有效")}
         </div>
         <div class="season-ops-authoritative-meta-row">
-          ${renderChip(`内容 ${this.lastRunMeta.contentVersion}`)}
-          ${renderChip(`内容哈希 ${shortHash(this.lastRunMeta.contentHash)}`)}
-          ${renderChip(`状态哈希 ${shortHash(integrity.stateHash)}`)}
-          ${renderChip(`链首 ${shortHash(integrity.chainHead)}`)}
+          ${renderChip("本轮规则已锁定")}
+          ${integrity.fullReplayRequiredForSettlement ? renderChip("全程校验") : ""}
           ${renderChip(formatTrustTier(this.lastRunMeta.trustTier))}
+          ${recovery.resumable ? renderChip("可跨设备恢复") : ""}
           ${this.isRelayExpeditionMode() && relayLeg ? renderChip(`第 ${clampInt(relayLeg.legIndex, 1)} 棒`) : ""}
-          ${this.isRelayExpeditionMode() && relayLeg && relayLeg.tacticId ? renderChip(`接力谱 ${relayLeg.tacticId}`) : ""}
+          ${this.isRelayExpeditionMode() && relayLeg && relayLeg.tacticId ? renderChip(`接力谱 ${formatMappedLabel(RELAY_TACTIC_LABELS, relayLeg.tacticId, "待定")}`) : ""}
         </div>
         ${this.getCurrentMode() === "challenge_ladder" ? this.renderChallengeLadderContext() : ""}
         ${this.getCurrentMode() === "world_rift" ? this.renderWorldRiftContext() : ""}
@@ -1296,7 +1382,7 @@ export class AuthoritativeRunPanel {
     if (phase === "reward") return this.renderRewardPhase();
     if (phase === "completed") return this.renderCompletedPhase();
     if (phase === "defeated" || phase === "abandoned") return this.renderTerminalPhase();
-    return this.renderStateCard("待命", "服务器暂未返回可展示的权威投影。");
+    return this.renderStateCard("待命", "尚未收到可展示的历练进度。");
   }
 
   renderRoutePhase() {
@@ -1309,18 +1395,18 @@ export class AuthoritativeRunPanel {
         <div class="season-ops-section-head">
           <div>
             <h3>路线选择</h3>
-            <p>服务器只开放当前两条候选节点；客户端只能选择其一，不能改写敌人与奖励池。</p>
+            <p>当前开放两条候选路线，选择后将锁定本次遭遇与奖励。</p>
           </div>
           <div class="season-ops-counter-chip">第 ${clampInt(route.stage, 1)} / ${clampInt(route.totalStages, 3)} 站</div>
         </div>
         <div class="season-ops-authoritative-choice-grid">
-          ${choices.map(choice => this.renderRouteChoice(choice)).join("") || `<div class="season-ops-inline-empty">当前没有可选路线，请恢复服务器卷面。</div>`}
+          ${choices.map(choice => this.renderRouteChoice(choice)).join("") || `<div class="season-ops-inline-empty">当前没有可选路线，请恢复本次历练。</div>`}
         </div>
         ${history.length > 0 ? `
           <div class="season-ops-authoritative-history">
             <strong>已通过节点</strong>
             <div class="season-ops-authoritative-history-list">
-              ${history.map(node => renderChip(`${node.nodeType} · ${node.enemyId}${node.boss ? " · 首领" : ""}`)).join("")}
+              ${history.map(node => renderChip(describeRouteNode(node))).join("")}
             </div>
           </div>
         ` : ""}
@@ -1334,10 +1420,10 @@ export class AuthoritativeRunPanel {
     return `
       <article class="season-ops-authoritative-choice-card" tabindex="-1" data-season-ops-focus-fallback="${escapeHtml(focusKey)}">
         <div class="season-ops-authoritative-choice-top">
-          <strong>${escapeHtml(choice.name || choice.enemyId || "未知节点")}</strong>
-          <span class="season-ops-meta-chip">${escapeHtml(choice.threat || choice.type || "路线")}</span>
+          <strong>${escapeHtml(choice.name || formatMappedLabel(ENEMY_LABELS, choice.enemyId, "未知敌手"))}</strong>
+          <span class="season-ops-meta-chip">${escapeHtml(choice.threat || formatMappedLabel(NODE_TYPE_LABELS, choice.type, "路线战斗"))}</span>
         </div>
-        <p>${escapeHtml(`节点 ${choice.type || "route"} · 敌人上限 ${clampInt(choice.maxHp)} HP${choice.boss ? " · 首领" : ""}`)}</p>
+        <p>${escapeHtml(`${formatMappedLabel(NODE_TYPE_LABELS, choice.type, "路线战斗")} · 敌人上限 ${clampInt(choice.maxHp)} HP${choice.boss ? " · 首领" : ""}`)}</p>
         <button
           type="button"
           class="season-ops-inline-btn is-claimable"
@@ -1362,7 +1448,7 @@ export class AuthoritativeRunPanel {
         <div class="season-ops-section-head">
           <div>
             <h3>战斗投影</h3>
-            <p>敌方下一手意图由服务器公开。客户端只能从当前权威手牌里出牌，绝不本地演算伤害。</p>
+            <p>敌方下一手意图已经公开，请用当前手牌安排攻防节奏。</p>
           </div>
           <div class="season-ops-counter-chip">回合 ${clampInt(battle.turn, 1)}</div>
         </div>
@@ -1381,8 +1467,8 @@ export class AuthoritativeRunPanel {
           </article>
           <article class="season-ops-authoritative-combatant">
             <div class="season-ops-authoritative-combatant-head">
-              <strong>${escapeHtml(enemy.name || enemy.enemyId || "敌方")}</strong>
-              <span class="season-ops-meta-chip">${escapeHtml(battle.nodeType || "battle")}</span>
+              <strong>${escapeHtml(enemy.name || formatMappedLabel(ENEMY_LABELS, enemy.enemyId, "敌方"))}</strong>
+              <span class="season-ops-meta-chip">${escapeHtml(formatMappedLabel(NODE_TYPE_LABELS, battle.nodeType, "战斗"))}</span>
             </div>
             <div class="season-ops-authoritative-vitals">
               ${renderChip(`HP ${clampInt(enemy.hp)}/${clampInt(enemy.maxHp)}`)}
@@ -1394,7 +1480,7 @@ export class AuthoritativeRunPanel {
           </article>
         </div>
         <div class="season-ops-authoritative-hand-grid">
-          ${hand.map(card => this.renderHandCard(card, player.energy)).join("") || `<div class="season-ops-inline-empty">当前权威手牌为空，可直接结束回合。</div>`}
+          ${hand.map(card => this.renderHandCard(card, player.energy)).join("") || `<div class="season-ops-inline-empty">当前手牌为空，可直接结束回合。</div>`}
         </div>
         ${this.renderLastReceipt()}
         ${this.renderFooterActions({ canEndTurn: true, canAbandon: true })}
@@ -1408,10 +1494,10 @@ export class AuthoritativeRunPanel {
     return `
       <article class="season-ops-authoritative-hand-card ${playable ? "is-playable" : "is-locked"}" tabindex="-1" data-season-ops-focus-fallback="${escapeHtml(focusKey)}">
         <div class="season-ops-authoritative-card-top">
-          <strong>${escapeHtml(card.name || card.cardId || "未知牌")}</strong>
+          <strong>${escapeHtml(card.name || formatMappedLabel(CARD_LABELS, card.cardId, "未知牌"))}</strong>
           <span class="season-ops-authoritative-card-cost">${clampInt(card.cost)}</span>
         </div>
-        <p>${escapeHtml(card.description || "服务器未提供描述。")}</p>
+        <p>${escapeHtml(card.description || "这张牌暂时没有更多描述。")}</p>
         <button
           type="button"
           class="season-ops-inline-btn ${playable ? "is-claimable" : "is-muted"}"
@@ -1419,7 +1505,7 @@ export class AuthoritativeRunPanel {
           data-season-ops-focus-key="${escapeHtml(focusKey)}"
           ${buildDataAttributes({ "data-card-instance-id": card.instanceId })}
           ${!playable || this.isBusy() ? "disabled" : ""}
-        >${this.isBusy() ? "等待服务器..." : playable ? "打出此牌" : "能量不足"}</button>
+        >${this.isBusy() ? "处理中..." : playable ? "打出此牌" : "能量不足"}</button>
       </article>
     `;
   }
@@ -1434,12 +1520,12 @@ export class AuthoritativeRunPanel {
         <div class="season-ops-section-head">
           <div>
             <h3>战后奖励</h3>
-            <p>奖励项由服务器生成。选择后才会进入下一站，客户端不会本地补卡或回血。</p>
+            <p>选择一项战后奖励，领取后将进入下一站。</p>
           </div>
           <div class="season-ops-counter-chip">整备 ${clampInt(scenario.betweenEncounterHeal)} HP</div>
         </div>
         <div class="season-ops-authoritative-choice-grid">
-          ${choices.map(choice => this.renderRewardChoice(choice)).join("") || `<div class="season-ops-inline-empty">当前没有可选奖励，请恢复服务器卷面。</div>`}
+          ${choices.map(choice => this.renderRewardChoice(choice)).join("") || `<div class="season-ops-inline-empty">当前没有可选奖励，请恢复本次历练。</div>`}
         </div>
         ${this.renderLastReceipt()}
         ${this.renderFooterActions({ canAbandon: true })}
@@ -1453,9 +1539,9 @@ export class AuthoritativeRunPanel {
       <article class="season-ops-authoritative-choice-card" tabindex="-1" data-season-ops-focus-fallback="${escapeHtml(focusKey)}">
         <div class="season-ops-authoritative-choice-top">
           <strong>${escapeHtml(choice.name || choice.rewardId || "未知奖励")}</strong>
-          <span class="season-ops-meta-chip">${escapeHtml(choice.kind || "reward")}</span>
+          <span class="season-ops-meta-chip">${escapeHtml(formatMappedLabel(REWARD_KIND_LABELS, choice.kind, "战后奖励"))}</span>
         </div>
-        <p>${escapeHtml(choice.description || "服务器未提供奖励描述。")}</p>
+        <p>${escapeHtml(choice.description || "这项奖励暂时没有更多描述。")}</p>
         <button
           type="button"
           class="season-ops-inline-btn is-claimable"
@@ -1478,10 +1564,10 @@ export class AuthoritativeRunPanel {
       <section class="season-ops-section-card season-ops-authoritative-section">
         <div class="season-ops-section-head">
           <div>
-            <h3>${settled ? (isRelay ? "已完成权威结算" : "已结算归档") : (isRelay ? "待投影共享路线" : "待提交结算")}</h3>
+            <h3>${settled ? (isRelay ? "本棒已结算" : "已结算归档") : (isRelay ? "待写入共享路线" : "待提交结算")}</h3>
             <p>${settled
-              ? (isRelay ? "这条接力 run 已完成服务端结算，下一步会把结果投影回共享路线。" : "这条 run 已写入赛季进度与权威计数。")
-              : (isRelay ? "服务器已确认本棒通关；结算后会直接投影回同道远征共享状态。" : "服务器已确认通关，但赛季进度还要等完整重放结算通过。")}</p>
+              ? (isRelay ? "本棒已完成结算，下一步会把结果写回共享路线。" : "本次历练已写入赛季进度与正式记录。")
+              : (isRelay ? "本棒已经通关；结算后会直接写回同道远征共享状态。" : "本次历练已经通关，通过全程校验后即可记入正式进度。")}</p>
           </div>
           <div class="season-ops-counter-chip">${escapeHtml(summary.grade || "未评级")}</div>
         </div>
@@ -1526,7 +1612,7 @@ export class AuthoritativeRunPanel {
             data-season-ops-action="authoritative-refresh"
             data-season-ops-focus-key="${escapeHtml(FOCUS_KEYS.refresh)}"
             ${this.isBusy() ? "disabled" : ""}
-          >${this.isBusy() ? "恢复中..." : "恢复服务器卷面"}</button>
+          >${this.isBusy() ? "恢复中..." : "恢复本次历练"}</button>
         </div>
       </section>
     `;
@@ -1544,12 +1630,12 @@ export class AuthoritativeRunPanel {
           <div>
             <h3>${abandoned ? "试炼已放弃" : isRelay ? "本棒已结束" : "试炼已结束"}</h3>
             <p>${abandoned
-              ? "这条权威路线已被主动封卷，不再接受后续操作。"
+              ? "本次路线已被主动封卷，不再接受后续操作。"
               : isRelay
-                ? "服务器已确认本棒终态；共享路线推进与下一棒安排回到同道远征工作区处理。"
-                : "服务器已确认败退终态，客户端只展示最终投影。"} </p>
+                ? "本棒已经结束；共享路线推进与下一棒安排请回到同道远征工作区处理。"
+                : "本次试炼已经败退，最终战况已封存。"} </p>
           </div>
-          <div class="season-ops-counter-chip">${escapeHtml(summary.reason || "terminal")}</div>
+          <div class="season-ops-counter-chip">${escapeHtml(formatMappedLabel(TERMINAL_REASON_LABELS, summary.reason, abandoned ? "主动封卷" : "历练结束"))}</div>
         </div>
         ${this.renderSummaryGrid(summary)}
         ${this.renderRouteHistory()}
@@ -1583,7 +1669,7 @@ export class AuthoritativeRunPanel {
             data-season-ops-action="authoritative-refresh"
             data-season-ops-focus-key="${escapeHtml(FOCUS_KEYS.refresh)}"
             ${this.isBusy() ? "disabled" : ""}
-          >${this.isBusy() ? "恢复中..." : "恢复服务器卷面"}</button>
+          >${this.isBusy() ? "恢复中..." : "恢复本次历练"}</button>
         </div>
       </section>
     `;
@@ -1609,19 +1695,19 @@ export class AuthoritativeRunPanel {
       <article class="season-ops-authoritative-settlement">
         <div class="season-ops-authoritative-choice-top">
           <strong>${settled ? "结算回执" : "待结算摘要"}</strong>
-          ${effectiveReceipt ? `<span class="season-ops-meta-chip">${escapeHtml(shortHash(effectiveReceipt.receiptId || effectiveReceipt.actionId || ""))}</span>` : ""}
+          ${effectiveReceipt ? `<span class="season-ops-meta-chip">天道校验</span>` : ""}
         </div>
         <div class="season-ops-authoritative-meta-row">
           ${progressDelta ? renderChip(`战斗胜利 +${clampInt(progressDelta.battleWins)}`) : ""}
           ${progressDelta ? renderChip(`首领胜利 +${clampInt(progressDelta.bossWins)}`) : ""}
           ${progressDelta ? renderChip(`历练完成 +${clampInt(progressDelta.activityCompletions)}`) : ""}
           ${effectiveReceipt && effectiveReceipt.settledAt ? renderChip(`结算 ${formatUtcDateTime(effectiveReceipt.settledAt, { compact: true })}`) : ""}
-          ${integrity ? renderChip(`回放 ${integrity.fullReplayPassed ? "通过" : "未通过"}`) : ""}
+          ${integrity ? renderChip(`全程校验 ${integrity.fullReplayPassed ? "通过" : "未通过"}`) : ""}
         </div>
         <p class="season-ops-inline-note">${escapeHtml(
           settled
-            ? (isRelay ? "服务器已完成完整重放校验；投影后会把本棒摘要写回共享路线。" : "服务器已完成完整重放校验，并把这条 run 记入权威赛季进度。")
-            : (isRelay ? "只有完整重放与状态哈希一致时，服务器才会允许把本棒结果投影回同道远征。" : "只有完整重放与状态哈希一致时，服务器才会把这条 run 写入正式历练。")
+            ? (isRelay ? "全程校验已经通过；返回后会把本棒摘要写回共享路线。" : "全程校验已经通过，本次历练已记入正式赛季进度。")
+            : (isRelay ? "只有全程校验通过时，本棒结果才会写回同道远征。" : "只有全程校验通过时，本次历练才会写入正式记录。")
         )}</p>
       </article>
     `;
@@ -1638,7 +1724,7 @@ export class AuthoritativeRunPanel {
           <span class="season-ops-meta-chip">${history.length} 节点</span>
         </div>
         <div class="season-ops-authoritative-history-list">
-          ${history.map(node => renderChip(`${node.nodeType} · ${node.enemyId}${node.boss ? " · 首领" : ""}`)).join("")}
+          ${history.map(node => renderChip(describeRouteNode(node))).join("")}
         </div>
       </article>
     `;
@@ -1652,13 +1738,13 @@ export class AuthoritativeRunPanel {
     return `
       <article class="season-ops-authoritative-settlement">
         <div class="season-ops-authoritative-choice-top">
-          <strong>最近服务器回执</strong>
-          <span class="season-ops-meta-chip">${escapeHtml(receipt.command || receipt.resultPhase || "receipt")}</span>
+          <strong>最近战况</strong>
+          <span class="season-ops-meta-chip">${escapeHtml(formatMappedLabel(COMMAND_LABELS, receipt.command || receipt.resultPhase, "战局已更新"))}</span>
         </div>
         <div class="season-ops-authoritative-event-list">
           ${events.slice(-4).map(event => `<div class="season-ops-authoritative-event-row">${escapeHtml(this.describeEvent(event))}</div>`).join("")}
         </div>
-        ${receipt.acceptedAt ? `<div class="season-ops-inline-note">确认时间 ${escapeHtml(formatUtcDateTime(receipt.acceptedAt, { compact: true }))}</div>` : ""}
+        ${receipt.acceptedAt ? `<div class="season-ops-inline-note">封卷时间 ${escapeHtml(formatUtcDateTime(receipt.acceptedAt, { compact: true }))}</div>` : ""}
       </article>
     `;
   }
@@ -1675,7 +1761,7 @@ export class AuthoritativeRunPanel {
             data-season-ops-action="authoritative-end-turn"
             data-season-ops-focus-key="${escapeHtml(FOCUS_KEYS.endTurn)}"
             ${!allowed.has("end_turn") || this.isBusy() ? "disabled" : ""}
-          >${this.isBusy() ? "等待服务器..." : "结束本回合"}</button>
+          >${this.isBusy() ? "处理中..." : "结束本回合"}</button>
         ` : ""}
         <button
           type="button"
@@ -1683,7 +1769,7 @@ export class AuthoritativeRunPanel {
           data-season-ops-action="authoritative-refresh"
           data-season-ops-focus-key="${escapeHtml(FOCUS_KEYS.refresh)}"
           ${this.isBusy() ? "disabled" : ""}
-        >${this.isBusy() ? "恢复中..." : "恢复服务器卷面"}</button>
+        >${this.isBusy() ? "恢复中..." : "恢复本次历练"}</button>
         ${canAbandon ? `
           <button
             type="button"
@@ -1691,7 +1777,7 @@ export class AuthoritativeRunPanel {
             data-season-ops-action="authoritative-abandon"
             data-season-ops-focus-key="${escapeHtml(FOCUS_KEYS.abandon)}"
             ${!allowed.has("abandon") || this.isBusy() ? "disabled" : ""}
-          >${this.isBusy() ? "等待服务器..." : "放弃本次试炼"}</button>
+          >${this.isBusy() ? "处理中..." : "放弃本次试炼"}</button>
         ` : ""}
       </div>
     `;
@@ -1709,15 +1795,15 @@ export class AuthoritativeRunPanel {
 
   describeEvent(event = {}) {
     const type = normalizeText(event.type);
-    if (type === "encounter_started") return `服务器已锁定遭遇 ${normalizeText(event.enemyId)}。`;
-    if (type === "card_played") return `已打出 ${normalizeText(event.cardId)}，伤害 ${clampInt(event.damage)}，格挡 ${clampInt(event.block)}。`;
+    if (type === "encounter_started") return `遭遇已锁定：${formatMappedLabel(ENEMY_LABELS, event.enemyId, "未知敌手")}。`;
+    if (type === "card_played") return `已打出「${formatMappedLabel(CARD_LABELS, event.cardId, "未知牌")}」，伤害 ${clampInt(event.damage)}，格挡 ${clampInt(event.block)}。`;
     if (type === "enemy_intent_resolved") return `敌方意图结算，承受 ${clampInt(event.damageTaken)} 伤害，敌方获得 ${clampInt(event.enemyBlock)} 格挡。`;
-    if (type === "reward_chosen") return `已领取奖励 ${normalizeText(event.rewardKind)}。`;
-    if (type === "encounter_won") return `已击破 ${normalizeText(event.enemyId)}${event.boss ? "（首领）" : ""}。`;
-    if (type === "run_completed") return `服务器确认通关，评分 ${clampInt(event.score)}，评级 ${normalizeText(event.grade)}。`;
-    if (type === "run_defeated") return `服务器确认败退，原因 ${normalizeText(event.reason)}。`;
-    if (type === "run_abandoned") return "服务器确认本次试炼已放弃。";
-    if (type === "player_turn_started") return `服务器已进入第 ${clampInt(event.turn, 1)} 回合。`;
-    return JSON.stringify(event);
+    if (type === "reward_chosen") return `已领取：${formatMappedLabel(REWARD_KIND_LABELS, event.rewardKind, "战后奖励")}。`;
+    if (type === "encounter_won") return `已击破 ${formatMappedLabel(ENEMY_LABELS, event.enemyId, "未知敌手")}${event.boss ? "（首领）" : ""}。`;
+    if (type === "run_completed") return `本次历练已通关，评分 ${clampInt(event.score)}，评级 ${normalizeText(event.grade)}。`;
+    if (type === "run_defeated") return `本次历练已败退：${formatMappedLabel(TERMINAL_REASON_LABELS, event.reason, "战斗结束")}。`;
+    if (type === "run_abandoned") return "本次历练已主动封卷。";
+    if (type === "player_turn_started") return `进入第 ${clampInt(event.turn, 1)} 回合。`;
+    return "战局状态已更新。";
   }
 }
