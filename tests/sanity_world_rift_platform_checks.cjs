@@ -1,6 +1,7 @@
 const assert = require('node:assert');
 const crypto = require('node:crypto');
 const fs = require('node:fs');
+const net = require('node:net');
 const os = require('node:os');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
@@ -29,10 +30,10 @@ function resolveSqlite3() {
 const sqlite3 = resolveSqlite3();
 const { CONTENT_VERSION } = require('../server/progression/authoritative-runs/catalog');
 
-const PORT = Number(process.env.WORLD_RIFT_PLATFORM_TEST_PORT || 9065);
-const BASE_URL = `http://127.0.0.1:${PORT}`;
-const SECONDARY_PORT = Number(process.env.WORLD_RIFT_PLATFORM_SECONDARY_TEST_PORT || PORT + 1);
-const SECONDARY_BASE_URL = `http://127.0.0.1:${SECONDARY_PORT}`;
+let PORT = Number(process.env.WORLD_RIFT_PLATFORM_TEST_PORT || 0);
+let SECONDARY_PORT = Number(process.env.WORLD_RIFT_PLATFORM_SECONDARY_TEST_PORT || (PORT ? PORT + 1 : 0));
+let BASE_URL = '';
+let SECONDARY_BASE_URL = '';
 const DB_PATH = process.env.WORLD_RIFT_PLATFORM_TEST_DB_PATH
   || path.join(os.tmpdir(), `the-defier-world-rift-platform-${process.pid}.sqlite`);
 const JWT_SECRET = 'world-rift-platform-jwt-secret-32';
@@ -82,7 +83,41 @@ function removeDbFiles() {
   }
 }
 
+function reserveAvailablePort() {
+  return new Promise((resolve, reject) => {
+    const server = net.createServer();
+    server.unref();
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', () => {
+      resolve({ server, port: Number(server.address()?.port || 0) });
+    });
+  });
+}
+
+async function configureTestPorts() {
+  const reservations = [];
+  if (!PORT) {
+    const reservation = await reserveAvailablePort();
+    reservations.push(reservation);
+    PORT = reservation.port;
+  }
+  if (!SECONDARY_PORT) {
+    const reservation = await reserveAvailablePort();
+    reservations.push(reservation);
+    SECONDARY_PORT = reservation.port;
+  }
+  if (!PORT || !SECONDARY_PORT || PORT === SECONDARY_PORT) {
+    throw new Error(`invalid world rift platform test ports: ${PORT}/${SECONDARY_PORT}`);
+  }
+  BASE_URL = `http://127.0.0.1:${PORT}`;
+  SECONDARY_BASE_URL = `http://127.0.0.1:${SECONDARY_PORT}`;
+  await Promise.all(reservations.map(({ server }) => new Promise((resolve, reject) => {
+    server.close(error => error ? reject(error) : resolve());
+  })));
+}
+
 function startServer(port = PORT) {
+  const gitSha = `world-rift-platform-test-${process.pid}-${port}`;
   const child = spawn(process.execPath, ['server/app.js'], {
     cwd: ROOT,
     env: {
@@ -95,7 +130,7 @@ function startServer(port = PORT) {
       DEFIER_INTEGRITY_REQUIRED: '1',
       DEFIER_OPS_TOKEN: OPS_TOKEN,
       DEFIER_DB_PATH: DB_PATH,
-      DEFIER_GIT_SHA: 'world-rift-platform-test-sha',
+      DEFIER_GIT_SHA: gitSha,
       NODE_PATH: [
         process.env.NODE_PATH,
         path.join(ROOT, 'node_modules'),
@@ -112,7 +147,7 @@ function startServer(port = PORT) {
   child.stderr.on('data', chunk => {
     output += chunk.toString();
   });
-  return { child, getOutput: () => output };
+  return { child, gitSha, getOutput: () => output };
 }
 
 async function stopServer(server) {
@@ -156,7 +191,11 @@ async function waitForHealth(server, baseUrl = BASE_URL) {
     }
     try {
       const response = await requestAt(baseUrl, '/api/health');
-      if (response.status === 200 && response.payload?.status === 'ok') return response;
+      if (response.status === 200
+        && response.payload?.status === 'ok'
+        && response.payload?.version?.gitSha === server.gitSha) {
+        return response;
+      }
     } catch (error) {}
     await new Promise(resolve => setTimeout(resolve, 100));
   }
@@ -1040,6 +1079,7 @@ async function runCoverage() {
 }
 
 async function main() {
+  await configureTestPorts();
   removeDbFiles();
   const primaryServer = startServer(PORT);
   const secondaryServer = startServer(SECONDARY_PORT);
