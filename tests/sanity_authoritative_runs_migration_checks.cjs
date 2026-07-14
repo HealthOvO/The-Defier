@@ -6,11 +6,27 @@ const path = require('node:path');
 const { spawn } = require('node:child_process');
 
 const ROOT = path.resolve(__dirname, '..');
+const SHARED_NODE_MODULE_DIRS = [
+  path.join(ROOT, 'node_modules'),
+  path.join(ROOT, 'server', 'node_modules'),
+  path.join(ROOT, '..', '..', 'node_modules'),
+  path.join(ROOT, '..', '..', 'server', 'node_modules')
+].filter(candidate => fs.existsSync(candidate));
+
+function buildNodePath() {
+  return [
+    ...SHARED_NODE_MODULE_DIRS,
+    process.env.NODE_PATH || ''
+  ].filter(Boolean).join(path.delimiter);
+}
+
 function resolveSqlite3() {
   for (const candidate of [
     'sqlite3',
     path.join(ROOT, 'node_modules', 'sqlite3'),
-    path.join(ROOT, 'server', 'node_modules', 'sqlite3')
+    path.join(ROOT, 'server', 'node_modules', 'sqlite3'),
+    path.join(ROOT, '..', '..', 'node_modules', 'sqlite3'),
+    path.join(ROOT, '..', '..', 'server', 'node_modules', 'sqlite3')
   ]) {
     try {
       return require(candidate).verbose();
@@ -22,10 +38,13 @@ const sqlite3 = resolveSqlite3();
 const PORT = Number(process.env.AUTHORITATIVE_RUNS_MIGRATION_TEST_PORT || 9056);
 const CONCURRENT_PORT_A = PORT + 1;
 const CONCURRENT_PORT_B = PORT + 2;
+const V5_COMPAT_PORT = PORT + 3;
 const DB_PATH = process.env.AUTHORITATIVE_RUNS_MIGRATION_DB_PATH
   || path.join(os.tmpdir(), `the-defier-authoritative-runs-v2-${process.pid}.sqlite`);
 const CONCURRENT_DB_PATH = process.env.AUTHORITATIVE_RUNS_MIGRATION_CONCURRENT_DB_PATH
   || path.join(os.tmpdir(), `the-defier-authoritative-runs-v2-concurrent-${process.pid}.sqlite`);
+const V5_COMPAT_DB_PATH = process.env.AUTHORITATIVE_RUNS_MIGRATION_V5_COMPAT_DB_PATH
+  || path.join(os.tmpdir(), `the-defier-authoritative-runs-v5-compat-${process.pid}.sqlite`);
 const JWT_SECRET = 'authoritative-runs-v2-jwt-secret-32-characters';
 const HMAC_SECRET = 'authoritative-runs-v2-hmac-secret-32-characters';
 
@@ -38,8 +57,30 @@ function stableStringify(value) {
   return JSON.stringify(value);
 }
 
+function cloneJson(value) {
+  return JSON.parse(JSON.stringify(value));
+}
+
 function digest(value) {
   return crypto.createHash('sha256').update(String(value || ''), 'utf8').digest('hex');
+}
+
+function createCatalogFixture(contentVersion, snapshot, {
+  relayExpeditionScenarioIds = [],
+  fateChronicleScenarioIds = []
+} = {}) {
+  const normalizedSnapshot = cloneJson(snapshot || {});
+  normalizedSnapshot.protocolVersion = 'authoritative-run-v2';
+  normalizedSnapshot.contentVersion = contentVersion;
+  const contentJson = stableStringify(normalizedSnapshot);
+  return {
+    contentVersion,
+    contentHash: digest(contentJson),
+    contentJson,
+    snapshot: normalizedSnapshot,
+    relayExpeditionScenarioIds: relayExpeditionScenarioIds.slice(),
+    fateChronicleScenarioIds: fateChronicleScenarioIds.slice()
+  };
 }
 
 const FALLBACK_CATALOG_SNAPSHOT = {
@@ -75,20 +116,63 @@ const CATALOG_VERSION = String(RUNTIME_CATALOG?.CONTENT_VERSION || 'authoritativ
 const CATALOG_JSON = String(RUNTIME_CATALOG?.CONTENT_JSON || stableStringify(FALLBACK_CATALOG_SNAPSHOT));
 const CATALOG_HASH = String(RUNTIME_CATALOG?.CONTENT_HASH || digest(CATALOG_JSON));
 const CATALOG_SNAPSHOT = JSON.parse(CATALOG_JSON);
+const RELAY_EXPEDITION_SCENARIO_IDS = Array.isArray(RUNTIME_CATALOG?.RELAY_EXPEDITION_SCENARIO_IDS)
+  ? RUNTIME_CATALOG.RELAY_EXPEDITION_SCENARIO_IDS.slice()
+  : [];
+const FATE_CHRONICLE_SCENARIO_IDS = Array.isArray(RUNTIME_CATALOG?.FATE_CHRONICLE_SCENARIO_IDS)
+  ? RUNTIME_CATALOG.FATE_CHRONICLE_SCENARIO_IDS.slice()
+  : [];
 const DRIFTED_CATALOG_HASH = '0'.repeat(64);
-const LEGACY_CATALOG_FIXTURES = ['v1', 'v2', 'v3'].map((suffix) => {
-  const contentVersion = `authoritative-trials-${suffix}`;
-  const contentJson = stableStringify({
-    protocolVersion: 'authoritative-run-v2',
-    contentVersion,
+const LEGACY_CATALOG_FIXTURES = ['v1', 'v2', 'v3'].map((suffix) => createCatalogFixture(
+  `authoritative-trials-${suffix}`,
+  {
     fixture: `immutable-${suffix}-catalog`
-  });
-  return {
-    contentVersion,
-    contentHash: digest(contentJson),
-    contentJson
-  };
+  }
+));
+const HISTORICAL_V4_DECK_CRAFTING = Object.freeze({
+  version: 1,
+  reportVersion: 'authoritative-deck-crafting-v1',
+  cardOfferCount: 2,
+  healAmount: 10,
+  healThresholdPercent: 55,
+  maxCardsRemoved: 2,
+  maxHpAmount: 5,
+  minBlockCards: 2,
+  minDamageCards: 2,
+  minDeckSize: 8,
+  removeUnlockStage: 2
 });
+const HISTORICAL_V4_CATALOG_FIXTURE = createCatalogFixture(
+  'authoritative-trials-v4',
+  {
+    fixture: 'immutable-v4-catalog',
+    deckCrafting: HISTORICAL_V4_DECK_CRAFTING
+  }
+);
+const HISTORICAL_CATALOG_FIXTURES = [
+  ...LEGACY_CATALOG_FIXTURES,
+  HISTORICAL_V4_CATALOG_FIXTURE
+];
+const V5_BOOTSTRAP_CATALOG_FIXTURE = CATALOG_VERSION === 'authoritative-trials-v5'
+  ? {
+      contentVersion: CATALOG_VERSION,
+      contentHash: CATALOG_HASH,
+      contentJson: CATALOG_JSON,
+      snapshot: cloneJson(CATALOG_SNAPSHOT),
+      relayExpeditionScenarioIds: RELAY_EXPEDITION_SCENARIO_IDS.slice(),
+      fateChronicleScenarioIds: FATE_CHRONICLE_SCENARIO_IDS.slice()
+    }
+  : createCatalogFixture(
+      'authoritative-trials-v5',
+      {
+        ...cloneJson(CATALOG_SNAPSHOT),
+        contentVersion: 'authoritative-trials-v5'
+      },
+      {
+        relayExpeditionScenarioIds: RELAY_EXPEDITION_SCENARIO_IDS,
+        fateChronicleScenarioIds: FATE_CHRONICLE_SCENARIO_IDS
+      }
+    );
 
 function removeDbFiles(dbPath) {
   for (const suffix of ['', '-wal', '-shm']) {
@@ -136,18 +220,72 @@ function buildServerBootstrapScript() {
   `;
 }
 
+function writeCatalogOverridePreload(catalogFixture) {
+  const preloadPath = path.join(
+    os.tmpdir(),
+    `the-defier-authoritative-runs-catalog-override-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}.cjs`
+  );
+  const fixturePayload = JSON.stringify({
+    contentVersion: catalogFixture.contentVersion,
+    contentHash: catalogFixture.contentHash,
+    contentJson: catalogFixture.contentJson,
+    snapshot: catalogFixture.snapshot,
+    relayExpeditionScenarioIds: catalogFixture.relayExpeditionScenarioIds || [],
+    fateChronicleScenarioIds: catalogFixture.fateChronicleScenarioIds || []
+  });
+  fs.writeFileSync(preloadPath, `
+const Module = require('node:module');
+const path = require('node:path');
+const fixture = ${fixturePayload};
+const targetPath = path.join(process.cwd(), 'server', 'progression', 'authoritative-runs', 'catalog.js');
+const originalLoad = Module._load;
+
+Module._load = function patchedLoad(request, parent, isMain) {
+  const resolved = Module._resolveFilename(request, parent, isMain);
+  if (resolved === targetPath) {
+    return {
+      PROTOCOL_VERSION: 'authoritative-run-v2',
+      CONTENT_VERSION: fixture.contentVersion,
+      CONTENT_HASH: fixture.contentHash,
+      CONTENT_JSON: fixture.contentJson,
+      CONTENT_SNAPSHOT: fixture.snapshot,
+      RELAY_EXPEDITION_SCENARIO_IDS: fixture.relayExpeditionScenarioIds,
+      FATE_CHRONICLE_SCENARIO_IDS: fixture.fateChronicleScenarioIds,
+      getContentSnapshot() {
+        return JSON.parse(JSON.stringify(fixture.snapshot));
+      }
+    };
+  }
+  return originalLoad.apply(this, arguments);
+};
+`, 'utf8');
+  return preloadPath;
+}
+
+function cleanupServerArtifacts(server) {
+  if (!server?.preloadPath) return;
+  fs.rmSync(server.preloadPath, { force: true });
+  server.preloadPath = '';
+}
+
 function startServer({
   port,
   dbPath,
   contentVersion = CATALOG_VERSION,
   contentHash = CATALOG_HASH,
   contentSnapshotJson = CATALOG_JSON,
-  gitSha = `authoritative-runs-v2-${port}`
+  gitSha = `authoritative-runs-v2-${port}`,
+  catalogOverride = null
 }) {
-  const child = spawn(process.execPath, ['-e', buildServerBootstrapScript()], {
+  const preloadPath = catalogOverride ? writeCatalogOverridePreload(catalogOverride) : '';
+  const execArgs = preloadPath
+    ? ['--require', preloadPath, '-e', buildServerBootstrapScript()]
+    : ['-e', buildServerBootstrapScript()];
+  const child = spawn(process.execPath, execArgs, {
     cwd: ROOT,
     env: {
       ...process.env,
+      NODE_PATH: buildNodePath(),
       PORT: String(port),
       NODE_ENV: 'test',
       JWT_SECRET,
@@ -163,18 +301,24 @@ function startServer({
   let output = '';
   child.stdout.on('data', chunk => output += chunk.toString());
   child.stderr.on('data', chunk => output += chunk.toString());
-  return { child, getOutput: () => output, port, dbPath };
+  return { child, getOutput: () => output, port, dbPath, preloadPath };
 }
 
 function stopServer(server) {
   return new Promise(resolve => {
-    if (!server || !server.child || server.child.exitCode !== null) return resolve();
+    if (!server || !server.child) return resolve();
+    if (server.child.exitCode !== null) {
+      cleanupServerArtifacts(server);
+      return resolve();
+    }
     const timer = setTimeout(() => {
       server.child.kill('SIGKILL');
+      cleanupServerArtifacts(server);
       resolve();
     }, 3000);
     server.child.once('exit', () => {
       clearTimeout(timer);
+      cleanupServerArtifacts(server);
       resolve();
     });
     server.child.kill('SIGTERM');
@@ -218,7 +362,35 @@ async function waitForExit(server, expectedCode = 1) {
       resolve(code);
     });
   });
+  cleanupServerArtifacts(server);
   assert.strictEqual(exitCode, expectedCode, `expected startup failure exit code ${expectedCode}, got ${exitCode}`);
+}
+
+async function upsertCatalogFixture(dbPath, fixture) {
+  const existing = await dbGet(
+    dbPath,
+    `SELECT content_version
+     FROM progression_authoritative_run_catalogs
+     WHERE content_version = ?`,
+    [fixture.contentVersion]
+  );
+  if (existing) {
+    await dbRun(
+      dbPath,
+      `UPDATE progression_authoritative_run_catalogs
+       SET protocol_version = ?, content_hash = ?, content_json = ?
+       WHERE content_version = ?`,
+      ['authoritative-run-v2', fixture.contentHash, fixture.contentJson, fixture.contentVersion]
+    );
+    return;
+  }
+  await dbRun(
+    dbPath,
+    `INSERT INTO progression_authoritative_run_catalogs
+        (content_version, protocol_version, content_hash, content_json, created_at)
+     VALUES (?, ?, ?, ?, ?)`,
+    [fixture.contentVersion, 'authoritative-run-v2', fixture.contentHash, fixture.contentJson, Date.now()]
+  );
 }
 
 async function expectUniqueConstraint(dbPath, sql, params, message) {
@@ -253,6 +425,7 @@ async function assertTablesExist(dbPath) {
 async function main() {
   removeDbFiles(DB_PATH);
   removeDbFiles(CONCURRENT_DB_PATH);
+  removeDbFiles(V5_COMPAT_DB_PATH);
 
   let server = startServer({ port: PORT, dbPath: DB_PATH });
   try {
@@ -468,7 +641,7 @@ async function main() {
       assert.deepStrictEqual(
         preservedLegacyCatalog,
         { content_hash: fixture.contentHash, content_json: fixture.contentJson },
-        `v4 catalog bootstrap must preserve immutable ${fixture.contentVersion} content for old-run replay`
+        `restart must preserve immutable ${fixture.contentVersion} content for old-run replay`
       );
     }
     const restoredWorldTable = await dbGet(
@@ -478,6 +651,74 @@ async function main() {
     assert.strictEqual(restoredWorldTable?.name, 'world_rift_attempts', 'v7 to v8 restart must bootstrap world-rift storage');
     await stopServer(server);
     server = null;
+
+    let compatServer = null;
+    try {
+      compatServer = startServer({
+        port: V5_COMPAT_PORT,
+        dbPath: V5_COMPAT_DB_PATH,
+        gitSha: 'authoritative-runs-v5-compat-base'
+      });
+      await waitForHealth(compatServer, 'v5-compat-base');
+      await stopServer(compatServer);
+      compatServer = null;
+
+      for (const fixture of HISTORICAL_CATALOG_FIXTURES) {
+        await upsertCatalogFixture(V5_COMPAT_DB_PATH, fixture);
+      }
+
+      compatServer = startServer({
+        port: V5_COMPAT_PORT,
+        dbPath: V5_COMPAT_DB_PATH,
+        gitSha: 'authoritative-runs-v5-compat-bootstrap',
+        catalogOverride: V5_BOOTSTRAP_CATALOG_FIXTURE
+      });
+      await waitForHealth(compatServer, 'v5-compat-bootstrap');
+
+      for (const fixture of HISTORICAL_CATALOG_FIXTURES) {
+        const preservedLegacyCatalog = await dbGet(
+          V5_COMPAT_DB_PATH,
+          `SELECT content_hash, content_json
+           FROM progression_authoritative_run_catalogs
+           WHERE content_version = ?`,
+          [fixture.contentVersion]
+        );
+        assert.deepStrictEqual(
+          preservedLegacyCatalog,
+          { content_hash: fixture.contentHash, content_json: fixture.contentJson },
+          `v5 bootstrap preserves immutable ${fixture.contentVersion} content for old-run replay`
+        );
+      }
+      const preservedV4Catalog = await dbGet(
+        V5_COMPAT_DB_PATH,
+        `SELECT content_hash, content_json
+         FROM progression_authoritative_run_catalogs
+         WHERE content_version = 'authoritative-trials-v4'`
+      );
+      assert.deepStrictEqual(
+        JSON.parse(preservedV4Catalog?.content_json || '{}').deckCrafting,
+        HISTORICAL_V4_DECK_CRAFTING,
+        'v5 bootstrap preserves the historical v4 deckCrafting shape'
+      );
+      const bootstrappedV5Catalog = await dbGet(
+        V5_COMPAT_DB_PATH,
+        `SELECT content_hash, content_json
+         FROM progression_authoritative_run_catalogs
+         WHERE content_version = ?`,
+        [V5_BOOTSTRAP_CATALOG_FIXTURE.contentVersion]
+      );
+      assert.deepStrictEqual(
+        bootstrappedV5Catalog,
+        {
+          content_hash: V5_BOOTSTRAP_CATALOG_FIXTURE.contentHash,
+          content_json: V5_BOOTSTRAP_CATALOG_FIXTURE.contentJson
+        },
+        'v5 bootstrap should insert the immutable v5 catalog row alongside v1-v4 history'
+      );
+    } finally {
+      await stopServer(compatServer);
+      removeDbFiles(V5_COMPAT_DB_PATH);
+    }
 
     await dbRun(
       DB_PATH,
@@ -632,6 +873,7 @@ async function main() {
     await stopServer(server);
     removeDbFiles(DB_PATH);
     removeDbFiles(CONCURRENT_DB_PATH);
+    removeDbFiles(V5_COMPAT_DB_PATH);
   }
 }
 

@@ -122,6 +122,26 @@ assert.deepEqual(signingCalls.at(-1).payload, {
   contentVersion: 'authoritative-trials-v2'
 }, 'begin signature should cover only the signed business payload');
 
+const defaultBeginResult = await BackendClient.beginAuthoritativeRun({
+  clientRunId: 'ar-client-api-default-0001',
+  mode: 'pve',
+  score: 9999
+}, { expectedUserId: 'authrun-user-a' });
+assert.equal(defaultBeginResult.success, true);
+assert.deepEqual(signingCalls.at(-1).payload, {
+  clientRunId: 'ar-client-api-default-0001',
+  mode: 'pve',
+  contentVersion: 'authoritative-trials-v5'
+}, 'begin signature should default to the v5 content snapshot without changing the signed field set');
+assert.deepEqual(requestCalls.at(-1).options.data, {
+  clientRunId: 'ar-client-api-default-0001',
+  mode: 'pve',
+  contentVersion: 'authoritative-trials-v5',
+  salt: 'authoritative-client-salt',
+  signature: 'b'.repeat(64),
+  signatureMode: 'session'
+}, 'begin request body should keep the existing signed payload shape when defaulting to v5');
+
 const currentResult = await BackendClient.getCurrentAuthoritativeRun('challenge', { expectedUserId: 'authrun-user-a' });
 assert.equal(currentResult.success, true);
 assert.equal(requestCalls.at(-1).path, '/api/progression/authoritative-runs/current?mode=challenge');
@@ -363,7 +383,7 @@ const serviceBegin = await service.begin({ mode: 'pve', expectedUserId: 'service
 assert.equal(serviceBegin.success, true);
 assert.equal(beginCalls.length, 1);
 assert.equal(beginCalls[0].payload.clientRunId, 'ar-client-generated-0001', 'service begin should generate and cache a clientRunId');
-assert.equal(beginCalls[0].payload.contentVersion, 'authoritative-trials-v4', 'service begin should pin the S108 content snapshot');
+assert.equal(beginCalls[0].payload.contentVersion, 'authoritative-trials-v5', 'service begin should pin the S109 content snapshot');
 assert.equal(service.getState().runId, 'ar-service-run-0001');
 assert.equal(service.getState().projection.version, 1);
 assert.equal(serviceSnapshots.some(snapshot => snapshot.pending && snapshot.pending.kind === 'begin'), true, 'subscription should observe pending begin state');
