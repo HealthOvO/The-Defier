@@ -58,7 +58,7 @@ audit_kill_after_for() {
 }
 
 filter_audit_log() {
-  awk '
+  LC_ALL=C awk '
     /^\[[^]]+\] START / { print; fflush(); next }
     /^\[[^]]+\] END / { print; fflush(); next }
     /^\[run_with_timeout\]/ { print; fflush(); next }
@@ -109,7 +109,7 @@ run_audit() {
   set +e
   node tests/run_with_timeout.mjs "$timeout_seconds" "$kill_after_seconds" "$@" 2>&1 \
     | tee "$log_path" \
-    | filter_audit_log
+    | { filter_audit_log || cat >/dev/null; }
   status=${PIPESTATUS[0]}
   set -e
 
@@ -122,7 +122,7 @@ run_audit() {
 
   if [ "$status" -ne 0 ]; then
     echo "[release-checks] Last log lines for $name:" >&2
-    tail -n "${AUDIT_FAILURE_LOG_LINES:-120}" "$log_path" | cut -c "1-${AUDIT_FAILURE_LOG_CHARS:-2000}" >&2
+    tail -n "${AUDIT_FAILURE_LOG_LINES:-120}" "$log_path" | LC_ALL=C cut -c "1-${AUDIT_FAILURE_LOG_CHARS:-2000}" >&2
   fi
 
   if [ "$status" -eq 0 ] && [ "$name" != "summarize" ]; then

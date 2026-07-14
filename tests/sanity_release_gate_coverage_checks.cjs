@@ -13,6 +13,7 @@ const prodApiSmoke = read('tests/prod_api_smoke.cjs');
 const pagesWorkflow = read('.github/workflows/pages.yml');
 const browserReleaseScript = read('tests/run_browser_release_checks.sh');
 const browserReleaseSummary = read('tests/summarize_browser_release_reports.cjs');
+const localReleaseGate = read('scripts/run-local-release-gate.sh');
 const backendSecurityChecks = read('tests/backend_security_checks.cjs');
 const backendClientSmoke = read('tests/browser_backend_client_smoke.mjs');
 const browserAuthUiCloudSmoke = read('tests/browser_auth_ui_cloud_smoke.mjs');
@@ -1291,6 +1292,29 @@ assert.strictEqual(
   assert.ok(
     browserReleaseScript.includes(needle),
     `filtered browser release gate should still run structural summary marker: ${needle}`,
+  );
+});
+
+[
+  'LC_ALL=C awk',
+  '| { filter_audit_log || cat >/dev/null; }',
+  'LC_ALL=C cut',
+].forEach((needle) => {
+  assert.ok(
+    browserReleaseScript.includes(needle),
+    `browser release logging should remain byte-safe and non-blocking: ${needle}`,
+  );
+});
+
+[
+  "server.listen(0, '127.0.0.1'",
+  'PROBE_PATH=".site/.release-probe.txt"',
+  'curl -fsS "$BASE_URL/.release-probe.txt"',
+  'kill -0 "$SERVER_PID"',
+].forEach((needle) => {
+  assert.ok(
+    localReleaseGate.includes(needle),
+    `local release gate should verify its isolated preview identity: ${needle}`,
   );
 });
 
