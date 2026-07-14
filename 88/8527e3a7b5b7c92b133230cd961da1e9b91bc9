@@ -1,0 +1,37 @@
+docs/backend_authoritative_runs_v2.md
+  s_bae69f1b7fab46::t_3b62ad96635b56 65-100
+game-intro.html
+  s_bae69f1b7fab46::t_4bf501e6c90d4b 173,186
+js/views/SystemView.js
+  s_bae69f1b7fab46::t_dbefed2d691549 422
+progress.md
+  s_bae69f1b7fab46::t_e021ff59516253 3-16
+tests/browser_authoritative_runs_real_backend_smoke.mjs
+  s_bae69f1b7fab46::t_520de6e82a59a5 399-401,528,693-712,719,722,730-739,760-766,817-819,863-868,1022,1195-1199,1289-1291
+tests/browser_fate_chronicle_real_backend_smoke.mjs
+  s_bae69f1b7fab46::t_a63b741919cc0a 280-282,348-367,398,522-540,555,558-575,608-615,622-640
+tests/sanity_authoritative_runs_ui_checks.mjs
+  s_bae69f1b7fab46::t_b2c97a4d51dcc6 169-171
+tests/sanity_intro_progress_sync_checks.cjs
+  s_bae69f1b7fab46::t_1001467d860cad 51-53,70,92
+tests/sanity_release_gate_coverage_checks.cjs
+  s_bae69f1b7fab46::t_737e886e927704 165,522,561,563-566,569-570,582-584,596-598
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "888527e3a7b5b7c92b133230cd961da1e9b91bc9",
+  "prompts": {},
+  "sessions": {
+    "s_bae69f1b7fab46": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ed4f6-e7ac-73e0-a29e-119f3eddb407",
+        "model": "unknown"
+      },
+      "human_author": "AI Agent <bot@example.com>"
+    }
+  },
+  "attestation_metadata": {},
+  "remote_transcripts": {}
+}
