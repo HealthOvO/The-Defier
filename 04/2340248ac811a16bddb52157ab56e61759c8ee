@@ -1,0 +1,35 @@
+css/fate-chronicle.css
+  s_ca5652313828d6::t_eab9bc9e2d6414 423-427,465-527,602-603,632-635,641-645
+css/season-ops.css
+  s_4c1bfeac281400::t_c78ca6143eebd6 886-890,922-984,1068-1069,1119-1120,1192-1193,1199-1200
+js/views/AuthoritativeRunPanel.js
+  s_4c1bfeac281400::t_24503a4a0d89c3 241-305,1534,1563,1646,1714,1781,1840-1906,1938,1945-1969
+tests/sanity_authoritative_runs_ui_checks.mjs
+  s_ca5652313828d6::t_579fe3160f9b54 102-103,107-153,168,245-266,269-275,281,298,316,330-341,392-399,410-412,435-436,490-494,565-574,581-582,625-668
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "042340248ac811a16bddb52157ab56e61759c8ee",
+  "prompts": {},
+  "sessions": {
+    "s_4c1bfeac281400": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f5fbf-5562-7103-a1d4-b84c84e7e82d",
+        "model": "unknown"
+      },
+      "human_author": "AI Agent <bot@example.com>"
+    },
+    "s_ca5652313828d6": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f3fed-94d5-77b2-9af0-61333559ff38",
+        "model": "unknown"
+      },
+      "human_author": "AI Agent <bot@example.com>"
+    }
+  },
+  "attestation_metadata": {},
+  "remote_transcripts": {}
+}
