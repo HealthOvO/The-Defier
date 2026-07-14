@@ -420,6 +420,11 @@
   gap: 10px;
 }
 
+#fate-chronicle-screen .season-ops-authoritative-contract-list {
+  display: grid;
+  gap: 10px;
+}
+
 #fate-chronicle-screen .season-ops-authoritative-battle-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -455,6 +460,69 @@
   border-radius: 8px;
   background: rgba(255, 248, 235, 0.03);
   color: rgba(228, 221, 205, 0.82);
+}
+
+#fate-chronicle-screen .season-ops-authoritative-contract {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  margin-top: 10px;
+  padding: 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(206, 177, 122, 0.18);
+  background: rgba(255, 248, 235, 0.03);
+}
+
+#fate-chronicle-screen .season-ops-authoritative-contract.is-compact {
+  margin-top: 0;
+}
+
+#fate-chronicle-screen .season-ops-authoritative-contract-head,
+#fate-chronicle-screen .season-ops-authoritative-contract-copy {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+}
+
+#fate-chronicle-screen .season-ops-authoritative-contract-copy {
+  flex: 1 1 auto;
+  flex-direction: column;
+  justify-content: flex-start;
+}
+
+#fate-chronicle-screen .season-ops-authoritative-contract-copy strong,
+#fate-chronicle-screen .season-ops-authoritative-contract-field strong {
+  color: #f4ead1;
+  overflow-wrap: anywhere;
+}
+
+#fate-chronicle-screen .season-ops-authoritative-contract-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+#fate-chronicle-screen .season-ops-authoritative-contract-grid-summary {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+#fate-chronicle-screen .season-ops-authoritative-contract-field {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+#fate-chronicle-screen .season-ops-authoritative-contract-field span {
+  color: rgba(209, 195, 166, 0.62);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+}
+
+#fate-chronicle-screen .season-ops-authoritative-contract-field strong {
+  font-size: 0.9rem;
+  line-height: 1.55;
 }
 
 #fate-chronicle-screen .season-ops-inline-btn,
@@ -531,7 +599,8 @@
   #fate-chronicle-screen .season-ops-authoritative-stats-grid,
   #fate-chronicle-screen .season-ops-authoritative-choice-grid,
   #fate-chronicle-screen .season-ops-authoritative-hand-grid,
-  #fate-chronicle-screen .season-ops-authoritative-battle-grid {
+  #fate-chronicle-screen .season-ops-authoritative-battle-grid,
+  #fate-chronicle-screen .season-ops-authoritative-contract-grid {
     grid-template-columns: 1fr;
   }
 }
@@ -560,9 +629,18 @@
     align-items: stretch;
   }
 
+  #fate-chronicle-screen .season-ops-authoritative-contract-grid-summary {
+    grid-template-columns: 1fr;
+  }
+
   #fate-chronicle-screen .fate-chronicle-actions > *,
   #fate-chronicle-screen .season-ops-state-actions > *,
   #fate-chronicle-screen .season-ops-authoritative-inline-actions > * {
     width: 100%;
+  }
+
+  #fate-chronicle-screen .season-ops-authoritative-contract-head {
+    flex-direction: column;
+    align-items: stretch;
   }
 }

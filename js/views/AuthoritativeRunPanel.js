@@ -238,6 +238,71 @@ function describeRouteNode(node = {}) {
   return `${typeLabel} · ${enemyLabel}${node.boss ? " · 首领" : ""}`;
 }
 
+function normalizeRouteContract(contract = null) {
+  if (!contract || clampInt(contract.version, 0, 10) !== 1) return null;
+  const normalized = {
+    version: 1,
+    label: normalizeText(contract.label),
+    riskLabel: normalizeText(contract.riskLabel),
+    difficultyLabel: normalizeText(contract.difficultyLabel),
+    difficultyRating: clampInt(contract.difficultyRating, 0),
+    rewardLabel: normalizeText(contract.rewardLabel),
+    difficultySummary: normalizeText(contract.difficultySummary),
+    rewardSummary: normalizeText(contract.rewardSummary),
+    scoreBonus: clampInt(contract.scoreBonus, 0)
+  };
+  if (
+    !normalized.label
+    && !normalized.riskLabel
+    && !normalized.difficultyLabel
+    && !normalized.difficultyRating
+    && !normalized.rewardLabel
+    && !normalized.difficultySummary
+    && !normalized.rewardSummary
+    && !normalized.scoreBonus
+  ) {
+    return null;
+  }
+  return normalized;
+}
+
+function normalizeRouteResolution(routeResolution = null) {
+  if (!routeResolution || clampInt(routeResolution.version, 0, 10) !== 1) return null;
+  const selections = normalizeArray(routeResolution.selections).map(selection => normalizeRouteContract(selection)).filter(Boolean);
+  const totalBonus = clampInt(routeResolution.totalBonus, 0);
+  if (!selections.length && !totalBonus) return null;
+  return { totalBonus, selections };
+}
+
+function normalizeScoreBreakdown(scoreBreakdown = null, fallbackFinalScore = 0) {
+  if (!scoreBreakdown || typeof scoreBreakdown !== "object") return null;
+  const normalized = {
+    baseScore: clampInt(scoreBreakdown.baseScore, 0),
+    routeBonus: clampInt(scoreBreakdown.routeBonus, 0),
+    scenarioMultiplierBps: clampInt(scoreBreakdown.scenarioMultiplierBps, 0),
+    finalScore: clampInt(scoreBreakdown.finalScore, fallbackFinalScore)
+  };
+  if (!normalized.baseScore && !normalized.routeBonus && !normalized.scenarioMultiplierBps && !normalized.finalScore) {
+    return null;
+  }
+  return normalized;
+}
+
+function formatRouteScoreValue(scoreBonus = 0) {
+  return `+${clampInt(scoreBonus, 0)}`;
+}
+
+function formatDifficultyRatingLabel(difficultyRating = 0) {
+  const rating = clampInt(difficultyRating, 0);
+  return rating > 0 ? `烈度 ${rating}/5` : "";
+}
+
+function formatScenarioMultiplierLabel(multiplierBps = 0) {
+  const normalized = clampInt(multiplierBps, 0);
+  if (!normalized) return "未提供";
+  return `x${(normalized / 10000).toFixed(2).replace(/\.?0+$/, "")}`;
+}
+
 function formatUtcDateTime(timestamp = 0, { compact = false } = {}) {
   const value = Number(timestamp);
   if (!Number.isFinite(value) || value <= 0) return "未记时";
@@ -1466,6 +1531,7 @@ export class AuthoritativeRunPanel {
           <span class="season-ops-meta-chip">${escapeHtml(choice.threat || formatMappedLabel(NODE_TYPE_LABELS, choice.type, "路线战斗"))}</span>
         </div>
         <p>${escapeHtml(`${formatMappedLabel(NODE_TYPE_LABELS, choice.type, "路线战斗")} · 敌人上限 ${clampInt(choice.maxHp)} HP${choice.boss ? " · 首领" : ""}`)}</p>
+        ${this.renderRouteContractPanel(choice.routeContract)}
         <button
           type="button"
           class="season-ops-inline-btn is-claimable"
@@ -1494,6 +1560,7 @@ export class AuthoritativeRunPanel {
           </div>
           <div class="season-ops-counter-chip">回合 ${clampInt(battle.turn, 1)}</div>
         </div>
+        ${this.renderRouteContractPanel(battle.routeContract, { title: "已选路线合同" })}
         <div class="season-ops-authoritative-battle-grid">
           <article class="season-ops-authoritative-combatant">
             <div class="season-ops-authoritative-combatant-head">
@@ -1576,6 +1643,7 @@ export class AuthoritativeRunPanel {
           </div>
           <div class="season-ops-counter-chip">整备 ${clampInt(scenario.betweenEncounterHeal)} HP</div>
         </div>
+        ${this.renderRouteContractPanel(reward.routeContract, { title: "已选路线合同" })}
         <div class="season-ops-authoritative-choice-grid">
           ${choices.map(choice => this.renderRewardChoice(choice)).join("") || `<div class="season-ops-inline-empty">当前没有可选奖励，请恢复本次历练。</div>`}
         </div>
@@ -1643,6 +1711,7 @@ export class AuthoritativeRunPanel {
           <div class="season-ops-counter-chip">${escapeHtml(summary.grade || "未评级")}</div>
         </div>
         ${this.renderSummaryGrid(summary)}
+        ${this.renderRouteScorePanel(summary)}
         ${this.renderSettlementCard(receipt, settled)}
         ${this.renderRouteHistory()}
         <div class="season-ops-state-actions season-ops-authoritative-inline-actions">
@@ -1709,6 +1778,7 @@ export class AuthoritativeRunPanel {
           <div class="season-ops-counter-chip">${escapeHtml(formatMappedLabel(TERMINAL_REASON_LABELS, summary.reason, abandoned ? "主动封卷" : "历练结束"))}</div>
         </div>
         ${this.renderSummaryGrid(summary)}
+        ${this.renderRouteScorePanel(summary)}
         ${this.renderRouteHistory()}
         <div class="season-ops-state-actions season-ops-authoritative-inline-actions">
           ${isRelay ? `
@@ -1767,6 +1837,73 @@ export class AuthoritativeRunPanel {
     `;
   }
 
+  renderRouteContractPanel(contractSource = null, { title = "路线合同", extraClass = "" } = {}) {
+    const contract = normalizeRouteContract(contractSource);
+    if (!contract) return "";
+    const difficultyRatingLabel = formatDifficultyRatingLabel(contract.difficultyRating);
+    return `
+      <div class="season-ops-authoritative-contract ${escapeHtml(extraClass)}">
+        <div class="season-ops-authoritative-contract-head">
+          <div class="season-ops-authoritative-contract-copy">
+            <span class="season-ops-inline-note">${escapeHtml(title)}</span>
+            <strong>${escapeHtml(contract.label || "未命名路线")}</strong>
+          </div>
+          <span class="season-ops-meta-chip">${escapeHtml(`路线分 ${formatRouteScoreValue(contract.scoreBonus)}`)}</span>
+        </div>
+        <div class="season-ops-authoritative-meta-row">
+          ${contract.riskLabel ? renderChip(contract.riskLabel) : ""}
+          ${contract.difficultyLabel ? renderChip(contract.difficultyLabel) : ""}
+          ${difficultyRatingLabel ? renderChip(difficultyRatingLabel) : ""}
+          ${contract.rewardLabel ? renderChip(contract.rewardLabel) : ""}
+        </div>
+        <div class="season-ops-authoritative-contract-grid">
+          ${this.renderRouteContractField("敌方压力", contract.difficultySummary || "沿用本轮常规强度")}
+          ${this.renderRouteContractField("奖励摘要", contract.rewardSummary || "沿用本轮常规回报")}
+        </div>
+      </div>
+    `;
+  }
+
+  renderRouteContractField(label = "", value = "") {
+    return `
+      <div class="season-ops-authoritative-contract-field">
+        <span>${escapeHtml(label)}</span>
+        <strong>${escapeHtml(value)}</strong>
+      </div>
+    `;
+  }
+
+  renderRouteScorePanel(summary = {}) {
+    const scoreBreakdown = normalizeScoreBreakdown(summary && summary.scoreBreakdown, clampInt(summary && summary.score));
+    const routeResolution = normalizeRouteResolution(summary && summary.routeResolution);
+    if (!scoreBreakdown && !routeResolution) return "";
+    const title = scoreBreakdown ? "路线分拆解" : "路线定稿";
+    return `
+      <article class="season-ops-authoritative-settlement">
+        <div class="season-ops-authoritative-choice-top">
+          <strong>${title}</strong>
+          ${routeResolution ? `<span class="season-ops-meta-chip">${escapeHtml(`路线总分 ${formatRouteScoreValue(routeResolution.totalBonus)}`)}</span>` : ""}
+        </div>
+        ${scoreBreakdown ? `
+          <div class="season-ops-authoritative-contract-grid season-ops-authoritative-contract-grid-summary">
+            ${this.renderRouteContractField("基础分", `${scoreBreakdown.baseScore}`)}
+            ${this.renderRouteContractField("路线分", formatRouteScoreValue(scoreBreakdown.routeBonus))}
+            ${this.renderRouteContractField("场景系数", formatScenarioMultiplierLabel(scoreBreakdown.scenarioMultiplierBps))}
+            ${this.renderRouteContractField("终局分", `${scoreBreakdown.finalScore}`)}
+          </div>
+        ` : ""}
+        ${routeResolution && routeResolution.selections.length ? `
+          <div class="season-ops-authoritative-contract-list">
+            ${routeResolution.selections.map((selection, index) => this.renderRouteContractPanel(selection, {
+              title: `第 ${index + 1} 站路线合同`,
+              extraClass: "is-compact"
+            })).join("")}
+          </div>
+        ` : ""}
+      </article>
+    `;
+  }
+
   renderSettlementCard(receipt = null, settled = false) {
     const effectiveReceipt = receipt && typeof receipt === "object" ? receipt : null;
     const progressDelta = effectiveReceipt && effectiveReceipt.progressDelta ? effectiveReceipt.progressDelta : null;
@@ -1798,15 +1935,38 @@ export class AuthoritativeRunPanel {
     const projection = this.getCurrentProjection();
     const history = normalizeArray(projection && projection.route && projection.route.completedNodes);
     if (!history.length) return "";
+    const contractAwareHistory = history.some(node => normalizeRouteContract(node && node.routeContract));
     return `
       <article class="season-ops-authoritative-settlement">
         <div class="season-ops-authoritative-choice-top">
           <strong>路线留痕</strong>
           <span class="season-ops-meta-chip">${history.length} 节点</span>
         </div>
-        <div class="season-ops-authoritative-history-list">
-          ${history.map(node => renderChip(describeRouteNode(node))).join("")}
-        </div>
+        ${contractAwareHistory ? `
+          <div class="season-ops-authoritative-contract-list">
+            ${history.map((node, index) => {
+              const contract = normalizeRouteContract(node && node.routeContract);
+              if (!contract) {
+                return `
+                  <div class="season-ops-authoritative-contract is-compact">
+                    <div class="season-ops-authoritative-contract-copy">
+                      <span class="season-ops-inline-note">${escapeHtml(`第 ${index + 1} 站`)}</span>
+                      <strong>${escapeHtml(describeRouteNode(node))}</strong>
+                    </div>
+                  </div>
+                `;
+              }
+              return this.renderRouteContractPanel(contract, {
+                title: `第 ${index + 1} 站 · ${describeRouteNode(node)}`,
+                extraClass: "is-compact"
+              });
+            }).join("")}
+          </div>
+        ` : `
+          <div class="season-ops-authoritative-history-list">
+            ${history.map(node => renderChip(describeRouteNode(node))).join("")}
+          </div>
+        `}
       </article>
     `;
   }

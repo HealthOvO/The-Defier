@@ -99,9 +99,58 @@ function createRunEnvelope({
   phase = "route",
   status = "active",
   settledAt = 0,
+  contentVersion = "authoritative-trials-v5",
+  includeRouteContracts = true,
   playerHand = null,
   rewardChoices = null
 } = {}) {
+  const routeContracts = includeRouteContracts ? {
+    steady: {
+      version: 1,
+      contractId: "steady",
+      label: "稳进",
+      riskTier: "low",
+      riskLabel: "低风险",
+      difficultyTier: "steady",
+      difficultyLabel: "稳压",
+      difficultyRating: 1,
+      rewardTier: "standard",
+      rewardLabel: "标准回报",
+      difficultySummary: "敌方 24 HP · 招式不额外增压",
+      rewardSummary: "标准构筑候选 · 不追加路线分",
+      scoreBonus: 0
+    },
+    contested: {
+      version: 1,
+      contractId: "contested",
+      label: "争衡",
+      riskTier: "medium",
+      riskLabel: "中风险",
+      difficultyTier: "pressured",
+      difficultyLabel: "增压",
+      difficultyRating: 2,
+      rewardTier: "enhanced",
+      rewardLabel: "加码回报",
+      difficultySummary: "敌方 39 HP · 攻击意图 +1 · 格挡意图 +1",
+      rewardSummary: "标准构筑候选 · 调息 +1 / 固本 +1 · 通关路线分 +25",
+      scoreBonus: 25
+    },
+    perilous: {
+      version: 1,
+      contractId: "perilous",
+      label: "险锋",
+      riskTier: "high",
+      riskLabel: "高风险",
+      difficultyTier: "severe",
+      difficultyLabel: "高压",
+      difficultyRating: 3,
+      rewardTier: "premium",
+      rewardLabel: "丰厚回报",
+      difficultySummary: "敌方 44 HP · 攻击意图 +2 · 格挡意图 +2",
+      rewardSummary: "额外 1 个卡牌候选 · 调息 +3 / 固本 +2 · 通关路线分 +55",
+      scoreBonus: 55
+    }
+  } : null;
   const hand = Array.isArray(playerHand) ? playerHand : [
     { instanceId: "card-1", cardId: "strike", name: "破势", description: "造成 8 点伤害。", cost: 1 },
     { instanceId: "card-2", cardId: "guard", name: "守心", description: "获得 6 点格挡。", cost: 1 }
@@ -116,7 +165,7 @@ function createRunEnvelope({
     mode,
     status,
     protocolVersion: "authoritative-run-v2",
-    contentVersion: "authoritative-trials-v4",
+    contentVersion,
     contentHash: "ec26095949bfadf81a322f454b092ec96dbfe09199c607513ea3e2f44501b301",
     authorityLevel: "server",
     trustTier: "server_authoritative",
@@ -193,16 +242,43 @@ function createRunEnvelope({
         stage: 2,
         totalStages: 3,
         choices: [
-          { nodeId: "node-a", stage: 2, type: "elite", enemyId: "oath_guard", name: "天契守卫", threat: "精英", maxHp: 35, boss: false },
-          { nodeId: "node-b", stage: 2, type: "elite", enemyId: "mirror_seer", name: "照命术士", threat: "精英", maxHp: 34, boss: false }
+          {
+            nodeId: "node-a",
+            stage: 2,
+            type: "elite",
+            enemyId: "oath_guard",
+            name: "天契守卫",
+            threat: "精英",
+            maxHp: 35,
+            boss: false,
+            routeContract: routeContracts ? routeContracts.contested : undefined
+          },
+          {
+            nodeId: "node-b",
+            stage: 2,
+            type: "elite",
+            enemyId: "mirror_seer",
+            name: "照命术士",
+            threat: "精英",
+            maxHp: 34,
+            boss: false,
+            routeContract: routeContracts ? routeContracts.perilous : undefined
+          }
         ],
         completedNodes: [
-          { nodeId: "node-0", nodeType: "enemy", enemyId: "ink_scout", boss: false }
+          {
+            nodeId: "node-0",
+            nodeType: "enemy",
+            enemyId: "ink_scout",
+            boss: false,
+            routeContract: routeContracts ? routeContracts.steady : undefined
+          }
         ]
       },
       battle: phase === "battle" ? {
         nodeId: "node-a",
         nodeType: "elite",
+        routeContract: routeContracts ? routeContracts.contested : undefined,
         turn: 3,
         enemy: {
           enemyId: "oath_guard",
@@ -219,6 +295,7 @@ function createRunEnvelope({
         }
       } : null,
       reward: phase === "reward" ? {
+        routeContract: routeContracts ? routeContracts.perilous : undefined,
         choices: rewardChoiceList
       } : null,
       stats: {
@@ -236,7 +313,7 @@ function createRunEnvelope({
       summary: ["completed", "defeated", "abandoned"].includes(phase) ? {
         result: phase === "completed" ? "completed" : phase,
         reason: phase === "completed" ? "boss_defeated" : phase === "defeated" ? "hp_depleted" : "player_abandoned",
-        score: phase === "completed" ? 613 : 0,
+        score: phase === "completed" ? 672 : 0,
         grade: phase === "completed" ? "S" : "未完成",
         mode,
         scenarioId: `${mode}-scenario`,
@@ -250,7 +327,18 @@ function createRunEnvelope({
         maxHp: 50,
         deckSize: 9,
         upgradedCards: 1,
-        cardsRemoved: 1
+        cardsRemoved: 1,
+        scoreBreakdown: phase === "completed" && routeContracts ? {
+          baseScore: 560,
+          routeBonus: 80,
+          scenarioMultiplierBps: 10500,
+          finalScore: 672
+        } : null,
+        routeResolution: phase === "completed" && routeContracts ? {
+          version: 1,
+          totalBonus: 80,
+          selections: [routeContracts.steady, routeContracts.contested, routeContracts.perilous]
+        } : null
       } : null
     }
   };
@@ -301,6 +389,14 @@ assert.match(html, /路线选择/);
 assert.match(html, /本轮规则已锁定/);
 assert.match(html, /天道校验 已通过/);
 assert.match(html, /常规战 · 墨痕斥候/);
+assert.match(html, /路线合同/);
+assert.match(html, /争衡/);
+assert.match(html, /中风险/);
+assert.match(html, /增压/);
+assert.match(html, /烈度 2\/5/);
+assert.match(html, /加码回报/);
+assert.match(html, /敌方 39 HP · 攻击意图 \+1 · 格挡意图 \+1/);
+assert.match(html, /路线分 \+25/);
 assert.match(html, /选择此路/);
 assert.match(html, /牌组 9 张/);
 assert.match(html, /已精修 1 张/);
@@ -311,7 +407,9 @@ assert.match(html, /已裁牌 1 张/);
   "state-hash-0001",
   "chain-head-0001",
   "ink_scout",
-  "arun-pve-route"
+  "arun-pve-route",
+  "contractId",
+  "contested"
 ].forEach(value => assert.doesNotMatch(html, new RegExp(value), `player UI must not render internal value: ${value}`));
 
 panel.applyResult({
@@ -334,6 +432,8 @@ panel.applyResult({
 });
 html = panel.render();
 assert.match(html, /战斗投影/);
+assert.match(html, /已选路线合同/);
+assert.match(html, /争衡/);
 assert.match(html, /敌方下一手意图/);
 assert.match(html, /重裁 10/);
 assert.match(html, /打出此牌/);
@@ -387,6 +487,11 @@ panel.applyResult({
 });
 html = panel.render();
 assert.match(html, /战后奖励/);
+assert.match(html, /已选路线合同/);
+assert.match(html, /险锋/);
+assert.match(html, /高风险/);
+assert.match(html, /高压/);
+assert.match(html, /丰厚回报/);
 assert.match(html, /精修卡牌/);
 assert.match(html, /裁去卡牌/);
 assert.match(html, /精修目标：破势/);
@@ -457,12 +562,24 @@ panel.applyResult({
 });
 html = panel.render();
 assert.match(html, /待提交结算/);
+assert.match(html, /路线分拆解/);
+assert.match(html, /路线总分 \+80/);
+assert.match(html, /基础分/);
+assert.match(html, /路线分/);
+assert.match(html, /场景系数/);
+assert.match(html, /x1\.05/);
+assert.match(html, /终局分/);
+assert.match(html, /第 1 站路线合同/);
+assert.match(html, /第 2 站路线合同/);
+assert.match(html, /第 3 站路线合同/);
 assert.match(html, /提交正式结算/);
 assert.match(html, /只有全程校验通过时/);
 assert.match(html, /终局牌组 9 张/);
 assert.match(html, /精修 1 张/);
 assert.match(html, /裁牌 1 张/);
 assert.match(html, /data-deck-crafting-summary="true"/);
+assert.match(html, /第 1 站 · 常规战 · 墨痕斥候/);
+assert.match(html, /稳进/);
 assert.doesNotMatch(html, /状态哈希|完整重放|arun-challenge-completed/);
 
 panel.applyResult({
@@ -504,6 +621,50 @@ panel.applyResult({
 html = panel.render();
 assert.match(html, /已结算归档/, "current recovery should preserve the settled run instead of clearing the panel");
 assert.match(html, /结算回执/);
+
+panel.applyResult({
+  success: true,
+  reportVersion: "authoritative-runs-ui-test-legacy-route",
+  run: createRunEnvelope({
+    mode: "pve",
+    phase: "route",
+    status: "active",
+    contentVersion: "authoritative-trials-v4",
+    includeRouteContracts: false
+  })
+});
+html = panel.render();
+assert.match(html, /路线选择/);
+assert.match(html, /精英战 · 敌人上限 35 HP/);
+assert.doesNotMatch(html, /路线合同|路线分拆解|第 1 站路线合同/);
+
+const escapedRun = createRunEnvelope({ mode: "pve", phase: "route", status: "active" });
+escapedRun.projection.route.choices[0].routeContract = {
+  version: 1,
+  contractId: "unsafe-contract",
+  label: '<img src=x onerror=alert(1)>',
+  riskLabel: '<script>alert("risk")</script>',
+  difficultyTier: "unsafe",
+  difficultyLabel: '高压 & "增伤"',
+  difficultyRating: 5,
+  rewardTier: "unsafe",
+  rewardLabel: "</strong>奖励",
+  difficultySummary: '敌方 <b>999 HP</b>',
+  rewardSummary: '奖励 </div><script>alert("reward")</script>',
+  scoreBonus: 99
+};
+panel.applyResult({
+  success: true,
+  reportVersion: "authoritative-runs-ui-test-escape",
+  run: escapedRun
+});
+html = panel.render();
+assert.match(html, /&lt;img src=x onerror=alert\(1\)&gt;/);
+assert.match(html, /&lt;script&gt;alert\(&quot;risk&quot;\)&lt;\/script&gt;/);
+assert.match(html, /高压 &amp; &quot;增伤&quot;/);
+assert.match(html, /敌方 &lt;b&gt;999 HP&lt;\/b&gt;/);
+assert.match(html, /奖励 &lt;\/div&gt;&lt;script&gt;alert\(&quot;reward&quot;\)&lt;\/script&gt;/);
+assert.doesNotMatch(html, /<img|<script|<\/div><script>/);
 
 await panel.handleAction({
   disabled: false,
