@@ -1,0 +1,25 @@
+scripts/run-local-release-gate.sh
+  s_bae69f1b7fab46::t_a959650b19ad17 7-28,32-33,41-42,47,54,60-63,67-72
+tests/run_browser_release_checks.sh
+  s_bae69f1b7fab46::t_374a012eb6f8e0 61,112,125
+tests/sanity_release_gate_coverage_checks.cjs
+  s_bae69f1b7fab46::t_e8663115553cf3 16,1298-1320
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "8cf6a848b4d86350f3b92dd433a16986732fce34",
+  "prompts": {},
+  "sessions": {
+    "s_bae69f1b7fab46": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ed4f6-e7ac-73e0-a29e-119f3eddb407",
+        "model": "unknown"
+      },
+      "human_author": "AI Agent <bot@example.com>"
+    }
+  },
+  "attestation_metadata": {},
+  "remote_transcripts": {}
+}
