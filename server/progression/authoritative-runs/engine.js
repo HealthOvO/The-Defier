@@ -1,6 +1,6 @@
 const crypto = require('node:crypto');
 const { cloneJson } = require('./canonical');
-const { CONTENT_VERSION, PROTOCOL_VERSION } = require('./catalog');
+const { PROTOCOL_VERSION } = require('./catalog');
 
 const MODES = ['pve', 'challenge', 'expedition', 'challenge_ladder', 'world_rift', 'relay_expedition', 'fate_chronicle'];
 const COMMANDS = ['select_node', 'play_card', 'end_turn', 'choose_reward', 'abandon'];
@@ -81,6 +81,93 @@ function getDeckCraftingRules(content, scenario = null) {
     };
 }
 
+function getRouteContractRules(content) {
+    const rules = content && content.routeContracts;
+    if (!rules || clampInt(rules.version, 0, 10) !== 1) return null;
+    if (!rules.profiles || typeof rules.profiles !== 'object' || Array.isArray(rules.profiles)) return null;
+    if (!Array.isArray(rules.stagePairs) || rules.stagePairs.length === 0) return null;
+    return rules;
+}
+
+function scaleByBps(value, bps) {
+    return Math.max(1, Math.round(clampInt(value, 0) * clampInt(bps ?? 10000, 1, 50000) / 10000));
+}
+
+function buildRouteContract(profile, enemy, finalStage = false) {
+    const enemyAdjustments = profile && profile.enemyAdjustments && typeof profile.enemyAdjustments === 'object'
+        ? profile.enemyAdjustments
+        : {};
+    const rewardAdjustments = profile && profile.rewardAdjustments && typeof profile.rewardAdjustments === 'object'
+        ? profile.rewardAdjustments
+        : {};
+    const maxHpBps = clampInt(enemyAdjustments.maxHpBps ?? 10000, 1000, 50000);
+    const intentDamageBonus = clampInt(enemyAdjustments.intentDamageBonus, 0, 20);
+    const intentBlockBonus = clampInt(enemyAdjustments.intentBlockBonus, 0, 20);
+    const extraCardOffers = clampInt(rewardAdjustments.extraCardOffers, 0, 2);
+    const healBonus = clampInt(rewardAdjustments.healBonus, 0, 20);
+    const maxHpBonus = clampInt(rewardAdjustments.maxHpBonus, 0, 20);
+    const scoreBonus = clampInt(profile && profile.scoreBonus, 0, 500);
+    const adjustedMaxHp = scaleByBps(enemy.maxHp, maxHpBps);
+    const pressureParts = [`敌方 ${adjustedMaxHp} HP`];
+    if (intentDamageBonus > 0) pressureParts.push(`攻击意图 +${intentDamageBonus}`);
+    if (intentBlockBonus > 0) pressureParts.push(`格挡意图 +${intentBlockBonus}`);
+    if (intentDamageBonus === 0 && intentBlockBonus === 0) pressureParts.push('招式不额外增压');
+    const rewardParts = [];
+    if (finalStage) {
+        rewardParts.push('终局不再发构筑奖励');
+    } else {
+        rewardParts.push(extraCardOffers > 0 ? `额外 ${extraCardOffers} 个卡牌候选` : '标准构筑候选');
+        if (healBonus > 0 || maxHpBonus > 0) {
+            rewardParts.push(`调息 +${healBonus} / 固本 +${maxHpBonus}`);
+        }
+    }
+    rewardParts.push(scoreBonus > 0 ? `通关路线分 +${scoreBonus}` : '不追加路线分');
+    return {
+        version: 1,
+        contractId: String(profile.contractId || ''),
+        label: String(profile.label || ''),
+        riskTier: String(profile.riskTier || ''),
+        riskLabel: String(profile.riskLabel || ''),
+        difficultyTier: String(profile.difficultyTier || ''),
+        difficultyLabel: String(profile.difficultyLabel || ''),
+        difficultyRating: clampInt(profile.difficultyRating, 1, 5),
+        rewardTier: String(profile.rewardTier || ''),
+        rewardLabel: String(profile.rewardLabel || ''),
+        difficultySummary: pressureParts.join(' · '),
+        rewardSummary: rewardParts.join(' · '),
+        scoreBonus,
+        enemyAdjustments: {
+            maxHpBps,
+            intentDamageBonus,
+            intentBlockBonus
+        },
+        rewardAdjustments: {
+            extraCardOffers,
+            healBonus,
+            maxHpBonus
+        }
+    };
+}
+
+function projectRouteContract(contract) {
+    if (!contract || clampInt(contract.version, 0, 10) !== 1) return null;
+    return {
+        version: 1,
+        contractId: String(contract.contractId || ''),
+        label: String(contract.label || ''),
+        riskTier: String(contract.riskTier || ''),
+        riskLabel: String(contract.riskLabel || ''),
+        difficultyTier: String(contract.difficultyTier || ''),
+        difficultyLabel: String(contract.difficultyLabel || ''),
+        difficultyRating: clampInt(contract.difficultyRating, 1, 5),
+        rewardTier: String(contract.rewardTier || ''),
+        rewardLabel: String(contract.rewardLabel || ''),
+        difficultySummary: String(contract.difficultySummary || ''),
+        rewardSummary: String(contract.rewardSummary || ''),
+        scoreBonus: clampInt(contract.scoreBonus, 0, 500)
+    };
+}
+
 function resolveCardDefinition(content, instance) {
     const definition = getCard(content, instance.cardId);
     if (!getDeckCraftingRules(content) || !instance.upgraded || !definition.upgrade) return definition;
@@ -131,6 +218,43 @@ function generateRouteChoices(state, content) {
     const scenario = getScenario(content, state.mode, state.scenarioId);
     const stage = scenario.stages[state.route.stageIndex];
     if (!stage) return [];
+    const routeRules = getRouteContractRules(content);
+    if (routeRules) {
+        const pairIndex = Math.min(state.route.stageIndex, routeRules.stagePairs.length - 1);
+        const configuredPair = Array.isArray(stage.contractIds) && stage.contractIds.length === 2
+            ? stage.contractIds
+            : routeRules.stagePairs[pairIndex];
+        if (!Array.isArray(configuredPair) || configuredPair.length !== 2) {
+            throw makeRuleError('route_contract_pair_invalid', '路线契约组合不存在', 500);
+        }
+        const contractIds = randomInt(state, 2) === 0 ? configuredPair.slice() : configuredPair.slice().reverse();
+        const enemyIds = stage.pool.length >= 2
+            ? shuffle(state, stage.pool).slice(0, 2)
+            : [stage.pool[0], stage.pool[0]];
+        return contractIds.map((contractId, index) => {
+            const profile = routeRules.profiles[contractId];
+            if (!profile || String(profile.contractId || '') !== String(contractId || '')) {
+                throw makeRuleError('route_contract_missing', '路线契约定义不存在', 500);
+            }
+            const enemy = getEnemy(content, enemyIds[index]);
+            const routeContract = buildRouteContract(
+                profile,
+                enemy,
+                state.route.stageIndex >= state.route.totalStages - 1
+            );
+            return {
+                nodeId: `stage-${state.route.stageIndex + 1}-${enemy.enemyId}-${routeContract.contractId}-${index + 1}`,
+                stage: state.route.stageIndex + 1,
+                type: stage.type,
+                enemyId: enemy.enemyId,
+                name: enemy.name,
+                threat: enemy.threat,
+                maxHp: scaleByBps(enemy.maxHp, routeContract.enemyAdjustments.maxHpBps),
+                boss: !!enemy.boss,
+                routeContract
+            };
+        });
+    }
     const enemyIds = stage.pool.length <= 2 ? stage.pool.slice() : shuffle(state, stage.pool).slice(0, 2);
     return enemyIds.map((enemyId, index) => {
         const enemy = getEnemy(content, enemyId);
@@ -162,13 +286,37 @@ function drawCards(state, count) {
     return drawn;
 }
 
+function replaceIntentLabelAmount(label, amount) {
+    const prefix = String(label || '').trim().replace(/(?:\s+|^)\d+$/, '').trim();
+    return prefix ? `${prefix} ${amount}` : String(amount);
+}
+
 function currentEnemyIntent(state, content) {
     if (!state.battle || !state.battle.enemy) return null;
     const definition = getEnemy(content, state.battle.enemy.enemyId);
     const pattern = Array.isArray(definition.pattern) ? definition.pattern : [];
     if (pattern.length === 0) return null;
     const index = clampInt(state.battle.enemy.intentIndex, 0) % pattern.length;
-    return cloneJson(pattern[index]);
+    const intent = cloneJson(pattern[index]);
+    const adjustments = state.battle.routeContract && state.battle.routeContract.enemyAdjustments;
+    if (!adjustments || typeof adjustments !== 'object') return intent;
+    const damageBonus = clampInt(adjustments.intentDamageBonus, 0, 20);
+    const blockBonus = clampInt(adjustments.intentBlockBonus, 0, 20);
+    if (intent.amount) intent.amount = clampInt(intent.amount, 0) + damageBonus;
+    if (intent.block) intent.block = clampInt(intent.block, 0) + blockBonus;
+    if (damageBonus > 0 || blockBonus > 0) {
+        const labelParts = String(intent.label || '').split('/').map(part => part.trim());
+        if (intent.type === 'defend_attack' && labelParts.length >= 2) {
+            labelParts[0] = replaceIntentLabelAmount(labelParts[0], intent.block);
+            labelParts[1] = replaceIntentLabelAmount(labelParts[1], intent.amount);
+            intent.label = labelParts.join(' / ');
+        } else if (intent.type === 'fortify' && intent.block) {
+            intent.label = replaceIntentLabelAmount(intent.label, intent.block);
+        } else if (intent.amount) {
+            intent.label = replaceIntentLabelAmount(intent.label, intent.amount);
+        }
+    }
+    return intent;
 }
 
 function createInitialState({ runId, userId, mode, scenarioId = '', seedHex, content }) {
@@ -181,14 +329,15 @@ function createInitialState({ runId, userId, mode, scenarioId = '', seedHex, con
     if (!/^[0-9a-f]{64}$/i.test(String(seedHex || ''))) {
         throw makeRuleError('invalid_run_seed', '权威 run seed 非法', 500);
     }
-    if (!content || content.protocolVersion !== PROTOCOL_VERSION || content.contentVersion !== CONTENT_VERSION) {
+    const contentVersion = String(content && content.contentVersion || '').trim();
+    if (!content || content.protocolVersion !== PROTOCOL_VERSION || !SAFE_REF.test(contentVersion)) {
         throw makeRuleError('unsupported_content_version', '权威内容版本不受支持', 409);
     }
     const scenario = getScenario(content, mode, scenarioId);
     const state = {
         schemaVersion: 2,
         protocolVersion: PROTOCOL_VERSION,
-        contentVersion: CONTENT_VERSION,
+        contentVersion,
         runId: String(runId),
         mode,
         scenarioId: scenario.scenarioId,
@@ -210,7 +359,8 @@ function createInitialState({ runId, userId, mode, scenarioId = '', seedHex, con
             stageIndex: 0,
             totalStages: scenario.stages.length,
             choices: [],
-            completedNodes: []
+            completedNodes: [],
+            ...(getRouteContractRules(content) ? { contractVersion: 1 } : {})
         },
         battle: null,
         reward: null,
@@ -274,18 +424,25 @@ function beginBattle(state, content, node) {
     const enemy = getEnemy(content, node.enemyId);
     state.phase = 'battle';
     state.reward = null;
+    const routeContract = node.routeContract && getRouteContractRules(content)
+        ? cloneJson(node.routeContract)
+        : null;
+    const enemyMaxHp = routeContract
+        ? scaleByBps(enemy.maxHp, routeContract.enemyAdjustments.maxHpBps)
+        : enemy.maxHp;
     state.battle = {
         nodeId: node.nodeId,
         nodeType: node.type,
         turn: 1,
         enemy: {
             enemyId: enemy.enemyId,
-            hp: enemy.maxHp,
-            maxHp: enemy.maxHp,
+            hp: enemyMaxHp,
+            maxHp: enemyMaxHp,
             block: 0,
             vulnerable: 0,
             intentIndex: 0
-        }
+        },
+        ...(routeContract ? { routeContract } : {})
     };
     state.player.block = 0;
     state.player.energy = scenario.energyPerTurn;
@@ -443,9 +600,25 @@ function makeDeckCraftingRewardChoices(state, content, scenario, rules) {
     return shuffle(state, choices);
 }
 
-function makeRewardChoices(state, content) {
+function applyRouteRewardAdjustments(rules, routeContract) {
+    const adjustments = routeContract && routeContract.rewardAdjustments;
+    if (!adjustments || typeof adjustments !== 'object') return rules;
+    return {
+        ...rules,
+        cardOfferCount: clampInt(
+            rules.cardOfferCount + clampInt(adjustments.extraCardOffers, 0, 2),
+            1,
+            5
+        ),
+        healAmount: clampInt(rules.healAmount + clampInt(adjustments.healBonus, 0, 20), 1, 100),
+        maxHpAmount: clampInt(rules.maxHpAmount + clampInt(adjustments.maxHpBonus, 0, 20), 1, 50)
+    };
+}
+
+function makeRewardChoices(state, content, routeContract = null) {
     const scenario = getScenario(content, state.mode, state.scenarioId);
-    const rules = getDeckCraftingRules(content, scenario);
+    const baseRules = getDeckCraftingRules(content, scenario);
+    const rules = baseRules ? applyRouteRewardAdjustments(baseRules, routeContract) : null;
     if (!rules) return makeLegacyRewardChoices(state, content);
     return makeDeckCraftingRewardChoices(state, content, scenario, rules);
 }
@@ -457,7 +630,21 @@ function buildSummary(state, content, result, reason) {
         + state.player.hp * 3
         - state.stats.turns * 4
         - state.stats.damageTaken * 2;
-    const score = result === 'completed' ? Math.max(0, Math.round(base * scenario.scoreMultiplier)) : 0;
+    const routeContracts = getRouteContractRules(content);
+    const routeSelections = routeContracts
+        ? state.route.completedNodes
+            .filter(node => node.routeContract)
+            .map(node => ({
+                stage: clampInt(node.stage, 1),
+                nodeId: String(node.nodeId || ''),
+                enemyId: String(node.enemyId || ''),
+                ...projectRouteContract(node.routeContract)
+            }))
+        : [];
+    const routeBonus = routeSelections.reduce((total, selection) => total + clampInt(selection.scoreBonus, 0, 500), 0);
+    const score = result === 'completed'
+        ? Math.max(0, Math.round((base + routeBonus) * scenario.scoreMultiplier))
+        : 0;
     const grade = score >= 520 ? 'S' : score >= 420 ? 'A' : score >= 300 ? 'B' : result === 'completed' ? 'C' : '未完成';
     const summary = {
         result,
@@ -473,7 +660,20 @@ function buildSummary(state, content, result, reason) {
         damageDealt: state.stats.damageDealt,
         damageTaken: state.stats.damageTaken,
         remainingHp: state.player.hp,
-        maxHp: state.player.maxHp
+        maxHp: state.player.maxHp,
+        ...(routeContracts ? {
+            scoreBreakdown: {
+                baseScore: base,
+                routeBonus,
+                scenarioMultiplierBps: Math.round(Number(scenario.scoreMultiplier || 0) * 10000),
+                finalScore: score
+            },
+            routeResolution: {
+                version: 1,
+                totalBonus: routeBonus,
+                selections: routeSelections
+            }
+        } : {})
     };
     if (getDeckCraftingRules(content, scenario)) {
         summary.deckSize = state.player.deck.length;
@@ -485,16 +685,31 @@ function buildSummary(state, content, result, reason) {
 
 function finishEncounter(state, content, events) {
     const enemyDefinition = getEnemy(content, state.battle.enemy.enemyId);
+    const routeContract = state.battle.routeContract ? cloneJson(state.battle.routeContract) : null;
     const completedNode = {
         nodeId: state.battle.nodeId,
         nodeType: state.battle.nodeType,
         enemyId: enemyDefinition.enemyId,
-        boss: !!enemyDefinition.boss
+        boss: !!enemyDefinition.boss,
+        ...(routeContract ? {
+            stage: state.route.stageIndex + 1,
+            routeContract
+        } : {})
     };
     state.route.completedNodes.push(completedNode);
     state.stats.encountersWon += 1;
     if (enemyDefinition.boss) state.stats.bossWins += 1;
-    events.push({ type: 'encounter_won', ...completedNode });
+    events.push({
+        type: 'encounter_won',
+        nodeId: completedNode.nodeId,
+        nodeType: completedNode.nodeType,
+        enemyId: completedNode.enemyId,
+        boss: completedNode.boss,
+        ...(routeContract ? {
+            routeContractId: routeContract.contractId,
+            routeScoreBonus: routeContract.scoreBonus
+        } : {})
+    });
     state.player.hand = [];
     state.player.drawPile = [];
     state.player.discardPile = [];
@@ -510,7 +725,10 @@ function finishEncounter(state, content, events) {
         return;
     }
     state.phase = 'reward';
-    state.reward = { choices: makeRewardChoices(state, content) };
+    state.reward = {
+        choices: makeRewardChoices(state, content, routeContract),
+        ...(routeContract ? { routeContract } : {})
+    };
 }
 
 function playCard(state, content, payload, events) {
@@ -614,6 +832,7 @@ function chooseReward(state, content, payload, events) {
     }
     const reward = state.reward.choices.find(choice => choice.rewardId === payload.rewardId);
     if (!reward) throw makeRuleError('reward_not_available', '奖励不在权威选项中');
+    const routeContract = state.reward.routeContract ? cloneJson(state.reward.routeContract) : null;
     const scenario = getScenario(content, state.mode, state.scenarioId);
     const deckCraftingRules = getDeckCraftingRules(content, scenario);
     if (reward.kind === 'card') {
@@ -669,6 +888,7 @@ function chooseReward(state, content, payload, events) {
         type: 'reward_chosen',
         rewardId: reward.rewardId,
         rewardKind: reward.kind,
+        ...(routeContract ? { routeContractId: routeContract.contractId } : {}),
         ...(deckCraftingRules && reward.cardId ? { cardId: reward.cardId } : {}),
         ...(deckCraftingRules && reward.targetCardInstanceId ? { targetCardInstanceId: reward.targetCardInstanceId } : {})
     });
@@ -680,6 +900,11 @@ function applyCommand(currentState, content, command, rawPayload) {
     if (!state || state.schemaVersion !== 2 || state.protocolVersion !== PROTOCOL_VERSION) {
         throw makeRuleError('invalid_canonical_state', '权威状态版本非法', 500);
     }
+    if (!content
+        || content.protocolVersion !== state.protocolVersion
+        || String(content.contentVersion || '') !== String(state.contentVersion || '')) {
+        throw makeRuleError('content_state_mismatch', '权威状态与内容快照不匹配', 500);
+    }
     if (TERMINAL_PHASES.has(state.phase)) {
         throw makeRuleError('run_not_active', '权威 run 已结束');
     }
@@ -689,7 +914,12 @@ function applyCommand(currentState, content, command, rawPayload) {
         const node = state.route.choices.find(choice => choice.nodeId === payload.nodeId);
         if (!node) throw makeRuleError('node_not_available', '路线节点不在权威选项中');
         beginBattle(state, content, node);
-        events.push({ type: 'encounter_started', nodeId: node.nodeId, enemyId: node.enemyId });
+        events.push({
+            type: 'encounter_started',
+            nodeId: node.nodeId,
+            enemyId: node.enemyId,
+            ...(node.routeContract ? { routeContractId: node.routeContract.contractId } : {})
+        });
     } else if (command === 'play_card') {
         playCard(state, content, payload, events);
     } else if (command === 'end_turn') {
@@ -724,6 +954,33 @@ function getAllowedCommands(state) {
     return [];
 }
 
+function projectRouteChoice(choice) {
+    return {
+        nodeId: String(choice.nodeId || ''),
+        stage: clampInt(choice.stage, 1),
+        type: String(choice.type || ''),
+        enemyId: String(choice.enemyId || ''),
+        name: String(choice.name || ''),
+        threat: String(choice.threat || ''),
+        maxHp: clampInt(choice.maxHp, 1),
+        boss: !!choice.boss,
+        ...(choice.routeContract ? { routeContract: projectRouteContract(choice.routeContract) } : {})
+    };
+}
+
+function projectCompletedNode(node) {
+    return {
+        nodeId: String(node.nodeId || ''),
+        nodeType: String(node.nodeType || ''),
+        enemyId: String(node.enemyId || ''),
+        boss: !!node.boss,
+        ...(node.routeContract ? {
+            stage: clampInt(node.stage, 1),
+            routeContract: projectRouteContract(node.routeContract)
+        } : {})
+    };
+}
+
 function projectState(state, content) {
     const scenario = getScenario(content, state.mode, state.scenarioId);
     const deckCraftingRules = getDeckCraftingRules(content, scenario);
@@ -747,7 +1004,10 @@ function projectState(state, content) {
             block: state.battle.enemy.block,
             vulnerable: state.battle.enemy.vulnerable,
             intent: currentEnemyIntent(state, content)
-        }
+        },
+        ...(state.battle.routeContract ? {
+            routeContract: projectRouteContract(state.battle.routeContract)
+        } : {})
     } : null;
     return {
         schemaVersion: state.schemaVersion,
@@ -787,11 +1047,17 @@ function projectState(state, content) {
         route: {
             stage: state.route.stageIndex + 1,
             totalStages: state.route.totalStages,
-            choices: cloneJson(state.route.choices),
-            completedNodes: cloneJson(state.route.completedNodes)
+            choices: state.route.choices.map(projectRouteChoice),
+            completedNodes: state.route.completedNodes.map(projectCompletedNode),
+            ...(state.route.contractVersion ? { contractVersion: state.route.contractVersion } : {})
         },
         battle,
-        reward: state.reward ? { choices: cloneJson(state.reward.choices) } : null,
+        reward: state.reward ? {
+            choices: cloneJson(state.reward.choices),
+            ...(state.reward.routeContract ? {
+                routeContract: projectRouteContract(state.reward.routeContract)
+            } : {})
+        } : null,
         stats: cloneJson(state.stats),
         summary: state.summary ? cloneJson(state.summary) : null
     };

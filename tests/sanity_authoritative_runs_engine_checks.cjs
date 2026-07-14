@@ -23,19 +23,25 @@ function seed(label) {
   return crypto.createHash('sha256').update(label).digest('hex');
 }
 
-function create(mode, label = `${mode}:golden:0`, runId = `golden-${mode}-0001`, scenarioId = '') {
+function create(
+  mode,
+  label = `${mode}:golden:0`,
+  runId = `golden-${mode}-0001`,
+  scenarioId = '',
+  content = CONTENT_SNAPSHOT,
+) {
   return createInitialState({
     runId,
     userId: 'golden-user',
     mode,
     scenarioId,
     seedHex: seed(label),
-    content: CONTENT_SNAPSHOT,
+    content,
   });
 }
 
-function chooseCommand(state) {
-  const view = projectState(state, CONTENT_SNAPSHOT);
+function chooseCommand(state, content = CONTENT_SNAPSHOT) {
+  const view = projectState(state, content);
   if (state.phase === 'route') {
     return ['select_node', { nodeId: view.route.choices[0].nodeId }];
   }
@@ -70,21 +76,27 @@ function chooseCommand(state) {
     : ['end_turn', {}];
 }
 
-function drive(mode, label = `${mode}:golden:0`, runId = `golden-${mode}-0001`, scenarioId = '') {
-  let state = create(mode, label, runId, scenarioId);
+function drive(
+  mode,
+  label = `${mode}:golden:0`,
+  runId = `golden-${mode}-0001`,
+  scenarioId = '',
+  content = CONTENT_SNAPSHOT,
+) {
+  let state = create(mode, label, runId, scenarioId, content);
   const commands = [];
   while (!TERMINAL_PHASES.has(state.phase) && commands.length < 256) {
-    const command = chooseCommand(state);
-    state = applyCommand(state, CONTENT_SNAPSHOT, command[0], command[1]).state;
+    const command = chooseCommand(state, content);
+    state = applyCommand(state, content, command[0], command[1]).state;
     commands.push(command);
   }
   return { state, commands };
 }
 
-function replay(mode, label, runId, commands, scenarioId = '') {
-  let state = create(mode, label, runId, scenarioId);
+function replay(mode, label, runId, commands, scenarioId = '', content = CONTENT_SNAPSHOT) {
+  let state = create(mode, label, runId, scenarioId, content);
   commands.forEach(([command, payload]) => {
-    state = applyCommand(state, CONTENT_SNAPSHOT, command, payload).state;
+    state = applyCommand(state, content, command, payload).state;
   });
   return state;
 }
@@ -113,12 +125,35 @@ function assertCompletedDeckCrafting(state, label) {
 }
 
 assert.strictEqual(PROTOCOL_VERSION, 'authoritative-run-v2');
-assert.strictEqual(CONTENT_VERSION, 'authoritative-trials-v4');
+assert.strictEqual(CONTENT_VERSION, 'authoritative-trials-v5');
 assert.strictEqual(
   CONTENT_HASH,
-  'ec26095949bfadf81a322f454b092ec96dbfe09199c607513ea3e2f44501b301',
+  'b1787bc02a98b459641c5dce541a56e3c3476724c7ae3083efc1b2e8e372b280',
   'content hash should change only with an intentional catalog version update',
 );
+
+assert.strictEqual(CONTENT_SNAPSHOT.routeContracts.version, 1);
+assert.strictEqual(CONTENT_SNAPSHOT.routeContracts.reportVersion, 'authoritative-route-contract-v1');
+assert.deepStrictEqual(Object.keys(CONTENT_SNAPSHOT.routeContracts.profiles), ['steady', 'contested', 'perilous']);
+const contractProfiles = Object.values(CONTENT_SNAPSHOT.routeContracts.profiles);
+for (let index = 0; index < contractProfiles.length; index += 1) {
+  const profile = contractProfiles[index];
+  assert.strictEqual(profile.contractId, ['steady', 'contested', 'perilous'][index]);
+  assert(profile.difficultyRating >= 1 && profile.difficultyRating <= 3);
+  assert(profile.enemyAdjustments.maxHpBps >= 10000);
+  assert(profile.scoreBonus >= 0);
+  if (index > 0) {
+    const previous = contractProfiles[index - 1];
+    assert(profile.difficultyRating > previous.difficultyRating, 'route difficulty must increase by contract tier');
+    assert(profile.enemyAdjustments.maxHpBps > previous.enemyAdjustments.maxHpBps, 'route HP pressure must increase');
+    assert(profile.scoreBonus > previous.scoreBonus, 'route score premium must increase');
+  }
+}
+for (const pair of CONTENT_SNAPSHOT.routeContracts.stagePairs) {
+  assert.strictEqual(pair.length, 2, 'every route stage must present exactly two distinct contracts');
+  assert.strictEqual(new Set(pair).size, 2, 'a route stage must not present duplicate contracts');
+  pair.forEach(contractId => assert(CONTENT_SNAPSHOT.routeContracts.profiles[contractId]));
+}
 
 for (const scenario of Object.values(CONTENT_SNAPSHOT.scenarios)) {
   assert(
@@ -148,7 +183,7 @@ for (const protectedCardId of ['insight', 'fracture', 'flowing_qi']) {
   assert.strictEqual(
     CONTENT_SNAPSHOT.cards[protectedCardId].upgrade,
     undefined,
-    `${protectedCardId} is a cycle/multiplier core and must not receive a direct v4 upgrade`,
+    `${protectedCardId} is a cycle/multiplier core and must not receive a direct v5 upgrade`,
   );
 }
 
@@ -162,6 +197,11 @@ assert.deepStrictEqual(publicInitial.allowedCommands, ['select_node', 'abandon']
 assert(!publicJson.includes(initial.rng.seed), 'public projection must not expose the secret seed');
 assert(!publicJson.includes('"rng"'), 'public projection must not expose RNG state');
 assert(!publicJson.includes('"drawPile":'), 'public projection must not expose ordered draw pile state');
+assert.strictEqual(publicInitial.route.contractVersion, 1);
+assert.strictEqual(publicInitial.route.choices.length, 2);
+assert(publicInitial.route.choices.every(choice => choice.routeContract?.version === 1));
+assert(!publicJson.includes('enemyAdjustments'), 'public projection must not expose private enemy coefficients');
+assert(!publicJson.includes('rewardAdjustments'), 'public projection must not expose private reward coefficients');
 assert.throws(
   () => normalizePayload('play_card', { cardInstanceId: 'card-1', damage: 9999 }),
   error => error.reason === 'invalid_action_payload',
@@ -172,9 +212,59 @@ assert.throws(
   error => error.reason === 'command_not_allowed',
 );
 assert.strictEqual(stableStringify(initial), initialCopy, 'rejected commands must not mutate canonical state');
-assert(initial.player.deck.every(card => card.upgraded === false), 'v4 genesis should explicitly pin every card as unupgraded');
+assert(initial.player.deck.every(card => card.upgraded === false), 'v5 genesis should explicitly pin every card as unupgraded');
 assert.deepStrictEqual(publicInitial.player.upgradedDeckCounts, {});
 assert.strictEqual(publicInitial.player.deckCrafting.minDeckSize, 8);
+
+const contestedChoice = publicInitial.route.choices.find(choice => choice.routeContract.contractId === 'contested');
+assert(contestedChoice, 'the opening route pair must expose the contested contract');
+const contestedStart = applyCommand(
+  initial,
+  CONTENT_SNAPSHOT,
+  'select_node',
+  { nodeId: contestedChoice.nodeId },
+);
+const contestedBattle = projectState(contestedStart.state, CONTENT_SNAPSHOT);
+const contestedEnemy = CONTENT_SNAPSHOT.enemies[contestedChoice.enemyId];
+const contestedProfile = CONTENT_SNAPSHOT.routeContracts.profiles.contested;
+assert.strictEqual(contestedBattle.battle.enemy.maxHp, contestedChoice.maxHp);
+assert.strictEqual(contestedBattle.battle.routeContract.contractId, 'contested');
+assert.strictEqual(
+  contestedBattle.battle.enemy.intent.amount || 0,
+  contestedEnemy.pattern[0].amount
+    ? Number(contestedEnemy.pattern[0].amount) + contestedProfile.enemyAdjustments.intentDamageBonus
+    : 0,
+  'the selected contract must bind enemy intent pressure on the server',
+);
+assert.strictEqual(
+  contestedBattle.battle.enemy.intent.block || 0,
+  contestedEnemy.pattern[0].block
+    ? Number(contestedEnemy.pattern[0].block) + contestedProfile.enemyAdjustments.intentBlockBonus
+    : 0,
+);
+assert.deepStrictEqual(contestedStart.events, [{
+  type: 'encounter_started',
+  nodeId: contestedChoice.nodeId,
+  enemyId: contestedChoice.enemyId,
+  routeContractId: 'contested',
+}]);
+const intentLabelProbe = JSON.parse(stableStringify(contestedStart.state));
+intentLabelProbe.battle.enemy.enemyId = 'mirror_seer';
+intentLabelProbe.battle.enemy.intentIndex = 0;
+const adjustedCombinedIntent = projectState(intentLabelProbe, CONTENT_SNAPSHOT).battle.enemy.intent;
+assert.strictEqual(adjustedCombinedIntent.label, '镜返 6 / 6');
+assert.strictEqual(adjustedCombinedIntent.block, 6);
+assert.strictEqual(adjustedCombinedIntent.amount, 6);
+assert.throws(
+  () => applyCommand(
+    initial,
+    { ...CONTENT_SNAPSHOT, contentVersion: 'authoritative-trials-v4' },
+    'abandon',
+    {},
+  ),
+  error => error.reason === 'content_state_mismatch',
+  'commands must not execute against a different immutable content snapshot',
+);
 
 let craftingState = create('pve', 'pve:crafting:0', 'crafting-pve-0001');
 while (craftingState.phase !== 'reward') {
@@ -183,6 +273,8 @@ while (craftingState.phase !== 'reward') {
 }
 const firstCraftingView = projectState(craftingState, CONTENT_SNAPSHOT);
 assert.strictEqual(firstCraftingView.reward.choices.filter(choice => choice.kind === 'card').length, 2);
+assert(firstCraftingView.reward.routeContract?.contractId);
+assert(!JSON.stringify(firstCraftingView.reward).includes('rewardAdjustments'));
 assert(firstCraftingView.reward.choices.some(choice => choice.kind === 'upgrade_card'));
 assert(!firstCraftingView.reward.choices.some(choice => choice.kind === 'remove_card'), 'trimming must stay locked after only one encounter');
 const upgradeChoice = firstCraftingView.reward.choices.find(choice => choice.kind === 'upgrade_card');
@@ -231,6 +323,29 @@ while (!(secondRewardState.phase === 'reward' && secondRewardState.route.stageIn
   secondRewardState = applyCommand(secondRewardState, CONTENT_SNAPSHOT, command, payload).state;
 }
 const secondRewardView = projectState(secondRewardState, CONTENT_SNAPSHOT);
+const secondRewardContract = CONTENT_SNAPSHOT.routeContracts.profiles[
+  secondRewardView.reward.routeContract.contractId
+];
+assert(secondRewardContract, 'reward state must retain its selected route contract');
+assert.strictEqual(
+  secondRewardView.reward.choices.filter(choice => choice.kind === 'card').length,
+  CONTENT_SNAPSHOT.deckCrafting.cardOfferCount + secondRewardContract.rewardAdjustments.extraCardOffers,
+  'the selected route must bind its card-offer premium to the reward state',
+);
+const healingReward = secondRewardView.reward.choices.find(choice => choice.kind === 'heal');
+if (healingReward) {
+  assert.strictEqual(
+    healingReward.amount,
+    CONTENT_SNAPSHOT.deckCrafting.healAmount + secondRewardContract.rewardAdjustments.healBonus,
+  );
+}
+const vitalityReward = secondRewardView.reward.choices.find(choice => choice.kind === 'max_hp');
+if (vitalityReward) {
+  assert.strictEqual(
+    vitalityReward.amount,
+    CONTENT_SNAPSHOT.deckCrafting.maxHpAmount + secondRewardContract.rewardAdjustments.maxHpBonus,
+  );
+}
 const removeChoice = secondRewardView.reward.choices.find(choice => choice.kind === 'remove_card');
 assert(removeChoice, 'a healthy deck should unlock one exact trim choice after the second encounter');
 const removedState = applyCommand(
@@ -252,6 +367,7 @@ assert.throws(
 
 const legacyContent = JSON.parse(stableStringify(CONTENT_SNAPSHOT));
 legacyContent.contentVersion = 'authoritative-trials-v3';
+delete legacyContent.routeContracts;
 delete legacyContent.deckCrafting;
 Object.values(legacyContent.cards).forEach(card => delete card.upgrade);
 const legacyRewardState = JSON.parse(stableStringify(initial));
@@ -259,6 +375,7 @@ legacyRewardState.contentVersion = legacyContent.contentVersion;
 legacyRewardState.phase = 'reward';
 legacyRewardState.battle = null;
 legacyRewardState.route.choices = [];
+delete legacyRewardState.route.contractVersion;
 legacyRewardState.player.deck.forEach(card => delete card.upgraded);
 delete legacyRewardState.stats.cardsUpgraded;
 delete legacyRewardState.stats.cardsRemoved;
@@ -319,7 +436,10 @@ for (const scenarioId of RELAY_EXPEDITION_SCENARIO_IDS) {
   assert.strictEqual(relayProjection.route.totalStages, 3, `${scenarioId} should pin a three-stage route`);
 }
 
-const golden = {
+const legacyV4Content = JSON.parse(stableStringify(CONTENT_SNAPSHOT));
+legacyV4Content.contentVersion = 'authoritative-trials-v4';
+delete legacyV4Content.routeContracts;
+const legacyV4Golden = {
   pve: {
     actions: 63,
     hash: '530b464118426b1a1f54d668ed8e38b4db15e908f302c9f7ae0f80d7b4ef86f9',
@@ -340,6 +460,44 @@ const golden = {
   },
 };
 
+for (const mode of Object.keys(legacyV4Golden)) {
+  const result = drive(
+    mode,
+    `${mode}:golden:0`,
+    `golden-${mode}-0001`,
+    '',
+    legacyV4Content,
+  );
+  const expected = legacyV4Golden[mode];
+  assert.strictEqual(result.state.phase, 'completed', `${mode} v4 replay should complete`);
+  assert.strictEqual(result.commands.length, expected.actions, `${mode} v4 action count drifted`);
+  assert.strictEqual(hashCanonical(result.state), expected.hash, `${mode} v4 final state must remain byte-identical`);
+  assert.strictEqual(result.state.summary.score, expected.score, `${mode} v4 score drifted`);
+  assert.strictEqual(result.state.stats.turns, expected.turns, `${mode} v4 turn count drifted`);
+  assert.strictEqual(result.state.route.contractVersion, undefined, `${mode} v4 must not backfill route contracts`);
+}
+
+const golden = {
+  pve: {
+    actions: 69,
+    hash: 'f7faf22e7e8958edfd21b20d1a3e3a23f76ec5141063fefe6ff490a98420bf9c',
+    score: 707,
+    turns: 17,
+  },
+  challenge: {
+    actions: 47,
+    hash: '935a53c537259a1283fa84c3214b24383f4f0b071da07193ce9944b68a96e8d0',
+    score: 869,
+    turns: 12,
+  },
+  expedition: {
+    actions: 142,
+    hash: '72778bffb09f1e2c16348f7633422a5197830e98148575e31eee5a046915b9ef',
+    score: 648,
+    turns: 36,
+  },
+};
+
 for (const mode of Object.keys(golden)) {
   const result = drive(mode);
   const expected = golden[mode];
@@ -351,27 +509,32 @@ for (const mode of Object.keys(golden)) {
   assert(result.state.stats.cardsUpgraded >= 1, `${mode} golden run must exercise a real card upgrade`);
   assert.strictEqual(result.state.stats.cardsRemoved, 1, `${mode} golden run must exercise one bounded trim`);
   assert.strictEqual(result.state.summary.bossWins, 1, `${mode} must complete through a boss`);
+  assert.strictEqual(result.state.summary.routeResolution.selections.length, result.state.route.totalStages);
+  assert.strictEqual(
+    result.state.summary.scoreBreakdown.routeBonus,
+    result.state.summary.routeResolution.totalBonus,
+  );
   const replayed = replay(mode, `${mode}:golden:0`, `golden-${mode}-0001`, result.commands);
   assert.strictEqual(stableStringify(replayed), stableStringify(result.state), `${mode} replay must be byte-identical`);
 }
 
 const relayGolden = {
   vanguard: {
-    actions: 27,
-    hash: '06d2b401e28a2b5cdceabd22aeef7298edc1f45d35d1c5aa6856829c63966763',
-    score: 641,
-    turns: 7,
+    actions: 32,
+    hash: '5e8ca7cd37b8cf2eb227d4bfd1afa6d26af0e3078b57e7484bbb9add7e53a67a',
+    score: 613,
+    turns: 9,
   },
   bulwark: {
-    actions: 60,
-    hash: '366b207081091187df5d797d36096a0edcf1c4a982901f83757c8844bd8e9436',
-    score: 629,
-    turns: 17,
+    actions: 74,
+    hash: 'e58097000d0324ff52f12d491ffa52522156ba3efcbb8d9e7005cca1f826b6d1',
+    score: 716,
+    turns: 21,
   },
   insight: {
-    actions: 40,
-    hash: 'ac547a24e16204173e586bafb41d6408d83b01ee345f179b8a3b335b766bf9dc',
-    score: 591,
+    actions: 41,
+    hash: '3cfd99ee2c868c0ba19250b9db0d8749b45b0c6f54299432352e17172747079b',
+    score: 611,
     turns: 10,
   },
 };
@@ -403,12 +566,12 @@ for (const scenarioId of RELAY_EXPEDITION_SCENARIO_IDS) {
 }
 
 const fateGolden = {
-  'chronicle-ember-guard': { actions: 36, hash: '844e06ae61a3d71b7a6b631f73007bce7a293bde3bd99c1478d9809afa3adba9', score: 668, turns: 10 },
-  'chronicle-ember-edge': { actions: 32, hash: 'f8da249bd2aed6154d30272f7114dbfcc97ddefbcac9723c6daae4e2fc621a9d', score: 709, turns: 8 },
-  'chronicle-mirror-guard': { actions: 54, hash: '90f146a6d75f1070c77d08feca7b6ff3946ba17bcac50b86ac59c087f966f99c', score: 840, turns: 14 },
-  'chronicle-mirror-edge': { actions: 48, hash: 'd06fa00a819e136fbe212acca57c7f5dd40a28675252da39e747e123a3cfab1d', score: 800, turns: 13 },
-  'chronicle-rift-guard': { actions: 93, hash: '5bfeb668741bcbaaa23feab44a6e97d80f86fb02d4bbea5938050b856170241f', score: 998, turns: 26 },
-  'chronicle-rift-edge': { actions: 61, hash: 'dd22b936c5e7626aecedcfe66e99d213114e50def53d7199cbbb943636da7d30', score: 1015, turns: 16 },
+  'chronicle-ember-guard': { actions: 59, hash: '9798929f077aaede0268e27673270029fe7146681a54987e1ef8badec625b0ff', score: 732, turns: 17 },
+  'chronicle-ember-edge': { actions: 34, hash: '89d6b4643dad9437e366546651f92461c055c250e77a0aeb33c0e1998251fbbd', score: 687, turns: 8 },
+  'chronicle-mirror-guard': { actions: 72, hash: 'eff9bb2b9331049d8d3352db715e61e4ee5783addedf0c042af0a7c43a571964', score: 905, turns: 18 },
+  'chronicle-mirror-edge': { actions: 53, hash: 'a2f8dc04499e7282c6562c3043601521bb376668e81fa90629f81d7159c9b168', score: 901, turns: 16 },
+  'chronicle-rift-guard': { actions: 119, hash: '7287fdd99ce0b5446344ae264dd0af1870421df654fcbd04508374ac65b5dea6', score: 1172, turns: 32 },
+  'chronicle-rift-edge': { actions: 72, hash: 'bd46b839bcd763e41d4f291613030f62a074d25b6c54df0e7f6d7d20112d83f9', score: 1099, turns: 18 },
 };
 
 for (const scenarioId of FATE_CHRONICLE_SCENARIO_IDS) {

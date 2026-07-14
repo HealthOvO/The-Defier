@@ -1,7 +1,7 @@
 const { cloneJson, hashCanonical, stableStringify } = require('./canonical');
 
 const PROTOCOL_VERSION = 'authoritative-run-v2';
-const CONTENT_VERSION = 'authoritative-trials-v4';
+const CONTENT_VERSION = 'authoritative-trials-v5';
 const RELAY_EXPEDITION_SCENARIO_IDS = ['vanguard', 'bulwark', 'insight'];
 const FATE_CHRONICLE_SCENARIO_IDS = [
     'chronicle-ember-guard',
@@ -22,6 +22,85 @@ function deepFreeze(value) {
 const CONTENT_SNAPSHOT = deepFreeze({
     protocolVersion: PROTOCOL_VERSION,
     contentVersion: CONTENT_VERSION,
+    routeContracts: {
+        version: 1,
+        reportVersion: 'authoritative-route-contract-v1',
+        profiles: {
+            steady: {
+                contractId: 'steady',
+                label: '稳进',
+                riskTier: 'low',
+                riskLabel: '低风险',
+                difficultyTier: 'steady',
+                difficultyLabel: '稳压',
+                difficultyRating: 1,
+                rewardTier: 'standard',
+                rewardLabel: '标准回报',
+                enemyAdjustments: {
+                    maxHpBps: 10000,
+                    intentDamageBonus: 0,
+                    intentBlockBonus: 0
+                },
+                rewardAdjustments: {
+                    extraCardOffers: 0,
+                    healBonus: 0,
+                    maxHpBonus: 0
+                },
+                scoreBonus: 0
+            },
+            contested: {
+                contractId: 'contested',
+                label: '争衡',
+                riskTier: 'medium',
+                riskLabel: '中风险',
+                difficultyTier: 'pressured',
+                difficultyLabel: '增压',
+                difficultyRating: 2,
+                rewardTier: 'enhanced',
+                rewardLabel: '加码回报',
+                enemyAdjustments: {
+                    maxHpBps: 11250,
+                    intentDamageBonus: 1,
+                    intentBlockBonus: 1
+                },
+                rewardAdjustments: {
+                    extraCardOffers: 0,
+                    healBonus: 1,
+                    maxHpBonus: 1
+                },
+                scoreBonus: 25
+            },
+            perilous: {
+                contractId: 'perilous',
+                label: '险锋',
+                riskTier: 'high',
+                riskLabel: '高风险',
+                difficultyTier: 'severe',
+                difficultyLabel: '高压',
+                difficultyRating: 3,
+                rewardTier: 'premium',
+                rewardLabel: '丰厚回报',
+                enemyAdjustments: {
+                    maxHpBps: 12500,
+                    intentDamageBonus: 2,
+                    intentBlockBonus: 2
+                },
+                rewardAdjustments: {
+                    extraCardOffers: 1,
+                    healBonus: 3,
+                    maxHpBonus: 2
+                },
+                scoreBonus: 55
+            }
+        },
+        stagePairs: [
+            ['steady', 'contested'],
+            ['steady', 'perilous'],
+            ['contested', 'perilous'],
+            ['steady', 'perilous'],
+            ['contested', 'perilous']
+        ]
+    },
     deckCrafting: {
         version: 1,
         reportVersion: 'authoritative-deck-crafting-v1',
