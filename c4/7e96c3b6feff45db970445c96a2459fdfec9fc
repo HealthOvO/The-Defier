@@ -1,0 +1,21 @@
+tests/sanity_world_rift_platform_checks.cjs
+  s_bae69f1b7fab46::t_ee16b2dea5dc7a 4,33-36,86-118,120,133,150,194-198,1082
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "c47e96c3b6feff45db970445c96a2459fdfec9fc",
+  "prompts": {},
+  "sessions": {
+    "s_bae69f1b7fab46": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ed4f6-e7ac-73e0-a29e-119f3eddb407",
+        "model": "unknown"
+      },
+      "human_author": "AI Agent <bot@example.com>"
+    }
+  },
+  "attestation_metadata": {},
+  "remote_transcripts": {}
+}
