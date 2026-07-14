@@ -1,0 +1,23 @@
+server/relay-expedition/service.js
+  s_bae69f1b7fab46::t_47eaf3378c116f 1354-1361
+tests/sanity_relay_expedition_cross_process_checks.cjs
+  s_bae69f1b7fab46::t_aae0cc3d9978c2 247,342-349,353,358-359,374-389,391,393-394,397
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "ecb7599dd7595d9360e821eb3bdf14621f9c9e7d",
+  "prompts": {},
+  "sessions": {
+    "s_bae69f1b7fab46": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ed4f6-e7ac-73e0-a29e-119f3eddb407",
+        "model": "unknown"
+      },
+      "human_author": "AI Agent <bot@example.com>"
+    }
+  },
+  "attestation_metadata": {},
+  "remote_transcripts": {}
+}
