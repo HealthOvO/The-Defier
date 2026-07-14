@@ -8,8 +8,11 @@ const root = path.resolve(__dirname, '..');
 const read = (relativePath) => fs.readFileSync(path.join(root, relativePath), 'utf8');
 const packageJson = JSON.parse(read('package.json'));
 
+const deployProductionScript = read('scripts/deploy-production.sh');
 const prodReadScript = read('scripts/check-production-read-only.sh');
+const prodApiReadyScript = read('scripts/wait-production-api-ready.mjs');
 const prodApiSmoke = read('tests/prod_api_smoke.cjs');
+const prodApiReadyChecks = read('tests/sanity_prod_api_readiness_checks.cjs');
 const pagesWorkflow = read('.github/workflows/pages.yml');
 const browserReleaseScript = read('tests/run_browser_release_checks.sh');
 const browserReleaseSummary = read('tests/summarize_browser_release_reports.cjs');
@@ -243,6 +246,45 @@ const waitingReportSource = pvpLiveStore.slice(
     `production read-only check should cover backend marker: ${needle}`,
   );
 });
+
+assert.ok(
+  deployProductionScript.includes('node scripts/wait-production-api-ready.mjs "$BASE_URL"'),
+  'production deploy should wait for the public API readiness helper before read-only checks',
+);
+assert.ok(
+  deployProductionScript.indexOf('node scripts/wait-production-api-ready.mjs "$BASE_URL"')
+    < deployProductionScript.indexOf('npm run test:prod:read -- "$HOST" "$BASE_URL"'),
+  'production deploy should only run read-only checks after the readiness helper succeeds',
+);
+
+[
+  '/api/health',
+  "payload?.status !== 'ok'",
+  'PROD_API_READY_TIMEOUT_MS',
+  'PROD_API_READY_INTERVAL_MS',
+  'PROD_API_READY_PROBE_TIMEOUT_MS',
+  'AbortController',
+  'probe timed out after',
+  'Timed out after',
+].forEach((needle) => {
+  assert.ok(prodApiReadyScript.includes(needle), `production API readiness helper should pin retry marker: ${needle}`);
+});
+
+[
+  'status: \'starting\'',
+  'bad gateway',
+  'response body intentionally hangs',
+  'probe timed out after 80ms',
+  'Timed out after 220ms',
+  'status=ok',
+].forEach((needle) => {
+  assert.ok(prodApiReadyChecks.includes(needle), `production API readiness behavior test should pin retry scenario: ${needle}`);
+});
+
+assert.ok(
+  runNodeChecks.includes('sanity_prod_api_readiness_checks.cjs'),
+  'node gate should execute the production API readiness behavior test',
+);
 
 assert.match(
   pagesWorkflow,

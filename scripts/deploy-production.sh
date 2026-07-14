@@ -61,6 +61,9 @@ systemctl is-active "$SERVICE"
 nginx -t
 REMOTE
 
+echo "[prod-deploy] Waiting for public API readiness at $BASE_URL/api/health."
+node scripts/wait-production-api-ready.mjs "$BASE_URL"
+
 echo "[prod-deploy] Running production read-only checks."
 npm run test:prod:read -- "$HOST" "$BASE_URL"
 

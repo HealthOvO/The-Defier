@@ -21,6 +21,7 @@ node tests/sanity_core_loop_design_system_checks.cjs
 node tests/sanity_pvp_trusted_control_surface_checks.cjs
 node tests/sanity_mobile_interaction_system_checks.cjs
 node tests/sanity_release_gate_coverage_checks.cjs
+node tests/sanity_prod_api_readiness_checks.cjs
 node tests/sanity_season_ops_ui_checks.cjs
 node tests/backend_security_checks.cjs
 node tests/backend_platform_checks.cjs
