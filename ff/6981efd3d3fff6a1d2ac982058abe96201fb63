@@ -1,0 +1,29 @@
+server/progression/authoritative-runs/catalog.js
+  s_bae69f1b7fab46::t_08d362c6ce3c29 4,25-103
+server/progression/authoritative-runs/engine.js
+  s_bae69f1b7fab46::t_2c127116780e66 3,84-170,221-257,289-293,300-319,332-333,340,362-363,427-432,439-440,444-445,603-618,620-621,633-647,663-676,688,693-697,702-712,728-731,835,891,903-907,917-922,957-983,1007-1010,1050-1052,1055-1060
+tests/run_node_checks.sh
+  s_bae69f1b7fab46::t_e03da0b8cdf8da 38
+tests/sanity_authoritative_route_balance_checks.cjs
+  s_bae69f1b7fab46::t_35b80d655cca43 1-181
+tests/sanity_authoritative_runs_engine_checks.cjs
+  s_bae69f1b7fab46::t_88a0991d8e4db9 26-32,39,43-44,79-86,89-90,96-97,99,128,131,135-157,186,200-204,215,219-268,276-277,326-348,370,378,439-442,463-500,512-516,523-526,529-532,535-537,569-574
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "ff6981efd3d3fff6a1d2ac982058abe96201fb63",
+  "prompts": {},
+  "sessions": {
+    "s_bae69f1b7fab46": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ed4f6-e7ac-73e0-a29e-119f3eddb407",
+        "model": "unknown"
+      },
+      "human_author": "AI Agent <bot@example.com>"
+    }
+  },
+  "attestation_metadata": {},
+  "remote_transcripts": {}
+}
