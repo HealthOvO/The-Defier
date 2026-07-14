@@ -1,0 +1,29 @@
+scripts/wait-production-api-ready.mjs
+  s_ca5652313828d6::t_0544d99c64c18d 1-147
+tests/sanity_prod_api_readiness_checks.cjs
+  s_ca5652313828d6::t_04555f35caeb90 1-168
+tests/run_node_checks.sh
+  s_ca5652313828d6::t_8f12a88b10266c 24
+tests/sanity_release_gate_coverage_checks.cjs
+  s_ca5652313828d6::t_2d1b5595a7f19d 11,13,15,250-288
+scripts/deploy-production.sh
+  s_ca5652313828d6::t_6de619d6b4c65f 64-66
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "e1d99ef96f3088690b944dd5a3e2d9298a5d45a6",
+  "prompts": {},
+  "sessions": {
+    "s_ca5652313828d6": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f3fed-94d5-77b2-9af0-61333559ff38",
+        "model": "unknown"
+      },
+      "human_author": "AI Agent <bot@example.com>"
+    }
+  },
+  "attestation_metadata": {},
+  "remote_transcripts": {}
+}
