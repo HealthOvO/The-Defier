@@ -279,7 +279,7 @@ function chooseDecision(projection) {
   if (projection.phase === "route") {
     const choice = [...(projection.route?.choices || [])].sort((left, right) => (
       Number(left.routeContract?.difficultyRating || 0) - Number(right.routeContract?.difficultyRating || 0)
-    ))[0];
+    )).at(-1);
     return choice ? {
       selector: `[data-fate-chronicle-action="authoritative-select-node"][data-node-id="${cssValue(choice.nodeId)}"]`
     } : null;
@@ -345,16 +345,44 @@ async function driveCurrentRun(page) {
   let actions = 0;
   const rewardKinds = [];
   const rewardUi = [];
-  const routeContractPhases = { battle: null, reward: null };
+  const routeContractPhases = { battle: null, reward: null, perilousBattle: null, perilousReward: null };
   while (!new Set(["completed", "defeated", "abandoned"]).has(state.projection?.phase) && actions < 256) {
     if (state.projection?.phase === "battle" && !routeContractPhases.battle) {
+      const visibility = await page.locator('[data-authoritative-phase="battle"]').evaluate(element => {
+        const root = element.closest('#fate-chronicle-screen');
+        const rootRect = root?.getBoundingClientRect();
+        const phaseRect = element.getBoundingClientRect();
+        return {
+          rootTop: rootRect?.top ?? 0,
+          rootHeight: rootRect?.height ?? 0,
+          phaseTop: phaseRect.top,
+          phaseHeight: phaseRect.height,
+          scrollTop: root?.scrollTop ?? 0,
+          activePhase: document.activeElement?.getAttribute('data-authoritative-phase') || '',
+        };
+      });
       routeContractPhases.battle = {
         contract: state.projection?.battle?.routeContract || null,
-        text: state.text
+        text: state.text,
+        visibility
       };
       await safeAuditScreenshot(
         page,
         path.join(outDir, "fate-chronicle-route-battle.png"),
+        "browser_fate_chronicle_real_backend_smoke",
+        { timeout: 9000 }
+      );
+    }
+    if (state.projection?.phase === "battle"
+      && state.projection?.battle?.routeContract?.contractId === "perilous"
+      && !routeContractPhases.perilousBattle) {
+      routeContractPhases.perilousBattle = {
+        contract: state.projection.battle.routeContract,
+        text: state.text
+      };
+      await safeAuditScreenshot(
+        page,
+        path.join(outDir, "fate-chronicle-perilous-battle.png"),
         "browser_fate_chronicle_real_backend_smoke",
         { timeout: 9000 }
       );
@@ -364,6 +392,21 @@ async function driveCurrentRun(page) {
         contract: state.projection?.reward?.routeContract || null,
         text: state.text
       };
+    }
+    if (state.projection?.phase === "reward"
+      && state.projection?.reward?.routeContract?.contractId === "perilous"
+      && !routeContractPhases.perilousReward) {
+      routeContractPhases.perilousReward = {
+        contract: state.projection.reward.routeContract,
+        choiceCount: state.projection?.reward?.choices?.length || 0,
+        text: state.text
+      };
+      await safeAuditScreenshot(
+        page,
+        path.join(outDir, "fate-chronicle-perilous-reward.png"),
+        "browser_fate_chronicle_real_backend_smoke",
+        { timeout: 9000 }
+      );
     }
     const decision = chooseDecision(state.projection);
     if (!decision) throw new Error(`fate chronicle has no playable command: ${JSON.stringify(state)}`);
@@ -391,7 +434,16 @@ async function driveCurrentRun(page) {
         );
       }
     }
-    await target.click({ force: true });
+    if (state.projection?.phase === "route") {
+      await target.evaluate(element => {
+        const root = element.closest('#fate-chronicle-screen');
+        element.focus({ preventScroll: true });
+        if (root) root.scrollTop = 0;
+        element.click();
+      });
+    } else {
+      await target.click({ force: true });
+    }
     state = await waitForRunChange(page, before);
     actions += 1;
   }
@@ -565,6 +617,33 @@ try {
       && driven.routeContractPhases.reward.text.includes(driven.routeContractPhases.reward.contract.rewardSummary)
       && !/enemyAdjustments|rewardAdjustments/.test(JSON.stringify(driven.routeContractPhases)),
     JSON.stringify(driven.routeContractPhases)
+  );
+  add(
+    "fate route transition reveals the battle phase instead of leaving a blank viewport",
+    Number(driven.routeContractPhases.battle?.visibility?.phaseHeight) > 0
+      && Number(driven.routeContractPhases.battle?.visibility?.scrollTop) > 0
+      && driven.routeContractPhases.battle?.visibility?.activePhase === "battle"
+      && Number(driven.routeContractPhases.battle?.visibility?.phaseTop) >= Number(driven.routeContractPhases.battle?.visibility?.rootTop) - 1
+      && Number(driven.routeContractPhases.battle?.visibility?.phaseTop)
+        <= Number(driven.routeContractPhases.battle?.visibility?.rootTop)
+          + Math.max(80, Number(driven.routeContractPhases.battle?.visibility?.rootHeight) * 0.25),
+    JSON.stringify(driven.routeContractPhases.battle?.visibility || null)
+  );
+  add(
+    "fate real browser path exercises perilous pressure and premium rewards",
+    driven.routeContractPhases.perilousBattle?.contract?.riskTier === "high"
+      && driven.routeContractPhases.perilousBattle?.contract?.rewardTier === "premium"
+      && driven.routeContractPhases.perilousBattle.text.includes(driven.routeContractPhases.perilousBattle.contract.difficultySummary)
+      && driven.routeContractPhases.perilousReward?.choiceCount >= 4
+      && driven.routeContractPhases.perilousReward.text.includes(driven.routeContractPhases.perilousReward.contract.rewardSummary)
+      && !/enemyAdjustments|rewardAdjustments/.test(JSON.stringify({
+        battle: driven.routeContractPhases.perilousBattle,
+        reward: driven.routeContractPhases.perilousReward
+      })),
+    JSON.stringify({
+      battle: driven.routeContractPhases.perilousBattle,
+      reward: driven.routeContractPhases.perilousReward
+    })
   );
   add(
     "fate terminal projection carries additive route score and per-stage resolution",

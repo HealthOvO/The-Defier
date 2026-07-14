@@ -23,6 +23,7 @@ const backendClientSource = read("js/services/backend-client.js");
 const gameSource = read("js/game.js");
 const indexSource = read("index.html");
 const cssSource = read("css/fate-chronicle.css");
+const backendDocSource = read("docs/backend_authoritative_fate_chronicle_v1.md");
 
 [
   "export class FateChronicleView",
@@ -37,7 +38,8 @@ const cssSource = read("css/fate-chronicle.css");
   "fate-chronicle-state-back",
   "aria-pressed=",
   "claim.carryoverCycle",
-  "foundationCycleId"
+  "foundationCycleId",
+  "revealAuthoritativePhase"
 ].forEach(marker => {
   assert.ok(viewSource.includes(marker), `fate chronicle view should pin ${marker}`);
 });
@@ -63,7 +65,10 @@ assert.ok(!viewSource.includes('fate-chronicle-kicker">server_authoritative'), '
   "fate_chronicle",
   "onFateChronicleProjected",
   "onFateChronicleReturn",
-  "返回命途长卷"
+  "返回命途长卷",
+  "requestPhaseReveal",
+  "data-authoritative-phase",
+  "tabindex=\"-1\""
 ].forEach(marker => {
   assert.ok(panelSource.includes(marker), `authoritative run panel should pin ${marker}`);
 });
@@ -71,6 +76,9 @@ assert.ok(panelSource.includes('season-ops-counter-chip">天道裁定'), 'author
 assert.ok(panelSource.includes('server_authoritative: "天道校验 已通过"'), 'authoritative run trust tiers should map to player-facing copy');
 assert.ok(panelSource.includes('renderChip(formatTrustTier(this.lastRunMeta.trustTier))'), 'authoritative run metadata should render the mapped trust copy');
 assert.ok(!panelSource.includes('season-ops-counter-chip">server_authoritative'), 'authoritative run panel should not expose an internal trust-tier label');
+assert.ok(viewSource.includes('target.focus({ preventScroll: true })'), 'fate chronicle phase reveal should preserve keyboard focus on the new phase');
+assert.ok(backendDocSource.includes('目录版本为 `authoritative-trials-v5`'), 'fate chronicle backend doc should pin the active v5 catalog');
+assert.ok(backendDocSource.includes('旧 `authoritative-trials-v4` 长卷仍按创建时目录完整回放'), 'fate chronicle backend doc should preserve the v4 replay contract');
 
 [
   "getFateChronicleCurrent",

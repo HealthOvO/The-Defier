@@ -18,9 +18,11 @@ function createServiceStub() {
   const beginCalls = [];
   const currentCalls = [];
   const getCalls = [];
+  const actionCalls = [];
   const settleCalls = [];
   let currentHandler = async () => ({ success: true, run: null });
   let getHandler = async () => ({ success: true, run: null });
+  let actionHandler = async () => ({ success: true, run: null });
   let settleHandler = async () => ({ success: true, run: null });
   return {
     getState() {
@@ -57,7 +59,10 @@ function createServiceStub() {
       beginCalls.push(options);
       return { success: true, run: null };
     },
-    action: async () => ({ success: true, run: null }),
+    action: async options => {
+      actionCalls.push(options);
+      return actionHandler(options);
+    },
     settle: async options => {
       settleCalls.push(options);
       return settleHandler(options);
@@ -79,6 +84,9 @@ function createServiceStub() {
     __getGetCalls() {
       return getCalls.slice();
     },
+    __getActionCalls() {
+      return actionCalls.slice();
+    },
     __getSettleCalls() {
       return settleCalls.slice();
     },
@@ -87,6 +95,9 @@ function createServiceStub() {
     },
     __setGetHandler(handler) {
       getHandler = handler;
+    },
+    __setActionHandler(handler) {
+      actionHandler = handler;
     },
     __setSettleHandler(handler) {
       settleHandler = handler;
@@ -704,6 +715,29 @@ assert.equal(panel.getCurrentMode(), "pve", "suppressed response must not switch
 assert.equal(panel.lastRunMeta.runId, stableRunId, "suppressed response must not replace panel metadata");
 
 panel.destroy();
+
+const phaseRevealService = createServiceStub();
+const phaseRevealCalls = [];
+phaseRevealService.__setActionHandler(async () => ({
+  success: true,
+  run: createRunEnvelope({ mode: "pve", phase: "battle", status: "active" })
+}));
+const phaseRevealPanel = new AuthoritativeRunPanel({
+  service: phaseRevealService,
+  getCurrentUserId: () => "ui-user-phase-reveal",
+  requestRender: noop,
+  requestPhaseReveal: phase => phaseRevealCalls.push(phase)
+});
+phaseRevealPanel.applyResult({
+  success: true,
+  run: createRunEnvelope({ mode: "pve", phase: "route", status: "active" })
+}, { userId: "ui-user-phase-reveal" });
+await phaseRevealPanel.submitAction("select_node", { nodeId: "stage-1-ink_scout-steady-2" });
+assert.deepEqual(phaseRevealCalls, ["battle"], "route-to-battle transition should reveal the new phase");
+assert.match(phaseRevealPanel.render(), /data-authoritative-phase="battle"/);
+assert.match(phaseRevealPanel.render(), /data-authoritative-phase="battle"[^>]*role="region"[^>]*tabindex="-1"/);
+assert.equal(phaseRevealService.__getActionCalls().length, 1);
+phaseRevealPanel.destroy();
 
 const retryService = createServiceStub();
 retryService.__setCurrentHandler(async () => ({

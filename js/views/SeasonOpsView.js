@@ -147,6 +147,7 @@ export class SeasonOpsView {
       relayExpeditionService: RelayExpeditionService,
       getCurrentUserId: () => this.getCurrentUserId(),
       requestRender: () => this.render(),
+      requestPhaseReveal: phase => this.revealAuthoritativePhase(phase),
       requestLogin: () => this.openLoginModal(),
       requestConfirm: message => this.requestConfirmation(message),
       onRelayExpeditionProjected: result => this.handleRelayExpeditionProjected(result),
@@ -380,6 +381,16 @@ export class SeasonOpsView {
       .find(element => element.dataset.seasonOpsFocusFallback === key);
     const target = primary || fallback;
     if (target && typeof target.focus === "function") target.focus({ preventScroll: true });
+  }
+
+  revealAuthoritativePhase(phase = "") {
+    const container = this.getContainer();
+    const normalizedPhase = normalizeText(phase);
+    const target = container && [...container.querySelectorAll("[data-authoritative-phase]")]
+      .find(element => element.dataset.authoritativePhase === normalizedPhase);
+    if (!target || typeof target.scrollIntoView !== "function") return;
+    if (typeof target.focus === "function") target.focus({ preventScroll: true });
+    target.scrollIntoView({ block: "start", inline: "nearest", behavior: "auto" });
   }
 
   handleStorageChange(event) {

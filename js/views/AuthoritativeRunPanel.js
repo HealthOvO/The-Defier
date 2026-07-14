@@ -387,6 +387,7 @@ export class AuthoritativeRunPanel {
     fateChronicleService = null,
     getCurrentUserId = () => "",
     requestRender = () => {},
+    requestPhaseReveal = () => {},
     requestLogin = () => {},
     requestConfirm = async () => false,
     onRelayExpeditionProjected = () => {},
@@ -401,6 +402,7 @@ export class AuthoritativeRunPanel {
     this.fateChronicleService = fateChronicleService;
     this.getCurrentUserId = getCurrentUserId;
     this.requestRender = requestRender;
+    this.requestPhaseReveal = requestPhaseReveal;
     this.requestLogin = requestLogin;
     this.requestConfirm = requestConfirm;
     this.onRelayExpeditionProjected = onRelayExpeditionProjected;
@@ -842,6 +844,7 @@ export class AuthoritativeRunPanel {
     if (!expectedUserId || !runId) {
       return { success: false, reason: "authoritative_run_missing_id", message: "天道试炼尚未开始。" };
     }
+    const previousPhase = this.getProjectionPhase();
     const result = await this.service.action({
       runId,
       command,
@@ -849,7 +852,12 @@ export class AuthoritativeRunPanel {
       expectedVersion: this.getExpectedVersion(),
       expectedUserId
     });
-    return this.applyResult(result, { kind: "action", userId: expectedUserId, force: true });
+    const applied = this.applyResult(result, { kind: "action", userId: expectedUserId, force: true });
+    const nextPhase = this.getProjectionPhase();
+    if (result && result.success !== false && nextPhase && nextPhase !== previousPhase) {
+      this.requestPhaseReveal(nextPhase);
+    }
+    return applied;
   }
 
   async settleRun() {
@@ -1484,12 +1492,15 @@ export class AuthoritativeRunPanel {
 
   renderPhaseSection() {
     const phase = this.getProjectionPhase();
-    if (phase === "route") return this.renderRoutePhase();
-    if (phase === "battle") return this.renderBattlePhase();
-    if (phase === "reward") return this.renderRewardPhase();
-    if (phase === "completed") return this.renderCompletedPhase();
-    if (phase === "defeated" || phase === "abandoned") return this.renderTerminalPhase();
-    return this.renderStateCard("待命", "尚未收到可展示的历练进度。");
+    const phaseMeta = formatPhase(phase);
+    let content = "";
+    if (phase === "route") content = this.renderRoutePhase();
+    else if (phase === "battle") content = this.renderBattlePhase();
+    else if (phase === "reward") content = this.renderRewardPhase();
+    else if (phase === "completed") content = this.renderCompletedPhase();
+    else if (phase === "defeated" || phase === "abandoned") content = this.renderTerminalPhase();
+    else content = this.renderStateCard("待命", "尚未收到可展示的历练进度。");
+    return `<div class="season-ops-authoritative-phase-anchor" data-authoritative-phase="${escapeHtml(phase || "idle")}" role="region" aria-label="当前阶段：${escapeHtml(phaseMeta.label)}" tabindex="-1">${content}</div>`;
   }
 
   renderRoutePhase() {

@@ -531,6 +531,7 @@ class FateChronicleRunPanel extends AuthoritativeRunPanel {
     fateChronicleService = chronicleService,
     getCurrentUserId,
     requestRender,
+    requestPhaseReveal,
     requestLogin,
     requestConfirm,
     onSubmitted,
@@ -542,6 +543,7 @@ class FateChronicleRunPanel extends AuthoritativeRunPanel {
       fateChronicleService,
       getCurrentUserId,
       requestRender,
+      requestPhaseReveal,
       requestLogin,
       requestConfirm,
       onFateChronicleProjected,
@@ -720,6 +722,7 @@ export class FateChronicleView {
       fateChronicleService: FateChronicleService,
       getCurrentUserId: () => this.getCurrentUserId(),
       requestRender: () => this.render(),
+      requestPhaseReveal: phase => this.revealAuthoritativePhase(phase),
       requestLogin: () => this.openLoginModal(),
       requestConfirm: message => this.requestConfirmation(message),
       onSubmitted: async result => {
@@ -783,6 +786,16 @@ export class FateChronicleView {
       this.storageListenerBound = true;
     }
     return container;
+  }
+
+  revealAuthoritativePhase(phase = "") {
+    const container = this.getContainer();
+    const normalizedPhase = normalizeText(phase);
+    const target = container && [...container.querySelectorAll("[data-authoritative-phase]")]
+      .find(element => element.dataset.authoritativePhase === normalizedPhase);
+    if (!target || typeof target.scrollIntoView !== "function") return;
+    if (typeof target.focus === "function") target.focus({ preventScroll: true });
+    target.scrollIntoView({ block: "start", inline: "nearest", behavior: "auto" });
   }
 
   getCurrentUser() {

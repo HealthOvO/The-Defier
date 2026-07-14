@@ -393,15 +393,18 @@ async function exerciseWorldRiftAccountSwitch(page, { runId, version }) {
   }
 }
 
-function chooseDecision(projection) {
+function chooseDecision(projection, { routePolicy = 'safe' } = {}) {
   if (!projection) return null;
   if (projection.phase === 'route') {
-    const choice = [...(projection.route?.choices || [])].sort((left, right) => (
+    const choices = [...(projection.route?.choices || [])].sort((left, right) => (
       Number(left.routeContract?.difficultyRating || 0) - Number(right.routeContract?.difficultyRating || 0)
-    ))[0];
+    ));
+    const choice = routePolicy === 'risky' ? choices.at(-1) : choices[0];
     return choice ? {
       command: 'select_node',
       selector: `[data-season-ops-action="authoritative-select-node"][data-node-id="${cssValue(choice.nodeId)}"]`,
+      nodeId: choice.nodeId,
+      routeContract: choice.routeContract || null,
     } : null;
   }
   if (projection.phase === 'reward') {
@@ -468,7 +471,16 @@ async function clickDecision(page, decision, before) {
   const target = page.locator(decision.selector).first();
   await target.waitFor({ state: 'visible', timeout: 10000 });
   await target.scrollIntoViewIfNeeded();
-  await target.click({ force: true });
+  if (decision.command === 'select_node') {
+    await target.evaluate(element => {
+      const root = element.closest('#season-ops-screen');
+      element.focus({ preventScroll: true });
+      if (root) root.scrollTop = 0;
+      element.click();
+    });
+  } else {
+    await target.click({ force: true });
+  }
   return waitForPanel(
     page,
     ({ runId, version }) => {
@@ -505,7 +517,7 @@ async function readLayout(page) {
   });
 }
 
-async function completeAdditionalMode(page, mode, maxAttempts = 3) {
+async function completeAdditionalMode(page, mode, { maxAttempts = 3, routePolicy = 'safe' } = {}) {
   await selectAuthoritativeMode(page, mode);
   await page.waitForSelector('[data-season-ops-action="authoritative-begin"]');
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
@@ -525,15 +537,39 @@ async function completeAdditionalMode(page, mode, maxAttempts = 3) {
     let actionCount = 0;
     const rewardKinds = [];
     const rewardUi = [];
+    const routeContracts = [];
+    const rewardContracts = [];
+    let perilousBattleCaptured = false;
+    let perilousRewardCaptured = false;
     while (!['completed', 'defeated', 'abandoned'].includes(panel.projection?.phase) && actionCount < 256) {
-      const decision = chooseDecision(panel.projection);
+      const decision = chooseDecision(panel.projection, { routePolicy });
       if (!decision) throw new Error(`${mode} has no playable UI command: ${JSON.stringify(panel)}`);
+      if (decision.command === 'select_node' && decision.routeContract) {
+        routeContracts.push(decision.routeContract);
+      }
       if (decision.command === 'choose_reward') {
         rewardKinds.push(decision.rewardKind);
         rewardUi.push(await readRewardDecisionUi(page, decision));
+        const rewardContract = panel.projection?.reward?.routeContract || null;
+        const rewardText = await page.locator('.season-ops-authoritative-panel').innerText();
+        rewardContracts.push({
+          contract: rewardContract,
+          choiceCount: panel.projection?.reward?.choices?.length || 0,
+          text: rewardText,
+        });
+        if (rewardContract?.contractId === 'perilous' && !perilousRewardCaptured) {
+          perilousRewardCaptured = true;
+          await safeAuditScreenshot(page, path.join(outDir, `${mode}-perilous-reward-desktop.png`), 'browser_authoritative_runs_real_backend_smoke', { timeout: 9000 });
+        }
       }
       panel = await clickDecision(page, decision, panel);
       actionCount += 1;
+      if (panel.projection?.phase === 'battle'
+        && panel.projection?.battle?.routeContract?.contractId === 'perilous'
+        && !perilousBattleCaptured) {
+        perilousBattleCaptured = true;
+        await safeAuditScreenshot(page, path.join(outDir, `${mode}-perilous-battle-desktop.png`), 'browser_authoritative_runs_real_backend_smoke', { timeout: 9000 });
+      }
     }
     if (panel.projection?.phase === 'defeated' && attempt < maxAttempts) continue;
     if (panel.projection?.phase !== 'completed') {
@@ -568,6 +604,8 @@ async function completeAdditionalMode(page, mode, maxAttempts = 3) {
       replayActionCount: replay.replay.actionCount,
       rewardKinds,
       rewardUi,
+      routeContracts,
+      rewardContracts,
       stats: replay.replay.finalState.stats,
       summary: replay.replay.finalState.summary,
     };
@@ -764,6 +802,24 @@ try {
         && battlePlayerCopy.includes(battleContract.label)
         && battlePlayerCopy.includes(battleContract.difficultySummary)
         && !/enemyAdjustments|rewardAdjustments/.test(JSON.stringify(panel.projection?.battle || null)), battlePlayerCopy);
+      const battlePhaseLayout = await page.locator('[data-authoritative-phase="battle"]').evaluate(element => {
+        const root = element.closest('#season-ops-screen');
+        const rootRect = root?.getBoundingClientRect();
+        const phaseRect = element.getBoundingClientRect();
+        return {
+          rootTop: rootRect?.top ?? 0,
+          rootHeight: rootRect?.height ?? 0,
+          phaseTop: phaseRect.top,
+          phaseHeight: phaseRect.height,
+          scrollTop: root?.scrollTop ?? 0,
+          activePhase: document.activeElement?.getAttribute('data-authoritative-phase') || '',
+        };
+      });
+      add('route transition reveals the battle phase instead of leaving a blank viewport', battlePhaseLayout.phaseHeight > 0
+        && battlePhaseLayout.scrollTop > 0
+        && battlePhaseLayout.activePhase === 'battle'
+        && battlePhaseLayout.phaseTop >= battlePhaseLayout.rootTop - 1
+        && battlePhaseLayout.phaseTop <= battlePhaseLayout.rootTop + Math.max(80, battlePhaseLayout.rootHeight * 0.25), JSON.stringify(battlePhaseLayout));
       await safeAuditScreenshot(page, path.join(outDir, 'challenge-ladder-battle-desktop.png'), 'browser_authoritative_runs_real_backend_smoke', { timeout: 9000 });
     }
 
@@ -1185,7 +1241,7 @@ try {
     && Number(persistedRift?.submit_mutation_count) === 1, JSON.stringify(persistedRift));
 
   await openAuthoritativeTab(page);
-  const pveResult = await completeAdditionalMode(page, 'pve');
+  const pveResult = await completeAdditionalMode(page, 'pve', { routePolicy: 'risky' });
   const challengeResult = await completeAdditionalMode(page, 'challenge');
   const expeditionResult = await completeAdditionalMode(page, 'expedition');
   add('real UI completes and settles all three base authoritative modes alongside challenge ladder and world rift', pveResult.replayActionCount === pveResult.actionCount
@@ -1197,6 +1253,21 @@ try {
       && Number(result.summary?.scoreBreakdown?.routeBonus) === Number(result.summary?.routeResolution?.totalBonus)
       && result.summary?.routeResolution?.selections?.length >= 3
   )), JSON.stringify(baseModeResults.map(result => ({ mode: result.mode, summary: result.summary }))));
+  const perilousReward = pveResult.rewardContracts.find(entry => entry.contract?.contractId === 'perilous');
+  const perilousResolution = pveResult.summary?.routeResolution?.selections?.filter(entry => entry.contractId === 'perilous') || [];
+  add('real PVE browser path exercises perilous pressure premium rewards and final route scoring', pveResult.routeContracts.some(contract => contract?.contractId === 'perilous'
+    && contract?.riskTier === 'high'
+    && contract?.rewardTier === 'premium')
+    && perilousReward?.choiceCount >= 4
+    && perilousReward?.text.includes(perilousReward.contract.rewardSummary)
+    && !/enemyAdjustments|rewardAdjustments/.test(JSON.stringify(perilousReward))
+    && perilousResolution.length >= 1
+    && Number(pveResult.summary?.scoreBreakdown?.routeBonus) === Number(pveResult.summary?.routeResolution?.totalBonus)
+    && Number(pveResult.summary?.routeResolution?.totalBonus) >= 55, JSON.stringify({
+      routeContracts: pveResult.routeContracts,
+      perilousReward,
+      summary: pveResult.summary,
+    }));
   add('all base-mode real UI runs execute exact-target upgrade and one legal trim', baseModeResults.every(result => Number(result.stats?.cardsUpgraded) >= 1
     && Number(result.stats?.cardsRemoved) === 1
     && Number(result.summary?.upgradedCards) >= 1
