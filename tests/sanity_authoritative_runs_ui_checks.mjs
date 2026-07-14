@@ -166,7 +166,9 @@ function createRunEnvelope({
     status,
     protocolVersion: "authoritative-run-v2",
     contentVersion,
-    contentHash: "ec26095949bfadf81a322f454b092ec96dbfe09199c607513ea3e2f44501b301",
+    contentHash: contentVersion === "authoritative-trials-v5"
+      ? "b1787bc02a98b459641c5dce541a56e3c3476724c7ae3083efc1b2e8e372b280"
+      : "ec26095949bfadf81a322f454b092ec96dbfe09199c607513ea3e2f44501b301",
     authorityLevel: "server",
     trustTier: "server_authoritative",
     stateVersion: 7,

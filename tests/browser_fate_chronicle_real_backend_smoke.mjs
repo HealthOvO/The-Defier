@@ -277,7 +277,9 @@ async function readChronicle(page) {
 function chooseDecision(projection) {
   if (!projection) return null;
   if (projection.phase === "route") {
-    const choice = projection.route?.choices?.[0];
+    const choice = [...(projection.route?.choices || [])].sort((left, right) => (
+      Number(left.routeContract?.difficultyRating || 0) - Number(right.routeContract?.difficultyRating || 0)
+    ))[0];
     return choice ? {
       selector: `[data-fate-chronicle-action="authoritative-select-node"][data-node-id="${cssValue(choice.nodeId)}"]`
     } : null;
@@ -343,7 +345,26 @@ async function driveCurrentRun(page) {
   let actions = 0;
   const rewardKinds = [];
   const rewardUi = [];
-  while (!new Set(["completed", "defeated", "abandoned"]).has(state.projection?.phase) && actions < 160) {
+  const routeContractPhases = { battle: null, reward: null };
+  while (!new Set(["completed", "defeated", "abandoned"]).has(state.projection?.phase) && actions < 256) {
+    if (state.projection?.phase === "battle" && !routeContractPhases.battle) {
+      routeContractPhases.battle = {
+        contract: state.projection?.battle?.routeContract || null,
+        text: state.text
+      };
+      await safeAuditScreenshot(
+        page,
+        path.join(outDir, "fate-chronicle-route-battle.png"),
+        "browser_fate_chronicle_real_backend_smoke",
+        { timeout: 9000 }
+      );
+    }
+    if (state.projection?.phase === "reward" && !routeContractPhases.reward) {
+      routeContractPhases.reward = {
+        contract: state.projection?.reward?.routeContract || null,
+        text: state.text
+      };
+    }
     const decision = chooseDecision(state.projection);
     if (!decision) throw new Error(`fate chronicle has no playable command: ${JSON.stringify(state)}`);
     const before = { runId: state.projection.runId, version: state.projection.version };
@@ -374,7 +395,7 @@ async function driveCurrentRun(page) {
     state = await waitForRunChange(page, before);
     actions += 1;
   }
-  return { state, actions, rewardKinds, rewardUi };
+  return { state, actions, rewardKinds, rewardUi, routeContractPhases };
 }
 
 async function readLayout(page) {
@@ -498,6 +519,25 @@ try {
       && started.projection?.scenario?.scenarioId === "chronicle-ember-guard",
     JSON.stringify({ runId, activeRunId: started.activeRunId, projection: started.projection })
   );
+  const startedProjectionJson = JSON.stringify(started.projection || null);
+  const startedContracts = started.projection?.route?.choices?.map(choice => choice.routeContract) || [];
+  add(
+    "fate route renders two readable v5 contracts without private coefficients",
+    started.projection?.contentVersion === "authoritative-trials-v5"
+      && Number(started.projection?.route?.contractVersion) === 1
+      && startedContracts.length === 2
+      && startedContracts.every(contract => Number(contract?.version) === 1
+        && !!contract?.label
+        && !!contract?.riskLabel
+        && !!contract?.difficultySummary
+        && !!contract?.rewardSummary
+        && started.text.includes(contract.label)
+        && started.text.includes(contract.difficultySummary)
+        && started.text.includes(contract.rewardSummary))
+      && !/enemyAdjustments|rewardAdjustments/.test(startedProjectionJson)
+      && !/contractId|scenarioMultiplierBps/.test(started.text),
+    JSON.stringify({ contracts: startedContracts, text: started.text })
+  );
   await safeAuditScreenshot(page, path.join(outDir, "fate-chronicle-route.png"), "browser_fate_chronicle_real_backend_smoke", { timeout: 9000 });
 
   await page.reload({ waitUntil: "domcontentloaded", timeout: 60000 });
@@ -512,8 +552,26 @@ try {
   const driven = await driveCurrentRun(page);
   add(
     "real fate chronicle UI completes the first guard oath",
-    driven.state.projection?.phase === "completed" && driven.actions > 0 && driven.actions < 160,
+    driven.state.projection?.phase === "completed" && driven.actions > 0 && driven.actions < 256,
     JSON.stringify({ actions: driven.actions, projection: driven.state.projection })
+  );
+  add(
+    "fate battle and reward retain the server-selected route contract",
+    !!driven.routeContractPhases.battle?.contract?.label
+      && !!driven.routeContractPhases.reward?.contract?.label
+      && /已选路线合同/.test(driven.routeContractPhases.battle.text)
+      && /已选路线合同/.test(driven.routeContractPhases.reward.text)
+      && driven.routeContractPhases.battle.text.includes(driven.routeContractPhases.battle.contract.difficultySummary)
+      && driven.routeContractPhases.reward.text.includes(driven.routeContractPhases.reward.contract.rewardSummary)
+      && !/enemyAdjustments|rewardAdjustments/.test(JSON.stringify(driven.routeContractPhases)),
+    JSON.stringify(driven.routeContractPhases)
+  );
+  add(
+    "fate terminal projection carries additive route score and per-stage resolution",
+    Number(driven.state.projection?.summary?.scoreBreakdown?.finalScore) === Number(driven.state.projection?.summary?.score)
+      && Number(driven.state.projection?.summary?.scoreBreakdown?.routeBonus) === Number(driven.state.projection?.summary?.routeResolution?.totalBonus)
+      && driven.state.projection?.summary?.routeResolution?.selections?.length === driven.state.projection?.route?.totalStages,
+    JSON.stringify(driven.state.projection?.summary)
   );
   add(
     "fate chronicle real UI executes exact-target upgrade and one legal trim",
@@ -547,12 +605,39 @@ try {
       && /裁牌 1 张/.test(completedRunCopy),
     completedRunCopy
   );
+  add(
+    "completed fate chronicle UI renders route score history without internal route fields",
+    /路线分拆解/.test(completedRunCopy)
+      && /路线总分/.test(completedRunCopy)
+      && /路线留痕/.test(completedRunCopy)
+      && !/contractId|enemyAdjustments|rewardAdjustments|scenarioMultiplierBps/.test(completedRunCopy),
+    completedRunCopy
+  );
   await safeAuditScreenshot(
     page,
     path.join(outDir, "fate-chronicle-completed.png"),
     "browser_fate_chronicle_real_backend_smoke",
     { timeout: 9000 }
   );
+  await page.setViewportSize({ width: 390, height: 844 });
+  const completedMobileLayout = await readLayout(page);
+  const completedMobileCopy = await page.locator('[data-fate-chronicle-state="run"]').innerText();
+  add(
+    "completed fate route resolution remains readable at 390px",
+    completedMobileLayout.documentScrollWidth === 390
+      && completedMobileLayout.rootScrollWidth === completedMobileLayout.rootClientWidth
+      && completedMobileLayout.undersized.length === 0
+      && /路线分拆解/.test(completedMobileCopy)
+      && /路线留痕/.test(completedMobileCopy),
+    JSON.stringify({ layout: completedMobileLayout, copy: completedMobileCopy })
+  );
+  await safeAuditScreenshot(
+    page,
+    path.join(outDir, "fate-chronicle-route-completed-mobile.png"),
+    "browser_fate_chronicle_real_backend_smoke",
+    { timeout: 9000 }
+  );
+  await page.setViewportSize({ width: 1440, height: 960 });
 
   await page.evaluate(() => {
     const panel = window.game?.fateChronicleView?.runPanel;

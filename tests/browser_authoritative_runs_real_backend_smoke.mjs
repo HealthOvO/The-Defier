@@ -396,7 +396,9 @@ async function exerciseWorldRiftAccountSwitch(page, { runId, version }) {
 function chooseDecision(projection) {
   if (!projection) return null;
   if (projection.phase === 'route') {
-    const choice = projection.route?.choices?.[0];
+    const choice = [...(projection.route?.choices || [])].sort((left, right) => (
+      Number(left.routeContract?.difficultyRating || 0) - Number(right.routeContract?.difficultyRating || 0)
+    ))[0];
     return choice ? {
       command: 'select_node',
       selector: `[data-season-ops-action="authoritative-select-node"][data-node-id="${cssValue(choice.nodeId)}"]`,
@@ -523,7 +525,7 @@ async function completeAdditionalMode(page, mode, maxAttempts = 3) {
     let actionCount = 0;
     const rewardKinds = [];
     const rewardUi = [];
-    while (!['completed', 'defeated', 'abandoned'].includes(panel.projection?.phase) && actionCount < 128) {
+    while (!['completed', 'defeated', 'abandoned'].includes(panel.projection?.phase) && actionCount < 256) {
       const decision = chooseDecision(panel.projection);
       if (!decision) throw new Error(`${mode} has no playable UI command: ${JSON.stringify(panel)}`);
       if (decision.command === 'choose_reward') {
@@ -688,15 +690,36 @@ try {
     }));
   const publicProjectionJson = JSON.stringify(panel.projection);
   add('public projection hides seed and ordered draw pile', !/"(?:seed|rng|drawPile)"/.test(publicProjectionJson));
+  const routeContracts = panel.projection?.route?.choices?.map(choice => choice.routeContract) || [];
+  const routePlayerCopy = await page.locator('.season-ops-authoritative-panel').innerText();
+  add('v5 route projection exposes two readable contracts without private coefficients', panel.projection?.contentVersion === 'authoritative-trials-v5'
+    && Number(panel.projection?.route?.contractVersion) === 1
+    && routeContracts.length === 2
+    && routeContracts.every(contract => Number(contract?.version) === 1
+      && !!contract?.label
+      && !!contract?.riskLabel
+      && !!contract?.difficultyLabel
+      && Number(contract?.difficultyRating) > 0
+      && !!contract?.rewardLabel
+      && !!contract?.difficultySummary
+      && !!contract?.rewardSummary)
+    && !/enemyAdjustments|rewardAdjustments/.test(publicProjectionJson), JSON.stringify(routeContracts));
+  add('desktop route UI renders the offered risk pressure reward and score contract', /路线合同/.test(routePlayerCopy)
+    && routeContracts.every(contract => routePlayerCopy.includes(contract.label)
+      && routePlayerCopy.includes(contract.riskLabel)
+      && routePlayerCopy.includes(contract.difficultySummary)
+      && routePlayerCopy.includes(contract.rewardSummary))
+    && !/contractId|enemyAdjustments|rewardAdjustments|scenarioMultiplierBps/.test(routePlayerCopy), routePlayerCopy);
   await safeAuditScreenshot(page, path.join(outDir, 'challenge-ladder-route-desktop.png'), 'browser_authoritative_runs_real_backend_smoke', { timeout: 9000 });
 
   let actionCount = 0;
   let reloadChecked = false;
   let refreshChecked = false;
   let openingFairnessChecked = false;
+  let routeContractRewardChecked = false;
   const ladderRewardKinds = [];
   const ladderRewardUi = [];
-  while (!['completed', 'defeated', 'abandoned'].includes(panel.projection?.phase) && actionCount < 128) {
+  while (!['completed', 'defeated', 'abandoned'].includes(panel.projection?.phase) && actionCount < 256) {
     const before = panel;
     const decision = chooseDecision(before.projection);
     if (!decision) throw new Error(`no playable UI command: ${JSON.stringify(before)}`);
@@ -704,6 +727,16 @@ try {
       const firstOfKind = !ladderRewardKinds.includes(decision.rewardKind);
       ladderRewardKinds.push(decision.rewardKind);
       ladderRewardUi.push(await readRewardDecisionUi(page, decision));
+      if (!routeContractRewardChecked) {
+        const rewardContract = before.projection?.reward?.routeContract;
+        const rewardPlayerCopy = await page.locator('.season-ops-authoritative-panel').innerText();
+        routeContractRewardChecked = true;
+        add('reward projection and UI retain the server-selected route contract', !!rewardContract?.label
+          && /已选路线合同/.test(rewardPlayerCopy)
+          && rewardPlayerCopy.includes(rewardContract.label)
+          && rewardPlayerCopy.includes(rewardContract.rewardSummary)
+          && !/enemyAdjustments|rewardAdjustments/.test(JSON.stringify(before.projection?.reward || null)), rewardPlayerCopy);
+      }
       if (firstOfKind && ['upgrade_card', 'remove_card'].includes(decision.rewardKind)) {
         const screenshotName = decision.rewardKind === 'upgrade_card'
           ? 'challenge-ladder-reward-upgrade-desktop.png'
@@ -724,6 +757,13 @@ try {
       const maxHp = Number(panel.projection.player?.maxHp || 0);
       openingFairnessChecked = true;
       add('opening enemy intent cannot one-shot full health', intent >= 0 && maxHp > 0 && intent < maxHp, `${intent}/${maxHp}`);
+      const battleContract = panel.projection.battle?.routeContract;
+      const battlePlayerCopy = await page.locator('.season-ops-authoritative-panel').innerText();
+      add('battle projection and UI retain the selected route contract', !!battleContract?.label
+        && /已选路线合同/.test(battlePlayerCopy)
+        && battlePlayerCopy.includes(battleContract.label)
+        && battlePlayerCopy.includes(battleContract.difficultySummary)
+        && !/enemyAdjustments|rewardAdjustments/.test(JSON.stringify(panel.projection?.battle || null)), battlePlayerCopy);
       await safeAuditScreenshot(page, path.join(outDir, 'challenge-ladder-battle-desktop.png'), 'browser_authoritative_runs_real_backend_smoke', { timeout: 9000 });
     }
 
@@ -774,6 +814,9 @@ try {
 
   add('real browser strategy completes the formal challenge ladder run without client simulation', panel.projection?.phase === 'completed', `${panel.projection?.phase || 'missing'} after ${actionCount} actions`);
   if (panel.projection?.phase !== 'completed') throw new Error(`challenge ladder run did not complete: ${JSON.stringify(panel)}`);
+  add('terminal projection carries additive route score and per-stage resolution', Number(panel.projection?.summary?.scoreBreakdown?.finalScore) === Number(panel.projection?.summary?.score)
+    && Number(panel.projection?.summary?.scoreBreakdown?.routeBonus) === Number(panel.projection?.summary?.routeResolution?.totalBonus)
+    && panel.projection?.summary?.routeResolution?.selections?.length === panel.projection?.route?.totalStages, JSON.stringify(panel.projection?.summary));
   add('challenge ladder real UI exercises targeted upgrade and bounded trim', Number(panel.projection?.stats?.cardsUpgraded) >= 1
     && Number(panel.projection?.stats?.cardsRemoved) === 1
     && Number(panel.projection?.summary?.upgradedCards) >= 1
@@ -817,8 +860,12 @@ try {
   add('settlement receipt confirms full genesis replay', panel.receipt?.integrity?.fullReplayPassed === true, JSON.stringify(panel.receipt));
   await safeAuditScreenshot(page, path.join(outDir, 'challenge-ladder-settled-desktop.png'), 'browser_authoritative_runs_real_backend_smoke', { timeout: 9000 });
   const settledPlayerCopy = await page.locator('.season-ops-authoritative-panel').innerText();
-  add('settled challenge UI hides implementation ids enums and hashes', !/\barun-|\barreceipt-|authoritative-(?:run|trials)|server_authoritative|state-hash|chain-head|ink_scout|trial_adjudicator|play_card|choose_reward/.test(settledPlayerCopy), settledPlayerCopy);
-  add('settled challenge UI presents localized route history and verification', /试炼战 · 墨痕斥候/.test(settledPlayerCopy)
+  add('settled challenge UI hides implementation ids enums hashes and route coefficients', !/\barun-|\barreceipt-|authoritative-(?:run|trials)|server_authoritative|state-hash|chain-head|ink_scout|trial_adjudicator|play_card|choose_reward|contractId|enemyAdjustments|rewardAdjustments|scenarioMultiplierBps/.test(settledPlayerCopy), settledPlayerCopy);
+  add('settled challenge UI presents localized route history and verification', /试炼战 · /.test(settledPlayerCopy)
+    && /首领战 · /.test(settledPlayerCopy)
+    && /路线分拆解/.test(settledPlayerCopy)
+    && /路线总分/.test(settledPlayerCopy)
+    && /路线留痕/.test(settledPlayerCopy)
     && /全程校验/.test(settledPlayerCopy)
     && /天道校验/.test(settledPlayerCopy), settledPlayerCopy);
   add('settled challenge UI preserves the deck-crafting payoff', /终局牌组 9 张/.test(settledPlayerCopy)
@@ -972,7 +1019,7 @@ try {
   let riftReloadChecked = false;
   let riftAccountSwitchChecked = false;
   const riftRewardKinds = [];
-  while (!['completed', 'defeated', 'abandoned'].includes(panel.projection?.phase) && riftActionCount < 128) {
+  while (!['completed', 'defeated', 'abandoned'].includes(panel.projection?.phase) && riftActionCount < 256) {
     const before = panel;
     const decision = chooseDecision(before.projection);
     if (!decision) throw new Error(`no playable world-rift command: ${JSON.stringify(before)}`);
@@ -1145,6 +1192,11 @@ try {
     && challengeResult.replayActionCount === challengeResult.actionCount
     && expeditionResult.replayActionCount === expeditionResult.actionCount, JSON.stringify({ pveResult, challengeResult, expeditionResult }));
   const baseModeResults = [pveResult, challengeResult, expeditionResult];
+  add('all base-mode replays preserve additive route resolution', baseModeResults.every(result => (
+    Number(result.summary?.scoreBreakdown?.finalScore) === Number(result.summary?.score)
+      && Number(result.summary?.scoreBreakdown?.routeBonus) === Number(result.summary?.routeResolution?.totalBonus)
+      && result.summary?.routeResolution?.selections?.length >= 3
+  )), JSON.stringify(baseModeResults.map(result => ({ mode: result.mode, summary: result.summary }))));
   add('all base-mode real UI runs execute exact-target upgrade and one legal trim', baseModeResults.every(result => Number(result.stats?.cardsUpgraded) >= 1
     && Number(result.stats?.cardsRemoved) === 1
     && Number(result.summary?.upgradedCards) >= 1
@@ -1234,7 +1286,9 @@ try {
   await page.locator('[data-season-ops-action="authoritative-begin-new"]').scrollIntoViewIfNeeded();
   await safeAuditScreenshot(page, path.join(outDir, 'challenge-ladder-settled-mobile.png'), 'browser_authoritative_runs_real_backend_smoke', { timeout: 9000 });
   const mobileSettledCopy = await page.locator('.season-ops-authoritative-panel').innerText();
-  add('real settled mobile UI keeps internal identifiers out of player copy', !/\barun-|\barreceipt-|authoritative-(?:run|trials)|server_authoritative|state-hash|chain-head|ink_scout|trial_adjudicator/.test(mobileSettledCopy), mobileSettledCopy);
+  add('real settled mobile UI keeps route resolution readable and internal identifiers out of player copy', /路线分拆解/.test(mobileSettledCopy)
+    && /路线留痕/.test(mobileSettledCopy)
+    && !/\barun-|\barreceipt-|authoritative-(?:run|trials)|server_authoritative|state-hash|chain-head|ink_scout|trial_adjudicator|contractId|enemyAdjustments|rewardAdjustments|scenarioMultiplierBps/.test(mobileSettledCopy), mobileSettledCopy);
   const riftMobileHub = await openChallengeHubRift(page, 4);
   const riftMobileLayout = await readLayout(page);
   add('real world rift mobile view has no horizontal overflow', riftMobileHub.activeTab === 'rift'

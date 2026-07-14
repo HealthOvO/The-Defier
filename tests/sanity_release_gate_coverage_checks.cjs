@@ -162,6 +162,7 @@ const authoritativeRunsService = read('server/progression/authoritative-runs/ser
 const authoritativeRunsClient = read('js/services/authoritative-run-service.js');
 const authoritativeRunsPanel = read('js/views/AuthoritativeRunPanel.js');
 const authoritativeRunsEngineChecks = read('tests/sanity_authoritative_runs_engine_checks.cjs');
+const authoritativeRouteBalanceChecks = read('tests/sanity_authoritative_route_balance_checks.cjs');
 const authoritativeRunsMigrationChecks = read('tests/sanity_authoritative_runs_migration_checks.cjs');
 const authoritativeRunsPlatformChecks = read('tests/sanity_authoritative_runs_platform_checks.cjs');
 const authoritativeRunsClientChecks = read('tests/sanity_authoritative_runs_client_checks.mjs');
@@ -518,6 +519,7 @@ assert.match(
 
 [
   'sanity_authoritative_runs_engine_checks.cjs',
+  'sanity_authoritative_route_balance_checks.cjs',
   'sanity_authoritative_runs_migration_checks.cjs',
   'sanity_authoritative_runs_platform_checks.cjs',
   'sanity_authoritative_runs_client_checks.mjs',
@@ -556,10 +558,16 @@ assert.match(
 });
 
 [
-  [authoritativeRunsCatalog, "CONTENT_VERSION = 'authoritative-trials-v4'"],
+  [authoritativeRunsCatalog, "CONTENT_VERSION = 'authoritative-trials-v5'"],
   [authoritativeRunsCatalog, "reportVersion: 'authoritative-deck-crafting-v1'"],
+  [authoritativeRunsCatalog, "reportVersion: 'authoritative-route-contract-v1'"],
+  [authoritativeRunsCatalog, "contractId: 'steady'"],
+  [authoritativeRunsCatalog, "contractId: 'contested'"],
+  [authoritativeRunsCatalog, "contractId: 'perilous'"],
   [authoritativeRunsEngine, "kind: 'upgrade_card'"],
   [authoritativeRunsEngine, "kind: 'remove_card'"],
+  [authoritativeRunsEngine, 'function projectRouteContract'],
+  [authoritativeRunsEngine, "makeRuleError('content_state_mismatch'"],
   [authoritativeRunsCatalog, "PROTOCOL_VERSION = 'authoritative-run-v2'"],
   [authoritativeRunsEngine, 'function createInitialState'],
   [authoritativeRunsEngine, 'function projectState'],
@@ -571,6 +579,9 @@ assert.match(
   [authoritativeRunsClient, 'forceNew'],
   [authoritativeRunsPanel, 'server_authoritative'],
   [authoritativeRunsEngineChecks, 'replay must be byte-identical'],
+  [authoritativeRunsEngineChecks, 'v4 final state must remain byte-identical'],
+  [authoritativeRouteBalanceChecks, 'challenge risky routing must create at least a 4.6pp completion tradeoff'],
+  [authoritativeRouteBalanceChecks, 'risky route needs a visible damage cost'],
   [authoritativeRunsMigrationChecks, '0006_authoritative_runs_v2'],
   [authoritativeRunsPlatformChecks, 'settle must mint a single server_authoritative progression event'],
   [authoritativeRunsPlatformChecks, 'expiredDuplicateAction'],
@@ -582,7 +593,9 @@ assert.match(
   [authoritativeRunsUiChecks, 'cross-mode refresh must not fetch the previous mode run id'],
   [authoritativeRunsUiChecks, 'suppressed response must not replace panel metadata'],
   [authoritativeRunsDocumentation, 'full journal replay'],
-  [authoritativeRunsDocumentation, '`authoritative-trials-v4`'],
+  [authoritativeRunsDocumentation, '`authoritative-trials-v5`'],
+  [authoritativeRunsDocumentation, '`routeContracts.version = 1`'],
+  [authoritativeRunsDocumentation, 'immutable v1-v4'],
   [authoritativeRunsDocumentation, '`deckCrafting.version = 1`'],
 ].forEach(([source, needle]) => {
   assert.ok(source.includes(needle), `authoritative runs V2 should pin release marker: ${needle}`);

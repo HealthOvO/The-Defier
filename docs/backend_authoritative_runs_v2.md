@@ -62,6 +62,42 @@ of `deckCrafting.version = 1`. This branch is required for old catalog replay: a
 `upgraded: false`, new event fields, or new RNG calls to a v1-v3 action would invalidate
 the stored state hash and action chain.
 
+## S109 route risk and reward contract
+
+`authoritative-trials-v5` keeps protocol `authoritative-run-v2` and canonical state
+schema 2. It adds `routeContracts.version = 1` without rewriting the immutable v1-v4
+catalog rows. The reducer now binds each offered node to one of three readable contracts:
+
+| Contract | Pressure | Build reward | Completion score |
+| --- | --- | --- | --- |
+| `steady` / 稳进 | baseline enemy HP and intent | baseline market | no route bonus |
+| `contested` / 争衡 | 112.5% HP, attack/block intent +1 | heal/max-HP utility +1 | +25 |
+| `perilous` / 险锋 | 125% HP, attack/block intent +2 | one extra card candidate, heal +3, max HP +2 | +55 |
+
+The complete coefficients stay in canonical server state. Public route, battle, reward,
+history, and settlement projections expose only the contract label, risk and difficulty
+tier, readable pressure/reward summaries, and score premium. They never expose the
+private `enemyAdjustments` or `rewardAdjustments` objects. A command also fails closed
+when its canonical state and loaded content snapshot versions differ.
+
+Non-final encounters carry the selected contract into the exact reward market. Final
+settlement adds `scoreBreakdown` and `routeResolution` while preserving the existing
+top-level score and progression fields consumed by challenge ladder, world rift, relay
+expedition, and fate chronicle. The route premium enters before the scenario multiplier,
+and only contracts on completed encounters contribute.
+
+The compatibility branch is selected by the immutable catalog, not by the current
+application version. A v4 snapshot has no `routeContracts`, so its route generation,
+RNG calls, intents, rewards, events, summaries, final hashes, and replay remain unchanged.
+The engine gate pins the original v4 PVE, challenge, and expedition golden hashes, and
+the migration gate preserves v1-v4 catalog rows while bootstrapping v5 as a new row.
+
+`sanity_authoritative_route_balance_checks.cjs` runs 64 shared seeds for lower-pressure,
+middle-pressure, and higher-pressure decisions across PVE, challenge, expedition,
+relay vanguard, and a five-encounter fate chronicle. The gate requires a monotonic score
+premium and turn-cost ladder, a visible damage cost, bounded actions, and a real
+challenge completion-rate tradeoff instead of a cosmetic risk label.
+
 ## Failure model
 
 - Network failure: the client keeps the last confirmed projection and retries with

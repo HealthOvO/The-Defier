@@ -48,6 +48,9 @@ function assert(condition, message) {
     '服务器指定的精修目标',
     '第二战后可裁去基础牌',
     '牌组不会低于 8 张',
+    '稳进、争衡、险锋三档路线合同',
+    '敌方压力、构筑回报与路线分',
+    '风险越高，敌方生命与意图压力越高',
   ];
 
   const introOnlyAnchors = [
@@ -64,6 +67,7 @@ function assert(condition, message) {
     'tests/browser_pvp_mobile_audit.mjs',
     'tests/browser_guide_modal_audit.mjs',
     'V11-S108 权威构筑深化 V1',
+    'V11-S109 权威路线风险收益与难度契约 V1',
   ];
 
   const systemViewCurrentAnchors = [
@@ -85,6 +89,7 @@ function assert(condition, message) {
     '不写正式积分',
     '权威试炼',
     '战后构筑',
+    '路线合同',
   ];
 
   sharedAnchors.forEach((anchor) => {
