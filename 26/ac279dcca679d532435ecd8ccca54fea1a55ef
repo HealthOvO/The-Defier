@@ -1,0 +1,21 @@
+tests/browser_pvp_live_audit.mjs
+  s_ca5652313828d6::t_322c39e6a07943 8002-8009,9000-9007
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "26ac279dcca679d532435ecd8ccca54fea1a55ef",
+  "prompts": {},
+  "sessions": {
+    "s_ca5652313828d6": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f3fed-94d5-77b2-9af0-61333559ff38",
+        "model": "unknown"
+      },
+      "human_author": "AI Agent <bot@example.com>"
+    }
+  },
+  "attestation_metadata": {},
+  "remote_transcripts": {}
+}
