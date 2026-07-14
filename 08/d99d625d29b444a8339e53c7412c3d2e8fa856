@@ -1,0 +1,25 @@
+js/services/authoritative-run-service.js
+  s_4c1bfeac281400::t_4edc3514b9b8f4 13
+js/services/backend-client.js
+  s_4c1bfeac281400::t_97acaae943a60b 14
+tests/sanity_authoritative_runs_client_checks.mjs
+  s_4c1bfeac281400::t_3d8887eda6fa51 125-144,386
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "08d99d625d29b444a8339e53c7412c3d2e8fa856",
+  "prompts": {},
+  "sessions": {
+    "s_4c1bfeac281400": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f5fbf-5562-7103-a1d4-b84c84e7e82d",
+        "model": "unknown"
+      },
+      "human_author": "AI Agent <bot@example.com>"
+    }
+  },
+  "attestation_metadata": {},
+  "remote_transcripts": {}
+}
