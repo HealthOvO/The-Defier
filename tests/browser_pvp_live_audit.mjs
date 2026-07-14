@@ -7999,7 +7999,14 @@ async function openDisclosure(page, selector) {
     }
   });
   await mobilePage.click('#pvp-btn', { timeout: 5000, force: true });
-  await mobilePage.waitForTimeout(400);
+  await mobilePage.waitForFunction(
+    () => window.game?.currentScreen === 'pvp-screen'
+      && window.PVPScene?.activeTab === 'live'
+      && document.getElementById('tab-live')?.classList.contains('active')
+      && document.querySelector('[data-live-action="join-queue"]')?.offsetParent !== null,
+    null,
+    { timeout: 20000 },
+  );
   const mobileDefaultEntryProbe = await mobilePage.evaluate(() => ({
     activeTab: JSON.parse(window.render_game_to_text()).pvp?.activeTab || '',
     liveTabActive: !!document.querySelector('[data-pvp-tab="live"]')?.classList.contains('active'),
@@ -8990,7 +8997,14 @@ async function openDisclosure(page, selector) {
     button.click();
     return true;
   });
-  await mobilePage.waitForTimeout(500);
+  if (mobilePracticeClicked) {
+    await mobilePage.waitForFunction(
+      () => window.game?.currentScreen === 'character-selection-screen'
+        && document.getElementById('character-selection-container')?.offsetParent !== null,
+      null,
+      { timeout: 20000 },
+    );
+  }
   const collapsedPracticeDisclosure = mobilePage.locator('#challenge-selection-banner:not([open]) > summary');
   if (await collapsedPracticeDisclosure.count()) {
     await collapsedPracticeDisclosure.click();
