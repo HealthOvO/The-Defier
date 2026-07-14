@@ -1,0 +1,35 @@
+docs/backend_authoritative_fate_chronicle_v1.md
+  s_bae69f1b7fab46::t_159e2a0204914e 64
+js/views/AuthoritativeRunPanel.js
+  s_bae69f1b7fab46::t_c625c529f242e7 390,405,847,855-860,1495-1503
+js/views/FateChronicleView.js
+  s_bae69f1b7fab46::t_a0100e69e7e60e 534,546,725,791-800
+js/views/SeasonOpsView.js
+  s_bae69f1b7fab46::t_5f276a55a7b066 150,386-395
+tests/browser_authoritative_runs_real_backend_smoke.mjs
+  s_bae69f1b7fab46::t_931cc21e343d02 396,399,401-402,406-407,474-483,520,540-543,545,547-549,553-563,567-572,607-608,805-822,1244,1256-1270
+tests/browser_fate_chronicle_real_backend_smoke.mjs
+  s_bae69f1b7fab46::t_7fd024f3b53cfe 282,348,351-363,366-367,376-389,396-410,437-446,621-647
+tests/sanity_authoritative_runs_ui_checks.mjs
+  s_bae69f1b7fab46::t_a3ebc60334d821 21,25,62-65,87-89,99-101,719-741
+tests/sanity_fate_chronicle_ui_checks.mjs
+  s_bae69f1b7fab46::t_4e10e2387807d2 26,41-42,68-71,79-81
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "c8328832171a842ea7cd4b2660ce4e94811096be",
+  "prompts": {},
+  "sessions": {
+    "s_bae69f1b7fab46": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ed4f6-e7ac-73e0-a29e-119f3eddb407",
+        "model": "unknown"
+      },
+      "human_author": "AI Agent <bot@example.com>"
+    }
+  },
+  "attestation_metadata": {},
+  "remote_transcripts": {}
+}
