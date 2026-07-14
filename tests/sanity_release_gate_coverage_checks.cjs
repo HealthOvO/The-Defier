@@ -904,6 +904,21 @@ const browserAutomationBootAudit = read('tests/browser_automation_boot_audit.mjs
 });
 
 [
+  'runDeferredModuleRecoveryScenario',
+  'window.game.pvpScene === window.PVPScene',
+  'stylesheetSource: stylesheetPattern?.source || \'\'',
+  "!!document.getElementById('runtime-load-status')?.hidden",
+  "!sessionStorage.getItem('theDefierDeferredRetryActionV1')",
+  '{ timeout: 15000 }',
+  'recoveryProbe.stylesheetLoaded',
+].forEach((needle) => {
+  assert.ok(
+    browserAutomationBootAudit.includes(needle),
+    `automation boot browser audit should wait for stable deferred recovery marker: ${needle}`,
+  );
+});
+
+[
   "id: 'endless-paranoia-modal'",
   'activateEndlessParanoiaModal',
   'showEndlessParanoiaSelection(26)',

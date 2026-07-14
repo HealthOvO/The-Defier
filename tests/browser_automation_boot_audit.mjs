@@ -321,21 +321,38 @@ async function runDeferredModuleRecoveryScenario(browser, scenario) {
   await page.waitForFunction(() => (
     document.documentElement.getAttribute('data-runtime-ready') === 'true'
   ), null, { timeout: 12000 });
-  await page.waitForFunction(({ screen, kind }) => {
+  await page.waitForFunction(({ screen, kind, stylesheetSource }) => {
     const ready = {
-      pvp: () => !!window.PVPScene,
+      pvp: () => !!window.game?.pvpScene && window.game.pvpScene === window.PVPScene,
       season: () => !!window.game?.seasonOpsView,
       chronicle: () => !!window.game?.fateChronicleView
         && !!document.querySelector('#fate-chronicle-screen .fate-chronicle-shell'),
       challenge: () => typeof window.game?.challengeHub?.showChallengeHub === 'function',
     }[kind];
-    return window.game?.currentScreen === screen && !!ready?.();
-  }, { screen: expectedScreen, kind: readyKind }, { timeout: 12000 });
+    const stylesheetLoaded = !stylesheetSource
+      || [...document.styleSheets].some((sheet) => {
+        const owner = sheet.ownerNode;
+        const source = sheet.href
+          || owner?.getAttribute?.('data-vite-dev-id')
+          || owner?.getAttribute?.('href')
+          || '';
+        return new RegExp(stylesheetSource).test(String(source));
+      });
+    return window.game?.currentScreen === screen
+      && !!ready?.()
+      && stylesheetLoaded
+      && !!document.getElementById('runtime-load-status')?.hidden
+      && !sessionStorage.getItem('theDefierDeferredRetryActionV1');
+  }, {
+    screen: expectedScreen,
+    kind: readyKind,
+    stylesheetSource: stylesheetPattern?.source || '',
+  }, { timeout: 15000 });
   const recoveryProbe = await page.evaluate(({ kind, stylesheetSource }) => ({
     statusVisible: !document.getElementById('runtime-load-status')?.hidden,
     currentScreen: window.game?.currentScreen || '',
     viewReady: ({
-      pvp: () => !!window.PVPScene,
+      pvp: () => !!window.game?.pvpScene && window.game.pvpScene === window.PVPScene,
       season: () => !!window.game?.seasonOpsView,
       chronicle: () => !!window.game?.fateChronicleView
         && !!document.querySelector('#fate-chronicle-screen .fate-chronicle-shell'),
