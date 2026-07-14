@@ -513,7 +513,10 @@ assert.match(
 });
 
 [
-  [authoritativeRunsCatalog, "CONTENT_VERSION = 'authoritative-trials-v3'"],
+  [authoritativeRunsCatalog, "CONTENT_VERSION = 'authoritative-trials-v4'"],
+  [authoritativeRunsCatalog, "reportVersion: 'authoritative-deck-crafting-v1'"],
+  [authoritativeRunsEngine, "kind: 'upgrade_card'"],
+  [authoritativeRunsEngine, "kind: 'remove_card'"],
   [authoritativeRunsCatalog, "PROTOCOL_VERSION = 'authoritative-run-v2'"],
   [authoritativeRunsEngine, 'function createInitialState'],
   [authoritativeRunsEngine, 'function projectState'],
@@ -536,6 +539,8 @@ assert.match(
   [authoritativeRunsUiChecks, 'cross-mode refresh must not fetch the previous mode run id'],
   [authoritativeRunsUiChecks, 'suppressed response must not replace panel metadata'],
   [authoritativeRunsDocumentation, 'full journal replay'],
+  [authoritativeRunsDocumentation, '`authoritative-trials-v4`'],
+  [authoritativeRunsDocumentation, '`deckCrafting.version = 1`'],
 ].forEach(([source, needle]) => {
   assert.ok(source.includes(needle), `authoritative runs V2 should pin release marker: ${needle}`);
 });
@@ -1190,11 +1195,16 @@ assert.strictEqual(
   'global formal surface uses the server rotation and excludes legacy local rewards',
   'formal challenge ladder attempt binds a server-authoritative run',
   'full browser reload resumes the same server run',
+  'challenge ladder real UI exercises targeted upgrade and bounded trim',
+  'settled challenge UI preserves the deck-crafting payoff',
+  'challenge-ladder-reward-upgrade-desktop.png',
+  'challenge-ladder-reward-trim-desktop.png',
   'settlement auto-submits the challenge ladder result with a full replay receipt',
   'settlement receipt confirms full genesis replay',
   'challenge ladder GET current after submission returns personal best leaderboard and my rank',
   'database persists settled authoritative receipt plus ladder result and leaderboard entry',
   'real UI completes and settles all three base authoritative modes alongside challenge ladder and world rift',
+  'all base-mode real UI runs execute exact-target upgrade and one legal trim',
   'all base modes challenge ladder and world rift mint exactly one receipt and event per settled run',
   'world rift GET current returns shared boss and five formal attempts',
   'world rift hub renders real shared state without simulated participants',
@@ -1202,6 +1212,7 @@ assert.strictEqual(
   'full browser reload resumes the same world rift server run',
   'world rift account switch discards an in-flight old-account refresh',
   'switching back resumes the same world rift server run',
+  'world rift real UI carries deck crafting through account switch and reload',
   'settlement atomically projects world rift contribution and shared state',
   'world rift current and hub refresh after contribution',
   'database persists one world-rift contribution and shared-state increment',
@@ -1241,6 +1252,11 @@ assert.strictEqual(
   'chapter oath starts a server-authoritative fate run',
   'full browser reload resumes the same fate chronicle run',
   'real fate chronicle UI completes the first guard oath',
+  'fate chronicle real UI executes exact-target upgrade and one legal trim',
+  'completed fate chronicle UI preserves the deck-crafting payoff',
+  'fate-chronicle-completed.png',
+  'fate-chronicle-reward-upgrade.png',
+  'fate-chronicle-reward-trim.png',
   'settlement projects chapter progress and unlocks the next chapter without consuming failure attempts',
   'chapter clear reward claims once as cosmetic-only renown',
   'weekly archive reaches foundation 2/5 and exposes the 120 renown claim CTA',

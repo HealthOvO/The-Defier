@@ -60,6 +60,38 @@ function getCard(content, cardId) {
     return card;
 }
 
+function getDeckCraftingRules(content, scenario = null) {
+    const base = content && content.deckCrafting;
+    if (!base || clampInt(base.version, 0, 10) !== 1) return null;
+    const override = scenario && scenario.rewardProfile && typeof scenario.rewardProfile === 'object'
+        ? scenario.rewardProfile
+        : {};
+    return {
+        cardOfferCount: clampInt(override.cardOfferCount ?? base.cardOfferCount, 1, 3),
+        healAmount: clampInt(override.healAmount ?? base.healAmount, 1, 100),
+        healThresholdPercent: clampInt(override.healThresholdPercent ?? base.healThresholdPercent, 1, 99),
+        maxCardsRemoved: clampInt(override.maxCardsRemoved ?? base.maxCardsRemoved, 0, 10),
+        maxHpAmount: clampInt(override.maxHpAmount ?? base.maxHpAmount, 1, 50),
+        minBlockCards: clampInt(override.minBlockCards ?? base.minBlockCards, 0, 10),
+        minDeckSize: clampInt(override.minDeckSize ?? base.minDeckSize, 5, 20),
+        minDamageCards: clampInt(override.minDamageCards ?? base.minDamageCards, 0, 10),
+        removePriority: Array.isArray(override.removePriority) ? override.removePriority : [],
+        removeUnlockStage: clampInt(override.removeUnlockStage ?? base.removeUnlockStage, 1, 20),
+        upgradePriority: Array.isArray(override.upgradePriority) ? override.upgradePriority : []
+    };
+}
+
+function resolveCardDefinition(content, instance) {
+    const definition = getCard(content, instance.cardId);
+    if (!getDeckCraftingRules(content) || !instance.upgraded || !definition.upgrade) return definition;
+    return {
+        ...definition,
+        ...definition.upgrade,
+        cardId: definition.cardId,
+        effect: cloneJson(definition.upgrade.effect || definition.effect || {})
+    };
+}
+
 function getEnemy(content, enemyId) {
     const enemy = content && content.enemies && content.enemies[enemyId];
     if (!enemy) throw makeRuleError('unknown_enemy_definition', '敌人定义不存在');
@@ -87,10 +119,12 @@ function shuffle(state, values) {
     return output;
 }
 
-function createCardInstance(state, cardId) {
+function createCardInstance(state, cardId, content) {
     const sequence = clampInt(state.player.nextCardInstance, 1);
     state.player.nextCardInstance = sequence + 1;
-    return { instanceId: `card-${sequence}`, cardId };
+    const instance = { instanceId: `card-${sequence}`, cardId };
+    if (getDeckCraftingRules(content)) instance.upgraded = false;
+    return instance;
 }
 
 function generateRouteChoices(state, content) {
@@ -188,14 +222,15 @@ function createInitialState({ runId, userId, mode, scenarioId = '', seedHex, con
             blockGained: 0,
             encountersWon: 0,
             bossWins: 0,
-            rewardsChosen: 0
+            rewardsChosen: 0,
+            ...(getDeckCraftingRules(content) ? { cardsUpgraded: 0, cardsRemoved: 0 } : {})
         },
         summary: null
     };
     const starterDeck = Array.isArray(scenario.starterDeck) && scenario.starterDeck.length > 0
         ? scenario.starterDeck
         : content.starterDeck;
-    state.player.deck = starterDeck.map(cardId => createCardInstance(state, cardId));
+    state.player.deck = starterDeck.map(cardId => createCardInstance(state, cardId, content));
     state.route.choices = generateRouteChoices(state, content);
     return state;
 }
@@ -276,7 +311,7 @@ function applyDamageToEnemy(state, amount) {
     return dealt;
 }
 
-function makeRewardChoices(state, content) {
+function makeLegacyRewardChoices(state, content) {
     const scenario = getScenario(content, state.mode, state.scenarioId);
     const rewardCardPool = Array.isArray(scenario.rewardCardPool) && scenario.rewardCardPool.length > 0
         ? scenario.rewardCardPool
@@ -308,6 +343,113 @@ function makeRewardChoices(state, content) {
     ]);
 }
 
+function prioritizeDeckInstances(state, priority, predicate) {
+    const ranks = new Map(priority.map((cardId, index) => [String(cardId), index]));
+    return state.player.deck
+        .filter(predicate)
+        .slice()
+        .sort((left, right) => {
+            const leftRank = ranks.has(left.cardId) ? ranks.get(left.cardId) : priority.length;
+            const rightRank = ranks.has(right.cardId) ? ranks.get(right.cardId) : priority.length;
+            if (leftRank !== rightRank) return leftRank - rightRank;
+            return String(left.instanceId).localeCompare(String(right.instanceId));
+        });
+}
+
+function canRemoveCardInstance(state, content, instance, rules) {
+    if (!instance || instance.upgraded) return false;
+    if (rules.removePriority.length > 0 && !rules.removePriority.includes(instance.cardId)) return false;
+    const remaining = state.player.deck.filter(entry => entry.instanceId !== instance.instanceId);
+    const damageCards = remaining.filter(entry => clampInt(resolveCardDefinition(content, entry).effect?.damage, 0) > 0).length;
+    const blockCards = remaining.filter(entry => clampInt(resolveCardDefinition(content, entry).effect?.block, 0) > 0).length;
+    return damageCards >= rules.minDamageCards && blockCards >= rules.minBlockCards;
+}
+
+function makeDeckCraftingRewardChoices(state, content, scenario, rules) {
+    const rewardCardPool = Array.isArray(scenario.rewardCardPool) && scenario.rewardCardPool.length > 0
+        ? scenario.rewardCardPool
+        : content.rewardCardPool;
+    const cardIds = [...new Set(rewardCardPool.map(cardId => String(cardId || '')).filter(Boolean))];
+    const cardChoices = shuffle(state, cardIds)
+        .slice(0, rules.cardOfferCount)
+        .map(cardId => {
+            const card = getCard(content, cardId);
+            return {
+                rewardId: `reward-card-${state.route.stageIndex + 1}-${cardId}`,
+                kind: 'card',
+                cardId,
+                name: `纳入「${card.name}」`,
+                description: card.description
+            };
+        });
+
+    const choices = cardChoices.slice();
+    const upgradeTarget = prioritizeDeckInstances(
+        state,
+        rules.upgradePriority,
+        instance => !instance.upgraded && !!getCard(content, instance.cardId).upgrade
+    )[0];
+    if (upgradeTarget) {
+        const card = getCard(content, upgradeTarget.cardId);
+        choices.push({
+            rewardId: `reward-upgrade-${state.route.stageIndex + 1}-${upgradeTarget.instanceId}`,
+            kind: 'upgrade_card',
+            cardId: upgradeTarget.cardId,
+            targetCardInstanceId: upgradeTarget.instanceId,
+            name: `精修「${card.name}」`,
+            description: `${card.description} 精修后：${card.upgrade.description}`
+        });
+    }
+
+    const hpPercent = state.player.maxHp > 0
+        ? Math.floor((state.player.hp * 100) / state.player.maxHp)
+        : 0;
+    const removeUnlocked = state.route.stageIndex + 1 >= rules.removeUnlockStage
+        && clampInt(state.stats.cardsRemoved, 0) < rules.maxCardsRemoved;
+    const removeTarget = removeUnlocked
+        ? prioritizeDeckInstances(
+            state,
+            rules.removePriority,
+            instance => canRemoveCardInstance(state, content, instance, rules)
+        )[0]
+        : null;
+    if (hpPercent <= rules.healThresholdPercent) {
+        choices.push({
+            rewardId: `reward-heal-${state.route.stageIndex + 1}`,
+            kind: 'heal',
+            amount: rules.healAmount,
+            name: '调息',
+            description: `回复 ${rules.healAmount} 点生命。`
+        });
+    } else if (state.player.deck.length > rules.minDeckSize && removeTarget) {
+        const card = getCard(content, removeTarget.cardId);
+        choices.push({
+            rewardId: `reward-remove-${state.route.stageIndex + 1}-${removeTarget.instanceId}`,
+            kind: 'remove_card',
+            cardId: removeTarget.cardId,
+            targetCardInstanceId: removeTarget.instanceId,
+            name: `裁去「${card.name}」`,
+            description: `从本次牌组永久移除此牌，牌组不会低于 ${rules.minDeckSize} 张。`
+        });
+    } else {
+        choices.push({
+            rewardId: `reward-vitality-${state.route.stageIndex + 1}`,
+            kind: 'max_hp',
+            amount: rules.maxHpAmount,
+            name: '固本',
+            description: `最大生命 +${rules.maxHpAmount}，并回复 ${rules.maxHpAmount} 点生命。`
+        });
+    }
+    return shuffle(state, choices);
+}
+
+function makeRewardChoices(state, content) {
+    const scenario = getScenario(content, state.mode, state.scenarioId);
+    const rules = getDeckCraftingRules(content, scenario);
+    if (!rules) return makeLegacyRewardChoices(state, content);
+    return makeDeckCraftingRewardChoices(state, content, scenario, rules);
+}
+
 function buildSummary(state, content, result, reason) {
     const scenario = getScenario(content, state.mode, state.scenarioId);
     const base = state.stats.encountersWon * 120
@@ -317,7 +459,7 @@ function buildSummary(state, content, result, reason) {
         - state.stats.damageTaken * 2;
     const score = result === 'completed' ? Math.max(0, Math.round(base * scenario.scoreMultiplier)) : 0;
     const grade = score >= 520 ? 'S' : score >= 420 ? 'A' : score >= 300 ? 'B' : result === 'completed' ? 'C' : '未完成';
-    return {
+    const summary = {
         result,
         reason,
         score,
@@ -333,6 +475,12 @@ function buildSummary(state, content, result, reason) {
         remainingHp: state.player.hp,
         maxHp: state.player.maxHp
     };
+    if (getDeckCraftingRules(content, scenario)) {
+        summary.deckSize = state.player.deck.length;
+        summary.upgradedCards = state.player.deck.filter(instance => !!instance.upgraded).length;
+        summary.cardsRemoved = clampInt(state.stats.cardsRemoved, 0);
+    }
+    return summary;
 }
 
 function finishEncounter(state, content, events) {
@@ -372,7 +520,7 @@ function playCard(state, content, payload, events) {
     const handIndex = state.player.hand.findIndex(card => card.instanceId === payload.cardInstanceId);
     if (handIndex < 0) throw makeRuleError('card_not_in_hand', '卡牌不在权威手牌中');
     const instance = state.player.hand[handIndex];
-    const definition = getCard(content, instance.cardId);
+    const definition = resolveCardDefinition(content, instance);
     if (definition.cost > state.player.energy) {
         throw makeRuleError('insufficient_energy', '能量不足');
     }
@@ -466,9 +614,40 @@ function chooseReward(state, content, payload, events) {
     }
     const reward = state.reward.choices.find(choice => choice.rewardId === payload.rewardId);
     if (!reward) throw makeRuleError('reward_not_available', '奖励不在权威选项中');
+    const scenario = getScenario(content, state.mode, state.scenarioId);
+    const deckCraftingRules = getDeckCraftingRules(content, scenario);
     if (reward.kind === 'card') {
         getCard(content, reward.cardId);
-        state.player.deck.push(createCardInstance(state, reward.cardId));
+        state.player.deck.push(createCardInstance(state, reward.cardId, content));
+    } else if (reward.kind === 'upgrade_card') {
+        if (!deckCraftingRules) {
+            throw makeRuleError('unknown_reward_kind', '奖励定义不存在', 500);
+        }
+        const target = state.player.deck.find(instance => instance.instanceId === reward.targetCardInstanceId);
+        const definition = target && getCard(content, target.cardId);
+        if (!target || target.upgraded || !definition.upgrade || target.cardId !== reward.cardId) {
+            throw makeRuleError('reward_target_invalid', '精修目标已不在权威牌组中');
+        }
+        target.upgraded = true;
+        state.stats.cardsUpgraded = clampInt(state.stats.cardsUpgraded, 0) + 1;
+    } else if (reward.kind === 'remove_card') {
+        if (!deckCraftingRules) throw makeRuleError('unknown_reward_kind', '奖励定义不存在', 500);
+        if (state.player.deck.length <= deckCraftingRules.minDeckSize
+            || state.route.stageIndex + 1 < deckCraftingRules.removeUnlockStage
+            || clampInt(state.stats.cardsRemoved, 0) >= deckCraftingRules.maxCardsRemoved) {
+            throw makeRuleError('reward_target_invalid', '当前牌组不能继续裁牌');
+        }
+        const targetIndex = state.player.deck.findIndex(instance => (
+            instance.instanceId === reward.targetCardInstanceId
+            && instance.cardId === reward.cardId
+            && !instance.upgraded
+        ));
+        if (targetIndex < 0) throw makeRuleError('reward_target_invalid', '裁牌目标已不在权威牌组中');
+        if (!canRemoveCardInstance(state, content, state.player.deck[targetIndex], deckCraftingRules)) {
+            throw makeRuleError('reward_target_invalid', '裁牌会破坏牌组的基本攻防能力');
+        }
+        state.player.deck.splice(targetIndex, 1);
+        state.stats.cardsRemoved = clampInt(state.stats.cardsRemoved, 0) + 1;
     } else if (reward.kind === 'heal') {
         state.player.hp = Math.min(state.player.maxHp, state.player.hp + clampInt(reward.amount, 0));
     } else if (reward.kind === 'max_hp') {
@@ -478,7 +657,6 @@ function chooseReward(state, content, payload, events) {
     } else {
         throw makeRuleError('unknown_reward_kind', '奖励定义不存在', 500);
     }
-    const scenario = getScenario(content, state.mode, state.scenarioId);
     if (scenario.betweenEncounterHeal > 0) {
         state.player.hp = Math.min(state.player.maxHp, state.player.hp + scenario.betweenEncounterHeal);
     }
@@ -487,7 +665,13 @@ function chooseReward(state, content, payload, events) {
     state.phase = 'route';
     state.reward = null;
     state.route.choices = generateRouteChoices(state, content);
-    events.push({ type: 'reward_chosen', rewardId: reward.rewardId, rewardKind: reward.kind });
+    events.push({
+        type: 'reward_chosen',
+        rewardId: reward.rewardId,
+        rewardKind: reward.kind,
+        ...(deckCraftingRules && reward.cardId ? { cardId: reward.cardId } : {}),
+        ...(deckCraftingRules && reward.targetCardInstanceId ? { targetCardInstanceId: reward.targetCardInstanceId } : {})
+    });
 }
 
 function applyCommand(currentState, content, command, rawPayload) {
@@ -522,13 +706,14 @@ function applyCommand(currentState, content, command, rawPayload) {
 }
 
 function projectCard(content, instance) {
-    const definition = getCard(content, instance.cardId);
+    const definition = resolveCardDefinition(content, instance);
     return {
         instanceId: instance.instanceId,
         cardId: definition.cardId,
         name: definition.name,
         description: definition.description,
-        cost: definition.cost
+        cost: definition.cost,
+        ...(getDeckCraftingRules(content) ? { upgraded: !!instance.upgraded } : {})
     };
 }
 
@@ -541,9 +726,14 @@ function getAllowedCommands(state) {
 
 function projectState(state, content) {
     const scenario = getScenario(content, state.mode, state.scenarioId);
+    const deckCraftingRules = getDeckCraftingRules(content, scenario);
     const deckCounts = {};
+    const upgradedDeckCounts = {};
     state.player.deck.forEach(instance => {
         deckCounts[instance.cardId] = (deckCounts[instance.cardId] || 0) + 1;
+        if (instance.upgraded) {
+            upgradedDeckCounts[instance.cardId] = (upgradedDeckCounts[instance.cardId] || 0) + 1;
+        }
     });
     const battle = state.battle ? {
         nodeId: state.battle.nodeId,
@@ -584,7 +774,15 @@ function projectState(state, content) {
             drawPileCount: state.player.drawPile.length,
             discardPileCount: state.player.discardPile.length,
             deckSize: state.player.deck.length,
-            deckCounts
+            deckCounts,
+            ...(deckCraftingRules ? {
+                upgradedDeckCounts,
+                deckCrafting: {
+                    upgradedCount: state.player.deck.filter(instance => !!instance.upgraded).length,
+                    cardsRemoved: clampInt(state.stats.cardsRemoved, 0),
+                    minDeckSize: deckCraftingRules.minDeckSize
+                }
+            } : {})
         },
         route: {
             stage: state.route.stageIndex + 1,

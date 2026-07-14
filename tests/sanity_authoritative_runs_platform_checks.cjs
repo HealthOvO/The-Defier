@@ -35,6 +35,18 @@ const RELAY_RUN_TTL_MS = 2 * 60 * 60 * 1000;
 process.env.DEFIER_DB_PATH = DB_PATH;
 
 const { CONTENT_SNAPSHOT, CONTENT_VERSION } = require('../server/progression/authoritative-runs/catalog');
+const {
+  hashCanonical,
+  makeActionHash,
+  makeGenesisHash,
+  sha256,
+  stableStringify
+} = require('../server/progression/authoritative-runs/canonical');
+const {
+  applyCommand,
+  createInitialState,
+  projectState
+} = require('../server/progression/authoritative-runs/engine');
 
 function loadAuthoritativeRunsService() {
   const target = require.resolve('../server/progression/authoritative-runs/service');
@@ -255,9 +267,19 @@ function chooseCommandFromProjection(projection) {
     return ['select_node', { nodeId: projection.route.choices[0].nodeId }];
   }
   if (projection.phase === 'reward') {
-    const reward = (projection.player.hp < 22
-      ? projection.reward.choices.find(choice => choice.kind === 'heal')
-      : projection.reward.choices.find(choice => choice.kind === 'card')) || projection.reward.choices[0];
+    const hpPercent = projection.player.maxHp > 0
+      ? (projection.player.hp * 100) / projection.player.maxHp
+      : 0;
+    const preferredKind = hpPercent < 35
+      ? 'heal'
+      : projection.route.stage === 1
+        ? 'upgrade_card'
+        : projection.route.stage === 2
+          ? 'remove_card'
+          : 'card';
+    const reward = projection.reward.choices.find(choice => choice.kind === preferredKind)
+      || projection.reward.choices.find(choice => choice.kind === 'card')
+      || projection.reward.choices[0];
     return ['choose_reward', { rewardId: reward.rewardId }];
   }
   if (projection.phase !== 'battle') {
@@ -276,6 +298,123 @@ function chooseCommandFromProjection(projection) {
   return card
     ? ['play_card', { cardInstanceId: card.instanceId }]
     : ['end_turn', {}];
+}
+
+async function persistLegacyCompletedRun(userId, contentVersion) {
+  const runId = `legacy-${contentVersion.slice(-2)}-run-0001`;
+  const now = Date.now();
+  const content = JSON.parse(stableStringify(CONTENT_SNAPSHOT));
+  content.contentVersion = contentVersion;
+  delete content.deckCrafting;
+  Object.values(content.cards).forEach(card => delete card.upgrade);
+  const contentJson = stableStringify(content);
+  const contentHash = hashCanonical(content);
+  let genesis = createInitialState({
+    runId,
+    userId,
+    mode: 'pve',
+    seedHex: seedHex(`persisted-${contentVersion}`),
+    content: CONTENT_SNAPSHOT
+  });
+  genesis.contentVersion = contentVersion;
+  genesis.player.deck.forEach(card => delete card.upgraded);
+  delete genesis.stats.cardsUpgraded;
+  delete genesis.stats.cardsRemoved;
+  const genesisJson = stableStringify(genesis);
+  const genesisStateHash = hashCanonical(genesis);
+  let chainHead = makeGenesisHash({
+    protocolVersion: genesis.protocolVersion,
+    runId,
+    userId,
+    contentHash,
+    stateHash: genesisStateHash
+  });
+  let state = genesis;
+  const actions = [];
+  while (!TERMINAL_PHASES.has(state.phase) && actions.length < 256) {
+    const [command, payload] = chooseCommandFromProjection(projectState(state, content));
+    const applied = applyCommand(state, content, command, payload);
+    const sequence = actions.length + 1;
+    const payloadJson = stableStringify(applied.payload);
+    const payloadHash = sha256(payloadJson);
+    const resultStateHash = hashCanonical(applied.state);
+    const actionHash = makeActionHash({
+      protocolVersion: genesis.protocolVersion,
+      runId,
+      sequence,
+      expectedVersion: sequence - 1,
+      command,
+      payloadHash,
+      previousHash: chainHead,
+      resultStateHash
+    });
+    actions.push({
+      actionId: `${runId}-action-${String(sequence).padStart(3, '0')}`,
+      sequence,
+      expectedVersion: sequence - 1,
+      command,
+      payloadJson,
+      payloadHash,
+      previousHash: chainHead,
+      actionHash,
+      resultStateHash,
+      resultPhase: applied.state.phase,
+      publicReceiptJson: stableStringify({ command, events: applied.events })
+    });
+    state = applied.state;
+    chainHead = actionHash;
+  }
+  assert.strictEqual(state.phase, 'completed', `${contentVersion} persisted fixture should complete`);
+  assert(!stableStringify(state).includes('"upgraded"'), `${contentVersion} fixture must retain the legacy card shape`);
+  const stateJson = stableStringify(state);
+  const stateHash = hashCanonical(state);
+  await dbRun(
+    `INSERT INTO progression_authoritative_run_catalogs
+        (content_version, protocol_version, content_hash, content_json, created_at)
+     VALUES (?, ?, ?, ?, ?)`,
+    [contentVersion, genesis.protocolVersion, contentHash, contentJson, now]
+  );
+  await dbRun(
+    `INSERT INTO progression_authoritative_runs (
+        run_id, user_id, client_run_id, activity_mode, scenario_id, protocol_version,
+        content_version, content_hash, status, state_version, action_count, state_json,
+        state_hash, chain_head, started_at, expires_at, completed_at, settled_at,
+        abandoned_at, last_action_at, recovery_count, updated_at
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      runId, userId, `${runId}-client`, 'pve', state.scenarioId, genesis.protocolVersion,
+      contentVersion, contentHash, 'completed', actions.length, actions.length, stateJson,
+      stateHash, chainHead, now, now + 60_000, now + actions.length, 0,
+      0, now + actions.length, 0, now + actions.length
+    ]
+  );
+  await dbRun(
+    `INSERT INTO progression_authoritative_run_snapshots
+        (snapshot_id, run_id, sequence, state_json, state_hash, chain_head, created_at)
+     VALUES (?, ?, 0, ?, ?, ?, ?)`,
+    [`${runId}-genesis`, runId, genesisJson, genesisStateHash, makeGenesisHash({
+      protocolVersion: genesis.protocolVersion,
+      runId,
+      userId,
+      contentHash,
+      stateHash: genesisStateHash
+    }), now]
+  );
+  for (const action of actions) {
+    await dbRun(
+      `INSERT INTO progression_authoritative_run_actions (
+          action_id, run_id, user_id, sequence, expected_version, command_type,
+          payload_json, payload_hash, previous_hash, action_hash, result_state_hash,
+          result_phase, public_receipt_json, created_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        action.actionId, runId, userId, action.sequence, action.expectedVersion, action.command,
+        action.payloadJson, action.payloadHash, action.previousHash, action.actionHash,
+        action.resultStateHash, action.resultPhase, action.publicReceiptJson, now + action.sequence
+      ]
+    );
+  }
+  return { runId, actionCount: actions.length, stateHash, chainHead };
 }
 
 async function startRun(token, mode, clientRunId = `${mode}-${nextId('run')}`) {
@@ -443,6 +582,30 @@ async function main() {
 
     const primary = await registerAndLogin();
     const secondary = await registerAndLogin();
+    const legacyAccount = await registerAndLogin();
+
+    for (const contentVersion of ['authoritative-trials-v1', 'authoritative-trials-v2', 'authoritative-trials-v3']) {
+      const legacyFixture = await persistLegacyCompletedRun(legacyAccount.userId, contentVersion);
+      const legacyReplay = await getReplay(legacyAccount.token, legacyFixture.runId);
+      assert.strictEqual(legacyReplay.status, 200, JSON.stringify(legacyReplay.payload));
+      assert.strictEqual(legacyReplay.payload?.replay?.verified, true);
+      assert.strictEqual(legacyReplay.payload?.replay?.contentVersion, contentVersion);
+      assert.strictEqual(legacyReplay.payload?.replay?.actionCount, legacyFixture.actionCount);
+      assert.strictEqual(legacyReplay.payload?.replay?.stateHash, legacyFixture.stateHash);
+      assert.strictEqual(legacyReplay.payload?.replay?.chainHead, legacyFixture.chainHead);
+      assert(!JSON.stringify(legacyReplay.payload?.replay?.finalState || {}).includes('"upgraded"'));
+      assert.strictEqual(legacyReplay.payload?.replay?.finalState?.summary?.deckSize, undefined);
+      const legacySettlement = await settleRun(
+        legacyAccount.token,
+        legacyFixture.runId,
+        legacyFixture.actionCount,
+        `legacy-${contentVersion.slice(-2)}-settlement-0001`
+      );
+      assert.strictEqual(legacySettlement.status, 200, JSON.stringify(legacySettlement.payload));
+      assert.strictEqual(legacySettlement.payload?.receipt?.contentVersion, contentVersion);
+      assert.strictEqual(legacySettlement.payload?.receipt?.integrity?.fullReplayPassed, true);
+      assert.strictEqual(legacySettlement.payload?.receipt?.summary?.deckSize, undefined);
+    }
 
     const faultRunStart = await startRun(secondary.token, 'expedition', 'fault-expedition-client-0001');
     let faultRun = faultRunStart.payload.run;
@@ -828,6 +991,10 @@ async function main() {
     pveRun = completedPve.run;
     assert.strictEqual(pveRun.status, 'completed');
     assert.strictEqual(pveRun.projection.phase, 'completed');
+    assert.strictEqual(pveRun.projection.stats.cardsUpgraded, 1, 'platform action journal should persist one exact card upgrade');
+    assert.strictEqual(pveRun.projection.stats.cardsRemoved, 1, 'platform action journal should persist one bounded trim');
+    assert.strictEqual(pveRun.projection.summary.upgradedCards, 1);
+    assert.strictEqual(pveRun.projection.summary.cardsRemoved, 1);
 
     const settleMismatch = await signedRequest(`/api/progression/authoritative-runs/${pveRun.runId}/settle`, {
       token: primary.token,

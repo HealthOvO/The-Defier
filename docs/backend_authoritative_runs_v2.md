@@ -36,6 +36,32 @@ V2 executes a deterministic game state and mints progression only after replay.
   secret seeds, tokens, card order, raw action payloads, or full state JSON;
 - retention deletes only terminal history older than its configured threshold.
 
+## S108 deck crafting contract
+
+`authoritative-trials-v4` keeps protocol `authoritative-run-v2` and canonical state
+schema 2. New runs store `upgraded: false` on each card instance; historical v1-v3
+states remain byte-for-byte unchanged and treat the missing field as unupgraded.
+
+After a non-final encounter, the server deterministically creates the complete reward
+market from canonical state and the immutable catalog. The client still submits only
+`rewardId`; it cannot choose or forge a target instance. A normal market contains two
+distinct card offers, one exact upgrade offer, and one contextual utility offer:
+
+- low life produces a heal offer;
+- healthy runs before the trim window, or decks at their trim boundary, receive max HP;
+- healthy runs after encounter two may remove one server-selected basic card.
+
+Only baseline numeric cards and finishers have upgrade overlays. Draw, energy-cycle,
+and vulnerability multipliers do not. Trimming is limited to `strike` and `guard`, at
+most twice per run, never below eight cards, two direct-damage cards, or two block
+cards. Upgrade and remove rewards retain the target card instance ID in the canonical
+choice and action receipt so duplicate card definitions remain unambiguous.
+
+The current reducer keeps the legacy three-choice reward algorithm behind the absence
+of `deckCrafting.version = 1`. This branch is required for old catalog replay: adding
+`upgraded: false`, new event fields, or new RNG calls to a v1-v3 action would invalidate
+the stored state hash and action chain.
+
 ## Failure model
 
 - Network failure: the client keeps the last confirmed projection and retries with

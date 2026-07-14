@@ -76,12 +76,18 @@ const CATALOG_JSON = String(RUNTIME_CATALOG?.CONTENT_JSON || stableStringify(FAL
 const CATALOG_HASH = String(RUNTIME_CATALOG?.CONTENT_HASH || digest(CATALOG_JSON));
 const CATALOG_SNAPSHOT = JSON.parse(CATALOG_JSON);
 const DRIFTED_CATALOG_HASH = '0'.repeat(64);
-const LEGACY_CATALOG_VERSION = 'authoritative-trials-v1';
-const LEGACY_CATALOG_HASH = digest('authoritative-trials-v1-immutable-fixture');
-const LEGACY_CATALOG_JSON = JSON.stringify({
-  protocolVersion: 'authoritative-run-v2',
-  contentVersion: LEGACY_CATALOG_VERSION,
-  fixture: 'pre-relay-catalog'
+const LEGACY_CATALOG_FIXTURES = ['v1', 'v2', 'v3'].map((suffix) => {
+  const contentVersion = `authoritative-trials-${suffix}`;
+  const contentJson = stableStringify({
+    protocolVersion: 'authoritative-run-v2',
+    contentVersion,
+    fixture: `immutable-${suffix}-catalog`
+  });
+  return {
+    contentVersion,
+    contentHash: digest(contentJson),
+    contentJson
+  };
 });
 
 function removeDbFiles(dbPath) {
@@ -295,13 +301,15 @@ async function main() {
     assert.strictEqual(relayScenarios.vanguard?.scenarioId, 'vanguard', 'catalog bootstrap should persist relay vanguard');
     assert.strictEqual(relayScenarios.bulwark?.scenarioId, 'bulwark', 'catalog bootstrap should persist relay bulwark');
     assert.strictEqual(relayScenarios.insight?.scenarioId, 'insight', 'catalog bootstrap should persist relay insight');
-    await dbRun(
-      DB_PATH,
-      `INSERT INTO progression_authoritative_run_catalogs
-          (content_version, protocol_version, content_hash, content_json, created_at)
-       VALUES (?, ?, ?, ?, ?)`,
-      [LEGACY_CATALOG_VERSION, 'authoritative-run-v2', LEGACY_CATALOG_HASH, LEGACY_CATALOG_JSON, Date.now()]
-    );
+    for (const fixture of LEGACY_CATALOG_FIXTURES) {
+      await dbRun(
+        DB_PATH,
+        `INSERT INTO progression_authoritative_run_catalogs
+            (content_version, protocol_version, content_hash, content_json, created_at)
+         VALUES (?, ?, ?, ?, ?)`,
+        [fixture.contentVersion, 'authoritative-run-v2', fixture.contentHash, fixture.contentJson, Date.now()]
+      );
+    }
 
     const migrationRow = await dbGet(
       DB_PATH,
@@ -449,18 +457,20 @@ async function main() {
        WHERE run_id IN ('ar-run-active-1', 'ar-run-terminal-1')`
     );
     assert.strictEqual(Number(preservedRuns?.count), 2, 'v7 to v8 restart must preserve live authoritative-run data while adding world-rift tables');
-    const preservedLegacyCatalog = await dbGet(
-      DB_PATH,
-      `SELECT content_hash, content_json
-       FROM progression_authoritative_run_catalogs
-       WHERE content_version = ?`,
-      [LEGACY_CATALOG_VERSION]
-    );
-    assert.deepStrictEqual(
-      preservedLegacyCatalog,
-      { content_hash: LEGACY_CATALOG_HASH, content_json: LEGACY_CATALOG_JSON },
-      'v2 catalog bootstrap must preserve immutable v1 content for old-run replay'
-    );
+    for (const fixture of LEGACY_CATALOG_FIXTURES) {
+      const preservedLegacyCatalog = await dbGet(
+        DB_PATH,
+        `SELECT content_hash, content_json
+         FROM progression_authoritative_run_catalogs
+         WHERE content_version = ?`,
+        [fixture.contentVersion]
+      );
+      assert.deepStrictEqual(
+        preservedLegacyCatalog,
+        { content_hash: fixture.contentHash, content_json: fixture.contentJson },
+        `v4 catalog bootstrap must preserve immutable ${fixture.contentVersion} content for old-run replay`
+      );
+    }
     const restoredWorldTable = await dbGet(
       DB_PATH,
       `SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'world_rift_attempts'`

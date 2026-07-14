@@ -10,7 +10,7 @@ const TERMINAL_PHASE_RANK = Object.freeze({
   defeated: 4,
   abandoned: 4
 });
-const DEFAULT_CONTENT_VERSION = 'authoritative-trials-v3';
+const DEFAULT_CONTENT_VERSION = 'authoritative-trials-v4';
 const DEFAULT_STATE = Object.freeze({
   mode: '',
   runId: '',

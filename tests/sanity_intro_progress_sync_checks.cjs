@@ -44,6 +44,10 @@ function assert(condition, message) {
     '3/5 只提升档案等级',
     '非强制 PVP',
     '纯外观里程碑',
+    '每战奖励提供两张互不重复的新牌',
+    '服务器指定的精修目标',
+    '第二战后可裁去基础牌',
+    '牌组不会低于 8 张',
   ];
 
   const introOnlyAnchors = [
@@ -59,6 +63,7 @@ function assert(condition, message) {
     'tests/browser_meta_screen_audit.mjs',
     'tests/browser_pvp_mobile_audit.mjs',
     'tests/browser_guide_modal_audit.mjs',
+    'V11-S108 权威构筑深化 V1',
   ];
 
   const systemViewCurrentAnchors = [
@@ -79,6 +84,7 @@ function assert(condition, message) {
     'PVP 练习快照',
     '不写正式积分',
     '权威试炼',
+    '战后构筑',
   ];
 
   sharedAnchors.forEach((anchor) => {

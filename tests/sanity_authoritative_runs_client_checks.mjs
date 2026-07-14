@@ -363,6 +363,7 @@ const serviceBegin = await service.begin({ mode: 'pve', expectedUserId: 'service
 assert.equal(serviceBegin.success, true);
 assert.equal(beginCalls.length, 1);
 assert.equal(beginCalls[0].payload.clientRunId, 'ar-client-generated-0001', 'service begin should generate and cache a clientRunId');
+assert.equal(beginCalls[0].payload.contentVersion, 'authoritative-trials-v4', 'service begin should pin the S108 content snapshot');
 assert.equal(service.getState().runId, 'ar-service-run-0001');
 assert.equal(service.getState().projection.version, 1);
 assert.equal(serviceSnapshots.some(snapshot => snapshot.pending && snapshot.pending.kind === 'begin'), true, 'subscription should observe pending begin state');

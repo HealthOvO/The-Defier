@@ -880,11 +880,6 @@ export class FateChronicleView {
       return { success: false, suppressed: true };
     }
     this.phase = "ready";
-    if (!archiveResult || archiveResult.success === false) {
-      this.notice = preserveNotice && this.notice
-        ? this.notice
-        : { tone: "warning", text: archiveResult && archiveResult.message ? archiveResult.message : "三证归卷读取失败" };
-    }
     this.render();
     return result;
   }

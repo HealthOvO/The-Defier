@@ -404,12 +404,24 @@ function chooseDecision(projection) {
   }
   if (projection.phase === 'reward') {
     const choices = Array.isArray(projection.reward?.choices) ? projection.reward.choices : [];
-    const choice = (Number(projection.player?.hp || 0) < 22
-      ? choices.find(entry => entry.kind === 'heal')
-      : choices.find(entry => entry.kind === 'card')) || choices[0];
+    const hp = Number(projection.player?.hp || 0);
+    const maxHp = Math.max(1, Number(projection.player?.maxHp || 1));
+    const stage = Number(projection.route?.stage || 0);
+    const preferredKind = hp / maxHp < 0.35
+      ? 'heal'
+      : stage === 1
+        ? 'upgrade_card'
+        : stage === 2
+          ? 'remove_card'
+          : 'card';
+    const choice = choices.find(entry => entry.kind === preferredKind)
+      || choices.find(entry => entry.kind === 'card')
+      || choices[0];
     return choice ? {
       command: 'choose_reward',
       selector: `[data-season-ops-action="authoritative-choose-reward"][data-reward-id="${cssValue(choice.rewardId)}"]`,
+      rewardKind: choice.kind,
+      targetCardInstanceId: choice.targetCardInstanceId || '',
     } : null;
   }
   if (projection.phase !== 'battle') return null;
@@ -432,6 +444,17 @@ function chooseDecision(projection) {
     command: 'end_turn',
     selector: '[data-season-ops-action="authoritative-end-turn"]',
   };
+}
+
+async function readRewardDecisionUi(page, decision) {
+  if (decision?.command !== 'choose_reward') return null;
+  const target = page.locator(decision.selector).first();
+  await target.waitFor({ state: 'visible', timeout: 10000 });
+  return target.evaluate(element => ({
+    text: element.textContent?.replace(/\s+/g, ' ').trim() || '',
+    rewardKind: element.getAttribute('data-reward-kind') || '',
+    targetCardInstanceId: element.getAttribute('data-target-card-instance-id') || '',
+  }));
 }
 
 async function clickDecision(page, decision, before) {
@@ -498,9 +521,15 @@ async function completeAdditionalMode(page, mode, maxAttempts = 3) {
     );
     const runId = panel.projection.runId;
     let actionCount = 0;
+    const rewardKinds = [];
+    const rewardUi = [];
     while (!['completed', 'defeated', 'abandoned'].includes(panel.projection?.phase) && actionCount < 128) {
       const decision = chooseDecision(panel.projection);
       if (!decision) throw new Error(`${mode} has no playable UI command: ${JSON.stringify(panel)}`);
+      if (decision.command === 'choose_reward') {
+        rewardKinds.push(decision.rewardKind);
+        rewardUi.push(await readRewardDecisionUi(page, decision));
+      }
       panel = await clickDecision(page, decision, panel);
       actionCount += 1;
     }
@@ -529,7 +558,17 @@ async function completeAdditionalMode(page, mode, maxAttempts = 3) {
     if (!replay?.success || replay?.replay?.verified !== true || replay?.replay?.finalState?.phase !== 'completed') {
       throw new Error(`${mode} verified replay missing: ${JSON.stringify(replay)}`);
     }
-    return { mode, runId, actionCount, attempt, replayActionCount: replay.replay.actionCount };
+    return {
+      mode,
+      runId,
+      actionCount,
+      attempt,
+      replayActionCount: replay.replay.actionCount,
+      rewardKinds,
+      rewardUi,
+      stats: replay.replay.finalState.stats,
+      summary: replay.replay.finalState.summary,
+    };
   }
   throw new Error(`${mode} exhausted authoritative attempts`);
 }
@@ -655,10 +694,28 @@ try {
   let reloadChecked = false;
   let refreshChecked = false;
   let openingFairnessChecked = false;
+  const ladderRewardKinds = [];
+  const ladderRewardUi = [];
   while (!['completed', 'defeated', 'abandoned'].includes(panel.projection?.phase) && actionCount < 128) {
     const before = panel;
     const decision = chooseDecision(before.projection);
     if (!decision) throw new Error(`no playable UI command: ${JSON.stringify(before)}`);
+    if (decision.command === 'choose_reward') {
+      const firstOfKind = !ladderRewardKinds.includes(decision.rewardKind);
+      ladderRewardKinds.push(decision.rewardKind);
+      ladderRewardUi.push(await readRewardDecisionUi(page, decision));
+      if (firstOfKind && ['upgrade_card', 'remove_card'].includes(decision.rewardKind)) {
+        const screenshotName = decision.rewardKind === 'upgrade_card'
+          ? 'challenge-ladder-reward-upgrade-desktop.png'
+          : 'challenge-ladder-reward-trim-desktop.png';
+        await safeAuditScreenshot(
+          page,
+          path.join(outDir, screenshotName),
+          'browser_authoritative_runs_real_backend_smoke',
+          { timeout: 9000 },
+        );
+      }
+    }
     panel = await clickDecision(page, decision, before);
     actionCount += 1;
 
@@ -717,6 +774,23 @@ try {
 
   add('real browser strategy completes the formal challenge ladder run without client simulation', panel.projection?.phase === 'completed', `${panel.projection?.phase || 'missing'} after ${actionCount} actions`);
   if (panel.projection?.phase !== 'completed') throw new Error(`challenge ladder run did not complete: ${JSON.stringify(panel)}`);
+  add('challenge ladder real UI exercises targeted upgrade and bounded trim', Number(panel.projection?.stats?.cardsUpgraded) >= 1
+    && Number(panel.projection?.stats?.cardsRemoved) === 1
+    && Number(panel.projection?.summary?.upgradedCards) >= 1
+    && Number(panel.projection?.summary?.cardsRemoved) === 1
+    && ladderRewardKinds.includes('upgrade_card')
+    && ladderRewardKinds.includes('remove_card')
+    && ladderRewardUi.some(entry => entry?.rewardKind === 'upgrade_card'
+      && !!entry.targetCardInstanceId
+      && /精修卡牌|精修目标|精修这张牌/.test(entry.text))
+    && ladderRewardUi.some(entry => entry?.rewardKind === 'remove_card'
+      && !!entry.targetCardInstanceId
+      && /裁去卡牌|裁牌目标|裁去这张牌/.test(entry.text)), JSON.stringify({
+      stats: panel.projection?.stats,
+      summary: panel.projection?.summary,
+      rewardKinds: ladderRewardKinds,
+      rewardUi: ladderRewardUi,
+    }));
   await page.locator('[data-season-ops-action="authoritative-settle"]').click();
   panel = await waitForPanel(
     page,
@@ -747,6 +821,9 @@ try {
   add('settled challenge UI presents localized route history and verification', /试炼战 · 墨痕斥候/.test(settledPlayerCopy)
     && /全程校验/.test(settledPlayerCopy)
     && /天道校验/.test(settledPlayerCopy), settledPlayerCopy);
+  add('settled challenge UI preserves the deck-crafting payoff', /终局牌组 9 张/.test(settledPlayerCopy)
+    && /精修 1 张/.test(settledPlayerCopy)
+    && /裁牌 1 张/.test(settledPlayerCopy), settledPlayerCopy);
 
   const replay = await page.evaluate(async targetRunId => {
     const { BackendClient } = window.__THE_DEFIER_SERVICES__;
@@ -894,10 +971,12 @@ try {
   let riftActionCount = 0;
   let riftReloadChecked = false;
   let riftAccountSwitchChecked = false;
+  const riftRewardKinds = [];
   while (!['completed', 'defeated', 'abandoned'].includes(panel.projection?.phase) && riftActionCount < 128) {
     const before = panel;
     const decision = chooseDecision(before.projection);
     if (!decision) throw new Error(`no playable world-rift command: ${JSON.stringify(before)}`);
+    if (decision.command === 'choose_reward') riftRewardKinds.push(decision.rewardKind);
     panel = await clickDecision(page, decision, before);
     riftActionCount += 1;
 
@@ -960,6 +1039,13 @@ try {
   }
   add('real browser strategy completes the formal world rift run', panel.projection?.phase === 'completed', `${panel.projection?.phase || 'missing'} after ${riftActionCount} actions`);
   if (panel.projection?.phase !== 'completed') throw new Error(`world rift run did not complete: ${JSON.stringify(panel)}`);
+  add('world rift real UI carries deck crafting through account switch and reload', Number(panel.projection?.stats?.cardsUpgraded) >= 1
+    && Number(panel.projection?.stats?.cardsRemoved) === 1
+    && riftRewardKinds.includes('upgrade_card')
+    && riftRewardKinds.includes('remove_card'), JSON.stringify({
+      stats: panel.projection?.stats,
+      rewardKinds: riftRewardKinds,
+    }));
   await page.locator('[data-season-ops-action="authoritative-settle"]').click();
   panel = await waitForPanel(
     page,
@@ -1058,6 +1144,15 @@ try {
   add('real UI completes and settles all three base authoritative modes alongside challenge ladder and world rift', pveResult.replayActionCount === pveResult.actionCount
     && challengeResult.replayActionCount === challengeResult.actionCount
     && expeditionResult.replayActionCount === expeditionResult.actionCount, JSON.stringify({ pveResult, challengeResult, expeditionResult }));
+  const baseModeResults = [pveResult, challengeResult, expeditionResult];
+  add('all base-mode real UI runs execute exact-target upgrade and one legal trim', baseModeResults.every(result => Number(result.stats?.cardsUpgraded) >= 1
+    && Number(result.stats?.cardsRemoved) === 1
+    && Number(result.summary?.upgradedCards) >= 1
+    && Number(result.summary?.cardsRemoved) === 1
+    && result.rewardKinds.includes('upgrade_card')
+    && result.rewardKinds.includes('remove_card')
+    && result.rewardUi.some(entry => entry?.rewardKind === 'upgrade_card' && !!entry.targetCardInstanceId)
+    && result.rewardUi.some(entry => entry?.rewardKind === 'remove_card' && !!entry.targetCardInstanceId)), JSON.stringify(baseModeResults));
 
   const aggregate = await dbGet(
     `SELECT

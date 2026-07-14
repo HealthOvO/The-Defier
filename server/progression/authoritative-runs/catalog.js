@@ -1,7 +1,7 @@
 const { cloneJson, hashCanonical, stableStringify } = require('./canonical');
 
 const PROTOCOL_VERSION = 'authoritative-run-v2';
-const CONTENT_VERSION = 'authoritative-trials-v3';
+const CONTENT_VERSION = 'authoritative-trials-v4';
 const RELAY_EXPEDITION_SCENARIO_IDS = ['vanguard', 'bulwark', 'insight'];
 const FATE_CHRONICLE_SCENARIO_IDS = [
     'chronicle-ember-guard',
@@ -22,20 +22,45 @@ function deepFreeze(value) {
 const CONTENT_SNAPSHOT = deepFreeze({
     protocolVersion: PROTOCOL_VERSION,
     contentVersion: CONTENT_VERSION,
+    deckCrafting: {
+        version: 1,
+        reportVersion: 'authoritative-deck-crafting-v1',
+        cardOfferCount: 2,
+        healAmount: 10,
+        healThresholdPercent: 55,
+        maxCardsRemoved: 2,
+        maxHpAmount: 5,
+        minBlockCards: 2,
+        minDamageCards: 2,
+        minDeckSize: 8,
+        removeUnlockStage: 2
+    },
     cards: {
         strike: {
             cardId: 'strike',
             name: '破势',
             description: '造成 8 点伤害。',
             cost: 1,
-            effect: { damage: 8 }
+            effect: { damage: 8 },
+            upgrade: {
+                name: '破势·极',
+                description: '造成 10 点伤害。',
+                cost: 1,
+                effect: { damage: 10 }
+            }
         },
         guard: {
             cardId: 'guard',
             name: '守心',
             description: '获得 6 点格挡。',
             cost: 1,
-            effect: { block: 6 }
+            effect: { block: 6 },
+            upgrade: {
+                name: '守心·极',
+                description: '获得 8 点格挡。',
+                cost: 1,
+                effect: { block: 8 }
+            }
         },
         insight: {
             cardId: 'insight',
@@ -49,21 +74,39 @@ const CONTENT_SNAPSHOT = deepFreeze({
             name: '穿云',
             description: '造成 13 点伤害。',
             cost: 2,
-            effect: { damage: 13 }
+            effect: { damage: 13 },
+            upgrade: {
+                name: '穿云·极',
+                description: '造成 16 点伤害。',
+                cost: 2,
+                effect: { damage: 16 }
+            }
         },
         iron_mandate: {
             cardId: 'iron_mandate',
             name: '铁律',
             description: '获得 12 点格挡。',
             cost: 2,
-            effect: { block: 12 }
+            effect: { block: 12 },
+            upgrade: {
+                name: '铁律·极',
+                description: '获得 15 点格挡。',
+                cost: 2,
+                effect: { block: 15 }
+            }
         },
         life_siphon: {
             cardId: 'life_siphon',
             name: '归息',
             description: '造成 4 点伤害并回复 3 点生命。',
             cost: 1,
-            effect: { damage: 4, heal: 3 }
+            effect: { damage: 4, heal: 3 },
+            upgrade: {
+                name: '归息·极',
+                description: '造成 5 点伤害并回复 4 点生命。',
+                cost: 1,
+                effect: { damage: 5, heal: 4 }
+            }
         },
         fracture: {
             cardId: 'fracture',
@@ -76,7 +119,7 @@ const CONTENT_SNAPSHOT = deepFreeze({
             cardId: 'flowing_qi',
             name: '流炁',
             description: '获得 1 点能量并抽 1 张牌。',
-            cost: 0,
+            cost: 1,
             effect: { energy: 1, draw: 1 }
         },
         ember_riposte: {
@@ -84,28 +127,52 @@ const CONTENT_SNAPSHOT = deepFreeze({
             name: '照火反锋',
             description: '造成 6 点伤害并获得 4 点格挡。',
             cost: 1,
-            effect: { damage: 6, block: 4 }
+            effect: { damage: 6, block: 4 },
+            upgrade: {
+                name: '照火反锋·极',
+                description: '造成 8 点伤害并获得 5 点格挡。',
+                cost: 1,
+                effect: { damage: 8, block: 5 }
+            }
         },
         mirror_breath: {
             cardId: 'mirror_breath',
             name: '镜息',
             description: '获得 5 点格挡并回复 3 点生命。',
             cost: 1,
-            effect: { block: 5, heal: 3 }
+            effect: { block: 5, heal: 3 },
+            upgrade: {
+                name: '镜息·极',
+                description: '获得 7 点格挡并回复 4 点生命。',
+                cost: 1,
+                effect: { block: 7, heal: 4 }
+            }
         },
         severing_flow: {
             cardId: 'severing_flow',
             name: '截流',
             description: '造成 7 点伤害并获得 1 点能量。',
             cost: 1,
-            effect: { damage: 7, energy: 1 }
+            effect: { damage: 7, energy: 1 },
+            upgrade: {
+                name: '截流·极',
+                description: '造成 9 点伤害并获得 1 点能量。',
+                cost: 1,
+                effect: { damage: 9, energy: 1 }
+            }
         },
         archive_surge: {
             cardId: 'archive_surge',
             name: '归卷冲霄',
             description: '造成 11 点伤害并抽 1 张牌。',
             cost: 2,
-            effect: { damage: 11, draw: 1 }
+            effect: { damage: 11, draw: 1 },
+            upgrade: {
+                name: '归卷冲霄·极',
+                description: '造成 13 点伤害并抽 1 张牌。',
+                cost: 2,
+                effect: { damage: 13, draw: 1 }
+            }
         }
     },
     starterDeck: [
@@ -231,6 +298,11 @@ const CONTENT_SNAPSHOT = deepFreeze({
             turnBudget: 0,
             betweenEncounterHeal: 0,
             scoreMultiplier: 1,
+            rewardCardPool: ['sky_pierce', 'iron_mandate', 'life_siphon', 'fracture', 'ember_riposte', 'mirror_breath'],
+            rewardProfile: {
+                upgradePriority: ['strike', 'guard', 'ember_riposte', 'life_siphon', 'sky_pierce'],
+                removePriority: ['strike', 'guard']
+            },
             stages: [
                 { type: 'enemy', pool: ['ink_scout', 'ash_acolyte', 'oath_scribe'] },
                 { type: 'elite', pool: ['oath_guard', 'mirror_seer', 'chain_colossus'] },
@@ -246,8 +318,15 @@ const CONTENT_SNAPSHOT = deepFreeze({
             energyPerTurn: 3,
             handSize: 5,
             turnBudget: 16,
-            betweenEncounterHeal: 2,
+            betweenEncounterHeal: 1,
             scoreMultiplier: 1.25,
+            rewardCardPool: ['sky_pierce', 'fracture', 'severing_flow', 'archive_surge', 'ember_riposte', 'flowing_qi'],
+            rewardProfile: {
+                healAmount: 8,
+                healThresholdPercent: 45,
+                upgradePriority: ['sky_pierce', 'strike', 'severing_flow', 'archive_surge', 'ember_riposte'],
+                removePriority: ['guard', 'strike']
+            },
             stages: [
                 { type: 'trial', pool: ['ash_acolyte', 'oath_scribe', 'ink_scout'] },
                 { type: 'trial', pool: ['mirror_seer', 'oath_guard', 'chain_colossus'] },
@@ -263,8 +342,15 @@ const CONTENT_SNAPSHOT = deepFreeze({
             energyPerTurn: 3,
             handSize: 5,
             turnBudget: 0,
-            betweenEncounterHeal: 5,
+            betweenEncounterHeal: 4,
             scoreMultiplier: 1.1,
+            rewardCardPool: ['iron_mandate', 'life_siphon', 'mirror_breath', 'ember_riposte', 'insight', 'flowing_qi'],
+            rewardProfile: {
+                healAmount: 12,
+                healThresholdPercent: 60,
+                upgradePriority: ['life_siphon', 'mirror_breath', 'guard', 'iron_mandate', 'ember_riposte'],
+                removePriority: ['strike', 'guard']
+            },
             stages: [
                 { type: 'expedition', pool: ['ink_scout', 'ash_acolyte', 'oath_scribe'] },
                 { type: 'expedition_elite', pool: ['chain_colossus', 'oath_guard', 'mirror_seer'] },
@@ -290,6 +376,13 @@ const CONTENT_SNAPSHOT = deepFreeze({
                 'flowing_qi',
                 'fracture'
             ],
+            rewardCardPool: ['sky_pierce', 'fracture', 'severing_flow', 'archive_surge', 'ember_riposte', 'flowing_qi'],
+            rewardProfile: {
+                healAmount: 8,
+                healThresholdPercent: 45,
+                upgradePriority: ['sky_pierce', 'strike', 'severing_flow', 'ember_riposte', 'archive_surge'],
+                removePriority: ['guard', 'strike']
+            },
             stages: [
                 { type: 'relay', pool: ['ink_scout', 'ash_acolyte', 'oath_scribe'] },
                 { type: 'relay_elite', pool: ['mirror_seer', 'oath_guard', 'chain_colossus'] },
@@ -314,6 +407,13 @@ const CONTENT_SNAPSHOT = deepFreeze({
                 'iron_mandate',
                 'life_siphon'
             ],
+            rewardCardPool: ['iron_mandate', 'life_siphon', 'mirror_breath', 'ember_riposte', 'guard', 'insight'],
+            rewardProfile: {
+                healAmount: 12,
+                healThresholdPercent: 65,
+                upgradePriority: ['iron_mandate', 'guard', 'life_siphon', 'mirror_breath', 'ember_riposte'],
+                removePriority: ['strike', 'guard']
+            },
             stages: [
                 { type: 'relay', pool: ['ink_scout', 'ash_acolyte', 'oath_scribe'] },
                 { type: 'relay_elite', pool: ['chain_colossus', 'oath_guard', 'mirror_seer'] },
@@ -338,6 +438,12 @@ const CONTENT_SNAPSHOT = deepFreeze({
                 'flowing_qi', 'flowing_qi',
                 'fracture'
             ],
+            rewardCardPool: ['insight', 'flowing_qi', 'fracture', 'severing_flow', 'archive_surge', 'mirror_breath'],
+            rewardProfile: {
+                healThresholdPercent: 50,
+                upgradePriority: ['severing_flow', 'archive_surge', 'strike', 'mirror_breath'],
+                removePriority: ['strike', 'guard']
+            },
             stages: [
                 { type: 'relay', pool: ['ash_acolyte', 'oath_scribe', 'ink_scout'] },
                 { type: 'relay_elite', pool: ['mirror_seer', 'chain_colossus', 'oath_guard'] },
@@ -353,7 +459,7 @@ const CONTENT_SNAPSHOT = deepFreeze({
             energyPerTurn: 3,
             handSize: 5,
             turnBudget: 0,
-            betweenEncounterHeal: 4,
+            betweenEncounterHeal: 3,
             scoreMultiplier: 1,
             starterDeck: [
                 'strike', 'strike', 'strike',
@@ -361,6 +467,12 @@ const CONTENT_SNAPSHOT = deepFreeze({
                 'insight', 'iron_mandate', 'life_siphon', 'ember_riposte'
             ],
             rewardCardPool: ['iron_mandate', 'life_siphon', 'ember_riposte', 'mirror_breath', 'flowing_qi'],
+            rewardProfile: {
+                healAmount: 12,
+                healThresholdPercent: 65,
+                upgradePriority: ['guard', 'iron_mandate', 'life_siphon', 'mirror_breath', 'ember_riposte'],
+                removePriority: ['strike', 'guard']
+            },
             stages: [
                 { type: 'chronicle', pool: ['ink_scout', 'ash_acolyte', 'ember_revenant'] },
                 { type: 'chronicle_elite', pool: ['oath_guard', 'mirror_seer', 'mirror_duelist'] },
@@ -376,7 +488,7 @@ const CONTENT_SNAPSHOT = deepFreeze({
             energyPerTurn: 3,
             handSize: 5,
             turnBudget: 20,
-            betweenEncounterHeal: 2,
+            betweenEncounterHeal: 1,
             scoreMultiplier: 1.12,
             starterDeck: [
                 'strike', 'strike', 'strike', 'strike',
@@ -384,6 +496,12 @@ const CONTENT_SNAPSHOT = deepFreeze({
                 'insight', 'fracture', 'severing_flow', 'ember_riposte'
             ],
             rewardCardPool: ['sky_pierce', 'fracture', 'severing_flow', 'archive_surge', 'flowing_qi'],
+            rewardProfile: {
+                healAmount: 8,
+                healThresholdPercent: 42,
+                upgradePriority: ['severing_flow', 'strike', 'sky_pierce', 'archive_surge'],
+                removePriority: ['guard', 'strike']
+            },
             stages: [
                 { type: 'chronicle', pool: ['ash_acolyte', 'ember_revenant', 'oath_scribe'] },
                 { type: 'chronicle_elite', pool: ['mirror_duelist', 'oath_guard', 'chain_colossus'] },
@@ -399,7 +517,7 @@ const CONTENT_SNAPSHOT = deepFreeze({
             energyPerTurn: 3,
             handSize: 5,
             turnBudget: 0,
-            betweenEncounterHeal: 5,
+            betweenEncounterHeal: 3,
             scoreMultiplier: 1.08,
             starterDeck: [
                 'strike', 'strike', 'strike',
@@ -407,6 +525,12 @@ const CONTENT_SNAPSHOT = deepFreeze({
                 'insight', 'mirror_breath', 'life_siphon', 'ember_riposte'
             ],
             rewardCardPool: ['iron_mandate', 'life_siphon', 'mirror_breath', 'ember_riposte', 'insight'],
+            rewardProfile: {
+                healAmount: 12,
+                healThresholdPercent: 65,
+                upgradePriority: ['mirror_breath', 'life_siphon', 'guard', 'iron_mandate', 'ember_riposte'],
+                removePriority: ['strike', 'guard']
+            },
             stages: [
                 { type: 'chronicle', pool: ['ink_scout', 'oath_scribe', 'ember_revenant'] },
                 { type: 'chronicle', pool: ['ash_acolyte', 'ember_revenant', 'oath_scribe'] },
@@ -423,7 +547,7 @@ const CONTENT_SNAPSHOT = deepFreeze({
             energyPerTurn: 3,
             handSize: 5,
             turnBudget: 28,
-            betweenEncounterHeal: 2,
+            betweenEncounterHeal: 1,
             scoreMultiplier: 1.2,
             starterDeck: [
                 'strike', 'strike', 'strike',
@@ -431,6 +555,12 @@ const CONTENT_SNAPSHOT = deepFreeze({
                 'insight', 'fracture', 'flowing_qi', 'severing_flow', 'archive_surge'
             ],
             rewardCardPool: ['sky_pierce', 'fracture', 'flowing_qi', 'severing_flow', 'archive_surge'],
+            rewardProfile: {
+                healAmount: 8,
+                healThresholdPercent: 42,
+                upgradePriority: ['severing_flow', 'archive_surge', 'strike', 'sky_pierce'],
+                removePriority: ['guard', 'strike']
+            },
             stages: [
                 { type: 'chronicle', pool: ['ash_acolyte', 'ember_revenant', 'ink_scout'] },
                 { type: 'chronicle', pool: ['oath_scribe', 'ember_revenant', 'ash_acolyte'] },
@@ -447,7 +577,7 @@ const CONTENT_SNAPSHOT = deepFreeze({
             energyPerTurn: 3,
             handSize: 5,
             turnBudget: 0,
-            betweenEncounterHeal: 6,
+            betweenEncounterHeal: 4,
             scoreMultiplier: 1.16,
             starterDeck: [
                 'strike', 'strike', 'strike',
@@ -455,6 +585,13 @@ const CONTENT_SNAPSHOT = deepFreeze({
                 'insight', 'iron_mandate', 'mirror_breath', 'life_siphon'
             ],
             rewardCardPool: ['iron_mandate', 'life_siphon', 'mirror_breath', 'ember_riposte', 'flowing_qi'],
+            rewardProfile: {
+                healAmount: 14,
+                healThresholdPercent: 68,
+                maxHpAmount: 6,
+                upgradePriority: ['mirror_breath', 'life_siphon', 'iron_mandate', 'guard', 'ember_riposte'],
+                removePriority: ['strike', 'guard']
+            },
             stages: [
                 { type: 'chronicle', pool: ['ink_scout', 'ash_acolyte', 'ember_revenant'] },
                 { type: 'chronicle', pool: ['oath_scribe', 'ember_revenant', 'ash_acolyte'] },
@@ -472,7 +609,7 @@ const CONTENT_SNAPSHOT = deepFreeze({
             energyPerTurn: 3,
             handSize: 5,
             turnBudget: 38,
-            betweenEncounterHeal: 3,
+            betweenEncounterHeal: 2,
             scoreMultiplier: 1.3,
             starterDeck: [
                 'strike', 'strike', 'strike',
@@ -480,6 +617,12 @@ const CONTENT_SNAPSHOT = deepFreeze({
                 'insight', 'fracture', 'severing_flow', 'archive_surge', 'flowing_qi'
             ],
             rewardCardPool: ['sky_pierce', 'fracture', 'severing_flow', 'archive_surge', 'flowing_qi'],
+            rewardProfile: {
+                healAmount: 9,
+                healThresholdPercent: 45,
+                upgradePriority: ['severing_flow', 'archive_surge', 'sky_pierce', 'strike'],
+                removePriority: ['guard', 'strike']
+            },
             stages: [
                 { type: 'chronicle', pool: ['ash_acolyte', 'ember_revenant', 'oath_scribe'] },
                 { type: 'chronicle', pool: ['ember_revenant', 'ink_scout', 'ash_acolyte'] },

@@ -94,15 +94,30 @@ function createServiceStub() {
   };
 }
 
-function createRunEnvelope({ mode = "pve", phase = "route", status = "active", settledAt = 0 } = {}) {
+function createRunEnvelope({
+  mode = "pve",
+  phase = "route",
+  status = "active",
+  settledAt = 0,
+  playerHand = null,
+  rewardChoices = null
+} = {}) {
+  const hand = Array.isArray(playerHand) ? playerHand : [
+    { instanceId: "card-1", cardId: "strike", name: "破势", description: "造成 8 点伤害。", cost: 1 },
+    { instanceId: "card-2", cardId: "guard", name: "守心", description: "获得 6 点格挡。", cost: 1 }
+  ];
+  const rewardChoiceList = Array.isArray(rewardChoices) ? rewardChoices : [
+    { rewardId: "reward-card", kind: "card", name: "纳入「穿云」", description: "造成 13 点伤害。" },
+    { rewardId: "reward-heal", kind: "heal", name: "调息", description: "回复 10 点生命。" }
+  ];
   return {
     runId: `arun-${mode}-${phase}`,
     clientRunId: `client-${mode}-${phase}`,
     mode,
     status,
     protocolVersion: "authoritative-run-v2",
-    contentVersion: "authoritative-trials-v2",
-    contentHash: "aa18ac01c39d1c1c38d0c26fe3d83d92a3b34035b25305628e00a96a42bdd281",
+    contentVersion: "authoritative-trials-v4",
+    contentHash: "ec26095949bfadf81a322f454b092ec96dbfe09199c607513ea3e2f44501b301",
     authorityLevel: "server",
     trustTier: "server_authoritative",
     stateVersion: 7,
@@ -138,7 +153,7 @@ function createRunEnvelope({ mode = "pve", phase = "route", status = "active", s
     projection: {
       schemaVersion: 2,
       protocolVersion: "authoritative-run-v2",
-      contentVersion: "authoritative-trials-v2",
+      contentVersion: "authoritative-trials-v4",
       runId: `arun-${mode}-${phase}`,
       mode,
       scenario: {
@@ -162,14 +177,17 @@ function createRunEnvelope({ mode = "pve", phase = "route", status = "active", s
         maxHp: 50,
         block: 6,
         energy: 2,
-        hand: [
-          { instanceId: "card-1", cardId: "strike", name: "破势", description: "造成 8 点伤害。", cost: 1 },
-          { instanceId: "card-2", cardId: "guard", name: "守心", description: "获得 6 点格挡。", cost: 1 }
-        ],
+        hand,
         drawPileCount: 4,
         discardPileCount: 3,
-        deckSize: 10,
-        deckCounts: { strike: 5, guard: 4, insight: 1 }
+        deckSize: 9,
+        deckCounts: { strike: 4, guard: 4, insight: 1 },
+        upgradedDeckCounts: { guard: 1 },
+        deckCrafting: {
+          upgradedCount: 1,
+          cardsRemoved: 1,
+          minDeckSize: 8
+        }
       },
       route: {
         stage: 2,
@@ -201,10 +219,7 @@ function createRunEnvelope({ mode = "pve", phase = "route", status = "active", s
         }
       } : null,
       reward: phase === "reward" ? {
-        choices: [
-          { rewardId: "reward-card", kind: "card", name: "纳入「穿云」", description: "造成 13 点伤害。" },
-          { rewardId: "reward-heal", kind: "heal", name: "调息", description: "回复 10 点生命。" }
-        ]
+        choices: rewardChoiceList
       } : null,
       stats: {
         turns: 5,
@@ -214,7 +229,9 @@ function createRunEnvelope({ mode = "pve", phase = "route", status = "active", s
         blockGained: 24,
         encountersWon: phase === "completed" || phase === "defeated" || phase === "abandoned" ? 3 : 1,
         bossWins: phase === "completed" ? 1 : 0,
-        rewardsChosen: 1
+        rewardsChosen: 1,
+        cardsUpgraded: 1,
+        cardsRemoved: 1
       },
       summary: ["completed", "defeated", "abandoned"].includes(phase) ? {
         result: phase === "completed" ? "completed" : phase,
@@ -230,7 +247,10 @@ function createRunEnvelope({ mode = "pve", phase = "route", status = "active", s
         damageDealt: 92,
         damageTaken: 24,
         remainingHp: phase === "completed" ? 26 : 0,
-        maxHp: 50
+        maxHp: 50,
+        deckSize: 9,
+        upgradedCards: 1,
+        cardsRemoved: 1
       } : null
     }
   };
@@ -282,6 +302,9 @@ assert.match(html, /本轮规则已锁定/);
 assert.match(html, /天道校验 已通过/);
 assert.match(html, /常规战 · 墨痕斥候/);
 assert.match(html, /选择此路/);
+assert.match(html, /牌组 9 张/);
+assert.match(html, /已精修 1 张/);
+assert.match(html, /已裁牌 1 张/);
 [
   "authoritative-runs-ui-test-route",
   "authoritative-run-v2",
@@ -299,7 +322,15 @@ panel.applyResult({
     acceptedAt: Date.UTC(2026, 6, 11, 8, 18),
     events: [{ type: "card_played", cardId: "strike", damage: 8, block: 0 }]
   },
-  run: createRunEnvelope({ mode: "pve", phase: "battle", status: "active" })
+  run: createRunEnvelope({
+    mode: "pve",
+    phase: "battle",
+    status: "active",
+    playerHand: [
+      { instanceId: "card-1", cardId: "strike", name: "破势", description: "造成 8 点伤害。", cost: 1 },
+      { instanceId: "card-2", cardId: "guard", name: "守心·极", description: "获得 8 点格挡。", cost: 1, upgraded: true }
+    ]
+  })
 });
 html = panel.render();
 assert.match(html, /战斗投影/);
@@ -310,6 +341,10 @@ assert.match(html, /结束本回合/);
 assert.match(html, /最近战况/);
 assert.match(html, /卡牌已打出/);
 assert.match(html, /已打出「破势」/);
+assert.match(html, /守心·极/);
+assert.match(html, /已精修/);
+assert.match(html, /data-card-instance-id="card-2"/);
+assert.match(html, /data-card-upgraded="true"/);
 assert.doesNotMatch(html, /play_card|strike/);
 
 panel.applyResult({
@@ -318,15 +353,102 @@ panel.applyResult({
   action: {
     command: "choose_reward",
     acceptedAt: Date.UTC(2026, 6, 11, 8, 22),
-    events: [{ type: "reward_chosen", rewardKind: "card" }]
+    events: [{ type: "reward_chosen", rewardKind: "upgrade_card", cardId: "strike", targetCardInstanceId: "card-17" }]
   },
-  run: createRunEnvelope({ mode: "expedition", phase: "reward", status: "active" })
+  run: createRunEnvelope({
+    mode: "expedition",
+    phase: "reward",
+    status: "active",
+    rewardChoices: [
+      {
+        rewardId: "reward-upgrade-card-17",
+        kind: "upgrade_card",
+        cardId: "strike",
+        targetCardInstanceId: "card-17",
+        name: "精修「破势」",
+        description: "造成 8 点伤害。 精修后：造成 10 点伤害。"
+      },
+      {
+        rewardId: "reward-remove-card-29",
+        kind: "remove_card",
+        cardId: "guard",
+        targetCardInstanceId: "card-29",
+        name: "裁去「守心」",
+        description: "从本次牌组永久移除此牌，牌组不会低于 8 张。"
+      },
+      {
+        rewardId: "reward-heal",
+        kind: "heal",
+        name: "调息",
+        description: "回复 10 点生命。"
+      }
+    ]
+  })
 });
 html = panel.render();
 assert.match(html, /战后奖励/);
-assert.match(html, /领取此项/);
+assert.match(html, /精修卡牌/);
+assert.match(html, /裁去卡牌/);
+assert.match(html, /精修目标：破势/);
+assert.match(html, /裁牌目标：守心/);
+assert.match(html, /精修这张牌/);
+assert.match(html, /裁去这张牌/);
 assert.match(html, /整备 5 HP/);
-assert.match(html, /新卡牌/);
+assert.match(html, /领取调息/);
+assert.match(html, /已领取：精修「破势」/);
+assert.match(html, /data-reward-kind="upgrade_card"/);
+assert.match(html, /data-reward-kind="remove_card"/);
+assert.match(html, /data-target-card-instance-id="card-17"/);
+assert.match(html, /data-target-card-instance-id="card-29"/);
+
+panel.applyResult({
+  success: true,
+  reportVersion: "authoritative-runs-ui-test-reward-remove-receipt",
+  action: {
+    command: "choose_reward",
+    acceptedAt: Date.UTC(2026, 6, 11, 8, 23),
+    events: [{ type: "reward_chosen", rewardKind: "remove_card", cardId: "guard", targetCardInstanceId: "card-29" }]
+  },
+  run: createRunEnvelope({
+    mode: "expedition",
+    phase: "reward",
+    status: "active",
+    rewardChoices: [
+      {
+        rewardId: "reward-upgrade-card-17",
+        kind: "upgrade_card",
+        cardId: "strike",
+        targetCardInstanceId: "card-17",
+        name: "精修「破势」",
+        description: "造成 8 点伤害。 精修后：造成 10 点伤害。"
+      },
+      {
+        rewardId: "reward-remove-card-29",
+        kind: "remove_card",
+        cardId: "guard",
+        targetCardInstanceId: "card-29",
+        name: "裁去「守心」",
+        description: "从本次牌组永久移除此牌，牌组不会低于 8 张。"
+      }
+    ]
+  })
+});
+html = panel.render();
+assert.match(html, /已领取：裁去「守心」/);
+
+panel.applyResult({
+  success: true,
+  reportVersion: "authoritative-runs-ui-test-legacy-card-receipt",
+  action: {
+    command: "choose_reward",
+    acceptedAt: Date.UTC(2026, 6, 11, 8, 24),
+    events: [{ type: "reward_chosen", rewardKind: "card" }]
+  },
+  run: createRunEnvelope({ mode: "pve", phase: "reward", status: "active" })
+});
+html = panel.render();
+assert.match(html, /已领取：新卡牌/);
+assert.doesNotMatch(html, /已领取：未知牌/);
 
 panel.applyResult({
   success: true,
@@ -337,6 +459,10 @@ html = panel.render();
 assert.match(html, /待提交结算/);
 assert.match(html, /提交正式结算/);
 assert.match(html, /只有全程校验通过时/);
+assert.match(html, /终局牌组 9 张/);
+assert.match(html, /精修 1 张/);
+assert.match(html, /裁牌 1 张/);
+assert.match(html, /data-deck-crafting-summary="true"/);
 assert.doesNotMatch(html, /状态哈希|完整重放|arun-challenge-completed/);
 
 panel.applyResult({

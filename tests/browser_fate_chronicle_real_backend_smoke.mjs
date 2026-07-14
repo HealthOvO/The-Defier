@@ -230,6 +230,7 @@ async function readChronicle(page) {
     const root = document.querySelector("#fate-chronicle-screen.active") || document.getElementById("fate-chronicle-screen");
     const foundationButton = root?.querySelector('[data-fate-chronicle-action="claim-foundation"]');
     const archiveWarning = root?.querySelector('[data-fate-chronicle-state="archive-warning"]');
+    const notice = root?.querySelector('[data-fate-chronicle-state="notice"]');
     return {
       phase: view?.phase || "",
       rotationId: model?.rotation?.rotationId || "",
@@ -255,6 +256,8 @@ async function readChronicle(page) {
       foundationButtonDisabled: foundationButton?.disabled === true,
       foundationButtonState: foundationButton?.getAttribute("data-fate-chronicle-foundation-claim") || "",
       archiveWarningText: archiveWarning?.textContent?.replace(/\s+/g, " ").trim() || "",
+      archiveWarningCount: root?.querySelectorAll('[data-fate-chronicle-state="archive-warning"]').length || 0,
+      noticeText: notice?.textContent?.replace(/\s+/g, " ").trim() || "",
       milestoneStates: (model?.rewardMilestones || []).map(entry => ({
         milestoneId: entry.milestoneId,
         claimable: entry.claimable,
@@ -275,14 +278,30 @@ function chooseDecision(projection) {
   if (!projection) return null;
   if (projection.phase === "route") {
     const choice = projection.route?.choices?.[0];
-    return choice ? `[data-fate-chronicle-action="authoritative-select-node"][data-node-id="${cssValue(choice.nodeId)}"]` : null;
+    return choice ? {
+      selector: `[data-fate-chronicle-action="authoritative-select-node"][data-node-id="${cssValue(choice.nodeId)}"]`
+    } : null;
   }
   if (projection.phase === "reward") {
     const choices = Array.isArray(projection.reward?.choices) ? projection.reward.choices : [];
-    const choice = (Number(projection.player?.hp || 0) < 22
-      ? choices.find(entry => entry.kind === "heal")
-      : choices.find(entry => entry.kind === "card")) || choices[0];
-    return choice ? `[data-fate-chronicle-action="authoritative-choose-reward"][data-reward-id="${cssValue(choice.rewardId)}"]` : null;
+    const hp = Number(projection.player?.hp || 0);
+    const maxHp = Math.max(1, Number(projection.player?.maxHp || 1));
+    const stage = Number(projection.route?.stage || 0);
+    const preferredKind = hp / maxHp < 0.35
+      ? "heal"
+      : stage === 1
+        ? "upgrade_card"
+        : stage === 2
+          ? "remove_card"
+          : "card";
+    const choice = choices.find(entry => entry.kind === preferredKind)
+      || choices.find(entry => entry.kind === "card")
+      || choices[0];
+    return choice ? {
+      selector: `[data-fate-chronicle-action="authoritative-choose-reward"][data-reward-id="${cssValue(choice.rewardId)}"]`,
+      rewardKind: choice.kind,
+      targetCardInstanceId: choice.targetCardInstanceId || ""
+    } : null;
   }
   if (projection.phase !== "battle") return null;
   const incoming = Number(projection.battle?.enemy?.intent?.amount || 0);
@@ -297,9 +316,11 @@ function chooseDecision(projection) {
       || String(left.instanceId).localeCompare(String(right.instanceId));
   });
   const card = cards.find(entry => Number(entry.cost || 0) <= energy);
-  return card
-    ? `[data-fate-chronicle-action="authoritative-play-card"][data-card-instance-id="${cssValue(card.instanceId)}"]`
-    : '[data-fate-chronicle-action="authoritative-end-turn"]';
+  return {
+    selector: card
+      ? `[data-fate-chronicle-action="authoritative-play-card"][data-card-instance-id="${cssValue(card.instanceId)}"]`
+      : '[data-fate-chronicle-action="authoritative-end-turn"]'
+  };
 }
 
 async function waitForRunChange(page, before) {
@@ -320,18 +341,40 @@ async function waitForRunChange(page, before) {
 async function driveCurrentRun(page) {
   let state = await readChronicle(page);
   let actions = 0;
+  const rewardKinds = [];
+  const rewardUi = [];
   while (!new Set(["completed", "defeated", "abandoned"]).has(state.projection?.phase) && actions < 160) {
-    const selector = chooseDecision(state.projection);
-    if (!selector) throw new Error(`fate chronicle has no playable command: ${JSON.stringify(state)}`);
+    const decision = chooseDecision(state.projection);
+    if (!decision) throw new Error(`fate chronicle has no playable command: ${JSON.stringify(state)}`);
     const before = { runId: state.projection.runId, version: state.projection.version };
-    const target = page.locator(selector).first();
+    const target = page.locator(decision.selector).first();
     await target.waitFor({ state: "visible", timeout: 10000 });
     await target.scrollIntoViewIfNeeded();
+    if (decision.rewardKind) {
+      const firstOfKind = !rewardKinds.includes(decision.rewardKind);
+      rewardKinds.push(decision.rewardKind);
+      rewardUi.push(await target.evaluate(element => ({
+        text: element.textContent?.replace(/\s+/g, " ").trim() || "",
+        rewardKind: element.getAttribute("data-reward-kind") || "",
+        targetCardInstanceId: element.getAttribute("data-target-card-instance-id") || ""
+      })));
+      if (firstOfKind && ["upgrade_card", "remove_card"].includes(decision.rewardKind)) {
+        const screenshotName = decision.rewardKind === "upgrade_card"
+          ? "fate-chronicle-reward-upgrade.png"
+          : "fate-chronicle-reward-trim.png";
+        await safeAuditScreenshot(
+          page,
+          path.join(outDir, screenshotName),
+          "browser_fate_chronicle_real_backend_smoke",
+          { timeout: 9000 }
+        );
+      }
+    }
     await target.click({ force: true });
     state = await waitForRunChange(page, before);
     actions += 1;
   }
-  return { state, actions };
+  return { state, actions, rewardKinds, rewardUi };
 }
 
 async function readLayout(page) {
@@ -472,9 +515,44 @@ try {
     driven.state.projection?.phase === "completed" && driven.actions > 0 && driven.actions < 160,
     JSON.stringify({ actions: driven.actions, projection: driven.state.projection })
   );
+  add(
+    "fate chronicle real UI executes exact-target upgrade and one legal trim",
+    Number(driven.state.projection?.stats?.cardsUpgraded) >= 1
+      && Number(driven.state.projection?.stats?.cardsRemoved) === 1
+      && Number(driven.state.projection?.summary?.upgradedCards) >= 1
+      && Number(driven.state.projection?.summary?.cardsRemoved) === 1
+      && driven.rewardKinds.includes("upgrade_card")
+      && driven.rewardKinds.includes("remove_card")
+      && driven.rewardUi.some(entry => entry?.rewardKind === "upgrade_card"
+        && !!entry.targetCardInstanceId
+        && /精修卡牌|精修目标|精修这张牌/.test(entry.text))
+      && driven.rewardUi.some(entry => entry?.rewardKind === "remove_card"
+        && !!entry.targetCardInstanceId
+        && /裁去卡牌|裁牌目标|裁去这张牌/.test(entry.text)),
+    JSON.stringify({
+      stats: driven.state.projection?.stats,
+      summary: driven.state.projection?.summary,
+      rewardKinds: driven.rewardKinds,
+      rewardUi: driven.rewardUi
+    })
+  );
   if (driven.state.projection?.phase !== "completed") {
     throw new Error(`fate chronicle run did not complete: ${JSON.stringify(driven)}`);
   }
+  const completedRunCopy = await page.locator('[data-fate-chronicle-state="run"]').innerText();
+  add(
+    "completed fate chronicle UI preserves the deck-crafting payoff",
+    /终局牌组 9 张/.test(completedRunCopy)
+      && /精修 1 张/.test(completedRunCopy)
+      && /裁牌 1 张/.test(completedRunCopy),
+    completedRunCopy
+  );
+  await safeAuditScreenshot(
+    page,
+    path.join(outDir, "fate-chronicle-completed.png"),
+    "browser_fate_chronicle_real_backend_smoke",
+    { timeout: 9000 }
+  );
 
   await page.evaluate(() => {
     const panel = window.game?.fateChronicleView?.runPanel;
@@ -685,6 +763,9 @@ try {
       && mobileFailure.foundationButtonState === "locked"
       && mobileFailure.foundationButtonText === "需先达成 2/5"
       && mobileFailure.voucherStates.every(entry => entry.completed === false)
+      && mobileFailure.archiveWarningCount === 1
+      && mobileFailure.noticeText !== "三证归卷当前状态读取失败"
+      && (mobileFailure.text.match(/三证归卷当前状态读取失败/g) || []).length === 1
       && /三证归卷当前状态读取失败/.test(mobileFailure.archiveWarningText),
     JSON.stringify(mobileFailure)
   );

@@ -114,6 +114,8 @@ const COMMAND_LABELS = Object.freeze({
 
 const REWARD_KIND_LABELS = Object.freeze({
   card: "新卡牌",
+  upgrade_card: "精修卡牌",
+  remove_card: "裁去卡牌",
   heal: "恢复生命",
   max_hp: "提升根基"
 });
@@ -191,6 +193,43 @@ function isMode(value = "") {
 
 function formatMappedLabel(labels = {}, value = "", fallback = "") {
   return labels[normalizeText(value)] || fallback;
+}
+
+function formatCardLabel(cardId = "", fallback = "未知牌") {
+  return formatMappedLabel(CARD_LABELS, cardId, fallback);
+}
+
+function formatRewardKindLabel(kind = "") {
+  return formatMappedLabel(REWARD_KIND_LABELS, kind, "战后奖励");
+}
+
+function formatRewardClaimLabel(choice = {}) {
+  const kind = normalizeText(choice.kind);
+  if (kind === "card") return "纳入这张牌";
+  if (kind === "upgrade_card") return "精修这张牌";
+  if (kind === "remove_card") return "裁去这张牌";
+  if (kind === "heal") return "领取调息";
+  if (kind === "max_hp") return "领取固本";
+  return "领取此项";
+}
+
+function formatRewardTargetLabel(choice = {}) {
+  const kind = normalizeText(choice.kind);
+  const cardLabel = formatCardLabel(choice.cardId, "未知牌");
+  if (kind === "upgrade_card") return `精修目标：${cardLabel}`;
+  if (kind === "remove_card") return `裁牌目标：${cardLabel}`;
+  return "";
+}
+
+function formatRewardReceiptLabel(event = {}) {
+  const rewardKind = normalizeText(event.rewardKind);
+  const cardLabel = formatCardLabel(event.cardId, "未知牌");
+  if (rewardKind === "card") return event.cardId ? `纳入「${cardLabel}」` : REWARD_KIND_LABELS.card;
+  if (rewardKind === "upgrade_card") return event.cardId ? `精修「${cardLabel}」` : REWARD_KIND_LABELS.upgrade_card;
+  if (rewardKind === "remove_card") return event.cardId ? `裁去「${cardLabel}」` : REWARD_KIND_LABELS.remove_card;
+  if (rewardKind === "heal") return "调息";
+  if (rewardKind === "max_hp") return "固本";
+  return formatRewardKindLabel(rewardKind);
 }
 
 function describeRouteNode(node = {}) {
@@ -1356,6 +1395,9 @@ export class AuthoritativeRunPanel {
           ${integrity.fullReplayRequiredForSettlement ? renderChip("全程校验") : ""}
           ${renderChip(formatTrustTier(this.lastRunMeta.trustTier))}
           ${recovery.resumable ? renderChip("可跨设备恢复") : ""}
+          ${player.deckCrafting ? renderChip(`牌组 ${clampInt(player.deckSize)} 张`) : ""}
+          ${player.deckCrafting ? renderChip(`已精修 ${clampInt(player.deckCrafting.upgradedCount)} 张`) : ""}
+          ${player.deckCrafting ? renderChip(`已裁牌 ${clampInt(player.deckCrafting.cardsRemoved)} 张`) : ""}
           ${this.isRelayExpeditionMode() && relayLeg ? renderChip(`第 ${clampInt(relayLeg.legIndex, 1)} 棒`) : ""}
           ${this.isRelayExpeditionMode() && relayLeg && relayLeg.tacticId ? renderChip(`接力谱 ${formatMappedLabel(RELAY_TACTIC_LABELS, relayLeg.tacticId, "待定")}`) : ""}
         </div>
@@ -1491,12 +1533,22 @@ export class AuthoritativeRunPanel {
   renderHandCard(card = {}, energy = 0) {
     const playable = clampInt(card.cost, 0) <= clampInt(energy, 0);
     const focusKey = buildFocusKey("authoritative:card", card.instanceId);
+    const upgraded = !!card.upgraded;
     return `
-      <article class="season-ops-authoritative-hand-card ${playable ? "is-playable" : "is-locked"}" tabindex="-1" data-season-ops-focus-fallback="${escapeHtml(focusKey)}">
+      <article
+        class="season-ops-authoritative-hand-card ${playable ? "is-playable" : "is-locked"}"
+        tabindex="-1"
+        data-season-ops-focus-fallback="${escapeHtml(focusKey)}"
+        ${buildDataAttributes({
+          "data-card-instance-id": card.instanceId,
+          "data-card-upgraded": upgraded ? "true" : "false"
+        })}
+      >
         <div class="season-ops-authoritative-card-top">
           <strong>${escapeHtml(card.name || formatMappedLabel(CARD_LABELS, card.cardId, "未知牌"))}</strong>
           <span class="season-ops-authoritative-card-cost">${clampInt(card.cost)}</span>
         </div>
+        ${upgraded ? `<div class="season-ops-inline-note">已精修</div>` : ""}
         <p>${escapeHtml(card.description || "这张牌暂时没有更多描述。")}</p>
         <button
           type="button"
@@ -1535,21 +1587,40 @@ export class AuthoritativeRunPanel {
 
   renderRewardChoice(choice = {}) {
     const focusKey = buildFocusKey("authoritative:reward", choice.rewardId);
+    const targetLabel = formatRewardTargetLabel(choice);
     return `
-      <article class="season-ops-authoritative-choice-card" tabindex="-1" data-season-ops-focus-fallback="${escapeHtml(focusKey)}">
+      <article
+        class="season-ops-authoritative-choice-card"
+        tabindex="-1"
+        data-season-ops-focus-fallback="${escapeHtml(focusKey)}"
+        ${buildDataAttributes({
+          "data-reward-kind": normalizeText(choice.kind),
+          "data-target-card-instance-id": choice.targetCardInstanceId
+        })}
+      >
         <div class="season-ops-authoritative-choice-top">
           <strong>${escapeHtml(choice.name || choice.rewardId || "未知奖励")}</strong>
-          <span class="season-ops-meta-chip">${escapeHtml(formatMappedLabel(REWARD_KIND_LABELS, choice.kind, "战后奖励"))}</span>
+          <span class="season-ops-meta-chip">${escapeHtml(formatRewardKindLabel(choice.kind))}</span>
         </div>
         <p>${escapeHtml(choice.description || "这项奖励暂时没有更多描述。")}</p>
+        ${targetLabel ? `
+          <div
+            class="season-ops-inline-note"
+            ${buildDataAttributes({ "data-reward-target-card-instance-id": choice.targetCardInstanceId })}
+          >${escapeHtml(targetLabel)}</div>
+        ` : ""}
         <button
           type="button"
           class="season-ops-inline-btn is-claimable"
           data-season-ops-action="authoritative-choose-reward"
           data-season-ops-focus-key="${escapeHtml(focusKey)}"
-          ${buildDataAttributes({ "data-reward-id": choice.rewardId })}
+          ${buildDataAttributes({
+            "data-reward-id": choice.rewardId,
+            "data-reward-kind": normalizeText(choice.kind),
+            "data-target-card-instance-id": choice.targetCardInstanceId
+          })}
           ${this.isBusy() ? "disabled" : ""}
-        >${this.isBusy() ? "提交中..." : "领取此项"}</button>
+        >${this.isBusy() ? "提交中..." : formatRewardClaimLabel(choice)}</button>
       </article>
     `;
   }
@@ -1676,6 +1747,9 @@ export class AuthoritativeRunPanel {
   }
 
   renderSummaryGrid(summary = {}) {
+    const hasDeckCrafting = Object.hasOwn(summary, "deckSize")
+      && Object.hasOwn(summary, "upgradedCards")
+      && Object.hasOwn(summary, "cardsRemoved");
     return `
       <div class="season-ops-authoritative-stats-grid">
         ${this.renderStatTile("评分", `${clampInt(summary.score)} 分`, `评级 ${normalizeText(summary.grade, "未评级")}`)}
@@ -1683,6 +1757,13 @@ export class AuthoritativeRunPanel {
         ${this.renderStatTile("回合数", `${clampInt(summary.turns)}`, `出牌 ${clampInt(summary.cardsPlayed)} 张`)}
         ${this.renderStatTile("生命收支", `${clampInt(summary.remainingHp)}/${clampInt(summary.maxHp)} HP`, `受伤 ${clampInt(summary.damageTaken)} · 输出 ${clampInt(summary.damageDealt)}`)}
       </div>
+      ${hasDeckCrafting ? `
+        <div class="season-ops-authoritative-meta-row" data-deck-crafting-summary="true">
+          ${renderChip(`终局牌组 ${clampInt(summary.deckSize)} 张`)}
+          ${renderChip(`精修 ${clampInt(summary.upgradedCards)} 张`)}
+          ${renderChip(`裁牌 ${clampInt(summary.cardsRemoved)} 张`)}
+        </div>
+      ` : ""}
     `;
   }
 
@@ -1798,7 +1879,7 @@ export class AuthoritativeRunPanel {
     if (type === "encounter_started") return `遭遇已锁定：${formatMappedLabel(ENEMY_LABELS, event.enemyId, "未知敌手")}。`;
     if (type === "card_played") return `已打出「${formatMappedLabel(CARD_LABELS, event.cardId, "未知牌")}」，伤害 ${clampInt(event.damage)}，格挡 ${clampInt(event.block)}。`;
     if (type === "enemy_intent_resolved") return `敌方意图结算，承受 ${clampInt(event.damageTaken)} 伤害，敌方获得 ${clampInt(event.enemyBlock)} 格挡。`;
-    if (type === "reward_chosen") return `已领取：${formatMappedLabel(REWARD_KIND_LABELS, event.rewardKind, "战后奖励")}。`;
+    if (type === "reward_chosen") return `已领取：${formatRewardReceiptLabel(event)}。`;
     if (type === "encounter_won") return `已击破 ${formatMappedLabel(ENEMY_LABELS, event.enemyId, "未知敌手")}${event.boss ? "（首领）" : ""}。`;
     if (type === "run_completed") return `本次历练已通关，评分 ${clampInt(event.score)}，评级 ${normalizeText(event.grade)}。`;
     if (type === "run_defeated") return `本次历练已败退：${formatMappedLabel(TERMINAL_REASON_LABELS, event.reason, "战斗结束")}。`;
