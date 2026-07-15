@@ -1,0 +1,121 @@
+css/account-social.css
+  s_ca5652313828d6::t_217132b0fc98a8 24-29,155,191,288-304,320-402,503-510,628,630,681-690
+css/events.css
+  s_ca5652313828d6::t_ad7fa80d92549b 241,246-267,294
+css/frontend-upgrade.css
+  s_ca5652313828d6::t_90897265d2595c 15-231,446,463,1382-1390,3281,3283-3285,3289,3291-3293,3296-3297,3300-3306,3308-3310,3313-3318,3321-3325,3328-3330,3333-3341,3344-3345,3348-3349,3351,3354-3355,3358,3360-3685,4183,4185-4186,4189-4272,4309-4319,4781-4785,4835-4836,4838,4841-4843,4989-5029,5052-6131
+css/pvp.css
+  s_ca5652313828d6::t_77313ce77bf2a9 4091-4105,5609,5616,6143-6250,6369,6413-6435,6555-6688
+css/season-ops.css
+  s_ca5652313828d6::t_270bb3ec0219f4 131,135-139,596,1068-1107,1111,1134
+css/style.css
+  s_ca5652313828d6::t_f173140b652b90 5106-5107,9638,9735,12944-12955,15919-15961,20434
+index.html
+  s_ca5652313828d6::t_0e1f12cd3eee25 649,651,1441,1500-1506,1513,1522,1533,1549,1551,2156,2163,2197,2206,2421-2422
+js/core/battle.js
+  s_bae69f1b7fab46::t_482f493aca99ef 33,763,4798,9080,9392,9411-9416
+js/game.js
+  s_ca5652313828d6::t_0b040b349b8046 45-46,458,467,908-909,918-940,949-954,981-1045,1051-1126,1134-1151,2953,2956,4416,5780,7667-7751,7775-7779,7792,8774-8777,8779-8781,8783-8801,8820-8823,8834-8839,8841-8842,8847-8848,8874-8876,8898,8901,8903-8905,8908,8910-8916,8919-8920,9230,9397,9719,9721-9723
+js/scenes/pvp-scene.js
+  s_ca5652313828d6::t_1a4c3c65e2a605 7,91,316,326,373-383,464-465,512-517,1650-1655,3275,3284-3285,4974,4982,4987,4989-4990,5036,5042,5044,5050,5560-5577,5579-5586,5778-5779,6134,6875,6887,7736,7753,7809
+js/services/backend-client.js
+  s_ca5652313828d6::t_095f3a862c7138 9,359-373,466-468
+js/testing/browser-audit-fixtures.js
+  s_ca5652313828d6::t_b73ab8d5279dc4 1-250
+js/ui/battle-hud.js
+  s_bae69f1b7fab46::t_74a122b6121dd0 244,350-399,401
+js/ui/player-message.js
+  s_ca5652313828d6::t_a7ebd986739c5e 1-25
+js/views/AuthoritativeRunPanel.js
+  s_bae69f1b7fab46::t_70bf33bcd68a2a 5,1092,1322,1325
+js/views/CampfireView.js
+  s_ca5652313828d6::t_538bb4d3512250 46,106,123,258-260,263,275-280,307,423-425,438,451,454-459,484,506
+js/views/EventView.js
+  s_ca5652313828d6::t_291ff6ebd5b70c 162-165,181,331,344-347,364,413-416,431,596,607-610,646,757
+js/views/FateChronicleView.js
+  s_ca5652313828d6::t_d224e7f7f0b25c 7,729,736,855,967,971,1002,1006,1026,1030
+js/views/InventoryView.js
+  s_ca5652313828d6::t_06a3b2f6f2b4fe 275,279
+js/views/SeasonOpsView.js
+  s_ca5652313828d6::t_f4d7f5f32200c3 6,420,745-746,763-764,766,1075,1275,1277,1358,1360,1435
+js/views/ShopView.js
+  s_ca5652313828d6::t_1a68552ce1fc2d 40-43,45-47,49-67,182,185-186
+js/views/SocialView.js
+  s_ca5652313828d6::t_f74ccab54ddaea 2,4,60-77,90-91,132-133,155-158,161,171,177-180,188,204-227,231-233,239,515,525,559,563,569,571,578,698,724-727,729-746,764,778-781,893,912-916,931-932,935
+js/views/SystemView.js
+  s_ca5652313828d6::t_ae12eb732da56c 16,278,315,364,366-368,481,502,670,680,685,704,738-739,812,919,932-935,948
+tests/browser_automation_boot_audit.mjs
+  s_ca5652313828d6::t_f5a5246a017b84 616-621,640-645,663-1034,1043-1044,1073-1104,1116-1169,1211-1225,1229-1230,1236-1243,1247-1318,1332-1541,1555-1576,1593-1605,1660,1667
+tests/browser_challenge_audit.mjs
+  s_ca5652313828d6::t_2b0efffb8923b8 97-107,117-124,139-140
+tests/browser_feature_audit.mjs
+  s_ca5652313828d6::t_36eb917e876142 1917,1933,1942
+tests/browser_frontend_layout_audit.mjs
+  s_ca5652313828d6::t_f6aeb85f3a3f9b 33,3426,3683-3684,3756-4007,4571,4596,4616
+tests/browser_guide_modal_audit.mjs
+  s_ca5652313828d6::t_0362d8fbd0b018 125-138,148-155,192-205
+tests/browser_mobile_layout_audit.mjs
+  s_ca5652313828d6::t_af9e457e17e14d 49,146-149,252-289,325,329-339,370,390-391,393-402,414-415,715-716,809-819,916-919,953-956
+tests/browser_reward_meta_mobile_audit.mjs
+  s_ca5652313828d6::t_1cca139194c713 23-95,490,500-520
+tests/browser_ui_gallery_audit.mjs
+  s_ca5652313828d6::t_504702c69d1ed5 981-983,999,1009
+tests/run_node_checks.sh
+  s_ca5652313828d6::t_78866e238de429 20-21
+tests/sanity_account_social_client_checks.mjs
+  s_ca5652313828d6::t_cc682a1b3fde76 12,27-28,35,49-51,56-118
+tests/sanity_battle_hud_module_checks.cjs
+  s_bae69f1b7fab46::t_62a29fe884a4fd 112,168
+tests/sanity_browser_audit_fixture_checks.mjs
+  s_ca5652313828d6::t_a15ddd5f2b9d21 1-41
+tests/sanity_frontend_design_system_checks.cjs
+  s_ca5652313828d6::t_01090daf5f00b9 10,18-20,68-91
+tests/sanity_intro_progress_sync_checks.cjs
+  s_bae69f1b7fab46::t_1094d962d366a4 121-122
+tests/sanity_player_message_checks.mjs
+  s_6d70cfaeda9963::t_5d1dc60d9e3f9e 1-38
+tests/sanity_pvp_live_ui_contract_checks.cjs
+  s_ca5652313828d6::t_d316a32dd113a3 24-83
+tests/sanity_relay_expedition_ui_checks.mjs
+  s_ca5652313828d6::t_0f8d2008afdf97 28
+tests/sanity_release_gate_coverage_checks.cjs
+  s_ca5652313828d6::t_75a1f9bdd546b5 858-882,1367-1369
+tests/sanity_season_ops_ui_checks.cjs
+  s_ca5652313828d6::t_3720c3e3413b66 63
+tests/sanity_secondary_frontend_flow_checks.cjs
+  s_ca5652313828d6::t_7b7cf11f2f85de 11-12,274-396
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "74d46e3a4e7d6955f5945a7f967d6c6b42dbcb5f",
+  "prompts": {},
+  "sessions": {
+    "s_6d70cfaeda9963": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f656e-8899-73b0-839d-721b5daa745b",
+        "model": "unknown"
+      },
+      "human_author": "AI Agent <bot@example.com>"
+    },
+    "s_bae69f1b7fab46": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ed4f6-e7ac-73e0-a29e-119f3eddb407",
+        "model": "unknown"
+      },
+      "human_author": "AI Agent <bot@example.com>"
+    },
+    "s_ca5652313828d6": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f3fed-94d5-77b2-9af0-61333559ff38",
+        "model": "unknown"
+      },
+      "human_author": "AI Agent <bot@example.com>"
+    }
+  },
+  "attestation_metadata": {},
+  "remote_transcripts": {}
+}
