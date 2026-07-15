@@ -3,9 +3,12 @@ const express = require('express');
 const { authenticate } = require('../middleware/auth');
 const { verifyRequestIntegrity } = require('../utils/hmac');
 const {
+    claimWorldRiftDirective,
     claimWorldRiftReward,
     getCurrentWorldRift,
     getWorldRiftOpsOverview,
+    reconcileWorldRiftDirectives,
+    replayWorldRiftDirectiveContribution,
     startWorldRiftAttempt,
     submitWorldRiftContribution
 } = require('../world-rift/service');
@@ -24,18 +27,19 @@ function getSignedBusinessPayload(body) {
     return source;
 }
 
-function requireSignedPayload(req, res, payload, route) {
+function requireSignedPayload(req, res, payload) {
+    const signedRoute = `${String(req.method || '').toUpperCase()} ${req.baseUrl}${req.path}`;
     const integrity = verifyRequestIntegrity(JSON.stringify(payload), req.body && req.body.salt, req.body && req.body.signature, {
-        route,
+        route: signedRoute,
         userId: req.user && req.user.id,
         sessionToken: req.authToken,
         signatureMode: req.body && req.body.signatureMode
     });
-    if (!integrity.ok || integrity.skipped) {
+    if (!integrity.ok || integrity.skipped || integrity.mode !== 'session-v2') {
         res.status(integrity.ok ? 400 : integrity.status).json({
             success: false,
-            reason: integrity.ok ? 'missing-signature' : integrity.reason,
-            message: integrity.ok ? '缺少完整性签名' : integrity.message
+            reason: integrity.ok ? (integrity.skipped ? 'missing-signature' : 'route-bound-signature-required') : integrity.reason,
+            message: integrity.ok ? (integrity.skipped ? '缺少完整性签名' : '天穹裂隙操作需要绑定请求路径的会话签名') : integrity.message
         });
         return false;
     }
@@ -74,13 +78,13 @@ router.get('/current', authenticate, asyncHandler(async (req, res) => {
 
 router.post('/attempts', authenticate, asyncHandler(async (req, res) => {
     const payload = getSignedBusinessPayload(req.body);
-    if (!requireSignedPayload(req, res, payload, 'POST /api/world-rift/attempts')) return;
+    if (!requireSignedPayload(req, res, payload)) return;
     res.json(await startWorldRiftAttempt(req.user.id, payload));
 }));
 
 router.post('/contributions', authenticate, asyncHandler(async (req, res) => {
     const payload = getSignedBusinessPayload(req.body);
-    if (!requireSignedPayload(req, res, payload, 'POST /api/world-rift/contributions')) return;
+    if (!requireSignedPayload(req, res, payload)) return;
     res.json(await submitWorldRiftContribution(req.user.id, payload));
 }));
 
@@ -94,12 +98,34 @@ router.post('/rewards/:milestoneId/claim', authenticate, asyncHandler(async (req
             message: '里程碑与请求路径不一致'
         });
     }
-    if (!requireSignedPayload(req, res, payload, 'POST /api/world-rift/rewards/:milestoneId/claim')) return;
+    if (!requireSignedPayload(req, res, payload)) return;
     res.json(await claimWorldRiftReward(req.user.id, milestoneId, payload));
+}));
+
+router.post('/directives/:directiveId/claim', authenticate, asyncHandler(async (req, res) => {
+    const directiveId = String(req.params.directiveId || '').trim();
+    const payload = getSignedBusinessPayload(req.body);
+    if (!directiveId || String(payload.directiveId || '').trim() !== directiveId) {
+        return res.status(400).json({
+            success: false,
+            reason: 'directive_id_mismatch',
+            message: '战役指令与请求路径不一致'
+        });
+    }
+    if (!requireSignedPayload(req, res, payload)) return;
+    res.json(await claimWorldRiftDirective(req.user.id, directiveId, payload));
 }));
 
 router.get('/ops/overview', authenticate, requireOpsToken, asyncHandler(async (req, res) => {
     res.json(await getWorldRiftOpsOverview());
+}));
+
+router.post('/ops/directives/replay', authenticate, requireOpsToken, asyncHandler(async (req, res) => {
+    res.json(await replayWorldRiftDirectiveContribution(req.body));
+}));
+
+router.post('/ops/directives/reconcile', authenticate, requireOpsToken, asyncHandler(async (req, res) => {
+    res.json(await reconcileWorldRiftDirectives(req.body));
 }));
 
 router.use((error, req, res, next) => {

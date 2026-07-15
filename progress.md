@@ -1,5 +1,21 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-07-15: V11-S110 天穹裂隙战役指令 V1
+  - 本轮完成
+    - 世界裂隙周目录升级为冻结的 `world-rift-catalog-v2 / world-rift-rotation-v2`，每周从三套战役题面中确定个人、小队与全服各一条指令；个人换路、小队多路线协作和全服阶段推进分别形成可读目标，不新增独立大厅、货币或永久战力。
+    - 指令进度只从服务端保存的权威 contribution、完整重放回执和 `routeResolution` 提取；客户端不能自报路线、伤害、完成状态或奖励。所有指令奖励继续只发荣誉、称号、观星档案与外观展示，不影响 PVP 积分、主线强度、裂隙伤害或正式次数。
+    - SQLite schema 升级到 V12 `0012_world_rift_campaign_directives`，新增指令状态、投影、领奖与状态日志；结算投影、幂等领奖、经济流水、运维重放和 reconcile 均在写事务内闭环，跨进程同账号并发领奖只会成功一次。
+    - 当前活动中的 v1 轮换会保留原 rotation id 原地升级为 v2，并按已有权威 contribution 顺序一次性回填指令投影；已经结束的 v1 历史快照保持逐字节不变。回填 marker 与投影同事务提交，后续新 contribution 继续增量投影。
+    - 浏览器客户端增加 session-v2 动态路径签名、稳定 mutation id、过期响应抑制和指令增量生命周期；结算后的首次刷新保留本局增量，之后普通刷新和领奖会清除旧增量，避免把上一局进度继续显示成新变化。
+    - 观星台“天穹裂隙”和权威战局结算面板现可直接查看三类指令、当前进度、完成时间、可领奖状态与本局增量；桌面、375/390/412px 手机和 768/900/1024px 平板布局均沿用现有挑战工作区，不增加嵌套页面壳。
+  - 已验证
+    - 完整 Node 门禁：`PVP_LIVE_WS_FANOUT_MESSAGE_TIMEOUT_MS=60000 npm run test:node`，最终输出 `All node checks passed.`；覆盖 V12 迁移、目录冻结、active v1 升级、历史回填、投影幂等、claim/reconcile 跨进程竞态、动态路由签名、客户端增量清理及既有 PVP/存档/E2E 回归。
+    - 定向平台与 UI 回归：`node tests/sanity_world_rift_directive_platform_checks.cjs`、`node tests/sanity_world_rift_directive_client_ui_checks.mjs` 均通过；旧轮换字节稳定、同账号并发领奖唯一性和 claim/reconcile 重叠恢复均有独立断言。
+    - 本地生产构建 `npm run build:pages` 通过；本轮 fresh 浏览器发布门禁 `output/s110-full-release-final2` 汇总 34/34 模块、1430 findings、715 张截图，0 failed、0 console error，missing / duplicate / unknown module 均为空；其中权威局 S110 专项为 58/58 findings。
+    - `gpt-5.4` 挑战者发现并推动修复两条最终边界：活动 v1 轮换可能整周停留在旧目录，以及客户端领奖测试 stub 签名错误形成无效断言；修复后复核未发现剩余 P1/P2。
+  - 当前结论
+    - S110 已完成设计、开发、完整回归、真实浏览器验收和挑战者终审；本次交付边界为提交、fast-forward 合并 `main` 并推送，不执行 SSH、rsync、systemd、Nginx、生产数据库写入或线上部署，`https://080305.xyz/` 继续运行已验证的 S108。
+
 - 2026-07-14: V11-S109 权威路线风险收益与难度契约 V1
   - 本轮完成
     - 权威内容目录升级为新的不可变 `authoritative-trials-v5`，继续使用 `authoritative-run-v2 / schemaVersion 2`。v5 为每个路线节点绑定稳进、争衡、险锋三档路线合同；v1-v4 目录不补字段、不增加 RNG 调用，PVE、挑战、远征的 v4 原始动作数、终局分数与最终哈希继续逐项锁定。

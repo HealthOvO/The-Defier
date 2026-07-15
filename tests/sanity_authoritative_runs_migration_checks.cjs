@@ -432,8 +432,8 @@ async function main() {
     await waitForHealth(server, 'fresh-start');
     const version = await request(PORT, '/api/version');
     assert.strictEqual(version.status, 200, JSON.stringify(version.payload));
-    assert.strictEqual(version.payload?.schema?.version, 11);
-    assert.strictEqual(version.payload?.schema?.currentMigrationId, '0011_authoritative_fate_chronicle');
+    assert.strictEqual(version.payload?.schema?.version, 12);
+    assert.strictEqual(version.payload?.schema?.currentMigrationId, '0012_world_rift_campaign_directives');
     assert.deepStrictEqual(
       version.payload?.schema?.appliedMigrations?.map(entry => entry.id),
       [
@@ -447,7 +447,8 @@ async function main() {
         '0008_authoritative_world_rift',
         '0009_account_social_coop',
         '0010_relay_expedition',
-        '0011_authoritative_fate_chronicle'
+        '0011_authoritative_fate_chronicle',
+        '0012_world_rift_campaign_directives'
       ]
     );
 
@@ -622,7 +623,7 @@ async function main() {
     server = startServer({ port: PORT, dbPath: DB_PATH, gitSha: 'authoritative-runs-v7-to-v8' });
     await waitForHealth(server, 'v7-to-v8-restart');
     const v7ToV8Version = await request(PORT, '/api/version');
-    assert.strictEqual(v7ToV8Version.payload?.schema?.currentMigrationId, '0011_authoritative_fate_chronicle');
+    assert.strictEqual(v7ToV8Version.payload?.schema?.currentMigrationId, '0012_world_rift_campaign_directives');
     const preservedRuns = await dbGet(
       DB_PATH,
       `SELECT COUNT(*) AS count
@@ -764,7 +765,7 @@ async function main() {
     server = startServer({ port: PORT, dbPath: DB_PATH, gitSha: 'authoritative-runs-v2-reapply' });
     await waitForHealth(server, 'upgrade-reapply');
     const upgraded = await request(PORT, '/api/version');
-    assert.strictEqual(upgraded.payload?.schema?.currentMigrationId, '0011_authoritative_fate_chronicle');
+    assert.strictEqual(upgraded.payload?.schema?.currentMigrationId, '0012_world_rift_campaign_directives');
     assert.deepStrictEqual(
       upgraded.payload?.schema?.appliedMigrations?.map(entry => entry.id),
       [
@@ -778,7 +779,8 @@ async function main() {
         '0008_authoritative_world_rift',
         '0009_account_social_coop',
         '0010_relay_expedition',
-        '0011_authoritative_fate_chronicle'
+        '0011_authoritative_fate_chronicle',
+        '0012_world_rift_campaign_directives'
       ],
       'reapplying authoritative runs should still converge on the full schema chain'
     );

@@ -300,8 +300,8 @@ async function main() {
     await waitForHealth(server, 'fresh-start');
     const version = await request(PORT, '/api/version');
     assert.strictEqual(version.status, 200, JSON.stringify(version.payload));
-    assert.strictEqual(version.payload?.schema?.version, 11);
-    assert.strictEqual(version.payload?.schema?.currentMigrationId, '0011_authoritative_fate_chronicle');
+    assert.strictEqual(version.payload?.schema?.version, 12);
+    assert.strictEqual(version.payload?.schema?.currentMigrationId, '0012_world_rift_campaign_directives');
     await assertRelayTablesExist(DB_PATH);
   } finally {
     await stopServer(server);
@@ -405,7 +405,7 @@ async function main() {
     await waitForHealth(server, 'v9-to-v10-restart');
     const version = await request(PORT, '/api/version');
     assert.strictEqual(version.status, 200, JSON.stringify(version.payload));
-    assert.strictEqual(version.payload?.schema?.currentMigrationId, '0011_authoritative_fate_chronicle');
+    assert.strictEqual(version.payload?.schema?.currentMigrationId, '0012_world_rift_campaign_directives');
     await assertRelayTablesExist(DB_PATH);
 
     const preservedUser = await dbGet(

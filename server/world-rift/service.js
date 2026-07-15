@@ -15,6 +15,7 @@ const {
 const { ensureWorldRiftSchema } = require('./bootstrap');
 const {
     ATTEMPT_LIMIT,
+    CATALOG_VERSION,
     CLAIM_WINDOW_MS,
     CONTRIBUTION_FORMULA,
     LEADERBOARD_LIMIT,
@@ -34,12 +35,15 @@ const {
     linkContributionToActiveSquad
 } = require('../account-social/squad-service');
 
-const REPORT_VERSION = 'account-world-rift-v1';
-const OPS_REPORT_VERSION = 'world-rift-ops-v1';
+const REPORT_VERSION = 'account-world-rift-v2';
+const OPS_REPORT_VERSION = 'world-rift-ops-v2';
 const SAFE_ID = /^[A-Za-z0-9._:-]{8,128}$/;
 const SAFE_MILESTONE_ID = /^[A-Za-z0-9._:-]{2,48}$/;
+const SAFE_DIRECTIVE_ID = /^[A-Za-z0-9._:-]{2,64}$/;
 const INTERNAL_SEED = /^[a-f0-9]{64}$/;
 const ACTIVE_ATTEMPT_STATUSES = ['reserved', 'active', 'completed'];
+const DIRECTIVE_SCOPES = new Set(['personal', 'squad', 'global']);
+const ROUTE_CONTRACT_IDS = new Set(['steady', 'contested', 'perilous']);
 
 function openDb() {
     const connection = new sqlite3.Database(dbPath);
@@ -141,6 +145,11 @@ function safeId(value) {
 function safeMilestoneId(value) {
     const text = String(value || '').trim();
     return SAFE_MILESTONE_ID.test(text) ? text : '';
+}
+
+function safeDirectiveId(value) {
+    const text = String(value || '').trim();
+    return SAFE_DIRECTIVE_ID.test(text) ? text : '';
 }
 
 function parseJson(value, fallback = null) {
@@ -249,6 +258,43 @@ function normalizeClaimRequest(milestoneIdFromPath, rawRequest) {
     return { protocolVersion, rotationId, milestoneId, mutationId };
 }
 
+function normalizeDirectiveClaimRequest(directiveIdFromPath, rawRequest) {
+    const source = rawRequest && typeof rawRequest === 'object' && !Array.isArray(rawRequest) ? rawRequest : {};
+    assertAllowedKeys(source, ['protocolVersion', 'rotationId', 'directiveId', 'mutationId']);
+    const protocolVersion = String(source.protocolVersion || '').trim();
+    const rotationId = safeId(source.rotationId);
+    const directiveId = safeDirectiveId(source.directiveId);
+    const mutationId = safeId(source.mutationId);
+    const requestedDirectiveId = safeDirectiveId(directiveIdFromPath);
+    if (protocolVersion !== PROTOCOL_VERSION) {
+        throw makeError(409, 'unsupported_protocol_version', '天穹裂隙协议版本不受支持');
+    }
+    if (!rotationId) throw makeError(400, 'invalid_rotation_id', 'rotationId 非法');
+    if (!directiveId || directiveId !== requestedDirectiveId) {
+        throw makeError(400, 'directive_id_mismatch', '战役指令与请求路径不一致');
+    }
+    if (!mutationId) throw makeError(400, 'invalid_mutation_id', 'mutationId 非法');
+    return { protocolVersion, rotationId, directiveId, mutationId };
+}
+
+function normalizeDirectiveReplayRequest(rawRequest) {
+    const source = rawRequest && typeof rawRequest === 'object' && !Array.isArray(rawRequest) ? rawRequest : {};
+    assertAllowedKeys(source, ['rotationId', 'contributionId']);
+    const rotationId = safeId(source.rotationId);
+    const contributionId = safeId(source.contributionId);
+    if (!rotationId) throw makeError(400, 'invalid_rotation_id', 'rotationId 非法');
+    if (!contributionId) throw makeError(400, 'invalid_contribution_id', 'contributionId 非法');
+    return { rotationId, contributionId };
+}
+
+function normalizeDirectiveReconcileRequest(rawRequest) {
+    const source = rawRequest && typeof rawRequest === 'object' && !Array.isArray(rawRequest) ? rawRequest : {};
+    assertAllowedKeys(source, ['rotationId']);
+    const rotationId = safeId(source.rotationId);
+    if (!rotationId) throw makeError(400, 'invalid_rotation_id', 'rotationId 非法');
+    return { rotationId };
+}
+
 function compareContributionLike(left, right) {
     const contributionDelta = clampInt(right.contribution) - clampInt(left.contribution);
     if (contributionDelta !== 0) return contributionDelta;
@@ -323,6 +369,12 @@ function formatRotation(rotation, now = Date.now()) {
                 spendPolicy: String(entry.reward && entry.reward.spendPolicy || 'cosmetic_only')
             }
         })) : [],
+        directiveSet: {
+            directiveSetId: String(rotation.directiveSetId || ''),
+            title: String(rotation.directiveTitle || ''),
+            description: String(rotation.directiveDescription || ''),
+            directives: getRotationDirectives(rotation).map(formatDirectiveDefinition)
+        },
         fairness: rotation.fairness || {},
         contributionFormula: rotation.contributionFormula || CONTRIBUTION_FORMULA
     };
@@ -432,6 +484,10 @@ function parseRotationRow(row) {
         contributionFormula: snapshot.contributionFormula || parseJson(row.contribution_formula_json, CONTRIBUTION_FORMULA),
         phases: snapshot.phases || parseJson(row.phases_json, PHASES),
         milestones: snapshot.milestones || parseJson(row.milestones_json, []),
+        directiveSetId: String(snapshot.directiveSetId || ''),
+        directiveTitle: String(snapshot.directiveTitle || ''),
+        directiveDescription: String(snapshot.directiveDescription || ''),
+        directives: Array.isArray(snapshot.directives) ? snapshot.directives : [],
         fairness: snapshot.fairness || {},
         snapshotHash: String(row.snapshot_hash || snapshot.snapshotHash || '')
     };
@@ -465,8 +521,18 @@ async function loadRotationById(connection, rotationId) {
 }
 
 async function loadCurrentRotation(connection, now = Date.now()) {
-    const snapshot = buildRotationSnapshot(now);
-    return loadRotationById(connection, snapshot.rotationId);
+    const row = await dbGet(
+        connection,
+        `SELECT *
+         FROM world_rift_rotations
+         WHERE starts_at <= ? AND ends_at > ?
+         ORDER BY created_at DESC, rotation_id ASC
+         LIMIT 1`,
+        [now, now]
+    );
+    if (row) return parseRotationRow(row);
+    const calendarRotation = buildRotationSnapshot(now);
+    return loadRotationById(connection, calendarRotation.rotationId);
 }
 
 async function loadPreviousClaimRotation(connection, now = Date.now()) {
@@ -778,6 +844,420 @@ function getRotationPhases(rotation) {
 
 function getRotationMilestones(rotation) {
     return Array.isArray(rotation && rotation.milestones) ? rotation.milestones : [];
+}
+
+function getRotationDirectives(rotation) {
+    return Array.isArray(rotation && rotation.directives)
+        ? rotation.directives.filter(entry => entry && safeDirectiveId(entry.directiveId) && DIRECTIVE_SCOPES.has(String(entry.scope || '')))
+        : [];
+}
+
+function formatDirectiveDefinition(entry) {
+    return {
+        directiveId: String(entry && entry.directiveId || ''),
+        scope: String(entry && entry.scope || ''),
+        title: String(entry && entry.title || ''),
+        description: String(entry && entry.description || ''),
+        goalText: String(entry && entry.goalText || ''),
+        target: clampInt(entry && entry.targetValue, 1),
+        reward: {
+            rewardType: String(entry && entry.reward && entry.reward.rewardType || 'world_rift_campaign_directive'),
+            currency: String(entry && entry.reward && entry.reward.currency || REWARD_CURRENCY),
+            amount: clampInt(entry && entry.reward && entry.reward.amount),
+            rewardImpact: String(entry && entry.reward && entry.reward.rewardImpact || REWARD_IMPACT),
+            spendPolicy: String(entry && entry.reward && entry.reward.spendPolicy || 'cosmetic_only')
+        }
+    };
+}
+
+function directiveProgressUnit(entry) {
+    switch (String(entry && entry.metric || '')) {
+    case 'qualified_runs':
+    case 'completed_runs':
+        return '场';
+    case 'distinct_contracts':
+        return '类';
+    case 'contract_selections':
+        return '段';
+    case 'route_bonus':
+        return '路线分';
+    default:
+        return '';
+    }
+}
+
+function extractDirectiveFacts(summary) {
+    const source = summary && typeof summary === 'object' && !Array.isArray(summary) ? summary : {};
+    const routeResolution = source.routeResolution && typeof source.routeResolution === 'object'
+        ? source.routeResolution
+        : {};
+    const completed = String(source.result || '') === 'completed';
+    const selections = completed && Array.isArray(routeResolution.selections)
+        ? routeResolution.selections
+            .map(entry => String(entry && entry.contractId || ''))
+            .filter(contractId => ROUTE_CONTRACT_IDS.has(contractId))
+        : [];
+    return {
+        completed,
+        completedRuns: completed ? 1 : 0,
+        remainingHp: completed ? clampInt(source.remainingHp, 0, 999) : 0,
+        routeBonus: completed ? clampInt(routeResolution.totalBonus, 0, 10_000) : 0,
+        selections,
+        distinctContracts: [...new Set(selections)].sort()
+    };
+}
+
+function evaluateDirectiveDelta(directive, facts, currentProgressJson = {}) {
+    const criteria = directive && directive.criteria && typeof directive.criteria === 'object'
+        ? directive.criteria
+        : {};
+    const allowedContracts = Array.isArray(criteria.allowedContracts)
+        ? criteria.allowedContracts.map(String).filter(contractId => ROUTE_CONTRACT_IDS.has(contractId))
+        : [];
+    const selectedContracts = allowedContracts.length > 0
+        ? facts.selections.filter(contractId => allowedContracts.includes(contractId))
+        : facts.selections.slice();
+    const matchedDistinctContracts = [...new Set(selectedContracts)].sort();
+    const qualifies = (!criteria.requireCompleted || facts.completed)
+        && facts.remainingHp >= clampInt(criteria.minRemainingHp)
+        && facts.distinctContracts.length >= clampInt(criteria.minDistinctContracts)
+        && selectedContracts.length >= clampInt(criteria.minMatchedContracts);
+    const metric = String(directive && directive.metric || '');
+    const previousContracts = Array.isArray(currentProgressJson.contracts)
+        ? currentProgressJson.contracts.map(String).filter(contractId => ROUTE_CONTRACT_IDS.has(contractId))
+        : [];
+    const nextContracts = metric === 'distinct_contracts' && qualifies
+        ? [...new Set([...previousContracts, ...matchedDistinctContracts])].sort()
+        : previousContracts;
+    let deltaValue = 0;
+    if (qualifies) {
+        switch (metric) {
+        case 'qualified_runs':
+            deltaValue = 1;
+            break;
+        case 'completed_runs':
+            deltaValue = facts.completedRuns;
+            break;
+        case 'contract_selections':
+            deltaValue = selectedContracts.length;
+            break;
+        case 'route_bonus':
+            deltaValue = facts.routeBonus;
+            break;
+        case 'distinct_contracts':
+            deltaValue = Math.max(nextContracts.length - previousContracts.length, 0);
+            break;
+        default:
+            deltaValue = 0;
+        }
+    }
+    return {
+        deltaValue,
+        progressJson: metric === 'distinct_contracts' ? { contracts: nextContracts } : {},
+        deltaJson: {
+            completed: facts.completed,
+            remainingHp: facts.remainingHp,
+            routeBonus: facts.routeBonus,
+            selectedContracts,
+            addedContracts: metric === 'distinct_contracts'
+                ? nextContracts.filter(contractId => !previousContracts.includes(contractId))
+                : []
+        }
+    };
+}
+
+async function loadDirectiveState(connection, rotationId, directiveId, ownerType, ownerId) {
+    return dbGet(
+        connection,
+        `SELECT *
+         FROM world_rift_directive_states
+         WHERE rotation_id = ? AND directive_id = ? AND owner_type = ? AND owner_id = ?`,
+        [rotationId, directiveId, ownerType, ownerId]
+    );
+}
+
+async function loadDirectiveClaims(connection, userId, rotationId) {
+    const rows = await dbAll(
+        connection,
+        `SELECT *
+         FROM world_rift_directive_claims
+         WHERE user_id = ? AND rotation_id = ?`,
+        [userId, rotationId]
+    );
+    return new Map(rows.map(row => [String(row.directive_id || ''), row]));
+}
+
+async function loadUserSquadContribution(connection, userId, rotationId) {
+    return dbGet(
+        connection,
+        `SELECT squad_id, contribution_id, contribution, linked_at
+         FROM world_rift_squad_contributions
+         WHERE user_id = ? AND rotation_id = ? AND contribution > 0
+         ORDER BY linked_at DESC, contribution_id ASC
+         LIMIT 1`,
+        [userId, rotationId]
+    );
+}
+
+async function loadContributionSquadId(connection, contributionId) {
+    const row = await dbGet(
+        connection,
+        `SELECT squad_id
+         FROM world_rift_squad_contributions
+         WHERE contribution_id = ?`,
+        [contributionId]
+    );
+    return String(row && row.squad_id || '');
+}
+
+function makeDirectiveOwner(directive, userId, rotationId, squadId = '') {
+    const scope = String(directive && directive.scope || '');
+    if (scope === 'personal') return { ownerType: 'account', ownerId: String(userId || '') };
+    if (scope === 'global') return { ownerType: 'global', ownerId: String(rotationId || '') };
+    if (scope === 'squad' && safeId(squadId)) return { ownerType: 'squad', ownerId: squadId };
+    return null;
+}
+
+async function projectDirective(connection, {
+    rotation,
+    directive,
+    contributionRow,
+    owner,
+    facts,
+    now = Date.now()
+}) {
+    const rotationId = String(rotation.rotationId || '');
+    const directiveId = String(directive.directiveId || '');
+    const contributionId = String(contributionRow.contribution_id || '');
+    const existingProjection = await dbGet(
+        connection,
+        `SELECT *
+         FROM world_rift_directive_projections
+         WHERE rotation_id = ? AND directive_id = ? AND contribution_id = ? AND owner_type = ? AND owner_id = ?`,
+        [rotationId, directiveId, contributionId, owner.ownerType, owner.ownerId]
+    );
+    if (existingProjection) {
+        const target = clampInt(directive.targetValue, 1);
+        const progress = Math.min(clampInt(existingProjection.result_progress_value), target);
+        return {
+            directiveId,
+            scope: String(directive.scope || ''),
+            title: String(directive.title || ''),
+            delta: 0,
+            progress,
+            target,
+            progressText: `${progress} / ${target} ${directiveProgressUnit(directive)}`.trim(),
+            completedNow: false,
+            projected: false
+        };
+    }
+    const state = await loadDirectiveState(connection, rotationId, directiveId, owner.ownerType, owner.ownerId);
+    const previousProgress = clampInt(state && state.progress_value);
+    const previousStateVersion = clampInt(state && state.state_version);
+    const evaluated = evaluateDirectiveDelta(directive, facts, parseJson(state && state.progress_json, {}));
+    const nextProgress = previousProgress + clampInt(evaluated.deltaValue);
+    const target = clampInt(directive.targetValue, 1);
+    const completedNow = previousProgress < target && nextProgress >= target;
+    const completedAt = clampInt(state && state.completed_at) || (completedNow ? clampInt(contributionRow.submitted_at || now) : 0);
+    const projectionId = deterministicId('riftdirectiveprojection', [
+        rotationId,
+        directiveId,
+        contributionId,
+        owner.ownerType,
+        owner.ownerId
+    ]);
+    const nextStateVersion = previousStateVersion + 1;
+    await dbRun(
+        connection,
+        `INSERT INTO world_rift_directive_states
+            (rotation_id, directive_id, scope, owner_type, owner_id, progress_value, target_value,
+             progress_json, state_version, completed_at, last_projection_id, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(rotation_id, directive_id, owner_type, owner_id) DO UPDATE SET
+            scope = excluded.scope,
+            progress_value = excluded.progress_value,
+            target_value = excluded.target_value,
+            progress_json = excluded.progress_json,
+            state_version = excluded.state_version,
+            completed_at = excluded.completed_at,
+            last_projection_id = excluded.last_projection_id,
+            updated_at = excluded.updated_at`,
+        [
+            rotationId,
+            directiveId,
+            String(directive.scope || ''),
+            owner.ownerType,
+            owner.ownerId,
+            nextProgress,
+            target,
+            stableStringify(evaluated.progressJson),
+            nextStateVersion,
+            completedAt,
+            projectionId,
+            now
+        ]
+    );
+    await dbRun(
+        connection,
+        `INSERT INTO world_rift_directive_projections
+            (projection_id, rotation_id, directive_id, contribution_id, owner_type, owner_id, delta_value,
+             delta_json, result_progress_value, result_state_version, completed_now, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+            projectionId,
+            rotationId,
+            directiveId,
+            contributionId,
+            owner.ownerType,
+            owner.ownerId,
+            clampInt(evaluated.deltaValue),
+            stableStringify(evaluated.deltaJson),
+            nextProgress,
+            nextStateVersion,
+            completedNow ? 1 : 0,
+            now
+        ]
+    );
+    return {
+        directiveId,
+        scope: String(directive.scope || ''),
+        title: String(directive.title || ''),
+        delta: clampInt(evaluated.deltaValue),
+        progress: Math.min(nextProgress, target),
+        target,
+        progressText: `${Math.min(nextProgress, target)} / ${target} ${directiveProgressUnit(directive)}`.trim(),
+        completedNow,
+        projected: true
+    };
+}
+
+async function projectContributionDirectives(connection, rotation, contributionRow, squadId = '', now = Date.now()) {
+    const directives = getRotationDirectives(rotation);
+    if (directives.length === 0 || !contributionRow) return [];
+    const summary = parseJson(contributionRow.summary_json, {});
+    const facts = extractDirectiveFacts(summary);
+    const deltas = [];
+    for (const directive of directives) {
+        const owner = makeDirectiveOwner(
+            directive,
+            String(contributionRow.user_id || ''),
+            String(contributionRow.rotation_id || ''),
+            squadId
+        );
+        if (!owner) continue;
+        deltas.push(await projectDirective(connection, {
+            rotation,
+            directive,
+            contributionRow,
+            owner,
+            facts,
+            now
+        }));
+    }
+    return deltas;
+}
+
+async function ensureDirectiveCatalogBackfill(connection, rotation, now = Date.now()) {
+    const directives = getRotationDirectives(rotation);
+    if (directives.length === 0) return { contributions: 0, projections: 0, skipped: true };
+    const marker = await dbGet(
+        connection,
+        `SELECT event_id
+         FROM world_rift_ops_events
+         WHERE event_type = 'directive_catalog_backfilled'
+           AND rotation_id = ?
+           AND result_code = ?
+         LIMIT 1`,
+        [rotation.rotationId, CATALOG_VERSION]
+    );
+    if (marker) return { contributions: 0, projections: 0, skipped: true };
+    const contributions = await dbAll(
+        connection,
+        `SELECT *
+         FROM world_rift_contributions
+         WHERE rotation_id = ?
+         ORDER BY submitted_at ASC, contribution_id ASC`,
+        [rotation.rotationId]
+    );
+    let projectionCount = 0;
+    for (const contribution of contributions) {
+        const squadId = await loadContributionSquadId(connection, contribution.contribution_id);
+        const deltas = await projectContributionDirectives(
+            connection,
+            rotation,
+            contribution,
+            squadId,
+            clampInt(contribution.submitted_at || now)
+        );
+        projectionCount += deltas.filter(entry => entry.projected).length;
+    }
+    await recordOpsEvent(connection, 'directive_catalog_backfilled', {
+        rotationId: rotation.rotationId,
+        resultCode: CATALOG_VERSION,
+        value: projectionCount,
+        detail: {
+            catalogVersion: CATALOG_VERSION,
+            contributions: contributions.length,
+            projections: projectionCount
+        }
+    }, now);
+    return {
+        contributions: contributions.length,
+        projections: projectionCount,
+        skipped: false
+    };
+}
+
+async function buildDirectiveViews(connection, rotation, userId, now = Date.now(), squadIdHint = '') {
+    const directives = getRotationDirectives(rotation);
+    if (directives.length === 0) return [];
+    const [claimMap, personalEntry, squadContribution] = await Promise.all([
+        loadDirectiveClaims(connection, userId, rotation.rotationId),
+        loadEntry(connection, userId, rotation.rotationId),
+        loadUserSquadContribution(connection, userId, rotation.rotationId)
+    ]);
+    const squadId = String(squadContribution && squadContribution.squad_id || squadIdHint || '');
+    const hasPersonalContribution = clampInt(personalEntry && personalEntry.completed_attempts) > 0;
+    const claimWindowOpen = now < clampInt(rotation.claimEndsAt);
+    const views = [];
+    for (const directive of directives.slice().sort((left, right) => clampInt(left.sortOrder) - clampInt(right.sortOrder))) {
+        const owner = makeDirectiveOwner(directive, userId, rotation.rotationId, squadId);
+        const state = owner
+            ? await loadDirectiveState(connection, rotation.rotationId, directive.directiveId, owner.ownerType, owner.ownerId)
+            : null;
+        const claim = claimMap.get(String(directive.directiveId || '')) || null;
+        const target = clampInt(directive.targetValue, 1);
+        const rawProgress = clampInt(state && state.progress_value);
+        const progress = Math.min(rawProgress, target);
+        const completedAt = clampInt(state && state.completed_at);
+        const completed = completedAt > 0 || rawProgress >= target;
+        const eligible = String(directive.scope || '') === 'squad'
+            ? !!squadContribution
+            : hasPersonalContribution;
+        const claimedAt = clampInt(claim && claim.claimed_at);
+        const claimed = claimedAt > 0;
+        views.push({
+            ...formatDirectiveDefinition(directive),
+            progress,
+            progressText: `${progress} / ${target} ${directiveProgressUnit(directive)}`.trim(),
+            status: claimed ? 'claimed' : completed ? 'completed' : owner ? 'active' : 'unavailable',
+            ownerLabel: String(directive.scope || '') === 'personal'
+                ? '个人'
+                : String(directive.scope || '') === 'squad'
+                    ? '裂隙小队'
+                    : '全服',
+            eligibilityText: String(directive.scope || '') === 'squad'
+                ? (!owner ? '加入裂隙小队后可共同推进' : !squadContribution ? '本轮向该小队完成一次正式贡献后可领取' : '')
+                : String(directive.scope || '') === 'global' && !hasPersonalContribution
+                    ? '本轮完成一次正式贡献后可领取'
+                    : '',
+            completedAt,
+            claimable: claimWindowOpen && completed && eligible && !claimed,
+            claimed,
+            claimedAt
+        });
+    }
+    return views;
 }
 
 function getTotalHp(rotation) {
@@ -1142,11 +1622,17 @@ async function projectAttemptContribution(connection, attempt, now = Date.now(),
             );
             syncedAttempt = await loadAttemptById(connection, syncedAttempt.user_id, syncedAttempt.attempt_id);
         }
+        const existingRotation = await loadRotationById(connection, syncedAttempt.rotation_id);
+        const existingSquadId = await loadContributionSquadId(connection, existingContribution.contribution_id);
+        const directiveDeltas = existingRotation
+            ? await projectContributionDirectives(connection, existingRotation, existingContribution, existingSquadId, now)
+            : [];
         return {
             attempt: syncedAttempt,
             contribution: existingContribution,
             state: await loadStateByRotation(connection, syncedAttempt.rotation_id),
-            projected: false
+            projected: false,
+            directiveDeltas
         };
     }
     if (!syncedAttempt.run_id) {
@@ -1257,11 +1743,18 @@ async function projectAttemptContribution(connection, attempt, now = Date.now(),
             contributionRow.submitted_at
         ]
     );
-    await linkContributionToActiveSquad(connection, {
+    const squadLink = await linkContributionToActiveSquad(connection, {
         userId: syncedAttempt.user_id,
         contributionRow,
         now
     });
+    const directiveDeltas = await projectContributionDirectives(
+        connection,
+        rotation,
+        contributionRow,
+        squadLink && squadLink.linked ? String(squadLink.squadId || '') : '',
+        now
+    );
     await dbRun(
         connection,
         `UPDATE world_rift_states
@@ -1325,7 +1818,8 @@ async function projectAttemptContribution(connection, attempt, now = Date.now(),
         attempt: await loadAttemptById(connection, syncedAttempt.user_id, syncedAttempt.attempt_id),
         contribution: await loadContributionById(connection, contributionId),
         state: await loadStateByRotation(connection, syncedAttempt.rotation_id),
-        projected: true
+        projected: true,
+        directiveDeltas
     };
 }
 
@@ -1565,7 +2059,11 @@ function buildStartResponse(rotation, worldState, attempt, run, now, { idempoten
     };
 }
 
-function buildSubmitResponse(rotation, worldState, attempt, contribution, entry, now, { idempotent = false } = {}) {
+function buildSubmitResponse(rotation, worldState, attempt, contribution, entry, now, {
+    idempotent = false,
+    directives = [],
+    directiveDeltas = []
+} = {}) {
     return {
         success: true,
         reportVersion: `${REPORT_VERSION}-submit`,
@@ -1575,7 +2073,9 @@ function buildSubmitResponse(rotation, worldState, attempt, contribution, entry,
         world: buildWorldStateView(rotation, worldState, now),
         attempt: formatAttempt(attempt),
         contribution: formatContribution(contribution),
-        personal: formatPersonalEntry(entry)
+        personal: formatPersonalEntry(entry),
+        directives,
+        directiveDeltas
     };
 }
 
@@ -1600,6 +2100,32 @@ function buildClaimResponse(rotation, claim, balance, now, { alreadyClaimed = fa
     };
 }
 
+function buildDirectiveClaimResponse(rotation, claim, directive, directives, balance, now, {
+    alreadyClaimed = false,
+    idempotent = false
+} = {}) {
+    return {
+        success: true,
+        reportVersion: `${REPORT_VERSION}-directive-claim`,
+        protocolVersion: PROTOCOL_VERSION,
+        alreadyClaimed,
+        idempotent,
+        rotation: formatRotation(rotation, now),
+        directive,
+        directives,
+        claim: {
+            claimId: String(claim.claim_id || ''),
+            directiveId: String(claim.directive_id || ''),
+            scope: String(claim.scope || ''),
+            currency: String(claim.currency || REWARD_CURRENCY),
+            amount: clampInt(claim.amount),
+            rewardImpact: String(claim.reward_impact || REWARD_IMPACT),
+            claimedAt: clampInt(claim.claimed_at)
+        },
+        balance: formatBalance(balance)
+    };
+}
+
 async function getCurrentWorldRift(userId, nowInput) {
     const identity = String(userId || '').trim();
     if (!identity) throw makeError(401, 'missing_user', '登录账号缺失');
@@ -1610,6 +2136,7 @@ async function getCurrentWorldRift(userId, nowInput) {
         await reconcileUserState(connection, identity, transactionNow);
         const rotation = await loadCurrentRotation(connection, transactionNow);
         if (!rotation) throw makeError(503, 'world_rift_rotation_missing', '天穹裂隙轮换不存在');
+        await ensureDirectiveCatalogBackfill(connection, rotation, transactionNow);
         const worldState = await loadStateByRotation(connection, rotation.rotationId);
         const usedAttempts = await countAttemptsUsed(connection, identity, rotation.rotationId);
         const resumableAttempt = await loadResumableAttempt(connection, identity, transactionNow);
@@ -1623,17 +2150,26 @@ async function getCurrentWorldRift(userId, nowInput) {
             previousRotationId: previousRotation && previousRotation.rotationId || '',
             now: transactionNow
         });
+        const directives = await buildDirectiveViews(
+            connection,
+            rotation,
+            identity,
+            transactionNow,
+            String(riftSquad && riftSquad.current && riftSquad.current.squad && riftSquad.current.squad.squadId || '')
+        );
         let previousClaim = null;
         if (previousRotation && previousRotation.rotationId !== rotation.rotationId) {
             const previousEntry = await loadEntry(connection, identity, previousRotation.rotationId);
             if (previousEntry) {
                 const previousState = await loadStateByRotation(connection, previousRotation.rotationId);
                 const previousClaims = await loadMilestoneClaims(connection, identity, previousRotation.rotationId);
+                const previousDirectives = await buildDirectiveViews(connection, previousRotation, identity, transactionNow);
                 previousClaim = {
                     rotation: previousRotation,
                     worldState: previousState,
                     personalEntry: previousEntry,
-                    milestones: buildMilestoneView(previousRotation, buildWorldStateView(previousRotation, previousState, transactionNow), previousEntry, previousClaims)
+                    milestones: buildMilestoneView(previousRotation, buildWorldStateView(previousRotation, previousState, transactionNow), previousEntry, previousClaims),
+                    directives: previousDirectives
                 };
             }
         }
@@ -1645,6 +2181,7 @@ async function getCurrentWorldRift(userId, nowInput) {
             resumableAttempt,
             personalEntry,
             milestones: buildMilestoneView(rotation, buildWorldStateView(rotation, worldState, transactionNow), personalEntry, claimMap),
+            directives,
             leaderboard,
             riftSquad,
             previousClaim,
@@ -1669,13 +2206,15 @@ async function getCurrentWorldRift(userId, nowInput) {
         } : null,
         personal: formatPersonalEntry(state.personalEntry),
         milestones: state.milestones,
+        directives: state.directives,
         leaderboard: state.leaderboard,
         riftSquad: state.riftSquad,
         previousClaim: state.previousClaim ? {
             rotation: formatRotation(state.previousClaim.rotation, responseNow),
             world: buildWorldStateView(state.previousClaim.rotation, state.previousClaim.worldState, responseNow),
             personal: formatPersonalEntry(state.previousClaim.personalEntry),
-            milestones: state.previousClaim.milestones
+            milestones: state.previousClaim.milestones,
+            directives: state.previousClaim.directives
         } : null,
         notices: {
             fairness: [
@@ -1848,13 +2387,17 @@ async function submitWorldRiftContribution(userId, rawRequest, nowInput) {
         if (!attempt) throw makeError(404, 'world_rift_attempt_not_found', '天穹裂隙尝试不存在');
         const rotation = await loadRotationById(connection, attempt.rotation_id);
         if (!rotation) throw makeError(503, 'world_rift_rotation_missing', '天穹裂隙轮换不存在');
+        await ensureDirectiveCatalogBackfill(connection, rotation, transactionNow);
         const projection = await projectAttemptContribution(connection, attempt, transactionNow, 'submit');
         if (!projection.contribution) {
             throw makeError(409, 'authoritative_receipt_unavailable', '权威结算回执尚未生成，请先完成权威结算');
         }
         const entry = await loadEntry(connection, identity, rotation.rotationId);
+        const directives = await buildDirectiveViews(connection, rotation, identity, transactionNow);
         const response = buildSubmitResponse(rotation, projection.state, projection.attempt, projection.contribution, entry, transactionNow, {
-            idempotent: !projection.projected
+            idempotent: !projection.projected,
+            directives,
+            directiveDeltas: projection.directiveDeltas || []
         });
         await storeMutationReceipt(connection, {
             userId: identity,
@@ -2028,6 +2571,300 @@ async function claimWorldRiftReward(userId, milestoneId, rawRequest, nowInput) {
     });
 }
 
+async function claimWorldRiftDirective(userId, directiveId, rawRequest, nowInput) {
+    const identity = String(userId || '').trim();
+    if (!identity) throw makeError(401, 'missing_user', '登录账号缺失');
+    const nowProvider = createNowProvider(nowInput);
+    const request = normalizeDirectiveClaimRequest(directiveId, rawRequest);
+    const requestHash = hashCanonical(request);
+    return withWriteTransaction(async connection => {
+        const transactionNow = nowProvider();
+        await ensureWorldRiftSchema(connection, transactionNow);
+        const replay = await ensureMutationAvailable(connection, identity, request.mutationId, requestHash);
+        if (replay) return replay;
+        const rotation = await loadRotationById(connection, request.rotationId);
+        if (!rotation) throw makeError(404, 'world_rift_rotation_not_found', '天穹裂隙轮换不存在');
+        if (transactionNow >= clampInt(rotation.claimEndsAt)) {
+            throw makeError(409, 'world_rift_claim_window_closed', '该轮天穹裂隙领奖窗口已关闭');
+        }
+        const directive = getRotationDirectives(rotation)
+            .find(entry => String(entry.directiveId || '') === request.directiveId);
+        if (!directive) throw makeError(404, 'world_rift_directive_not_found', '天穹裂隙战役指令不存在');
+        await ensureDirectiveCatalogBackfill(connection, rotation, transactionNow);
+        await reconcileUserState(connection, identity, transactionNow);
+        const personalEntry = await loadEntry(connection, identity, rotation.rotationId);
+        if (clampInt(personalEntry && personalEntry.completed_attempts) <= 0) {
+            throw makeError(409, 'world_rift_directive_unmet', '当前轮换尚无有效裂隙贡献');
+        }
+        const squadContribution = await loadUserSquadContribution(connection, identity, rotation.rotationId);
+        const squadId = String(squadContribution && squadContribution.squad_id || '');
+        if (String(directive.scope || '') === 'squad' && !squadId) {
+            throw makeError(409, 'world_rift_directive_unmet', '本轮未留下可领取的小队贡献');
+        }
+        const owner = makeDirectiveOwner(directive, identity, rotation.rotationId, squadId);
+        if (!owner) throw makeError(409, 'world_rift_directive_unmet', '战役指令尚未建立可领取进度');
+        const state = await loadDirectiveState(
+            connection,
+            rotation.rotationId,
+            request.directiveId,
+            owner.ownerType,
+            owner.ownerId
+        );
+        if (!state || (clampInt(state.completed_at) <= 0 && clampInt(state.progress_value) < clampInt(directive.targetValue, 1))) {
+            throw makeError(409, 'world_rift_directive_unmet', '当前战役指令尚未完成');
+        }
+        const existingClaim = await dbGet(
+            connection,
+            `SELECT *
+             FROM world_rift_directive_claims
+             WHERE user_id = ? AND rotation_id = ? AND directive_id = ?`,
+            [identity, rotation.rotationId, request.directiveId]
+        );
+        if (!existingClaim) {
+            const claimId = deterministicId('riftdirectiveclaim', [identity, rotation.rotationId, request.directiveId]);
+            const ledgerEntryId = deterministicId('riftdirectiveledger', [identity, rotation.rotationId, request.directiveId, REWARD_CURRENCY]);
+            const amount = clampInt(directive.reward && directive.reward.amount);
+            await dbRun(
+                connection,
+                `INSERT INTO progression_economy_balances
+                    (user_id, currency, balance, lifetime_earned, lifetime_spent, updated_at)
+                 VALUES (?, ?, ?, ?, 0, ?)
+                 ON CONFLICT(user_id, currency) DO UPDATE SET
+                    balance = progression_economy_balances.balance + excluded.balance,
+                    lifetime_earned = progression_economy_balances.lifetime_earned + excluded.lifetime_earned,
+                    updated_at = excluded.updated_at`,
+                [identity, REWARD_CURRENCY, amount, amount, transactionNow]
+            );
+            const balance = await dbGet(
+                connection,
+                `SELECT *
+                 FROM progression_economy_balances
+                 WHERE user_id = ? AND currency = ?`,
+                [identity, REWARD_CURRENCY]
+            );
+            await dbRun(
+                connection,
+                `INSERT INTO progression_economy_ledger
+                    (entry_id, user_id, currency, delta, balance_after, reason, source_type, source_id, reward_impact, metadata_json, created_at)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                [
+                    ledgerEntryId,
+                    identity,
+                    REWARD_CURRENCY,
+                    amount,
+                    clampInt(balance && balance.balance),
+                    String(directive.title || '天穹裂隙战役指令'),
+                    'world_rift_directive',
+                    `world_rift_directive:${rotation.rotationId}:${request.directiveId}`,
+                    REWARD_IMPACT,
+                    stableStringify({
+                        rotationId: rotation.rotationId,
+                        directiveId: request.directiveId,
+                        scope: String(directive.scope || ''),
+                        progress: clampInt(state.progress_value),
+                        target: clampInt(directive.targetValue, 1)
+                    }),
+                    transactionNow
+                ]
+            );
+            await dbRun(
+                connection,
+                `INSERT INTO world_rift_directive_claims
+                    (claim_id, user_id, rotation_id, directive_id, scope, owner_type, owner_id, contribution_id,
+                     currency, amount, reward_impact, ledger_entry_id, claim_payload_json, claimed_at)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                [
+                    claimId,
+                    identity,
+                    rotation.rotationId,
+                    request.directiveId,
+                    String(directive.scope || ''),
+                    owner.ownerType,
+                    owner.ownerId,
+                    String(squadContribution && squadContribution.contribution_id || ''),
+                    REWARD_CURRENCY,
+                    amount,
+                    REWARD_IMPACT,
+                    ledgerEntryId,
+                    stableStringify({
+                        progress: clampInt(state.progress_value),
+                        target: clampInt(directive.targetValue, 1),
+                        stateVersion: clampInt(state.state_version)
+                    }),
+                    transactionNow
+                ]
+            );
+            await recordOpsEvent(connection, 'directive_reward_claimed', {
+                rotationId: rotation.rotationId,
+                accountRef: makeAccountRef(identity),
+                resultCode: 'ok',
+                value: amount,
+                detail: {
+                    directiveId: request.directiveId,
+                    scope: String(directive.scope || '')
+                }
+            }, transactionNow);
+        }
+        const claim = await dbGet(
+            connection,
+            `SELECT *
+             FROM world_rift_directive_claims
+             WHERE user_id = ? AND rotation_id = ? AND directive_id = ?`,
+            [identity, rotation.rotationId, request.directiveId]
+        );
+        const balance = await dbGet(
+            connection,
+            `SELECT *
+             FROM progression_economy_balances
+             WHERE user_id = ? AND currency = ?`,
+            [identity, REWARD_CURRENCY]
+        );
+        const directives = await buildDirectiveViews(connection, rotation, identity, transactionNow, squadId);
+        const directiveView = directives.find(entry => entry.directiveId === request.directiveId) || null;
+        const response = buildDirectiveClaimResponse(
+            rotation,
+            claim,
+            directiveView,
+            directives,
+            balance,
+            transactionNow,
+            { alreadyClaimed: !!existingClaim }
+        );
+        await storeMutationReceipt(connection, {
+            userId: identity,
+            mutationId: request.mutationId,
+            rotationId: rotation.rotationId,
+            requestType: 'directive_claim',
+            requestHash,
+            requestBody: request,
+            receipt: response,
+            claimId: String(claim.claim_id || ''),
+            now: transactionNow
+        });
+        if (!existingClaim && nowProvider() >= clampInt(rotation.claimEndsAt)) {
+            throw makeError(409, 'world_rift_claim_window_closed', '该轮天穹裂隙领奖窗口已关闭');
+        }
+        return response;
+    });
+}
+
+async function replayWorldRiftDirectiveContribution(rawRequest, nowInput) {
+    const request = normalizeDirectiveReplayRequest(rawRequest);
+    const nowProvider = createNowProvider(nowInput);
+    return withWriteTransaction(async connection => {
+        const transactionNow = nowProvider();
+        await ensureWorldRiftSchema(connection, transactionNow);
+        const rotation = await loadRotationById(connection, request.rotationId);
+        if (!rotation) throw makeError(404, 'world_rift_rotation_not_found', '天穹裂隙轮换不存在');
+        const contribution = await loadContributionById(connection, request.contributionId);
+        if (!contribution || String(contribution.rotation_id || '') !== rotation.rotationId) {
+            throw makeError(404, 'world_rift_contribution_not_found', '天穹裂隙贡献不存在');
+        }
+        const squadId = await loadContributionSquadId(connection, contribution.contribution_id);
+        const deltas = await projectContributionDirectives(
+            connection,
+            rotation,
+            contribution,
+            squadId,
+            clampInt(contribution.submitted_at || transactionNow)
+        );
+        await recordOpsEvent(connection, 'directive_contribution_replayed', {
+            rotationId: rotation.rotationId,
+            accountRef: makeAccountRef(contribution.user_id),
+            resultCode: 'ok',
+            value: deltas.filter(entry => entry.projected).length,
+            detail: {
+                contributionId: contribution.contribution_id,
+                projected: deltas.filter(entry => entry.projected).length,
+                alreadyPresent: deltas.filter(entry => !entry.projected).length
+            }
+        }, transactionNow);
+        return {
+            success: true,
+            reportVersion: `${OPS_REPORT_VERSION}-directive-replay`,
+            rotationId: rotation.rotationId,
+            contributionId: contribution.contribution_id,
+            deltas
+        };
+    });
+}
+
+async function reconcileWorldRiftDirectives(rawRequest, nowInput) {
+    const request = normalizeDirectiveReconcileRequest(rawRequest);
+    const nowProvider = createNowProvider(nowInput);
+    return withWriteTransaction(async connection => {
+        const transactionNow = nowProvider();
+        await ensureWorldRiftSchema(connection, transactionNow);
+        const rotation = await loadRotationById(connection, request.rotationId);
+        if (!rotation) throw makeError(404, 'world_rift_rotation_not_found', '天穹裂隙轮换不存在');
+        const contributions = await dbAll(
+            connection,
+            `SELECT *
+             FROM world_rift_contributions
+             WHERE rotation_id = ?
+             ORDER BY submitted_at ASC, contribution_id ASC`,
+            [rotation.rotationId]
+        );
+        await dbRun(connection, `DELETE FROM world_rift_directive_projections WHERE rotation_id = ?`, [rotation.rotationId]);
+        await dbRun(connection, `DELETE FROM world_rift_directive_states WHERE rotation_id = ?`, [rotation.rotationId]);
+        let projectionCount = 0;
+        let positiveDeltaCount = 0;
+        for (const contribution of contributions) {
+            const squadId = await loadContributionSquadId(connection, contribution.contribution_id);
+            const deltas = await projectContributionDirectives(
+                connection,
+                rotation,
+                contribution,
+                squadId,
+                clampInt(contribution.submitted_at || transactionNow)
+            );
+            projectionCount += deltas.length;
+            positiveDeltaCount += deltas.filter(entry => entry.delta > 0).length;
+        }
+        const stateRows = await dbAll(
+            connection,
+            `SELECT scope, COUNT(*) AS owners,
+                    SUM(CASE WHEN completed_at > 0 OR progress_value >= target_value THEN 1 ELSE 0 END) AS completed
+             FROM world_rift_directive_states
+             WHERE rotation_id = ?
+             GROUP BY scope`,
+            [rotation.rotationId]
+        );
+        const claimRow = await dbGet(
+            connection,
+            `SELECT COUNT(*) AS count
+             FROM world_rift_directive_claims
+             WHERE rotation_id = ?`,
+            [rotation.rotationId]
+        );
+        await recordOpsEvent(connection, 'directives_reconciled', {
+            rotationId: rotation.rotationId,
+            resultCode: 'ok',
+            value: projectionCount,
+            detail: {
+                contributions: contributions.length,
+                projections: projectionCount,
+                positiveDeltas: positiveDeltaCount,
+                preservedClaims: clampInt(claimRow && claimRow.count)
+            }
+        }, transactionNow);
+        return {
+            success: true,
+            reportVersion: `${OPS_REPORT_VERSION}-directive-reconcile`,
+            rotationId: rotation.rotationId,
+            contributions: contributions.length,
+            projections: projectionCount,
+            positiveDeltas: positiveDeltaCount,
+            preservedClaims: clampInt(claimRow && claimRow.count),
+            states: stateRows.map(row => ({
+                scope: String(row.scope || ''),
+                owners: clampInt(row.owners),
+                completed: clampInt(row.completed)
+            }))
+        };
+    });
+}
+
 async function getWorldRiftOpsOverview(now = Date.now()) {
     return withReadConnection(async connection => {
         await ensureWorldRiftSchema(connection, now);
@@ -2041,7 +2878,9 @@ async function getWorldRiftOpsOverview(now = Date.now()) {
                     (SELECT COUNT(*) FROM world_rift_attempts) AS attempts,
                     (SELECT COUNT(DISTINCT user_id) FROM world_rift_attempts) AS players,
                     (SELECT COUNT(*) FROM world_rift_contributions) AS contributions,
-                    (SELECT COUNT(*) FROM world_rift_reward_claims) AS claims`,
+                    (SELECT COUNT(*) FROM world_rift_reward_claims) AS claims,
+                    (SELECT COUNT(*) FROM world_rift_directive_projections) AS directive_projections,
+                    (SELECT COUNT(*) FROM world_rift_directive_claims) AS directive_claims`,
                 []
             ),
             dbAll(
@@ -2086,7 +2925,9 @@ async function getWorldRiftOpsOverview(now = Date.now()) {
                 attempts: clampInt(totals && totals.attempts),
                 players: clampInt(totals && totals.players),
                 contributions: clampInt(totals && totals.contributions),
-                claims: clampInt(totals && totals.claims)
+                claims: clampInt(totals && totals.claims),
+                directiveProjections: clampInt(totals && totals.directive_projections),
+                directiveClaims: clampInt(totals && totals.directive_claims)
             },
             attemptStates: stateCounts,
             counters: counterRows.map(row => ({
@@ -2102,9 +2943,12 @@ async function getWorldRiftOpsOverview(now = Date.now()) {
 }
 
 module.exports = {
+    claimWorldRiftDirective,
     claimWorldRiftReward,
     getCurrentWorldRift,
     getWorldRiftOpsOverview,
+    reconcileWorldRiftDirectives,
+    replayWorldRiftDirectiveContribution,
     startWorldRiftAttempt,
     submitWorldRiftContribution
 };

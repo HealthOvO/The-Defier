@@ -493,8 +493,8 @@ try {
   backend = startBackend();
   const health = await waitForHealth();
   add(
-    "real backend boots fate chronicle schema V11",
-    health?.schema?.version === 11 && health?.schema?.currentMigrationId === "0011_authoritative_fate_chronicle",
+    "real backend boots fate chronicle schema V12",
+    health?.schema?.version === 12 && health?.schema?.currentMigrationId === "0012_world_rift_campaign_directives",
     JSON.stringify(health?.schema || {})
   );
 

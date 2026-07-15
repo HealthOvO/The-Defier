@@ -545,8 +545,8 @@ async function main() {
 
     const version = await request('/api/version');
     assert.strictEqual(version.status, 200, JSON.stringify(version.payload));
-    assert.strictEqual(version.payload?.schema?.version, 11);
-    assert.strictEqual(version.payload?.schema?.currentMigrationId, '0011_authoritative_fate_chronicle');
+    assert.strictEqual(version.payload?.schema?.version, 12);
+    assert.strictEqual(version.payload?.schema?.currentMigrationId, '0012_world_rift_campaign_directives');
     assert.deepStrictEqual(
       version.payload?.schema?.appliedMigrations?.map(entry => entry.id),
       [
@@ -560,7 +560,8 @@ async function main() {
         '0008_authoritative_world_rift',
         '0009_account_social_coop',
         '0010_relay_expedition',
-        '0011_authoritative_fate_chronicle'
+        '0011_authoritative_fate_chronicle',
+        '0012_world_rift_campaign_directives'
       ]
     );
 

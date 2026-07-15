@@ -193,6 +193,9 @@ async function readChallengeHub(page) {
     launchCta: document.querySelector('[data-challenge-action="open-authoritative-ladder"]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
     worldRiftRankRowCount: document.querySelectorAll('[data-world-rift-rank]').length,
     worldRiftRewardCount: document.querySelectorAll('#challenge-hub-rewards [data-world-rift-milestone]').length,
+    worldRiftDirectiveCount: document.querySelectorAll('#challenge-hub-rewards [data-world-rift-directive]').length,
+    worldRiftDirectiveScopes: [...document.querySelectorAll('#challenge-hub-rewards [data-world-rift-directive-scope]')]
+      .map(node => node.getAttribute('data-world-rift-directive-scope') || ''),
     worldRiftStateVersion: Number(document.querySelector('[data-world-rift-summary]')?.dataset.worldRiftStateVersion || 0),
     worldRiftLaunchCta: document.querySelector('[data-challenge-action="open-authoritative-world-rift"]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
   }));
@@ -619,7 +622,7 @@ try {
   apiUrl = `http://127.0.0.1:${port}`;
   backend = startBackend();
   const health = await waitForHealth();
-  add('real backend boots schema V11', health?.schema?.version === 11 && health?.schema?.currentMigrationId === '0011_authoritative_fate_chronicle', JSON.stringify(health?.schema || {}));
+  add('real backend boots schema V12', health?.schema?.version === 12 && health?.schema?.currentMigrationId === '0012_world_rift_campaign_directives', JSON.stringify(health?.schema || {}));
 
   const launchArgs = [];
   if (new URL(appUrl).protocol === 'https:') {
@@ -1024,6 +1027,14 @@ try {
     && Number(riftCurrentBefore?.world?.appliedDamage) === 0
     && Array.isArray(riftCurrentBefore?.leaderboard?.entries)
     && riftCurrentBefore.leaderboard.entries.length === 0, JSON.stringify(riftCurrentBefore));
+  const riftCurrentBeforeJson = JSON.stringify(riftCurrentBefore);
+  add('world rift current exposes three redacted campaign directive scopes', Array.isArray(riftCurrentBefore?.directives)
+    && riftCurrentBefore.directives.length === 3
+    && ['personal', 'squad', 'global'].every(scope => riftCurrentBefore.directives.some(entry => entry.scope === scope))
+    && riftCurrentBefore.directives.find(entry => entry.scope === 'squad')?.status === 'unavailable'
+    && Array.isArray(riftCurrentBefore?.rotation?.directiveSet?.directives)
+    && riftCurrentBefore.rotation.directiveSet.directives.length === 3
+    && !/ownerId|requestHash|criteria|"metric"/.test(riftCurrentBeforeJson), riftCurrentBeforeJson);
 
   const riftHubBefore = await openChallengeHubRift(page, 5);
   add('world rift hub renders real shared state without simulated participants', riftHubBefore.currentScreen === 'challenge-screen'
@@ -1035,6 +1046,12 @@ try {
     && /无末刀奖励/.test(riftHubBefore.summaryText)
     && /固定牌组与统一种子/.test(riftHubBefore.summaryText)
     && riftHubBefore.worldRiftRewardCount === riftCurrentBefore.milestones.length
+    && riftHubBefore.worldRiftDirectiveCount === 3
+    && ['personal', 'squad', 'global'].every(scope => riftHubBefore.worldRiftDirectiveScopes.includes(scope))
+    && /本周战役指令/.test(riftHubBefore.summaryText)
+    && /个人指令/.test(riftHubBefore.rewardsText)
+    && /小队指令/.test(riftHubBefore.rewardsText)
+    && /全服指令/.test(riftHubBefore.rewardsText)
     && riftHubBefore.worldRiftRankRowCount === 0
     && /进入权威共斗/.test(riftHubBefore.launchText), JSON.stringify(riftHubBefore));
   await safeAuditScreenshot(page, path.join(outDir, 'world-rift-hub-before.png'), 'browser_authoritative_runs_real_backend_smoke', { timeout: 9000 });
@@ -1176,6 +1193,13 @@ try {
       contribution: panel.worldRiftState?.contribution,
       world: panel.worldRiftState?.world || panel.worldRiftState?.current?.world,
     }));
+  const directiveDeltas = Array.isArray(panel.worldRiftState?.directiveDeltas) ? panel.worldRiftState.directiveDeltas : [];
+  const settledPanelText = await page.locator('.season-ops-authoritative-panel').innerText();
+  add('settlement projects readable directive deltas from the authoritative receipt', directiveDeltas.length >= 2
+    && directiveDeltas.some(entry => entry.scope === 'personal')
+    && directiveDeltas.some(entry => entry.scope === 'global' && Number(entry.delta) > 0)
+    && /战役指令/.test(settledPanelText)
+    && !/ownerId|requestHash|criteria|contractId/.test(settledPanelText), JSON.stringify({ directiveDeltas, settledPanelText }));
   await safeAuditScreenshot(page, path.join(outDir, 'world-rift-settled-desktop.png'), 'browser_authoritative_runs_real_backend_smoke', { timeout: 9000 });
 
   const riftCurrentAfter = await page.evaluate(async () => {
@@ -1194,10 +1218,16 @@ try {
     && Number(riftCurrentAfter?.personal?.completedAttempts) === 1
     && Array.isArray(riftCurrentAfter?.leaderboard?.entries)
     && riftCurrentAfter.leaderboard.entries.length === 1
+    && Array.isArray(riftCurrentAfter?.directives)
+    && riftCurrentAfter.directives.length === 3
+    && riftCurrentAfter.directives.some(entry => entry.scope === 'global' && Number(entry.progress) > 0)
+    && riftHubAfter.worldRiftDirectiveCount === 3
     && riftHubAfter.worldRiftRankRowCount === 1
     && riftHubAfter.rankingText.includes(username)
     && /4\/5/.test(riftHubAfter.summaryText), JSON.stringify({ riftCurrentAfter, riftHubAfter }));
   await safeAuditScreenshot(page, path.join(outDir, 'world-rift-hub-after.png'), 'browser_authoritative_runs_real_backend_smoke', { timeout: 9000 });
+  await page.locator('[data-world-rift-directive-scope="personal"]').scrollIntoViewIfNeeded();
+  await safeAuditScreenshot(page, path.join(outDir, 'world-rift-directives-after.png'), 'browser_authoritative_runs_real_backend_smoke', { fullPage: false, timeout: 9000 });
 
   const persistedRift = await dbGet(
     `SELECT ar.status AS run_status,
@@ -1215,7 +1245,9 @@ try {
             s.total_contribution AS world_total_contribution,
             s.state_version AS world_state_version,
             (SELECT COUNT(*) FROM progression_authoritative_run_receipts WHERE run_id = ?) AS receipt_count,
-            (SELECT COUNT(*) FROM world_rift_mutations WHERE user_id = a.user_id AND request_type = 'submit') AS submit_mutation_count
+            (SELECT COUNT(*) FROM world_rift_mutations WHERE user_id = a.user_id AND request_type = 'submit') AS submit_mutation_count,
+            (SELECT COUNT(*) FROM world_rift_directive_projections WHERE contribution_id = c.contribution_id) AS directive_projection_count,
+            (SELECT COUNT(*) FROM world_rift_directive_states WHERE rotation_id = a.rotation_id) AS directive_state_count
      FROM progression_authoritative_runs ar
      JOIN world_rift_attempts a ON a.run_id = ar.run_id
      JOIN world_rift_contributions c ON c.run_id = ar.run_id
@@ -1238,7 +1270,9 @@ try {
     && Number(persistedRift?.ranked_contribution) === Number(persistedRift?.contribution)
     && Number(persistedRift?.completed_attempts) === 1
     && Number(persistedRift?.receipt_count) === 1
-    && Number(persistedRift?.submit_mutation_count) === 1, JSON.stringify(persistedRift));
+    && Number(persistedRift?.submit_mutation_count) === 1
+    && Number(persistedRift?.directive_projection_count) === 2
+    && Number(persistedRift?.directive_state_count) === 2, JSON.stringify(persistedRift));
 
   await openAuthoritativeTab(page);
   const pveResult = await completeAdditionalMode(page, 'pve', { routePolicy: 'risky' });

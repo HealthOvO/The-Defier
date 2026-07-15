@@ -2,6 +2,7 @@ import { BackendClient } from "./backend-client.js";
 
 const SAFE_ID = /^[A-Za-z0-9._:-]{8,128}$/;
 const SAFE_MILESTONE_ID = /^[A-Za-z0-9._:-]{2,48}$/;
+const SAFE_DIRECTIVE_ID = /^[A-Za-z0-9._:-]{2,64}$/;
 const DEFAULT_PROTOCOL_VERSION = 'authoritative-world-rift-v1';
 const DEFAULT_STATE = Object.freeze({
   current: null,
@@ -9,6 +10,8 @@ const DEFAULT_STATE = Object.freeze({
   leaderboard: null,
   attempt: null,
   contribution: null,
+  directives: null,
+  directiveDeltas: null,
   claim: null,
   previousClaim: null,
   pending: null,
@@ -40,6 +43,11 @@ function normalizeSafeId(value) {
 function normalizeMilestoneId(value) {
   const text = String(value || '').trim();
   return SAFE_MILESTONE_ID.test(text) ? text : '';
+}
+
+function normalizeDirectiveId(value) {
+  const text = String(value || '').trim();
+  return SAFE_DIRECTIVE_ID.test(text) ? text : '';
 }
 
 function normalizeFailure(result = {}, fallbackMessage = '世界裂隙请求失败') {
@@ -252,6 +260,24 @@ function extractPreviousClaim(result) {
   ]);
 }
 
+function extractDirectives(result) {
+  return findCandidateValue(result, [
+    ['directives'],
+    ['current', 'directives'],
+    ['snapshot', 'directives'],
+    ['state', 'directives']
+  ]);
+}
+
+function extractDirectiveDeltas(result) {
+  return findCandidateValue(result, [
+    ['directiveDeltas'],
+    ['contribution', 'directiveDeltas'],
+    ['submission', 'directiveDeltas'],
+    ['result', 'directiveDeltas']
+  ]);
+}
+
 function extractWorld(result) {
   return findCandidateValue(result, [
     ['world'],
@@ -324,6 +350,12 @@ function normalizeWorldValue(value, snapshot = null) {
     return null;
   }
   return cloneData(snapshot);
+}
+
+function normalizeDirectiveList(value) {
+  if (value === null) return null;
+  if (!Array.isArray(value)) return undefined;
+  return cloneData(value);
 }
 
 function getRotationIdFromState(state) {
@@ -520,7 +552,7 @@ export function createWorldRiftService({
     };
   }
 
-  function buildSuccessPatch(kind, result) {
+  function buildSuccessPatch(kind, result, { preserveDirectiveDeltas = false } = {}) {
     const patch = {
       pending: null,
       lastError: null
@@ -555,6 +587,20 @@ export function createWorldRiftService({
         patch.contribution = contribution.value;
       }
     }
+    const directives = extractDirectives(result);
+    if (directives.found) {
+      const normalizedDirectives = normalizeDirectiveList(directives.value);
+      if (normalizedDirectives !== undefined) patch.directives = normalizedDirectives;
+    } else if (snapshot && Object.prototype.hasOwnProperty.call(snapshot, 'directives')) {
+      const normalizedDirectives = normalizeDirectiveList(snapshot.directives);
+      if (normalizedDirectives !== undefined) patch.directives = normalizedDirectives;
+    }
+    const directiveDeltas = extractDirectiveDeltas(result);
+    if (!preserveDirectiveDeltas) patch.directiveDeltas = [];
+    if (kind === 'submit' && directiveDeltas.found) {
+      const normalizedDeltas = normalizeDirectiveList(directiveDeltas.value);
+      if (normalizedDeltas !== undefined) patch.directiveDeltas = normalizedDeltas;
+    }
     const claim = extractClaimRecord(result);
     if (claim.found) {
       patch.claim = claim.value;
@@ -569,6 +615,7 @@ export function createWorldRiftService({
   async function performRequest(kind, requestFactory, {
     expectedUserId = '',
     pending = {},
+    preserveDirectiveDeltas = false,
     fallbackFailureMessage = '世界裂隙请求失败'
   } = {}) {
     const boundUserId = getBoundUserId(expectedUserId);
@@ -633,12 +680,13 @@ export function createWorldRiftService({
     if (kind === 'start') cachedStartRetry = null;
     if (kind === 'submit') cachedSubmitRetry = null;
     if (kind === 'claim') cachedClaimRetry = null;
-    publish(buildSuccessPatch(kind, result));
+    publish(buildSuccessPatch(kind, result, { preserveDirectiveDeltas }));
     return result;
   }
 
   async function current({
-    expectedUserId = ''
+    expectedUserId = '',
+    preserveDirectiveDeltas = false
   } = {}) {
     if (!client || typeof client.getWorldRiftCurrent !== 'function') {
       const failure = createMissingMethodFailure('getWorldRiftCurrent', '世界裂隙当前状态读取未就绪');
@@ -650,6 +698,7 @@ export function createWorldRiftService({
       boundUserId => client.getWorldRiftCurrent({ expectedUserId: boundUserId }),
       {
         expectedUserId,
+        preserveDirectiveDeltas,
         fallbackFailureMessage: '世界裂隙当前状态读取失败'
       }
     );
@@ -789,6 +838,7 @@ export function createWorldRiftService({
     const safeProtocolVersion = normalizeSafeId(protocolVersion) || DEFAULT_PROTOCOL_VERSION;
     const resolvedMutationId = resolveMutationRetry('claim', {
       requestedMutationId: mutationId,
+      claimKind: 'milestone',
       protocolVersion: safeProtocolVersion,
       rotationId: safeRotationId,
       milestoneId: safeMilestoneId,
@@ -814,6 +864,67 @@ export function createWorldRiftService({
     );
   }
 
+  async function claimDirective({
+    rotationId = '',
+    directiveId = '',
+    mutationId = '',
+    protocolVersion = DEFAULT_PROTOCOL_VERSION,
+    expectedUserId = ''
+  } = {}) {
+    if (!client || typeof client.claimWorldRiftDirective !== 'function') {
+      const failure = createMissingMethodFailure('claimWorldRiftDirective', '世界裂隙指令领取未就绪');
+      publish({ lastError: failure });
+      return failure;
+    }
+    const safeRotationId = normalizeSafeId(rotationId) || getRotationIdFromState(state);
+    const safeDirectiveId = normalizeDirectiveId(directiveId);
+    if (!safeRotationId) {
+      const failure = {
+        success: false,
+        reason: 'world_rift_missing_rotation',
+        message: '世界裂隙 rotationId 缺失'
+      };
+      publish({ lastError: failure });
+      return failure;
+    }
+    if (!safeDirectiveId) {
+      const failure = {
+        success: false,
+        reason: 'world_rift_missing_directive',
+        message: '世界裂隙 directiveId 缺失'
+      };
+      publish({ lastError: failure });
+      return failure;
+    }
+    const safeProtocolVersion = normalizeSafeId(protocolVersion) || DEFAULT_PROTOCOL_VERSION;
+    const resolvedMutationId = resolveMutationRetry('claim', {
+      requestedMutationId: mutationId,
+      claimKind: 'directive',
+      protocolVersion: safeProtocolVersion,
+      rotationId: safeRotationId,
+      directiveId: safeDirectiveId,
+      boundUserId: getBoundUserId(expectedUserId)
+    });
+    return await performRequest(
+      'claim',
+      requestUserId => client.claimWorldRiftDirective(safeDirectiveId, {
+        protocolVersion: safeProtocolVersion,
+        rotationId: safeRotationId,
+        directiveId: safeDirectiveId,
+        mutationId: resolvedMutationId
+      }, { expectedUserId: requestUserId }),
+      {
+        expectedUserId,
+        pending: {
+          rotationId: safeRotationId,
+          directiveId: safeDirectiveId,
+          mutationId: resolvedMutationId
+        },
+        fallbackFailureMessage: '世界裂隙指令领取失败'
+      }
+    );
+  }
+
   return {
     getState,
     subscribe,
@@ -821,7 +932,8 @@ export function createWorldRiftService({
     current,
     start,
     submit,
-    claim
+    claim,
+    claimDirective
   };
 }
 

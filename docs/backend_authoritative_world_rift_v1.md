@@ -116,6 +116,20 @@ V1 有三个连续阶段：
 - 所有里程碑可在该轮 `claimEndsAt=endsAt+7天` 前领取；下一轮 current 会继续暴露上一轮待领状态。
 - claim、钱包、账本、领奖事实、mutation 回执和运营事件在同一事务提交。
 
+### 战役指令目录 V2
+
+`world-rift-catalog-v2 / world-rift-rotation-v2` 在不改变 V1 协议、次数、榜单和里程碑的前提下，为每周轮换固化三条可选战役指令：
+
+- `personal`：只累计本账号的服务器回执；
+- `squad`：累计贡献提交时已锁定的裂隙小队，退队或转队不改写旧贡献；
+- `global`：累计该轮全部有效贡献，但只有本轮完成过正式贡献的账号可领奖。
+
+轮换从三套固定题面中选取一套：三类路线覆盖、增压路线推进、保有余力的稳定通关。所有进度仅读取服务器重放回执的 `summary.result`、`summary.remainingHp` 和 `summary.routeResolution`；客户端不得上报路线次数、路线分或完成状态。
+
+指令奖励继续使用 `renown`，且 `rewardImpact=cosmetic_only`。它们不影响基础裂隙贡献、榜单、首领生命或原有里程碑，因此不参与指令不会损失基础收益。
+
+已存在的 V1 当周快照不会在部署时补写 V2 字段。bootstrap 会按周时间窗口识别旧快照并继续服务，直到下一个 UTC 周轮换才创建 V2 快照，避免轮换中途规则漂移。
+
 ## 公平与反作弊合同
 
 正式结果必须同时满足：
@@ -191,6 +205,14 @@ phase_1 -> phase_2 -> phase_3 -> cleared/echo
 
 保存 start/submit/claim 请求哈希和脱敏回执。相同 mutation 同业务体幂等返回，改参返回 `409 mutation_reused`。
 
+### `world_rift_directive_states/projections/claims`
+
+- `states` 保存轮换、指令、owner 下的可重建进度和完成时间；
+- `projections` 是按 contribution/directive/owner 唯一的投影 journal，包括 0 增量评估，用于防重和重放；
+- `claims` 是按 user/rotation/directive 唯一的领奖事实，与确定性 ledger entry 绑定。
+
+三张表由平台迁移 `0012_world_rift_campaign_directives` 纳入 schema V12。投影与原贡献在同一 `BEGIN IMMEDIATE` 事务中提交，多进程重试不会重复增加进度。
+
 ### `world_rift_ops_events/counters`
 
 只保存脱敏 `accountRef`、事件、结果码、有限数值和有限详情；不记录 JWT、HMAC、原始种子、动作 payload 或完整战局状态。
@@ -226,9 +248,21 @@ phase_1 -> phase_2 -> phase_3 -> cleared/echo
 
 业务体绑定 `protocolVersion/rotationId/milestoneId/mutationId`。
 
+### `POST /api/world-rift/directives/:directiveId/claim`
+
+业务体绑定 `protocolVersion/rotationId/directiveId/mutationId`。个人指令要求本人有效贡献，小队指令要求本人向该小队留下正贡献，全服指令要求本人在该轮至少完成一次正式贡献。
+
+所有 world-rift 玩家写接口使用 `session-v2` 路径绑定签名，签名路由必须是实际 `METHOD + pathname`；动态指令或里程碑 ID 不得用占位路径代替。
+
 ### `GET /api/world-rift/ops/overview`
 
 要求 JWT actor 与 `x-defier-ops-token`。返回轮换、世界状态、attempt 终态、玩家、贡献、领奖和错误聚合，不返回账号 ID 或秘密字段。
+
+### `POST /api/world-rift/ops/directives/replay|reconcile`
+
+- `replay` 按 contribution ID 补写缺失的指令投影，已存在的唯一投影只返回幂等结果；
+- `reconcile` 删除指定轮换的可重建 state/projection，按 `submitted_at, contribution_id` 顺序重放全部贡献；
+- 已发放 claim 和 economy ledger 是事实源，重建时保留，不撤销也不重复发奖。
 
 ## 客户端体验
 
@@ -274,4 +308,4 @@ phase_1 -> phase_2 -> phase_3 -> cleared/echo
 - 不允许客户端自定义牌组或客户端分数进入正式贡献；
 - 不按榜单名次发战力奖励；
 - 不伪造全服参与人数或 NPC 贡献；
-- 不部署线上，不修改生产数据库，不合并 `main`。
+- 本地验收不会自动部署线上或修改生产数据库。

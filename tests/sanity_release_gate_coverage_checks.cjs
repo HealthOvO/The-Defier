@@ -182,8 +182,10 @@ const worldRiftService = read('server/world-rift/service.js');
 const worldRiftRoutes = read('server/routes/world-rift.js');
 const worldRiftClient = read('js/services/world-rift-service.js');
 const worldRiftClientChecks = read('tests/sanity_world_rift_client_checks.mjs');
+const worldRiftDirectiveClientUiChecks = read('tests/sanity_world_rift_directive_client_ui_checks.mjs');
 const worldRiftUiChecks = read('tests/sanity_world_rift_ui_checks.mjs');
 const worldRiftPlatformChecks = read('tests/sanity_world_rift_platform_checks.cjs');
+const worldRiftDirectivePlatformChecks = read('tests/sanity_world_rift_directive_platform_checks.cjs');
 const worldRiftDocumentation = read('docs/backend_authoritative_world_rift_v1.md');
 const relayExpeditionCatalog = read('server/relay-expedition/catalog.js');
 const relayExpeditionBootstrap = read('server/relay-expedition/bootstrap.js');
@@ -486,7 +488,7 @@ assert.match(
   'receipt?.idempotent',
   'server_verified must only upgrade an observed event',
   'a checkpoint source must not move across tickets',
-  'older databases should advance through verified runs to authoritative fate chronicle v11 on restart',
+  'older databases should advance through verified runs to world-rift campaign directives v12 on restart',
 ].forEach((needle) => {
   assert.ok(
     verifiedRunsPlatformChecks.includes(needle) || verifiedRunsDocumentation.includes(needle),
@@ -541,8 +543,10 @@ assert.match(
 
 [
   'sanity_world_rift_client_checks.mjs',
+  'sanity_world_rift_directive_client_ui_checks.mjs',
   'sanity_world_rift_ui_checks.mjs',
   'sanity_world_rift_platform_checks.cjs',
+  'sanity_world_rift_directive_platform_checks.cjs',
 ].forEach((needle) => {
   assert.ok(runNodeChecks.includes(needle), `node gate should execute world rift check: ${needle}`);
 });
@@ -621,17 +625,29 @@ assert.match(
 
 [
   [worldRiftCatalog, "PROTOCOL_VERSION = 'authoritative-world-rift-v1'"],
+  [worldRiftCatalog, "CATALOG_VERSION = 'world-rift-catalog-v2'"],
+  [worldRiftCatalog, "ROTATION_RULE_VERSION = 'world-rift-rotation-v2'"],
+  [worldRiftCatalog, "templateId: 'threefold-reading'"],
   [worldRiftCatalog, 'ATTEMPT_LIMIT = 5'],
   [worldRiftCatalog, 'CLAIM_WINDOW_MS = 7 * 24 * 60 * 60 * 1000'],
   [worldRiftBootstrap, 'world_rift_states'],
+  [worldRiftBootstrap, 'world_rift_directive_states'],
+  [worldRiftBootstrap, 'world_rift_directive_projections'],
+  [worldRiftBootstrap, 'world_rift_directive_claims'],
   [worldRiftBootstrap, 'UNIQUE(user_id, mutation_id)'],
   [worldRiftService, "activity_mode || '') !== 'world_rift'"],
   [worldRiftService, 'fullReplayPassed !== true'],
   [worldRiftService, 'r.grace_ends_at > ?'],
+  [worldRiftService, 'projectContributionDirectives'],
+  [worldRiftService, 'claimWorldRiftDirective'],
+  [worldRiftService, 'reconcileWorldRiftDirectives'],
   [authoritativeRunsService, 'world_rift_start_required'],
   [worldRiftRoutes, "router.get('/ops/overview', authenticate, requireOpsToken"],
+  [worldRiftRoutes, "router.post('/directives/:directiveId/claim'"],
+  [worldRiftRoutes, "router.post('/ops/directives/reconcile'"],
   [worldRiftClient, "DEFAULT_PROTOCOL_VERSION = 'authoritative-world-rift-v1'"],
   [worldRiftClientChecks, 'account churn should suppress the stale world-rift response'],
+  [worldRiftDirectiveClientUiChecks, 'BackendClient signs world-rift mutations with session-v2 dynamic routes'],
   [worldRiftUiChecks, 'World rift UI checks passed.'],
   [challengeHub, 'role="progressbar"'],
   [worldRiftPlatformChecks, 'two concurrent contributions must each be recorded exactly once'],
@@ -641,8 +657,11 @@ assert.match(
   [worldRiftPlatformChecks, 'reward claims queued across claimEndsAt must not mint late ledger entries'],
   [worldRiftPlatformChecks, 'unauthenticated callers must not get an ops-token validity oracle'],
   [worldRiftPlatformChecks, 'echo submissions must not change cleared world damage'],
+  [worldRiftDirectivePlatformChecks, 'authoritative submit derives directive deltas from receipt summary and remains idempotent'],
   [authoritativeRunsMigrationChecks, 'v7 to v8 restart must preserve live authoritative-run data while adding world-rift tables'],
   [worldRiftDocumentation, '没有末刀奖励'],
+  [worldRiftDocumentation, '`world-rift-catalog-v2 / world-rift-rotation-v2`'],
+  [worldRiftDocumentation, '`0012_world_rift_campaign_directives`'],
 ].forEach(([source, needle]) => {
   assert.ok(source.includes(needle), `world rift V1 should pin release marker: ${needle}`);
 });
@@ -724,6 +743,7 @@ assert.match(
   '0009_account_social_coop',
   '0010_relay_expedition',
   '0011_authoritative_fate_chronicle',
+  '0012_world_rift_campaign_directives',
   'cloud_state_revisions',
   'cloud_state_heads',
   'cloud_state_ops_counters',
@@ -761,6 +781,9 @@ assert.match(
   'world_rift_mutations',
   'world_rift_ops_events',
   'world_rift_ops_counters',
+  'world_rift_directive_states',
+  'world_rift_directive_projections',
+  'world_rift_directive_claims',
   'relay_expedition_rotations',
   'relay_expedition_sessions',
   'relay_expedition_members',
@@ -1260,7 +1283,7 @@ assert.strictEqual(
 );
 
 [
-  'real backend boots schema V11',
+  'real backend boots schema V12',
   'challenge ladder GET current returns initial allowance before any formal run',
   'challenge hub global UI shows formal attempts and official ladder copy before submission',
   'global formal surface uses the server rotation and excludes legacy local rewards',
@@ -1298,7 +1321,7 @@ assert.strictEqual(
 });
 
 [
-  'real backend boots authoritative fate chronicle schema V11',
+  'real backend boots authoritative fate chronicle schema V12',
   'two-account active world-rift squad is established before relay',
   'leader creates the relay session from the real social workspace',
   'account A claim binds a real relay_expedition authoritative run in the UI',
@@ -1317,7 +1340,7 @@ assert.strictEqual(
 });
 
 [
-  'real backend boots fate chronicle schema V11',
+  'real backend boots fate chronicle schema V12',
   'fate chronicle renders three chapters six oaths and five archive proofs',
   'real fate chronicle desktop milestone controls stay within cards',
   'chapter oath starts a server-authoritative fate run',
@@ -3140,7 +3163,7 @@ assert.ok(
   'matched view should expose near rating delta bucket',
   'matched view should expose strict rating expansion stage',
   'matched quality should explain closest rating safeguard',
-  'matched quality should not expose exact player ratings',
+  'assertMatchQualityConcealsRatings',
   'far-rated first queue player should remain waiting after closer match is selected',
   'long-wait wide rating gap should not auto-match without explicit acceptance',
   'one-sided wide rating consent should not match without the waiting player consent',
@@ -3149,7 +3172,7 @@ assert.ok(
   'accepted wide match should expose accepted 200-399 stage',
   'accepted wide match should explain explicit two-sided consent',
   'accepted wide match should keep explicit consent safeguard',
-  'accepted wide match quality should not expose exact player ratings',
+  '[1250, 1000]',
   'later wide consent requester should also wait before either player confirms',
   'first later wide consent should only update consent and preserve waiting',
   'second later wide consent should immediately match two existing waiting players',

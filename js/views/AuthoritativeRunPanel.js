@@ -145,6 +145,12 @@ const RELAY_STATUS_LABELS = Object.freeze({
   abandoned: "已放弃"
 });
 
+const WORLD_RIFT_DIRECTIVE_SCOPE_LABELS = Object.freeze({
+  personal: "个人指令",
+  squad: "小队指令",
+  global: "全服指令"
+});
+
 const STATUS_META = Object.freeze({
   idle: { label: "待命", tone: "muted" },
   active: { label: "进行中", tone: "success" },
@@ -324,6 +330,41 @@ function formatStatus(status = "") {
 
 function formatPhase(phase = "") {
   return PHASE_META[normalizeText(phase)] || PHASE_META.route;
+}
+
+function normalizeWorldRiftDirectiveScope(scope = "") {
+  const normalized = normalizeText(scope);
+  return WORLD_RIFT_DIRECTIVE_SCOPE_LABELS[normalized] ? normalized : "personal";
+}
+
+function formatWorldRiftDirectiveScope(scope = "") {
+  return WORLD_RIFT_DIRECTIVE_SCOPE_LABELS[normalizeWorldRiftDirectiveScope(scope)] || WORLD_RIFT_DIRECTIVE_SCOPE_LABELS.personal;
+}
+
+function formatWorldRiftDirectiveProgressText(value = {}) {
+  const progressText = normalizeText(value.progressText);
+  if (progressText) return progressText;
+  const progress = clampInt(value.progress, 0);
+  const target = clampInt(value.target, 0);
+  if (target > 0) return `${Math.min(progress, target)}/${target}`;
+  if (progress > 0) return `${progress}`;
+  return "待推进";
+}
+
+function formatWorldRiftDirectiveSummary(value = {}) {
+  const scopeLabel = formatWorldRiftDirectiveScope(value.scope);
+  const title = normalizeText(value.title, "未命名指令");
+  const progress = formatWorldRiftDirectiveProgressText(value);
+  return `${scopeLabel} · ${title} · ${progress}`;
+}
+
+function formatWorldRiftDirectiveDelta(value = {}) {
+  const scopeLabel = formatWorldRiftDirectiveScope(value.scope);
+  const title = normalizeText(value.title, "指令推进");
+  const delta = clampInt(value.delta, 0);
+  const progress = formatWorldRiftDirectiveProgressText(value);
+  const completedNow = value.completedNow ? " · 本局完成" : "";
+  return `${scopeLabel} +${delta} · ${title} · ${progress}${completedNow}`;
 }
 
 function extractRunEnvelope(result = null) {
@@ -936,7 +977,7 @@ export class AuthoritativeRunPanel {
       const riftSubmission = await this.worldRiftService.submit({ runId, expectedUserId });
       if (riftSubmission && riftSubmission.success !== false
         && typeof this.worldRiftService.current === "function") {
-        await this.worldRiftService.current({ expectedUserId });
+        await this.worldRiftService.current({ expectedUserId, preserveDirectiveDeltas: true });
       }
       this.worldRiftState = this.worldRiftService.getState();
       return { ...applied, riftSubmission };
@@ -1417,6 +1458,27 @@ export class AuthoritativeRunPanel {
     const remainingHp = clampInt(world.remainingHp ?? Math.max(0, totalHp - appliedDamage), 0, totalHp);
     const phaseLabel = normalizeText(world.phaseTitle || world.currentPhase?.title || world.phaseName,
       world.cleared || String(world.status || "").startsWith("echo") ? "余响阶段" : `第 ${clampInt(world.currentPhaseIndex, 1, 3)} 阶段`);
+    const directives = normalizeArray(current.directives ?? this.worldRiftState.directives)
+      .filter(Boolean)
+      .sort((left, right) => {
+        const leftScope = normalizeWorldRiftDirectiveScope(left?.scope);
+        const rightScope = normalizeWorldRiftDirectiveScope(right?.scope);
+        return ["personal", "squad", "global"].indexOf(leftScope) - ["personal", "squad", "global"].indexOf(rightScope);
+      });
+    const directiveSummaries = ["personal", "squad", "global"].map(scope => {
+      const directive = directives.find(item => normalizeWorldRiftDirectiveScope(item?.scope) === scope);
+      return directive ? formatWorldRiftDirectiveSummary(directive) : "";
+    }).filter(Boolean);
+    const directiveSummaryNote = directiveSummaries.length
+      ? `<div class="season-ops-inline-note" data-world-rift-directive-summary="true">战役指令：${escapeHtml(directiveSummaries.join("；"))}</div>`
+      : "";
+    const directiveDeltaChips = normalizeArray(this.worldRiftState?.directiveDeltas)
+      .filter(item => item && (clampInt(item.delta, 0) > 0 || item.completedNow))
+      .slice(0, 3)
+      .map(item => renderChip(formatWorldRiftDirectiveDelta(item)));
+    const directiveDeltaRow = directiveDeltaChips.length
+      ? `<div class="season-ops-authoritative-meta-row" data-world-rift-directive-deltas>${directiveDeltaChips.join("")}</div>`
+      : "";
     return `
       <div class="season-ops-authoritative-meta-row" data-world-rift-context>
         ${renderChip(normalizeText(rotation.title, "本周天穹裂隙"))}
@@ -1425,6 +1487,8 @@ export class AuthoritativeRunPanel {
         ${renderChip(ranked > 0 ? `最佳三次 ${ranked}` : "尚无正式贡献")}
         ${renderChip(world.cleared || String(world.status || "").startsWith("echo") ? "已击破 · 余响可继续" : "全服真实推进")}
       </div>
+      ${directiveSummaryNote}
+      ${directiveDeltaRow}
     `;
   }
 

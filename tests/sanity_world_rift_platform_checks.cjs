@@ -40,8 +40,8 @@ const JWT_SECRET = 'world-rift-platform-jwt-secret-32';
 const HMAC_SECRET = 'world-rift-platform-hmac-secret-32';
 const OPS_TOKEN = 'world-rift-platform-ops-token-32';
 const PROTOCOL_VERSION = 'authoritative-world-rift-v1';
-const EXPECTED_SCHEMA_VERSION = 11;
-const EXPECTED_MIGRATION_ID = '0011_authoritative_fate_chronicle';
+const EXPECTED_SCHEMA_VERSION = 12;
+const EXPECTED_MIGRATION_ID = '0012_world_rift_campaign_directives';
 const EXPECTED_TABLES = [
   'world_rift_rotations',
   'world_rift_states',
@@ -50,6 +50,9 @@ const EXPECTED_TABLES = [
   'world_rift_entries',
   'world_rift_reward_claims',
   'world_rift_mutations',
+  'world_rift_directive_states',
+  'world_rift_directive_projections',
+  'world_rift_directive_claims',
   'world_rift_ops_events',
   'world_rift_ops_counters',
 ];
@@ -202,30 +205,35 @@ async function waitForHealth(server, baseUrl = BASE_URL) {
   throw new Error(`world rift backend health timed out\n${server.getOutput()}`);
 }
 
-function signSessionPayload(data, token, salt = `riftsig-${crypto.randomBytes(12).toString('hex')}`) {
-  const signature = crypto.createHmac('sha256', token)
-    .update('session-v1', 'utf8')
-    .update('\n', 'utf8')
-    .update(salt, 'utf8')
-    .update('\n', 'utf8')
-    .update(JSON.stringify(data), 'utf8')
-    .digest('hex');
-  return { salt, signature, signatureMode: 'session' };
+function signSessionPayload(data, token, salt = `riftsig-${crypto.randomBytes(12).toString('hex')}`, route = '') {
+  const signedRoute = String(route || '').trim();
+  const hmac = crypto.createHmac('sha256', token)
+    .update(signedRoute ? 'session-v2' : 'session-v1', 'utf8');
+  if (signedRoute) hmac.update(`\n${signedRoute}`, 'utf8');
+  hmac.update('\n', 'utf8').update(salt, 'utf8').update('\n', 'utf8');
+  const signature = hmac.update(JSON.stringify(data), 'utf8').digest('hex');
+  return { salt, signature, signatureMode: signedRoute ? 'session-v2' : 'session' };
 }
 
 async function signedRequest(pathname, { token, data, method = 'POST' }) {
+  const route = String(pathname || '').startsWith('/api/world-rift/')
+    ? `${String(method || 'POST').toUpperCase()} ${pathname}`
+    : '';
   return request(pathname, {
     method,
     token,
-    body: { ...data, ...signSessionPayload(data, token) },
+    body: { ...data, ...signSessionPayload(data, token, undefined, route) },
   });
 }
 
 async function signedRequestAt(baseUrl, pathname, { token, data, method = 'POST' }) {
+  const route = String(pathname || '').startsWith('/api/world-rift/')
+    ? `${String(method || 'POST').toUpperCase()} ${pathname}`
+    : '';
   return requestAt(baseUrl, pathname, {
     method,
     token,
-    body: { ...data, ...signSessionPayload(data, token) },
+    body: { ...data, ...signSessionPayload(data, token, undefined, route) },
   });
 }
 

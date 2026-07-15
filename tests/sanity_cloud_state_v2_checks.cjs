@@ -282,14 +282,15 @@ async function main() {
 
     const version = await request('/api/version');
     assert.strictEqual(version.status, 200, JSON.stringify(version.payload));
-    assert.strictEqual(version.payload?.schema?.version, 11, 'schema version should advance through authoritative fate chronicle v11');
-    assert.strictEqual(version.payload?.schema?.currentMigrationId, '0011_authoritative_fate_chronicle');
+    assert.strictEqual(version.payload?.schema?.version, 12, 'schema version should advance through world-rift campaign directives v12');
+    assert.strictEqual(version.payload?.schema?.currentMigrationId, '0012_world_rift_campaign_directives');
     assert(version.payload?.schema?.appliedMigrations?.some(item => item.id === '0004_cloud_state_v2'), 'applied migrations should include v4');
     assert(version.payload?.schema?.appliedMigrations?.some(item => item.id === '0007_authoritative_challenge_ladder'), 'applied migrations should include v7');
     assert(version.payload?.schema?.appliedMigrations?.some(item => item.id === '0008_authoritative_world_rift'), 'applied migrations should include v8');
     assert(version.payload?.schema?.appliedMigrations?.some(item => item.id === '0009_account_social_coop'), 'applied migrations should include v9');
     assert(version.payload?.schema?.appliedMigrations?.some(item => item.id === '0010_relay_expedition'), 'applied migrations should include v10');
     assert(version.payload?.schema?.appliedMigrations?.some(item => item.id === '0011_authoritative_fate_chronicle'), 'applied migrations should include v11');
+    assert(version.payload?.schema?.appliedMigrations?.some(item => item.id === '0012_world_rift_campaign_directives'), 'applied migrations should include v12');
 
     const legacyHeads = await dbAll(
       `SELECT user_id, entity_key, head_revision_id

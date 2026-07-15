@@ -1,8 +1,8 @@
 const { cloneJson, hashCanonical } = require('../progression/authoritative-runs/canonical');
 
 const PROTOCOL_VERSION = 'authoritative-world-rift-v1';
-const CATALOG_VERSION = 'world-rift-catalog-v1';
-const ROTATION_RULE_VERSION = 'world-rift-rotation-v1';
+const CATALOG_VERSION = 'world-rift-catalog-v2';
+const ROTATION_RULE_VERSION = 'world-rift-rotation-v2';
 const REWARD_CURRENCY = 'renown';
 const REWARD_IMPACT = 'cosmetic_only';
 const ATTEMPT_LIMIT = 5;
@@ -72,6 +72,176 @@ const CONTRIBUTION_FORMULA = deepFreeze({
     formulaText: 'clamp(300 + score * 2 + min(remainingHp * 3, 180) + min(max(18 - turns, 0) * 15, 120), 300, 2400)'
 });
 
+function makeDirective({
+    directiveId,
+    scope,
+    title,
+    description,
+    goalText,
+    metric,
+    targetValue,
+    criteria,
+    rewardAmount,
+    sortOrder
+}) {
+    return {
+        directiveId,
+        scope,
+        title,
+        description,
+        goalText,
+        metric,
+        targetValue,
+        criteria,
+        sortOrder,
+        reward: {
+            rewardType: 'world_rift_campaign_directive',
+            currency: REWARD_CURRENCY,
+            amount: rewardAmount,
+            rewardImpact: REWARD_IMPACT,
+            spendPolicy: 'cosmetic_only'
+        }
+    };
+}
+
+const DIRECTIVE_TEMPLATES = deepFreeze([
+    {
+        templateId: 'threefold-reading',
+        title: '三衡会卷',
+        description: '本周鼓励根据题面切换路线，不把稳进、争衡或险锋固定成唯一答案。',
+        directives: [
+            makeDirective({
+                directiveId: 'personal-two-paths',
+                scope: 'personal',
+                title: '辨势改卷',
+                description: '在一场完整出征中采用至少两类路线合同。',
+                goalText: '完成 1 场包含至少两类路线的正式出征',
+                metric: 'qualified_runs',
+                targetValue: 1,
+                criteria: { requireCompleted: true, minDistinctContracts: 2 },
+                rewardAmount: 35,
+                sortOrder: 10
+            }),
+            makeDirective({
+                directiveId: 'squad-three-contracts',
+                scope: 'squad',
+                title: '三衡同证',
+                description: '小队成员共同留下稳进、争衡与险锋三类权威路线记录。',
+                goalText: '小队共同覆盖 3 类路线合同',
+                metric: 'distinct_contracts',
+                targetValue: 3,
+                criteria: { requireCompleted: true, allowedContracts: ['steady', 'contested', 'perilous'] },
+                rewardAmount: 60,
+                sortOrder: 20
+            }),
+            makeDirective({
+                directiveId: 'global-route-selections',
+                scope: 'global',
+                title: '万修合卷',
+                description: '全服把每次完成的权威路线汇入同一卷面。',
+                goalText: '全服累计完成 12 段路线合同',
+                metric: 'contract_selections',
+                targetValue: 12,
+                criteria: { requireCompleted: true, allowedContracts: ['steady', 'contested', 'perilous'] },
+                rewardAmount: 45,
+                sortOrder: 30
+            })
+        ]
+    },
+    {
+        templateId: 'pressed-front',
+        title: '争锋破界',
+        description: '本周公开奖题偏向增压路线，但险锋仍是可选题，不影响基础裂隙奖励。',
+        directives: [
+            makeDirective({
+                directiveId: 'personal-pressed-clear',
+                scope: 'personal',
+                title: '迎压成卷',
+                description: '完成一场至少包含一次争衡或险锋路线的正式出征。',
+                goalText: '完成 1 场带有增压路线的正式出征',
+                metric: 'qualified_runs',
+                targetValue: 1,
+                criteria: { requireCompleted: true, minMatchedContracts: 1, allowedContracts: ['contested', 'perilous'] },
+                rewardAmount: 35,
+                sortOrder: 10
+            }),
+            makeDirective({
+                directiveId: 'squad-pressed-selections',
+                scope: 'squad',
+                title: '合力争锋',
+                description: '小队共同完成争衡或险锋路线，不要求同一成员独自承担。',
+                goalText: '小队累计完成 5 段增压路线',
+                metric: 'contract_selections',
+                targetValue: 5,
+                criteria: { requireCompleted: true, allowedContracts: ['contested', 'perilous'] },
+                rewardAmount: 60,
+                sortOrder: 20
+            }),
+            makeDirective({
+                directiveId: 'global-route-bonus',
+                scope: 'global',
+                title: '破界锋值',
+                description: '全服汇总完成出征的路线分，不奖励未封卷的冒进。',
+                goalText: '全服累计获得 250 路线分',
+                metric: 'route_bonus',
+                targetValue: 250,
+                criteria: { requireCompleted: true },
+                rewardAmount: 45,
+                sortOrder: 30
+            })
+        ]
+    },
+    {
+        templateId: 'measured-return',
+        title: '守衡归卷',
+        description: '本周鼓励保留余力与稳定通关，速度和险锋不会额外垄断指令进度。',
+        directives: [
+            makeDirective({
+                directiveId: 'personal-steady-survivor',
+                scope: 'personal',
+                title: '稳脉归卷',
+                description: '采用至少一次稳进路线，并以足够余力完成正式出征。',
+                goalText: '以至少 18 点剩余生命完成 1 场含稳进路线的出征',
+                metric: 'qualified_runs',
+                targetValue: 1,
+                criteria: { requireCompleted: true, minRemainingHp: 18, minMatchedContracts: 1, allowedContracts: ['steady'] },
+                rewardAmount: 35,
+                sortOrder: 10
+            }),
+            makeDirective({
+                directiveId: 'squad-safe-clears',
+                scope: 'squad',
+                title: '同道守界',
+                description: '小队共同完成三场保有余力的权威出征。',
+                goalText: '小队完成 3 场剩余生命不少于 12 的出征',
+                metric: 'qualified_runs',
+                targetValue: 3,
+                criteria: { requireCompleted: true, minRemainingHp: 12 },
+                rewardAmount: 60,
+                sortOrder: 20
+            }),
+            makeDirective({
+                directiveId: 'global-completed-runs',
+                scope: 'global',
+                title: '众修镇界',
+                description: '全服只统计完整封卷的权威出征，不把失败或放弃算作进度。',
+                goalText: '全服共同完成 5 场正式出征',
+                metric: 'completed_runs',
+                targetValue: 5,
+                criteria: { requireCompleted: true },
+                rewardAmount: 45,
+                sortOrder: 30
+            })
+        ]
+    }
+]);
+
+function getDirectiveTemplate(startMs) {
+    const index = Math.floor(startMs / WEEK_MS);
+    const normalized = ((index % DIRECTIVE_TEMPLATES.length) + DIRECTIVE_TEMPLATES.length) % DIRECTIVE_TEMPLATES.length;
+    return DIRECTIVE_TEMPLATES[normalized];
+}
+
 function buildMilestones() {
     return [
         ...PERSONAL_MILESTONES.map(entry => ({
@@ -118,7 +288,8 @@ const CATALOG_SNAPSHOT = deepFreeze({
     totalHp: TOTAL_HP,
     contributionFormula: CONTRIBUTION_FORMULA,
     phases: PHASES,
-    milestones: buildMilestones()
+    milestones: buildMilestones(),
+    directiveTemplates: DIRECTIVE_TEMPLATES
 });
 
 const CATALOG_HASH = hashCanonical(CATALOG_SNAPSHOT);
@@ -148,6 +319,7 @@ function buildRotationSnapshotForStart(startMs) {
     const graceEndsAt = endsAt + SETTLEMENT_GRACE_MS;
     const claimEndsAt = endsAt + CLAIM_WINDOW_MS;
     const { weekYear, weekNumber } = getIsoWeekParts(start);
+    const directiveTemplate = getDirectiveTemplate(start);
     const snapshot = {
         rotationId: `rift-${weekYear}-w${String(weekNumber).padStart(2, '0')}`,
         protocolVersion: PROTOCOL_VERSION,
@@ -167,9 +339,15 @@ function buildRotationSnapshotForStart(startMs) {
         contributionFormula: cloneJson(CONTRIBUTION_FORMULA),
         phases: cloneJson(PHASES),
         milestones: buildMilestones(),
+        directiveSetId: directiveTemplate.templateId,
+        directiveTitle: directiveTemplate.title,
+        directiveDescription: directiveTemplate.description,
+        directives: cloneJson(directiveTemplate.directives),
         fairness: {
             sharedSeedSlots: true,
             settledBy: 'server_authoritative',
+            directiveFactsSource: 'server_replayed_receipt',
+            directiveRewards: 'cosmetic_only',
             rankingWindow: 'utc_week',
             settlementGraceMs: SETTLEMENT_GRACE_MS,
             claimWindowMs: CLAIM_WINDOW_MS,
@@ -193,6 +371,7 @@ module.exports = {
     CATALOG_VERSION,
     CLAIM_WINDOW_MS,
     CONTRIBUTION_FORMULA,
+    DIRECTIVE_TEMPLATES,
     LEADERBOARD_LIMIT,
     PERSONAL_MILESTONES,
     PHASES,

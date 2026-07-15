@@ -234,8 +234,8 @@ function expectReason(response, status, reason) {
   let server = startServer();
   try {
     const health = await waitForHealth(server);
-    assert.equal(health.schema?.version, 11);
-    assert.equal(health.schema?.currentMigrationId, '0011_authoritative_fate_chronicle');
+    assert.equal(health.schema?.version, 12);
+    assert.equal(health.schema?.currentMigrationId, '0012_world_rift_campaign_directives');
 
     const account = await registerAndLogin();
     const current = await request('/api/fate-chronicle/current', { token: account.token });

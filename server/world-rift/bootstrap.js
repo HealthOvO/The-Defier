@@ -1,4 +1,5 @@
 const {
+    CATALOG_VERSION,
     PHASES,
     TOTAL_HP,
     WEEK_MS,
@@ -101,6 +102,78 @@ async function ensureRotationRow(connection, snapshot, now = Date.now()) {
             now
         ]
     );
+}
+
+async function ensureRotationWindow(connection, snapshot, now = Date.now()) {
+    const existing = await dbGet(
+        connection,
+        `SELECT rotation_id, catalog_version, snapshot_json
+         FROM world_rift_rotations
+         WHERE starts_at = ? AND ends_at = ?
+         ORDER BY created_at DESC, rotation_id DESC
+         LIMIT 1`,
+        [snapshot.startsAt, snapshot.endsAt]
+    );
+    if (!existing) {
+        await ensureRotationRow(connection, snapshot, now);
+        return snapshot;
+    }
+    if (String(existing.catalog_version || '') === CATALOG_VERSION) {
+        await ensureRotationRow(connection, snapshot, now);
+        return snapshot;
+    }
+    try {
+        const legacySnapshot = JSON.parse(String(existing.snapshot_json || ''));
+        if (!legacySnapshot || String(legacySnapshot.rotationId || '') !== String(existing.rotation_id || '')) {
+            throw new Error('legacy rotation snapshot identity mismatch');
+        }
+        const activeWindow = snapshot.startsAt <= now && snapshot.endsAt > now;
+        if (activeWindow) {
+            if (String(existing.rotation_id || '') !== String(snapshot.rotationId || '')) {
+                throw new Error('active rotation upgrade identity mismatch');
+            }
+            const snapshotJson = stableStringify(snapshot);
+            await dbRun(
+                connection,
+                `UPDATE world_rift_rotations
+                 SET protocol_version = ?, catalog_version = ?, rule_version = ?, catalog_hash = ?,
+                     title = ?, description = ?, starts_at = ?, ends_at = ?, grace_ends_at = ?, claim_ends_at = ?,
+                     attempt_limit = ?, seed_slot_count = ?, leaderboard_limit = ?, total_hp = ?,
+                     contribution_formula_json = ?, phases_json = ?, milestones_json = ?,
+                     snapshot_hash = ?, snapshot_json = ?
+                 WHERE rotation_id = ?`,
+                [
+                    snapshot.protocolVersion,
+                    snapshot.catalogVersion,
+                    snapshot.rotationRuleVersion,
+                    snapshot.catalogHash,
+                    snapshot.title,
+                    snapshot.description,
+                    snapshot.startsAt,
+                    snapshot.endsAt,
+                    snapshot.graceEndsAt,
+                    snapshot.claimEndsAt,
+                    snapshot.attemptLimit,
+                    snapshot.seedSlotCount,
+                    snapshot.leaderboardLimit,
+                    snapshot.totalHp,
+                    stableStringify(snapshot.contributionFormula),
+                    stableStringify(snapshot.phases),
+                    stableStringify(snapshot.milestones),
+                    snapshot.snapshotHash,
+                    snapshotJson,
+                    snapshot.rotationId
+                ]
+            );
+            return snapshot;
+        }
+        return legacySnapshot;
+    } catch (error) {
+        throw makeError(
+            ROTATION_DRIFT_CODE,
+            `world rift legacy rotation snapshot is invalid for ${existing.rotation_id}`
+        );
+    }
 }
 
 async function ensureStateRow(connection, snapshot, now = Date.now()) {
@@ -306,6 +379,73 @@ async function ensureWorldRiftSchema(connection, now = Date.now()) {
     await dbRun(connection, `CREATE INDEX IF NOT EXISTS idx_world_rift_mutations_rotation_type ON world_rift_mutations(rotation_id, request_type, created_at DESC)`);
     await dbRun(
         connection,
+        `CREATE TABLE IF NOT EXISTS world_rift_directive_states (
+            rotation_id TEXT NOT NULL,
+            directive_id TEXT NOT NULL,
+            scope TEXT NOT NULL,
+            owner_type TEXT NOT NULL,
+            owner_id TEXT NOT NULL,
+            progress_value INTEGER NOT NULL DEFAULT 0,
+            target_value INTEGER NOT NULL DEFAULT 0,
+            progress_json TEXT NOT NULL DEFAULT '{}',
+            state_version INTEGER NOT NULL DEFAULT 0,
+            completed_at INTEGER NOT NULL DEFAULT 0,
+            last_projection_id TEXT NOT NULL DEFAULT '',
+            updated_at INTEGER NOT NULL,
+            PRIMARY KEY(rotation_id, directive_id, owner_type, owner_id),
+            FOREIGN KEY(rotation_id) REFERENCES world_rift_rotations(rotation_id)
+        )`
+    );
+    await dbRun(connection, `CREATE INDEX IF NOT EXISTS idx_world_rift_directive_states_owner ON world_rift_directive_states(owner_type, owner_id, updated_at DESC)`);
+    await dbRun(connection, `CREATE INDEX IF NOT EXISTS idx_world_rift_directive_states_rotation_scope ON world_rift_directive_states(rotation_id, scope, completed_at, updated_at DESC)`);
+    await dbRun(
+        connection,
+        `CREATE TABLE IF NOT EXISTS world_rift_directive_projections (
+            projection_id TEXT PRIMARY KEY,
+            rotation_id TEXT NOT NULL,
+            directive_id TEXT NOT NULL,
+            contribution_id TEXT NOT NULL,
+            owner_type TEXT NOT NULL,
+            owner_id TEXT NOT NULL,
+            delta_value INTEGER NOT NULL DEFAULT 0,
+            delta_json TEXT NOT NULL DEFAULT '{}',
+            result_progress_value INTEGER NOT NULL DEFAULT 0,
+            result_state_version INTEGER NOT NULL DEFAULT 0,
+            completed_now INTEGER NOT NULL DEFAULT 0,
+            created_at INTEGER NOT NULL,
+            UNIQUE(rotation_id, directive_id, contribution_id, owner_type, owner_id),
+            FOREIGN KEY(rotation_id) REFERENCES world_rift_rotations(rotation_id),
+            FOREIGN KEY(contribution_id) REFERENCES world_rift_contributions(contribution_id)
+        )`
+    );
+    await dbRun(connection, `CREATE INDEX IF NOT EXISTS idx_world_rift_directive_projections_rotation_created ON world_rift_directive_projections(rotation_id, created_at, projection_id)`);
+    await dbRun(connection, `CREATE INDEX IF NOT EXISTS idx_world_rift_directive_projections_owner ON world_rift_directive_projections(owner_type, owner_id, created_at DESC)`);
+    await dbRun(
+        connection,
+        `CREATE TABLE IF NOT EXISTS world_rift_directive_claims (
+            claim_id TEXT PRIMARY KEY,
+            user_id TEXT NOT NULL,
+            rotation_id TEXT NOT NULL,
+            directive_id TEXT NOT NULL,
+            scope TEXT NOT NULL,
+            owner_type TEXT NOT NULL,
+            owner_id TEXT NOT NULL,
+            contribution_id TEXT NOT NULL DEFAULT '',
+            currency TEXT NOT NULL,
+            amount INTEGER NOT NULL,
+            reward_impact TEXT NOT NULL DEFAULT 'cosmetic_only',
+            ledger_entry_id TEXT NOT NULL,
+            claim_payload_json TEXT NOT NULL DEFAULT '{}',
+            claimed_at INTEGER NOT NULL,
+            UNIQUE(user_id, rotation_id, directive_id),
+            FOREIGN KEY(user_id) REFERENCES users(id),
+            FOREIGN KEY(rotation_id) REFERENCES world_rift_rotations(rotation_id)
+        )`
+    );
+    await dbRun(connection, `CREATE INDEX IF NOT EXISTS idx_world_rift_directive_claims_owner ON world_rift_directive_claims(rotation_id, owner_type, owner_id, claimed_at DESC)`);
+    await dbRun(connection, `CREATE INDEX IF NOT EXISTS idx_world_rift_directive_claims_user_rotation ON world_rift_directive_claims(user_id, rotation_id, claimed_at DESC)`);
+    await dbRun(
+        connection,
         `CREATE TABLE IF NOT EXISTS world_rift_ops_events (
             event_id TEXT PRIMARY KEY,
             event_type TEXT NOT NULL,
@@ -332,10 +472,10 @@ async function ensureWorldRiftSchema(connection, now = Date.now()) {
     );
     const current = buildRotationSnapshot(now);
     const previous = buildRotationSnapshotForStart(current.startsAt - WEEK_MS);
-    await ensureRotationRow(connection, previous, now);
-    await ensureRotationRow(connection, current, now);
-    await ensureStateRow(connection, previous, now);
-    await ensureStateRow(connection, current, now);
+    const selectedPrevious = await ensureRotationWindow(connection, previous, now);
+    const selectedCurrent = await ensureRotationWindow(connection, current, now);
+    await ensureStateRow(connection, selectedPrevious, now);
+    await ensureStateRow(connection, selectedCurrent, now);
 }
 
 async function reconcileWorldRiftOpsCounters(connection) {

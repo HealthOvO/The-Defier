@@ -140,6 +140,61 @@ const challengeHubMethods = Object.create(null);
     };
   };
   const describeWorldRiftContribution = () => '贡献由基础表现、战斗得分、生存状态与回合节奏共同结算，单次上下限由本轮规则固定';
+  const WORLD_RIFT_DIRECTIVE_SCOPE_META = {
+    personal: {
+      label: '个人指令'
+    },
+    squad: {
+      label: '小队指令'
+    },
+    global: {
+      label: '全服指令'
+    }
+  };
+  const normalizeWorldRiftDirectiveScope = scope => ['personal', 'squad', 'global'].includes(String(scope || '').trim()) ? String(scope || '').trim() : 'personal';
+  const normalizeWorldRiftDirectiveStatus = status => ['unavailable', 'active', 'completed', 'claimed'].includes(String(status || '').trim()) ? String(status || '').trim() : 'active';
+  const getWorldRiftDirectiveScopeLabel = scope => WORLD_RIFT_DIRECTIVE_SCOPE_META[normalizeWorldRiftDirectiveScope(scope)]?.label || '战役指令';
+  const getWorldRiftDirectiveStatusLabel = directive => {
+    const status = normalizeWorldRiftDirectiveStatus(directive?.status);
+    if (directive?.claimed || directive?.claimedAt || status === 'claimed') return '已领取';
+    if (directive?.claimable) return '可领取';
+    if (status === 'completed') return '已完成';
+    if (status === 'unavailable') return '未开放';
+    return '推进中';
+  };
+  const getWorldRiftDirectiveTone = directive => {
+    const status = normalizeWorldRiftDirectiveStatus(directive?.status);
+    if (directive?.claimed || directive?.claimedAt || status === 'claimed') return 'claimed';
+    if (directive?.claimable) return 'ready';
+    return status === 'unavailable' ? 'locked' : 'locked';
+  };
+  const getWorldRiftDirectiveProgressLabel = directive => {
+    if (directive && typeof directive.progressText === 'string' && directive.progressText.trim()) {
+      return directive.progressText.trim();
+    }
+    const progress = clampInt(directive?.progress, 0);
+    const target = clampInt(directive?.target, 0);
+    if (target > 0) return `${Math.min(progress, target)}/${target}`;
+    if (progress > 0) return `${progress}`;
+    return getWorldRiftDirectiveStatusLabel(directive);
+  };
+  const getWorldRiftDirectiveRewardLabel = directive => {
+    const reward = directive?.reward && typeof directive.reward === 'object' ? directive.reward : {};
+    const amount = clampInt(reward.amount, 0);
+    const currency = toPlayerFacingLabel(reward.currency, amount > 0 ? '荣誉' : '');
+    const impact = toPlayerFacingLabel(reward.rewardImpact, '');
+    const spendPolicy = toPlayerFacingLabel(reward.spendPolicy, '');
+    const parts = [];
+    if (amount > 0 || currency) parts.push(`${amount > 0 ? amount : ''}${amount > 0 && currency ? ' ' : ''}${currency}`.trim());
+    if (impact) parts.push(impact);
+    if (spendPolicy) parts.push(spendPolicy);
+    return parts.filter(Boolean).join(' · ') || '奖励待公布';
+  };
+  const getWorldRiftDirectivePrimaryLine = directive => {
+    const title = toPlayerFacingLabel(directive?.title, '未命名指令');
+    const progress = getWorldRiftDirectiveProgressLabel(directive);
+    return `${title} · ${progress}`;
+  };
   const toPlayerFacingLabel = (value = '', fallback = '') => {
     const text = String(value || '').trim();
     return text && !/^[a-z0-9:_-]+$/i.test(text) ? text : fallback;
@@ -2642,6 +2697,12 @@ const challengeHubMethods = Object.create(null);
     const personal = current?.personal || current?.personalContribution || current?.entry || current?.self
       || state.contribution || leaderboardEnvelope?.self || null;
     const myRank = leaderboardEnvelope?.myRank || current?.myRank || null;
+    const directives = Array.isArray(current?.directives)
+      ? current.directives
+      : Array.isArray(state.directives)
+        ? state.directives
+        : [];
+    const directiveDeltas = Array.isArray(state.directiveDeltas) ? state.directiveDeltas : [];
     const phase = !userId
       ? 'login_required'
       : state.pending
@@ -2666,6 +2727,8 @@ const challengeHubMethods = Object.create(null);
       recoverableAttempt: current?.resumableAttempt || current?.recoverableAttempt || current?.currentAttempt || state.attempt || null,
       leaderboard: leaderboardSource,
       milestones,
+      directives,
+      directiveDeltas,
       error: state.lastError || null,
       pending: state.pending || null
     };
@@ -2704,6 +2767,26 @@ const challengeHubMethods = Object.create(null);
     await this.refreshWorldRift();
     return result;
   };
+  challengeHubMethods.claimWorldRiftDirective = async function (directiveId = '', rotationId = '') {
+    const view = this.getWorldRiftViewModel();
+    const resolvedRotationId = String(rotationId || view.rotation?.rotationId || view.rotation?.id || '').trim();
+    const service = typeof WorldRiftService !== 'undefined' ? WorldRiftService : null;
+    if (!directiveId || !resolvedRotationId || !view.userId || !service || typeof service.claimDirective !== 'function') {
+      return { success: false, reason: 'world_rift_directive_claim_unavailable' };
+    }
+    const result = await service.claimDirective({
+      directiveId,
+      rotationId: resolvedRotationId,
+      expectedUserId: view.userId
+    });
+    if (!result || result.success === false) {
+      if (typeof Utils !== 'undefined' && Utils && typeof Utils.showBattleLog === 'function') {
+        Utils.showBattleLog(result?.message || '天穹裂隙指令领取失败，请稍后重试。', { category: 'system', duration: 2600 });
+      }
+    }
+    await this.refreshWorldRift();
+    return result;
+  };
   challengeHubMethods.initWorldRiftHub = function () {
     if (typeof document === 'undefined') return;
     const view = this.getWorldRiftViewModel();
@@ -2722,6 +2805,46 @@ const challengeHubMethods = Object.create(null);
     const personalTotal = clampInt(view.personal?.totalContribution ?? view.personal?.contributionTotal, 0);
     const rankedContribution = clampInt(view.personal?.rankedContribution ?? view.personal?.rankScore ?? view.personal?.score, 0);
     const selfRank = clampInt(view.myRank?.rank ?? view.personal?.rank, 0);
+    const directives = Array.isArray(view.directives) ? view.directives.filter(Boolean) : [];
+    const directiveScopeOrder = {
+      personal: 0,
+      squad: 1,
+      global: 2
+    };
+    const directiveStatusOrder = {
+      active: 0,
+      completed: 1,
+      claimed: 2,
+      unavailable: 3
+    };
+    const sortedDirectives = directives.slice().sort((left, right) => {
+      const leftScope = normalizeWorldRiftDirectiveScope(left?.scope);
+      const rightScope = normalizeWorldRiftDirectiveScope(right?.scope);
+      if (directiveScopeOrder[leftScope] !== directiveScopeOrder[rightScope]) {
+        return directiveScopeOrder[leftScope] - directiveScopeOrder[rightScope];
+      }
+      const leftStatus = normalizeWorldRiftDirectiveStatus(left?.status);
+      const rightStatus = normalizeWorldRiftDirectiveStatus(right?.status);
+      if (directiveStatusOrder[leftStatus] !== directiveStatusOrder[rightStatus]) {
+        return directiveStatusOrder[leftStatus] - directiveStatusOrder[rightStatus];
+      }
+      return String(left?.title || left?.directiveId || '').localeCompare(String(right?.title || right?.directiveId || ''), 'zh-Hans-CN');
+    });
+    const directiveGroupsByScope = ['personal', 'squad', 'global'].map(scope => ({
+      scope,
+      label: getWorldRiftDirectiveScopeLabel(scope),
+      directives: sortedDirectives.filter(item => normalizeWorldRiftDirectiveScope(item?.scope) === scope)
+    }));
+    const directiveSummaryLines = directiveGroupsByScope.map(group => {
+      const lead = group.directives[0];
+      if (!lead) return `${group.label} · 暂无本轮战役指令`;
+      return `${group.label} · ${getWorldRiftDirectivePrimaryLine(lead)} · ${getWorldRiftDirectiveStatusLabel(lead)}`;
+    });
+    const directiveSummaryHtml = directiveSummaryLines.length ? `
+          <div class="challenge-theme-note" data-world-rift-directive-summary>
+            <strong>本周战役指令</strong>
+            ${directiveSummaryLines.map(line => `<span>${escapeHtml(line)}</span>`).join('')}
+          </div>` : '';
     const titleEl = document.getElementById('challenge-hub-title');
     const subtitleEl = document.getElementById('challenge-hub-subtitle');
     const summaryEl = document.getElementById('challenge-hub-summary');
@@ -2774,6 +2897,7 @@ const challengeHubMethods = Object.create(null);
             <span class="challenge-tag">最佳 3 次计榜</span>
             <span class="challenge-tag">固定牌组与统一种子</span>
           </div>
+          ${directiveSummaryHtml}
         </article>`;
     }
     if (rulesEl) {
@@ -2790,16 +2914,81 @@ const challengeHubMethods = Object.create(null);
     }
     if (rewardsEl) {
       const groups = [
-        { label: '本周裂隙', rotation, world, personal: view.personal, milestones: view.milestones },
+        {
+          label: '本周裂隙',
+          rotation,
+          world,
+          personal: view.personal,
+          milestones: view.milestones,
+          directives: directives
+        },
         ...(view.previousClaim ? [{
           label: '上轮待领',
-          rotation: view.previousClaim.rotation || {},
+          rotation: view.previousClaim.rotation || {
+            rotationId: view.previousClaim.rotationId,
+            id: view.previousClaim.rotationId
+          },
           world: view.previousClaim.world || {},
           personal: view.previousClaim.personal || {},
-          milestones: Array.isArray(view.previousClaim.milestones) ? view.previousClaim.milestones : []
+          milestones: Array.isArray(view.previousClaim.milestones) ? view.previousClaim.milestones : [],
+          directives: Array.isArray(view.previousClaim.directives) ? view.previousClaim.directives : []
         }] : [])
       ];
-      const cards = groups.flatMap(group => group.milestones.map(item => {
+      const directiveSections = groups.map(group => {
+        const rotationId = String(group.rotation.rotationId || group.rotation.id || rotation.rotationId || rotation.id || '').trim();
+        const sections = directiveGroupsByScope.map(scopeGroup => {
+          const items = (Array.isArray(group.directives) ? group.directives : [])
+            .filter(item => normalizeWorldRiftDirectiveScope(item?.scope) === scopeGroup.scope);
+          if (!items.length) return '';
+          const cards = items.map(item => {
+            const directiveId = String(item.directiveId || item.id || '').trim();
+            const title = toPlayerFacingLabel(item.title, directiveId || '未命名指令');
+            const statusLabel = getWorldRiftDirectiveStatusLabel(item);
+            const progressLabel = getWorldRiftDirectiveProgressLabel(item);
+            const rewardLabel = getWorldRiftDirectiveRewardLabel(item);
+            const ownerLabel = toPlayerFacingLabel(item.ownerLabel, '');
+            const goalText = toPlayerFacingLabel(item.goalText, '');
+            const description = toPlayerFacingLabel(item.description, '');
+            const eligibilityText = toPlayerFacingLabel(item.eligibilityText, '');
+            const claimable = !!item.claimable && !(item.claimed || item.claimedAt || item.status === 'claimed');
+            const claimed = !!(item.claimed || item.claimedAt || item.status === 'claimed');
+            const buttonLabel = claimed
+              ? '已领取'
+              : claimable
+                ? '领取奖励'
+                : statusLabel;
+            const detailLine = [group.label, ownerLabel, rewardLabel].filter(Boolean).join(' · ');
+            const bodyLine = [description, goalText, eligibilityText].filter(Boolean).join(' ');
+            const completedAt = clampInt(item.completedAt, 0);
+            const claimedAt = clampInt(item.claimedAt, 0);
+            return `
+              <article class="challenge-reward-card ${getWorldRiftDirectiveTone(item)}" data-world-rift-directive="${escapeHtml(directiveId)}">
+                <div class="challenge-reward-top">
+                  <div>
+                    <strong>${escapeHtml(title)}</strong>
+                    <p>${escapeHtml(detailLine || `${group.label} · ${scopeGroup.label}`)}</p>
+                    ${bodyLine ? `<p>${escapeHtml(bodyLine)}</p>` : ''}
+                  </div>
+                  <span class="challenge-reward-progress">${escapeHtml(progressLabel)}</span>
+                </div>
+                <div class="challenge-tag-strip challenge-archive-summary-tags">
+                  <span class="challenge-tag">${escapeHtml(scopeGroup.label)}</span>
+                  <span class="challenge-tag">${escapeHtml(statusLabel)}</span>
+                  ${completedAt > 0 ? `<span class="challenge-tag">完成 ${escapeHtml(new Date(completedAt).toLocaleDateString('zh-CN', { timeZone: 'UTC' }))} UTC</span>` : ''}
+                  ${claimedAt > 0 ? `<span class="challenge-tag">到账 ${escapeHtml(new Date(claimedAt).toLocaleDateString('zh-CN', { timeZone: 'UTC' }))} UTC</span>` : ''}
+                </div>
+                <button type="button" class="collection-inline-btn" data-challenge-action="claim-world-rift-directive" data-rotation-id="${escapeHtml(rotationId)}" data-directive-id="${escapeHtml(directiveId)}" ${(claimable && directiveId && rotationId) ? '' : 'disabled'}>${escapeHtml(buttonLabel)}</button>
+              </article>`;
+          }).join('');
+          return `
+            <section class="challenge-record-section" data-world-rift-directive-scope="${escapeHtml(scopeGroup.scope)}">
+              <div class="challenge-record-section-head"><strong>${escapeHtml(`${group.label} · ${scopeGroup.label}`)}</strong><span>${escapeHtml(items.length > 1 ? `${items.length} 条指令` : '1 条指令')}</span></div>
+              <div class="challenge-reward-list">${cards}</div>
+            </section>`;
+        }).filter(Boolean).join('');
+        return sections;
+      }).filter(Boolean).join('');
+      const milestoneCards = groups.flatMap(group => group.milestones.map(item => {
         const milestoneId = String(item.milestoneId || item.id || '');
         const rotationId = String(group.rotation.rotationId || group.rotation.id || '');
         const claimed = !!item.claimed;
@@ -2817,7 +3006,12 @@ const challengeHubMethods = Object.create(null);
             <button type="button" class="collection-inline-btn" data-challenge-action="claim-world-rift-milestone" data-rotation-id="${escapeHtml(rotationId)}" data-milestone-id="${escapeHtml(milestoneId)}" ${claimable ? '' : 'disabled'}>${claimed ? '已领取' : claimable ? `领取 ${amount} 荣誉` : '未达成'}</button>
           </article>`;
       }));
-      rewardsEl.innerHTML = cards.join('') || '<div class="codex-empty-state">登录并完成一次正式贡献后，可读取个人与全服里程碑。</div>';
+      const milestoneSection = milestoneCards.length ? `
+        <section class="challenge-record-section" data-world-rift-milestones>
+          <div class="challenge-record-section-head"><strong>里程碑奖励</strong><span>保留原有裂隙账本</span></div>
+          <div class="challenge-reward-list">${milestoneCards.join('')}</div>
+        </section>` : '';
+      rewardsEl.innerHTML = `${directiveSections}${milestoneSection}` || '<div class="codex-empty-state">登录并完成一次正式贡献后，可读取本轮战役指令与裂隙里程碑。</div>';
     }
     if (recordsEl) {
       const completedAttempts = clampInt(view.personal?.completedAttempts, 0);
@@ -3767,6 +3961,12 @@ const challengeHubMethods = Object.create(null);
     };
     bindRootClick(rewardsEl, button => {
       const action = String(button.dataset.challengeAction || '');
+      if (action === 'claim-world-rift-directive') {
+        const directiveId = String(button.dataset.directiveId || '');
+        const rotationId = String(button.dataset.rotationId || '');
+        Promise.resolve(this.claimWorldRiftDirective(directiveId, rotationId)).catch(() => {});
+        return;
+      }
       if (action === 'claim-world-rift-milestone') {
         const milestoneId = String(button.dataset.milestoneId || '');
         const rotationId = String(button.dataset.rotationId || '');

@@ -250,6 +250,22 @@ function assertRankedOpponentConcealed(opponent, messagePrefix) {
     assert.doesNotMatch(JSON.stringify(opponent), /"userId"|"displayName"|"loadoutHash"|"loadoutSummary"|"loadoutSnapshot"|"identitySlot"|"label"|"hand":|"deck":|"cardId"|"instanceId"/i, `${messagePrefix} must not leak hidden opponent build or account fields`);
 }
 
+function assertMatchQualityConcealsRatings(report, exactRatings, messagePrefix) {
+    assert.ok(report && typeof report === 'object', `${messagePrefix} should expose a match-quality report`);
+    assert.doesNotMatch(
+        JSON.stringify(report),
+        /"(?:rating|playerRating|opponentRating|ratingA|ratingB|score|elo)"\s*:/i,
+        `${messagePrefix} must not expose exact-rating fields`
+    );
+    const { matchedAt, waitMs, ...stablePublicReport } = report;
+    const exactRatingPattern = new RegExp(`(?:^|\\D)(?:${exactRatings.join('|')})(?:\\D|$)`);
+    assert.doesNotMatch(
+        JSON.stringify(stablePublicReport),
+        exactRatingPattern,
+        `${messagePrefix} must not embed exact ratings in public labels`
+    );
+}
+
 async function heartbeat(baseUrl, token, matchId) {
     return request(baseUrl, `/api/pvp/live/matches/${matchId}/heartbeat`, {
         method: 'POST',
@@ -666,7 +682,11 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
         assert.equal(ratedRequesterJoin.payload.stateView.matchQuality?.expansionStage, 'strict_rating', 'matched view should expose strict rating expansion stage');
         assert.equal(ratedRequesterJoin.payload.stateView.matchQuality?.candidatePoolSize, 3, 'matched view should count rated candidate pool');
         assert.ok(ratedRequesterJoin.payload.stateView.matchQuality?.safeguards?.includes('closest_rating_candidate'), 'matched quality should explain closest rating safeguard');
-        assert.ok(!/1800|1040|1000/.test(JSON.stringify(ratedRequesterJoin.payload.stateView.matchQuality || {})), 'matched quality should not expose exact player ratings');
+        assertMatchQualityConcealsRatings(
+            ratedRequesterJoin.payload.stateView.matchQuality,
+            [1800, 1040, 1000],
+            'matched quality'
+        );
         const nearRatedMatched = await request(baseUrl, `/api/pvp/live/queue/status/${nearRatedJoin.payload.queueTicket}`, {
             token: tokenD
         });
@@ -732,7 +752,11 @@ async function readyBoth(baseUrl, { matchId, tokenA, tokenB, stateVersionA, pref
         assert.equal(acceptedWideRequester.payload.stateView.matchQuality?.ratingDeltaBucket, 'expanded_200_399', 'accepted wide match should expose bucketed wide rating delta');
         assert.equal(acceptedWideRequester.payload.stateView.matchQuality?.wideMatchReason, 'two_sided_explicit_consent', 'accepted wide match should explain explicit two-sided consent');
         assert.ok(acceptedWideRequester.payload.stateView.matchQuality?.safeguards?.includes('explicit_wide_match_consent'), 'accepted wide match should keep explicit consent safeguard');
-        assert.ok(!/1250|1000/.test(JSON.stringify(acceptedWideRequester.payload.stateView.matchQuality || {})), 'accepted wide match quality should not expose exact player ratings');
+        assertMatchQualityConcealsRatings(
+            acceptedWideRequester.payload.stateView.matchQuality,
+            [1250, 1000],
+            'accepted wide match quality'
+        );
         pvpLiveRoutes.__livePvpStore.reset();
 
         const laterConsentSeed = await request(baseUrl, '/api/pvp/live/queue/join', {

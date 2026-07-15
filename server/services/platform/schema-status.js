@@ -192,6 +192,16 @@ const SCHEMA_MIGRATIONS = [
             'progression_authoritative_run_receipts.request_hash',
             'progression_authoritative_run_receipts.request_body_json'
         ]
+    }),
+    makeMigration({
+        id: '0012_world_rift_campaign_directives',
+        version: 12,
+        description: 'Replayable personal, squad, and global world-rift campaign directives',
+        resources: [
+            'world_rift_directive_states',
+            'world_rift_directive_projections',
+            'world_rift_directive_claims'
+        ]
     })
 ];
 const CURRENT_MIGRATION = SCHEMA_MIGRATIONS[SCHEMA_MIGRATIONS.length - 1];

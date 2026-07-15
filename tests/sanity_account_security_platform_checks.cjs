@@ -292,8 +292,8 @@ async function runMigrationCollisionChecks() {
     await assertExpectedTablesExist();
     const version = await request('/api/version');
     assert.strictEqual(version.status, 200, JSON.stringify(version.payload));
-    assert.strictEqual(version.payload?.schema?.currentMigrationId, '0011_authoritative_fate_chronicle');
-    assert.strictEqual(version.payload?.schema?.version, 11);
+    assert.strictEqual(version.payload?.schema?.currentMigrationId, '0012_world_rift_campaign_directives');
+    assert.strictEqual(version.payload?.schema?.version, 12);
 
     const columns = await dbAll(`SELECT name FROM pragma_table_info('users')`);
     const columnNames = new Set(columns.map(row => row.name));

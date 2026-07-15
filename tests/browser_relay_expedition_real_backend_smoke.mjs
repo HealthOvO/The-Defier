@@ -616,7 +616,7 @@ try {
   apiUrl = `http://127.0.0.1:${port}`;
   backend = startBackend();
   const health = await waitForHealth();
-  add('real backend boots authoritative fate chronicle schema V11', health?.schema?.version === 11 && health?.schema?.currentMigrationId === '0011_authoritative_fate_chronicle', JSON.stringify(health?.schema || {}));
+  add('real backend boots authoritative fate chronicle schema V12', health?.schema?.version === 12 && health?.schema?.currentMigrationId === '0012_world_rift_campaign_directives', JSON.stringify(health?.schema || {}));
 
   const accountA = await register(usernameA, 'Relay Desktop A');
   const accountB = await register(usernameB, 'Relay Desktop B');

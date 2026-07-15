@@ -47,8 +47,10 @@ node tests/sanity_fate_chronicle_ui_checks.mjs
 node tests/sanity_challenge_ladder_client_checks.mjs
 node tests/sanity_challenge_ladder_platform_checks.cjs
 node tests/sanity_world_rift_client_checks.mjs
+node tests/sanity_world_rift_directive_client_ui_checks.mjs
 node tests/sanity_world_rift_ui_checks.mjs
 node tests/sanity_world_rift_platform_checks.cjs
+node tests/sanity_world_rift_directive_platform_checks.cjs
 node tests/sanity_world_rift_squad_platform_checks.cjs
 node tests/sanity_relay_expedition_migration_checks.cjs
 node tests/sanity_relay_expedition_platform_checks.cjs
