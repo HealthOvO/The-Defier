@@ -9,6 +9,8 @@ import { safeAuditScreenshot } from './helpers/safe_audit_screenshot.mjs';
 
 const require = createRequire(import.meta.url);
 const sqlite3 = require('../server/node_modules/sqlite3').verbose();
+const { getContentSnapshot } = require('../server/progression/authoritative-runs/catalog');
+const authoritativeContent = getContentSnapshot();
 
 const appUrl = process.argv[2] || 'http://127.0.0.1:4173';
 const outDir = process.argv[3] || 'output/browser-authoritative-runs-real-backend-smoke';
@@ -434,24 +436,65 @@ function chooseDecision(projection, { routePolicy = 'safe' } = {}) {
   }
   if (projection.phase !== 'battle') return null;
   const incoming = Number(projection.battle?.enemy?.intent?.amount || 0);
+  const enemyBlock = Number(projection.battle?.enemy?.block || 0);
   const playerBlock = Number(projection.player?.block || 0);
   const energy = Number(projection.player?.energy || 0);
-  const blockCards = new Set(['guard', 'iron_mandate']);
+  const blockCards = new Set(['guard', 'iron_mandate', 'ember_riposte', 'mirror_breath', 'warding_stride']);
+  const damageCards = new Set(['strike', 'sky_pierce', 'life_siphon', 'fracture', 'ember_riposte', 'severing_flow', 'archive_surge', 'sealbreaker']);
+  const tactic = projection.battle?.tactic;
+  const requirements = Array.isArray(tactic?.requirements) ? tactic.requirements : [];
+  const blockRequirement = requirements.find(requirement => requirement.metric === 'blockGained');
+  const damageRequirement = requirements.find(requirement => requirement.metric === 'damageDealt');
+  const needsBlock = blockRequirement && !blockRequirement.met;
+  const needsDamage = damageRequirement && !damageRequirement.met;
+  const effectiveIncoming = Math.max(
+    0,
+    incoming - (tactic?.completed ? Number(tactic.effects?.damageReduction || 0) : 0),
+  );
   const cards = [...(projection.player?.hand || [])].sort((left, right) => {
     const leftBlocks = blockCards.has(left.cardId) ? 1 : 0;
     const rightBlocks = blockCards.has(right.cardId) ? 1 : 0;
-    const defenseOrder = incoming > playerBlock ? rightBlocks - leftBlocks : leftBlocks - rightBlocks;
-    return defenseOrder || Number(right.cost || 0) - Number(left.cost || 0)
+    const leftDamages = damageCards.has(left.cardId) ? 1 : 0;
+    const rightDamages = damageCards.has(right.cardId) ? 1 : 0;
+    const tacticOrder = needsBlock
+      ? rightBlocks - leftBlocks
+      : needsDamage
+        ? rightDamages - leftDamages
+        : 0;
+    const defenseOrder = effectiveIncoming > playerBlock ? rightBlocks - leftBlocks : leftBlocks - rightBlocks;
+    return tacticOrder || defenseOrder || Number(right.cost || 0) - Number(left.cost || 0)
       || String(left.instanceId).localeCompare(String(right.instanceId));
   });
-  const card = cards.find(entry => Number(entry.cost || 0) <= energy);
+  const damageIntoGuard = enemyBlock > 0
+    ? cards.find(entry => damageCards.has(entry.cardId) && Number(entry.cost || 0) <= energy)
+    : null;
+  const card = damageIntoGuard || cards.find(entry => Number(entry.cost || 0) <= energy);
   return card ? {
     command: 'play_card',
     selector: `[data-season-ops-action="authoritative-play-card"][data-card-instance-id="${cssValue(card.instanceId)}"]`,
+    cardInstanceId: card.instanceId,
+    cardId: card.cardId,
+    damageCard: damageCards.has(card.cardId),
   } : {
     command: 'end_turn',
     selector: '[data-season-ops-action="authoritative-end-turn"]',
   };
+}
+
+function calculateExpectedRawCardDamage(card, projection) {
+  const baseDefinition = authoritativeContent.cards?.[card?.cardId];
+  const definition = card?.upgraded && baseDefinition?.upgrade
+    ? baseDefinition.upgrade
+    : baseDefinition;
+  const effect = definition?.effect || {};
+  let damage = Math.max(0, Math.trunc(Number(effect.damage || 0)));
+  if (Number(projection?.battle?.enemy?.block || 0) > 0) {
+    damage += Math.max(0, Math.trunc(Number(effect.bonusDamageAgainstBlock || 0)));
+  }
+  if (Number(projection?.battle?.enemy?.vulnerable || 0) > 0 && damage > 0) {
+    damage = Math.floor(damage * 1.5);
+  }
+  return damage;
 }
 
 async function readRewardDecisionUi(page, decision) {
@@ -733,7 +776,8 @@ try {
   add('public projection hides seed and ordered draw pile', !/"(?:seed|rng|drawPile)"/.test(publicProjectionJson));
   const routeContracts = panel.projection?.route?.choices?.map(choice => choice.routeContract) || [];
   const routePlayerCopy = await page.locator('.season-ops-authoritative-panel').innerText();
-  add('v6 route projection exposes two readable contracts without private coefficients', panel.projection?.contentVersion === 'authoritative-trials-v6'
+  add('v7 route projection exposes tactics and two readable contracts without private coefficients', panel.projection?.contentVersion === 'authoritative-trials-v7'
+    && panel.projection?.combatTactics?.version === 1
     && Number(panel.projection?.route?.contractVersion) === 1
     && routeContracts.length === 2
     && routeContracts.every(contract => Number(contract?.version) === 1
@@ -758,12 +802,47 @@ try {
   let refreshChecked = false;
   let openingFairnessChecked = false;
   let routeContractRewardChecked = false;
+  let tacticPanelProof = null;
+  let tacticReceiptProof = null;
+  let persistentEnemyBlockProof = null;
+  let enemyBlockAbsorptionProof = null;
+  let tacticMobileProof = null;
   const ladderRewardKinds = [];
   const ladderRewardUi = [];
   while (!['completed', 'defeated', 'abandoned'].includes(panel.projection?.phase) && actionCount < 256) {
     const before = panel;
     const decision = chooseDecision(before.projection);
     if (!decision) throw new Error(`no playable UI command: ${JSON.stringify(before)}`);
+    const selectedCard = decision.command === 'play_card'
+      ? before.projection?.player?.hand?.find(card => card.instanceId === decision.cardInstanceId)
+      : null;
+    const expectedRawDamage = calculateExpectedRawCardDamage(selectedCard, before.projection);
+    const enemyBlockBeforeCard = Number(before.projection?.battle?.enemy?.block || 0);
+    const enemyHpBeforeCard = Number(before.projection?.battle?.enemy?.hp || 0);
+    const expectedBlockedDamage = Math.min(enemyBlockBeforeCard, expectedRawDamage);
+    const expectedHpDamage = Math.min(enemyHpBeforeCard, Math.max(0, expectedRawDamage - expectedBlockedDamage));
+    const blockAbsorptionCandidate = decision.command === 'play_card'
+      && decision.damageCard
+      && expectedBlockedDamage > 0
+      && expectedHpDamage < enemyHpBeforeCard
+      ? {
+          cardId: decision.cardId,
+          upgraded: !!selectedCard?.upgraded,
+          enemyBlock: enemyBlockBeforeCard,
+          enemyHp: enemyHpBeforeCard,
+          expectedRawDamage,
+          expectedBlockedDamage,
+          expectedHpDamage,
+          expectedRemainingBlock: enemyBlockBeforeCard - expectedBlockedDamage,
+        }
+      : null;
+    const persistentBlockCandidate = decision.command === 'end_turn'
+      && Number(before.projection?.battle?.enemy?.intent?.block || 0) > 0
+      ? {
+          intentType: before.projection.battle.enemy.intent.type,
+          advertisedBlock: Number(before.projection.battle.enemy.intent.block),
+        }
+      : null;
     if (decision.command === 'choose_reward') {
       const firstOfKind = !ladderRewardKinds.includes(decision.rewardKind);
       ladderRewardKinds.push(decision.rewardKind);
@@ -793,6 +872,62 @@ try {
     panel = await clickDecision(page, decision, before);
     actionCount += 1;
 
+    const actionEvents = Array.isArray(panel.receipt?.events) ? panel.receipt.events : [];
+    if (decision.command === 'end_turn' && !tacticReceiptProof) {
+      const tacticEvent = actionEvents.find(event => event.type === 'enemy_tactic_resolved');
+      if (tacticEvent) {
+        const tacticReceiptCopy = await page.locator('.season-ops-authoritative-panel').innerText();
+        tacticReceiptProof = {
+          tacticEvent,
+          projected: panel.projection?.combatTactics?.lastResolution || null,
+          textVisible: tacticEvent.success
+            ? /反制成功/.test(tacticReceiptCopy)
+            : /未达成|不追加额外惩罚/.test(tacticReceiptCopy),
+          privateFieldsHidden: !/damageThresholdBps|blockThresholdBps|blockReductionBps|tacticId|intentType/.test(tacticReceiptCopy),
+        };
+      }
+    }
+
+    if (persistentBlockCandidate && !persistentEnemyBlockProof && panel.projection?.phase === 'battle') {
+      const enemyEvent = actionEvents.find(event => event.type === 'enemy_intent_resolved');
+      const persistedBlock = Number(panel.projection.battle?.enemy?.block || 0);
+      const persistentBlockCopy = await page.locator('.season-ops-authoritative-panel').innerText();
+      persistentEnemyBlockProof = {
+        ...persistentBlockCandidate,
+        resolvedBlock: Number(enemyEvent?.enemyBlock || 0),
+        persistedBlock,
+        textVisible: /当前格挡会吸收本回合伤害，并在下次敌方结算前消散/.test(persistentBlockCopy),
+      };
+      await page.locator('[data-authoritative-tactic="true"]').scrollIntoViewIfNeeded();
+      await safeAuditScreenshot(page, path.join(outDir, 'combat-tactic-persistent-block-desktop.png'), 'browser_authoritative_runs_real_backend_smoke', { timeout: 9000 });
+      await page.setViewportSize({ width: 390, height: 844 });
+      await page.waitForTimeout(100);
+      await page.locator('[data-authoritative-tactic="true"]').scrollIntoViewIfNeeded();
+      const mobileTacticLayout = await readLayout(page);
+      const mobileTacticCopy = await page.locator('.season-ops-authoritative-panel').innerText();
+      tacticMobileProof = {
+        layout: mobileTacticLayout,
+        textVisible: /当前敌意题面/.test(mobileTacticCopy)
+          && /当前格挡会吸收本回合伤害/.test(mobileTacticCopy),
+      };
+      await safeAuditScreenshot(page, path.join(outDir, 'combat-tactic-persistent-block-mobile.png'), 'browser_authoritative_runs_real_backend_smoke', { timeout: 9000 });
+      await page.setViewportSize({ width: 1440, height: 960 });
+      await page.waitForTimeout(100);
+    }
+
+    if (blockAbsorptionCandidate && !enemyBlockAbsorptionProof && panel.projection?.phase === 'battle') {
+      const cardEvent = actionEvents.find(event => event.type === 'card_played');
+      const afterEnemyBlock = Number(panel.projection.battle?.enemy?.block || 0);
+      const afterEnemyHp = Number(panel.projection.battle?.enemy?.hp || 0);
+      enemyBlockAbsorptionProof = {
+        ...blockAbsorptionCandidate,
+        afterEnemyBlock,
+        afterEnemyHp,
+        reportedDamage: Number(cardEvent?.damage || 0),
+        blockChanged: afterEnemyBlock < blockAbsorptionCandidate.enemyBlock,
+      };
+    }
+
     if (!openingFairnessChecked && panel.projection.phase === 'battle') {
       const intent = Number(panel.projection.battle?.enemy?.intent?.amount || 0);
       const maxHp = Number(panel.projection.player?.maxHp || 0);
@@ -805,6 +940,15 @@ try {
         && battlePlayerCopy.includes(battleContract.label)
         && battlePlayerCopy.includes(battleContract.difficultySummary)
         && !/enemyAdjustments|rewardAdjustments/.test(JSON.stringify(panel.projection?.battle || null)), battlePlayerCopy);
+      const tactic = panel.projection.battle?.tactic;
+      tacticPanelProof = {
+        tactic,
+        textVisible: /当前敌意题面/.test(battlePlayerCopy)
+          && !!tactic?.title
+          && battlePlayerCopy.includes(tactic.title)
+          && (tactic.requirements || []).every(requirement => battlePlayerCopy.includes(`${requirement.actual}/${requirement.target}`)),
+        privateFieldsHidden: !/blockThresholdBps|damageThresholdBps|blockReductionBps/.test(JSON.stringify(panel.projection)),
+      };
       const battlePhaseLayout = await page.locator('[data-authoritative-phase="battle"]').evaluate(element => {
         const root = element.closest('#season-ops-screen');
         const rootRect = root?.getBoundingClientRect();
@@ -871,11 +1015,46 @@ try {
     }
   }
 
+  add('v7 battle UI renders exact public tactic progress and effects without private coefficients', !!tacticPanelProof?.tactic
+    && Number(tacticPanelProof.tactic.version) === 1
+    && Array.isArray(tacticPanelProof.tactic.requirements)
+    && tacticPanelProof.tactic.requirements.length > 0
+    && tacticPanelProof.tactic.requirements.every(requirement => Number(requirement.target) > 0)
+    && tacticPanelProof.textVisible
+    && tacticPanelProof.privateFieldsHidden, JSON.stringify(tacticPanelProof));
+  add('real end-turn receipt keeps tactic success or failure readable and authoritative', !!tacticReceiptProof?.tacticEvent
+    && Number(tacticReceiptProof.tacticEvent.version) === 1
+    && tacticReceiptProof.projected?.tacticId === tacticReceiptProof.tacticEvent.tacticId
+    && tacticReceiptProof.projected?.success === tacticReceiptProof.tacticEvent.success
+    && tacticReceiptProof.textVisible
+    && tacticReceiptProof.privateFieldsHidden, JSON.stringify(tacticReceiptProof));
+  add('enemy fortify or mixed guard persists into the following real player turn', Number(persistentEnemyBlockProof?.resolvedBlock) > 0
+    && Number(persistentEnemyBlockProof?.persistedBlock) === Number(persistentEnemyBlockProof?.resolvedBlock)
+    && Number(persistentEnemyBlockProof?.persistedBlock) <= Number(persistentEnemyBlockProof?.advertisedBlock)
+    && persistentEnemyBlockProof?.textVisible === true, JSON.stringify(persistentEnemyBlockProof));
+  add('real damage card is absorbed by persisted enemy guard before hp loss', Number(enemyBlockAbsorptionProof?.enemyBlock) > 0
+    && Number(enemyBlockAbsorptionProof?.expectedBlockedDamage) > 0
+    && Number(enemyBlockAbsorptionProof?.expectedRawDamage) > Number(enemyBlockAbsorptionProof?.expectedHpDamage)
+    && Number(enemyBlockAbsorptionProof?.afterEnemyBlock) === Number(enemyBlockAbsorptionProof?.expectedRemainingBlock)
+    && Number(enemyBlockAbsorptionProof?.reportedDamage) === Number(enemyBlockAbsorptionProof?.expectedHpDamage)
+    && Number(enemyBlockAbsorptionProof?.enemyHp) - Number(enemyBlockAbsorptionProof?.afterEnemyHp) === Number(enemyBlockAbsorptionProof?.expectedHpDamage), JSON.stringify(enemyBlockAbsorptionProof));
+  add('390px real battle keeps tactic progress and persisted guard readable without overflow', tacticMobileProof?.textVisible === true
+    && tacticMobileProof?.layout?.documentScrollWidth === 390
+    && tacticMobileProof?.layout?.rootScrollWidth === tacticMobileProof?.layout?.rootClientWidth
+    && tacticMobileProof?.layout?.undersized?.length === 0, JSON.stringify(tacticMobileProof));
   add('real browser strategy completes the formal challenge ladder run without client simulation', panel.projection?.phase === 'completed', `${panel.projection?.phase || 'missing'} after ${actionCount} actions`);
   if (panel.projection?.phase !== 'completed') throw new Error(`challenge ladder run did not complete: ${JSON.stringify(panel)}`);
   add('terminal projection carries additive route score and per-stage resolution', Number(panel.projection?.summary?.scoreBreakdown?.finalScore) === Number(panel.projection?.summary?.score)
     && Number(panel.projection?.summary?.scoreBreakdown?.routeBonus) === Number(panel.projection?.summary?.routeResolution?.totalBonus)
     && panel.projection?.summary?.routeResolution?.selections?.length === panel.projection?.route?.totalStages, JSON.stringify(panel.projection?.summary));
+  const tacticTerminalCopy = await page.locator('.season-ops-authoritative-panel').innerText();
+  add('terminal projection and UI summarize real combat tactic opportunities and successes', Number(panel.projection?.summary?.combatTactics?.version) === 1
+    && Number(panel.projection?.summary?.combatTactics?.opportunities) > 0
+    && Number(panel.projection?.summary?.combatTactics?.successes) >= 0
+    && Number(panel.projection?.summary?.combatTactics?.successes) <= Number(panel.projection?.summary?.combatTactics?.opportunities)
+    && /敌意题面/.test(tacticTerminalCopy)
+    && /成功反制/.test(tacticTerminalCopy)
+    && /反制率/.test(tacticTerminalCopy), tacticTerminalCopy);
   add('challenge ladder real UI exercises targeted upgrade and bounded trim', Number(panel.projection?.stats?.cardsUpgraded) >= 1
     && Number(panel.projection?.stats?.cardsRemoved) === 1
     && Number(panel.projection?.summary?.upgradedCards) >= 1

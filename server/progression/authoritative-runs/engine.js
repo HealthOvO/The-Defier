@@ -89,6 +89,163 @@ function getRouteContractRules(content) {
     return rules;
 }
 
+function getCombatTacticsRules(content) {
+    const rules = content && content.combatTactics;
+    if (!rules || clampInt(rules.version, 0, 10) !== 1) return null;
+    if (!rules.profiles || typeof rules.profiles !== 'object' || Array.isArray(rules.profiles)) return null;
+    for (const intentType of ['attack', 'fortify', 'defend_attack']) {
+        const profile = rules.profiles[intentType];
+        if (!profile || !SAFE_REF.test(String(profile.tacticId || ''))) return null;
+    }
+    return rules;
+}
+
+function scaleThreshold(value, bps, minimum) {
+    const scaled = Math.ceil(clampInt(value, 0) * clampInt(bps, 0, 10000) / 10000);
+    return Math.max(clampInt(minimum, 1, 100), scaled);
+}
+
+function createCombatTacticTurn() {
+    return {
+        damageDealt: 0,
+        blockGained: 0,
+        cardsPlayed: 0
+    };
+}
+
+function buildCombatTactic(state, content, intent = null) {
+    const rules = getCombatTacticsRules(content);
+    if (!rules || !state.battle) return null;
+    const resolvedIntent = intent || currentEnemyIntent(state, content);
+    const profile = resolvedIntent && rules.profiles[resolvedIntent.type];
+    if (!profile) return null;
+    const turn = state.battle.tacticTurn || createCombatTacticTurn();
+    const requirements = [];
+    if (resolvedIntent.type === 'attack') {
+        requirements.push({
+            metric: 'blockGained',
+            label: '本回合获得格挡',
+            target: scaleThreshold(
+                resolvedIntent.amount,
+                profile.blockThresholdBps,
+                profile.minBlockThreshold
+            ),
+            actual: clampInt(turn.blockGained, 0)
+        });
+    } else if (resolvedIntent.type === 'fortify') {
+        requirements.push({
+            metric: 'damageDealt',
+            label: '本回合造成伤害',
+            target: scaleThreshold(
+                resolvedIntent.block,
+                profile.damageThresholdBps,
+                profile.minDamageThreshold
+            ),
+            actual: clampInt(turn.damageDealt, 0)
+        });
+    } else if (resolvedIntent.type === 'defend_attack') {
+        requirements.push({
+            metric: 'damageDealt',
+            label: '本回合造成伤害',
+            target: scaleThreshold(
+                resolvedIntent.block,
+                profile.damageThresholdBps,
+                profile.minDamageThreshold
+            ),
+            actual: clampInt(turn.damageDealt, 0)
+        });
+        requirements.push({
+            metric: 'blockGained',
+            label: '本回合获得格挡',
+            target: scaleThreshold(
+                resolvedIntent.amount,
+                profile.blockThresholdBps,
+                profile.minBlockThreshold
+            ),
+            actual: clampInt(turn.blockGained, 0)
+        });
+    }
+    const projectedRequirements = requirements.map(requirement => ({
+        ...requirement,
+        met: requirement.actual >= requirement.target
+    }));
+    const completed = projectedRequirements.length > 0
+        && projectedRequirements.every(requirement => requirement.met);
+    const damageReduction = Math.min(
+        clampInt(resolvedIntent.amount, 0),
+        clampInt(profile.damageReduction, 0, 100)
+    );
+    let blockReduction = Math.min(
+        clampInt(resolvedIntent.block, 0),
+        clampInt(profile.blockReduction, 0, 100)
+    );
+    if (clampInt(profile.blockReductionBps, 0, 10000) > 0) {
+        blockReduction = Math.floor(
+            clampInt(resolvedIntent.block, 0) * clampInt(profile.blockReductionBps, 0, 10000) / 10000
+        );
+    }
+    return {
+        version: 1,
+        tacticId: String(profile.tacticId || ''),
+        intentType: String(resolvedIntent.type || ''),
+        title: String(profile.title || ''),
+        prompt: String(profile.prompt || ''),
+        rewardSummary: String(profile.rewardSummary || ''),
+        effects: { damageReduction, blockReduction },
+        requirements: projectedRequirements,
+        cardsPlayed: clampInt(turn.cardsPlayed, 0),
+        status: completed ? 'ready' : 'in_progress',
+        completed
+    };
+}
+
+function resolveCombatTactic(state, content, intent, events) {
+    const rules = getCombatTacticsRules(content);
+    const tactic = buildCombatTactic(state, content, intent);
+    if (!rules || !tactic) return null;
+    const damageReduction = tactic.completed
+        ? clampInt(tactic.effects && tactic.effects.damageReduction, 0)
+        : 0;
+    const blockReduction = tactic.completed
+        ? clampInt(tactic.effects && tactic.effects.blockReduction, 0)
+        : 0;
+    const resolution = {
+        version: 1,
+        tacticId: tactic.tacticId,
+        intentType: tactic.intentType,
+        title: tactic.title,
+        success: tactic.completed,
+        requirements: cloneJson(tactic.requirements),
+        rewardSummary: tactic.rewardSummary,
+        damageReduction,
+        blockReduction
+    };
+    state.stats.combatTacticOpportunities = clampInt(state.stats.combatTacticOpportunities, 0) + 1;
+    if (resolution.success) {
+        state.stats.combatTacticSuccesses = clampInt(state.stats.combatTacticSuccesses, 0) + 1;
+    }
+    if (!state.combatTactics || typeof state.combatTactics !== 'object') {
+        state.combatTactics = {
+            version: 1,
+            reportVersion: String(rules.reportVersion || ''),
+            lastResolution: null
+        };
+    }
+    state.combatTactics.lastResolution = cloneJson(resolution);
+    events.push({ type: 'enemy_tactic_resolved', ...cloneJson(resolution) });
+    return resolution;
+}
+
+function getRewardCardPool(content, scenario) {
+    const basePool = Array.isArray(scenario.rewardCardPool) && scenario.rewardCardPool.length > 0
+        ? scenario.rewardCardPool
+        : content.rewardCardPool;
+    const tactics = getCombatTacticsRules(content);
+    if (!tactics) return basePool.slice();
+    const tacticCards = tactics && Array.isArray(tactics.rewardCardPool) ? tactics.rewardCardPool : [];
+    return [...new Set([...basePool, ...tacticCards].map(cardId => String(cardId || '')).filter(Boolean))];
+}
+
 function scaleByBps(value, bps) {
     return Math.max(1, Math.round(clampInt(value, 0) * clampInt(bps ?? 10000, 1, 50000) / 10000));
 }
@@ -468,6 +625,7 @@ function createInitialState({ runId, userId, mode, scenarioId = '', seedHex, con
         throw makeRuleError('unsupported_content_version', '权威内容版本不受支持', 409);
     }
     const scenario = getScenario(content, mode, scenarioId);
+    const combatTactics = getCombatTacticsRules(content);
     const state = {
         schemaVersion: 2,
         protocolVersion: PROTOCOL_VERSION,
@@ -507,9 +665,20 @@ function createInitialState({ runId, userId, mode, scenarioId = '', seedHex, con
             encountersWon: 0,
             bossWins: 0,
             rewardsChosen: 0,
-            ...(getDeckCraftingRules(content) ? { cardsUpgraded: 0, cardsRemoved: 0 } : {})
+            ...(getDeckCraftingRules(content) ? { cardsUpgraded: 0, cardsRemoved: 0 } : {}),
+            ...(combatTactics ? {
+                combatTacticOpportunities: 0,
+                combatTacticSuccesses: 0
+            } : {})
         },
-        summary: null
+        summary: null,
+        ...(combatTactics ? {
+            combatTactics: {
+                version: 1,
+                reportVersion: String(combatTactics.reportVersion || ''),
+                lastResolution: null
+            }
+        } : {})
     };
     const starterDeck = Array.isArray(scenario.starterDeck) && scenario.starterDeck.length > 0
         ? scenario.starterDeck
@@ -564,6 +733,7 @@ function beginBattle(state, content, node) {
     const enemyMaxHp = routeContract
         ? scaleByBps(enemy.maxHp, routeContract.enemyAdjustments.maxHpBps)
         : enemy.maxHp;
+    const combatTactics = getCombatTacticsRules(content);
     state.battle = {
         nodeId: node.nodeId,
         nodeType: node.type,
@@ -577,7 +747,8 @@ function beginBattle(state, content, node) {
             intentIndex: 0
         },
         ...(routeContract ? { routeContract } : {}),
-        ...(node.chapterBranch ? { chapterBranch: projectChapterBranch(node.chapterBranch) } : {})
+        ...(node.chapterBranch ? { chapterBranch: projectChapterBranch(node.chapterBranch) } : {}),
+        ...(combatTactics ? { tacticTurn: createCombatTacticTurn() } : {})
     };
     state.player.block = 0;
     state.player.energy = scenario.energyPerTurn;
@@ -605,9 +776,7 @@ function applyDamageToEnemy(state, amount) {
 
 function makeLegacyRewardChoices(state, content) {
     const scenario = resolveSelectedBranchScenario(state, getScenario(content, state.mode, state.scenarioId));
-    const rewardCardPool = Array.isArray(scenario.rewardCardPool) && scenario.rewardCardPool.length > 0
-        ? scenario.rewardCardPool
-        : content.rewardCardPool;
+    const rewardCardPool = getRewardCardPool(content, scenario);
     const cardId = shuffle(state, rewardCardPool)[0];
     const card = getCard(content, cardId);
     return shuffle(state, [
@@ -658,10 +827,7 @@ function canRemoveCardInstance(state, content, instance, rules) {
 }
 
 function makeDeckCraftingRewardChoices(state, content, scenario, rules) {
-    const rewardCardPool = Array.isArray(scenario.rewardCardPool) && scenario.rewardCardPool.length > 0
-        ? scenario.rewardCardPool
-        : content.rewardCardPool;
-    const cardIds = [...new Set(rewardCardPool.map(cardId => String(cardId || '')).filter(Boolean))];
+    const cardIds = getRewardCardPool(content, scenario);
     const cardChoices = shuffle(state, cardIds)
         .slice(0, rules.cardOfferCount)
         .map(cardId => {
@@ -781,6 +947,9 @@ function buildSummary(state, content, result, reason) {
         ? Math.max(0, Math.round((base + routeBonus) * scenario.scoreMultiplier))
         : 0;
     const grade = score >= 520 ? 'S' : score >= 420 ? 'A' : score >= 300 ? 'B' : result === 'completed' ? 'C' : '未完成';
+    const combatTactics = getCombatTacticsRules(content);
+    const tacticOpportunities = clampInt(state.stats.combatTacticOpportunities, 0);
+    const tacticSuccesses = clampInt(state.stats.combatTacticSuccesses, 0);
     const summary = {
         result,
         reason,
@@ -811,6 +980,17 @@ function buildSummary(state, content, result, reason) {
         } : {}),
         ...(state.route.chapterBranch ? {
             chapterBranchResolution: projectChapterBranch(state.route.chapterBranch)
+        } : {}),
+        ...(combatTactics ? {
+            combatTactics: {
+                version: 1,
+                reportVersion: String(combatTactics.reportVersion || ''),
+                opportunities: tacticOpportunities,
+                successes: tacticSuccesses,
+                successRateBps: tacticOpportunities > 0
+                    ? Math.floor(tacticSuccesses * 10000 / tacticOpportunities)
+                    : 0
+            }
         } : {})
     };
     if (getDeckCraftingRules(content, scenario)) {
@@ -888,12 +1068,25 @@ function playCard(state, content, payload, events) {
     state.player.energy -= definition.cost;
     const effect = definition.effect || {};
     const event = { type: 'card_played', cardInstanceId: instance.instanceId, cardId: instance.cardId };
-    if (effect.damage) event.damage = applyDamageToEnemy(state, effect.damage);
-    if (effect.block) {
-        const gained = clampInt(effect.block, 0);
+    const combatTactics = getCombatTacticsRules(content);
+    const enemyHadBlock = state.battle.enemy.block > 0;
+    const intent = combatTactics ? currentEnemyIntent(state, content) : null;
+    const conditionalDamage = combatTactics && enemyHadBlock
+        ? clampInt(effect.bonusDamageAgainstBlock, 0)
+        : 0;
+    const conditionalBlock = combatTactics && clampInt(intent && intent.amount, 0) > 0
+        ? clampInt(effect.bonusBlockAgainstAttack, 0)
+        : 0;
+    if (effect.damage || conditionalDamage) {
+        event.damage = applyDamageToEnemy(state, clampInt(effect.damage, 0) + conditionalDamage);
+        if (conditionalDamage > 0) event.conditionalDamage = conditionalDamage;
+    }
+    if (effect.block || conditionalBlock) {
+        const gained = clampInt(effect.block, 0) + conditionalBlock;
         state.player.block += gained;
         state.stats.blockGained += gained;
         event.block = gained;
+        if (conditionalBlock > 0) event.conditionalBlock = conditionalBlock;
     }
     if (effect.heal) {
         const before = state.player.hp;
@@ -911,6 +1104,12 @@ function playCard(state, content, payload, events) {
     state.player.discardPile.push(instance);
     if (effect.draw) event.drawn = drawCards(state, clampInt(effect.draw, 0, 5));
     state.stats.cardsPlayed += 1;
+    if (combatTactics) {
+        if (!state.battle.tacticTurn) state.battle.tacticTurn = createCombatTacticTurn();
+        state.battle.tacticTurn.damageDealt += clampInt(event.damage, 0);
+        state.battle.tacticTurn.blockGained += clampInt(event.block, 0);
+        state.battle.tacticTurn.cardsPlayed += 1;
+    }
     events.push(event);
     if (state.battle.enemy.hp <= 0) finishEncounter(state, content, events);
 }
@@ -919,10 +1118,23 @@ function applyEnemyIntent(state, content, events) {
     const intent = currentEnemyIntent(state, content);
     if (!intent) throw makeRuleError('enemy_intent_missing', '敌方意图不存在', 500);
     const enemy = state.battle.enemy;
-    if (intent.block) enemy.block += clampInt(intent.block, 0);
+    const combatTactics = getCombatTacticsRules(content);
+    const tacticResolution = combatTactics
+        ? resolveCombatTactic(state, content, intent, events)
+        : null;
+    if (combatTactics) enemy.block = 0;
+    const enemyBlock = Math.max(
+        0,
+        clampInt(intent.block, 0) - clampInt(tacticResolution && tacticResolution.blockReduction, 0)
+    );
+    if (enemyBlock > 0) enemy.block += enemyBlock;
     let damageTaken = 0;
-    if (intent.amount) {
-        const amount = clampInt(intent.amount, 0);
+    const resolvedDamage = Math.max(
+        0,
+        clampInt(intent.amount, 0) - clampInt(tacticResolution && tacticResolution.damageReduction, 0)
+    );
+    if (resolvedDamage > 0) {
+        const amount = resolvedDamage;
         const blocked = Math.min(state.player.block, amount);
         state.player.block -= blocked;
         damageTaken = Math.min(state.player.hp, amount - blocked);
@@ -933,7 +1145,11 @@ function applyEnemyIntent(state, content, events) {
         type: 'enemy_intent_resolved',
         intentType: intent.type,
         damageTaken,
-        enemyBlock: clampInt(intent.block, 0)
+        enemyBlock,
+        ...(combatTactics ? {
+            damagePrevented: clampInt(tacticResolution && tacticResolution.damageReduction, 0),
+            blockPrevented: clampInt(tacticResolution && tacticResolution.blockReduction, 0)
+        } : {})
     });
     enemy.intentIndex += 1;
 }
@@ -959,11 +1175,13 @@ function endTurn(state, content, events) {
         events.push({ type: 'run_defeated', reason: 'turn_budget_exhausted' });
         return;
     }
+    const combatTactics = getCombatTacticsRules(content);
     state.player.block = 0;
-    state.battle.enemy.block = 0;
+    if (!combatTactics) state.battle.enemy.block = 0;
     state.player.energy = scenario.energyPerTurn;
     state.battle.turn += 1;
     state.stats.turns += 1;
+    if (combatTactics) state.battle.tacticTurn = createCombatTacticTurn();
     drawCards(state, scenario.handSize);
     events.push({ type: 'player_turn_started', turn: state.battle.turn });
 }
@@ -1142,6 +1360,7 @@ function projectState(state, content) {
     const rewardScenario = resolveSelectedBranchScenario(state, scenario);
     const deckCraftingRules = getDeckCraftingRules(content, rewardScenario);
     const pendingChapterBranchDecision = projectPendingChapterBranchDecision(state, scenario);
+    const combatTactics = getCombatTacticsRules(content);
     const deckCounts = {};
     const upgradedDeckCounts = {};
     state.player.deck.forEach(instance => {
@@ -1168,7 +1387,8 @@ function projectState(state, content) {
         } : {}),
         ...(state.battle.chapterBranch ? {
             chapterBranch: projectChapterBranch(state.battle.chapterBranch)
-        } : {})
+        } : {}),
+        ...(combatTactics ? { tactic: buildCombatTactic(state, content) } : {})
     } : null;
     return {
         schemaVersion: state.schemaVersion,
@@ -1221,6 +1441,15 @@ function projectState(state, content) {
                 routeContract: projectRouteContract(state.reward.routeContract)
             } : {})
         } : null,
+        ...(combatTactics ? {
+            combatTactics: {
+                version: 1,
+                reportVersion: String(combatTactics.reportVersion || ''),
+                lastResolution: state.combatTactics && state.combatTactics.lastResolution
+                    ? cloneJson(state.combatTactics.lastResolution)
+                    : null
+            }
+        } : {}),
         stats: cloneJson(state.stats),
         summary: state.summary ? cloneJson(state.summary) : null
     };

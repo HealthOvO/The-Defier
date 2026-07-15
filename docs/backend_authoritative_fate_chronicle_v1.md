@@ -63,7 +63,7 @@ S111 继续收口两条长期缺口：
 
 ## 4. 命途长卷内容
 
-协议名继续为 `authoritative-fate-chronicle-v1`。authoritative run schema 与 commands 不变，当前内容版本提升为 `authoritative-trials-v6`，fate 目录提升为 `fate-chronicle-catalog-v2 / fate-chronicle-rotation-v2`。S109 为每站提供两条服务器权威路线合同，公开风险档、敌方压力、奖励档和通关路线分，但不下发内部倍率；稳进、争衡、险锋分别形成容错、压力与回报递增的真实取舍。旧 v1 冻结周卷按创建时的 catalog/rotation 快照完整回放，不会被当前 v2 新周卷或后续合同重算。S108 已在不扩大战斗效果语法的前提下，把每战奖励升级为两张互异卡牌报价、服务器指定的卡牌精修，以及按生命和牌组状态动态出现的调息、固本或裁牌选择。
+协议名继续为 `authoritative-fate-chronicle-v1`。authoritative run schema 与 commands 不变，当前内容版本提升为 `authoritative-trials-v7`，fate 目录保持 `fate-chronicle-catalog-v2 / fate-chronicle-rotation-v2`。S112 在 v7 中加入敌意反制题面并修复敌方格挡生命周期；该规则只由 run 创建时冻结的内容快照启用，v1-v6 旧 run 不回填。S109 为每站提供两条服务器权威路线合同，公开风险档、敌方压力、奖励档和通关路线分，但不下发内部倍率；稳进、争衡、险锋分别形成容错、压力与回报递增的真实取舍。旧 v1 冻结周卷按创建时的 catalog/rotation 快照完整回放，不会被当前 v2 新周卷或后续合同重算。S108 已在不扩大战斗效果语法的前提下，把每战奖励升级为两张互异卡牌报价、服务器指定的卡牌精修，以及按生命和牌组状态动态出现的调息、固本或裁牌选择。
 
 卡牌精修只覆盖基础数值牌和高费终结牌；观微、裂隙、流炁等滤抽、倍率与能量核心不提供直接升级。裁牌只允许移除破势或守心，第二战后才开放、每局最多两次，并始终保留至少两张直接伤害牌、两张格挡牌和八张总牌，避免构筑进入不可玩的软锁状态。
 

@@ -352,14 +352,32 @@ function chooseDecision(projection, { preferredBranchId = "" } = {}) {
   }
   if (projection.phase !== "battle") return null;
   const incoming = Number(projection.battle?.enemy?.intent?.amount || 0);
-  const block = Number(projection.player?.block || 0);
+  const playerBlock = Number(projection.player?.block || 0);
   const energy = Number(projection.player?.energy || 0);
-  const blockCards = new Set(["guard", "iron_mandate"]);
+  const blockCards = new Set(["guard", "iron_mandate", "ember_riposte", "mirror_breath", "warding_stride"]);
+  const damageCards = new Set(["strike", "sky_pierce", "life_siphon", "fracture", "ember_riposte", "severing_flow", "archive_surge", "sealbreaker"]);
+  const tactic = projection.battle?.tactic;
+  const requirements = Array.isArray(tactic?.requirements) ? tactic.requirements : [];
+  const blockRequirement = requirements.find(requirement => requirement.metric === "blockGained");
+  const damageRequirement = requirements.find(requirement => requirement.metric === "damageDealt");
+  const needsBlock = blockRequirement && !blockRequirement.met;
+  const needsDamage = damageRequirement && !damageRequirement.met;
+  const effectiveIncoming = Math.max(
+    0,
+    incoming - (tactic?.completed ? Number(tactic.effects?.damageReduction || 0) : 0)
+  );
   const cards = [...(projection.player?.hand || [])].sort((left, right) => {
     const leftBlocks = blockCards.has(left.cardId) ? 1 : 0;
     const rightBlocks = blockCards.has(right.cardId) ? 1 : 0;
-    const defenseOrder = incoming > block ? rightBlocks - leftBlocks : leftBlocks - rightBlocks;
-    return defenseOrder || Number(right.cost || 0) - Number(left.cost || 0)
+    const leftDamages = damageCards.has(left.cardId) ? 1 : 0;
+    const rightDamages = damageCards.has(right.cardId) ? 1 : 0;
+    const tacticOrder = needsBlock
+      ? rightBlocks - leftBlocks
+      : needsDamage
+        ? rightDamages - leftDamages
+        : 0;
+    const defenseOrder = effectiveIncoming > playerBlock ? rightBlocks - leftBlocks : leftBlocks - rightBlocks;
+    return tacticOrder || defenseOrder || Number(right.cost || 0) - Number(left.cost || 0)
       || String(left.instanceId).localeCompare(String(right.instanceId));
   });
   const card = cards.find(entry => Number(entry.cost || 0) <= energy);
@@ -681,8 +699,8 @@ try {
   const startedProjectionJson = JSON.stringify(started.projection || null);
   const startedContracts = started.projection?.route?.choices?.map(choice => choice.routeContract) || [];
   add(
-    "fate route renders two readable v6 contracts without private coefficients",
-    started.projection?.contentVersion === "authoritative-trials-v6"
+    "fate route renders two readable v7 contracts without private coefficients",
+    started.projection?.contentVersion === "authoritative-trials-v7"
       && Number(started.projection?.route?.contractVersion) === 1
       && startedContracts.length === 2
       && startedContracts.every(contract => Number(contract?.version) === 1

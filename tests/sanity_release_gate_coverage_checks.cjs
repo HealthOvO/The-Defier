@@ -162,6 +162,7 @@ const authoritativeRunsService = read('server/progression/authoritative-runs/ser
 const authoritativeRunsClient = read('js/services/authoritative-run-service.js');
 const authoritativeRunsPanel = read('js/views/AuthoritativeRunPanel.js');
 const authoritativeRunsEngineChecks = read('tests/sanity_authoritative_runs_engine_checks.cjs');
+const authoritativeCombatTacticsBalanceChecks = read('tests/sanity_authoritative_combat_tactics_balance_checks.cjs');
 const authoritativeRouteBalanceChecks = read('tests/sanity_authoritative_route_balance_checks.cjs');
 const authoritativeRunsMigrationChecks = read('tests/sanity_authoritative_runs_migration_checks.cjs');
 const authoritativeRunsPlatformChecks = read('tests/sanity_authoritative_runs_platform_checks.cjs');
@@ -521,6 +522,7 @@ assert.match(
 
 [
   'sanity_authoritative_runs_engine_checks.cjs',
+  'sanity_authoritative_combat_tactics_balance_checks.cjs',
   'sanity_authoritative_route_balance_checks.cjs',
   'sanity_authoritative_runs_migration_checks.cjs',
   'sanity_authoritative_runs_platform_checks.cjs',
@@ -564,9 +566,12 @@ assert.match(
 });
 
 [
-  [authoritativeRunsCatalog, "CONTENT_VERSION = 'authoritative-trials-v6'"],
+  [authoritativeRunsCatalog, "CONTENT_VERSION = 'authoritative-trials-v7'"],
   [authoritativeRunsCatalog, "reportVersion: 'authoritative-deck-crafting-v1'"],
   [authoritativeRunsCatalog, "reportVersion: 'authoritative-route-contract-v1'"],
+  [authoritativeRunsCatalog, "reportVersion: 'authoritative-combat-tactics-v1'"],
+  [authoritativeRunsCatalog, "cardId: 'warding_stride'"],
+  [authoritativeRunsCatalog, "cardId: 'sealbreaker'"],
   [authoritativeRunsCatalog, "contractId: 'steady'"],
   [authoritativeRunsCatalog, "contractId: 'contested'"],
   [authoritativeRunsCatalog, "contractId: 'perilous'"],
@@ -586,6 +591,9 @@ assert.match(
   [authoritativeRunsPanel, 'server_authoritative'],
   [authoritativeRunsEngineChecks, 'replay must be byte-identical'],
   [authoritativeRunsEngineChecks, 'v4 final state must remain byte-identical'],
+  [authoritativeRunsEngineChecks, 'legacy v6 enemy block should still clear immediately after the enemy turn'],
+  [authoritativeCombatTacticsBalanceChecks, 'tactic should still admit failure cases in the representative balance matrix'],
+  [authoritativeCombatTacticsBalanceChecks, 'should also appear without its condition so it does not become unconditional'],
   [authoritativeRouteBalanceChecks, 'challenge risky routing must create at least a 4.6pp completion tradeoff'],
   [authoritativeRouteBalanceChecks, 'risky route needs a visible damage cost'],
   [authoritativeRunsMigrationChecks, '0006_authoritative_runs_v2'],
@@ -599,11 +607,12 @@ assert.match(
   [authoritativeRunsUiChecks, 'cross-mode refresh must not fetch the previous mode run id'],
   [authoritativeRunsUiChecks, 'suppressed response must not replace panel metadata'],
   [authoritativeRunsDocumentation, 'full journal replay'],
+  [authoritativeRunsDocumentation, '`authoritative-trials-v7`'],
   [authoritativeRunsDocumentation, '`authoritative-trials-v6`'],
   [authoritativeRunsDocumentation, '`authoritative-trials-v5`'],
   [authoritativeRunsDocumentation, '`routeContracts.version = 1`'],
-  [authoritativeRunsMigrationChecks, 'V5_BOOTSTRAP_CATALOG_FIXTURE'],
-  [authoritativeRunsMigrationChecks, 'v5 bootstrap should insert the immutable v5 catalog row alongside v1-v4 history'],
+  [authoritativeRunsMigrationChecks, 'HISTORICAL_V6_CATALOG_FIXTURE'],
+  [authoritativeRunsMigrationChecks, 'v7 bootstrap should insert the immutable v7 catalog row alongside frozen v1-v6 history'],
   [authoritativeRunsDocumentation, '`deckCrafting.version = 1`'],
 ].forEach(([source, needle]) => {
   assert.ok(source.includes(needle), `authoritative runs V2 should pin release marker: ${needle}`);
@@ -1305,7 +1314,15 @@ assert.strictEqual(
   'real UI completes and settles all three base authoritative modes alongside challenge ladder and world rift',
   'all base-mode real UI runs execute exact-target upgrade and one legal trim',
   'all base modes challenge ladder and world rift mint exactly one receipt and event per settled run',
-  'v6 route projection exposes two readable contracts without private coefficients',
+  'v7 route projection exposes tactics and two readable contracts without private coefficients',
+  'v7 battle UI renders exact public tactic progress and effects without private coefficients',
+  'real end-turn receipt keeps tactic success or failure readable and authoritative',
+  'enemy fortify or mixed guard persists into the following real player turn',
+  'real damage card is absorbed by persisted enemy guard before hp loss',
+  '390px real battle keeps tactic progress and persisted guard readable without overflow',
+  'terminal projection and UI summarize real combat tactic opportunities and successes',
+  'combat-tactic-persistent-block-desktop.png',
+  'combat-tactic-persistent-block-mobile.png',
   'world rift GET current returns shared boss and five formal attempts',
   'world rift hub renders real shared state without simulated participants',
   'formal world rift attempt binds a server-authoritative shared seed',
@@ -1350,7 +1367,7 @@ assert.strictEqual(
   'fate chronicle renders three chapters nine oaths and five archive proofs',
   'real fate chronicle desktop milestone controls stay within cards',
   'chapter-1 proof oath starts a server-authoritative fate run',
-  'fate route renders two readable v6 contracts without private coefficients',
+  'fate route renders two readable v7 contracts without private coefficients',
   'full browser reload resumes the same fate chronicle run',
   'real fate chronicle UI completes the chapter-1 proof oath',
   'proof route captures two public branch options before lock-in',

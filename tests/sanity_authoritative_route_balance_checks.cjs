@@ -7,7 +7,17 @@ const {
   projectState,
 } = require('../server/progression/authoritative-runs/engine');
 
-const BLOCK_CARDS = new Set(['guard', 'iron_mandate']);
+const BLOCK_CARDS = new Set(['guard', 'iron_mandate', 'ember_riposte', 'mirror_breath', 'warding_stride']);
+const DAMAGE_CARDS = new Set([
+  'strike',
+  'sky_pierce',
+  'life_siphon',
+  'fracture',
+  'ember_riposte',
+  'severing_flow',
+  'archive_surge',
+  'sealbreaker',
+]);
 const TERMINAL_PHASES = new Set(['completed', 'defeated', 'abandoned']);
 const SAMPLE_SIZE = 64;
 const STRATEGIES = ['safe', 'mid', 'risky'];
@@ -61,13 +71,30 @@ function chooseReward(view) {
 
 function chooseBattleAction(view) {
   const incomingDamage = Number(view.battle?.enemy?.intent?.amount || 0);
+  const tactic = view.battle?.tactic;
+  const requirements = Array.isArray(tactic?.requirements) ? tactic.requirements : [];
+  const blockRequirement = requirements.find(requirement => requirement.metric === 'blockGained');
+  const damageRequirement = requirements.find(requirement => requirement.metric === 'damageDealt');
+  const needsBlock = blockRequirement && !blockRequirement.met;
+  const needsDamage = damageRequirement && !damageRequirement.met;
+  const effectiveIncomingDamage = Math.max(
+    0,
+    incomingDamage - (tactic?.completed ? Number(tactic.effects?.damageReduction || 0) : 0),
+  );
   const cards = view.player.hand.slice().sort((left, right) => {
     const leftBlocks = BLOCK_CARDS.has(left.cardId) ? 1 : 0;
     const rightBlocks = BLOCK_CARDS.has(right.cardId) ? 1 : 0;
-    const defenseOrder = incomingDamage > view.player.block
+    const leftDamages = DAMAGE_CARDS.has(left.cardId) ? 1 : 0;
+    const rightDamages = DAMAGE_CARDS.has(right.cardId) ? 1 : 0;
+    const tacticOrder = needsBlock
+      ? rightBlocks - leftBlocks
+      : needsDamage
+        ? rightDamages - leftDamages
+        : 0;
+    const defenseOrder = effectiveIncomingDamage > view.player.block
       ? rightBlocks - leftBlocks
       : leftBlocks - rightBlocks;
-    return defenseOrder || right.cost - left.cost || left.instanceId.localeCompare(right.instanceId);
+    return tacticOrder || defenseOrder || right.cost - left.cost || left.instanceId.localeCompare(right.instanceId);
   });
   const card = cards.find(entry => entry.cost <= view.player.energy);
   return card
@@ -99,7 +126,10 @@ function runSample(scenario, strategy, index) {
     state = applyCommand(state, CONTENT_SNAPSHOT, command, payload).state;
     actions += 1;
   }
-  assert(TERMINAL_PHASES.has(state.phase), `${sampleKey} must terminate within the action budget`);
+  assert(
+    TERMINAL_PHASES.has(state.phase),
+    `${sampleKey} must terminate within the action budget: ${JSON.stringify(projectState(state, CONTENT_SNAPSHOT))}`,
+  );
   assert(actions <= 256, `${sampleKey} exceeded the action budget`);
   assert(state.player.hp >= 0 && state.player.hp <= state.player.maxHp, `${sampleKey} produced invalid hp`);
   return {

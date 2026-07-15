@@ -7,7 +7,17 @@ const {
   projectState,
 } = require('../server/progression/authoritative-runs/engine');
 
-const BLOCK_CARDS = new Set(['guard', 'iron_mandate']);
+const BLOCK_CARDS = new Set(['guard', 'iron_mandate', 'ember_riposte', 'mirror_breath', 'warding_stride']);
+const DAMAGE_CARDS = new Set([
+  'strike',
+  'sky_pierce',
+  'life_siphon',
+  'fracture',
+  'ember_riposte',
+  'severing_flow',
+  'archive_surge',
+  'sealbreaker',
+]);
 const TERMINAL_PHASES = new Set(['completed', 'defeated', 'abandoned']);
 const BRANCH_SCENARIOS = [
   'chronicle-ember-proof',
@@ -85,15 +95,36 @@ function chooseReward(view) {
 
 function chooseBattleAction(view) {
   const incomingDamage = Number(view.battle?.enemy?.intent?.amount || 0);
+  const enemyBlock = Number(view.battle?.enemy?.block || 0);
+  const tactic = view.battle?.tactic;
+  const requirements = Array.isArray(tactic?.requirements) ? tactic.requirements : [];
+  const blockRequirement = requirements.find(requirement => requirement.metric === 'blockGained');
+  const damageRequirement = requirements.find(requirement => requirement.metric === 'damageDealt');
+  const needsBlock = blockRequirement && !blockRequirement.met;
+  const needsDamage = damageRequirement && !damageRequirement.met;
+  const effectiveIncomingDamage = Math.max(
+    0,
+    incomingDamage - (tactic?.completed ? Number(tactic.effects?.damageReduction || 0) : 0),
+  );
   const cards = view.player.hand.slice().sort((left, right) => {
     const leftBlocks = BLOCK_CARDS.has(left.cardId) ? 1 : 0;
     const rightBlocks = BLOCK_CARDS.has(right.cardId) ? 1 : 0;
-    const defenseOrder = incomingDamage > view.player.block
+    const leftDamages = DAMAGE_CARDS.has(left.cardId) ? 1 : 0;
+    const rightDamages = DAMAGE_CARDS.has(right.cardId) ? 1 : 0;
+    const tacticOrder = needsBlock
+      ? rightBlocks - leftBlocks
+      : needsDamage
+        ? rightDamages - leftDamages
+        : 0;
+    const defenseOrder = effectiveIncomingDamage > view.player.block
       ? rightBlocks - leftBlocks
       : leftBlocks - rightBlocks;
-    return defenseOrder || right.cost - left.cost || left.instanceId.localeCompare(right.instanceId);
+    return tacticOrder || defenseOrder || right.cost - left.cost || left.instanceId.localeCompare(right.instanceId);
   });
-  const card = cards.find(entry => entry.cost <= view.player.energy);
+  const damageIntoGuard = enemyBlock > 0
+    ? cards.find(entry => DAMAGE_CARDS.has(entry.cardId) && entry.cost <= view.player.energy)
+    : null;
+  const card = damageIntoGuard || cards.find(entry => entry.cost <= view.player.energy);
   return card
     ? ['play_card', { cardInstanceId: card.instanceId }]
     : ['end_turn', {}];
@@ -223,7 +254,7 @@ function assertHigherScorePaysCost(scenarioId, left, right) {
   );
 }
 
-assert.equal(CONTENT_VERSION, 'authoritative-trials-v6');
+assert.equal(CONTENT_VERSION, 'authoritative-trials-v7');
 
 const report = {
   reportVersion: 'fate-chronicle-branch-balance-v1',

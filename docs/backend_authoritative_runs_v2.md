@@ -120,6 +120,39 @@ Catalog v1-v5 rows remain immutable. Runs created with those snapshots have no
 `branchPlan`, retain their original RNG calls and projection shape, and replay through the
 same schema-2 reducer. V6 is inserted as a new catalog row and never rewrites a v5 run.
 
+## S112 combat tactics and persistent enemy guard
+
+`authoritative-trials-v7` keeps protocol `authoritative-run-v2`, canonical state schema 2,
+and the existing command set. The optional `combatTactics.version = 1` block enables three
+public counterplay questions without adding a page, currency, or account-level power:
+
+- `attack` asks the player to establish a visible block threshold before the intent resolves.
+- `fortify` asks the player to deal a visible damage threshold before the enemy guard forms.
+- `defend_attack` requires both damage and block, so mixed hands have a real use case.
+
+The battle projection exposes the tactic title, exact requirements, current progress, and
+the exact damage or block reduction earned on success. Failure adds no hidden punishment;
+the advertised enemy intent resolves at its base value. Every resolved question emits an
+`enemy_tactic_resolved` receipt, updates bounded success counters, and contributes to the
+terminal `combatTactics` summary.
+
+V7 also fixes the enemy guard lifecycle. Block created by `fortify` or `defend_attack`
+persists through the following player turn, absorbs card damage, and expires immediately
+before the next enemy intent resolves. The server clears the old guard before applying the
+new intent, so guard neither disappears before it matters nor stacks across unrelated enemy
+turns. `warding_stride` provides conditional block against attacking intents, while
+`sealbreaker` provides conditional damage only when enemy guard is already present; both
+cost at least one energy and enter the existing reward pool rather than a new progression
+track.
+
+The lifecycle branch is gated entirely by the stored content snapshot. V1-V6 catalogs have
+no `combatTactics` block, so their canonical state, public projection, RNG calls, enemy block
+expiry, journal replay, and hashes retain the historical behavior. Migration checks preserve
+distinct v5 and v6 catalog rows byte-for-byte while concurrent startup inserts exactly one v7
+row. The tactic balance gate runs 24 fixed seeds across three contracts and three representative
+scenarios, while the route gate remains tactic-aware and keeps every sample within the action
+budget.
+
 ## Failure model
 
 - Network failure: the client keeps the last confirmed projection and retries with

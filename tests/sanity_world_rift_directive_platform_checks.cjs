@@ -43,7 +43,17 @@ function resolveSqlite3() {
 }
 
 const sqlite3 = resolveSqlite3();
-const BLOCK_CARDS = new Set(['guard', 'iron_mandate']);
+const BLOCK_CARDS = new Set(['guard', 'iron_mandate', 'ember_riposte', 'mirror_breath', 'warding_stride']);
+const DAMAGE_CARDS = new Set([
+  'strike',
+  'sky_pierce',
+  'life_siphon',
+  'fracture',
+  'ember_riposte',
+  'severing_flow',
+  'archive_surge',
+  'sealbreaker',
+]);
 const DB_PATH = process.env.WORLD_RIFT_DIRECTIVE_PLATFORM_TEST_DB_PATH
   || path.join(os.tmpdir(), `the-defier-world-rift-directives-${process.pid}.sqlite`);
 const JWT_SECRET = 'world-rift-directive-platform-jwt-secret-32';
@@ -345,15 +355,36 @@ function chooseCommandFromProjection(projection, strategy = {}) {
     throw new Error(`unsupported projection phase for driver: ${projection.phase}`);
   }
   const incomingDamage = Number(projection.battle?.enemy?.intent?.amount || 0);
+  const enemyBlock = Number(projection.battle?.enemy?.block || 0);
+  const tactic = projection.battle?.tactic;
+  const requirements = Array.isArray(tactic?.requirements) ? tactic.requirements : [];
+  const blockRequirement = requirements.find(requirement => requirement.metric === 'blockGained');
+  const damageRequirement = requirements.find(requirement => requirement.metric === 'damageDealt');
+  const needsBlock = blockRequirement && !blockRequirement.met;
+  const needsDamage = damageRequirement && !damageRequirement.met;
+  const effectiveIncomingDamage = Math.max(
+    0,
+    incomingDamage - (tactic?.completed ? Number(tactic.effects?.damageReduction || 0) : 0),
+  );
   const cards = projection.player.hand.slice().sort((left, right) => {
     const leftBlocks = BLOCK_CARDS.has(left.cardId) ? 1 : 0;
     const rightBlocks = BLOCK_CARDS.has(right.cardId) ? 1 : 0;
-    const defenseOrder = incomingDamage > projection.player.block
+    const leftDamages = DAMAGE_CARDS.has(left.cardId) ? 1 : 0;
+    const rightDamages = DAMAGE_CARDS.has(right.cardId) ? 1 : 0;
+    const tacticOrder = needsBlock
+      ? rightBlocks - leftBlocks
+      : needsDamage
+        ? rightDamages - leftDamages
+        : 0;
+    const defenseOrder = effectiveIncomingDamage > projection.player.block
       ? rightBlocks - leftBlocks
       : leftBlocks - rightBlocks;
-    return defenseOrder || right.cost - left.cost || left.instanceId.localeCompare(right.instanceId);
+    return tacticOrder || defenseOrder || right.cost - left.cost || left.instanceId.localeCompare(right.instanceId);
   });
-  const card = cards.find(entry => entry.cost <= projection.player.energy);
+  const damageIntoGuard = enemyBlock > 0
+    ? cards.find(entry => DAMAGE_CARDS.has(entry.cardId) && entry.cost <= projection.player.energy)
+    : null;
+  const card = damageIntoGuard || cards.find(entry => entry.cost <= projection.player.energy);
   return card
     ? ['play_card', { cardInstanceId: card.instanceId }]
     : ['end_turn', {}];

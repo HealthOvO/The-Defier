@@ -1,7 +1,7 @@
 const { cloneJson, hashCanonical, stableStringify } = require('./canonical');
 
 const PROTOCOL_VERSION = 'authoritative-run-v2';
-const CONTENT_VERSION = 'authoritative-trials-v6';
+const CONTENT_VERSION = 'authoritative-trials-v7';
 const RELAY_EXPEDITION_SCENARIO_IDS = ['vanguard', 'bulwark', 'insight'];
 const FATE_CHRONICLE_SCENARIO_IDS = [
     'chronicle-ember-guard',
@@ -103,6 +103,43 @@ const CONTENT_SNAPSHOT = deepFreeze({
             ['steady', 'perilous'],
             ['contested', 'perilous']
         ]
+    },
+    combatTactics: {
+        version: 1,
+        reportVersion: 'authoritative-combat-tactics-v1',
+        rewardCardPool: ['warding_stride', 'sealbreaker'],
+        profiles: {
+            attack: {
+                tacticId: 'brace',
+                title: '守势',
+                prompt: '在敌方进攻落下前建立足够格挡。',
+                blockThresholdBps: 7000,
+                minBlockThreshold: 4,
+                damageReduction: 2,
+                rewardSummary: '达成后本次敌方伤害减少 2 点。'
+            },
+            fortify: {
+                tacticId: 'break',
+                title: '破阵',
+                prompt: '在敌方结印前打出足够伤害，压缩其护势。',
+                damageThresholdBps: 7500,
+                minDamageThreshold: 5,
+                blockReductionBps: 5000,
+                rewardSummary: '达成后本次敌方格挡减半。'
+            },
+            defend_attack: {
+                tacticId: 'balance',
+                title: '争衡',
+                prompt: '同时完成进攻与防守，拆解敌方攻守一体。',
+                damageThresholdBps: 5000,
+                blockThresholdBps: 5000,
+                minDamageThreshold: 4,
+                minBlockThreshold: 3,
+                damageReduction: 2,
+                blockReduction: 2,
+                rewardSummary: '达成后本次敌方伤害与格挡各减少 2 点。'
+            }
+        }
     },
     deckCrafting: {
         version: 1,
@@ -254,6 +291,32 @@ const CONTENT_SNAPSHOT = deepFreeze({
                 description: '造成 13 点伤害并抽 1 张牌。',
                 cost: 2,
                 effect: { damage: 13, draw: 1 }
+            }
+        },
+        warding_stride: {
+            cardId: 'warding_stride',
+            name: '承势步',
+            description: '获得 4 点格挡；若敌方意图包含攻击，额外获得 4 点格挡。',
+            cost: 1,
+            effect: { block: 4, bonusBlockAgainstAttack: 4 },
+            upgrade: {
+                name: '承势步·极',
+                description: '获得 5 点格挡；若敌方意图包含攻击，额外获得 4 点格挡。',
+                cost: 1,
+                effect: { block: 5, bonusBlockAgainstAttack: 4 }
+            }
+        },
+        sealbreaker: {
+            cardId: 'sealbreaker',
+            name: '破印诀',
+            description: '造成 9 点伤害；若敌方已有格挡，额外造成 7 点伤害。',
+            cost: 2,
+            effect: { damage: 9, bonusDamageAgainstBlock: 7 },
+            upgrade: {
+                name: '破印诀·极',
+                description: '造成 11 点伤害；若敌方已有格挡，额外造成 7 点伤害。',
+                cost: 2,
+                effect: { damage: 11, bonusDamageAgainstBlock: 7 }
             }
         }
     },
@@ -782,7 +845,7 @@ const CONTENT_SNAPSHOT = deepFreeze({
                         buildFocus: '能量、易伤、连续出牌与攻击精修。',
                         consequenceSummary: '当前站险锋，后续首领只开放争衡或险锋。',
                         scoreMultiplier: 1.26,
-                        enemyId: 'mirror_duelist',
+                        enemyId: 'void_archivist',
                         contractId: 'perilous',
                         rewardCardPool: ['flowing_qi', 'fracture', 'severing_flow', 'archive_surge'],
                         rewardProfile: {
@@ -923,6 +986,7 @@ const CONTENT_SNAPSHOT = deepFreeze({
                         counterplay: '牌组已经精简，且终结牌与能量循环都已到位时选择。',
                         buildFocus: '薄牌组、攻击精修、能量循环与短回合收官。',
                         consequenceSummary: '当前站险锋，裂天首领只开放争衡或险锋。',
+                        scoreMultiplier: 1.32,
                         enemyId: 'void_archivist',
                         contractId: 'perilous',
                         rewardCardPool: ['severing_flow', 'archive_surge', 'sky_pierce', 'fracture'],

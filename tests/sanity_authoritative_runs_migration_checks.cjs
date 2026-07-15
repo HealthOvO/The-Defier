@@ -38,13 +38,13 @@ const sqlite3 = resolveSqlite3();
 const PORT = Number(process.env.AUTHORITATIVE_RUNS_MIGRATION_TEST_PORT || 9056);
 const CONCURRENT_PORT_A = PORT + 1;
 const CONCURRENT_PORT_B = PORT + 2;
-const V5_COMPAT_PORT = PORT + 3;
+const HISTORY_COMPAT_PORT = PORT + 3;
 const DB_PATH = process.env.AUTHORITATIVE_RUNS_MIGRATION_DB_PATH
   || path.join(os.tmpdir(), `the-defier-authoritative-runs-v2-${process.pid}.sqlite`);
 const CONCURRENT_DB_PATH = process.env.AUTHORITATIVE_RUNS_MIGRATION_CONCURRENT_DB_PATH
   || path.join(os.tmpdir(), `the-defier-authoritative-runs-v2-concurrent-${process.pid}.sqlite`);
-const V5_COMPAT_DB_PATH = process.env.AUTHORITATIVE_RUNS_MIGRATION_V5_COMPAT_DB_PATH
-  || path.join(os.tmpdir(), `the-defier-authoritative-runs-v5-compat-${process.pid}.sqlite`);
+const HISTORY_COMPAT_DB_PATH = process.env.AUTHORITATIVE_RUNS_MIGRATION_HISTORY_COMPAT_DB_PATH
+  || path.join(os.tmpdir(), `the-defier-authoritative-runs-history-compat-${process.pid}.sqlite`);
 const JWT_SECRET = 'authoritative-runs-v2-jwt-secret-32-characters';
 const HMAC_SECRET = 'authoritative-runs-v2-hmac-secret-32-characters';
 
@@ -122,6 +122,11 @@ const RELAY_EXPEDITION_SCENARIO_IDS = Array.isArray(RUNTIME_CATALOG?.RELAY_EXPED
 const FATE_CHRONICLE_SCENARIO_IDS = Array.isArray(RUNTIME_CATALOG?.FATE_CHRONICLE_SCENARIO_IDS)
   ? RUNTIME_CATALOG.FATE_CHRONICLE_SCENARIO_IDS.slice()
   : [];
+const BRANCHED_FATE_SCENARIO_IDS = Object.freeze([
+  'chronicle-ember-proof',
+  'chronicle-mirror-audit',
+  'chronicle-rift-seal'
+]);
 const DRIFTED_CATALOG_HASH = '0'.repeat(64);
 const LEGACY_CATALOG_FIXTURES = ['v1', 'v2', 'v3'].map((suffix) => createCatalogFixture(
   `authoritative-trials-${suffix}`,
@@ -153,26 +158,74 @@ const HISTORICAL_CATALOG_FIXTURES = [
   ...LEGACY_CATALOG_FIXTURES,
   HISTORICAL_V4_CATALOG_FIXTURE
 ];
-const V5_BOOTSTRAP_CATALOG_FIXTURE = CATALOG_VERSION === 'authoritative-trials-v5'
-  ? {
-      contentVersion: CATALOG_VERSION,
-      contentHash: CATALOG_HASH,
-      contentJson: CATALOG_JSON,
-      snapshot: cloneJson(CATALOG_SNAPSHOT),
-      relayExpeditionScenarioIds: RELAY_EXPEDITION_SCENARIO_IDS.slice(),
-      fateChronicleScenarioIds: FATE_CHRONICLE_SCENARIO_IDS.slice()
+
+function createHistoricalRuntimeCatalogFixture(contentVersion, mutateSnapshot) {
+  const snapshot = cloneJson(CATALOG_SNAPSHOT);
+  if (typeof mutateSnapshot === 'function') {
+    mutateSnapshot(snapshot);
+  }
+  snapshot.contentVersion = contentVersion;
+  return createCatalogFixture(
+    contentVersion,
+    snapshot,
+    {
+      relayExpeditionScenarioIds: RELAY_EXPEDITION_SCENARIO_IDS,
+      fateChronicleScenarioIds: FATE_CHRONICLE_SCENARIO_IDS
     }
-  : createCatalogFixture(
-      'authoritative-trials-v5',
-      {
-        ...cloneJson(CATALOG_SNAPSHOT),
-        contentVersion: 'authoritative-trials-v5'
-      },
-      {
-        relayExpeditionScenarioIds: RELAY_EXPEDITION_SCENARIO_IDS,
-        fateChronicleScenarioIds: FATE_CHRONICLE_SCENARIO_IDS
+  );
+}
+
+const HISTORICAL_V5_CATALOG_FIXTURE = createHistoricalRuntimeCatalogFixture(
+  'authoritative-trials-v5',
+  (snapshot) => {
+    delete snapshot.combatTactics;
+    for (const scenarioId of BRANCHED_FATE_SCENARIO_IDS) {
+      if (snapshot.scenarios && snapshot.scenarios[scenarioId]) {
+        delete snapshot.scenarios[scenarioId].branchPlan;
       }
-    );
+    }
+  }
+);
+const HISTORICAL_V6_CATALOG_FIXTURE = createHistoricalRuntimeCatalogFixture(
+  'authoritative-trials-v6',
+  (snapshot) => {
+    delete snapshot.combatTactics;
+  }
+);
+HISTORICAL_CATALOG_FIXTURES.push(HISTORICAL_V5_CATALOG_FIXTURE, HISTORICAL_V6_CATALOG_FIXTURE);
+
+assert.strictEqual(CATALOG_VERSION, 'authoritative-trials-v7', 'migration coverage should target the current v7 authoritative catalog');
+assert.equal(
+  HISTORICAL_V5_CATALOG_FIXTURE.snapshot.combatTactics,
+  undefined,
+  'historical v5 fixture must not inherit the v7 combatTactics block'
+);
+assert.equal(
+  HISTORICAL_V6_CATALOG_FIXTURE.snapshot.combatTactics,
+  undefined,
+  'historical v6 fixture must stay pre-combat-tactics'
+);
+for (const scenarioId of BRANCHED_FATE_SCENARIO_IDS) {
+  assert.equal(
+    HISTORICAL_V5_CATALOG_FIXTURE.snapshot.scenarios?.[scenarioId]?.branchPlan,
+    undefined,
+    `historical v5 fixture should not retain the v6 chapter branch for ${scenarioId}`
+  );
+  assert.ok(
+    HISTORICAL_V6_CATALOG_FIXTURE.snapshot.scenarios?.[scenarioId]?.branchPlan,
+    `historical v6 fixture should preserve the chapter branch for ${scenarioId}`
+  );
+}
+assert.notStrictEqual(
+  HISTORICAL_V5_CATALOG_FIXTURE.contentHash,
+  HISTORICAL_V6_CATALOG_FIXTURE.contentHash,
+  'historical v5 and v6 fixtures must represent distinct immutable catalog payloads'
+);
+assert.notStrictEqual(
+  HISTORICAL_V6_CATALOG_FIXTURE.contentHash,
+  CATALOG_HASH,
+  'historical v6 fixture must remain distinct from the current v7 snapshot'
+);
 
 function removeDbFiles(dbPath) {
   for (const suffix of ['', '-wal', '-shm']) {
@@ -393,6 +446,34 @@ async function upsertCatalogFixture(dbPath, fixture) {
   );
 }
 
+async function readCatalogPayload(dbPath, contentVersion) {
+  return dbGet(
+    dbPath,
+    `SELECT content_hash, content_json
+     FROM progression_authoritative_run_catalogs
+     WHERE content_version = ?`,
+    [contentVersion]
+  );
+}
+
+async function snapshotCatalogPayloads(dbPath, fixtures) {
+  const payloads = new Map();
+  for (const fixture of fixtures) {
+    payloads.set(fixture.contentVersion, await readCatalogPayload(dbPath, fixture.contentVersion));
+  }
+  return payloads;
+}
+
+async function assertCatalogPayloads(dbPath, fixtures, expectedPayloads, messagePrefix) {
+  for (const fixture of fixtures) {
+    assert.deepStrictEqual(
+      await readCatalogPayload(dbPath, fixture.contentVersion),
+      expectedPayloads.get(fixture.contentVersion),
+      `${messagePrefix} ${fixture.contentVersion} content for old-run replay`
+    );
+  }
+}
+
 async function expectUniqueConstraint(dbPath, sql, params, message) {
   try {
     await dbRun(dbPath, sql, params);
@@ -425,9 +506,10 @@ async function assertTablesExist(dbPath) {
 async function main() {
   removeDbFiles(DB_PATH);
   removeDbFiles(CONCURRENT_DB_PATH);
-  removeDbFiles(V5_COMPAT_DB_PATH);
+  removeDbFiles(HISTORY_COMPAT_DB_PATH);
 
   let server = startServer({ port: PORT, dbPath: DB_PATH });
+  let immutableHistoricalCatalogs = new Map();
   try {
     await waitForHealth(server, 'fresh-start');
     const version = await request(PORT, '/api/version');
@@ -471,11 +553,17 @@ async function main() {
     assert.strictEqual(catalogRow?.protocol_version, 'authoritative-run-v2', 'catalog bootstrap should pin the protocol version');
     assert.strictEqual(catalogRow?.content_hash, CATALOG_HASH, 'catalog bootstrap should persist the configured content hash');
     assert.deepStrictEqual(JSON.parse(catalogRow?.content_json || '{}'), CATALOG_SNAPSHOT, 'catalog bootstrap should persist the immutable snapshot');
-    const relayScenarios = JSON.parse(catalogRow?.content_json || '{}')?.scenarios || {};
+    const bootstrappedCatalogJson = JSON.parse(catalogRow?.content_json || '{}');
+    const relayScenarios = bootstrappedCatalogJson?.scenarios || {};
     assert.strictEqual(relayScenarios.vanguard?.scenarioId, 'vanguard', 'catalog bootstrap should persist relay vanguard');
     assert.strictEqual(relayScenarios.bulwark?.scenarioId, 'bulwark', 'catalog bootstrap should persist relay bulwark');
     assert.strictEqual(relayScenarios.insight?.scenarioId, 'insight', 'catalog bootstrap should persist relay insight');
-    for (const fixture of LEGACY_CATALOG_FIXTURES) {
+    assert.strictEqual(
+      bootstrappedCatalogJson?.combatTactics?.reportVersion,
+      'authoritative-combat-tactics-v1',
+      'catalog bootstrap should persist the current v7 combat tactics block'
+    );
+    for (const fixture of HISTORICAL_CATALOG_FIXTURES) {
       await dbRun(
         DB_PATH,
         `INSERT INTO progression_authoritative_run_catalogs
@@ -484,6 +572,7 @@ async function main() {
         [fixture.contentVersion, 'authoritative-run-v2', fixture.contentHash, fixture.contentJson, Date.now()]
       );
     }
+    immutableHistoricalCatalogs = await snapshotCatalogPayloads(DB_PATH, HISTORICAL_CATALOG_FIXTURES);
 
     const migrationRow = await dbGet(
       DB_PATH,
@@ -631,20 +720,7 @@ async function main() {
        WHERE run_id IN ('ar-run-active-1', 'ar-run-terminal-1')`
     );
     assert.strictEqual(Number(preservedRuns?.count), 2, 'v7 to v8 restart must preserve live authoritative-run data while adding world-rift tables');
-    for (const fixture of LEGACY_CATALOG_FIXTURES) {
-      const preservedLegacyCatalog = await dbGet(
-        DB_PATH,
-        `SELECT content_hash, content_json
-         FROM progression_authoritative_run_catalogs
-         WHERE content_version = ?`,
-        [fixture.contentVersion]
-      );
-      assert.deepStrictEqual(
-        preservedLegacyCatalog,
-        { content_hash: fixture.contentHash, content_json: fixture.contentJson },
-        `restart must preserve immutable ${fixture.contentVersion} content for old-run replay`
-      );
-    }
+    await assertCatalogPayloads(DB_PATH, HISTORICAL_CATALOG_FIXTURES, immutableHistoricalCatalogs, 'restart must preserve immutable');
     const restoredWorldTable = await dbGet(
       DB_PATH,
       `SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'world_rift_attempts'`
@@ -656,42 +732,55 @@ async function main() {
     let compatServer = null;
     try {
       compatServer = startServer({
-        port: V5_COMPAT_PORT,
-        dbPath: V5_COMPAT_DB_PATH,
-        gitSha: 'authoritative-runs-v5-compat-base'
+        port: HISTORY_COMPAT_PORT,
+        dbPath: HISTORY_COMPAT_DB_PATH,
+        gitSha: 'authoritative-runs-history-compat-base'
       });
-      await waitForHealth(compatServer, 'v5-compat-base');
+      await waitForHealth(compatServer, 'history-compat-base');
       await stopServer(compatServer);
       compatServer = null;
+      await dbRun(
+        HISTORY_COMPAT_DB_PATH,
+        `DELETE FROM progression_authoritative_run_catalogs
+         WHERE content_version = ?`,
+        [CATALOG_VERSION]
+      );
 
       for (const fixture of HISTORICAL_CATALOG_FIXTURES) {
-        await upsertCatalogFixture(V5_COMPAT_DB_PATH, fixture);
+        await upsertCatalogFixture(HISTORY_COMPAT_DB_PATH, fixture);
       }
+      const historicalPayloadsBeforeV7Bootstrap = await snapshotCatalogPayloads(HISTORY_COMPAT_DB_PATH, HISTORICAL_CATALOG_FIXTURES);
+      const historicalCatalogCountBeforeV7Bootstrap = await dbGet(
+        HISTORY_COMPAT_DB_PATH,
+        `SELECT COUNT(*) AS count
+         FROM progression_authoritative_run_catalogs`
+      );
 
       compatServer = startServer({
-        port: V5_COMPAT_PORT,
-        dbPath: V5_COMPAT_DB_PATH,
-        gitSha: 'authoritative-runs-v5-compat-bootstrap',
-        catalogOverride: V5_BOOTSTRAP_CATALOG_FIXTURE
+        port: HISTORY_COMPAT_PORT,
+        dbPath: HISTORY_COMPAT_DB_PATH,
+        gitSha: 'authoritative-runs-v7-history-bootstrap'
       });
-      await waitForHealth(compatServer, 'v5-compat-bootstrap');
+      await waitForHealth(compatServer, 'v7-history-bootstrap');
+      const historicalCatalogCountAfterV7Bootstrap = await dbGet(
+        HISTORY_COMPAT_DB_PATH,
+        `SELECT COUNT(*) AS count
+         FROM progression_authoritative_run_catalogs`
+      );
+      assert.strictEqual(
+        Number(historicalCatalogCountAfterV7Bootstrap?.count),
+        Number(historicalCatalogCountBeforeV7Bootstrap?.count) + 1,
+        'v7 bootstrap should insert exactly one current catalog row alongside frozen v1-v6 history'
+      );
+      await assertCatalogPayloads(
+        HISTORY_COMPAT_DB_PATH,
+        HISTORICAL_CATALOG_FIXTURES,
+        historicalPayloadsBeforeV7Bootstrap,
+        'v7 bootstrap must preserve frozen'
+      );
 
-      for (const fixture of HISTORICAL_CATALOG_FIXTURES) {
-        const preservedLegacyCatalog = await dbGet(
-          V5_COMPAT_DB_PATH,
-          `SELECT content_hash, content_json
-           FROM progression_authoritative_run_catalogs
-           WHERE content_version = ?`,
-          [fixture.contentVersion]
-        );
-        assert.deepStrictEqual(
-          preservedLegacyCatalog,
-          { content_hash: fixture.contentHash, content_json: fixture.contentJson },
-          `v5 bootstrap preserves immutable ${fixture.contentVersion} content for old-run replay`
-        );
-      }
       const preservedV4Catalog = await dbGet(
-        V5_COMPAT_DB_PATH,
+        HISTORY_COMPAT_DB_PATH,
         `SELECT content_hash, content_json
          FROM progression_authoritative_run_catalogs
          WHERE content_version = 'authoritative-trials-v4'`
@@ -699,26 +788,26 @@ async function main() {
       assert.deepStrictEqual(
         JSON.parse(preservedV4Catalog?.content_json || '{}').deckCrafting,
         HISTORICAL_V4_DECK_CRAFTING,
-        'v5 bootstrap preserves the historical v4 deckCrafting shape'
+        'v7 bootstrap preserves the historical v4 deckCrafting shape'
       );
-      const bootstrappedV5Catalog = await dbGet(
-        V5_COMPAT_DB_PATH,
+      const bootstrappedV7Catalog = await dbGet(
+        HISTORY_COMPAT_DB_PATH,
         `SELECT content_hash, content_json
          FROM progression_authoritative_run_catalogs
          WHERE content_version = ?`,
-        [V5_BOOTSTRAP_CATALOG_FIXTURE.contentVersion]
+        [CATALOG_VERSION]
       );
       assert.deepStrictEqual(
-        bootstrappedV5Catalog,
+        bootstrappedV7Catalog,
         {
-          content_hash: V5_BOOTSTRAP_CATALOG_FIXTURE.contentHash,
-          content_json: V5_BOOTSTRAP_CATALOG_FIXTURE.contentJson
+          content_hash: CATALOG_HASH,
+          content_json: CATALOG_JSON
         },
-        'v5 bootstrap should insert the immutable v5 catalog row alongside v1-v4 history'
+        'v7 bootstrap should insert the immutable v7 catalog row alongside frozen v1-v6 history'
       );
     } finally {
       await stopServer(compatServer);
-      removeDbFiles(V5_COMPAT_DB_PATH);
+      removeDbFiles(HISTORY_COMPAT_DB_PATH);
     }
 
     await dbRun(
@@ -810,21 +899,56 @@ async function main() {
     await stopServer(server);
     server = null;
 
+    const concurrentBootstrap = startServer({
+      port: CONCURRENT_PORT_A,
+      dbPath: CONCURRENT_DB_PATH,
+      gitSha: 'authoritative-runs-v7-concurrent-bootstrap'
+    });
+    try {
+      await waitForHealth(concurrentBootstrap, 'concurrent-bootstrap');
+    } finally {
+      await stopServer(concurrentBootstrap);
+    }
+    await dbRun(
+      CONCURRENT_DB_PATH,
+      `DELETE FROM progression_authoritative_run_catalogs
+       WHERE content_version = ?`,
+      [CATALOG_VERSION]
+    );
+    for (const fixture of HISTORICAL_CATALOG_FIXTURES) {
+      await upsertCatalogFixture(CONCURRENT_DB_PATH, fixture);
+    }
+    const concurrentHistoricalPayloads = await snapshotCatalogPayloads(CONCURRENT_DB_PATH, HISTORICAL_CATALOG_FIXTURES);
+    const concurrentCatalogCountBeforeV7Bootstrap = await dbGet(
+      CONCURRENT_DB_PATH,
+      `SELECT COUNT(*) AS count
+       FROM progression_authoritative_run_catalogs`
+    );
     const concurrentA = startServer({
       port: CONCURRENT_PORT_A,
       dbPath: CONCURRENT_DB_PATH,
-      gitSha: 'authoritative-runs-v2-concurrent-a'
+      gitSha: 'authoritative-runs-v7-concurrent-a'
     });
     const concurrentB = startServer({
       port: CONCURRENT_PORT_B,
       dbPath: CONCURRENT_DB_PATH,
-      gitSha: 'authoritative-runs-v2-concurrent-b'
+      gitSha: 'authoritative-runs-v7-concurrent-b'
     });
     try {
       await Promise.all([
         waitForHealth(concurrentA, 'concurrent-a'),
         waitForHealth(concurrentB, 'concurrent-b')
       ]);
+      const concurrentCatalogCountAfterV7Bootstrap = await dbGet(
+        CONCURRENT_DB_PATH,
+        `SELECT COUNT(*) AS count
+         FROM progression_authoritative_run_catalogs`
+      );
+      assert.strictEqual(
+        Number(concurrentCatalogCountAfterV7Bootstrap?.count),
+        Number(concurrentCatalogCountBeforeV7Bootstrap?.count) + 1,
+        'concurrent v7 startup should add exactly one current catalog row beside frozen history'
+      );
       const concurrentCatalogCount = await dbGet(
         CONCURRENT_DB_PATH,
         `SELECT COUNT(*) AS count
@@ -832,7 +956,19 @@ async function main() {
          WHERE content_version = ?`,
         [CATALOG_VERSION]
       );
-      assert.strictEqual(Number(concurrentCatalogCount?.count), 1, 'concurrent startup should keep one immutable catalog row');
+      assert.strictEqual(Number(concurrentCatalogCount?.count), 1, 'concurrent startup should keep one immutable v7 catalog row');
+      await assertCatalogPayloads(
+        CONCURRENT_DB_PATH,
+        HISTORICAL_CATALOG_FIXTURES,
+        concurrentHistoricalPayloads,
+        'concurrent v7 startup must preserve frozen'
+      );
+      const concurrentV7Catalog = await readCatalogPayload(CONCURRENT_DB_PATH, CATALOG_VERSION);
+      assert.deepStrictEqual(
+        concurrentV7Catalog,
+        { content_hash: CATALOG_HASH, content_json: CATALOG_JSON },
+        'concurrent v7 startup should not duplicate or drift the current catalog row'
+      );
       const concurrentMigrationCount = await dbGet(
         CONCURRENT_DB_PATH,
         `SELECT COUNT(*) AS count
@@ -875,7 +1011,7 @@ async function main() {
     await stopServer(server);
     removeDbFiles(DB_PATH);
     removeDbFiles(CONCURRENT_DB_PATH);
-    removeDbFiles(V5_COMPAT_DB_PATH);
+    removeDbFiles(HISTORY_COMPAT_DB_PATH);
   }
 }
 

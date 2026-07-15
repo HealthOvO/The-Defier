@@ -100,7 +100,9 @@ const CARD_LABELS = Object.freeze({
   ember_riposte: "照火反锋",
   mirror_breath: "镜息",
   severing_flow: "截流",
-  archive_surge: "归卷冲霄"
+  archive_surge: "归卷冲霄",
+  warding_stride: "承势步",
+  sealbreaker: "破印诀"
 });
 
 const COMMAND_LABELS = Object.freeze({
@@ -307,6 +309,70 @@ function normalizeScoreBreakdown(scoreBreakdown = null, fallbackFinalScore = 0) 
     return null;
   }
   return normalized;
+}
+
+function normalizeCombatTacticRequirement(source = null) {
+  if (!source || typeof source !== "object") return null;
+  const metric = normalizeText(source.metric);
+  if (!metric) return null;
+  const target = Math.max(1, clampInt(source.target, 1));
+  const actual = Math.max(0, clampInt(source.actual, 0));
+  return {
+    metric,
+    label: normalizeText(source.label, "反制进度"),
+    target,
+    actual,
+    met: source.met === true || actual >= target
+  };
+}
+
+function normalizeCombatTactic(source = null) {
+  if (!source || clampInt(source.version, 0) !== 1 || !normalizeText(source.tacticId)) return null;
+  const requirements = normalizeArray(source.requirements)
+    .map(normalizeCombatTacticRequirement)
+    .filter(Boolean);
+  if (!requirements.length) return null;
+  return {
+    tacticId: normalizeText(source.tacticId),
+    intentType: normalizeText(source.intentType),
+    title: normalizeText(source.title, "敌意反制"),
+    prompt: normalizeText(source.prompt),
+    rewardSummary: normalizeText(source.rewardSummary),
+    effects: {
+      damageReduction: Math.max(0, clampInt(source.effects && source.effects.damageReduction, 0)),
+      blockReduction: Math.max(0, clampInt(source.effects && source.effects.blockReduction, 0))
+    },
+    requirements,
+    cardsPlayed: Math.max(0, clampInt(source.cardsPlayed, 0)),
+    completed: source.completed === true || requirements.every(requirement => requirement.met)
+  };
+}
+
+function normalizeCombatTacticResolution(source = null) {
+  if (!source || clampInt(source.version, 0) !== 1 || !normalizeText(source.tacticId)) return null;
+  return {
+    tacticId: normalizeText(source.tacticId),
+    intentType: normalizeText(source.intentType),
+    title: normalizeText(source.title, "敌意反制"),
+    success: source.success === true,
+    requirements: normalizeArray(source.requirements)
+      .map(normalizeCombatTacticRequirement)
+      .filter(Boolean),
+    rewardSummary: normalizeText(source.rewardSummary),
+    damageReduction: Math.max(0, clampInt(source.damageReduction, 0)),
+    blockReduction: Math.max(0, clampInt(source.blockReduction, 0))
+  };
+}
+
+function normalizeCombatTacticSummary(source = null) {
+  if (!source || clampInt(source.version, 0) !== 1) return null;
+  const opportunities = Math.max(0, clampInt(source.opportunities, 0));
+  const successes = Math.min(opportunities, Math.max(0, clampInt(source.successes, 0)));
+  return {
+    opportunities,
+    successes,
+    successRateBps: Math.max(0, Math.min(10000, clampInt(source.successRateBps, 0)))
+  };
 }
 
 function formatRouteScoreValue(scoreBonus = 0) {
@@ -1602,6 +1668,7 @@ export class AuthoritativeRunPanel {
           <div class="season-ops-counter-chip">第 ${clampInt(route.stage, 1)} / ${clampInt(route.totalStages, 3)} 站</div>
         </div>
         ${this.renderChapterBranchPanel(route.chapterBranch, { title: "已锁定章中命途" })}
+        ${this.renderCombatTacticResolution(projection && projection.combatTactics && projection.combatTactics.lastResolution)}
         <div class="season-ops-authoritative-choice-grid">
           ${choices.map(choice => this.renderRouteChoice(choice)).join("") || `<div class="season-ops-inline-empty">当前没有可选路线，请恢复本次历练。</div>`}
         </div>
@@ -1657,6 +1724,8 @@ export class AuthoritativeRunPanel {
     const enemy = battle && battle.enemy ? battle.enemy : {};
     const hand = normalizeArray(player.hand);
     const intent = enemy && enemy.intent ? enemy.intent : null;
+    const tactic = battle && battle.tactic ? battle.tactic : null;
+    const tacticsEnabled = clampInt(projection && projection.combatTactics && projection.combatTactics.version, 0) === 1;
     return `
       <section class="season-ops-section-card season-ops-authoritative-section">
         <div class="season-ops-section-head">
@@ -1693,8 +1762,10 @@ export class AuthoritativeRunPanel {
               ${renderChip(`意图 ${normalizeText(intent && intent.label, "未公开")}`)}
             </div>
             ${intent ? `<div class="season-ops-authoritative-intent">${escapeHtml(this.describeEnemyIntent(intent))}</div>` : ""}
+            ${tacticsEnabled && clampInt(enemy.block) > 0 ? `<div class="season-ops-inline-note">当前格挡会吸收本回合伤害，并在下次敌方结算前消散。</div>` : ""}
           </article>
         </div>
+        ${this.renderCombatTacticPanel(tactic)}
         <div class="season-ops-authoritative-hand-grid">
           ${hand.map(card => this.renderHandCard(card, player.energy)).join("") || `<div class="season-ops-inline-empty">当前手牌为空，可直接结束回合。</div>`}
         </div>
@@ -1752,6 +1823,7 @@ export class AuthoritativeRunPanel {
         </div>
         ${this.renderChapterBranchPanel(projection && projection.route && projection.route.chapterBranch)}
         ${this.renderRouteContractPanel(reward.routeContract, { title: "已选路线合同" })}
+        ${this.renderCombatTacticResolution(projection && projection.combatTactics && projection.combatTactics.lastResolution)}
         <div class="season-ops-authoritative-choice-grid">
           ${choices.map(choice => this.renderRewardChoice(choice)).join("") || `<div class="season-ops-inline-empty">当前没有可选奖励，请恢复本次历练。</div>`}
         </div>
@@ -1819,6 +1891,7 @@ export class AuthoritativeRunPanel {
           <div class="season-ops-counter-chip">${escapeHtml(summary.grade || "未评级")}</div>
         </div>
         ${this.renderSummaryGrid(summary)}
+        ${this.renderCombatTacticSummary(summary.combatTactics)}
         ${this.renderChapterBranchPanel(summary.chapterBranchResolution, { title: "章中命途结论" })}
         ${this.renderRouteScorePanel(summary)}
         ${this.renderSettlementCard(receipt, settled)}
@@ -1887,6 +1960,7 @@ export class AuthoritativeRunPanel {
           <div class="season-ops-counter-chip">${escapeHtml(formatMappedLabel(TERMINAL_REASON_LABELS, summary.reason, abandoned ? "主动封卷" : "历练结束"))}</div>
         </div>
         ${this.renderSummaryGrid(summary)}
+        ${this.renderCombatTacticSummary(summary.combatTactics)}
         ${this.renderChapterBranchPanel(summary.chapterBranchResolution || (projection && projection.route && projection.route.chapterBranch), { title: "章中命途结论" })}
         ${this.renderRouteScorePanel(summary)}
         ${this.renderRouteHistory()}
@@ -1944,6 +2018,83 @@ export class AuthoritativeRunPanel {
           ${renderChip(`裁牌 ${clampInt(summary.cardsRemoved)} 张`)}
         </div>
       ` : ""}
+    `;
+  }
+
+  renderCombatTacticPanel(source = null) {
+    const tactic = normalizeCombatTactic(source);
+    if (!tactic) return "";
+    const effectParts = [];
+    if (tactic.effects.damageReduction > 0) effectParts.push(`敌方伤害 -${tactic.effects.damageReduction}`);
+    if (tactic.effects.blockReduction > 0) effectParts.push(`敌方格挡 -${tactic.effects.blockReduction}`);
+    return `
+      <article class="season-ops-authoritative-tactic" data-authoritative-tactic="true">
+        <div class="season-ops-authoritative-choice-top">
+          <div class="season-ops-authoritative-tactic-heading">
+            <span class="season-ops-inline-note">当前敌意题面</span>
+            <strong>${escapeHtml(tactic.title)}</strong>
+          </div>
+          <span class="season-ops-meta-chip">${tactic.completed ? "反制已就绪" : "反制进行中"}</span>
+        </div>
+        ${tactic.prompt ? `<p>${escapeHtml(tactic.prompt)}</p>` : ""}
+        <div class="season-ops-authoritative-tactic-progress">
+          ${tactic.requirements.map(requirement => {
+            const percent = Math.min(100, Math.floor(requirement.actual * 100 / requirement.target));
+            return `
+              <div class="season-ops-authoritative-tactic-row">
+                <div class="season-ops-authoritative-tactic-row-copy">
+                  <span>${escapeHtml(requirement.label)}</span>
+                  <strong>${requirement.actual}/${requirement.target}</strong>
+                </div>
+                <div class="season-ops-authoritative-tactic-track" role="progressbar" aria-label="${escapeHtml(requirement.label)}" aria-valuemin="0" aria-valuemax="${requirement.target}" aria-valuenow="${Math.min(requirement.actual, requirement.target)}">
+                  <span style="width: ${percent}%"></span>
+                </div>
+              </div>
+            `;
+          }).join("")}
+        </div>
+        <div class="season-ops-inline-note">${escapeHtml(effectParts.length
+          ? `达成收益：${effectParts.join(" · ")}`
+          : (tactic.rewardSummary || "达成后会削弱本次敌方意图。"))}</div>
+      </article>
+    `;
+  }
+
+  renderCombatTacticResolution(source = null) {
+    const resolution = normalizeCombatTacticResolution(source);
+    if (!resolution) return "";
+    const effectParts = [];
+    if (resolution.damageReduction > 0) effectParts.push(`敌方伤害 -${resolution.damageReduction}`);
+    if (resolution.blockReduction > 0) effectParts.push(`敌方格挡 -${resolution.blockReduction}`);
+    return `
+      <article class="season-ops-authoritative-tactic is-resolution ${resolution.success ? "is-success" : "is-missed"}" data-authoritative-tactic-resolution="true">
+        <div class="season-ops-authoritative-choice-top">
+          <div class="season-ops-authoritative-tactic-heading">
+            <span class="season-ops-inline-note">上一手反制回执</span>
+            <strong>${escapeHtml(resolution.title)}</strong>
+          </div>
+          <span class="season-ops-meta-chip">${resolution.success ? "反制成功" : "未达成"}</span>
+        </div>
+        <div class="season-ops-authoritative-meta-row">
+          ${resolution.requirements.map(requirement => renderChip(`${requirement.label} ${requirement.actual}/${requirement.target}`)).join("")}
+        </div>
+        <p>${escapeHtml(resolution.success
+          ? (effectParts.join(" · ") || resolution.rewardSummary || "本次敌意已经削弱。")
+          : "本手不追加额外惩罚，敌方意图按公开数值结算。")}</p>
+      </article>
+    `;
+  }
+
+  renderCombatTacticSummary(source = null) {
+    const summary = normalizeCombatTacticSummary(source);
+    if (!summary) return "";
+    const rate = (summary.successRateBps / 100).toFixed(0);
+    return `
+      <div class="season-ops-authoritative-meta-row" data-combat-tactic-summary="true">
+        ${renderChip(`敌意题面 ${summary.opportunities}`)}
+        ${renderChip(`成功反制 ${summary.successes}`)}
+        ${renderChip(`反制率 ${rate}%`)}
+      </div>
     `;
   }
 
@@ -2170,8 +2321,28 @@ export class AuthoritativeRunPanel {
     const type = normalizeText(event.type);
     if (type === "chapter_branch_selected") return `章中命途已锁定：${normalizeText(event.title, event.branchId || "已选路线")}。`;
     if (type === "encounter_started") return `遭遇已锁定：${formatMappedLabel(ENEMY_LABELS, event.enemyId, "未知敌手")}。`;
-    if (type === "card_played") return `已打出「${formatMappedLabel(CARD_LABELS, event.cardId, "未知牌")}」，伤害 ${clampInt(event.damage)}，格挡 ${clampInt(event.block)}。`;
-    if (type === "enemy_intent_resolved") return `敌方意图结算，承受 ${clampInt(event.damageTaken)} 伤害，敌方获得 ${clampInt(event.enemyBlock)} 格挡。`;
+    if (type === "card_played") {
+      const conditionalParts = [];
+      if (clampInt(event.conditionalDamage) > 0) conditionalParts.push(`条件伤害 +${clampInt(event.conditionalDamage)}`);
+      if (clampInt(event.conditionalBlock) > 0) conditionalParts.push(`条件格挡 +${clampInt(event.conditionalBlock)}`);
+      return `已打出「${formatMappedLabel(CARD_LABELS, event.cardId, "未知牌")}」，伤害 ${clampInt(event.damage)}，格挡 ${clampInt(event.block)}${conditionalParts.length ? `（${conditionalParts.join(" · ")}）` : ""}。`;
+    }
+    if (type === "enemy_tactic_resolved") {
+      const resolution = normalizeCombatTacticResolution(event);
+      if (!resolution) return "敌意反制已经结算。";
+      const reductions = [];
+      if (resolution.damageReduction > 0) reductions.push(`伤害 -${resolution.damageReduction}`);
+      if (resolution.blockReduction > 0) reductions.push(`格挡 -${resolution.blockReduction}`);
+      return resolution.success
+        ? `${resolution.title}反制成功${reductions.length ? `，敌方${reductions.join("、")}` : ""}。`
+        : `${resolution.title}未达成；不追加额外惩罚。`;
+    }
+    if (type === "enemy_intent_resolved") {
+      const prevented = [];
+      if (clampInt(event.damagePrevented) > 0) prevented.push(`阻止 ${clampInt(event.damagePrevented)} 伤害`);
+      if (clampInt(event.blockPrevented) > 0) prevented.push(`压低 ${clampInt(event.blockPrevented)} 格挡`);
+      return `敌方意图结算，承受 ${clampInt(event.damageTaken)} 伤害，敌方获得 ${clampInt(event.enemyBlock)} 格挡${prevented.length ? `（${prevented.join(" · ")}）` : ""}。`;
+    }
     if (type === "reward_chosen") return `已领取：${formatRewardReceiptLabel(event)}。`;
     if (type === "encounter_won") return `已击破 ${formatMappedLabel(ENEMY_LABELS, event.enemyId, "未知敌手")}${event.boss ? "（首领）" : ""}。`;
     if (type === "run_completed") return `本次历练已通关，评分 ${clampInt(event.score)}，评级 ${normalizeText(event.grade)}。`;

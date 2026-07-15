@@ -197,8 +197,84 @@ function routeSignature(view) {
   }));
 }
 
+function createTacticProbe({
+  label,
+  contractId = 'steady',
+  enemyId = 'ink_scout',
+  intentIndex = 0,
+  handCardIds = [],
+  enemyBlock = 0,
+  playerBlock = 0,
+  energy = 3,
+  content = CONTENT_SNAPSHOT,
+} = {}) {
+  let state = create(
+    'pve',
+    `tactic:${label}`,
+    `tactic-${seed(`run:${label}`).slice(0, 24)}`,
+    '',
+    content,
+  );
+  const nodeId = projectState(state, content).route.choices[0].nodeId;
+  state = applyCommand(state, content, 'select_node', { nodeId }).state;
+  const enemy = content.enemies[enemyId];
+  const contract = content.routeContracts?.profiles?.[contractId];
+  state.battle.enemy.enemyId = enemyId;
+  state.battle.enemy.hp = enemy.maxHp;
+  state.battle.enemy.maxHp = enemy.maxHp;
+  state.battle.enemy.block = enemyBlock;
+  state.battle.enemy.vulnerable = 0;
+  state.battle.enemy.intentIndex = intentIndex;
+  state.battle.routeContract = contract ? {
+    version: 1,
+    contractId,
+    label: contract.label,
+    riskTier: contract.riskTier,
+    riskLabel: contract.riskLabel,
+    difficultyTier: contract.difficultyTier,
+    difficultyLabel: contract.difficultyLabel,
+    difficultyRating: contract.difficultyRating,
+    rewardTier: contract.rewardTier,
+    rewardLabel: contract.rewardLabel,
+    difficultySummary: `probe:${contractId}`,
+    rewardSummary: `probe:${contractId}`,
+    scoreBonus: contract.scoreBonus,
+    enemyAdjustments: cloneState(contract.enemyAdjustments),
+    rewardAdjustments: cloneState(contract.rewardAdjustments),
+  } : null;
+  state.player.block = playerBlock;
+  state.player.energy = energy;
+  state.player.hand = handCardIds.map((cardId, index) => ({
+    instanceId: `probe-card-${index + 1}`,
+    cardId,
+    upgraded: false,
+  }));
+  state.player.drawPile = [];
+  state.player.discardPile = [];
+  if (state.battle.tacticTurn) {
+    state.battle.tacticTurn = { damageDealt: 0, blockGained: 0, cardsPlayed: 0 };
+  }
+  return state;
+}
+
+function runTacticProbe(state, cardInstanceIds = [], content = CONTENT_SNAPSHOT) {
+  let current = state;
+  const playEvents = [];
+  cardInstanceIds.forEach((cardInstanceId) => {
+    const result = applyCommand(current, content, 'play_card', { cardInstanceId });
+    current = result.state;
+    playEvents.push(...result.events);
+  });
+  const endTurn = applyCommand(current, content, 'end_turn', {});
+  return { state: endTurn.state, playEvents, endTurnEvents: endTurn.events };
+}
+
+function findEvent(events, type) {
+  return events.find(event => event.type === type);
+}
+
 assert.strictEqual(PROTOCOL_VERSION, 'authoritative-run-v2');
-assert.strictEqual(CONTENT_VERSION, 'authoritative-trials-v6');
+assert.strictEqual(CONTENT_VERSION, 'authoritative-trials-v7');
 assert.match(CONTENT_HASH, /^[a-f0-9]{64}$/i, 'content hash should stay a canonical SHA-256');
 assert.deepStrictEqual(FATE_CHRONICLE_SCENARIO_IDS, [
   'chronicle-ember-guard',
@@ -298,6 +374,11 @@ assert(!publicJson.includes('"drawPile":'), 'public projection must not expose o
 assert.strictEqual(publicInitial.route.contractVersion, 1);
 assert.strictEqual(publicInitial.route.choices.length, 2);
 assert(publicInitial.route.choices.every(choice => choice.routeContract?.version === 1));
+assert.strictEqual(publicInitial.combatTactics.version, 1);
+assert.strictEqual(publicInitial.combatTactics.reportVersion, CONTENT_SNAPSHOT.combatTactics.reportVersion);
+assert.strictEqual(publicInitial.combatTactics.lastResolution, null);
+assert.strictEqual(publicInitial.stats.combatTacticOpportunities, 0);
+assert.strictEqual(publicInitial.stats.combatTacticSuccesses, 0);
 assert(!publicJson.includes('enemyAdjustments'), 'public projection must not expose private enemy coefficients');
 assert(!publicJson.includes('rewardAdjustments'), 'public projection must not expose private reward coefficients');
 assert.throws(
@@ -310,7 +391,7 @@ assert.throws(
   error => error.reason === 'command_not_allowed',
 );
 assert.strictEqual(stableStringify(initial), initialCopy, 'rejected commands must not mutate canonical state');
-assert(initial.player.deck.every(card => card.upgraded === false), 'v5 genesis should explicitly pin every card as unupgraded');
+assert(initial.player.deck.every(card => card.upgraded === false), 'v7 genesis should explicitly pin every card as unupgraded');
 assert.deepStrictEqual(publicInitial.player.upgradedDeckCounts, {});
 assert.strictEqual(publicInitial.player.deckCrafting.minDeckSize, 8);
 
@@ -363,6 +444,272 @@ assert.throws(
   error => error.reason === 'content_state_mismatch',
   'commands must not execute against a different immutable content snapshot',
 );
+
+const tacticThresholdCases = [
+  {
+    label: 'attack-steady',
+    contractId: 'steady',
+    enemyId: 'ink_scout',
+    intentIndex: 0,
+    successCards: ['guard'],
+    failureCards: [],
+    expectedPublic: {
+      tacticId: 'brace',
+      intentType: 'attack',
+      targets: [4],
+    },
+    expectedSuccess: {
+      damageReduction: 2,
+      blockReduction: 0,
+      damageTaken: 0,
+    },
+  },
+  {
+    label: 'fortify-contested',
+    contractId: 'contested',
+    enemyId: 'ash_acolyte',
+    intentIndex: 1,
+    successCards: ['strike'],
+    failureCards: ['fracture'],
+    expectedPublic: {
+      tacticId: 'break',
+      intentType: 'fortify',
+      targets: [6],
+    },
+    expectedSuccess: {
+      damageReduction: 0,
+      blockReduction: 4,
+      damageTaken: 0,
+    },
+  },
+  {
+    label: 'defend-attack-perilous',
+    contractId: 'perilous',
+    enemyId: 'mirror_seer',
+    intentIndex: 0,
+    successCards: ['ember_riposte'],
+    failureCards: ['strike'],
+    expectedPublic: {
+      tacticId: 'balance',
+      intentType: 'defend_attack',
+      targets: [4, 4],
+    },
+    expectedSuccess: {
+      damageReduction: 2,
+      blockReduction: 2,
+      damageTaken: 1,
+    },
+  },
+];
+
+for (const tacticCase of tacticThresholdCases) {
+  const successProbe = createTacticProbe({
+    label: `${tacticCase.label}:success`,
+    contractId: tacticCase.contractId,
+    enemyId: tacticCase.enemyId,
+    intentIndex: tacticCase.intentIndex,
+    handCardIds: tacticCase.successCards,
+  });
+  const projectedBefore = projectState(successProbe, CONTENT_SNAPSHOT);
+  assert.strictEqual(projectedBefore.battle.tactic.tacticId, tacticCase.expectedPublic.tacticId);
+  assert.strictEqual(projectedBefore.battle.tactic.intentType, tacticCase.expectedPublic.intentType);
+  assert.deepStrictEqual(
+    projectedBefore.battle.tactic.requirements.map(requirement => requirement.target),
+    tacticCase.expectedPublic.targets,
+    `${tacticCase.label} public tactic thresholds drifted`,
+  );
+  assert.strictEqual(projectedBefore.battle.tactic.status, 'in_progress');
+  const successResult = runTacticProbe(
+    successProbe,
+    successProbe.player.hand.map(card => card.instanceId),
+  );
+  const successResolution = findEvent(successResult.endTurnEvents, 'enemy_tactic_resolved');
+  const successIntent = findEvent(successResult.endTurnEvents, 'enemy_intent_resolved');
+  assert(successResolution, `${tacticCase.label} should emit an enemy_tactic_resolved receipt`);
+  assert(successIntent, `${tacticCase.label} should emit an enemy_intent_resolved receipt`);
+  assert.strictEqual(successResolution.success, true, `${tacticCase.label} should succeed when its thresholds are met`);
+  assert.strictEqual(successResolution.tacticId, tacticCase.expectedPublic.tacticId);
+  assert.strictEqual(successResolution.intentType, tacticCase.expectedPublic.intentType);
+  assert.strictEqual(successResolution.damageReduction, tacticCase.expectedSuccess.damageReduction);
+  assert.strictEqual(successResolution.blockReduction, tacticCase.expectedSuccess.blockReduction);
+  assert(successResolution.requirements.every(requirement => requirement.met), `${tacticCase.label} success receipt should mark every requirement as met`);
+  assert.strictEqual(successIntent.damageTaken, tacticCase.expectedSuccess.damageTaken);
+  assert.strictEqual(successResult.state.stats.combatTacticOpportunities, 1);
+  assert.strictEqual(successResult.state.stats.combatTacticSuccesses, 1);
+  const projectedAfter = projectState(successResult.state, CONTENT_SNAPSHOT);
+  assert.strictEqual(projectedAfter.combatTactics.lastResolution.success, true);
+  assert.strictEqual(projectedAfter.combatTactics.lastResolution.tacticId, tacticCase.expectedPublic.tacticId);
+
+  const failureProbe = createTacticProbe({
+    label: `${tacticCase.label}:failure`,
+    contractId: tacticCase.contractId,
+    enemyId: tacticCase.enemyId,
+    intentIndex: tacticCase.intentIndex,
+    handCardIds: tacticCase.failureCards,
+  });
+  const failureResult = runTacticProbe(
+    failureProbe,
+    failureProbe.player.hand.map(card => card.instanceId),
+  );
+  const failureResolution = findEvent(failureResult.endTurnEvents, 'enemy_tactic_resolved');
+  assert(failureResolution, `${tacticCase.label} failure case should still emit a tactic receipt`);
+  assert.strictEqual(failureResolution.success, false, `${tacticCase.label} failure receipt must remain explicit`);
+  assert(failureResolution.requirements.some(requirement => !requirement.met), `${tacticCase.label} failure receipt should preserve the unmet requirement`);
+  assert.strictEqual(failureResult.state.stats.combatTacticOpportunities, 1);
+  assert.strictEqual(failureResult.state.stats.combatTacticSuccesses, 0);
+  const failureProjection = projectState(failureResult.state, CONTENT_SNAPSHOT);
+  assert.strictEqual(failureProjection.combatTactics.lastResolution.success, false);
+}
+
+const persistentBlockExpectations = [
+  { contractId: 'steady', enemyId: 'ash_acolyte', intentIndex: 1, cards: ['strike'], expectedBlock: 4, label: 'fortify/steady' },
+  { contractId: 'contested', enemyId: 'ash_acolyte', intentIndex: 1, cards: ['strike'], expectedBlock: 4, label: 'fortify/contested' },
+  { contractId: 'perilous', enemyId: 'ash_acolyte', intentIndex: 1, cards: ['strike'], expectedBlock: 5, label: 'fortify/perilous' },
+  { contractId: 'steady', enemyId: 'mirror_seer', intentIndex: 0, cards: ['ember_riposte'], expectedBlock: 3, label: 'defend_attack/steady' },
+  { contractId: 'contested', enemyId: 'mirror_seer', intentIndex: 0, cards: ['ember_riposte'], expectedBlock: 4, label: 'defend_attack/contested' },
+  { contractId: 'perilous', enemyId: 'mirror_seer', intentIndex: 0, cards: ['ember_riposte'], expectedBlock: 5, label: 'defend_attack/perilous' },
+];
+
+for (const expectation of persistentBlockExpectations) {
+  const probe = createTacticProbe({
+    label: `persistent:${expectation.label}`,
+    contractId: expectation.contractId,
+    enemyId: expectation.enemyId,
+    intentIndex: expectation.intentIndex,
+    handCardIds: expectation.cards,
+  });
+  const result = runTacticProbe(probe, probe.player.hand.map(card => card.instanceId));
+  const projected = projectState(result.state, CONTENT_SNAPSHOT);
+  assert.strictEqual(
+    projected.battle.enemy.block,
+    expectation.expectedBlock,
+    `${expectation.label} should carry its reduced block into the next player turn`,
+  );
+}
+
+const fortifyCarryProbe = createTacticProbe({
+  label: 'carry-fortify',
+  contractId: 'steady',
+  enemyId: 'ash_acolyte',
+  intentIndex: 1,
+  handCardIds: ['strike'],
+});
+const fortifyCarry = runTacticProbe(
+  fortifyCarryProbe,
+  fortifyCarryProbe.player.hand.map(card => card.instanceId),
+);
+assert.strictEqual(projectState(fortifyCarry.state, CONTENT_SNAPSHOT).battle.enemy.block, 4);
+fortifyCarry.state.player.hand = [{ instanceId: 'probe-followup-strike', cardId: 'strike', upgraded: false }];
+fortifyCarry.state.player.drawPile = [];
+fortifyCarry.state.player.discardPile = [];
+fortifyCarry.state.player.energy = 3;
+const fortifyCarryHit = applyCommand(
+  fortifyCarry.state,
+  CONTENT_SNAPSHOT,
+  'play_card',
+  { cardInstanceId: 'probe-followup-strike' },
+);
+assert.strictEqual(fortifyCarryHit.events[0].damage, 4, 'persistent fortify block should absorb the next player-turn damage first');
+assert.strictEqual(fortifyCarryHit.state.battle.enemy.block, 0);
+const fortifyCarryClear = applyCommand(fortifyCarryHit.state, CONTENT_SNAPSHOT, 'end_turn', {});
+assert.strictEqual(
+  findEvent(fortifyCarryClear.events, 'enemy_intent_resolved').enemyBlock,
+  0,
+  'legacy persistent block must clear before the next enemy intent resolves',
+);
+assert.strictEqual(fortifyCarryClear.state.battle.enemy.block, 0);
+
+const defendCarryProbe = createTacticProbe({
+  label: 'carry-defend-attack',
+  contractId: 'steady',
+  enemyId: 'mirror_seer',
+  intentIndex: 0,
+  handCardIds: ['ember_riposte'],
+});
+const defendCarry = runTacticProbe(
+  defendCarryProbe,
+  defendCarryProbe.player.hand.map(card => card.instanceId),
+);
+assert.strictEqual(projectState(defendCarry.state, CONTENT_SNAPSHOT).battle.enemy.block, 3);
+defendCarry.state.player.hand = [{ instanceId: 'probe-followup-strike-2', cardId: 'strike', upgraded: false }];
+defendCarry.state.player.drawPile = [];
+defendCarry.state.player.discardPile = [];
+defendCarry.state.player.energy = 3;
+const defendCarryHit = applyCommand(
+  defendCarry.state,
+  CONTENT_SNAPSHOT,
+  'play_card',
+  { cardInstanceId: 'probe-followup-strike-2' },
+);
+assert.strictEqual(defendCarryHit.events[0].damage, 5, 'persistent defend_attack block should absorb the next player-turn damage first');
+assert.strictEqual(defendCarryHit.state.battle.enemy.block, 0);
+const defendCarryClear = applyCommand(defendCarryHit.state, CONTENT_SNAPSHOT, 'end_turn', {});
+assert.strictEqual(
+  findEvent(defendCarryClear.events, 'enemy_intent_resolved').enemyBlock,
+  0,
+  'defend_attack carryover block should clear before the next enemy action',
+);
+assert.strictEqual(defendCarryClear.state.battle.enemy.block, 0);
+
+const wardingStrideAttack = applyCommand(
+  createTacticProbe({
+    label: 'warding-stride-attack',
+    contractId: 'steady',
+    enemyId: 'ink_scout',
+    intentIndex: 0,
+    handCardIds: ['warding_stride'],
+  }),
+  CONTENT_SNAPSHOT,
+  'play_card',
+  { cardInstanceId: 'probe-card-1' },
+);
+assert.strictEqual(wardingStrideAttack.events[0].block, 8);
+assert.strictEqual(wardingStrideAttack.events[0].conditionalBlock, 4);
+const wardingStrideFortify = applyCommand(
+  createTacticProbe({
+    label: 'warding-stride-fortify',
+    contractId: 'steady',
+    enemyId: 'ash_acolyte',
+    intentIndex: 1,
+    handCardIds: ['warding_stride'],
+  }),
+  CONTENT_SNAPSHOT,
+  'play_card',
+  { cardInstanceId: 'probe-card-1' },
+);
+assert.strictEqual(wardingStrideFortify.events[0].block, 4);
+assert.strictEqual(wardingStrideFortify.events[0].conditionalBlock, undefined);
+
+const sealbreakerWithBlock = applyCommand(
+  createTacticProbe({
+    label: 'sealbreaker-with-block',
+    contractId: 'steady',
+    enemyId: 'ink_scout',
+    intentIndex: 0,
+    enemyBlock: 4,
+    handCardIds: ['sealbreaker'],
+  }),
+  CONTENT_SNAPSHOT,
+  'play_card',
+  { cardInstanceId: 'probe-card-1' },
+);
+assert.strictEqual(sealbreakerWithBlock.events[0].damage, 12);
+assert.strictEqual(sealbreakerWithBlock.events[0].conditionalDamage, 7);
+const sealbreakerWithoutBlock = applyCommand(
+  createTacticProbe({
+    label: 'sealbreaker-without-block',
+    contractId: 'steady',
+    enemyId: 'ink_scout',
+    intentIndex: 0,
+    enemyBlock: 0,
+    handCardIds: ['sealbreaker'],
+  }),
+  CONTENT_SNAPSHOT,
+  'play_card',
+  { cardInstanceId: 'probe-card-1' },
+);
+assert.strictEqual(sealbreakerWithoutBlock.events[0].damage, 9);
+assert.strictEqual(sealbreakerWithoutBlock.events[0].conditionalDamage, undefined);
 
 let craftingState = create('pve', 'pve:crafting:0', 'crafting-pve-0001');
 while (craftingState.phase !== 'reward') {
@@ -467,6 +814,7 @@ const legacyContent = JSON.parse(stableStringify(CONTENT_SNAPSHOT));
 legacyContent.contentVersion = 'authoritative-trials-v3';
 delete legacyContent.routeContracts;
 delete legacyContent.deckCrafting;
+delete legacyContent.combatTactics;
 Object.values(legacyContent.cards).forEach(card => delete card.upgrade);
 const legacyRewardState = JSON.parse(stableStringify(initial));
 legacyRewardState.contentVersion = legacyContent.contentVersion;
@@ -477,6 +825,9 @@ delete legacyRewardState.route.contractVersion;
 legacyRewardState.player.deck.forEach(card => delete card.upgraded);
 delete legacyRewardState.stats.cardsUpgraded;
 delete legacyRewardState.stats.cardsRemoved;
+delete legacyRewardState.stats.combatTacticOpportunities;
+delete legacyRewardState.stats.combatTacticSuccesses;
+delete legacyRewardState.combatTactics;
 legacyRewardState.reward = {
   choices: [{
     rewardId: 'reward-card-1-sky_pierce',
@@ -501,6 +852,42 @@ assert.deepStrictEqual(legacyRewardResult.events, [{
   rewardId: 'reward-card-1-sky_pierce',
   rewardKind: 'card',
 }]);
+
+const legacyV6Content = JSON.parse(stableStringify(CONTENT_SNAPSHOT));
+legacyV6Content.contentVersion = 'authoritative-trials-v6';
+delete legacyV6Content.combatTactics;
+const legacyV6Initial = create(
+  'pve',
+  'legacy-v6:tactics:0',
+  'legacy-v6-tactics-0001',
+  '',
+  legacyV6Content,
+);
+const legacyV6Projection = projectState(legacyV6Initial, legacyV6Content);
+assert.strictEqual(legacyV6Projection.combatTactics, undefined);
+assert.strictEqual(legacyV6Initial.combatTactics, undefined);
+assert.strictEqual(legacyV6Initial.stats.combatTacticOpportunities, undefined);
+assert.strictEqual(legacyV6Initial.stats.combatTacticSuccesses, undefined);
+let legacyV6Battle = applyCommand(
+  legacyV6Initial,
+  legacyV6Content,
+  'select_node',
+  { nodeId: legacyV6Projection.route.choices[0].nodeId },
+).state;
+legacyV6Battle.battle.enemy.enemyId = 'ash_acolyte';
+legacyV6Battle.battle.enemy.hp = CONTENT_SNAPSHOT.enemies.ash_acolyte.maxHp;
+legacyV6Battle.battle.enemy.maxHp = CONTENT_SNAPSHOT.enemies.ash_acolyte.maxHp;
+legacyV6Battle.battle.enemy.intentIndex = 1;
+legacyV6Battle.player.hand = [];
+legacyV6Battle.player.drawPile = [];
+legacyV6Battle.player.discardPile = [];
+legacyV6Battle.player.energy = 3;
+legacyV6Battle = applyCommand(legacyV6Battle, legacyV6Content, 'end_turn', {}).state;
+const legacyV6BattleProjection = projectState(legacyV6Battle, legacyV6Content);
+assert.strictEqual(legacyV6Battle.battle.enemy.block, 0, 'legacy v6 enemy block should still clear immediately after the enemy turn');
+assert.strictEqual(legacyV6BattleProjection.battle.tactic, undefined);
+assert.strictEqual(legacyV6BattleProjection.combatTactics, undefined);
+assert(!stableStringify(legacyV6Battle).includes('combatTactics'), 'legacy v6 canonical state must not backfill combatTactics fields');
 
 const abandoned = applyCommand(initial, CONTENT_SNAPSHOT, 'abandon', {}).state;
 assert.strictEqual(abandoned.phase, 'abandoned');
@@ -608,6 +995,7 @@ for (const scenarioId of BRANCHED_FATE_SCENARIO_IDS) {
 
 const branchlessLegacyContent = JSON.parse(stableStringify(CONTENT_SNAPSHOT));
 branchlessLegacyContent.contentVersion = 'authoritative-trials-v5';
+delete branchlessLegacyContent.combatTactics;
 for (const scenarioId of BRANCHED_FATE_SCENARIO_IDS) {
   delete branchlessLegacyContent.scenarios[scenarioId].branchPlan;
 }
@@ -636,6 +1024,7 @@ assert.strictEqual(branchlessLegacyResult.state.summary?.chapterBranchResolution
 const legacyV4Content = JSON.parse(stableStringify(CONTENT_SNAPSHOT));
 legacyV4Content.contentVersion = 'authoritative-trials-v4';
 delete legacyV4Content.routeContracts;
+delete legacyV4Content.combatTactics;
 const legacyV4Golden = {
   pve: {
     actions: 63,

@@ -27,6 +27,8 @@ function resolveSqlite3() {
     'sqlite3',
     path.join(ROOT, 'node_modules', 'sqlite3'),
     path.join(ROOT, 'server', 'node_modules', 'sqlite3'),
+    path.join(ROOT, '..', '..', 'node_modules', 'sqlite3'),
+    path.join(ROOT, '..', '..', 'server', 'node_modules', 'sqlite3'),
   ]) {
     try {
       return require(candidate).verbose();
@@ -85,6 +87,33 @@ function buildLegacyV1Snapshot(snapshot, { catalogHash = LEGACY_CATALOG_HASH } =
   delete legacy.snapshotHash;
   legacy.snapshotHash = hashCanonical(legacy);
   return legacy;
+}
+
+function assertFrozenV2Semantics(snapshot, label) {
+  assert.equal(snapshot.catalogVersion, CATALOG_VERSION, `${label} should stay on the current v2 catalog version`);
+  assert.equal(snapshot.rotationRuleVersion, ROTATION_RULE_VERSION, `${label} should stay on the current v2 rotation rule version`);
+  assert(Array.isArray(snapshot.chapters) && snapshot.chapters.length === 3, `${label} should keep three chapters`);
+  assert(snapshot.chapters.every(chapter => Array.isArray(chapter.oaths) && chapter.oaths.length === 3), `${label} should keep three oaths per chapter`);
+  assert.deepEqual(
+    snapshot.chapters.map(chapter => chapter.oaths[2]?.scenarioId),
+    ['chronicle-ember-proof', 'chronicle-mirror-audit', 'chronicle-rift-seal'],
+    `${label} should keep the authored third-oath scenario ids`,
+  );
+}
+
+function assertFrozenV1Semantics(snapshot, label) {
+  assert.equal(snapshot.catalogVersion, 'fate-chronicle-catalog-v1', `${label} should stay on the legacy v1 catalog version`);
+  assert.equal(snapshot.rotationRuleVersion, 'fate-chronicle-rotation-v1', `${label} should stay on the legacy v1 rotation rule version`);
+  assert.equal(snapshot.catalogHash, LEGACY_CATALOG_HASH, `${label} should keep the known legacy catalog hash`);
+  assert(Array.isArray(snapshot.chapters) && snapshot.chapters.length === 3, `${label} should keep three chapters`);
+  assert(snapshot.chapters.every(chapter => Array.isArray(chapter.oaths) && chapter.oaths.length === 2), `${label} should keep exactly two oaths per chapter`);
+  assert.deepEqual(
+    snapshot.milestones
+      .filter(milestone => Object.prototype.hasOwnProperty.call(LEGACY_DUAL_TITLES, milestone.milestoneId))
+      .map(milestone => milestone.title),
+    Object.values(LEGACY_DUAL_TITLES),
+    `${label} should keep the frozen dual-oath milestone titles`,
+  );
 }
 
 async function rewriteRotationRow(db, snapshot) {
@@ -197,6 +226,39 @@ async function insertRotationRow(db, snapshot) {
 
     const previousSnapshot = buildRotationSnapshot(previousNow);
     const currentSnapshot = buildRotationSnapshot(now);
+    const frozenV2RowsBeforeBootstrap = new Map();
+    for (const v2Snapshot of [previousSnapshot, currentSnapshot]) {
+      const persisted = await dbGet(
+        db,
+        'SELECT * FROM fate_chronicle_rotations WHERE rotation_id = ?',
+        [v2Snapshot.rotationId],
+      );
+      frozenV2RowsBeforeBootstrap.set(v2Snapshot.rotationId, persisted);
+      assert(persisted, `missing fresh v2 rotation row ${v2Snapshot.rotationId}`);
+      assert.equal(persisted.snapshot_hash, v2Snapshot.snapshotHash, `${v2Snapshot.rotationId} frozen v2 row should keep its canonical snapshot hash`);
+      assert.equal(persisted.snapshot_json, stableStringify(v2Snapshot), `${v2Snapshot.rotationId} frozen v2 row should stay byte-identical before later bootstraps`);
+      assertFrozenV2Semantics(JSON.parse(String(persisted.snapshot_json || '{}')), `${v2Snapshot.rotationId} frozen v2 row`);
+    }
+
+    await bootstrapFateChronicleSchema(db, now);
+    await bootstrapFateChronicleSchema(db, nextNow);
+    for (const v2Snapshot of [previousSnapshot, currentSnapshot]) {
+      const preservedFullRow = await dbGet(
+        db,
+        'SELECT * FROM fate_chronicle_rotations WHERE rotation_id = ?',
+        [v2Snapshot.rotationId],
+      );
+      assert.deepEqual(
+        preservedFullRow,
+        frozenV2RowsBeforeBootstrap.get(v2Snapshot.rotationId),
+        `${v2Snapshot.rotationId} frozen v2 row should remain byte-identical across repeated bootstrap and week rollover`,
+      );
+      assertFrozenV2Semantics(
+        JSON.parse(String(preservedFullRow?.snapshot_json || '{}')),
+        `${v2Snapshot.rotationId} frozen v2 row`,
+      );
+    }
+
     const legacyPrevious = buildLegacyV1Snapshot(previousSnapshot);
     const legacyCurrent = buildLegacyV1Snapshot(currentSnapshot);
     await rewriteRotationRow(db, legacyPrevious);
@@ -234,6 +296,7 @@ async function insertRotationRow(db, snapshot) {
       assert.equal(preserved.catalog_hash, LEGACY_CATALOG_HASH, `${legacySnapshot.rotationId} should keep the known legacy catalog hash`);
       assert.equal(preserved.snapshot_hash, legacySnapshot.snapshotHash, `${legacySnapshot.rotationId} should keep its legacy snapshot hash`);
       assert.equal(preserved.snapshot_json, stableStringify(legacySnapshot), `${legacySnapshot.rotationId} should stay byte-identical after bootstrap`);
+      assertFrozenV1Semantics(JSON.parse(String(preserved.snapshot_json || '{}')), `${legacySnapshot.rotationId} frozen v1 row`);
     }
 
     await bootstrapFateChronicleSchema(db, nextNow);
@@ -266,6 +329,7 @@ async function insertRotationRow(db, snapshot) {
         },
         `rolling into the next week must not rewrite ${legacySnapshot.rotationId}`,
       );
+      assertFrozenV1Semantics(JSON.parse(String(preservedAfterWeekRoll.snapshot_json || '{}')), `${legacySnapshot.rotationId} frozen v1 row`);
     }
 
     const freshV2Snapshot = buildRotationSnapshot(nextNow);
@@ -282,13 +346,7 @@ async function insertRotationRow(db, snapshot) {
     assert.equal(freshV2Row.snapshot_hash, freshV2Snapshot.snapshotHash, 'fresh future rotation should keep the canonical v2 snapshot hash');
 
     const freshV2Json = JSON.parse(String(freshV2Row.snapshot_json || '{}'));
-    assert(Array.isArray(freshV2Json.chapters) && freshV2Json.chapters.length === 3, 'fresh v2 rotation should keep three chapters');
-    assert(freshV2Json.chapters.every(chapter => Array.isArray(chapter.oaths) && chapter.oaths.length === 3), 'fresh v2 rotation should keep three oaths per chapter');
-    assert.deepEqual(
-      freshV2Json.chapters.map(chapter => chapter.oaths[2].scenarioId),
-      ['chronicle-ember-proof', 'chronicle-mirror-audit', 'chronicle-rift-seal'],
-      'fresh v2 rotation should keep the three branch-oath scenario ids',
-    );
+    assertFrozenV2Semantics(freshV2Json, 'fresh future v2 rotation');
     await dbRun(
       db,
       'UPDATE fate_chronicle_rotations SET title = ? WHERE rotation_id = ?',

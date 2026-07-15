@@ -82,6 +82,7 @@ BackendClient.requestServer = async (path, options = {}) => {
     projection: {
       runId: 'ar-run-0001',
       mode: 'pve',
+      contentVersion: 'authoritative-trials-v6',
       version: 1,
       phase: 'route'
     },
@@ -131,16 +132,21 @@ assert.equal(defaultBeginResult.success, true);
 assert.deepEqual(signingCalls.at(-1).payload, {
   clientRunId: 'ar-client-api-default-0001',
   mode: 'pve',
-  contentVersion: 'authoritative-trials-v6'
-}, 'begin signature should default to the current v6 content snapshot without changing the signed field set');
+  contentVersion: 'authoritative-trials-v7'
+}, 'begin signature should default to the current v7 content snapshot without changing the signed field set');
 assert.deepEqual(requestCalls.at(-1).options.data, {
   clientRunId: 'ar-client-api-default-0001',
   mode: 'pve',
-  contentVersion: 'authoritative-trials-v6',
+  contentVersion: 'authoritative-trials-v7',
   salt: 'authoritative-client-salt',
   signature: 'b'.repeat(64),
   signatureMode: 'session'
-}, 'begin request body should keep the existing signed payload shape when defaulting to v6');
+}, 'begin request body should keep the existing signed payload shape when defaulting to v7');
+assert.equal(
+  defaultBeginResult.projection?.contentVersion,
+  'authoritative-trials-v6',
+  'default begin should still accept a legacy v6 response payload after the client default moves to v7'
+);
 
 const currentResult = await BackendClient.getCurrentAuthoritativeRun('challenge', { expectedUserId: 'authrun-user-a' });
 assert.equal(currentResult.success, true);
@@ -282,6 +288,7 @@ const serviceClient = {
       projection: {
         runId: 'ar-service-run-0001',
         mode: payload.mode,
+        contentVersion: 'authoritative-trials-v6',
         version: 1,
         phase: 'route'
       }
@@ -297,6 +304,7 @@ const serviceClient = {
       projection: {
         runId: 'ar-service-run-0001',
         mode,
+        contentVersion: 'authoritative-trials-v6',
         version: 1,
         phase: 'route'
       }
@@ -308,6 +316,7 @@ const serviceClient = {
       projection: {
         runId,
         mode: 'pve',
+        contentVersion: 'authoritative-trials-v6',
         version: 1,
         phase: 'route'
       }
@@ -329,6 +338,7 @@ const serviceClient = {
       projection: {
         runId,
         mode: 'pve',
+        contentVersion: 'authoritative-trials-v6',
         version: payload.expectedVersion + 1,
         phase: 'battle'
       }
@@ -350,6 +360,7 @@ const serviceClient = {
       projection: {
         runId,
         mode: 'pve',
+        contentVersion: 'authoritative-trials-v6',
         version: payload.expectedVersion + 1,
         phase: 'completed'
       }
@@ -383,8 +394,9 @@ const serviceBegin = await service.begin({ mode: 'pve', expectedUserId: 'service
 assert.equal(serviceBegin.success, true);
 assert.equal(beginCalls.length, 1);
 assert.equal(beginCalls[0].payload.clientRunId, 'ar-client-generated-0001', 'service begin should generate and cache a clientRunId');
-assert.equal(beginCalls[0].payload.contentVersion, 'authoritative-trials-v6', 'service begin should pin the current authoritative content snapshot');
+assert.equal(beginCalls[0].payload.contentVersion, 'authoritative-trials-v7', 'service begin should pin the current authoritative content snapshot');
 assert.equal(service.getState().runId, 'ar-service-run-0001');
+assert.equal(service.getState().projection.contentVersion, 'authoritative-trials-v6', 'service should preserve a legacy v6 response projection without rewriting it to v7');
 assert.equal(service.getState().projection.version, 1);
 assert.equal(serviceSnapshots.some(snapshot => snapshot.pending && snapshot.pending.kind === 'begin'), true, 'subscription should observe pending begin state');
 

@@ -110,11 +110,12 @@ function createRunEnvelope({
   phase = "route",
   status = "active",
   settledAt = 0,
-  contentVersion = "authoritative-trials-v6",
+  contentVersion = "authoritative-trials-v7",
   includeRouteContracts = true,
   playerHand = null,
   rewardChoices = null
 } = {}) {
+  const includeCombatTactics = contentVersion === "authoritative-trials-v7";
   const routeContracts = includeRouteContracts ? {
     steady: {
       version: 1,
@@ -181,7 +182,8 @@ function createRunEnvelope({
       {
         "authoritative-trials-v5": "b1787bc02a98b459641c5dce541a56e3c3476724c7ae3083efc1b2e8e372b280",
         "authoritative-trials-v6": "ec26095949bfadf81a322f454b092ec96dbfe09199c607513ea3e2f44501b301",
-      }[contentVersion] || "ec26095949bfadf81a322f454b092ec96dbfe09199c607513ea3e2f44501b301"
+        "authoritative-trials-v7": "a89a387d2558df8e982de8951979f930c96891574fcae2b68d28fb5ae2a7a062"
+      }[contentVersion] || "a89a387d2558df8e982de8951979f930c96891574fcae2b68d28fb5ae2a7a062"
     ),
     authorityLevel: "server",
     trustTier: "server_authoritative",
@@ -218,7 +220,7 @@ function createRunEnvelope({
     projection: {
       schemaVersion: 2,
       protocolVersion: "authoritative-run-v2",
-      contentVersion: "authoritative-trials-v4",
+      contentVersion,
       runId: `arun-${mode}-${phase}`,
       mode,
       scenario: {
@@ -308,12 +310,47 @@ function createRunEnvelope({
             amount: 10,
             label: "重裁 10"
           }
-        }
+        },
+        ...(includeCombatTactics ? {
+          tactic: {
+            version: 1,
+            tacticId: "brace",
+            intentType: "attack",
+            title: "守势",
+            prompt: "在敌方进攻落下前建立足够格挡。",
+            rewardSummary: "达成后本次敌方伤害减少 2 点。",
+            requirements: [
+              { metric: "blockGained", label: "本回合获得格挡", target: 7, actual: 6, met: false }
+            ],
+            cardsPlayed: 1,
+            status: "in_progress",
+            completed: false
+          }
+        } : {})
       } : null,
       reward: phase === "reward" ? {
         routeContract: routeContracts ? routeContracts.perilous : undefined,
         choices: rewardChoiceList
       } : null,
+      ...(includeCombatTactics ? {
+        combatTactics: {
+          version: 1,
+          reportVersion: "authoritative-combat-tactics-v1",
+          lastResolution: {
+            version: 1,
+            tacticId: "break",
+            intentType: "fortify",
+            title: "破阵",
+            success: true,
+            requirements: [
+              { metric: "damageDealt", label: "本回合造成伤害", target: 6, actual: 8, met: true }
+            ],
+            rewardSummary: "达成后本次敌方格挡减半。",
+            damageReduction: 0,
+            blockReduction: 4
+          }
+        }
+      } : {}),
       stats: {
         turns: 5,
         cardsPlayed: 8,
@@ -324,7 +361,11 @@ function createRunEnvelope({
         bossWins: phase === "completed" ? 1 : 0,
         rewardsChosen: 1,
         cardsUpgraded: 1,
-        cardsRemoved: 1
+        cardsRemoved: 1,
+        ...(includeCombatTactics ? {
+          combatTacticOpportunities: 5,
+          combatTacticSuccesses: 3
+        } : {})
       },
       summary: ["completed", "defeated", "abandoned"].includes(phase) ? {
         result: phase === "completed" ? "completed" : phase,
@@ -354,7 +395,16 @@ function createRunEnvelope({
           version: 1,
           totalBonus: 80,
           selections: [routeContracts.steady, routeContracts.contested, routeContracts.perilous]
-        } : null
+        } : null,
+        ...(includeCombatTactics ? {
+          combatTactics: {
+            version: 1,
+            reportVersion: "authoritative-combat-tactics-v1",
+            opportunities: 5,
+            successes: 3,
+            successRateBps: 6000
+          }
+        } : {})
       } : null
     }
   };
@@ -452,6 +502,13 @@ assert.match(html, /已选路线合同/);
 assert.match(html, /争衡/);
 assert.match(html, /敌方下一手意图/);
 assert.match(html, /重裁 10/);
+assert.match(html, /当前格挡会吸收本回合伤害，并在下次敌方结算前消散/);
+assert.match(html, /当前敌意题面/);
+assert.match(html, /守势/);
+assert.match(html, /本回合获得格挡/);
+assert.match(html, /6\/7/);
+assert.match(html, /达成后本次敌方伤害减少 2 点/);
+assert.match(html, /data-authoritative-tactic="true"/);
 assert.match(html, /打出此牌/);
 assert.match(html, /结束本回合/);
 assert.match(html, /最近战况/);
@@ -461,7 +518,41 @@ assert.match(html, /守心·极/);
 assert.match(html, /已精修/);
 assert.match(html, /data-card-instance-id="card-2"/);
 assert.match(html, /data-card-upgraded="true"/);
-assert.doesNotMatch(html, /play_card|strike/);
+assert.doesNotMatch(html, /play_card|strike|blockGained|brace/);
+
+panel.applyResult({
+  success: true,
+  reportVersion: "authoritative-runs-ui-test-tactic-receipt",
+  action: {
+    command: "end_turn",
+    acceptedAt: Date.UTC(2026, 6, 11, 8, 20),
+    events: [
+      {
+        type: "enemy_tactic_resolved",
+        version: 1,
+        tacticId: "balance",
+        intentType: "defend_attack",
+        title: "争衡",
+        success: true,
+        requirements: [
+          { metric: "damageDealt", label: "本回合造成伤害", target: 4, actual: 8, met: true },
+          { metric: "blockGained", label: "本回合获得格挡", target: 3, actual: 6, met: true }
+        ],
+        rewardSummary: "达成后本次敌方伤害与格挡各减少 2 点。",
+        damageReduction: 2,
+        blockReduction: 2
+      },
+      { type: "enemy_intent_resolved", intentType: "defend_attack", damageTaken: 0, enemyBlock: 4, damagePrevented: 2, blockPrevented: 2 },
+      { type: "player_turn_started", turn: 4 }
+    ]
+  },
+  run: createRunEnvelope({ mode: "pve", phase: "battle", status: "active" })
+});
+html = panel.render();
+assert.match(html, /争衡反制成功，敌方伤害 -2、格挡 -2/);
+assert.match(html, /敌方获得 4 格挡（阻止 2 伤害 · 压低 2 格挡）/);
+assert.match(html, /进入第 4 回合/);
+assert.doesNotMatch(html, /defend_attack|damageDealt|blockGained|balance/);
 
 panel.applyResult({
   success: true,
@@ -503,6 +594,11 @@ panel.applyResult({
 });
 html = panel.render();
 assert.match(html, /战后奖励/);
+assert.match(html, /上一手反制回执/);
+assert.match(html, /破阵/);
+assert.match(html, /反制成功/);
+assert.match(html, /敌方格挡 -4/);
+assert.match(html, /本回合造成伤害 8\/6/);
 assert.match(html, /已选路线合同/);
 assert.match(html, /险锋/);
 assert.match(html, /高风险/);
@@ -594,6 +690,10 @@ assert.match(html, /终局牌组 9 张/);
 assert.match(html, /精修 1 张/);
 assert.match(html, /裁牌 1 张/);
 assert.match(html, /data-deck-crafting-summary="true"/);
+assert.match(html, /敌意题面 5/);
+assert.match(html, /成功反制 3/);
+assert.match(html, /反制率 60%/);
+assert.match(html, /data-combat-tactic-summary="true"/);
 assert.match(html, /第 1 站 · 常规战 · 墨痕斥候/);
 assert.match(html, /稳进/);
 assert.doesNotMatch(html, /状态哈希|完整重放|arun-challenge-completed/);
@@ -653,6 +753,20 @@ html = panel.render();
 assert.match(html, /路线选择/);
 assert.match(html, /精英战 · 敌人上限 35 HP/);
 assert.doesNotMatch(html, /路线合同|路线分拆解|第 1 站路线合同/);
+
+panel.applyResult({
+  success: true,
+  reportVersion: "authoritative-runs-ui-test-v6-battle",
+  run: createRunEnvelope({
+    mode: "pve",
+    phase: "battle",
+    status: "active",
+    contentVersion: "authoritative-trials-v6"
+  })
+});
+html = panel.render();
+assert.match(html, /战斗投影/);
+assert.doesNotMatch(html, /当前敌意题面|上一手反制回执|反制进行中|反制已就绪|data-authoritative-tactic=/);
 
 const escapedRun = createRunEnvelope({ mode: "pve", phase: "route", status: "active" });
 escapedRun.projection.route.choices[0].routeContract = {
