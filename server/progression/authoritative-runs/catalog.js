@@ -1,7 +1,7 @@
 const { cloneJson, hashCanonical, stableStringify } = require('./canonical');
 
 const PROTOCOL_VERSION = 'authoritative-run-v2';
-const CONTENT_VERSION = 'authoritative-trials-v8';
+const CONTENT_VERSION = 'authoritative-trials-v9';
 const RELAY_EXPEDITION_SCENARIO_IDS = ['vanguard', 'bulwark', 'insight'];
 const FATE_CHRONICLE_SCENARIO_IDS = [
     'chronicle-ember-guard',
@@ -202,6 +202,256 @@ const CONTENT_SNAPSHOT = deepFreeze({
                     }
                 ]
             }
+        }
+    },
+    enemyDecision: {
+        version: 1,
+        reportVersion: 'authoritative-enemy-decision-v1',
+        policies: {
+            pressure_reader: {
+                policyId: 'pressure_reader',
+                cue: {
+                    version: 1,
+                    cueId: 'pressure-read',
+                    title: '压血读构',
+                    detail: '敌人会观察血线与上一回合解题结果，优先压迫防守薄弱处。'
+                },
+                priority: 90,
+                adaptOnIntentIndex: 2,
+                preferredTypes: ['attack', 'defend_attack', 'fortify'],
+                thresholds: {
+                    lowHpPercent: 45,
+                    lowBlockCards: 3,
+                    skewCards: 2,
+                    pressuredDifficulty: 2
+                },
+                branches: [
+                    {
+                        branchId: 'low-hp-pursuit',
+                        priority: 120,
+                        cue: {
+                            version: 1,
+                            cueId: 'pressure-critical',
+                            title: '血线追击',
+                            detail: '敌人看见血线下探，本回合更倾向直接制造伤害。'
+                        },
+                        when: ['low_hp'],
+                        preferredTypes: ['attack', 'defend_attack']
+                    },
+                    {
+                        branchId: 'missed-pressure-repeat',
+                        priority: 100,
+                        cue: {
+                            version: 1,
+                            cueId: 'pressure-repeat',
+                            title: '守势缺口',
+                            detail: '上一回合的进攻题没有完全解开，敌人继续压迫同一处防线。'
+                        },
+                        when: ['last_failed_attack'],
+                        preferredTypes: ['attack', 'defend_attack']
+                    },
+                    {
+                        branchId: 'timed-pressure-push',
+                        priority: 130,
+                        cue: {
+                            version: 1,
+                            cueId: 'pressure-timed',
+                            title: '限时追击',
+                            detail: '限时路线里敌人会减少试探回合，优先把压力转成伤害题面。'
+                        },
+                        when: ['timed_route', 'pressured_contract'],
+                        preferredTypes: ['attack', 'defend_attack']
+                    },
+                    {
+                        branchId: 'thin-guard-probe',
+                        priority: 80,
+                        cue: {
+                            version: 1,
+                            cueId: 'pressure-thin-guard',
+                            title: '守牌偏薄',
+                            detail: '敌人读到牌组承伤手段偏少，优先用攻势测试防线。'
+                        },
+                        when: ['block_light'],
+                        preferredTypes: ['attack', 'defend_attack']
+                    },
+                    {
+                        branchId: 'risk-contract-push',
+                        priority: 60,
+                        cue: {
+                            version: 1,
+                            cueId: 'pressure-contract',
+                            title: '契约增压',
+                            detail: '当前路线契约更危险，敌人会把攻防题面推向高压解法。'
+                        },
+                        when: ['pressured_contract'],
+                        preferredTypes: ['defend_attack']
+                    }
+                ]
+            },
+            guard_breaker: {
+                policyId: 'guard_breaker',
+                cue: {
+                    version: 1,
+                    cueId: 'guard-break',
+                    title: '破守试探',
+                    detail: '敌人会读取牌组进攻密度，尝试用结印或攻守混合逼出破阵答案。'
+                },
+                priority: 80,
+                adaptOnIntentIndex: 2,
+                preferredTypes: ['fortify', 'defend_attack', 'attack'],
+                thresholds: {
+                    lowDamageCards: 4,
+                    blockSkewCards: 2,
+                    pressuredDifficulty: 2,
+                    lowDualCards: 1
+                },
+                branches: [
+                    {
+                        branchId: 'damage-light-lock',
+                        priority: 120,
+                        cue: {
+                            version: 1,
+                            cueId: 'break-low-damage',
+                            title: '破阵不足',
+                            detail: '敌人读到牌组直接伤害偏少，本回合更可能先结印占势。'
+                        },
+                        when: ['damage_light'],
+                        preferredTypes: ['fortify', 'defend_attack']
+                    },
+                    {
+                        branchId: 'missed-break-repeat',
+                        priority: 100,
+                        cue: {
+                            version: 1,
+                            cueId: 'break-repeat',
+                            title: '结印复压',
+                            detail: '上一回合的破阵题没有完全解开，敌人继续测试输出答案。'
+                        },
+                        when: ['last_failed_fortify'],
+                        preferredTypes: ['fortify']
+                    },
+                    {
+                        branchId: 'timed-break-push',
+                        priority: 130,
+                        cue: {
+                            version: 1,
+                            cueId: 'break-timed',
+                            title: '限时迫战',
+                            detail: '限时路线里敌人会减少结印停顿，迫使你更快处理攻势。'
+                        },
+                        when: ['timed_route', 'pressured_contract'],
+                        preferredTypes: ['attack', 'defend_attack']
+                    },
+                    {
+                        branchId: 'guard-heavy-tax',
+                        priority: 75,
+                        cue: {
+                            version: 1,
+                            cueId: 'break-guard-heavy',
+                            title: '守重攻轻',
+                            detail: '敌人读到牌组更偏防守，转向需要主动破阵的题面。'
+                        },
+                        when: ['block_skew'],
+                        preferredTypes: ['fortify', 'defend_attack']
+                    },
+                    {
+                        branchId: 'advanced-break-answer',
+                        priority: 55,
+                        cue: {
+                            version: 1,
+                            cueId: 'break-counter',
+                            title: '反读速破',
+                            detail: '你刚完成破阵进阶解法，敌人改用更直接的节奏来反读。'
+                        },
+                        when: ['last_advanced_fortify'],
+                        preferredTypes: ['attack', 'fortify']
+                    }
+                ]
+            },
+            balance_auditor: {
+                policyId: 'balance_auditor',
+                cue: {
+                    version: 1,
+                    cueId: 'balance-audit',
+                    title: '攻守审计',
+                    detail: '敌人会根据攻守比例与契约压力，切换到更需要双线响应的题面。'
+                },
+                priority: 70,
+                adaptOnIntentIndex: 2,
+                preferredTypes: ['defend_attack', 'attack', 'fortify'],
+                thresholds: {
+                    lowDualCards: 1,
+                    lowHpPercent: 50,
+                    damageSkewCards: 2,
+                    pressuredDifficulty: 2,
+                    steadyDifficulty: 1
+                },
+                branches: [
+                    {
+                        branchId: 'missed-balance-repeat',
+                        priority: 105,
+                        cue: {
+                            version: 1,
+                            cueId: 'audit-repeat',
+                            title: '争衡复核',
+                            detail: '上一回合的攻守题没有完全解开，敌人继续要求双线响应。'
+                        },
+                        when: ['last_failed_defend_attack'],
+                        preferredTypes: ['attack', 'defend_attack']
+                    },
+                    {
+                        branchId: 'timed-balance-push',
+                        priority: 130,
+                        cue: {
+                            version: 1,
+                            cueId: 'audit-timed',
+                            title: '限时审计',
+                            detail: '限时路线里敌人会更快切入攻守压力，逼你压缩解题回合。'
+                        },
+                        when: ['timed_route', 'pressured_contract'],
+                        preferredTypes: ['attack', 'defend_attack']
+                    },
+                    {
+                        branchId: 'attack-skew-punish',
+                        priority: 75,
+                        cue: {
+                            version: 1,
+                            cueId: 'audit-attack-skew',
+                            title: '攻势过重',
+                            detail: '敌人读到牌组偏向进攻，本回合更重视让你同时处理防线。'
+                        },
+                        when: ['damage_skew'],
+                        preferredTypes: ['defend_attack', 'attack']
+                    },
+                    {
+                        branchId: 'advanced-balance-answer',
+                        priority: 60,
+                        cue: {
+                            version: 1,
+                            cueId: 'audit-counter',
+                            title: '反读争衡',
+                            detail: '你刚完成争衡进阶解法，敌人切换节奏避免被同一套答案覆盖。'
+                        },
+                        when: ['last_advanced_defend_attack'],
+                        preferredTypes: ['attack', 'fortify', 'defend_attack']
+                    }
+                ]
+            }
+        },
+        enemyPolicies: {
+            ink_scout: 'balance_auditor',
+            ash_acolyte: 'pressure_reader',
+            oath_scribe: 'guard_breaker',
+            oath_guard: 'pressure_reader',
+            mirror_seer: 'balance_auditor',
+            chain_colossus: 'guard_breaker',
+            fate_warden: 'balance_auditor',
+            trial_adjudicator: 'guard_breaker',
+            rift_sovereign: 'balance_auditor',
+            ember_revenant: 'pressure_reader',
+            mirror_duelist: 'balance_auditor',
+            void_archivist: 'guard_breaker',
+            heaven_breaker: 'balance_auditor'
         }
     },
     deckCrafting: {

@@ -139,6 +139,7 @@ const DRIFTED_CATALOG_HASH = '0'.repeat(64);
 const FROZEN_V5_CATALOG_HASH = 'b1787bc02a98b459641c5dce541a56e3c3476724c7ae3083efc1b2e8e372b280';
 const FROZEN_V6_CATALOG_HASH = '25e7e2f3fab1b58f477f6c016d7bdea6c43292bcabf635b5f0f9d8ff241c9abc';
 const FROZEN_V7_CATALOG_HASH = 'a89a387d2558df8e982de8951979f930c96891574fcae2b68d28fb5ae2a7a062';
+const FROZEN_V8_CATALOG_HASH = 'e41817fac808bb93072d18a463972ea8ca046c66eba38e9506b671fee2e983db';
 const LEGACY_CATALOG_FIXTURES = ['v1', 'v2', 'v3'].map((suffix) => createCatalogFixture(
   `authoritative-trials-${suffix}`,
   {
@@ -228,6 +229,7 @@ function createHistoricalRuntimeCatalogFixture(contentVersion, mutateSnapshot, {
 const HISTORICAL_V5_CATALOG_FIXTURE = createHistoricalRuntimeCatalogFixture(
   'authoritative-trials-v5',
   (snapshot) => {
+    delete snapshot.enemyDecision;
     delete snapshot.combatTactics;
     delete snapshot.cards.warding_stride;
     delete snapshot.cards.sealbreaker;
@@ -240,6 +242,7 @@ const HISTORICAL_V5_CATALOG_FIXTURE = createHistoricalRuntimeCatalogFixture(
 const HISTORICAL_V6_CATALOG_FIXTURE = createHistoricalRuntimeCatalogFixture(
   'authoritative-trials-v6',
   (snapshot) => {
+    delete snapshot.enemyDecision;
     delete snapshot.combatTactics;
     delete snapshot.cards.warding_stride;
     delete snapshot.cards.sealbreaker;
@@ -254,16 +257,24 @@ const HISTORICAL_V6_CATALOG_FIXTURE = createHistoricalRuntimeCatalogFixture(
 const HISTORICAL_V7_CATALOG_FIXTURE = createHistoricalRuntimeCatalogFixture(
   'authoritative-trials-v7',
   (snapshot) => {
+    delete snapshot.enemyDecision;
     snapshot.combatTactics = cloneJson(HISTORICAL_V7_COMBAT_TACTICS);
+  }
+);
+const HISTORICAL_V8_CATALOG_FIXTURE = createHistoricalRuntimeCatalogFixture(
+  'authoritative-trials-v8',
+  (snapshot) => {
+    delete snapshot.enemyDecision;
   }
 );
 HISTORICAL_CATALOG_FIXTURES.push(
   HISTORICAL_V5_CATALOG_FIXTURE,
   HISTORICAL_V6_CATALOG_FIXTURE,
-  HISTORICAL_V7_CATALOG_FIXTURE
+  HISTORICAL_V7_CATALOG_FIXTURE,
+  HISTORICAL_V8_CATALOG_FIXTURE
 );
 
-assert.strictEqual(CATALOG_VERSION, 'authoritative-trials-v8', 'migration coverage should target the current v8 authoritative catalog');
+assert.strictEqual(CATALOG_VERSION, 'authoritative-trials-v9', 'migration coverage should target the current v9 authoritative catalog');
 assert.equal(
   HISTORICAL_V5_CATALOG_FIXTURE.snapshot.combatTactics,
   undefined,
@@ -293,6 +304,16 @@ assert.strictEqual(
   HISTORICAL_V7_CATALOG_FIXTURE.contentHash,
   FROZEN_V7_CATALOG_HASH,
   'historical v7 fixture hash must stay frozen for old-run replay compatibility'
+);
+assert.equal(
+  HISTORICAL_V8_CATALOG_FIXTURE.snapshot.enemyDecision,
+  undefined,
+  'historical v8 fixture must stay pre-enemy-decision'
+);
+assert.strictEqual(
+  HISTORICAL_V8_CATALOG_FIXTURE.contentHash,
+  FROZEN_V8_CATALOG_HASH,
+  'historical v8 fixture hash must stay frozen for old-run replay compatibility'
 );
 for (const scenarioId of BRANCHED_FATE_SCENARIO_IDS) {
   assert.equal(
@@ -334,12 +355,17 @@ assert.notStrictEqual(
 assert.notStrictEqual(
   HISTORICAL_V6_CATALOG_FIXTURE.contentHash,
   CATALOG_HASH,
-  'historical v6 fixture must remain distinct from the current v8 snapshot'
+  'historical v6 fixture must remain distinct from the current v9 snapshot'
 );
 assert.notStrictEqual(
   HISTORICAL_V7_CATALOG_FIXTURE.contentHash,
   CATALOG_HASH,
-  'historical v7 fixture must remain distinct from the current v8 snapshot'
+  'historical v7 fixture must remain distinct from the current v9 snapshot'
+);
+assert.notStrictEqual(
+  HISTORICAL_V8_CATALOG_FIXTURE.contentHash,
+  CATALOG_HASH,
+  'historical v8 fixture must remain distinct from the current v9 snapshot'
 );
 
 function removeDbFiles(dbPath) {
@@ -676,7 +702,12 @@ async function main() {
     assert.strictEqual(
       bootstrappedCatalogJson?.combatTactics?.reportVersion,
       'authoritative-combat-tactics-v2',
-      'catalog bootstrap should persist the current v8 combat tactics block'
+      'catalog bootstrap should persist the current v9 combat tactics block'
+    );
+    assert.strictEqual(
+      bootstrappedCatalogJson?.enemyDecision?.reportVersion,
+      'authoritative-enemy-decision-v1',
+      'catalog bootstrap should persist the current v9 enemy decision block'
     );
     for (const fixture of HISTORICAL_CATALOG_FIXTURES) {
       await dbRun(
@@ -824,8 +855,8 @@ async function main() {
       await dbRun(DB_PATH, `DROP TABLE ${table}`);
     }
     await dbRun(DB_PATH, `DELETE FROM schema_migrations WHERE id = '0008_authoritative_world_rift'`);
-    server = startServer({ port: PORT, dbPath: DB_PATH, gitSha: 'authoritative-runs-v7-to-v8' });
-    await waitForHealth(server, 'v7-to-v8-restart');
+    server = startServer({ port: PORT, dbPath: DB_PATH, gitSha: 'authoritative-runs-v8-to-v9' });
+    await waitForHealth(server, 'v8-to-v9-restart');
     const v7ToV8Version = await request(PORT, '/api/version');
     assert.strictEqual(v7ToV8Version.payload?.schema?.currentMigrationId, '0012_world_rift_campaign_directives');
     const preservedRuns = await dbGet(
@@ -834,13 +865,13 @@ async function main() {
        FROM progression_authoritative_runs
        WHERE run_id IN ('ar-run-active-1', 'ar-run-terminal-1')`
     );
-    assert.strictEqual(Number(preservedRuns?.count), 2, 'v8 restart must preserve live authoritative-run data while adding world-rift tables');
+    assert.strictEqual(Number(preservedRuns?.count), 2, 'v9 restart must preserve live authoritative-run data while adding world-rift tables');
     await assertCatalogPayloads(DB_PATH, HISTORICAL_CATALOG_FIXTURES, immutableHistoricalCatalogs, 'restart must preserve immutable');
     const restoredWorldTable = await dbGet(
       DB_PATH,
       `SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'world_rift_attempts'`
     );
-    assert.strictEqual(restoredWorldTable?.name, 'world_rift_attempts', 'v8 restart must bootstrap world-rift storage');
+    assert.strictEqual(restoredWorldTable?.name, 'world_rift_attempts', 'v9 restart must bootstrap world-rift storage');
     await stopServer(server);
     server = null;
 
@@ -885,13 +916,13 @@ async function main() {
       assert.strictEqual(
         Number(historicalCatalogCountAfterV8Bootstrap?.count),
         Number(historicalCatalogCountBeforeV8Bootstrap?.count) + 1,
-        'v8 bootstrap should insert exactly one current catalog row alongside frozen v1-v7 history'
+        'v9 bootstrap should insert exactly one current catalog row alongside frozen v1-v8 history'
       );
       await assertCatalogPayloads(
         HISTORY_COMPAT_DB_PATH,
         HISTORICAL_CATALOG_FIXTURES,
         historicalPayloadsBeforeV8Bootstrap,
-        'v8 bootstrap must preserve frozen'
+        'v9 bootstrap must preserve frozen'
       );
 
       const preservedV4Catalog = await dbGet(
@@ -903,7 +934,7 @@ async function main() {
       assert.deepStrictEqual(
         JSON.parse(preservedV4Catalog?.content_json || '{}').deckCrafting,
         HISTORICAL_V4_DECK_CRAFTING,
-        'v8 bootstrap preserves the historical v4 deckCrafting shape'
+        'v9 bootstrap preserves the historical v4 deckCrafting shape'
       );
       const bootstrappedV8Catalog = await dbGet(
         HISTORY_COMPAT_DB_PATH,
@@ -918,7 +949,7 @@ async function main() {
           content_hash: CATALOG_HASH,
           content_json: CATALOG_JSON
         },
-        'v8 bootstrap should insert the immutable v8 catalog row alongside frozen v1-v7 history'
+        'v9 bootstrap should insert the immutable v9 catalog row alongside frozen v1-v8 history'
       );
     } finally {
       await stopServer(compatServer);
@@ -1062,7 +1093,7 @@ async function main() {
       assert.strictEqual(
         Number(concurrentCatalogCountAfterV8Bootstrap?.count),
         Number(concurrentCatalogCountBeforeV8Bootstrap?.count) + 1,
-        'concurrent v8 startup should add exactly one current catalog row beside frozen history'
+        'concurrent v9 startup should add exactly one current catalog row beside frozen history'
       );
       const concurrentCatalogCount = await dbGet(
         CONCURRENT_DB_PATH,
@@ -1071,18 +1102,18 @@ async function main() {
          WHERE content_version = ?`,
         [CATALOG_VERSION]
       );
-      assert.strictEqual(Number(concurrentCatalogCount?.count), 1, 'concurrent startup should keep one immutable v8 catalog row');
+      assert.strictEqual(Number(concurrentCatalogCount?.count), 1, 'concurrent startup should keep one immutable v9 catalog row');
       await assertCatalogPayloads(
         CONCURRENT_DB_PATH,
         HISTORICAL_CATALOG_FIXTURES,
         concurrentHistoricalPayloads,
-        'concurrent v8 startup must preserve frozen'
+        'concurrent v9 startup must preserve frozen'
       );
       const concurrentV8Catalog = await readCatalogPayload(CONCURRENT_DB_PATH, CATALOG_VERSION);
       assert.deepStrictEqual(
         concurrentV8Catalog,
         { content_hash: CATALOG_HASH, content_json: CATALOG_JSON },
-        'concurrent v8 startup should not duplicate or drift the current catalog row'
+        'concurrent v9 startup should not duplicate or drift the current catalog row'
       );
       const concurrentMigrationCount = await dbGet(
         CONCURRENT_DB_PATH,

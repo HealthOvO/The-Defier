@@ -37,6 +37,7 @@ node tests/sanity_verified_runs_platform_checks.cjs
 node tests/sanity_verified_runs_client_checks.mjs
 node tests/sanity_verified_runs_bridge_checks.cjs
 node tests/sanity_authoritative_runs_engine_checks.cjs
+node tests/sanity_authoritative_enemy_decision_checks.cjs
 node tests/sanity_authoritative_combat_tactics_balance_checks.cjs
 node tests/sanity_authoritative_route_balance_checks.cjs
 node tests/sanity_authoritative_runs_migration_checks.cjs

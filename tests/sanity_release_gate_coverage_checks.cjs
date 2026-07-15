@@ -162,6 +162,7 @@ const authoritativeRunsService = read('server/progression/authoritative-runs/ser
 const authoritativeRunsClient = read('js/services/authoritative-run-service.js');
 const authoritativeRunsPanel = read('js/views/AuthoritativeRunPanel.js');
 const authoritativeRunsEngineChecks = read('tests/sanity_authoritative_runs_engine_checks.cjs');
+const authoritativeEnemyDecisionChecks = read('tests/sanity_authoritative_enemy_decision_checks.cjs');
 const authoritativeCombatTacticsBalanceChecks = read('tests/sanity_authoritative_combat_tactics_balance_checks.cjs');
 const authoritativeRouteBalanceChecks = read('tests/sanity_authoritative_route_balance_checks.cjs');
 const authoritativeRunsMigrationChecks = read('tests/sanity_authoritative_runs_migration_checks.cjs');
@@ -522,6 +523,7 @@ assert.match(
 
 [
   'sanity_authoritative_runs_engine_checks.cjs',
+  'sanity_authoritative_enemy_decision_checks.cjs',
   'sanity_authoritative_combat_tactics_balance_checks.cjs',
   'sanity_authoritative_route_balance_checks.cjs',
   'sanity_authoritative_runs_migration_checks.cjs',
@@ -566,10 +568,17 @@ assert.match(
 });
 
 [
-  [authoritativeRunsCatalog, "CONTENT_VERSION = 'authoritative-trials-v8'"],
+  [authoritativeRunsCatalog, "CONTENT_VERSION = 'authoritative-trials-v9'"],
   [authoritativeRunsCatalog, "reportVersion: 'authoritative-deck-crafting-v1'"],
   [authoritativeRunsCatalog, "reportVersion: 'authoritative-route-contract-v1'"],
   [authoritativeRunsCatalog, "reportVersion: 'authoritative-combat-tactics-v2'"],
+  [authoritativeRunsCatalog, "reportVersion: 'authoritative-enemy-decision-v1'"],
+  [authoritativeRunsCatalog, 'enemyDecision: {'],
+  [authoritativeRunsCatalog, "policyId: 'pressure_reader'"],
+  [authoritativeRunsCatalog, "policyId: 'guard_breaker'"],
+  [authoritativeRunsCatalog, "policyId: 'balance_auditor'"],
+  [authoritativeRunsCatalog, "cueId: 'pressure-contract'"],
+  [authoritativeRunsCatalog, 'adaptOnIntentIndex: 2'],
   [authoritativeRunsCatalog, "tier: 'standard'"],
   [authoritativeRunsCatalog, "tier: 'advanced'"],
   [authoritativeRunsCatalog, "cardId: 'warding_stride'"],
@@ -588,6 +597,11 @@ assert.match(
   [authoritativeRunsEngine, "comparison: 'lte'"],
   [authoritativeRunsEngine, 'combatTacticAdvancedSuccesses'],
   [authoritativeRunsEngine, 'tacticRole'],
+  [authoritativeRunsEngine, 'function getEnemyDecisionRules'],
+  [authoritativeRunsEngine, 'function freezeEnemyIntent'],
+  [authoritativeRunsEngine, 'function currentEnemyDecisionCue'],
+  [authoritativeRunsEngine, 'function buildCorrectionMetadata'],
+  [authoritativeRunsEngine, 'correctionRewardsChosen'],
   [authoritativeRunsService, 'makeGenesisHash'],
   [authoritativeRunsService, 'makeActionHash'],
   [authoritativeRunsService, 'replayFromGenesis'],
@@ -598,6 +612,18 @@ assert.match(
   [authoritativeRunsEngineChecks, 'replay must be byte-identical'],
   [authoritativeRunsEngineChecks, 'v4 final state must remain byte-identical'],
   [authoritativeRunsEngineChecks, 'legacy v6 enemy block should still clear immediately after the enemy turn'],
+  [authoritativeEnemyDecisionChecks, 'same seed and same action journal result must be byte-identical'],
+  [authoritativeEnemyDecisionChecks, 'frozen enemy intent must stay identical after a card is played'],
+  [authoritativeEnemyDecisionChecks, 'turns after the adaptive window should return to the base pattern'],
+  [authoritativeEnemyDecisionChecks, 'timed steady contracts should abstain from adaptive pressure'],
+  [authoritativeEnemyDecisionChecks, 'should exercise at least two fixed-sample adaptive branches'],
+  [authoritativeEnemyDecisionChecks, 'enemyDecision should enable from the snapshot block/version, not the catalog version string'],
+  [authoritativeEnemyDecisionChecks, 'v8 projection must not expose enemy decision cue'],
+  [authoritativeEnemyDecisionChecks, 'failed counterplay should add no extra punishment beyond intent damage'],
+  [authoritativeEnemyDecisionChecks, 'correction marker must not increase the number of reward choices'],
+  [authoritativeEnemyDecisionChecks, 'correction.role should stay within attack|guard|tempo'],
+  [authoritativeEnemyDecisionChecks, 'adaptive branch should expose its specific public cue instead of the generic policy cue'],
+  [authoritativeEnemyDecisionChecks, 'must not leak private enemy decision key'],
   [authoritativeCombatTacticsBalanceChecks, 'tactic should still admit failure cases in the representative balance matrix'],
   [authoritativeCombatTacticsBalanceChecks, 'should also appear without its condition so it does not become unconditional'],
   [authoritativeRouteBalanceChecks, 'challenge risky routing must create at least a 4.6pp completion tradeoff'],
@@ -613,12 +639,13 @@ assert.match(
   [authoritativeRunsUiChecks, 'cross-mode refresh must not fetch the previous mode run id'],
   [authoritativeRunsUiChecks, 'suppressed response must not replace panel metadata'],
   [authoritativeRunsDocumentation, 'full journal replay'],
-  [authoritativeRunsDocumentation, '`authoritative-trials-v8`'],
+  [authoritativeRunsDocumentation, '`authoritative-trials-v9`'],
+  [authoritativeRunsDocumentation, '`enemyDecision.version = 1`'],
   [authoritativeRunsDocumentation, '`authoritative-trials-v6`'],
   [authoritativeRunsDocumentation, '`authoritative-trials-v5`'],
   [authoritativeRunsDocumentation, '`routeContracts.version = 1`'],
   [authoritativeRunsMigrationChecks, 'HISTORICAL_V6_CATALOG_FIXTURE'],
-  [authoritativeRunsMigrationChecks, 'v8 bootstrap should insert the immutable v8 catalog row alongside frozen v1-v7 history'],
+  [authoritativeRunsMigrationChecks, 'v9 bootstrap should insert the immutable v9 catalog row alongside frozen v1-v8 history'],
   [authoritativeRunsDocumentation, '`deckCrafting.version = 1`'],
 ].forEach(([source, needle]) => {
   assert.ok(source.includes(needle), `authoritative runs V2 should pin release marker: ${needle}`);
@@ -677,7 +704,7 @@ assert.match(
   [worldRiftPlatformChecks, 'unauthenticated callers must not get an ops-token validity oracle'],
   [worldRiftPlatformChecks, 'echo submissions must not change cleared world damage'],
   [worldRiftDirectivePlatformChecks, 'authoritative submit derives directive deltas from receipt summary and remains idempotent'],
-  [authoritativeRunsMigrationChecks, 'v8 restart must preserve live authoritative-run data while adding world-rift tables'],
+  [authoritativeRunsMigrationChecks, 'v9 restart must preserve live authoritative-run data while adding world-rift tables'],
   [worldRiftDocumentation, '没有末刀奖励'],
   [worldRiftDocumentation, '`world-rift-catalog-v2 / world-rift-rotation-v2`'],
   [worldRiftDocumentation, '`0012_world_rift_campaign_directives`'],
@@ -1345,8 +1372,12 @@ assert.strictEqual(
   'real UI completes and settles all three base authoritative modes alongside challenge ladder and world rift',
   'all base-mode real UI runs execute exact-target upgrade and one legal trim',
   'all base modes challenge ladder and world rift mint exactly one receipt and event per settled run',
-  'v8 route projection exposes dual tactics and two readable contracts without private coefficients',
-  'v8 battle UI renders both public tactic lines and exact progress without private coefficients',
+  'v9 route projection exposes dual tactics and two readable contracts without private coefficients',
+  'v9 battle shows the frozen enemy decision cue without private policy data',
+  'terminal projection and UI summarize enemy decisions without exposing policy internals',
+  'real backend rewards expose one readable corrective card without increasing the reward surface',
+  '390px corrective reward stays readable without horizontal overflow',
+  'v9 battle UI renders both public tactic lines and exact progress without private coefficients',
   'real end-turn receipt keeps tactic success or failure readable and authoritative',
   'real strategy completes and locks an advanced counterplay line',
   'enemy fortify or mixed guard persists into the following real player turn',
@@ -1399,7 +1430,7 @@ assert.strictEqual(
   'fate chronicle renders three chapters nine oaths and five archive proofs',
   'real fate chronicle desktop milestone controls stay within cards',
   'chapter-1 proof oath starts a server-authoritative fate run',
-  'fate route renders two readable v8 contracts without private coefficients',
+  'fate route renders two readable v9 contracts without private coefficients',
   'full browser reload resumes the same fate chronicle run',
   'real fate chronicle UI completes the chapter-1 proof oath',
   'proof route captures two public branch options before lock-in',

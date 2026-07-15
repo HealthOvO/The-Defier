@@ -285,6 +285,7 @@ function findTacticLine(tactic, lineId) {
 const FROZEN_V5_CONTENT_HASH = 'b1787bc02a98b459641c5dce541a56e3c3476724c7ae3083efc1b2e8e372b280';
 const FROZEN_V6_CONTENT_HASH = '25e7e2f3fab1b58f477f6c016d7bdea6c43292bcabf635b5f0f9d8ff241c9abc';
 const FROZEN_V7_CONTENT_HASH = 'a89a387d2558df8e982de8951979f930c96891574fcae2b68d28fb5ae2a7a062';
+const FROZEN_V8_CONTENT_HASH = 'e41817fac808bb93072d18a463972ea8ca046c66eba38e9506b671fee2e983db';
 const HISTORICAL_V7_COMBAT_TACTICS = Object.freeze({
   version: 1,
   reportVersion: 'authoritative-combat-tactics-v1',
@@ -326,6 +327,7 @@ const HISTORICAL_V7_COMBAT_TACTICS = Object.freeze({
 function createHistoricalV7Content() {
   const content = cloneState(CONTENT_SNAPSHOT);
   content.contentVersion = 'authoritative-trials-v7';
+  delete content.enemyDecision;
   content.combatTactics = cloneState(HISTORICAL_V7_COMBAT_TACTICS);
   return content;
 }
@@ -333,6 +335,7 @@ function createHistoricalV7Content() {
 function createHistoricalV6Content() {
   const content = cloneState(CONTENT_SNAPSHOT);
   content.contentVersion = 'authoritative-trials-v6';
+  delete content.enemyDecision;
   delete content.combatTactics;
   delete content.cards.warding_stride;
   delete content.cards.sealbreaker;
@@ -342,6 +345,13 @@ function createHistoricalV6Content() {
     .find(option => option.branchId === 'seal_rush');
   auditCashout.enemyId = 'mirror_duelist';
   delete sealRush.scoreMultiplier;
+  return content;
+}
+
+function createHistoricalV8Content() {
+  const content = cloneState(CONTENT_SNAPSHOT);
+  content.contentVersion = 'authoritative-trials-v8';
+  delete content.enemyDecision;
   return content;
 }
 
@@ -357,9 +367,10 @@ function createHistoricalV5Content() {
 const HISTORICAL_V5_CONTENT = createHistoricalV5Content();
 const HISTORICAL_V6_CONTENT = createHistoricalV6Content();
 const HISTORICAL_V7_CONTENT = createHistoricalV7Content();
+const HISTORICAL_V8_CONTENT = createHistoricalV8Content();
 
 assert.strictEqual(PROTOCOL_VERSION, 'authoritative-run-v2');
-assert.strictEqual(CONTENT_VERSION, 'authoritative-trials-v8');
+assert.strictEqual(CONTENT_VERSION, 'authoritative-trials-v9');
 assert.match(CONTENT_HASH, /^[a-f0-9]{64}$/i, 'content hash should stay a canonical SHA-256');
 assert.strictEqual(
   hashCanonical(HISTORICAL_V5_CONTENT),
@@ -375,6 +386,11 @@ assert.strictEqual(
   crypto.createHash('sha256').update(stableStringify(HISTORICAL_V7_CONTENT)).digest('hex'),
   FROZEN_V7_CONTENT_HASH,
   'historical v7 content must preserve the frozen compatibility hash',
+);
+assert.strictEqual(
+  hashCanonical(HISTORICAL_V8_CONTENT),
+  FROZEN_V8_CONTENT_HASH,
+  'historical v8 content must preserve the frozen compatibility hash',
 );
 assert.deepStrictEqual(FATE_CHRONICLE_SCENARIO_IDS, [
   'chronicle-ember-guard',
@@ -1226,6 +1242,7 @@ legacyContent.contentVersion = 'authoritative-trials-v3';
 delete legacyContent.routeContracts;
 delete legacyContent.deckCrafting;
 delete legacyContent.combatTactics;
+delete legacyContent.enemyDecision;
 Object.values(legacyContent.cards).forEach(card => delete card.upgrade);
 const legacyRewardState = JSON.parse(stableStringify(initial));
 legacyRewardState.contentVersion = legacyContent.contentVersion;
@@ -1239,6 +1256,7 @@ delete legacyRewardState.stats.cardsRemoved;
 delete legacyRewardState.stats.combatTacticOpportunities;
 delete legacyRewardState.stats.combatTacticSuccesses;
 delete legacyRewardState.combatTactics;
+delete legacyRewardState.enemyDecision;
 legacyRewardState.reward = {
   choices: [{
     rewardId: 'reward-card-1-sky_pierce',
@@ -1429,6 +1447,7 @@ const legacyV4Content = JSON.parse(stableStringify(CONTENT_SNAPSHOT));
 legacyV4Content.contentVersion = 'authoritative-trials-v4';
 delete legacyV4Content.routeContracts;
 delete legacyV4Content.combatTactics;
+delete legacyV4Content.enemyDecision;
 const legacyV4Golden = {
   pve: {
     actions: 63,

@@ -178,6 +178,37 @@ V7 remains an immutable Combat Tactics V1 snapshot. V8 migration bootstraps a ne
 while V1-V7 runs continue loading their stored content and preserve their historical tactic
 projection, resolution receipt, replay, and hash behavior.
 
+## S114 construct-reading enemy decisions and corrective rewards
+
+`authoritative-trials-v9` keeps protocol `authoritative-run-v2`, canonical state schema 2,
+and the five-command surface unchanged. The optional `enemyDecision.version = 1` block gives
+enemies deterministic intent policies that can react to the current run deck, player health,
+the previous public counterplay result, and the selected route contract. The opening intent always
+uses the base pattern; the third player turn is the encounter's only adaptive window, after which
+the enemy returns to its base loop. The policy never runs after an individual card. The server
+selects and freezes the adjusted intent at player-turn start, then uses that exact value for card
+conditions, the public counterplay question, and end-turn resolution. Timed scenarios allow only
+their explicit timed branch, and a steady contract abstains from that branch so adaptive pressure
+cannot erase the route difficulty ladder.
+
+The battle projection exposes only the frozen intent and a bounded `decisionCue` with a title
+and readable detail. Policy identifiers, preferred intent lists, thresholds, branch scores, and
+future alternatives remain inside the immutable server catalog and canonical state. Projecting
+or polling a run does not consume RNG or recalculate the decision, so the same seed and action
+journal produce the same state and final hash after snapshot recovery or full replay.
+
+Each encounter also records its public counterplay outcomes. A non-final victory may mark at most
+one matching card already present in the normal offer as a corrective attack, guard, or tempo
+choice. It never replaces a shuffled offer or increases the offer count, and the client still
+submits only the server-issued `rewardId`. A missed question adds no damage, debuff, discard, or
+hidden reward penalty; it can only annotate a normal card offer as a possible repair. Deck-size,
+minimum damage-card, minimum block-card, and removal limits remain unchanged.
+
+Terminal summaries expose only aggregate decision opportunities, actual adaptive changes, and
+chosen corrective rewards. V8 remains an immutable dual-line counterplay snapshot. V1-V8 runs
+load their stored catalog without enemy policies or correction metadata, preserving historical
+intent order, projection shape, RNG calls, journal replay, and hashes.
+
 ## Failure model
 
 - Network failure: the client keeps the last confirmed projection and retries with

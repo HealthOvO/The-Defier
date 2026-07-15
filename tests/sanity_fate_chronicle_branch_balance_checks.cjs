@@ -319,7 +319,7 @@ function assertHigherScorePaysCost(scenarioId, left, right) {
   );
 }
 
-assert.equal(CONTENT_VERSION, 'authoritative-trials-v8');
+assert.equal(CONTENT_VERSION, 'authoritative-trials-v9');
 
 const report = {
   reportVersion: 'fate-chronicle-branch-balance-v1',

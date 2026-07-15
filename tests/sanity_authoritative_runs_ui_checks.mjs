@@ -113,10 +113,12 @@ function createRunEnvelope({
   contentVersion = "authoritative-trials-v7",
   includeRouteContracts = true,
   playerHand = null,
-  rewardChoices = null
+  rewardChoices = null,
+  enemyDecisionCue = null,
+  enemyDecisionSummary = null
 } = {}) {
   const combatTacticsVersion = (
-    contentVersion === "authoritative-trials-v8"
+    ["authoritative-trials-v8", "authoritative-trials-v9"].includes(contentVersion)
       ? 2
       : contentVersion === "authoritative-trials-v7"
         ? 1
@@ -190,7 +192,8 @@ function createRunEnvelope({
         "authoritative-trials-v5": "b1787bc02a98b459641c5dce541a56e3c3476724c7ae3083efc1b2e8e372b280",
         "authoritative-trials-v6": "ec26095949bfadf81a322f454b092ec96dbfe09199c607513ea3e2f44501b301",
         "authoritative-trials-v7": "a89a387d2558df8e982de8951979f930c96891574fcae2b68d28fb5ae2a7a062",
-        "authoritative-trials-v8": "e41817fac808bb93072d18a463972ea8ca046c66eba38e9506b671fee2e983db"
+        "authoritative-trials-v8": "e41817fac808bb93072d18a463972ea8ca046c66eba38e9506b671fee2e983db",
+        "authoritative-trials-v9": "7f2d9e95543a616228436d6c6fe79a7bed79a7452060ad955063e2dd942fec9b"
       }[contentVersion] || "a89a387d2558df8e982de8951979f930c96891574fcae2b68d28fb5ae2a7a062"
     ),
     authorityLevel: "server",
@@ -317,7 +320,8 @@ function createRunEnvelope({
             type: "attack",
             amount: 10,
             label: "重裁 10"
-          }
+          },
+          ...(enemyDecisionCue && typeof enemyDecisionCue === "object" ? { decisionCue: enemyDecisionCue } : {})
         },
         ...(includeCombatTactics ? {
           tactic: {
@@ -509,7 +513,8 @@ function createRunEnvelope({
             ...(combatTacticsVersion === 2 ? { advancedSuccesses: 1 } : {}),
             successRateBps: 6000
           }
-        } : {})
+        } : {}),
+        ...(enemyDecisionSummary && typeof enemyDecisionSummary === "object" ? { enemyDecision: enemyDecisionSummary } : {})
       } : null
     }
   };
@@ -624,6 +629,33 @@ assert.match(html, /已精修/);
 assert.match(html, /data-card-instance-id="card-2"/);
 assert.match(html, /data-card-upgraded="true"/);
 assert.doesNotMatch(html, /play_card|strike|blockGained|brace/);
+
+panel.applyResult({
+  success: true,
+  reportVersion: "authoritative-runs-ui-test-enemy-decision-cue",
+  run: createRunEnvelope({
+    mode: "pve",
+    phase: "battle",
+    status: "active",
+    contentVersion: "authoritative-trials-v9",
+    enemyDecisionCue: {
+      version: 1,
+      cueId: "cue-visible-id",
+      policyId: "policy-secret",
+      branchId: "branch-secret",
+      preferredTypes: ["attack", "guard"],
+      thresholds: { hp: 20 },
+      title: "<img src=x onerror=alert(1)>不应出现尾部",
+      detail: '敌方会转入守势。</div><script>alert("cue")</script>后续长文不应出现不应出现不应出现不应出现不应出现不应出现'
+    }
+  })
+});
+html = panel.render();
+assert.match(html, /data-authoritative-enemy-decision-cue="true"/);
+assert.match(html, /敌策/);
+assert.match(html, /&lt;img src=x/);
+assert.match(html, /敌方会转入守势。&lt;\/div&gt;&lt;script&gt;alert\(&quot;cue&quot;\)&lt;\/script&gt;/);
+assert.doesNotMatch(html, /<img|<script|<\/div><script>|cue-visible-id|policy-secret|branch-secret|preferredTypes|thresholds|不应出现尾部/);
 
 panel.applyResult({
   success: true,
@@ -756,6 +788,7 @@ panel.applyResult({
     mode: "expedition",
     phase: "reward",
     status: "active",
+    contentVersion: "authoritative-trials-v9",
     rewardChoices: [
       {
         rewardId: "reward-upgrade-card-17",
@@ -763,7 +796,14 @@ panel.applyResult({
         cardId: "strike",
         targetCardInstanceId: "card-17",
         name: "精修「破势」",
-        description: "造成 8 点伤害。 精修后：造成 10 点伤害。"
+        description: "造成 8 点伤害。 精修后：造成 10 点伤害。",
+        correction: {
+          version: 1,
+          role: "attack",
+          title: "破势校正",
+          reason: "补足攻击线，奖励继续推高斩杀窗口。",
+          policyId: "reward-policy-secret"
+        }
       },
       {
         rewardId: "reward-remove-card-29",
@@ -771,13 +811,37 @@ panel.applyResult({
         cardId: "guard",
         targetCardInstanceId: "card-29",
         name: "裁去「守心」",
-        description: "从本次牌组永久移除此牌，牌组不会低于 8 张。"
+        description: "从本次牌组永久移除此牌，牌组不会低于 8 张。",
+        correction: {
+          version: 1,
+          role: "guard",
+          title: "守心校正",
+          reason: "削掉低效防牌，让守式牌位更集中。"
+        }
       },
       {
         rewardId: "reward-heal",
         kind: "heal",
         name: "调息",
-        description: "回复 10 点生命。"
+        description: "回复 10 点生命。",
+        correction: {
+          version: 1,
+          role: "tempo",
+          title: "节奏校正",
+          reason: '把血量补回安全线。</div><script>alert("tempo")</script>'
+        }
+      },
+      {
+        rewardId: "reward-invalid-correction",
+        kind: "max_hp",
+        name: "固本",
+        description: "提升 4 点生命上限。",
+        correction: {
+          version: 1,
+          role: "policy",
+          title: "不可见校正",
+          reason: "threshold secret"
+        }
       }
     ]
   })
@@ -785,10 +849,10 @@ panel.applyResult({
 html = panel.render();
 assert.match(html, /战后奖励/);
 assert.match(html, /上一手反制回执/);
-assert.match(html, /破阵/);
+assert.match(html, /争衡双解/);
 assert.match(html, /反制成功/);
-assert.match(html, /敌方格挡 -4/);
-assert.match(html, /本回合造成伤害 8\/6/);
+assert.match(html, /敌方伤害 -3 · 敌方格挡 -3/);
+assert.match(html, /本回合造成伤害 8\/4/);
 assert.match(html, /已选路线合同/);
 assert.match(html, /险锋/);
 assert.match(html, /高风险/);
@@ -803,6 +867,21 @@ assert.match(html, /裁去这张牌/);
 assert.match(html, /整备 5 HP/);
 assert.match(html, /领取调息/);
 assert.match(html, /已领取：精修「破势」/);
+assert.match(html, /data-authoritative-reward-correction="true"/);
+assert.equal((html.match(/data-authoritative-reward-correction="true"/g) || []).length, 3, "reward corrections should render only the three public roles");
+assert.match(html, /data-correction-role="attack"/);
+assert.match(html, /data-correction-role="guard"/);
+assert.match(html, /data-correction-role="tempo"/);
+assert.match(html, /攻式校正/);
+assert.match(html, /守式校正/);
+assert.match(html, /节奏校正/);
+assert.match(html, /破势校正/);
+assert.match(html, /补足攻击线/);
+assert.match(html, /守心校正/);
+assert.match(html, /削掉低效防牌/);
+assert.match(html, /把血量补回安全线。&lt;\/div&gt;&lt;script&gt;alert\(&quot;tempo&quot;\)&lt;\/script&gt;/);
+assert.equal((html.match(/data-season-ops-action="authoritative-choose-reward"/g) || []).length, 4, "reward correction cards must keep the authoritative reward action");
+assert.doesNotMatch(html, /<script|<\/div><script>|reward-policy-secret|不可见校正|threshold secret|data-correction-role="policy"/);
 assert.match(html, /data-reward-kind="upgrade_card"/);
 assert.match(html, /data-reward-kind="remove_card"/);
 assert.match(html, /data-target-card-instance-id="card-17"/);
@@ -882,7 +961,22 @@ assert.doesNotMatch(html, /已领取：未知牌/);
 panel.applyResult({
   success: true,
   reportVersion: "authoritative-runs-ui-test-completed",
-  run: createRunEnvelope({ mode: "challenge", phase: "completed", status: "completed" })
+  run: createRunEnvelope({
+    mode: "challenge",
+    phase: "completed",
+    status: "completed",
+    contentVersion: "authoritative-trials-v9",
+    enemyDecisionSummary: {
+      version: 1,
+      reportVersion: "enemy-decision-private-report-v1",
+      opportunities: 7,
+      adaptiveBranches: 4,
+      adaptiveRateBps: 5714,
+      correctionRewardsChosen: 2,
+      branchId: "summary-branch-secret",
+      policyId: "summary-policy-secret"
+    }
+  })
 });
 html = panel.render();
 assert.match(html, /待提交结算/);
@@ -906,9 +1000,13 @@ assert.match(html, /敌意题面 5/);
 assert.match(html, /成功反制 3/);
 assert.match(html, /反制率 60%/);
 assert.match(html, /data-combat-tactic-summary="true"/);
+assert.match(html, /data-authoritative-enemy-decision-summary="true"/);
+assert.match(html, /变招 4\/7/);
+assert.match(html, /校正选择 2/);
+assert.match(html, /变招率 57%/);
 assert.match(html, /第 1 站 · 常规战 · 墨痕斥候/);
 assert.match(html, /稳进/);
-assert.doesNotMatch(html, /状态哈希|完整重放|arun-challenge-completed/);
+assert.doesNotMatch(html, /状态哈希|完整重放|arun-challenge-completed|enemy-decision-private-report-v1|summary-branch-secret|summary-policy-secret/);
 
 panel.applyResult({
   success: true,
@@ -921,6 +1019,7 @@ assert.match(html, /成功反制 3/);
 assert.match(html, /逆解成功 1/);
 assert.match(html, /反制率 60%/);
 assert.doesNotMatch(html, /advancedSuccesses|authoritative-combat-tactics-v2|6000/);
+assert.doesNotMatch(html, /data-authoritative-enemy-decision-summary/);
 
 panel.applyResult({
   success: true,
@@ -991,6 +1090,7 @@ panel.applyResult({
 html = panel.render();
 assert.match(html, /战斗投影/);
 assert.doesNotMatch(html, /当前敌意题面|上一手反制回执|反制进行中|反制已就绪|data-authoritative-tactic=/);
+assert.doesNotMatch(html, /data-authoritative-enemy-decision-cue|data-authoritative-reward-correction|data-authoritative-enemy-decision-summary/);
 
 const escapedRun = createRunEnvelope({ mode: "pve", phase: "route", status: "active" });
 escapedRun.projection.route.choices[0].routeContract = {

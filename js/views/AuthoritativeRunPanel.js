@@ -125,6 +125,12 @@ const COMBAT_TACTIC_ROLE_LABELS = Object.freeze({
   guard: "守式"
 });
 
+const REWARD_CORRECTION_ROLE_META = Object.freeze({
+  attack: { label: "攻式校正", tone: "attack" },
+  guard: { label: "守式校正", tone: "guard" },
+  tempo: { label: "节奏校正", tone: "tempo" }
+});
+
 const REWARD_KIND_LABELS = Object.freeze({
   card: "新卡牌",
   upgrade_card: "精修卡牌",
@@ -191,6 +197,12 @@ function clampInt(value, fallback = 0) {
 function normalizeText(value, fallback = "") {
   const text = String(value ?? "").trim();
   return text || fallback;
+}
+
+function normalizeLimitedText(value, fallback = "", maxLength = 80) {
+  const text = normalizeText(value, fallback);
+  if (!text) return "";
+  return Array.from(text).slice(0, Math.max(0, clampInt(maxLength, 80))).join("");
 }
 
 function formatTrustTier(value = "") {
@@ -320,6 +332,51 @@ function normalizeScoreBreakdown(scoreBreakdown = null, fallbackFinalScore = 0) 
     return null;
   }
   return normalized;
+}
+
+function normalizeEnemyDecisionCue(source = null) {
+  if (!source || typeof source !== "object" || clampInt(source.version, 0) !== 1) return null;
+  const title = normalizeLimitedText(source.title, "", 24);
+  const detail = normalizeLimitedText(source.detail, "", 84);
+  if (!title && !detail) return null;
+  return {
+    version: 1,
+    title: title || "敌策变招",
+    detail
+  };
+}
+
+function normalizeRewardCorrection(source = null) {
+  if (!source || typeof source !== "object" || clampInt(source.version, 0) !== 1) return null;
+  const role = normalizeText(source.role);
+  const roleMeta = REWARD_CORRECTION_ROLE_META[role];
+  if (!roleMeta) return null;
+  const title = normalizeLimitedText(source.title, "", 28);
+  const reason = normalizeLimitedText(source.reason, "", 96);
+  if (!title && !reason) return null;
+  return {
+    version: 1,
+    role,
+    roleLabel: roleMeta.label,
+    title: title || roleMeta.label,
+    reason
+  };
+}
+
+function normalizeEnemyDecisionSummary(source = null) {
+  if (!source || typeof source !== "object" || clampInt(source.version, 0) !== 1) return null;
+  const opportunities = Math.max(0, clampInt(source.opportunities, 0));
+  const adaptiveBranches = Math.max(0, clampInt(source.adaptiveBranches, 0));
+  const correctionRewardsChosen = Math.max(0, clampInt(source.correctionRewardsChosen, 0));
+  const adaptiveRateBps = Math.max(0, Math.min(10000, clampInt(source.adaptiveRateBps, 0)));
+  if (!opportunities && !adaptiveBranches && !correctionRewardsChosen && !adaptiveRateBps) return null;
+  return {
+    version: 1,
+    opportunities,
+    adaptiveBranches: opportunities > 0 ? Math.min(opportunities, adaptiveBranches) : adaptiveBranches,
+    adaptiveRateBps,
+    correctionRewardsChosen
+  };
 }
 
 function normalizeCombatTacticRequirement(source = null) {
@@ -1871,6 +1928,7 @@ export class AuthoritativeRunPanel {
               ${renderChip(`意图 ${normalizeText(intent && intent.label, "未公开")}`)}
             </div>
             ${intent ? `<div class="season-ops-authoritative-intent">${escapeHtml(this.describeEnemyIntent(intent))}</div>` : ""}
+            ${this.renderEnemyDecisionCue(enemy.decisionCue)}
             ${tacticsEnabled && clampInt(enemy.block) > 0 ? `<div class="season-ops-inline-note">当前格挡会吸收本回合伤害，并在下次敌方结算前消散。</div>` : ""}
           </article>
         </div>
@@ -1881,6 +1939,18 @@ export class AuthoritativeRunPanel {
         ${this.renderLastReceipt()}
         ${this.renderFooterActions({ canEndTurn: true, canAbandon: true })}
       </section>
+    `;
+  }
+
+  renderEnemyDecisionCue(source = null) {
+    const cue = normalizeEnemyDecisionCue(source);
+    if (!cue) return "";
+    return `
+      <div class="season-ops-authoritative-decision-cue" data-authoritative-enemy-decision-cue="true">
+        <span class="season-ops-inline-note">敌策</span>
+        <strong>${escapeHtml(cue.title)}</strong>
+        ${cue.detail ? `<span>${escapeHtml(cue.detail)}</span>` : ""}
+      </div>
     `;
   }
 
@@ -1948,6 +2018,24 @@ export class AuthoritativeRunPanel {
     `;
   }
 
+  renderRewardCorrection(source = null) {
+    const correction = normalizeRewardCorrection(source);
+    if (!correction) return "";
+    return `
+      <div
+        class="season-ops-authoritative-reward-correction role-${escapeHtml(correction.role)}"
+        data-authoritative-reward-correction="true"
+        ${buildDataAttributes({ "data-correction-role": correction.role })}
+      >
+        <span class="season-ops-meta-chip tone-${escapeHtml(REWARD_CORRECTION_ROLE_META[correction.role].tone)}">${escapeHtml(correction.roleLabel)}</span>
+        <div class="season-ops-authoritative-reward-correction-copy">
+          <strong>${escapeHtml(correction.title)}</strong>
+          ${correction.reason ? `<p>${escapeHtml(correction.reason)}</p>` : ""}
+        </div>
+      </div>
+    `;
+  }
+
   renderRewardChoice(choice = {}) {
     const focusKey = buildFocusKey("authoritative:reward", choice.rewardId);
     const targetLabel = formatRewardTargetLabel(choice);
@@ -1966,6 +2054,7 @@ export class AuthoritativeRunPanel {
           <span class="season-ops-meta-chip">${escapeHtml(formatRewardKindLabel(choice.kind))}</span>
         </div>
         <p>${escapeHtml(choice.description || "这项奖励暂时没有更多描述。")}</p>
+        ${this.renderRewardCorrection(choice.correction)}
         ${targetLabel ? `
           <div
             class="season-ops-inline-note"
@@ -2007,6 +2096,7 @@ export class AuthoritativeRunPanel {
         </div>
         ${this.renderSummaryGrid(summary)}
         ${this.renderCombatTacticSummary(summary.combatTactics)}
+        ${this.renderEnemyDecisionSummary(summary.enemyDecision)}
         ${this.renderChapterBranchPanel(summary.chapterBranchResolution, { title: "章中命途结论" })}
         ${this.renderRouteScorePanel(summary)}
         ${this.renderSettlementCard(receipt, settled)}
@@ -2076,6 +2166,7 @@ export class AuthoritativeRunPanel {
         </div>
         ${this.renderSummaryGrid(summary)}
         ${this.renderCombatTacticSummary(summary.combatTactics)}
+        ${this.renderEnemyDecisionSummary(summary.enemyDecision)}
         ${this.renderChapterBranchPanel(summary.chapterBranchResolution || (projection && projection.route && projection.route.chapterBranch), { title: "章中命途结论" })}
         ${this.renderRouteScorePanel(summary)}
         ${this.renderRouteHistory()}
@@ -2133,6 +2224,19 @@ export class AuthoritativeRunPanel {
           ${renderChip(`裁牌 ${clampInt(summary.cardsRemoved)} 张`)}
         </div>
       ` : ""}
+    `;
+  }
+
+  renderEnemyDecisionSummary(source = null) {
+    const summary = normalizeEnemyDecisionSummary(source);
+    if (!summary) return "";
+    const rate = (summary.adaptiveRateBps / 100).toFixed(0);
+    return `
+      <div class="season-ops-authoritative-meta-row" data-authoritative-enemy-decision-summary="true">
+        ${renderChip(`变招 ${summary.adaptiveBranches}/${summary.opportunities}`)}
+        ${renderChip(`校正选择 ${summary.correctionRewardsChosen}`)}
+        ${renderChip(`变招率 ${rate}%`)}
+      </div>
     `;
   }
 

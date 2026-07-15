@@ -552,6 +552,21 @@
     overflow-wrap: anywhere;
 }
 
+#season-ops-screen .season-ops-meta-chip.tone-attack {
+    border-color: rgba(201, 137, 91, 0.3);
+    color: #f4d8c3;
+}
+
+#season-ops-screen .season-ops-meta-chip.tone-guard {
+    border-color: rgba(112, 171, 145, 0.3);
+    color: #d9f1df;
+}
+
+#season-ops-screen .season-ops-meta-chip.tone-tempo {
+    border-color: rgba(118, 162, 177, 0.3);
+    color: #e1f0f2;
+}
+
 #season-ops-screen .season-ops-meta-chip.is-self {
     border-color: rgba(215, 183, 124, 0.28);
     color: #faefcb;
@@ -1015,6 +1030,24 @@
     line-height: 1.56;
 }
 
+#season-ops-screen .season-ops-authoritative-decision-cue {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 10px;
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid rgba(118, 162, 177, 0.18);
+    color: rgba(224, 217, 200, 0.76);
+    font-size: 0.84rem;
+    line-height: 1.45;
+}
+
+#season-ops-screen .season-ops-authoritative-decision-cue strong {
+    color: #f4ead0;
+    font-size: 0.9rem;
+}
+
 #season-ops-screen .season-ops-authoritative-tactic {
     display: grid;
     gap: 10px;
@@ -1052,6 +1085,36 @@
     flex-wrap: wrap;
     align-items: center;
     gap: 8px;
+}
+
+#season-ops-screen .season-ops-authoritative-reward-correction {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: start;
+    gap: 9px;
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid rgba(205, 173, 121, 0.14);
+}
+
+#season-ops-screen .season-ops-authoritative-reward-correction-copy {
+    min-width: 0;
+    display: grid;
+    gap: 3px;
+}
+
+#season-ops-screen .season-ops-authoritative-reward-correction-copy strong {
+    color: #f4ead0;
+    font-size: 0.9rem;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+}
+
+#season-ops-screen .season-ops-authoritative-reward-correction-copy p {
+    margin: 0;
+    color: rgba(220, 212, 195, 0.72);
+    font-size: 0.82rem;
+    line-height: 1.5;
 }
 
 #season-ops-screen .season-ops-authoritative-tactic-progress {
@@ -1370,5 +1433,9 @@
     #season-ops-screen .season-ops-authoritative-contract-head {
         flex-direction: column;
         align-items: stretch;
+    }
+
+    #season-ops-screen .season-ops-authoritative-reward-correction {
+        grid-template-columns: 1fr;
     }
 }

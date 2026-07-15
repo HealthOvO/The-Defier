@@ -726,8 +726,8 @@ try {
   const startedProjectionJson = JSON.stringify(started.projection || null);
   const startedContracts = started.projection?.route?.choices?.map(choice => choice.routeContract) || [];
   add(
-    "fate route renders two readable v8 contracts without private coefficients",
-    started.projection?.contentVersion === "authoritative-trials-v8"
+    "fate route renders two readable v9 contracts without private coefficients",
+    started.projection?.contentVersion === "authoritative-trials-v9"
       && Number(started.projection?.combatTactics?.version) === 2
       && Number(started.projection?.route?.contractVersion) === 1
       && startedContracts.length === 2

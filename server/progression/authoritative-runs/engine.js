@@ -6,6 +6,8 @@ const MODES = ['pve', 'challenge', 'expedition', 'challenge_ladder', 'world_rift
 const COMMANDS = ['select_node', 'play_card', 'end_turn', 'choose_reward', 'abandon'];
 const TERMINAL_PHASES = new Set(['completed', 'defeated', 'abandoned']);
 const SAFE_REF = /^[A-Za-z0-9._:-]{1,128}$/;
+const ENEMY_INTENT_TYPES = ['attack', 'fortify', 'defend_attack'];
+const CORRECTION_ROLES = ['attack', 'guard', 'tempo'];
 
 function makeRuleError(reason, message, statusCode = 409) {
     const error = new Error(message);
@@ -119,6 +121,90 @@ function getCombatTacticsRules(content) {
                 tiers.add(tier);
             }
         }
+    }
+    return rules;
+}
+
+function isPlainObject(value) {
+    return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
+function isEnemyIntentType(value) {
+    return ENEMY_INTENT_TYPES.includes(String(value || ''));
+}
+
+function hasValidIntentTypeList(value) {
+    return Array.isArray(value)
+        && value.length > 0
+        && value.length <= ENEMY_INTENT_TYPES.length
+        && value.every(isEnemyIntentType);
+}
+
+function getEnemyDecisionRules(content) {
+    const rules = content && content.enemyDecision;
+    if (!rules || clampInt(rules.version, 0, 10) !== 1) return null;
+    if (!SAFE_REF.test(String(rules.reportVersion || ''))) return null;
+    if (!isPlainObject(rules.policies) || Object.keys(rules.policies).length < 3) return null;
+    if (!isPlainObject(rules.enemyPolicies)) return null;
+    const allowedConditions = new Set([
+        'low_hp',
+        'damage_light',
+        'block_light',
+        'dual_light',
+        'damage_skew',
+        'block_skew',
+        'steady_contract',
+        'pressured_contract',
+        'timed_route',
+        'last_failed_attack',
+        'last_failed_fortify',
+        'last_failed_defend_attack',
+        'last_advanced_attack',
+        'last_advanced_fortify',
+        'last_advanced_defend_attack'
+    ]);
+    for (const [policyId, policy] of Object.entries(rules.policies)) {
+        if (!SAFE_REF.test(policyId) || !isPlainObject(policy)) return null;
+        if (String(policy.policyId || '') !== policyId) return null;
+        const cue = policy.cue;
+        if (!isPlainObject(cue)
+            || clampInt(cue.version, 0, 10) !== 1
+            || !SAFE_REF.test(String(cue.cueId || ''))
+            || !String(cue.title || '').trim()
+            || !String(cue.detail || '').trim()) {
+            return null;
+        }
+        if (clampInt(policy.priority, 0, 10_000) <= 0) return null;
+        if (!Number.isInteger(Number(policy.adaptOnIntentIndex))
+            || clampInt(policy.adaptOnIntentIndex, 0, 10) < 1) {
+            return null;
+        }
+        if (!hasValidIntentTypeList(policy.preferredTypes)) return null;
+        if (!isPlainObject(policy.thresholds)) return null;
+        for (const value of Object.values(policy.thresholds)) {
+            if (!Number.isFinite(Number(value))) return null;
+        }
+        if (!Array.isArray(policy.branches) || policy.branches.length === 0) return null;
+        const branchIds = new Set();
+        for (const branch of policy.branches) {
+            if (!isPlainObject(branch)) return null;
+            const branchId = String(branch.branchId || '');
+            if (!SAFE_REF.test(branchId) || branchIds.has(branchId)) return null;
+            branchIds.add(branchId);
+            if (clampInt(branch.priority, 0, 10_000) <= 0) return null;
+            if (!projectDecisionCue(branch.cue)) return null;
+            if (!hasValidIntentTypeList(branch.preferredTypes)) return null;
+            if (!Array.isArray(branch.when) || branch.when.length === 0) return null;
+            if (branch.when.some(condition => !allowedConditions.has(String(condition || '')))) return null;
+        }
+    }
+    const enemies = content && content.enemies && typeof content.enemies === 'object'
+        ? Object.keys(content.enemies)
+        : [];
+    if (enemies.length === 0) return null;
+    for (const enemyId of enemies) {
+        const policyId = String(rules.enemyPolicies[enemyId] || '');
+        if (!SAFE_REF.test(policyId) || !rules.policies[policyId]) return null;
     }
     return rules;
 }
@@ -391,6 +477,7 @@ function resolveCombatTactic(state, content, intent, events) {
             ) + 1;
         }
     }
+    recordTacticEncounter(state, resolution);
     if (!state.combatTactics || typeof state.combatTactics !== 'object') {
         state.combatTactics = {
             version: clampInt(rules.version, 1, 2),
@@ -749,13 +836,14 @@ function replaceIntentLabelAmount(label, amount) {
     return prefix ? `${prefix} ${amount}` : String(amount);
 }
 
-function currentEnemyIntent(state, content) {
-    if (!state.battle || !state.battle.enemy) return null;
-    const definition = getEnemy(content, state.battle.enemy.enemyId);
-    const pattern = Array.isArray(definition.pattern) ? definition.pattern : [];
-    if (pattern.length === 0) return null;
-    const index = clampInt(state.battle.enemy.intentIndex, 0) % pattern.length;
-    const intent = cloneJson(pattern[index]);
+function getBattleRouteContractId(state) {
+    return String(state && state.battle && state.battle.routeContract
+        ? state.battle.routeContract.contractId || ''
+        : '');
+}
+
+function adjustEnemyIntentForRoute(state, sourceIntent) {
+    const intent = cloneJson(sourceIntent || {});
     const adjustments = state.battle.routeContract && state.battle.routeContract.enemyAdjustments;
     if (!adjustments || typeof adjustments !== 'object') return intent;
     const damageBonus = clampInt(adjustments.intentDamageBonus, 0, 20);
@@ -777,6 +865,286 @@ function currentEnemyIntent(state, content) {
     return intent;
 }
 
+function buildStaticEnemyIntent(state, content, forcedPatternIndex = null) {
+    if (!state.battle || !state.battle.enemy) return null;
+    const definition = getEnemy(content, state.battle.enemy.enemyId);
+    const pattern = Array.isArray(definition.pattern) ? definition.pattern : [];
+    if (pattern.length === 0) return null;
+    const sourceIntentIndex = clampInt(state.battle.enemy.intentIndex, 0);
+    const index = forcedPatternIndex === null || forcedPatternIndex === undefined
+        ? sourceIntentIndex % pattern.length
+        : clampInt(forcedPatternIndex, 0, pattern.length - 1);
+    return {
+        enemyId: String(definition.enemyId || ''),
+        sourceIntentIndex,
+        patternIndex: index,
+        routeContractId: getBattleRouteContractId(state),
+        intent: adjustEnemyIntentForRoute(state, pattern[index])
+    };
+}
+
+function frozenEnemyIntentMatches(state) {
+    const enemy = state && state.battle && state.battle.enemy;
+    const source = enemy && enemy.intentSource;
+    return !!(enemy
+        && enemy.intent
+        && source
+        && clampInt(source.version, 0, 10) === 1
+        && String(source.enemyId || '') === String(enemy.enemyId || '')
+        && clampInt(source.intentIndex, 0) === clampInt(enemy.intentIndex, 0)
+        && String(source.routeContractId || '') === getBattleRouteContractId(state));
+}
+
+function currentEnemyIntent(state, content) {
+    if (getEnemyDecisionRules(content) && frozenEnemyIntentMatches(state)) {
+        return cloneJson(state.battle.enemy.intent);
+    }
+    const staticIntent = buildStaticEnemyIntent(state, content);
+    return staticIntent ? staticIntent.intent : null;
+}
+
+function projectDecisionCue(cue) {
+    if (!cue || clampInt(cue.version, 0, 10) !== 1 || !SAFE_REF.test(String(cue.cueId || ''))) {
+        return null;
+    }
+    return {
+        version: 1,
+        cueId: String(cue.cueId || ''),
+        title: String(cue.title || ''),
+        detail: String(cue.detail || '')
+    };
+}
+
+function currentEnemyDecisionCue(state, content) {
+    if (!getEnemyDecisionRules(content) || !frozenEnemyIntentMatches(state)) return null;
+    return projectDecisionCue(state.battle.enemy.decisionCue);
+}
+
+function ensureEnemyDecisionState(state, rules) {
+    if (!rules) return null;
+    if (!isPlainObject(state.enemyDecision) || clampInt(state.enemyDecision.version, 0, 10) !== 1) {
+        state.enemyDecision = {
+            version: 1,
+            reportVersion: String(rules.reportVersion || ''),
+            opportunities: 0,
+            adaptiveBranches: 0,
+            correctionRewardsChosen: 0
+        };
+    }
+    return state.enemyDecision;
+}
+
+function clearFrozenEnemyIntent(state) {
+    const enemy = state && state.battle && state.battle.enemy;
+    if (!enemy) return;
+    delete enemy.intent;
+    delete enemy.intentSource;
+    delete enemy.decisionCue;
+    if (state.battle) delete state.battle.enemyDecision;
+}
+
+function findPatternIntentByTypes(state, content, preferredTypes) {
+    if (!state.battle || !state.battle.enemy || !hasValidIntentTypeList(preferredTypes)) return null;
+    const definition = getEnemy(content, state.battle.enemy.enemyId);
+    const pattern = Array.isArray(definition.pattern) ? definition.pattern : [];
+    if (pattern.length === 0) return null;
+    const baseIndex = clampInt(state.battle.enemy.intentIndex, 0) % pattern.length;
+    if (preferredTypes.includes(String(pattern[baseIndex] && pattern[baseIndex].type || ''))) {
+        return buildStaticEnemyIntent(state, content, baseIndex);
+    }
+    for (const intentType of preferredTypes) {
+        for (let offset = 0; offset < pattern.length; offset += 1) {
+            const patternIndex = (baseIndex + offset) % pattern.length;
+            if (String(pattern[patternIndex] && pattern[patternIndex].type || '') === intentType) {
+                return buildStaticEnemyIntent(state, content, patternIndex);
+            }
+        }
+    }
+    return null;
+}
+
+function countDeckAnswerRoles(state, content) {
+    const counts = {
+        damageCards: 0,
+        blockCards: 0,
+        dualCards: 0
+    };
+    state.player.deck.forEach(instance => {
+        const effect = resolveCardDefinition(content, instance).effect || {};
+        const damage = clampInt(effect.damage, 0) + clampInt(effect.bonusDamageAgainstBlock, 0);
+        const block = clampInt(effect.block, 0) + clampInt(effect.bonusBlockAgainstAttack, 0);
+        if (damage > 0) counts.damageCards += 1;
+        if (block > 0) counts.blockCards += 1;
+        if (damage > 0 && block > 0) counts.dualCards += 1;
+    });
+    return counts;
+}
+
+function getEnemyDecisionContext(state, content) {
+    const deckCounts = countDeckAnswerRoles(state, content);
+    const scenario = getScenario(content, state.mode, state.scenarioId);
+    const hpPercent = state.player.maxHp > 0
+        ? Math.floor(state.player.hp * 100 / state.player.maxHp)
+        : 0;
+    const routeContract = state.battle && state.battle.routeContract;
+    const lastResolution = state.combatTactics && state.combatTactics.lastResolution
+        ? state.combatTactics.lastResolution
+        : null;
+    return {
+        ...deckCounts,
+        hpPercent,
+        intentIndex: clampInt(state.battle && state.battle.enemy && state.battle.enemy.intentIndex, 0),
+        turnBudget: clampInt(scenario && scenario.turnBudget, 0),
+        routeContractId: String(routeContract && routeContract.contractId || ''),
+        routeDifficulty: clampInt(routeContract && routeContract.difficultyRating, 0, 5),
+        lastResolution
+    };
+}
+
+function readDecisionThreshold(thresholds, names, fallback) {
+    for (const name of names) {
+        if (thresholds && thresholds[name] !== undefined) return Number(thresholds[name]);
+    }
+    return fallback;
+}
+
+function enemyDecisionConditionMet(condition, thresholds, context) {
+    const last = context.lastResolution || {};
+    if (condition === 'low_hp') {
+        return context.hpPercent <= readDecisionThreshold(thresholds, ['lowHpPercent'], 45);
+    }
+    if (condition === 'damage_light') {
+        return context.damageCards <= readDecisionThreshold(thresholds, ['lowDamageCards'], 4);
+    }
+    if (condition === 'block_light') {
+        return context.blockCards <= readDecisionThreshold(thresholds, ['lowBlockCards'], 3);
+    }
+    if (condition === 'dual_light') {
+        return context.dualCards <= readDecisionThreshold(thresholds, ['lowDualCards'], 1);
+    }
+    if (condition === 'damage_skew') {
+        const threshold = readDecisionThreshold(thresholds, ['damageSkewCards', 'skewCards'], 2);
+        return context.damageCards - context.blockCards >= threshold;
+    }
+    if (condition === 'block_skew') {
+        const threshold = readDecisionThreshold(thresholds, ['blockSkewCards', 'skewCards'], 2);
+        return context.blockCards - context.damageCards >= threshold;
+    }
+    if (condition === 'pressured_contract') {
+        return context.routeDifficulty >= readDecisionThreshold(thresholds, ['pressuredDifficulty'], 2);
+    }
+    if (condition === 'steady_contract') {
+        return context.routeDifficulty <= readDecisionThreshold(thresholds, ['steadyDifficulty'], 1);
+    }
+    if (condition === 'timed_route') {
+        return context.turnBudget > 0;
+    }
+    if (condition === 'last_failed_attack') {
+        return last.success === false && String(last.intentType || '') === 'attack';
+    }
+    if (condition === 'last_failed_fortify') {
+        return last.success === false && String(last.intentType || '') === 'fortify';
+    }
+    if (condition === 'last_failed_defend_attack') {
+        return last.success === false && String(last.intentType || '') === 'defend_attack';
+    }
+    if (condition === 'last_advanced_attack') {
+        return last.success === true && last.tier === 'advanced' && String(last.intentType || '') === 'attack';
+    }
+    if (condition === 'last_advanced_fortify') {
+        return last.success === true && last.tier === 'advanced' && String(last.intentType || '') === 'fortify';
+    }
+    if (condition === 'last_advanced_defend_attack') {
+        return last.success === true && last.tier === 'advanced' && String(last.intentType || '') === 'defend_attack';
+    }
+    return false;
+}
+
+function selectEnemyDecisionBranch(policy, context) {
+    const adaptOnIntentIndex = clampInt(policy && policy.adaptOnIntentIndex, 1, 10);
+    if (context.intentIndex !== adaptOnIntentIndex) return null;
+    const branches = policy.branches
+        .slice()
+        .sort((left, right) => (
+            clampInt(right.priority, 0, 10_000) - clampInt(left.priority, 0, 10_000)
+            || String(left.branchId || '').localeCompare(String(right.branchId || ''))
+        ));
+    const eligibleBranches = context.turnBudget > 0
+        ? branches.filter(branch => branch.when.includes('timed_route'))
+        : branches;
+    return eligibleBranches
+        .find(branch => branch.when.every(condition => (
+            enemyDecisionConditionMet(String(condition || ''), policy.thresholds, context)
+        ))) || null;
+}
+
+function freezeEnemyIntent(state, content) {
+    const rules = getEnemyDecisionRules(content);
+    if (!rules || !state.battle || !state.battle.enemy) return;
+    clearFrozenEnemyIntent(state);
+    const baseChoice = buildStaticEnemyIntent(state, content);
+    if (!baseChoice || !isEnemyIntentType(baseChoice.intent && baseChoice.intent.type)) return;
+    const policyId = String(rules.enemyPolicies[state.battle.enemy.enemyId] || '');
+    const policy = rules.policies[policyId];
+    if (!policy) return;
+    const context = getEnemyDecisionContext(state, content);
+    const branch = selectEnemyDecisionBranch(policy, context);
+    const branchChoice = branch
+        ? findPatternIntentByTypes(state, content, branch.preferredTypes)
+        : null;
+    const selectedBranch = branchChoice ? branch : null;
+    const selected = branchChoice || baseChoice;
+    const cue = projectDecisionCue(selectedBranch && selectedBranch.cue) || projectDecisionCue(policy.cue);
+    const enemyDecision = ensureEnemyDecisionState(state, rules);
+    if (enemyDecision) {
+        enemyDecision.opportunities = clampInt(enemyDecision.opportunities, 0) + 1;
+    }
+    const adaptive = selected.patternIndex !== baseChoice.patternIndex;
+    if (enemyDecision && adaptive) {
+        enemyDecision.adaptiveBranches = clampInt(enemyDecision.adaptiveBranches, 0) + 1;
+    }
+    state.battle.enemy.intent = cloneJson(selected.intent);
+    state.battle.enemy.intentSource = {
+        version: 1,
+        enemyId: selected.enemyId,
+        intentIndex: selected.sourceIntentIndex,
+        patternIndex: selected.patternIndex,
+        routeContractId: selected.routeContractId
+    };
+    if (cue) state.battle.enemy.decisionCue = cue;
+    state.battle.enemyDecision = {
+        version: 1,
+        reportVersion: String(rules.reportVersion || ''),
+        policyId,
+        branchId: selectedBranch ? String(selectedBranch.branchId || '') : '',
+        adaptive,
+        baseIntentType: String(baseChoice.intent.type || ''),
+        selectedIntentType: String(selected.intent.type || '')
+    };
+}
+
+function createTacticEncounter() {
+    return {
+        version: 1,
+        records: []
+    };
+}
+
+function recordTacticEncounter(state, resolution) {
+    if (!state.battle || !isPlainObject(state.battle.tacticEncounter)) return;
+    if (!isEnemyIntentType(resolution && resolution.intentType)) return;
+    if (!Array.isArray(state.battle.tacticEncounter.records)) {
+        state.battle.tacticEncounter.records = [];
+    }
+    if (state.battle.tacticEncounter.records.length >= 50) return;
+    state.battle.tacticEncounter.records.push({
+        turn: clampInt(state.battle.turn, 1),
+        intentType: String(resolution.intentType || ''),
+        success: resolution.success === true,
+        tier: String(resolution.tier || '')
+    });
+}
+
 function createInitialState({ runId, userId, mode, scenarioId = '', seedHex, content }) {
     if (!SAFE_REF.test(String(runId || ''))) {
         throw makeRuleError('invalid_run_id', '权威 run id 非法', 400);
@@ -793,6 +1161,7 @@ function createInitialState({ runId, userId, mode, scenarioId = '', seedHex, con
     }
     const scenario = getScenario(content, mode, scenarioId);
     const combatTactics = getCombatTacticsRules(content);
+    const enemyDecisionRules = getEnemyDecisionRules(content);
     const state = {
         schemaVersion: 2,
         protocolVersion: PROTOCOL_VERSION,
@@ -847,6 +1216,15 @@ function createInitialState({ runId, userId, mode, scenarioId = '', seedHex, con
                 version: clampInt(combatTactics.version, 1, 2),
                 reportVersion: String(combatTactics.reportVersion || ''),
                 lastResolution: null
+            }
+        } : {}),
+        ...(enemyDecisionRules ? {
+            enemyDecision: {
+                version: 1,
+                reportVersion: String(enemyDecisionRules.reportVersion || ''),
+                opportunities: 0,
+                adaptiveBranches: 0,
+                correctionRewardsChosen: 0
             }
         } : {})
     };
@@ -904,6 +1282,7 @@ function beginBattle(state, content, node) {
         ? scaleByBps(enemy.maxHp, routeContract.enemyAdjustments.maxHpBps)
         : enemy.maxHp;
     const combatTactics = getCombatTacticsRules(content);
+    const enemyDecisionRules = getEnemyDecisionRules(content);
     state.battle = {
         nodeId: node.nodeId,
         nodeType: node.type,
@@ -918,7 +1297,8 @@ function beginBattle(state, content, node) {
         },
         ...(routeContract ? { routeContract } : {}),
         ...(node.chapterBranch ? { chapterBranch: projectChapterBranch(node.chapterBranch) } : {}),
-        ...(combatTactics ? { tacticTurn: createCombatTacticTurn(combatTactics) } : {})
+        ...(combatTactics ? { tacticTurn: createCombatTacticTurn(combatTactics) } : {}),
+        ...(enemyDecisionRules ? { tacticEncounter: createTacticEncounter() } : {})
     };
     state.player.block = 0;
     state.player.energy = scenario.energyPerTurn;
@@ -927,6 +1307,7 @@ function beginBattle(state, content, node) {
     state.player.drawPile = shuffle(state, state.player.deck);
     drawCards(state, scenario.handSize);
     state.stats.turns += 1;
+    freezeEnemyIntent(state, content);
 }
 
 function applyDamageToEnemy(state, amount) {
@@ -996,9 +1377,108 @@ function canRemoveCardInstance(state, content, instance, rules) {
     return damageCards >= rules.minDamageCards && blockCards >= rules.minBlockCards;
 }
 
-function makeDeckCraftingRewardChoices(state, content, scenario, rules) {
+function getCorrectionSourceFromBattle(state, content) {
+    if (!getEnemyDecisionRules(content) || !state.battle || !isPlainObject(state.battle.tacticEncounter)) {
+        return null;
+    }
+    const records = Array.isArray(state.battle.tacticEncounter.records)
+        ? state.battle.tacticEncounter.records.filter(record => isEnemyIntentType(record && record.intentType))
+        : [];
+    const missed = records.slice().reverse().find(record => record.success === false);
+    if (missed) {
+        return {
+            intentType: String(missed.intentType || ''),
+            role: mapCorrectionRole(String(missed.intentType || '')),
+            source: 'missed'
+        };
+    }
+    const advanced = records.slice().reverse().find(record => (
+        record.success === true && String(record.tier || '') === 'advanced'
+    ));
+    if (advanced) {
+        return {
+            intentType: String(advanced.intentType || ''),
+            role: mapCorrectionRole(String(advanced.intentType || '')),
+            source: 'advanced'
+        };
+    }
+    return null;
+}
+
+function mapCorrectionRole(intentType) {
+    if (intentType === 'attack') return 'guard';
+    if (intentType === 'fortify') return 'attack';
+    if (intentType === 'defend_attack') return 'tempo';
+    return '';
+}
+
+function cardMatchesCorrectionRole(content, cardId, role, strict = true) {
+    const effect = getCard(content, cardId).effect || {};
+    const damage = clampInt(effect.damage, 0) + clampInt(effect.bonusDamageAgainstBlock, 0);
+    const block = clampInt(effect.block, 0) + clampInt(effect.bonusBlockAgainstAttack, 0);
+    const cycle = clampInt(effect.draw, 0) + clampInt(effect.energy, 0);
+    if (role === 'attack') return damage > 0;
+    if (role === 'guard') return block > 0;
+    if (role === 'tempo') {
+        return strict ? ((damage > 0 && block > 0) || cycle > 0) : (damage > 0 || block > 0);
+    }
+    return false;
+}
+
+function selectCorrectionCardId(cardIds, content, role) {
+    const pool = cardIds.map(cardId => String(cardId || '')).filter(Boolean);
+    return pool.find(cardId => cardMatchesCorrectionRole(content, cardId, role, true))
+        || pool.find(cardId => cardMatchesCorrectionRole(content, cardId, role, false))
+        || '';
+}
+
+function buildCorrectionMetadata(correctionSource) {
+    if (!correctionSource || !CORRECTION_ROLES.includes(correctionSource.role)) return null;
+    const missed = correctionSource.source === 'missed';
+    const titles = {
+        attack: missed ? '补进攻答案' : '巩固进攻逆解',
+        guard: missed ? '补守势答案' : '巩固守势逆解',
+        tempo: missed ? '补节奏答案' : '巩固节奏逆解'
+    };
+    const reasons = {
+        attack: missed
+            ? '本场曾错过结印题面，本次已有报价中的一张可帮助输出破阵。'
+            : '本场完成结印题面的进阶解法，本次已有报价中的一张可继续强化输出节奏。',
+        guard: missed
+            ? '本场曾错过攻击题面，本次已有报价中的一张可帮助承伤。'
+            : '本场完成攻击题面的进阶解法，本次已有报价中的一张可继续强化承伤节奏。',
+        tempo: missed
+            ? '本场曾错过攻守题面，本次已有报价中的一张可补足混合或循环节奏。'
+            : '本场完成攻守题面的进阶解法，本次已有报价中的一张可继续强化混合或循环节奏。'
+    };
+    return {
+        version: 1,
+        role: correctionSource.role,
+        title: titles[correctionSource.role],
+        reason: reasons[correctionSource.role]
+    };
+}
+
+function markCorrectionCardChoice(content, cardChoices, correctionSource) {
+    const correction = buildCorrectionMetadata(correctionSource);
+    if (!correction || cardChoices.length === 0) return cardChoices;
+    const correctionCardId = selectCorrectionCardId(
+        cardChoices.map(choice => choice.cardId),
+        content,
+        correction.role
+    );
+    if (!correctionCardId) return cardChoices;
+    const existingIndex = cardChoices.findIndex(choice => choice.cardId === correctionCardId);
+    return cardChoices.map((choice, index) => (
+        index === existingIndex ? { ...choice, correction } : choice
+    ));
+}
+
+function makeDeckCraftingRewardChoices(state, content, scenario, rules, correctionSource = null) {
     const cardIds = getRewardCardPool(content, scenario);
-    const cardChoices = shuffle(state, cardIds)
+    const cardChoices = markCorrectionCardChoice(
+        content,
+        shuffle(state, cardIds)
         .slice(0, rules.cardOfferCount)
         .map(cardId => {
             const card = getCard(content, cardId);
@@ -1009,7 +1489,9 @@ function makeDeckCraftingRewardChoices(state, content, scenario, rules) {
                 name: `纳入「${card.name}」`,
                 description: card.description
             };
-        });
+        }),
+        correctionSource
+    );
 
     const choices = cardChoices.slice();
     const upgradeTarget = prioritizeDeckInstances(
@@ -1086,12 +1568,12 @@ function applyRouteRewardAdjustments(rules, routeContract) {
     };
 }
 
-function makeRewardChoices(state, content, routeContract = null) {
+function makeRewardChoices(state, content, routeContract = null, correctionSource = null) {
     const scenario = resolveSelectedBranchScenario(state, getScenario(content, state.mode, state.scenarioId));
     const baseRules = getDeckCraftingRules(content, scenario);
     const rules = baseRules ? applyRouteRewardAdjustments(baseRules, routeContract) : null;
     if (!rules) return makeLegacyRewardChoices(state, content);
-    return makeDeckCraftingRewardChoices(state, content, scenario, rules);
+    return makeDeckCraftingRewardChoices(state, content, scenario, rules, correctionSource);
 }
 
 function buildSummary(state, content, result, reason) {
@@ -1118,9 +1600,15 @@ function buildSummary(state, content, result, reason) {
         : 0;
     const grade = score >= 520 ? 'S' : score >= 420 ? 'A' : score >= 300 ? 'B' : result === 'completed' ? 'C' : '未完成';
     const combatTactics = getCombatTacticsRules(content);
+    const enemyDecisionRules = getEnemyDecisionRules(content);
     const tacticOpportunities = clampInt(state.stats.combatTacticOpportunities, 0);
     const tacticSuccesses = clampInt(state.stats.combatTacticSuccesses, 0);
     const tacticAdvancedSuccesses = clampInt(state.stats.combatTacticAdvancedSuccesses, 0);
+    const decisionState = state.enemyDecision && typeof state.enemyDecision === 'object'
+        ? state.enemyDecision
+        : {};
+    const decisionOpportunities = clampInt(decisionState.opportunities, 0);
+    const adaptiveBranches = clampInt(decisionState.adaptiveBranches, 0);
     const summary = {
         result,
         reason,
@@ -1165,6 +1653,18 @@ function buildSummary(state, content, result, reason) {
                     ? { advancedSuccesses: tacticAdvancedSuccesses }
                     : {})
             }
+        } : {}),
+        ...(enemyDecisionRules ? {
+            enemyDecision: {
+                version: 1,
+                reportVersion: String(enemyDecisionRules.reportVersion || ''),
+                opportunities: decisionOpportunities,
+                adaptiveBranches,
+                adaptiveRateBps: decisionOpportunities > 0
+                    ? Math.floor(adaptiveBranches * 10000 / decisionOpportunities)
+                    : 0,
+                correctionRewardsChosen: clampInt(decisionState.correctionRewardsChosen, 0)
+            }
         } : {})
     };
     if (getDeckCraftingRules(content, scenario)) {
@@ -1178,6 +1678,7 @@ function buildSummary(state, content, result, reason) {
 function finishEncounter(state, content, events) {
     const enemyDefinition = getEnemy(content, state.battle.enemy.enemyId);
     const routeContract = state.battle.routeContract ? cloneJson(state.battle.routeContract) : null;
+    const correctionSource = getCorrectionSourceFromBattle(state, content);
     const completedNode = {
         nodeId: state.battle.nodeId,
         nodeType: state.battle.nodeType,
@@ -1222,7 +1723,7 @@ function finishEncounter(state, content, events) {
     }
     state.phase = 'reward';
     state.reward = {
-        choices: makeRewardChoices(state, content, routeContract),
+        choices: makeRewardChoices(state, content, routeContract, correctionSource),
         ...(routeContract ? { routeContract } : {})
     };
 }
@@ -1333,6 +1834,7 @@ function applyEnemyIntent(state, content, events) {
             blockPrevented: clampInt(tacticResolution && tacticResolution.blockReduction, 0)
         } : {})
     });
+    clearFrozenEnemyIntent(state);
     enemy.intentIndex += 1;
 }
 
@@ -1365,6 +1867,7 @@ function endTurn(state, content, events) {
     state.stats.turns += 1;
     if (combatTactics) state.battle.tacticTurn = createCombatTacticTurn(combatTactics);
     drawCards(state, scenario.handSize);
+    freezeEnemyIntent(state, content);
     events.push({ type: 'player_turn_started', turn: state.battle.turn });
 }
 
@@ -1377,9 +1880,19 @@ function chooseReward(state, content, payload, events) {
     const routeContract = state.reward.routeContract ? cloneJson(state.reward.routeContract) : null;
     const scenario = resolveSelectedBranchScenario(state, getScenario(content, state.mode, state.scenarioId));
     const deckCraftingRules = getDeckCraftingRules(content, scenario);
+    const enemyDecisionRules = getEnemyDecisionRules(content);
     if (reward.kind === 'card') {
         getCard(content, reward.cardId);
         state.player.deck.push(createCardInstance(state, reward.cardId, content));
+        if (reward.correction && clampInt(reward.correction.version, 0, 10) === 1) {
+            const enemyDecision = ensureEnemyDecisionState(state, enemyDecisionRules);
+            if (enemyDecision) {
+                enemyDecision.correctionRewardsChosen = clampInt(
+                    enemyDecision.correctionRewardsChosen,
+                    0
+                ) + 1;
+            }
+        }
     } else if (reward.kind === 'upgrade_card') {
         if (!deckCraftingRules) {
             throw makeRuleError('unknown_reward_kind', '奖励定义不存在', 500);
@@ -1564,6 +2077,7 @@ function projectState(state, content) {
             upgradedDeckCounts[instance.cardId] = (upgradedDeckCounts[instance.cardId] || 0) + 1;
         }
     });
+    const enemyDecisionCue = state.battle ? currentEnemyDecisionCue(state, content) : null;
     const battle = state.battle ? {
         nodeId: state.battle.nodeId,
         nodeType: state.battle.nodeType,
@@ -1575,7 +2089,8 @@ function projectState(state, content) {
             maxHp: state.battle.enemy.maxHp,
             block: state.battle.enemy.block,
             vulnerable: state.battle.enemy.vulnerable,
-            intent: currentEnemyIntent(state, content)
+            intent: currentEnemyIntent(state, content),
+            ...(enemyDecisionCue ? { decisionCue: enemyDecisionCue } : {})
         },
         ...(state.battle.routeContract ? {
             routeContract: projectRouteContract(state.battle.routeContract)

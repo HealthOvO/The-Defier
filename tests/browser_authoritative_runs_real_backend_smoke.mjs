@@ -398,7 +398,11 @@ async function exerciseWorldRiftAccountSwitch(page, { runId, version }) {
   }
 }
 
-function chooseDecision(projection, { routePolicy = 'safe', routeEnemyId = '' } = {}) {
+function chooseDecision(projection, {
+  routePolicy = 'safe',
+  routeEnemyId = '',
+  preferAdvanced = false,
+} = {}) {
   if (!projection) return null;
   if (projection.phase === 'route') {
     const choices = [...(projection.route?.choices || [])].sort((left, right) => (
@@ -439,7 +443,12 @@ function chooseDecision(projection, { routePolicy = 'safe', routeEnemyId = '' } 
   const incoming = Number(projection.battle?.enemy?.intent?.amount || 0);
   const enemyBlock = Number(projection.battle?.enemy?.block || 0);
   const playerBlock = Number(projection.player?.block || 0);
+  const playerHp = Number(projection.player?.hp || 0);
+  const playerMaxHp = Math.max(1, Number(projection.player?.maxHp || 1));
   const energy = Number(projection.player?.energy || 0);
+  const timedOffense = Number(projection.scenario?.turnBudget || 0) > 0
+    && playerHp / playerMaxHp >= 0.4
+    && !preferAdvanced;
   const blockCards = new Set(['guard', 'iron_mandate', 'ember_riposte', 'mirror_breath', 'warding_stride']);
   const damageCards = new Set(['strike', 'sky_pierce', 'life_siphon', 'fracture', 'ember_riposte', 'severing_flow', 'archive_surge', 'sealbreaker']);
   const tactic = projection.battle?.tactic;
@@ -487,13 +496,14 @@ function chooseDecision(projection, { routePolicy = 'safe', routeEnemyId = '' } 
     const roleOrder = desiredRole
       ? Number(right.tacticRole === desiredRole) - Number(left.tacticRole === desiredRole)
       : 0;
+    const offenseOrder = timedOffense ? rightDamages - leftDamages : 0;
     const tacticOrder = needsBlock
       ? rightBlocks - leftBlocks
       : needsDamage
         ? rightDamages - leftDamages
         : 0;
     const defenseOrder = effectiveIncoming > playerBlock ? rightBlocks - leftBlocks : leftBlocks - rightBlocks;
-    return roleOrder || tacticOrder || defenseOrder || Number(right.cost || 0) - Number(left.cost || 0)
+    return offenseOrder || roleOrder || tacticOrder || defenseOrder || Number(right.cost || 0) - Number(left.cost || 0)
       || String(left.instanceId).localeCompare(String(right.instanceId));
   });
   const damageIntoGuard = enemyBlock > 0
@@ -547,7 +557,6 @@ async function clickDecision(page, decision, before) {
   });
   const target = page.locator(decision.selector).first();
   await target.waitFor({ state: 'visible', timeout: 10000 });
-  await target.scrollIntoViewIfNeeded();
   if (decision.command === 'select_node') {
     await target.evaluate(element => {
       const root = element.closest('#season-ops-screen');
@@ -556,7 +565,10 @@ async function clickDecision(page, decision, before) {
       element.click();
     });
   } else {
-    await target.click({ force: true });
+    await target.evaluate(element => {
+      element.scrollIntoView({ block: 'center', inline: 'nearest' });
+      element.click();
+    });
   }
   return waitForPanel(
     page,
@@ -569,6 +581,7 @@ async function clickDecision(page, decision, before) {
         && !panel?.isBusy?.();
     },
     { runId: before.projection.runId, version: before.projection.version },
+    25000,
   );
 }
 
@@ -636,6 +649,8 @@ async function completeAdditionalMode(page, mode, { maxAttempts = 3, routePolicy
     const rewardUi = [];
     const routeContracts = [];
     const rewardContracts = [];
+    const correctionOffers = [];
+    let correctionMobileProof = null;
     let perilousBattleCaptured = false;
     let perilousRewardCaptured = false;
     while (!['completed', 'defeated', 'abandoned'].includes(panel.projection?.phase) && actionCount < 256) {
@@ -645,6 +660,15 @@ async function completeAdditionalMode(page, mode, { maxAttempts = 3, routePolicy
         routeContracts.push(decision.routeContract);
       }
       if (decision.command === 'choose_reward') {
+        const offeredCorrections = (panel.projection?.reward?.choices || [])
+          .filter(choice => Number(choice.correction?.version) === 1)
+          .map(choice => ({
+            rewardId: choice.rewardId,
+            role: choice.correction?.role || '',
+            title: choice.correction?.title || '',
+            reason: choice.correction?.reason || '',
+          }));
+        correctionOffers.push(...offeredCorrections);
         rewardKinds.push(decision.rewardKind);
         rewardUi.push(await readRewardDecisionUi(page, decision));
         const rewardContract = panel.projection?.reward?.routeContract || null;
@@ -652,8 +676,26 @@ async function completeAdditionalMode(page, mode, { maxAttempts = 3, routePolicy
         rewardContracts.push({
           contract: rewardContract,
           choiceCount: panel.projection?.reward?.choices?.length || 0,
+          correctionCount: offeredCorrections.length,
+          correctionRoles: offeredCorrections.map(entry => entry.role),
           text: rewardText,
         });
+        if (offeredCorrections.length > 0 && !correctionMobileProof) {
+          await page.setViewportSize({ width: 390, height: 844 });
+          await page.waitForTimeout(100);
+          await page.locator('[data-authoritative-reward-correction="true"]').first().scrollIntoViewIfNeeded();
+          const layout = await readLayout(page);
+          const mobileRewardText = await page.locator('.season-ops-authoritative-panel').innerText();
+          correctionMobileProof = {
+            layout,
+            textVisible: offeredCorrections.every(entry => (
+              mobileRewardText.includes(entry.title) && mobileRewardText.includes(entry.reason)
+            )),
+          };
+          await safeAuditScreenshot(page, path.join(outDir, `${mode}-correction-reward-mobile.png`), 'browser_authoritative_runs_real_backend_smoke', { timeout: 9000 });
+          await page.setViewportSize({ width: 1440, height: 960 });
+          await page.waitForTimeout(100);
+        }
         if (rewardContract?.contractId === 'perilous' && !perilousRewardCaptured) {
           perilousRewardCaptured = true;
           await safeAuditScreenshot(page, path.join(outDir, `${mode}-perilous-reward-desktop.png`), 'browser_authoritative_runs_real_backend_smoke', { timeout: 9000 });
@@ -703,6 +745,8 @@ async function completeAdditionalMode(page, mode, { maxAttempts = 3, routePolicy
       rewardUi,
       routeContracts,
       rewardContracts,
+      correctionOffers,
+      correctionMobileProof,
       stats: replay.replay.finalState.stats,
       summary: replay.replay.finalState.summary,
     };
@@ -827,7 +871,7 @@ try {
   add('public projection hides seed and ordered draw pile', !/"(?:seed|rng|drawPile)"/.test(publicProjectionJson));
   const routeContracts = panel.projection?.route?.choices?.map(choice => choice.routeContract) || [];
   const routePlayerCopy = await page.locator('.season-ops-authoritative-panel').innerText();
-  add('v8 route projection exposes dual tactics and two readable contracts without private coefficients', panel.projection?.contentVersion === 'authoritative-trials-v8'
+  add('v9 route projection exposes dual tactics and two readable contracts without private coefficients', panel.projection?.contentVersion === 'authoritative-trials-v9'
     && panel.projection?.combatTactics?.version === 2
     && Number(panel.projection?.route?.contractVersion) === 1
     && routeContracts.length === 2
@@ -854,6 +898,7 @@ try {
   let openingFairnessChecked = false;
   let routeContractRewardChecked = false;
   let tacticPanelProof = null;
+  let enemyDecisionCueProof = null;
   let failedTacticReceiptProof = null;
   let defendTurnaboutProof = null;
   let persistentEnemyBlockProof = null;
@@ -885,7 +930,11 @@ try {
           command: 'end_turn',
           selector: '[data-season-ops-action="authoritative-end-turn"]',
         }
-      : chooseDecision(before.projection, { routePolicy, routeEnemyId });
+      : chooseDecision(before.projection, {
+          routePolicy,
+          routeEnemyId,
+          preferAdvanced: !defendTurnaboutProof,
+        });
     if (!decision) throw new Error(`no playable UI command: ${JSON.stringify(before)}`);
     const selectedCard = decision.command === 'play_card'
       ? before.projection?.player?.hand?.find(card => card.instanceId === decision.cardInstanceId)
@@ -1042,6 +1091,18 @@ try {
       add('opening enemy intent cannot one-shot full health', intent >= 0 && maxHp > 0 && intent < maxHp, `${intent}/${maxHp}`);
       const battleContract = panel.projection.battle?.routeContract;
       const battlePlayerCopy = await page.locator('.season-ops-authoritative-panel').innerText();
+      const decisionCue = panel.projection.battle?.enemy?.decisionCue || null;
+      enemyDecisionCueProof = {
+        cue: decisionCue,
+        intent: panel.projection.battle?.enemy?.intent || null,
+        textVisible: !!decisionCue?.title
+          && !!decisionCue?.detail
+          && battlePlayerCopy.includes(decisionCue.title)
+          && battlePlayerCopy.includes(decisionCue.detail),
+        privateFieldsHidden: !/policyId|branchId|preferredTypes|thresholds|priority|intentSource/.test(
+          JSON.stringify(panel.projection?.battle || null),
+        ),
+      };
       add('battle projection and UI retain the selected route contract', !!battleContract?.label
         && /已选路线合同/.test(battlePlayerCopy)
         && battlePlayerCopy.includes(battleContract.label)
@@ -1141,7 +1202,7 @@ try {
     }
   }
 
-  add('v8 battle UI renders both public tactic lines and exact progress without private coefficients', !!tacticPanelProof?.tactic
+  add('v9 battle UI renders both public tactic lines and exact progress without private coefficients', !!tacticPanelProof?.tactic
     && Number(tacticPanelProof.tactic.version) === 2
     && Array.isArray(tacticPanelProof.tactic.lines)
     && tacticPanelProof.tactic.lines.length === 2
@@ -1152,6 +1213,11 @@ try {
       && line.requirements.every(requirement => Number(requirement.target) > 0))
     && tacticPanelProof.textVisible
     && tacticPanelProof.privateFieldsHidden, JSON.stringify(tacticPanelProof));
+  add('v9 battle shows the frozen enemy decision cue without private policy data', Number(enemyDecisionCueProof?.cue?.version) === 1
+    && !!enemyDecisionCueProof?.cue?.cueId
+    && !!enemyDecisionCueProof?.intent?.type
+    && enemyDecisionCueProof?.textVisible === true
+    && enemyDecisionCueProof?.privateFieldsHidden === true, JSON.stringify(enemyDecisionCueProof));
   add('real end-turn receipt keeps tactic success or failure readable and authoritative', !!failedTacticReceiptProof?.tacticEvent
     && Number(failedTacticReceiptProof.tacticEvent.version) === 2
     && failedTacticReceiptProof.tacticEvent.success === false
@@ -1214,6 +1280,13 @@ try {
     && /成功反制/.test(tacticTerminalCopy)
     && /逆解/.test(tacticTerminalCopy)
     && /反制率/.test(tacticTerminalCopy), tacticTerminalCopy);
+  add('terminal projection and UI summarize enemy decisions without exposing policy internals', Number(panel.projection?.summary?.enemyDecision?.version) === 1
+    && Number(panel.projection?.summary?.enemyDecision?.opportunities) > 0
+    && Number(panel.projection?.summary?.enemyDecision?.adaptiveBranches) >= 0
+    && Number(panel.projection?.summary?.enemyDecision?.adaptiveBranches) <= Number(panel.projection?.summary?.enemyDecision?.opportunities)
+    && /变招/.test(tacticTerminalCopy)
+    && /校正选择/.test(tacticTerminalCopy)
+    && !/policyId|branchId|preferredTypes|thresholds|priority/.test(tacticTerminalCopy), tacticTerminalCopy);
   add('challenge ladder real UI exercises targeted upgrade and bounded trim', Number(panel.projection?.stats?.cardsUpgraded) >= 1
     && Number(panel.projection?.stats?.cardsRemoved) === 1
     && Number(panel.projection?.summary?.upgradedCards) >= 1
@@ -1279,7 +1352,7 @@ try {
     && replay?.replay?.verified === true
     && replay?.replay?.actionCount === actionCount
     && replay?.replay?.actions?.every((entry, index) => entry.sequence === index + 1), JSON.stringify(replay?.replay && { actionCount: replay.replay.actionCount, phase: replay.replay.finalState?.phase }));
-  add('public replay contains no secret RNG material', !/"(?:seed|rng|drawPile)"/.test(replayJson));
+  add('public replay contains no secret RNG or enemy policy material', !/"(?:seed|rng|drawPile|policyId|branchId|preferredTypes|thresholds|priority|intentSource)"/.test(replayJson));
 
   const ladderCurrentAfter = await page.evaluate(async () => {
     const { BackendClient } = window.__THE_DEFIER_SERVICES__;
@@ -1620,6 +1693,34 @@ try {
     && challengeResult.replayActionCount === challengeResult.actionCount
     && expeditionResult.replayActionCount === expeditionResult.actionCount, JSON.stringify({ pveResult, challengeResult, expeditionResult }));
   const baseModeResults = [pveResult, challengeResult, expeditionResult];
+  const baseCorrectionOffers = baseModeResults.flatMap(result => result.correctionOffers || []);
+  const baseRewardContracts = baseModeResults.flatMap(result => result.rewardContracts || []);
+  const correctionMobileProofs = baseModeResults
+    .map(result => result.correctionMobileProof)
+    .filter(Boolean);
+  add('real backend rewards expose one readable corrective card without increasing the reward surface', baseCorrectionOffers.length > 0
+    && baseCorrectionOffers.every(entry => ['attack', 'guard', 'tempo'].includes(entry.role)
+      && !!entry.title
+      && !!entry.reason)
+    && baseRewardContracts.some(entry => Number(entry.correctionCount) === 1)
+    && baseRewardContracts.every(entry => Number(entry.correctionCount) <= 1)
+    && baseRewardContracts.some(entry => baseCorrectionOffers.some(offer => (
+      entry.text.includes(offer.title) && entry.text.includes(offer.reason)
+    )))
+    && !baseRewardContracts.some(entry => /policyId|branchId|preferredTypes|thresholds|priority/.test(entry.text)), JSON.stringify({
+      offers: baseCorrectionOffers,
+      rewards: baseRewardContracts.map(entry => ({
+        contractId: entry.contract?.contractId || '',
+        choiceCount: entry.choiceCount,
+        correctionCount: entry.correctionCount,
+        correctionRoles: entry.correctionRoles,
+      })),
+    }));
+  add('390px corrective reward stays readable without horizontal overflow', correctionMobileProofs.length > 0
+    && correctionMobileProofs.every(proof => proof.textVisible
+      && Number(proof.layout?.documentScrollWidth || 0) <= Number(proof.layout?.viewportWidth || 0)
+      && Number(proof.layout?.rootScrollWidth || 0) <= Number(proof.layout?.rootClientWidth || 0)
+      && (proof.layout?.undersized || []).length === 0), JSON.stringify(correctionMobileProofs));
   add('all base-mode replays preserve additive route resolution', baseModeResults.every(result => (
     Number(result.summary?.scoreBreakdown?.finalScore) === Number(result.summary?.score)
       && Number(result.summary?.scoreBreakdown?.routeBonus) === Number(result.summary?.routeResolution?.totalBonus)
