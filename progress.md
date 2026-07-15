@@ -13,8 +13,11 @@ Original prompt: 进入全自动审查与修复模式，按顺序审查并修复
     - 定向平台与 UI 回归：`node tests/sanity_world_rift_directive_platform_checks.cjs`、`node tests/sanity_world_rift_directive_client_ui_checks.mjs` 均通过；旧轮换字节稳定、同账号并发领奖唯一性和 claim/reconcile 重叠恢复均有独立断言。
     - 本地生产构建 `npm run build:pages` 通过；本轮 fresh 浏览器发布门禁 `output/s110-full-release-final2` 汇总 34/34 模块、1430 findings、715 张截图，0 failed、0 console error，missing / duplicate / unknown module 均为空；其中权威局 S110 专项为 58/58 findings。
     - `gpt-5.4` 挑战者发现并推动修复两条最终边界：活动 v1 轮换可能整周停留在旧目录，以及客户端领奖测试 stub 签名错误形成无效断言；修复后复核未发现剩余 P1/P2。
+    - 2026-07-15 正式部署前已备份 `/www/backup/the-defier/wwwroot_20260715_172031.tar.gz`、`backend_20260715_172031.tar.gz` 与 SQLite 一致性快照 `database_20260715_172031.sqlite.gz`；数据库快照通过 `PRAGMA integrity_check`、gzip 与 SHA-256 校验，后端 rsync dry-run 未发现私密文件删除。
+    - 静态站与后端同步后，`the-defier-backend` 为 active、`nginx -t` 通过，公网首页与 `/api/health` 均为 200；线上 schema 已升级到 V12 `0012_world_rift_campaign_directives`，活动轮换为 `world-rift-catalog-v2 / world-rift-rotation-v2`。
+    - 生产只读、运行环境与写入 smoke 全部通过，覆盖注册、登录、存档、全局进度、残影与现有 PVP；额外 S110 在线探针确认个人、小队、全服三类指令均可从正式 API 读取。生产域名浏览器专项 `output/s110-production-authoritative-final` 为 58/58 findings、0 failed、0 console error，部署后服务 warning 以上日志为空。
   - 当前结论
-    - S110 已完成设计、开发、完整回归、真实浏览器验收和挑战者终审；本次交付边界为提交、fast-forward 合并 `main` 并推送，不执行 SSH、rsync、systemd、Nginx、生产数据库写入或线上部署，`https://080305.xyz/` 继续运行已验证的 S108。
+    - S110 已完成设计、开发、完整回归、挑战者终审、合并推送、生产备份部署和线上 smoke；正式地址为 `https://080305.xyz/`，当前生产运行 V12 天穹裂隙战役指令 V1。
 
 - 2026-07-14: V11-S109 权威路线风险收益与难度契约 V1
   - 本轮完成
