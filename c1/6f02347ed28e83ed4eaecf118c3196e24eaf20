@@ -1,0 +1,67 @@
+css/season-ops.css
+  s_bae69f1b7fab46::t_eeb9216e0a9949 1044-1050,1056-1078,1084-1091,1120-1123,1186-1201
+docs/backend_authoritative_fate_chronicle_v1.md
+  s_bae69f1b7fab46::t_eda5b79a0d5211 66
+docs/backend_authoritative_runs_v2.md
+  s_bae69f1b7fab46::t_bbb7bba2556926 156-180
+game-intro.html
+  s_bae69f1b7fab46::t_847a04ae4d9e5a 175
+js/services/authoritative-run-service.js
+  s_37f486b76c7979::t_cada46e48343e9 13
+js/services/backend-client.js
+  s_37f486b76c7979::t_42aa2804b3036e 14
+js/views/AuthoritativeRunPanel.js
+  s_bae69f1b7fab46::t_9647328245a847 117-126,330,336-337,342-388,393-395,404-405,410-434,436,439,441-443,447-448,455,458,460,463,468-483,1834-1835,1889,1904-1909,2137-2207,2211-2228,2240,2242,2253-2255,2265-2270,2272,2289,2530-2535,2537-2538
+server/progression/authoritative-runs/catalog.js
+  s_bae69f1b7fab46::t_9b0419b4bd15c7 4,108-109,113-139,142-168,171-203
+server/progression/authoritative-runs/engine.js
+  s_bae69f1b7fab46::t_03bb966651344d 94-95,100-121,131-132,137-246,255-270,322,342-383,387-392,396,838-841,847,921,1123,1157,1163-1166,1254-1256,1285,1289-1293,1366,1492,1494-1505,1512-1513,1588-1591,1613,1645
+tests/browser_fate_chronicle_real_backend_smoke.mjs
+  s_bae69f1b7fab46::t_9b32fe348aa71a 360-373,376,379-388,391,398-400,407,729-731
+tests/sanity_authoritative_combat_tactics_balance_checks.cjs
+  s_37f486b76c7979::t_b26dfeb6abbffe 118-121,159,165-176,190,195,247-250,289-292,322-328
+tests/sanity_authoritative_route_balance_checks.cjs
+  s_bae69f1b7fab46::t_5c23f4ff4e2da4 72-119,122,124-132,135,137-147,156-163,165-168,245,247,253,265
+tests/sanity_authoritative_runs_client_checks.mjs
+  s_37f486b76c7979::t_2f3bffa5ff5232 135-136,140,144,397
+tests/sanity_authoritative_runs_engine_checks.cjs
+  s_bae69f1b7fab46::t_ab8f422117c731 255-260,281-360,362,364-378,477,482,495,549-839,896,898,903,905-912,918,923,927-933,938,942-948,951,956,961,964-970,972,1029,1267,1405,1410,1423,1480-1485
+tests/sanity_authoritative_runs_migration_checks.cjs
+  s_bae69f1b7fab46::t_6b91d73dceb574 130-137,139-141,172-208,210-212,223,232-233,235,237-238,244-251,254-264,266,270,277-296,299,301,308-328,337-342,678-679,837,843,867-868,880,886-888,893-894,906,908,916,921,1037,1057,1063-1065,1074,1079,1081,1083,1085
+tests/sanity_authoritative_runs_ui_checks.mjs
+  s_bae69f1b7fab46::t_02b4b29c71f4f0 118-125,174-175,192-193,324-378,388-442,470-471,505-506,509,628-657,692-746,811-832,913-924
+tests/sanity_challenge_ladder_platform_checks.cjs
+  s_bae69f1b7fab46::t_e996aab7d92f24 269-339,359-369,372,374-384,393-400,402-403
+tests/sanity_fate_chronicle_branch_balance_checks.cjs
+  s_bae69f1b7fab46::t_2eb26e21e12d25 96-143,148-156,159,161-171,180-187,189-190,322
+tests/sanity_release_gate_coverage_checks.cjs
+  s_bae69f1b7fab46::t_bd86558ce40a2e 569,572-574,587-590,616,621,680,1323-1324,1326,1330,1377
+tests/sanity_world_rift_directive_platform_checks.cjs
+  s_bae69f1b7fab46::t_254334b597f879 328-398,431-441,444,446-456,465-472,474-475
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "c16f02347ed28e83ed4eaecf118c3196e24eaf20",
+  "prompts": {},
+  "sessions": {
+    "s_37f486b76c7979": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f6625-6c15-7472-9edf-1a6454f45b03",
+        "model": "unknown"
+      },
+      "human_author": "AI Agent <bot@example.com>"
+    },
+    "s_bae69f1b7fab46": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ed4f6-e7ac-73e0-a29e-119f3eddb407",
+        "model": "unknown"
+      },
+      "human_author": "AI Agent <bot@example.com>"
+    }
+  },
+  "attestation_metadata": {},
+  "remote_transcripts": {}
+}
