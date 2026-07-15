@@ -1,0 +1,73 @@
+css/season-ops.css
+  s_06f0cd6af0067e::t_d9e6b3458da1e2 555-569,1033-1050,1090-1119,1437-1440
+docs/backend_authoritative_fate_chronicle_v1.md
+  s_bae69f1b7fab46::t_99c19c1090ebf7 66
+docs/backend_authoritative_runs_v2.md
+  s_bae69f1b7fab46::t_535a6320e365f0 181-211
+js/services/authoritative-run-service.js
+  s_bae69f1b7fab46::t_aae6d5661645db 13
+js/services/backend-client.js
+  s_bae69f1b7fab46::t_3217704029af25 15
+js/views/AuthoritativeRunPanel.js
+  s_bae69f1b7fab46::t_e4c3d6e45490eb 128-133,202-207,337-381,1931,1945-1956,2021-2038,2057,2099,2169,2230-2242
+progress.md
+  s_bae69f1b7fab46::t_4111c37859dff1 3-18,34
+server/progression/authoritative-runs/catalog.js
+  s_bae69f1b7fab46::t_3cc05c2518f0c0 4,207-456
+server/progression/authoritative-runs/engine.js
+  s_bae69f1b7fab46::t_bec1ac4f380956 9-10,128-211,480,839-846,868-1147,1164,1220-1228,1285,1300-1301,1310,1380-1477,1479-1481,1492-1494,1571,1576,1603,1607-1611,1656-1667,1681,1726,1837,1870,1883,1887-1895,2080,2092-2093
+tests/browser_authoritative_runs_real_backend_smoke.mjs
+  s_bae69f1b7fab46::t_e459b3ed1574de 401-405,446-447,449-451,499,506,568-571,584,652-653,663-671,679-680,683-698,748-749,874,901,933-937,1094-1105,1205,1216-1220,1283-1289,1355,1696-1723
+tests/browser_fate_chronicle_real_backend_smoke.mjs
+  s_bae69f1b7fab46::t_a31fd124bcc697 729-730
+tests/run_node_checks.sh
+  s_06f0cd6af0067e::t_ed1714838ea21d 40
+tests/sanity_authoritative_enemy_decision_checks.cjs
+  s_bae69f1b7fab46::t_4eb4b24692ea65 1-485
+tests/sanity_authoritative_runs_client_checks.mjs
+  s_bae69f1b7fab46::t_ff06f154d3aef7 135-136,140,397
+tests/sanity_authoritative_runs_engine_checks.cjs
+  s_bae69f1b7fab46::t_836b8d8dd4c97d 288,330,338,351-357,370,373,390-394,1245,1259,1450
+tests/sanity_authoritative_runs_migration_checks.cjs
+  s_a40e3d79b9f234::t_d5b8e071710369 142,232,245,260,264-269,273-274,277,308-317,358,363-368,705-710,858-859,868,874,919,925,937,952,1096,1105,1110,1116
+tests/sanity_authoritative_runs_ui_checks.mjs
+  s_bae69f1b7fab46::t_85db1e7ec154c5 116-118,121,195-196,323-324,516-517,633-659,791,799-806,814-820,826-844,852,854-855,870-884,964-979,1003-1006,1009,1022,1093
+tests/sanity_fate_chronicle_branch_balance_checks.cjs
+  s_bae69f1b7fab46::t_2c306ebca01835 322
+tests/sanity_release_gate_coverage_checks.cjs
+  s_bae69f1b7fab46::t_ec58a3777e73b1 165,526,571,575-581,600-604,615-626,642-643,648,707,1375-1380,1433
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "235691e26fe78e910d6d60ac625acaad26007b59",
+  "prompts": {},
+  "sessions": {
+    "s_06f0cd6af0067e": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f6670-0de6-78b1-86c2-fa6dddfa0cbd",
+        "model": "unknown"
+      },
+      "human_author": "AI Agent <bot@example.com>"
+    },
+    "s_a40e3d79b9f234": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f6672-17bb-7831-a146-f232acec7187",
+        "model": "unknown"
+      },
+      "human_author": "AI Agent <bot@example.com>"
+    },
+    "s_bae69f1b7fab46": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ed4f6-e7ac-73e0-a29e-119f3eddb407",
+        "model": "unknown"
+      },
+      "human_author": "AI Agent <bot@example.com>"
+    }
+  },
+  "attestation_metadata": {},
+  "remote_transcripts": {}
+}
