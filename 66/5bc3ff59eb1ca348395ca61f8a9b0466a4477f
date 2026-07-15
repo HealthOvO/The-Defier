@@ -1,0 +1,67 @@
+css/fate-chronicle.css
+  s_ca5652313828d6::t_e352fa2b123135 23-39
+index.html
+  s_ca5652313828d6::t_a104705328e4e6 815,1883-1887,1907-1908,1910,2018
+js/core/collection_hub.js
+  s_ca5652313828d6::t_99f524df5a2bd0 23,4013-4014,4587,4697,6206-6207
+js/core/expedition_hub.js
+  s_ca5652313828d6::t_4a1efc759bb7c6 149-154,160-165,531,639,656,748,757,764,777,803,805,813,831,2091-2093,2305,2340,2367,3788,3814-3815,3817,3993,3996,4489,4506,4534,4556,4667,4669,4694,4699,4712,4762,4804,5926,5937,5959,5964,5974,5983,5989
+js/core/map.js
+  s_ca5652313828d6::t_089542fdd57559 2,4,1418,1421,1425-1443,1833-1836,1854,1874
+js/data/expedition_systems.js
+  s_ca5652313828d6::t_df17ff824031e2 24,65,81,95,108,136,181,194,209,211,238,240,310,348,361,386,404,417,424,461,548,872
+js/managers/EventManager.js
+  s_7ccf642ff2de88::t_e46ed719c36253 300-307,370,373,385
+js/testing/browser-audit-fixtures.js
+  s_ca5652313828d6::t_dd843845ebe99d 251-291
+js/views/EventView.js
+  s_bae69f1b7fab46::t_afad1dcf824c33 105-108,114
+js/views/FateChronicleView.js
+  s_ca5652313828d6::t_10b6aa98983ecd 1171-1172,1184-1185,1195
+js/views/RewardView.js
+  s_bae69f1b7fab46::t_702a743212a86e 289,300-302,310-312,648,652,664,668,688,1146
+js/views/SystemView.js
+  s_ca5652313828d6::t_8661c8a4973c18 144-145,156-157
+tests/browser_expedition_audit.mjs
+  s_ca5652313828d6::t_3bf8b88092b985 787-788,1524
+tests/sanity_browser_audit_fixture_checks.mjs
+  s_ca5652313828d6::t_5d634c95f28508 3,7-16,28-29,31,35,39-86,100-104,107-108
+tests/sanity_expedition_state_checks.cjs
+  s_ca5652313828d6::t_d31308d45616aa 550,688,984,1143
+tests/sanity_map_overview_risk_card_checks.cjs
+  s_ca5652313828d6::t_b690f42b7c9b4c 60-69,308-310,327-329
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "665bc3ff59eb1ca348395ca61f8a9b0466a4477f",
+  "prompts": {},
+  "sessions": {
+    "s_7ccf642ff2de88": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f6626-a869-79f3-8134-a8900a9a232f",
+        "model": "unknown"
+      },
+      "human_author": "AI Agent <bot@example.com>"
+    },
+    "s_bae69f1b7fab46": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ed4f6-e7ac-73e0-a29e-119f3eddb407",
+        "model": "unknown"
+      },
+      "human_author": "AI Agent <bot@example.com>"
+    },
+    "s_ca5652313828d6": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f3fed-94d5-77b2-9af0-61333559ff38",
+        "model": "unknown"
+      },
+      "human_author": "AI Agent <bot@example.com>"
+    }
+  },
+  "attestation_metadata": {},
+  "remote_transcripts": {}
+}
