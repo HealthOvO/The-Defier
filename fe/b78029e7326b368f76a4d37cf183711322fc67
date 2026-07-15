@@ -1,0 +1,83 @@
+css/fate-chronicle.css
+  s_bae69f1b7fab46::t_7700b0e79c64c4 395-422,456-497,673-675
+docs/backend_authoritative_fate_chronicle_v1.md
+  s_bae69f1b7fab46::t_c4df770630a436 1,5,10,12,22-29,66,74,80,86,88,106,109-110,153,165,170-172
+docs/backend_authoritative_runs_v2.md
+  s_bae69f1b7fab46::t_470abd640fc6d6 101-122
+game-intro.html
+  s_bae69f1b7fab46::t_c60b20a20dc81b 165-167,181,187-188
+js/services/authoritative-run-service.js
+  s_bae69f1b7fab46::t_2279fedc40b6fa 13
+js/services/backend-client.js
+  s_bae69f1b7fab46::t_16fdd9d8f4e5d9 14
+js/views/AuthoritativeRunPanel.js
+  s_bae69f1b7fab46::t_2911101d587bfa 57-58,244-259,1590-1592,1598-1600,1604,1623,1627,1630-1639,1669,1753,1822,1890,1977-1998,2171
+js/views/FateChronicleView.js
+  s_bae69f1b7fab46::t_055439cb4e6a40 21,28,33-42,53,60,65-74,85,92,97-106,346-355,363,371-373,383-391,402-416,1258,1279,1286-1288,1372,1411,1417-1418,1454-1455,1487-1493
+js/views/SystemView.js
+  s_d6f49f21d6299e::t_ad5da2158fa7d4 403,418,420,433
+server/fate-chronicle/catalog.js
+  s_bae69f1b7fab46::t_d952d85e500478 4-5,50-63,95-108,140-153,185,192,199,258
+server/fate-chronicle/service.js
+  s_bae69f1b7fab46::t_b3e2c5a11ca986 326-328,908-910,926-927,930,939-941,963,997,1049,1067-1072,1227
+server/progression/authoritative-runs/catalog.js
+  s_bae69f1b7fab46::t_3fb433f2a46b67 4,9,12,14-15,593-667,728-805,868-946
+server/progression/authoritative-runs/engine.js
+  s_bae69f1b7fab46::t_dfe313f1fa595a 171-270,319,321-323,325-355,579-580,607,754,762,811-813,835-837,852-853,978,1058-1068,1074-1075,1121-1122,1135-1136,1142-1144,1168-1170,1213-1215
+tests/browser_authoritative_runs_real_backend_smoke.mjs
+  s_017ceb83d71973::t_25c3dccffcd41d 736
+tests/browser_fate_chronicle_real_backend_smoke.mjs
+  s_017ceb83d71973::t_10be169daabb49 31-46,157-181,318,321-325,388,394,396-413,440-454,475-483,499,538-548,632,634,652-660,674,678,684-685,711,713,717-740,783-784
+tests/run_node_checks.sh
+  s_017ceb83d71973::t_2e101beb9d785a 43-44
+tests/sanity_authoritative_runs_client_checks.mjs
+  s_017ceb83d71973::t_3c8b87d9bcc32b 134-135,139,143,386
+tests/sanity_authoritative_runs_engine_checks.cjs
+  s_017ceb83d71973::t_70f7b8063cabf3 43,46-50,89,94,132-199,201-213,258-275,537-635,677-686,688-689,691-692,696-702,708-713,718,721,726-732,738-743,748,751
+tests/sanity_authoritative_runs_ui_checks.mjs
+  s_017ceb83d71973::t_902247cb58d93e 113,180-185
+tests/sanity_fate_chronicle_branch_balance_checks.cjs
+  s_017ceb83d71973::t_c63aae2ee44be9 1-271
+tests/sanity_fate_chronicle_platform_checks.cjs
+  s_017ceb83d71973::t_481fd60868660e 20-35,170-192,226-264,269-270,274,363,371,377,381,399-524
+tests/sanity_fate_chronicle_ui_checks.mjs
+  s_017ceb83d71973::t_387d369e6043fb 14,90,99,113,117,120,131-133,137-138,146-149,152-153,161-164,167-169,173-175,177-180,183-186,189-191,196,201,208,215,220-223,226-338,340-357
+tests/sanity_intro_progress_sync_checks.cjs
+  s_017ceb83d71973::t_33d99d9bf889f7 12-15,21,32-37,41-43,45,48-50,52,54,63-64,67-69,72-74,82,86-87
+tests/sanity_release_gate_coverage_checks.cjs
+  s_017ceb83d71973::t_06d93555a8ed0a 529-530,567,602,605-606,719-720,1308,1350,1352-1353,1355-1357,1360-1361
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "feb78029e7326b368f76a4d37cf183711322fc67",
+  "prompts": {},
+  "sessions": {
+    "s_017ceb83d71973": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f6520-e3b8-7493-a170-acdab8ab52d7",
+        "model": "unknown"
+      },
+      "human_author": "AI Agent <bot@example.com>"
+    },
+    "s_bae69f1b7fab46": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ed4f6-e7ac-73e0-a29e-119f3eddb407",
+        "model": "unknown"
+      },
+      "human_author": "AI Agent <bot@example.com>"
+    },
+    "s_d6f49f21d6299e": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f6528-e5f5-7570-959e-512e820fd9a6",
+        "model": "unknown"
+      },
+      "human_author": "AI Agent <bot@example.com>"
+    }
+  },
+  "attestation_metadata": {},
+  "remote_transcripts": {}
+}
