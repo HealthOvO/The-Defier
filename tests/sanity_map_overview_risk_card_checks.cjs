@@ -57,6 +57,16 @@ function createElement(id) {
     inferDeckArchetype: (deck = []) => {
       if (!Array.isArray(deck) || deck.length === 0) return null;
       return deck[0]?.archetypeHint || null;
+    },
+    FATE_RING: {
+      paths: {
+        convergence: { name: '汇流之环' },
+        crippled: { name: '残缺印记' }
+      }
+    },
+    ARCHETYPE_PACKS: {
+      entropy: { name: '虚账收束' },
+      bulwark: { name: '玄甲反击' }
     }
   });
   ctx.window = ctx;
@@ -295,6 +305,9 @@ function createElement(id) {
   assert(/最近势力变化/.test(overviewText), `overview should include recent faction signal label, got: ${overviewText}`);
   assert(/追猎预判/.test(overviewText), `overview should include nemesis-forecast label, got: ${overviewText}`);
   assert(/观星工程/.test(overviewText) && /II阶/.test(overviewText), `overview should include concrete engineering content, got: ${overviewText}`);
+  assert(/命途·汇流之环/.test(overviewText), `overview should translate the fate path id, got: ${overviewText}`);
+  assert(/构筑·虚账收束/.test(overviewText), `overview should translate the archetype id, got: ${overviewText}`);
+  assert(!/(?:crippled|awakened|bulwark|entropy|undefined)/i.test(overviewText), `overview should not expose internal tokens, got: ${overviewText}`);
   assert(/星占会/.test(overviewText) && /观星台/.test(overviewText), `overview should include concrete faction signal content, got: ${overviewText}`);
   assert(/灰烬猎誓/.test(overviewText) && /高压/.test(overviewText), `overview should include concrete nemesis forecast content, got: ${overviewText}`);
   assert(/高危机制/.test(riskText), `risk card should include high-risk mechanism, got: ${riskText}`);
@@ -311,6 +324,9 @@ function createElement(id) {
   assert(/工程收益/.test(tooltipText) && /观星工程/.test(tooltipText), `node tooltip should expose engineering gain hint, got: ${tooltipText}`);
   assert(!/>\s*<\/span>/.test(overview.innerHTML), 'overview strip should not render empty value spans');
   assert(!/>\s*<\/span>/.test(risk.innerHTML), 'risk card should not render empty value spans');
+  assert(map.formatPathLabel('unknown_path') === '命途未定', 'unknown fate paths should use a player-facing fallback');
+  assert(map.formatArchetypeLabel('unknown_archetype') === '流派待成型', 'unknown archetypes should use a player-facing fallback');
+  assert(map.formatEngineeringProgress({ remaining: 1 }) === '距下一阶还需 1 次工程节点', 'incomplete engineering data should stay readable');
 
   game.getChapterDisplaySnapshot = () => null;
   map.updateChapterBriefPanel();

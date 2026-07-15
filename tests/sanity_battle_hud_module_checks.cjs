@@ -109,6 +109,7 @@ function assert(condition, message) {
       }
     ],
     advisorExpanded: true,
+    advisorDetailsExpanded: true,
     loop: {
       nodeLabel: '精英战',
       phaseLabel: '玩家回合',
@@ -164,6 +165,7 @@ function assert(condition, message) {
   assert(!/onclick=/.test(panelMarkup), 'battle command panel should not contain inline click handlers');
   assert(/data-action="activate-battle-command"/.test(panelMarkup), 'battle command panel should expose command action data attr');
   assert(/data-action="toggle-tactical-advisor"/.test(panelMarkup), 'battle command panel should expose advisor toggle action');
+  assert(/<details class="battle-advisor-details" open>/.test(panelMarkup), 'battle command panel should restore expanded tactical details');
 
   console.log('Battle HUD module checks passed.');
 })();

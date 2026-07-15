@@ -1,6 +1,7 @@
 import { LEVEL_CONFIG } from "../data/levels.js";
-import { canUpgradeCard, inferDeckArchetype, upgradeCard, getRandomCard } from "../data/cards.js";
+import { ARCHETYPE_PACKS, canUpgradeCard, inferDeckArchetype, upgradeCard, getRandomCard } from "../data/cards.js";
 import { RUN_DESTINIES } from "../data/run_destinies.js";
+import { FATE_RING } from "../data/fate_ring.js";
 import { Utils } from "./utils.js";
 import { MapView } from "../views/MapView.js";
 import { getRandomEnemy, createEliteEnemy, getBossForRealm } from "../data/enemies.js";
@@ -1414,23 +1415,32 @@ export class GameMap {
   escapeMapText(value = '') {
     return String(value == null ? '' : value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
   }
-  formatTagLabel(label = '') {
+  formatTagLabel(label = '', fallback = '待定') {
     const text = String(label || '').trim();
     if (!text) return '';
+    if (/^[a-z][a-z0-9_-]*$/i.test(text)) return fallback;
     return text.replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim();
   }
   formatPathLabel(pathId = '') {
-    const labels = {
-      convergence: '同调',
-      resonance: '共振',
-      destruction: '湮灭',
-      agility: '迅捷',
-      wisdom: '洞明',
-      insight: '洞察',
-      toughness: '坚韧'
-    };
-    if (labels[pathId]) return labels[pathId];
-    return this.formatTagLabel(pathId);
+    const normalized = String(pathId || '').trim();
+    const pathCatalog = typeof FATE_RING !== 'undefined' ? FATE_RING : null;
+    const pathName = pathCatalog?.paths?.[normalized]?.name;
+    if (pathName) return String(pathName);
+    return this.formatTagLabel(normalized, '命途未定');
+  }
+  formatArchetypeLabel(archetypeId = '') {
+    const normalized = String(archetypeId || '').trim();
+    const archetypeCatalog = typeof ARCHETYPE_PACKS !== 'undefined' ? ARCHETYPE_PACKS : null;
+    const archetypeName = archetypeCatalog?.[normalized]?.name;
+    if (archetypeName) return String(archetypeName);
+    return this.formatTagLabel(normalized, '流派待成型');
+  }
+  formatEngineeringProgress(track = null) {
+    const source = track && typeof track === 'object' ? track : {};
+    const nextTierLabel = String(source.nextTierLabel || '下一阶').trim() || '下一阶';
+    const remaining = Math.max(1, Math.floor(Number(source.remaining) || 1));
+    const nodeLabel = String(source.nodeLabel || '工程节点').trim() || '工程节点';
+    return `距${nextTierLabel}还需 ${remaining} 次${nodeLabel}`;
   }
   getDangerTierMetaByIndex(index = 0) {
     const safeIndex = Math.max(0, Math.min(100, Math.floor(Number(index) || 0)));
@@ -1820,7 +1830,10 @@ export class GameMap {
     if (!focus) {
       return '尚未形成跨章工程，优先在观星、禁术、裂隙或灵契节点里选出一条主轴。';
     }
-    return `${focus.icon || '✦'} ${focus.name} ${focus.tierLabel} · ${focus.effectSummary}${focus.nextTarget != null ? ` · 距${focus.nextTierLabel}还需 ${focus.remaining} 次${focus.nodeLabel}` : ' · 已达当前最高工事阶'}`;
+    const name = String(focus.name || '跨章工程');
+    const tierLabel = String(focus.tierLabel || '起步');
+    const effectSummary = String(focus.effectSummary || '工程回响正在积累。');
+    return `${focus.icon || '✦'} ${name} ${tierLabel} · ${effectSummary}${focus.nextTarget != null ? ` · ${this.formatEngineeringProgress(focus)}` : ' · 已达当前最高工事阶'}`;
   }
   resolveStrategicEngineeringRiskSignal() {
     const snapshot = this.getStrategicEngineeringSnapshot();
@@ -1838,7 +1851,7 @@ export class GameMap {
     const track = snapshot && Array.isArray(snapshot.allTracks) ? snapshot.allTracks.find(entry => entry && entry.trackId === nodeType) : null;
     if (!track) return '';
     if (track.nextTarget != null) {
-      return `工程收益：推进${track.name}${track.active ? ` ${track.tierLabel}` : ''} · ${track.effectSummary} · 距${track.nextTierLabel}还需 ${track.remaining} 次${track.nodeLabel}`;
+      return `工程收益：推进${track.name || '当前工程'}${track.active && track.tierLabel ? ` ${track.tierLabel}` : ''} · ${track.effectSummary || '工程回响正在积累。'} · ${this.formatEngineeringProgress(track)}`;
     }
     return `工程收益：推进${track.name}${track.active ? ` ${track.tierLabel}` : ''} · ${track.effectSummary} · 当前已达最高工事阶`;
   }
@@ -1858,7 +1871,7 @@ export class GameMap {
     }
     const archetype = this.getPreferredArchetypeId(player);
     if (archetype) {
-      tags.push(`构筑·${this.formatTagLabel(archetype)}`);
+      tags.push(`构筑·${this.formatArchetypeLabel(archetype)}`);
     }
     if (expeditionPayload?.selectedBranchName) {
       tags.push(`路线·${this.formatTagLabel(expeditionPayload.selectedBranchName)}`);

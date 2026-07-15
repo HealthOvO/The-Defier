@@ -25,7 +25,7 @@ const seasonOpsCss = read("css/season-ops.css");
   "renderRelayExpeditionWorkspace(context)",
   "getRelayPreviousSessions()",
   "previousSessions",
-  "共享路线，不共享残血牌组",
+  "只共享路线、棒次与权威摘要，不转移战斗状态。",
   "接棒并进入权威试炼",
   "RelayExpeditionService.createSession",
   "RelayExpeditionService.claimLeg",

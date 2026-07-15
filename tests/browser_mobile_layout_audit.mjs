@@ -46,7 +46,7 @@ function add(name, pass, detail = '') {
   await page.goto(url, { waitUntil: 'domcontentloaded' });
   await page.waitForTimeout(1200);
 
-  const probe = await page.evaluate(() => {
+  const probe = await page.evaluate(async () => {
     ['auth-modal', 'save-slots-modal', 'generic-confirm-modal', 'save-conflict-modal', 'reward-modal', 'endless-boon-modal'].forEach((id) => {
       const el = document.getElementById(id);
       if (!el) return;
@@ -143,6 +143,10 @@ function add(name, pass, detail = '') {
     const battleLoopRail = document.querySelector('#battle-command-panel [data-core-loop-rail="battle"]');
     const battleLoopRailRect = rectObj(battleLoopRail);
     const battleLoopText = battleLoopRail?.textContent?.replace(/\s+/g, ' ').trim() || '';
+    const visibleShortcutHints = Array.from(document.querySelectorAll('#battle-screen *'))
+      .filter((el) => el.childElementCount === 0 && isVisible(el))
+      .map((el) => (el.textContent || '').replace(/\s+/g, ' ').trim())
+      .filter((text) => /按\s*[A-Z]|快捷预设/.test(text));
     const metaStrips = Array.from(document.querySelectorAll('.enemy .enemy-meta-strip'));
     const handCards = Array.from(document.querySelectorAll('#hand-cards .card')).slice(0, 3);
     const handCardRects = handCards.map((el) => rectObj(el));
@@ -245,7 +249,44 @@ function add(name, pass, detail = '') {
     }
     const expandedRailRect = rectObj(controlRail);
     const expandedCommandRect = rectObj(command);
-    const bossHiddenWhileAdvisorExpanded = !isVisible(boss);
+    const expandedEnvironmentRect = isVisible(environment) ? rectObj(environment) : null;
+    const expandedBossRect = isVisible(boss) ? rectObj(boss) : null;
+    const expandedAdvisor = document.querySelector('#battle-command-panel .battle-tactical-advisor');
+    const expandedAdvisorDetails = expandedAdvisor?.querySelector('.battle-advisor-details');
+    const expandedAdvisorDetailsSummary = expandedAdvisorDetails?.querySelector('summary') || null;
+    const advisorDetailsSummaryRect = expandedAdvisorDetailsSummary ? rectObj(expandedAdvisorDetailsSummary) : null;
+    const advisorDetailsSummaryTopHit = isTopHit(expandedAdvisorDetailsSummary);
+    const expandedAdvisorText = (expandedAdvisor?.textContent || '').replace(/\s+/g, ' ').trim();
+    const expandedVisibleRailChildren = controlRail
+      ? Array.from(controlRail.children).filter((el) => isVisible(el))
+      : [];
+    const expandedRailChildRects = expandedVisibleRailChildren.map((el) => ({ id: el.id, rect: rectObj(el) }));
+    const expandedRailChildrenOverlap = expandedRailChildRects.some((entry, index) => expandedRailChildRects
+      .slice(index + 1)
+      .some((other) => overlaps(entry.rect, other.rect, 0)));
+    const decisionContextRetained = !!expandedEnvironmentRect && (!bossVisible || !!expandedBossRect);
+    const advisorDetailsCollapsed = !!expandedAdvisorDetails && !expandedAdvisorDetails.open;
+    const primaryAdviceVisible = /建议回路/.test(expandedAdvisorText) && /更多战术数据/.test(expandedAdvisorText);
+    let advisorDetailsOpened = false;
+    let advisorDetailsPersistedAfterRefresh = false;
+    if (expandedAdvisorDetails) {
+      if (expandedAdvisorDetailsSummary && typeof expandedAdvisorDetailsSummary.click === 'function') expandedAdvisorDetailsSummary.click();
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      advisorDetailsOpened = expandedAdvisorDetails.open;
+      if (window.game?.battle && typeof game.battle.markUIDirty === 'function' && typeof game.battle.updateBattleUI === 'function') {
+        game.battle.markUIDirty('command');
+        game.battle.updateBattleUI();
+      }
+      const refreshedDetails = document.querySelector('#battle-command-panel .battle-advisor-details');
+      advisorDetailsPersistedAfterRefresh = !!refreshedDetails
+        && refreshedDetails.open
+        && game.battle.tacticalAdvisorDetailsExpanded === true;
+      if (refreshedDetails) {
+        const refreshedSummary = refreshedDetails.querySelector('summary');
+        if (refreshedSummary && typeof refreshedSummary.click === 'function') refreshedSummary.click();
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+      }
+    }
     const restoreToggle = document.querySelector('#battle-command-panel .battle-advisor-toggle');
     if (restoreToggle && typeof restoreToggle.click === 'function') {
       restoreToggle.click();
@@ -281,10 +322,21 @@ function add(name, pass, detail = '') {
       command: expandedCommandRect,
       battleLoopRail: battleLoopRailRect,
       battleLoopText,
+      visibleShortcutHints,
       boss: rectObj(boss),
       collapsedBoss: collapsedBossRect,
       bossVisible,
-      bossHiddenWhileAdvisorExpanded,
+      expandedBoss: expandedBossRect,
+      expandedEnvironment: expandedEnvironmentRect,
+      expandedRailChildRects,
+      expandedRailChildrenOverlap,
+      decisionContextRetained,
+      advisorDetailsCollapsed,
+      advisorDetailsSummaryRect,
+      advisorDetailsSummaryTopHit,
+      advisorDetailsOpened,
+      advisorDetailsPersistedAfterRefresh,
+      primaryAdviceVisible,
       advisorCollapsedAfterRestore,
       contextRestoredAfterCollapse,
       hand: rectObj(hand),
@@ -315,6 +367,7 @@ function add(name, pass, detail = '') {
         !!battleLoopRailRect &&
         battleLoopRailRect.width > 0 &&
         battleLoopRailRect.height > 0 &&
+        visibleShortcutHints.length === 0 &&
         /胜利后进入战利结算，再回章节地图/.test(battleLoopText) &&
         controlRailRect.left >= 4 &&
         controlRailRect.right <= window.innerWidth - 4 &&
@@ -334,8 +387,19 @@ function add(name, pass, detail = '') {
         collapsedCommandRect.top >= controlRailRect.top - 1 &&
         collapsedCommandRect.bottom <= controlRailRect.bottom + 1 &&
         !!expandedCommandRect &&
-        expandedCommandRect.height <= 160 &&
+        expandedCommandRect.height >= 190 &&
+        expandedCommandRect.height <= 270 &&
         expandedCommandRect.bottom <= expandedRailRect.bottom + 1 &&
+        !expandedRailChildrenOverlap &&
+        decisionContextRetained &&
+        advisorDetailsCollapsed &&
+        !!advisorDetailsSummaryRect &&
+        advisorDetailsSummaryRect.width >= 44 &&
+        advisorDetailsSummaryRect.height >= 44 &&
+        advisorDetailsSummaryTopHit &&
+        advisorDetailsOpened &&
+        advisorDetailsPersistedAfterRefresh &&
+        primaryAdviceVisible &&
         battleLoopRailRect.left >= 0 &&
         battleLoopRailRect.right <= window.innerWidth &&
         battleLoopRailRect.bottom <= collapsedCommandRect.bottom + 2 &&
@@ -347,7 +411,8 @@ function add(name, pass, detail = '') {
           collapsedBossRect.height <= 52 &&
           collapsedBossRect.top >= controlRailRect.top - 1 &&
           collapsedBossRect.bottom <= controlRailRect.bottom + 1 &&
-          bossHiddenWhileAdvisorExpanded
+          !!expandedBossRect &&
+          expandedBossRect.height <= 46
         )) &&
         rectObj(endTurn).top >= (collapsedBossRect?.top || 0) &&
         rectObj(endTurn).bottom <= rectObj(hand).top + 28 &&
@@ -647,6 +712,8 @@ function add(name, pass, detail = '') {
   const expeditionPanelsProbe = await page.evaluate(() => {
     const panels = document.getElementById('map-expedition-panels');
     const drawer = document.getElementById('map-intel-drawer');
+    const mapScroller = document.getElementById('map-scroll-container');
+    const currentRouteRow = document.querySelector('#map-screen .node-row-v3[data-current-route="true"]');
     const root = document.documentElement;
     const isVisible = (el) => {
       if (!el) return false;
@@ -739,6 +806,17 @@ function add(name, pass, detail = '') {
     } : rectObj(panels);
     const panelVisible = visualCards.some((entry) => visibleRatio(entry.rect) > 0);
     const drawerRect = rectObj(drawer);
+    const mapPreviewRect = rectObj(mapScroller);
+    const currentRouteRect = rectObj(currentRouteRow);
+    const currentRouteCenterVisible = !!mapPreviewRect
+      && !!currentRouteRect
+      && currentRouteRect.top + currentRouteRect.height / 2 >= mapPreviewRect.top
+      && currentRouteRect.top + currentRouteRect.height / 2 <= mapPreviewRect.bottom;
+    const mapPreviewContextOk = isVisible(mapScroller)
+      && !!mapPreviewRect
+      && mapPreviewRect.height >= 160
+      && currentRouteCenterVisible
+      && getComputedStyle(mapScroller).pointerEvents === 'none';
     const firstCardRect = firstVisualCard?.rect || null;
     const headerRect = rectObj(document.querySelector('#map-screen .map-v3-header'));
     const textReadabilityProbes = cards.slice(0, 4).flatMap((card) => {
@@ -835,6 +913,10 @@ function add(name, pass, detail = '') {
       panelVisible,
       drawerVisible: isVisible(drawer),
       drawerRect,
+      mapPreviewRect,
+      currentRouteRect,
+      currentRouteCenterVisible,
+      mapPreviewContextOk,
       drawerScrollHeight: drawer?.scrollHeight || 0,
       drawerClientHeight: drawer?.clientHeight || 0,
       toolsExclusive,
@@ -868,6 +950,10 @@ function add(name, pass, detail = '') {
       actionSizeProbes,
       ok:
         isVisible(drawer) &&
+        mapPreviewContextOk &&
+        !!mapPreviewRect &&
+        !!drawerRect &&
+        drawerRect.top >= mapPreviewRect.bottom - 2 &&
         panelVisible &&
         initialPanelInViewport &&
         overlapArea(drawerRect, headerRect) <= 12 &&

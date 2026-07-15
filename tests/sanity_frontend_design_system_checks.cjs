@@ -7,6 +7,7 @@ const read = (relativePath) => fs.readFileSync(path.join(root, relativePath), 'u
 
 const designSystemCss = read('css/design-system.css');
 const frontendUpgradeCss = read('css/frontend-upgrade.css');
+const pvpCss = read('css/pvp.css');
 const indexHtml = read('index.html');
 const gameSource = read('js/game.js');
 const mapView = read('js/views/MapView.js');
@@ -14,6 +15,9 @@ const battleRuntime = read('js/core/battle.js');
 const characterSelectView = read('js/views/CharacterSelectView.js');
 const rewardView = read('js/views/RewardView.js');
 const systemView = read('js/views/SystemView.js');
+const eventView = read('js/views/EventView.js');
+const campfireView = read('js/views/CampfireView.js');
+const inventoryView = read('js/views/InventoryView.js');
 const uiGalleryAudit = read('tests/browser_ui_gallery_audit.mjs');
 const automationBootAudit = read('tests/browser_automation_boot_audit.mjs');
 const releaseCoverageChecks = read('tests/sanity_release_gate_coverage_checks.cjs');
@@ -61,6 +65,30 @@ assert.ok(characterSelectView.includes("?.setAttribute('aria-pressed'"), 'charac
 assert.ok(characterSelectView.includes('details class="char-story-panel"'), 'selected character detail should use progressive disclosure');
 assert.ok(rewardView.includes('reward-popup-content'), 'reward popup sizing should be CSS-owned');
 assert.ok(systemView.includes('system-prompt-content'), 'system prompt sizing should be CSS-owned');
+assert.ok(gameSource.includes('openModalWithFocus(modal'), 'modal openings should move focus into the active dialog');
+assert.ok(gameSource.includes('closeModalElement(modal'), 'modal closures should restore the invoking control');
+assert.ok(gameSource.includes("event.key !== 'Tab'"), 'shared modal focus handling should keep keyboard focus inside the active dialog');
+assert.ok(systemView.includes("openModalWithFocus(modal, '.modal-close')"), 'the game guide should use shared modal focus handling');
+assert.ok(systemView.includes("openModalWithFocus(modal, '#auth-username')"), 'authentication should focus its first field');
+assert.ok(systemView.includes("openModalWithFocus(modal, '[data-system-action=\"select-slot\"]')"), 'save-slot selection should focus its first action');
+assert.ok(eventView.includes("openModalWithFocus(modal, '.event-choice:not(.disabled)')"), 'event choices should use shared modal focus handling');
+assert.ok(eventView.includes("openModalWithFocus(modal, '.event-upgrade-list [role=\"button\"]')"), 'event card upgrades should focus the first selectable card');
+assert.ok(campfireView.includes("openModalWithFocus(modal, '.event-choice:not(.disabled)')"), 'campfire choices should use shared modal focus handling');
+assert.ok(campfireView.includes("openModalWithFocus(modal, '.upgrade-card-grid [role=\"button\"]')"), 'campfire upgrades should focus the first selectable card');
+assert.ok(campfireView.includes("openModalWithFocus(modal, '.purification-card-wrapper')"), 'campfire purification should focus the first selectable card');
+assert.ok(inventoryView.includes('openModalWithFocus(modal, \'[data-inventory-action="close-treasure-bag"]\')'), 'treasure bag should use shared modal focus handling');
+assert.ok(gameSource.includes('<details class="shop-advice-details">'), 'live shop renderer should collapse secondary budget guidance');
+assert.ok(read('js/views/ShopView.js').includes('<details class="shop-advice-details">'), 'shop view module should mirror the live progressive-disclosure structure');
+assert.ok(indexHtml.includes('class="compendium-advanced-filters"'), 'treasure compendium should collapse secondary filters and presets');
+assert.match(frontendUpgradeCss, /#treasure-compendium \.compendium-grid \{[\s\S]*grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/, 'mobile treasure compendium should keep cards in a compact two-column grid');
+assert.match(frontendUpgradeCss, /#reward-screen \.reward-cards \{[\s\S]*display: grid;[\s\S]*scroll-snap-type: none;/, 'compact landscape rewards should override the mobile horizontal rail');
+assert.match(frontendUpgradeCss, /#event-modal\.active::before,[\s\S]*#event-modal\.active::after \{[\s\S]*min-height: 8px;/, 'compact landscape event frames should fit inside the viewport gutters');
+assert.match(frontendUpgradeCss, /#event-modal \.event-choices \{[\s\S]*grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/, 'compact landscape event choices should remain comparable in two columns');
+assert.match(frontendUpgradeCss, /@media \(min-width: 560px\) and \(max-width: 1180px\) and \(max-height: 560px\)/, 'battle should define a compact landscape composition for narrow phones and tablets');
+assert.match(frontendUpgradeCss, /\.battle-control-rail \.battle-command-list[\s\S]*grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/, 'compact battle commands should wrap into two columns instead of clipping horizontally');
+assert.match(frontendUpgradeCss, /@media \(min-width: 560px\) and \(max-width: 768px\) and \(max-height: 520px\)/, 'map should define a compact landscape composition');
+assert.match(pvpCss, /@media \(min-width: 769px\) and \(max-width: 960px\) and \(max-height: 560px\)/, 'PVP should define a compact landscape composition');
+assert.match(pvpCss, /\.pvp-content-container > \.pvp-tab-pane\.active[\s\S]*overflow-y: auto/, 'every compact PVP tab should remain independently scrollable');
 
 [
   '__THE_DEFIER_BOOT_CLICK_STATE__',

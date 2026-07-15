@@ -20,7 +20,7 @@ const collectionHubMethods = Object.create(null);
   const SECTION_META = {
     laws: {
       title: '藏经阁 · 法则图鉴',
-      subtitle: '补齐法则与共鸣链，把命环装配、命途样本与下一轮路线对成同一份档案。'
+      subtitle: '补齐法则与共鸣链，把命环装配、命途战录与下一轮路线对成同一份档案。'
     },
     spirits: {
       title: '藏经阁 · 灵契图鉴',
@@ -4010,8 +4010,8 @@ const collectionHubMethods = Object.create(null);
       const ratingTone = normalizeRatingTone(answerReview?.ratingTone || trainingFocus?.ratingTone || (answerReview?.trainingAdvice ? 'selected' : 'idle'));
       const trainingAdvice = String(trainingFocus?.trainingAdvice || answerReview?.trainingAdvice || extractTagValue(entry.scoreBreakdown, '训练建议：') || '').trim();
       const highlightLine = String(trainingFocus?.highlightLine || answerReview?.highlightLine || answerReview?.overviewLine || extractTagValue(entry.scoreBreakdown, '回响结论：') || '').trim();
-      const routeFocusLine = String(trainingFocus?.routeFocusLine || extractTagValue(entry.scoreBreakdown, '样本路径：') || '').trim();
-      const sourceTitle = String(trainingFocus?.sourceTitle || answerReview?.topicTitle || extractTagValue(entry.scoreBreakdown, '课题样本：') || extractTagValue(entry.scoreBreakdown, '观星线索：') || '').trim();
+      const routeFocusLine = String(trainingFocus?.routeFocusLine || extractTagValue(entry.scoreBreakdown, '路线指引：') || extractTagValue(entry.scoreBreakdown, '样本路径：') || '').trim();
+      const sourceTitle = String(trainingFocus?.sourceTitle || answerReview?.topicTitle || extractTagValue(entry.scoreBreakdown, '修行课题：') || extractTagValue(entry.scoreBreakdown, '课题样本：') || extractTagValue(entry.scoreBreakdown, '观星线索：') || '').trim();
       const goalHighlights = toStringArray(trainingFocus?.goalHighlights && trainingFocus.goalHighlights.length > 0 ? trainingFocus.goalHighlights : answerReview?.goalHighlights, 3);
       const trainingTags = (() => {
         const focusTags = toStringArray(trainingFocus?.trainingTags, 4);
@@ -4584,7 +4584,7 @@ const collectionHubMethods = Object.create(null);
         goalProgressText: '等待周循环接入',
         summaryLine: '天道敕令尚未启封，洞府会在这里留出本周题面与外层考校。',
         detailLine: '待周循环板接入后，会同步当前敕令、风险倾向与本周刻印。',
-        guideLine: '若周循环板尚未启封，可先按当前议程、命盘与样本节奏照常推进。',
+        guideLine: '若周循环板尚未启封，可先按当前议程、命盘与路线节奏照常推进。',
         completedTaskCount: 0,
         totalTaskCount: 0,
         lanes: [],
@@ -4694,7 +4694,7 @@ const collectionHubMethods = Object.create(null);
       const goalProgressText = activeGoal?.progressText || `已入卷 ${completedGoals}/${Math.max(1, goals.length)} 重刻印`;
       const summaryLine = `天道敕令：${weekTag || weekLabel} · 当前轮转「${directiveName}」`;
       const detailLine = directiveDesc ? `${seasonName}当前偏向 ${directiveRiskLabel} 路数，由${selectionModeLabel}挂题：${directiveDesc}` : `${seasonName}已挂出本周题面，当前刻印进度为 ${goalTierLabel}。`;
-      const guideLine = activeGoal ? `本周刻印：${activeGoal.title || '留痕校卷'} · ${goalProgressText}，适合先按敕令方向校命盘与样本节奏。` : `天道敕令已入卷 ${goalTierLabel}，可继续用更高压的轮转补稳定样本。`;
+      const guideLine = activeGoal ? `本周刻印：${activeGoal.title || '留痕校卷'} · ${goalProgressText}，适合先按敕令方向校命盘与路线节奏。` : `天道敕令已入卷 ${goalTierLabel}，可继续用更高压的轮转补稳定战录。`;
       return {
         available: true,
         source: 'season',
@@ -6203,8 +6203,8 @@ const collectionHubMethods = Object.create(null);
                         <p>${escapeHtml(selected.trainingAdvice || '当前这份答卷还没有生成训练建议，先去完成带训练提示的章节答卷。')}</p>
                     </section>
                     <section class="collection-detail-card">
-                        <span class="detail-mini-label">样本路径</span>
-                        <p>${escapeHtml(selected.routeFocusLine || '这份归卷暂未留下样本路径，后续可在观星台继续补路线样本。')}</p>
+                        <span class="detail-mini-label">路线指引</span>
+                        <p>${escapeHtml(selected.routeFocusLine || '这份归卷暂未留下路线指引，后续可在观星台继续补齐路线记录。')}</p>
                         ${selected.compareHint ? `<p class="collection-muted">${escapeHtml(`对照抓手：${selected.compareHint}`)}</p>` : ''}
                     </section>
                     <section class="collection-detail-card">

@@ -6,6 +6,7 @@ export const WORLD_RIFT_SQUAD_PROTOCOL_VERSION = 'world-rift-squad-v1';
 export const RELAY_EXPEDITION_PROTOCOL_VERSION = 'relay-expedition-v1';
 export const FATE_CHRONICLE_PROTOCOL_VERSION = 'authoritative-fate-chronicle-v1';
 export const WEEKLY_ARCHIVE_PROTOCOL_VERSION = 'weekly-archive-v1';
+export const AUTH_EXPIRED_EVENT = 'the-defier-auth-expired';
 const DEVICE_STORAGE_KEY = 'theDefierDeviceIdV1';
 const AUTHORITATIVE_RUN_SAFE_ID = /^[A-Za-z0-9._:-]{8,128}$/;
 const AUTHORITATIVE_RUN_ENTITY_ID = /^[A-Za-z0-9._:-]{1,128}$/;
@@ -355,6 +356,21 @@ export const BackendClient = {
     this.persistServerSession(null);
     this.currentUser = null;
   },
+  expireServerSession(requestAuthToken = '') {
+    const activeSession = this.loadServerSession();
+    const activeToken = String(activeSession && activeSession.token || '');
+    const rejectedToken = String(requestAuthToken || '');
+    if (!activeToken || !rejectedToken || activeToken !== rejectedToken) return false;
+    const expiredUserId = String(activeSession && activeSession.user && (activeSession.user.objectId || activeSession.user.id || activeSession.user.userId) || '');
+    this.clearServerSession();
+    const root = typeof globalThis !== 'undefined' ? globalThis : null;
+    if (root && typeof root.dispatchEvent === 'function' && typeof root.CustomEvent === 'function') {
+      root.dispatchEvent(new root.CustomEvent(AUTH_EXPIRED_EVENT, {
+        detail: { userId: expiredUserId }
+      }));
+    }
+    return true;
+  },
   async runWithTimeout(task, timeoutMs = this.REQUEST_TIMEOUT_MS) {
     return await Promise.race([Promise.resolve().then(task), new Promise((_, reject) => {
       setTimeout(() => reject(this.createError('network-timeout')), timeoutMs);
@@ -446,6 +462,9 @@ export const BackendClient = {
       payload = await response.json();
     } catch (error) {
       payload = null;
+    }
+    if (auth && response && response.status === 401 && requestAuthToken) {
+      this.expireServerSession(requestAuthToken);
     }
     if (response && response.ok) {
       return payload;

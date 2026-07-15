@@ -2,6 +2,7 @@ import { AuthoritativeRunService } from "../services/authoritative-run-service.j
 import { ChallengeLadderService } from "../services/challenge-ladder-service.js";
 import { WorldRiftService } from "../services/world-rift-service.js";
 import { buildDataAttributes, escapeHtml } from "../ui/render-safe.js";
+import { safePlayerMessage } from "../ui/player-message.js";
 
 const MODES = ["pve", "challenge", "expedition", "challenge_ladder", "world_rift", "relay_expedition", "fate_chronicle"];
 const FOCUS_KEYS = Object.freeze({
@@ -1428,7 +1429,7 @@ export class AuthoritativeRunPanel {
   }
 
   renderErrorCard(error = null) {
-    const message = normalizeText(error && error.message, "天道试炼读取失败。");
+    const message = safePlayerMessage(error, "天道试炼读取失败，请稍后重试。");
     return `
       <div class="season-ops-state-panel season-ops-authoritative-state" role="alert" aria-live="assertive">
         <div class="season-ops-state-kicker">天道试炼</div>
@@ -1681,9 +1682,10 @@ export class AuthoritativeRunPanel {
 
   renderStatusBanner(error = null) {
     if (!error || !error.message) return "";
+    const message = safePlayerMessage(error, "当前战局暂时无法同步，请稍后重试。");
     return `
       <div class="season-ops-notice tone-danger" role="alert" aria-live="assertive">
-        ${escapeHtml(error.message)}
+        ${escapeHtml(message)}
       </div>
     `;
   }

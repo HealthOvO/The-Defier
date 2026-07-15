@@ -1,6 +1,7 @@
 import { AuthService } from '../services/authService.js';
-import { BackendClient } from '../services/backend-client.js';
+import { AUTH_EXPIRED_EVENT, BackendClient } from '../services/backend-client.js';
 import { RelayExpeditionService } from '../services/relay-expedition-service.js';
+import { safePlayerMessage } from '../ui/player-message.js';
 
 export function loadSocialViewStyles() {
   if (typeof import.meta.env !== 'object') return Promise.resolve();
@@ -56,6 +57,24 @@ function displayName(entry) {
   return String(entry && (entry.displayName || entry.userName || entry.username || entry.name || entry.profile?.displayName) || '无名道友');
 }
 
+function isSessionExpiredResult(result) {
+  if (!result || result.success !== false) return false;
+  const code = Number(result.error?.code ?? result.code ?? result.status);
+  const reason = String(result.reason || result.error?.reason || '').toLowerCase();
+  const message = String(result.message || result.error?.message || '').toLowerCase();
+  return code === 401
+    || reason.includes('auth_expired')
+    || reason.includes('session_expired')
+    || message === '未登录'
+    || message.includes('unauthorized')
+    || (!AuthService.isLoggedIn() && Boolean(result.error));
+}
+
+function safeSocialMessage(source, fallback = '操作未完成，请稍后再试') {
+  if (isSessionExpiredResult(source)) return '登录状态已过期，请重新登录';
+  return safePlayerMessage(source, fallback, { maxLength: 96 });
+}
+
 export class SocialView {
   constructor(game) {
     this.game = game;
@@ -68,6 +87,8 @@ export class SocialView {
     this.bound = false;
     this.presenceTimer = null;
     this.relayTacticSelections = new Map();
+    this.authExpired = false;
+    this.boundAuthExpired = null;
   }
 
   async show(tab = 'friends') {
@@ -108,6 +129,8 @@ export class SocialView {
       event.preventDefault();
       this.handleForm(form.dataset.socialForm, new FormData(form));
     });
+    this.boundAuthExpired = () => this.handleSessionExpired();
+    window.addEventListener(AUTH_EXPIRED_EVENT, this.boundAuthExpired);
   }
 
   syncTabs() {
@@ -129,8 +152,13 @@ export class SocialView {
       BackendClient.getSocialDashboard({ expectedUserId }),
       this.refreshRelay({ expectedUserId, render: false })
     ]);
+    if (isSessionExpiredResult(result) || isSessionExpiredResult(relayResult)) {
+      this.handleSessionExpired();
+      return;
+    }
     if (result && result.success !== false) {
       this.dashboard = result;
+      this.authExpired = false;
     } else if (result && result.reason === 'account_social_account_changed') {
       this.dashboard = null;
       this.security = null;
@@ -140,12 +168,16 @@ export class SocialView {
       this.relayTacticSelections.clear();
     }
     if (this.tab === 'security') await this.refreshSecurity(false);
-    this.render(result && result.success === false ? result.message : '');
+    this.render(result && result.success === false ? safeSocialMessage(result, '道友录暂时无法同步，请稍后重试') : '');
   }
 
   async refreshSecurity(render = true) {
     const expectedUserId = AuthService.getUserIdentity(AuthService.getCurrentUser());
     const result = await AuthService.getSecurityOverview({ expectedUserId });
+    if (isSessionExpiredResult(result)) {
+      this.handleSessionExpired();
+      return;
+    }
     if (result && result.success !== false) {
       this.security = result;
     } else if (result && result.reason === 'account_social_account_changed') {
@@ -153,7 +185,7 @@ export class SocialView {
       this.security = null;
       this.searchResult = null;
     }
-    if (render) this.render(result && result.success === false ? result.message : '');
+    if (render) this.render(result && result.success === false ? safeSocialMessage(result, '账号安全状态暂时无法同步，请稍后重试') : '');
   }
 
   startPresence() {
@@ -169,17 +201,42 @@ export class SocialView {
     this.presenceTimer = window.setInterval(heartbeat, 45000);
   }
 
+  stopPresence() {
+    if (!this.presenceTimer) return;
+    window.clearInterval(this.presenceTimer);
+    this.presenceTimer = null;
+  }
+
+  handleSessionExpired({ openLogin = true } = {}) {
+    if (this.authExpired) return;
+    this.authExpired = true;
+    this.dashboard = null;
+    this.security = null;
+    this.searchResult = null;
+    this.relayTacticSelections.clear();
+    this.stopPresence();
+    const content = document.getElementById('social-content');
+    if (content) {
+      content.innerHTML = `<div class="social-empty error social-session-expired"><strong>登录状态已过期</strong><span>为保护账号，旧会话已结束。重新登录后可继续使用道友录。</span><button type="button" data-social-action="login">重新登录</button></div>`;
+    }
+    const status = document.getElementById('social-status');
+    if (status) status.textContent = '';
+    if (this.game && typeof this.game.checkLoginStatus === 'function') this.game.checkLoginStatus();
+    if (openLogin && this.game && typeof this.game.showLoginModal === 'function') this.game.showLoginModal();
+  }
+
   render(errorMessage = '') {
     const content = document.getElementById('social-content');
     if (!content) return;
-    if (errorMessage && !this.dashboard && this.tab !== 'security') {
-      content.innerHTML = `<div class="social-empty error">${escapeHtml(errorMessage)}</div>`;
+    const visibleError = errorMessage ? safeSocialMessage(errorMessage, '道友录暂时无法同步，请稍后重试') : '';
+    if (visibleError && !this.dashboard && this.tab !== 'security') {
+      content.innerHTML = `<div class="social-empty error">${escapeHtml(visibleError)}</div>`;
       return;
     }
     if (this.tab === 'friends') content.innerHTML = this.renderFriends();
     if (this.tab === 'requests') content.innerHTML = this.renderRequests();
     if (this.tab === 'squad') content.innerHTML = this.renderSquad();
-    if (this.tab === 'security') content.innerHTML = this.renderSecurity(errorMessage);
+    if (this.tab === 'security') content.innerHTML = this.renderSecurity(visibleError);
   }
 
   getRoot() {
@@ -455,7 +512,7 @@ export class SocialView {
       return `<section class="social-section social-relay-workspace">
         <div class="social-section-heading">
           <div><h3>同道远征</h3><span>四棒共享路线</span></div>
-          <button type="button" class="icon-btn" title="刷新同道远征" data-social-action="relay-refresh">刷</button>
+          <button type="button" class="icon-btn" title="刷新同道远征" aria-label="刷新同道远征" data-social-action="relay-refresh">↻</button>
         </div>
         <div class="social-empty">需先结成本轮裂隙小队，才能开启同道远征。</div>
       </section>`;
@@ -465,7 +522,7 @@ export class SocialView {
       return `<section class="social-section social-relay-workspace">
         <div class="social-section-heading">
           <div><h3>同道远征</h3><span>${escapeHtml(rotation.title)}</span></div>
-          <button type="button" class="icon-btn" title="刷新同道远征" data-social-action="relay-refresh" disabled>刷</button>
+          <button type="button" class="icon-btn" title="刷新同道远征" aria-label="刷新同道远征" data-social-action="relay-refresh" disabled>↻</button>
         </div>
         <div class="social-empty">正在恢复共享路线与当前棒次...</div>
       </section>`;
@@ -499,26 +556,26 @@ export class SocialView {
           <span>${escapeHtml(this.getRelayWindowSummary(leg))}</span>
         </div>
       </div>
-      <div class="social-inline-note">队伍只共享路线、棒次和权威摘要；不会把上一棒的残血、手牌、弃牌堆或临时状态交给下一位。</div>
+      <div class="social-inline-note">只共享路线、棒次与权威摘要，不转移战斗状态。</div>
       ${this.renderRelayRouteGrid()}
       ${this.renderRelayTacticSelector(leg)}
       <div class="social-row-actions social-relay-actions">${actionButtons}</div>`
-      : `<div class="social-inline-note">${hasRewardSessions ? '当前没有进行中的共享路线；以下保留领奖窗口内的历史里程碑。' : '队伍只共享路线、棒次和权威摘要；不会把上一棒的残血、手牌、弃牌堆或临时状态交给下一位。'}</div>${actionButtons ? `<div class="social-row-actions social-relay-actions">${actionButtons}</div>` : ''}`;
+      : `<div class="social-inline-note">${hasRewardSessions ? '当前没有进行中的路线，以下保留可领奖记录。' : '只共享路线、棒次与权威摘要，不转移战斗状态。'}</div>${actionButtons ? `<div class="social-row-actions social-relay-actions">${actionButtons}</div>` : ''}`;
 
     return `<section class="social-section social-relay-workspace">
       <div class="social-section-heading">
         <div>
           <h3>同道远征</h3>
-          <span>${escapeHtml(rotation.title)} · 共享路线，不共享残血牌组</span>
+          <span>${escapeHtml(rotation.title)}</span>
         </div>
-        <button type="button" class="icon-btn" title="刷新同道远征" data-social-action="relay-refresh" ${relayPending ? 'disabled' : ''}>刷</button>
+        <button type="button" class="icon-btn" title="刷新同道远征" aria-label="刷新同道远征" data-social-action="relay-refresh" ${relayPending ? 'disabled' : ''}>↻</button>
       </div>
       ${relayError ? `<div class="social-search-result unavailable">${escapeHtml(relayError)}</div>` : ''}
       ${activeWorkspace}
       <div class="social-relay-rewards">
         <div class="social-relay-reward-copy">
           <strong>里程碑荣誉</strong>
-          <span>${hasRewardSessions ? '当前与仍在领奖窗的历史路线都会保留在此；仅真实投影成员可领取。' : '仅真实投影成员可领取，仅用于外观。'}</span>
+          <span>${hasRewardSessions ? '仅真实投影成员可领取，仅用于外观。' : '完成路线里程碑后可领取。'}</span>
         </div>
         ${rewardPanels}
       </div>
@@ -638,7 +695,7 @@ export class SocialView {
   renderSearchResult() {
     const result = this.searchResult;
     if (result.success === false || !value(result, 'profile', 'result')) {
-      return `<div class="social-search-result unavailable">${escapeHtml(result.message || '未找到可联系的道友')}</div>`;
+      return `<div class="social-search-result unavailable">${escapeHtml(safeSocialMessage(result, '未找到可联系的道友'))}</div>`;
     }
     const profile = value(result, 'profile', 'result');
     return `<div class="social-search-result"><div><span class="social-kicker">精确匹配</span><strong>${escapeHtml(displayName(profile))}</strong></div><button type="button" data-social-action="request" data-username="${escapeHtml(profile.username || profile.displayName || '')}">发送道友信</button></div>`;
@@ -664,9 +721,29 @@ export class SocialView {
     const members = list(squad, 'members');
     const score = Number(value(squad, 'cooperativeScore', 'score') || 0);
     const memberRows = members.map(member => `<div class="social-member"><strong>${escapeHtml(displayName(member))}</strong><span>${Number(member.bestContribution || member.contribution || 0) > 0 ? `真实贡献 ${Number(member.bestContribution || member.contribution)}` : '尚无贡献'}</span></div>`).join('');
-    const rewards = list(current, 'milestones', 'rewards').map(reward => `<button type="button" class="${reward.claimable ? '' : 'secondary'}" data-social-action="squad-claim" data-milestone-id="${escapeHtml(reward.milestoneId || reward.id)}" ${reward.claimable ? '' : 'disabled'}>${reward.claimed ? '已领取' : `${Number(reward.reward?.amount || reward.amount || 0)} 荣誉`}</button>`).join('');
+    const milestoneRewards = list(current, 'milestones', 'rewards');
+    const claimableRewards = milestoneRewards.filter(reward => reward.claimable && !reward.claimed)
+      .map(reward => `<button type="button" data-social-action="squad-claim" data-milestone-id="${escapeHtml(reward.milestoneId || reward.id)}">领取 ${Number(reward.reward?.amount || reward.amount || 0)} 荣誉</button>`).join('');
+    const claimedRewardCount = milestoneRewards.filter(reward => reward.claimed).length;
     const locked = Number(value(current, 'membership.lockedAt') || 0) > 0;
-    return `<section class="social-section social-squad-summary"><span class="social-kicker">本轮协作分</span><div class="social-score"><strong>${score}</strong><span>/ 9600</span></div><p>${members.length}/4 位成员 · 每人仅取最佳一次真实贡献</p><div class="social-members">${memberRows}</div><div class="social-rewards">${rewards}</div><button type="button" class="danger" data-social-action="squad-leave" ${locked ? 'disabled' : ''}>${locked ? '已有贡献，本轮归属已锁定' : '退出小队'}</button></section>${this.renderRelayExpeditionWorkspace(context)}<section class="social-section"><div class="social-section-heading"><h3>待处理邀请</h3><span>${invites.length}</span></div>${inviteRows || '<div class="social-empty">当前没有其他小队邀请。</div>'}</section>`;
+    return `<section class="social-section social-squad-summary social-squad-compact">
+      <div class="social-squad-overview">
+        <div>
+          <span class="social-kicker">本轮协作分</span>
+          <div class="social-score"><strong>${score}</strong><span>/ 9600</span></div>
+          <p>${members.length}/4 位成员 · 每人仅取最佳一次真实贡献</p>
+        </div>
+        <div class="social-squad-actions">
+          ${claimableRewards}
+          ${claimedRewardCount > 0 ? `<span class="social-status-chip">${claimedRewardCount} 项已领取</span>` : ''}
+          ${locked ? '<span class="social-status-chip is-locked">本轮归属已锁定</span>' : '<button type="button" class="danger" data-social-action="squad-leave">退出小队</button>'}
+        </div>
+      </div>
+      <details class="social-squad-roster">
+        <summary><span>小队成员</span><strong>${members.length}/4</strong></summary>
+        <div class="social-members">${memberRows}</div>
+      </details>
+    </section>${this.renderRelayExpeditionWorkspace(context)}<section class="social-section"><div class="social-section-heading"><h3>待处理邀请</h3><span>${invites.length}</span></div>${inviteRows || '<div class="social-empty">当前没有其他小队邀请。</div>'}</section>`;
   }
 
   renderSecurity(errorMessage = '') {
@@ -684,6 +761,7 @@ export class SocialView {
       this.busy = true;
       this.searchResult = await BackendClient.searchSocialProfile(String(data.get('username') || ''));
       this.busy = false;
+      if (isSessionExpiredResult(this.searchResult)) return this.handleSessionExpired();
       this.render();
       return;
     }
@@ -697,6 +775,10 @@ export class SocialView {
   }
 
   async handleAction(action, data) {
+    if (action === 'login') {
+      this.game?.showLoginModal?.();
+      return;
+    }
     if (action === 'relay-select-tactic') {
       this.setRelaySelectedTactic(this.getRelayCurrentLeg(), data.tacticId);
       this.render();
@@ -808,7 +890,7 @@ export class SocialView {
         if (gameRef && typeof gameRef.resumeAfterAuthLogoutFailure === 'function') {
           await gameRef.resumeAfterAuthLogoutFailure();
         }
-        this.notice(result && result.message || '全端退出失败', true);
+        this.notice(safeSocialMessage(result, '全端退出失败，请稍后再试'), true);
       }
     }
   }
@@ -827,7 +909,11 @@ export class SocialView {
     try {
       const result = await task();
       if (!result || result.success === false) {
-        this.notice(result && result.message || '操作未完成', true);
+        if (isSessionExpiredResult(result)) {
+          this.handleSessionExpired();
+          return result;
+        }
+        this.notice(safeSocialMessage(result, '操作未完成，请稍后再试'), true);
         return result;
       }
       await this.refresh();
@@ -842,10 +928,11 @@ export class SocialView {
   notice(message, error = false) {
     const status = document.getElementById('social-status');
     if (!status) return;
-    status.textContent = String(message || '');
+    const visibleMessage = error ? safeSocialMessage(message, '操作未完成，请稍后再试') : String(message || '');
+    status.textContent = visibleMessage;
     status.classList.toggle('error', error);
     window.setTimeout(() => {
-      if (status.textContent === message) status.textContent = '';
+      if (status.textContent === visibleMessage) status.textContent = '';
     }, 3600);
   }
 }

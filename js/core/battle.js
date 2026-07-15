@@ -30,6 +30,7 @@ export class Battle {
     this.squadRewardConsumed = false;
     this.commandState = this.createDefaultBattleCommandState();
     this.tacticalAdvisorCollapsed = true;
+    this.tacticalAdvisorDetailsExpanded = false;
     this.tacticalAdvisorHoverExpanded = false;
     this.tacticalAdvisorHoverLocked = false;
     this.activeSquadEcology = null;
@@ -759,6 +760,7 @@ export class Battle {
     this.squadRewardConsumed = false;
     this.commandState = this.createDefaultBattleCommandState();
     this.tacticalAdvisorCollapsed = true;
+    this.tacticalAdvisorDetailsExpanded = false;
     this.activeSquadEcology = null;
     this.turnAdvisorTelemetry = null;
     if (this.advisorFocusTimer) {
@@ -4793,6 +4795,7 @@ export class Battle {
     this.encounterRewardConsumed = false;
     this.lastPlayerCardSnapshot = null;
     this.tacticalAdvisorCollapsed = true;
+    this.tacticalAdvisorDetailsExpanded = false;
     this.installBattlePlayerHooks();
 
     // --- P1 机制：解析残影 (Ghost) 行为库 ---
@@ -9074,7 +9077,7 @@ export class Battle {
     advisor.classList.toggle('hover-expanded', !!this.tacticalAdvisorHoverExpanded);
     const compactHud = this.shouldUseCompactBattleHud();
     const viewportHeight = typeof window !== 'undefined' ? Math.max(0, Number(window.innerHeight) || 0) : 0;
-    const expandedMaxHeight = compactHud ? Math.min(240, Math.max(140, viewportHeight * 0.26)) : Math.min(220, Math.max(120, viewportHeight * 0.28));
+    const expandedMaxHeight = compactHud ? Math.min(184, Math.max(136, viewportHeight * 0.22)) : Math.min(220, Math.max(120, viewportHeight * 0.28));
     advisor.style.maxHeight = expanded ? `${Math.round(expandedMaxHeight)}px` : `${compactHud ? 34 : 38}px`;
     advisor.style.overflowY = expanded ? 'auto' : 'hidden';
     const body = advisor.querySelector('.battle-advisor-body');
@@ -9386,6 +9389,7 @@ export class Battle {
       systems,
       advisor,
       advisorExpanded,
+      advisorDetailsExpanded: this.tacticalAdvisorDetailsExpanded,
       loop: this.resolveBattleCoreLoopContext()
     });
     if (typeof panel.querySelector !== 'function') return;
@@ -9403,6 +9407,12 @@ export class Battle {
     if (advisorEl) {
       advisorEl.onmouseenter = null;
       advisorEl.onmouseleave = null;
+    }
+    const advisorDetails = panel.querySelector('.battle-advisor-details');
+    if (advisorDetails) {
+      advisorDetails.ontoggle = () => {
+        this.tacticalAdvisorDetailsExpanded = advisorDetails.open;
+      };
     }
     panel.onmouseenter = null;
     panel.onmouseleave = null;

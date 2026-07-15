@@ -4,6 +4,7 @@ import { createAuthoritativeRunService } from "../services/authoritative-run-ser
 import { FateChronicleService } from "../services/fate-chronicle-service.js";
 import { AuthoritativeRunPanel } from "./AuthoritativeRunPanel.js";
 import { buildDataAttributes, escapeHtml } from "../ui/render-safe.js";
+import { safePlayerMessage } from "../ui/player-message.js";
 
 export function loadFateChronicleStyles() {
   if (typeof import.meta.env !== "object") return Promise.resolve();
@@ -794,14 +795,14 @@ export class FateChronicleView {
       onSubmitted: async result => {
         this.notice = {
           tone: "success",
-          text: result && result.message ? result.message : "本章长卷已完成归卷投影。"
+          text: safePlayerMessage(result, "本章长卷已完成归卷投影。")
         };
         await this.refresh({ silent: true, preserveNotice: true });
       },
       onFateChronicleProjected: async result => {
         this.notice = {
           tone: "success",
-          text: result && result.message ? result.message : "本章长卷已完成归卷投影。"
+          text: safePlayerMessage(result, "本章长卷已完成归卷投影。")
         };
         await this.refresh({ silent: true, preserveNotice: true });
       },
@@ -930,7 +931,7 @@ export class FateChronicleView {
     }
     if (!result || result.success === false || result.suppressed) {
       this.phase = result && result.suppressed ? "loading" : "error";
-      this.errorMessage = result && result.message ? result.message : "命途长卷读取失败";
+      this.errorMessage = safePlayerMessage(result, "命途长卷读取失败，请稍后重试");
       this.runPanel.clearRun();
       this.render();
       return result || { success: false, reason: "fate_chronicle_read_failed", message: this.errorMessage };
@@ -1037,11 +1038,11 @@ export class FateChronicleView {
     if (result && result.success !== false) {
       this.notice = {
         tone: "success",
-        text: normalizeText(result.message, `已进入${chapter.title} · ${vow.title}。`)
+        text: safePlayerMessage(result, `已进入${chapter.title} · ${vow.title}。`)
       };
       await this.refresh({ silent: true, preserveNotice: true });
     } else if (result && result.message) {
-      this.notice = { tone: "danger", text: result.message };
+      this.notice = { tone: "danger", text: safePlayerMessage(result, "命途长卷暂时无法开始，请稍后重试。") };
       this.render();
     }
     return result;
@@ -1072,11 +1073,11 @@ export class FateChronicleView {
     if (result && result.success !== false) {
       this.notice = {
         tone: "success",
-        text: normalizeText(result.message, "长卷奖励已领取。")
+        text: safePlayerMessage(result, "长卷奖励已领取。")
       };
       await this.refresh({ silent: true, preserveNotice: true });
     } else if (result && result.message) {
-      this.notice = { tone: "danger", text: result.message };
+      this.notice = { tone: "danger", text: safePlayerMessage(result, "长卷奖励暂时无法领取，请稍后重试。") };
       this.render();
     }
     return result;
@@ -1096,11 +1097,11 @@ export class FateChronicleView {
     if (result && result.success !== false) {
       this.notice = {
         tone: "success",
-        text: normalizeText(result.message, "三证归卷基础奖励已领取。")
+        text: safePlayerMessage(result, "三证归卷基础奖励已领取。")
       };
       await this.refresh({ silent: true, preserveNotice: true });
     } else if (result && result.message) {
-      this.notice = { tone: "danger", text: result.message };
+      this.notice = { tone: "danger", text: safePlayerMessage(result, "归卷奖励暂时无法领取，请稍后重试。") };
       this.render();
     }
     return result;
@@ -1241,8 +1242,8 @@ export class FateChronicleView {
     return `
       <section class="fate-chronicle-state-card" data-fate-chronicle-state="guest">
         <div class="fate-chronicle-kicker">账号绑定</div>
-        <h2>游客无法恢复长卷</h2>
-        <p>命途长卷与三证归卷都依赖账号签名。登录后才能读取每周章节、恢复进行中的长卷战局和领取 2/5 基础归卷奖励。</p>
+        <h2>登录后继续命途长卷</h2>
+        <p>登录后可读取每周章节、恢复进行中的长卷战局，并领取阶段归卷奖励。</p>
         <div class="fate-chronicle-actions">
           <button type="button" class="menu-btn primary" data-fate-chronicle-action="login">前往登录</button>
         </div>
@@ -1254,8 +1255,8 @@ export class FateChronicleView {
     return `
       <section class="fate-chronicle-state-card" data-fate-chronicle-state="loading">
         <div class="fate-chronicle-kicker">命途长卷</div>
-        <h2>正在恢复服务器卷面</h2>
-        <p>章节解锁、全部誓约、进行中的长卷战局与三证归卷都以本周固定卷面为准，客户端不会本地补全。</p>
+        <h2>正在展开命途长卷</h2>
+        <p>正在读取每周章节、誓约与未完战局。</p>
       </section>
     `;
   }
@@ -1265,7 +1266,7 @@ export class FateChronicleView {
       <section class="fate-chronicle-state-card" data-fate-chronicle-state="error" role="alert">
         <div class="fate-chronicle-kicker">命途长卷</div>
         <h2>读取失败</h2>
-        <p>${escapeHtml(this.errorMessage || "命途长卷读取失败。")}</p>
+        <p>${escapeHtml(this.errorMessage || "命途长卷暂时无法展开，请稍后重试。")}</p>
         <div class="fate-chronicle-actions">
           <button type="button" class="menu-btn primary" data-fate-chronicle-action="refresh">重试</button>
         </div>

@@ -547,7 +547,7 @@ function getBountyFocusNodeTypesForTest(bounty) {
     `practice topic should expose at least one recommended branch anchor, got ${JSON.stringify(initialPracticeTopic)}`
   );
   assert(
-    /待按样本锁线|待从精选命盘里锁 1 条线索/.test([initialAnswerSheet.routeGoal?.statusLine || '', initialAnswerSheet.clueStatusLine].join(' ')),
+    /待按指引锁线|待从精选命盘里锁 1 条线索/.test([initialAnswerSheet.routeGoal?.statusLine || '', initialAnswerSheet.clueStatusLine].join(' ')),
     `initial answer sheet should begin in a readable pending state, got ${JSON.stringify(initialAnswerSheet)}`
   );
 
@@ -685,7 +685,7 @@ function getBountyFocusNodeTypesForTest(bounty) {
     `recommended branch shortcut should mark route goal completed, got ${JSON.stringify(answerSheetAfterRecommendedBranch)}`
   );
   assert(
-    /已按样本锁定|贴题/.test(answerSheetAfterRecommendedBranch.routeGoal?.statusLine || ''),
+    /已按指引锁定|贴题/.test(answerSheetAfterRecommendedBranch.routeGoal?.statusLine || ''),
     `recommended branch shortcut should expose readable route-goal text, got ${JSON.stringify(answerSheetAfterRecommendedBranch.routeGoal)}`
   );
   assert(
@@ -981,7 +981,7 @@ function getBountyFocusNodeTypesForTest(bounty) {
   const answerBuildSnapshot = game.getBuildSnapshotData();
   assert(answerBuildSnapshot.strengths.some((line) => /观星线索/.test(line)), 'build snapshot should mention observatory link guidance');
   assert(answerBuildSnapshot.strengths.some((line) => /训练标签|修行课题|答卷/.test(line)), 'build snapshot should mention observatory training tags or the new practice topic spine');
-  assert(answerBuildSnapshot.nextTargets.some((line) => /观星演练|样本路径|章节答卷|训练建议/.test(line)), 'build snapshot should mention observatory drill objective, answer sheet, or route focus');
+  assert(answerBuildSnapshot.nextTargets.some((line) => /观星演练|路线指引|章节答卷|训练建议/.test(line)), 'build snapshot should mention observatory drill objective, answer sheet, or route focus');
   assertPracticeTopicContract(getPracticeTopicModel(answerBuildSnapshot.expedition?.practiceTopic), 'build snapshot practice topic');
   assertAnswerSheetContract(getAnswerSheetModel(answerBuildSnapshot.expedition?.answerSheet), 'build snapshot answer sheet');
 
@@ -1140,7 +1140,7 @@ function getBountyFocusNodeTypesForTest(bounty) {
   assert(payloadAfterFinalize && payloadAfterFinalize.latestSlate && payloadAfterFinalize.latestSlate.id === slate.id, 'payload should fall back to latest run slate after finalization');
   assert(
     Array.isArray(payloadAfterFinalize.latestSlate?.scoreBreakdown)
-      && payloadAfterFinalize.latestSlate.scoreBreakdown.some((line) => /命盘共鸣|路线合卷|训练标签|演练目标|章节答卷|训练建议|课题样本/.test(line || '')),
+      && payloadAfterFinalize.latestSlate.scoreBreakdown.some((line) => /命盘共鸣|路线合卷|训练标签|演练目标|章节答卷|训练建议|修行课题/.test(line || '')),
     `latest slate payload should retain observatory breakdown lines, got ${JSON.stringify(payloadAfterFinalize.latestSlate)}`
   );
   assert(

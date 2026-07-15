@@ -30,6 +30,7 @@ function filterAuditItems(items, envValue) {
 
 const viewports = filterAuditItems([
   { id: 'desktop', width: 1440, height: 960, isMobile: false },
+  { id: 'desktop-compact-1024', width: 1024, height: 640, isMobile: false },
   { id: 'short', width: 1366, height: 720, isMobile: false },
   { id: 'mobile-375', width: 375, height: 812, isMobile: true },
   { id: 'mobile-390', width: 390, height: 844, isMobile: true },
@@ -3422,7 +3423,7 @@ async function inspectPvpTabMobileSurface(page, scenarioId) {
       if (!pane) return [];
       const selectorsByTab = {
         ranking: ['[data-pvp-legacy-practice]'],
-        live: ['[data-live-action="join-queue"]'],
+        live: ['[data-live-action="join-queue"]', '[data-live-loadout-preset]'],
         defense: ['.ink-btn-large', '#guardian-formation', '.dao-card'],
         shop: ['.shop-category', '.buy-overlay', '.talisman-card'],
       };
@@ -3679,6 +3680,8 @@ async function inspectPvpDesktopShopSurface(page, scenarioId) {
     const categories = Array.from(pane?.querySelectorAll('.shop-category') || []);
     const firstItem = pane?.querySelector('.talisman-card') || null;
     const buyButton = firstItem?.querySelector('.buy-overlay') || null;
+    buyButton?.focus({ preventScroll: true });
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
     const rect = buyButton?.getBoundingClientRect() || null;
     const buttonInViewport = !!rect
       && rect.left >= 0
@@ -3688,7 +3691,6 @@ async function inspectPvpDesktopShopSurface(page, scenarioId) {
     const hit = buttonInViewport
       ? document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2)
       : null;
-    buyButton?.focus({ preventScroll: true });
     const categoryStyles = categories.map((category) => {
       const style = getComputedStyle(category);
       return {
@@ -3746,6 +3748,258 @@ async function inspectPvpDesktopShopSurface(page, scenarioId) {
       categoryStyles,
       categoryButtonsValid,
       buyButtonValid,
+      issues,
+    };
+  });
+}
+
+async function inspectPvpCompactDesktopSurface(page, scenarioId) {
+  if (scenarioId !== 'pvp-screen') {
+    return { ok: true, skipped: true };
+  }
+
+  return page.evaluate(async () => {
+    const viewport = { width: window.innerWidth, height: window.innerHeight };
+    if (viewport.width < 961 || viewport.width > 1180 || viewport.height > 700) {
+      return { ok: true, skipped: true, viewport };
+    }
+    if (!window.PVPScene || typeof window.PVPScene.switchTab !== 'function') {
+      return {
+        ok: false,
+        skipped: false,
+        viewport,
+        issues: [{ type: 'missing-pvp-scene-switch-tab' }],
+      };
+    }
+
+    const issues = [];
+    const tabs = {};
+    const content = document.querySelector('#pvp-screen .pvp-content-container');
+    const waitForPaint = () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    const waitForMs = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+    const rectObj = (rect) => rect ? ({
+      left: Math.round(rect.left * 10) / 10,
+      top: Math.round(rect.top * 10) / 10,
+      right: Math.round(rect.right * 10) / 10,
+      bottom: Math.round(rect.bottom * 10) / 10,
+      width: Math.round(rect.width * 10) / 10,
+      height: Math.round(rect.height * 10) / 10,
+    }) : null;
+    const fitsViewportX = (rect, tolerance = 2) => !!rect
+      && rect.left >= -tolerance
+      && rect.right <= viewport.width + tolerance;
+    const fitsViewport = (rect, tolerance = 2) => !!rect
+      && fitsViewportX(rect, tolerance)
+      && rect.top >= -tolerance
+      && rect.bottom <= viewport.height + tolerance;
+    const isRendered = (element) => {
+      if (!element) return false;
+      const style = getComputedStyle(element);
+      const rect = element.getBoundingClientRect();
+      return style.display !== 'none'
+        && style.visibility !== 'hidden'
+        && Number(style.opacity) > 0
+        && rect.width >= 2
+        && rect.height >= 2;
+    };
+    const isTopHit = (element) => {
+      if (!element) return false;
+      const rect = element.getBoundingClientRect();
+      if (!fitsViewport(rect)) return false;
+      const top = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+      return !!top && (top === element || element.contains(top));
+    };
+    const readButton = (element) => {
+      const rect = element?.getBoundingClientRect() || null;
+      return {
+        exists: !!element,
+        rect: rectObj(rect),
+        rendered: isRendered(element),
+        viewportFit: fitsViewport(rect),
+        topHit: isTopHit(element),
+      };
+    };
+    const readCommon = (tab, pane) => {
+      const paneRect = pane?.getBoundingClientRect() || null;
+      const contentStyle = content ? getComputedStyle(content) : null;
+      const detail = {
+        activeTab: window.PVPScene.activeTab || '',
+        paneActive: !!pane?.classList.contains('active'),
+        paneRect: rectObj(paneRect),
+        paneClientWidth: pane?.clientWidth || 0,
+        paneScrollWidth: pane?.scrollWidth || 0,
+        contentClientWidth: content?.clientWidth || 0,
+        contentScrollWidth: content?.scrollWidth || 0,
+        contentClientHeight: content?.clientHeight || 0,
+        contentScrollHeight: content?.scrollHeight || 0,
+        contentOverflowX: contentStyle?.overflowX || '',
+        contentOverflowY: contentStyle?.overflowY || '',
+        documentScrollWidth: document.documentElement.scrollWidth,
+      };
+      if (detail.activeTab !== tab || !detail.paneActive || !isRendered(pane)) {
+        issues.push({ type: 'pvp-compact-tab-not-active', tab, detail });
+      }
+      if (!fitsViewportX(paneRect)
+        || detail.paneScrollWidth > detail.paneClientWidth + 2
+        || detail.documentScrollWidth > viewport.width + 2
+        || !content
+        || detail.contentScrollWidth > detail.contentClientWidth + 2
+        || detail.contentOverflowX !== 'hidden'
+        || !['auto', 'scroll'].includes(detail.contentOverflowY)) {
+        issues.push({ type: 'pvp-compact-horizontal-overflow', tab, detail });
+      }
+      return detail;
+    };
+
+    for (const tab of ['ranking', 'live', 'defense', 'shop']) {
+      await window.PVPScene.switchTab(tab);
+      await waitForPaint();
+      await waitForMs(100);
+      if (content) content.scrollTop = 0;
+      const pane = document.getElementById(`tab-${tab}`);
+      const detail = readCommon(tab, pane);
+
+      if (tab === 'ranking') {
+        const rankingDetails = pane?.querySelector('.pvp-ranking-details') || null;
+        const summary = rankingDetails?.querySelector('.pvp-ranking-details-toggle') || null;
+        const counterplay = pane?.querySelector('.pvp-risk-primary-line') || null;
+        const cta = pane?.querySelector('[data-pvp-legacy-practice]') || null;
+        const summaryRect = summary?.getBoundingClientRect() || null;
+        const ctaProbe = readButton(cta);
+        detail.ranking = {
+          detailsPresent: !!rankingDetails,
+          detailsOpen: !!rankingDetails?.open,
+          summaryRect: rectObj(summaryRect),
+          summaryTopHit: isTopHit(summary),
+          counterplayPresent: !!counterplay && (counterplay.textContent || '').trim().length > 0,
+          cta: ctaProbe,
+        };
+        if (!detail.ranking.detailsPresent
+          || detail.ranking.detailsOpen
+          || !summaryRect
+          || summaryRect.width < 44
+          || summaryRect.height < 44
+          || !detail.ranking.summaryTopHit
+          || !detail.ranking.counterplayPresent
+          || !ctaProbe.rendered
+          || !ctaProbe.viewportFit
+          || !ctaProbe.topHit
+          || (ctaProbe.rect?.height || 0) < 44) {
+          issues.push({ type: 'pvp-compact-ranking-surface-invalid', tab, detail: detail.ranking });
+        }
+      }
+
+      if (tab === 'live') {
+        const joinButton = pane?.querySelector('[data-live-action="join-queue"]') || null;
+        const detailToggle = pane?.querySelector('.pvp-live-detail-toggle') || null;
+        const joinProbe = readButton(joinButton);
+        const toggleRect = detailToggle?.getBoundingClientRect() || null;
+        const detailToggleRendered = isRendered(detailToggle);
+        const visibleText = (pane?.innerText || '').replace(/\s+/g, ' ').trim();
+        detail.live = {
+          joinButton: joinProbe,
+          detailToggleRendered,
+          detailToggleRect: rectObj(toggleRect),
+          exposesApiPath: /\/api\//i.test(visibleText),
+        };
+        if (!joinProbe.rendered
+          || !joinProbe.viewportFit
+          || !joinProbe.topHit
+          || (joinProbe.rect?.width || 0) < 44
+          || (joinProbe.rect?.height || 0) < 44
+          || (detailToggleRendered && (!toggleRect || toggleRect.width < 44 || toggleRect.height < 44))
+          || detail.live.exposesApiPath) {
+          issues.push({ type: 'pvp-compact-live-surface-invalid', tab, detail: detail.live });
+        }
+      }
+
+      if (tab === 'defense') {
+        const layout = pane?.querySelector('.defense-layout-split') || null;
+        const controls = pane?.querySelector('.defense-controls-panel') || null;
+        const labels = Array.from(pane?.querySelectorAll('.formation-stats-overlay .label') || []).map((label) => {
+          const rect = label.getBoundingClientRect();
+          const style = getComputedStyle(label);
+          return {
+            text: label.textContent || '',
+            rect: rectObj(rect),
+            whiteSpace: style.whiteSpace,
+            scrollWidth: label.scrollWidth,
+            clientWidth: label.clientWidth,
+          };
+        });
+        const action = pane?.querySelector('.ink-btn-large') || null;
+        if (content) content.scrollTop = content.scrollHeight;
+        await waitForPaint();
+        const actionProbe = readButton(action);
+        detail.defense = {
+          layoutRect: rectObj(layout?.getBoundingClientRect() || null),
+          controlsRect: rectObj(controls?.getBoundingClientRect() || null),
+          labels,
+          action: actionProbe,
+        };
+        const labelsValid = labels.length >= 2 && labels.every((label) => label.whiteSpace === 'nowrap'
+          && label.scrollWidth <= label.clientWidth + 1
+          && (label.rect?.height || 0) <= 32);
+        if (!fitsViewportX(layout?.getBoundingClientRect() || null)
+          || !fitsViewportX(controls?.getBoundingClientRect() || null)
+          || !labelsValid
+          || !actionProbe.rendered
+          || !actionProbe.viewportFit
+          || !actionProbe.topHit
+          || (actionProbe.rect?.height || 0) < 44) {
+          issues.push({ type: 'pvp-compact-defense-surface-invalid', tab, detail: detail.defense });
+        }
+      }
+
+      if (tab === 'shop') {
+        const scrollView = pane?.querySelector('.shop-scroll-view') || null;
+        const scrollStyle = scrollView ? getComputedStyle(scrollView) : null;
+        const focusButton = pane?.querySelector('.buy-overlay:not(:disabled)') || null;
+        focusButton?.focus({ preventScroll: true });
+        await waitForPaint();
+        const focusButtonRect = focusButton?.getBoundingClientRect() || null;
+        const focusButtonFocused = document.activeElement === focusButton;
+        if (scrollView) scrollView.scrollTop = scrollView.scrollHeight;
+        await waitForPaint();
+        const buyButtons = Array.from(pane?.querySelectorAll('.buy-overlay') || []).filter(isRendered);
+        const finalButton = buyButtons.at(-1) || null;
+        const finalButtonProbe = readButton(finalButton);
+        detail.shop = {
+          scrollClientWidth: scrollView?.clientWidth || 0,
+          scrollWidth: scrollView?.scrollWidth || 0,
+          scrollClientHeight: scrollView?.clientHeight || 0,
+          scrollHeight: scrollView?.scrollHeight || 0,
+          scrollTop: scrollView?.scrollTop || 0,
+          overflowY: scrollStyle?.overflowY || '',
+          focusButtonRect: rectObj(focusButtonRect),
+          focusButtonFocused,
+          finalButton: finalButtonProbe,
+        };
+        if (!scrollView
+          || !['auto', 'scroll'].includes(detail.shop.overflowY)
+          || detail.shop.scrollWidth > detail.shop.scrollClientWidth + 2
+          || detail.shop.scrollHeight <= detail.shop.scrollClientHeight
+          || !focusButtonFocused
+          || !focusButtonRect
+          || focusButtonRect.width < 44
+          || focusButtonRect.height < 44
+          || !finalButtonProbe.rendered
+          || !finalButtonProbe.viewportFit
+          || !finalButtonProbe.topHit
+          || (finalButtonProbe.rect?.height || 0) < 44) {
+          issues.push({ type: 'pvp-compact-shop-surface-invalid', tab, detail: detail.shop });
+        }
+      }
+
+      tabs[tab] = detail;
+    }
+
+    await window.PVPScene.switchTab('live');
+    return {
+      ok: issues.length === 0,
+      skipped: false,
+      viewport,
+      tabs,
       issues,
     };
   });
@@ -4314,6 +4568,7 @@ async function inspectBattleOverlaySwitchGuard(page) {
       const mapChapterSummaryLayout = await inspectMapChapterSummaryLayout(page, scenario.id);
       const pvpTabMobileSurface = await inspectPvpTabMobileSurface(page, scenario.id);
       const pvpDesktopShopSurface = await inspectPvpDesktopShopSurface(page, scenario.id);
+      const pvpCompactDesktopSurface = await inspectPvpCompactDesktopSurface(page, scenario.id);
       const settingsModalLayering = await inspectSettingsModalLayering(page, scenario.id);
       const mapExpeditionIntel = await inspectMapExpeditionIntelPersistence(page, scenario.id);
       const mapNodeClick = await inspectMapNodeClickability(page, scenario.id);
@@ -4338,6 +4593,7 @@ async function inspectBattleOverlaySwitchGuard(page) {
         mapChapterSummaryLayout,
         pvpTabMobileSurface,
         pvpDesktopShopSurface,
+        pvpCompactDesktopSurface,
         settingsModalLayering,
         mapExpeditionIntel,
         mapNodeClick,
@@ -4357,6 +4613,7 @@ async function inspectBattleOverlaySwitchGuard(page) {
         && !!mapChapterSummaryLayout?.ok
         && !!pvpTabMobileSurface?.ok
         && !!pvpDesktopShopSurface?.ok
+        && !!pvpCompactDesktopSurface?.ok
         && !!settingsModalLayering?.ok
         && !!mapExpeditionIntel?.ok
         && !!mapNodeClick?.ok;

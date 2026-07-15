@@ -1914,7 +1914,7 @@ async function safeScreenshot(page, outPath) {
       : null;
     const queuedAfter = Number(game.player?.buffs?.matrixBreakSignal) || 0;
     const queuedGuardAfter = Number(game.player?.buffs?.matrixGuardSignal) || 0;
-    const hotkeyHint = (panel?.querySelector('.battle-advisor-hotkey')?.textContent || '').trim();
+    const visibleHotkeyHint = (panel?.querySelector('.battle-advisor-hotkey')?.textContent || '').trim();
 
     if (typeof prevIsEndlessActive === 'function') game.isEndlessActive = prevIsEndlessActive;
     if (typeof prevEnsureEndlessState === 'function') game.ensureEndlessState = prevEnsureEndlessState;
@@ -1930,7 +1930,7 @@ async function safeScreenshot(page, outPath) {
         && queuedAfter === 0
         && queuedGuardAfter === 0
         && consumed?.id === 'guard'
-        && /1自适应/.test(hotkeyHint),
+        && visibleHotkeyHint.length === 0,
       activeMode,
       pendingText,
       activeModeAfterHotkey,
@@ -1939,7 +1939,7 @@ async function safeScreenshot(page, outPath) {
       queuedAfter,
       queuedGuardBeforeConsume,
       queuedGuardAfter,
-      hotkeyHint,
+      visibleHotkeyHint,
       consumedId: consumed?.id || ''
     };
   });
@@ -2193,8 +2193,9 @@ async function safeScreenshot(page, outPath) {
       Number(scoutPackLocalizationProbe.rarityBadgeCount || 0) >= 3 &&
       !scoutPackLocalizationProbe.hasEnglishRarity &&
       scoutPackLocalizationProbe.iconText === '🎒' &&
-      Number(scoutPackLocalizationProbe.iconWidth || 0) >= 60 &&
-      Number(scoutPackLocalizationProbe.iconHeight || 0) >= 60 &&
+      Number(scoutPackLocalizationProbe.iconWidth || 0) >= 50 &&
+      Number(scoutPackLocalizationProbe.iconWidth || 0) <= 64 &&
+      Number(scoutPackLocalizationProbe.iconHeight || 0) === Number(scoutPackLocalizationProbe.iconWidth || 0) &&
       !!scoutPackLocalizationProbe.iconCentered,
     JSON.stringify(scoutPackLocalizationProbe || null)
   );

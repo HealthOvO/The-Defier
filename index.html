@@ -646,9 +646,9 @@
                                 <button class="ink-btn-large" onclick="PVPScene.uploadDefense()">
                                     <span class="ink-flow-effect"></span>
                                     <span class="btn-icon">🌩️</span>
-                                    <span class="btn-text">注入神念 (上传数据)</span>
+                                    <span class="btn-text">注入神念</span>
                                 </button>
-                                <div class="last-sync-time" id="def-time">上次注入: 无记录</div>
+                                <div class="last-sync-time" id="def-time">上次注入：无记录</div>
                             </div>
                         </div>
                     </div>
@@ -812,7 +812,7 @@
             <button class="back-btn" onclick="game.showScreen('main-menu')">← 返回</button>
             <div class="collection-heading-group">
                 <h2 id="collection-title">藏经阁 · 法则图鉴</h2>
-                <p id="collection-subtitle">补齐法则与共鸣链，把命环装配、命途样本与下一轮路线对成同一份档案。</p>
+                <p id="collection-subtitle">补齐法则与共鸣链，把命环装配、命途战录与下一轮路线对成同一份档案。</p>
             </div>
         </div>
 
@@ -1438,9 +1438,9 @@
                         </section>
                     </div>
                     <aside class="challenge-side-column">
+                        <section class="codex-side-card challenge-launch-card" id="challenge-hub-launch"></section>
                         <div id="challenge-hub-side"></div>
                         <div id="challenge-hub-ranking"></div>
-                        <section class="codex-side-card challenge-launch-card" id="challenge-hub-launch"></section>
                     </aside>
                 </div>
             </div>
@@ -1497,15 +1497,20 @@
                                 <option value="name_asc">名称排序</option>
                             </select>
                         </label>
-                        <div class="compendium-chip-groups">
-                            <div class="compendium-chip-group">
+                        <details class="compendium-advanced-filters">
+                            <summary>
+                                <span>高级筛选与预设</span>
+                                <span class="compendium-filter-summary-meta">状态 · 稀有度 · 来源</span>
+                            </summary>
+                            <div class="compendium-chip-groups">
+                                <div class="compendium-chip-group">
                                 <span class="compendium-chip-label">收录状态</span>
                                 <div class="compendium-chip-row">
                                     <button type="button" class="compendium-chip" data-filter-chip-group="status" data-filter-chip-value="owned" onclick="game.toggleTreasureCompendiumFilterChip('status', 'owned')">已收录</button>
                                     <button type="button" class="compendium-chip" data-filter-chip-group="status" data-filter-chip-value="unowned" onclick="game.toggleTreasureCompendiumFilterChip('status', 'unowned')">未收录</button>
                                 </div>
                             </div>
-                            <div class="compendium-chip-group">
+                                <div class="compendium-chip-group">
                                 <span class="compendium-chip-label">稀有度</span>
                                 <div class="compendium-chip-row">
                                     <button type="button" class="compendium-chip" data-filter-chip-group="rarity" data-filter-chip-value="common" onclick="game.toggleTreasureCompendiumFilterChip('rarity', 'common')">凡品</button>
@@ -1514,7 +1519,7 @@
                                     <button type="button" class="compendium-chip" data-filter-chip-group="rarity" data-filter-chip-value="mythic" onclick="game.toggleTreasureCompendiumFilterChip('rarity', 'mythic')">仙品</button>
                                 </div>
                             </div>
-                            <div class="compendium-chip-group">
+                                <div class="compendium-chip-group">
                                 <span class="compendium-chip-label">来源维度</span>
                                 <div class="compendium-chip-row">
                                     <button type="button" class="compendium-chip" data-filter-chip-group="source" data-filter-chip-value="shop" onclick="game.toggleTreasureCompendiumFilterChip('source', 'shop')">商店</button>
@@ -1525,7 +1530,7 @@
                                     <button type="button" class="compendium-chip" data-filter-chip-group="source" data-filter-chip-value="challenge" onclick="game.toggleTreasureCompendiumFilterChip('source', 'challenge')">挑战</button>
                                 </div>
                             </div>
-                            <div class="compendium-preset-bar">
+                                <div class="compendium-preset-bar">
                                 <button type="button" class="compendium-chip utility" id="treasure-filter-clear" onclick="game.clearTreasureCompendiumFilters()">清空筛选</button>
                                 <div class="compendium-preset-slots">
                                     <div class="compendium-preset-slot">
@@ -1541,8 +1546,9 @@
                                         <button type="button" class="compendium-chip utility compact" id="treasure-preset-save-2" onclick="game.saveTreasureCompendiumPreset(2)">存</button>
                                     </div>
                                 </div>
+                                </div>
                             </div>
-                        </div>
+                        </details>
                     </div>
 
                     <div class="compendium-grid-container">
@@ -1874,8 +1880,11 @@
     <!-- 游戏结束界面 -->
     <div id="game-over-screen" class="screen">
         <div class="game-over-container">
-            <h2 class="game-over-title" id="game-over-title">陨落...</h2>
-            <p class="game-over-text" id="game-over-text">逆命之路，暂时中断</p>
+            <div class="game-over-hero">
+                <span class="game-over-kicker">轮回结算</span>
+                <h2 class="game-over-title" id="game-over-title">陨落...</h2>
+                <p class="game-over-text" id="game-over-text">逆命之路，暂时中断</p>
+            </div>
             <div class="run-stats">
                 <div class="stat-row">
                     <span>到达层数</span>
@@ -1895,10 +1904,10 @@
                 </div>
             </div>
             <div class="game-over-buttons">
-                <button class="menu-btn primary" onclick="game.startNewGame()">再次挑战</button>
-                <button class="menu-btn secondary" id="restart-realm-btn" onclick="game.restartRealm()">重修此界
+                <button class="menu-btn primary" data-run-result-action="retry" onclick="game.startNewGame()">再次挑战</button>
+                <button class="menu-btn secondary" data-run-result-action="restart" id="restart-realm-btn" onclick="game.restartRealm()">重修此界
                     (消耗50%灵石)</button>
-                <button class="menu-btn" onclick="game.showScreen('main-menu')">返回主菜单</button>
+                <button class="menu-btn" data-run-result-action="menu" onclick="game.showScreen('main-menu')">返回主菜单</button>
             </div>
         </div>
     </div>
@@ -2006,7 +2015,7 @@
             <div class="event-body">
                 <p class="event-desc" id="event-desc">发生了一些事情...</p>
                 <div class="event-atmosphere" id="event-atmosphere" style="display:none;"></div>
-                <div class="event-system-summary" id="event-system-summary" style="display:none;"></div>
+                <details class="event-system-summary" id="event-system-summary" style="display:none;"></details>
                 <div class="event-choices" id="event-choices">
                     <!-- 动态生成选项 -->
                 </div>
@@ -2147,14 +2156,14 @@
             <div class="save-conflict-options">
                 <section class="save-conflict-option local">
                     <h3>本地进度 (浏览器)</h3>
-                    <p id="local-save-info">读取中...</p>
+                    <div id="local-save-info" class="save-conflict-info">读取中...</div>
                     <button class="menu-btn primary small" onclick="game.resolveSaveConflict('local')">
                         保留本地 (覆盖云端)
                     </button>
                 </section>
                 <section class="save-conflict-option cloud">
                     <h3>云端进度 (服务器)</h3>
-                    <p id="cloud-save-info">读取中...</p>
+                    <div id="cloud-save-info" class="save-conflict-info">读取中...</div>
                     <button class="menu-btn small" onclick="game.resolveSaveConflict('cloud')">
                         保留云端 (覆盖本地)
                     </button>
@@ -2188,7 +2197,7 @@
                     <p>横向浏览命牌，继续旧轮回或开启新的历程。</p>
                 </div>
                 <button class="modal-close" type="button" aria-label="关闭命牌选择"
-                    onclick="document.getElementById('save-slots-modal').classList.remove('active')">×</button>
+                    onclick="game.closeModalElement(document.getElementById('save-slots-modal'))">×</button>
             </header>
 
             <div class="slots-container" id="slots-container">
@@ -2197,7 +2206,7 @@
 
             <div class="modal-footer save-slots-footer">
                 <button class="talisman-btn small"
-                    onclick="document.getElementById('save-slots-modal').classList.remove('active')"
+                    onclick="game.closeModalElement(document.getElementById('save-slots-modal'))"
                     style="width: 120px;">
                     <div class="talisman-paper" style="border-color: #666; background: #222;"></div>
                     <div class="talisman-content">
@@ -2412,8 +2421,8 @@
 
             <div class="purification-footer">
                 <div class="purification-cost" id="purification-cost-display">消耗: 100 灵石</div>
-                <button class="purification-btn" onclick="game.closeModal()">取消 (Cancel)</button>
-                <button class="purification-btn confirm" id="purification-confirm-btn" disabled>确认移除 (Confirm)</button>
+                <button class="purification-btn" onclick="game.closeModal()">取消</button>
+                <button class="purification-btn confirm" id="purification-confirm-btn" disabled>确认移除</button>
             </div>
         </div>
     </div>

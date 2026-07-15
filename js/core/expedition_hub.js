@@ -146,12 +146,23 @@ const expeditionHubMethods = Object.create(null);
     forbidden_altar: '禁术坛',
     memory_rift: '记忆裂隙'
   };
-  const getExpeditionNodeLabel = (type = '') => EXPEDITION_NODE_LABELS[String(type || '')] || String(type || '未知节点');
+  const getExpeditionNodeLabel = (type = '') => {
+    const normalized = String(type || '').trim();
+    if (EXPEDITION_NODE_LABELS[normalized]) return EXPEDITION_NODE_LABELS[normalized];
+    if (!normalized || /^[a-z][a-z0-9_-]*$/i.test(normalized)) return '未知节点';
+    return normalized;
+  };
   const getExpeditionNodeLabels = (nodeTypes = [], limit = 3) => Array.from(new Set(readArray(nodeTypes).map(value => getExpeditionNodeLabel(value)).filter(Boolean))).slice(0, Math.max(1, clampInt(limit, 1, 6)));
   const formatExpeditionNodeLabels = (nodeTypes = [], fallback = '关键线路', limit = 3) => {
     const labels = getExpeditionNodeLabels(nodeTypes, limit);
     return labels.length > 0 ? labels.join(' / ') : fallback;
   };
+  const EXPEDITION_BOUNTY_TYPE_LABELS = {
+    battle: '战斗悬赏',
+    route: '路线悬赏',
+    extreme: '险境悬赏'
+  };
+  const getExpeditionBountyTypeLabel = (type = '') => EXPEDITION_BOUNTY_TYPE_LABELS[String(type || '')] || '章节悬赏';
   const getStrategicEngineeringExpeditionTrackProfile = (trackId = '') => {
     switch (String(trackId || '')) {
       case 'observatory':
@@ -517,7 +528,7 @@ const expeditionHubMethods = Object.create(null);
     const reward = normalizeObservatoryLinkReward(profile.reward);
     const rewardLine = formatObservatoryRewardLine(reward);
     return normalizeExpeditionObservatoryResonance({
-      label: profile.label || `${source.themeLabel || '样本'}共鸣`,
+      label: profile.label || `${source.themeLabel || '命盘'}共鸣`,
       summary: `沿 ${formatExpeditionNodeLabels(focusNodeTypes, '关键线路')} 继续推进 ${clampInt(profile.target, 1, 6) || 2} 次，可兑现 ${profile.label || '命盘共鸣'}${rewardLine ? `：${rewardLine}` : ''}。`,
       focusNodeTypes,
       progress: 0,
@@ -625,7 +636,7 @@ const expeditionHubMethods = Object.create(null);
     const recommendedBranchNames = recommendedBranches.map(entry => entry.name).filter(Boolean);
     const focusLine = formatExpeditionNodeLabels(focusNodeTypes, source.routeFocusLine || '关键线路', 4);
     const executionTarget = clampInt(source.resonance?.target, 1, 6) || Math.max(2, Math.min(3, Math.max(1, focusNodeTypes.length)));
-    const routeGoalLine = recommendedBranchNames.length > 0 ? `按样本优先锁定 ${recommendedBranchNames.map(name => `「${name}」`).join(' / ')}。` : `优先沿 ${source.routeFocusLine || focusLine} 组织本章路线。`;
+    const routeGoalLine = recommendedBranchNames.length > 0 ? `按命盘指引优先锁定 ${recommendedBranchNames.map(name => `「${name}」`).join(' / ')}。` : `优先沿 ${source.routeFocusLine || focusLine} 组织本章路线。`;
     const executionGoalLine = `沿 ${focusLine} 线推进 ${executionTarget} 次，跑出本章实操段。`;
     const synthesisGoalLine = `承接一条与 ${focusLine} 同线的章节悬赏，把研判真正并成答卷。`;
     return {
@@ -642,7 +653,7 @@ const expeditionHubMethods = Object.create(null);
       objective: String(source.drillObjective || source.coachBrief || source.expeditionNote || ''),
       routeHint: String(source.routeFocusLine || ''),
       compareHint: String(source.compareHint || ''),
-      summary: String(source.expeditionNote || `本章会围绕「${source.sourceTitle || '当前样本'}」来答题，重点盯住 ${focusLine} 的线路节奏。`),
+      summary: String(source.expeditionNote || `本章会围绕「${source.sourceTitle || '当前命盘'}」来答题，重点盯住 ${focusLine} 的线路节奏。`),
       recommendedBranchIds: recommendedBranches.map(entry => entry.id).filter(Boolean).slice(0, 3),
       recommendedBranchNames: recommendedBranchNames.slice(0, 3),
       focusNodeTypes,
@@ -734,7 +745,7 @@ const expeditionHubMethods = Object.create(null);
       completed: routeCompleted,
       stateTone: routeCompleted ? 'completed' : selectedBranch ? 'selected' : 'suggested',
       tagLabel: routeCompleted ? '贴题' : routeDeviated ? '偏题' : '待锁线',
-      statusLine: !selectedBranch ? `待按样本锁线${recommendedBranchNames.length > 0 ? `：${recommendedBranchNames.join(' / ')}` : ''}` : routeCompleted ? `已按样本锁定「${selectedBranch.name}」` : `当前路线「${selectedBranch.name}」与样本主轴存在偏差`,
+      statusLine: !selectedBranch ? `待按指引锁线${recommendedBranchNames.length > 0 ? `：${recommendedBranchNames.join(' / ')}` : ''}` : routeCompleted ? `已按指引锁定「${selectedBranch.name}」` : `当前路线「${selectedBranch.name}」与命盘主轴存在偏差`,
       noteLine: recommendedBranchNames.length > 0 ? `推荐路线：${recommendedBranchNames.join(' / ')}` : practiceTopic.routeHint || `优先沿 ${formatExpeditionNodeLabels(practiceTopic.focusNodeTypes, '关键线路', 4)} 布局本章路线。`,
       deviated: routeDeviated
     });
@@ -743,14 +754,14 @@ const expeditionHubMethods = Object.create(null);
     const executionCompleted = executionProgress >= executionTarget;
     const executionGoal = normalizeExpeditionAnswerGoal({
       id: 'sample_execution',
-      label: '样本实操',
+      label: '路线实操',
       progress: executionProgress,
       target: executionTarget,
       completed: executionCompleted,
       stateTone: executionCompleted ? 'completed' : executionProgress > 0 ? 'selected' : 'suggested',
       tagLabel: executionCompleted ? '跑通' : executionProgress > 0 ? '进行中' : '待实操',
       statusLine: executionCompleted ? `已沿 ${executionFocusLine} 跑完 ${executionTarget} 段实操` : `沿 ${executionFocusLine} 推进 ${executionProgress}/${executionTarget}`,
-      noteLine: selectedBonus ? `当前线索：${selectedBonus.label}${selectedBonus.consumed ? ' · 已触发' : ''}` : '先锁 1 条观星线索，让样本开始真正记分。'
+      noteLine: selectedBonus ? `当前线索：${selectedBonus.label}${selectedBonus.consumed ? ' · 已触发' : ''}` : '先锁 1 条观星线索，让本章开始真正记分。'
     });
     const activeBounties = readArray(state.activeBountyIds).map(id => readArray(state.bountyDraft).find(entry => entry.id === id) || null).filter(Boolean);
     const alignedBounties = activeBounties.filter(entry => intersectNodeTypes(getBountyFocusNodeTypes(entry), executionFocusNodeTypes).length > 0);
@@ -763,7 +774,7 @@ const expeditionHubMethods = Object.create(null);
       stateTone: routePact?.completed ? 'completed' : routePact || alignedBounties.length > 0 ? 'selected' : 'suggested',
       tagLabel: routePact?.completed ? '合卷' : routePact || alignedBounties.length > 0 ? '已挂卷' : '待并卷',
       statusLine: routePact?.completed ? `已把「${routePact.bountyName}」并成章节答卷` : routePact ? `正在把「${routePact.bountyName}」并卷 ${routePact.progress}/${routePact.target}` : alignedBounties.length > 0 ? `已找到贴题悬赏「${alignedBounties[0].name}」` : `待承接一条与 ${executionFocusLine} 同线的章节悬赏`,
-      noteLine: routePact ? routePact.rewardLine ? `合卷奖励：${routePact.rewardLine}` : routePact.summary : alignedBounties.length > 0 ? !state.observatoryLink?.selectedBonusId || !selectedBranch ? `补齐${!state.observatoryLink?.selectedBonusId ? '观星线索' : '支线锁定'}后即可开始合卷。` : '继续沿样本线路推进，就能把这一卷真正写实。' : practiceTopic.compareHint || '优先挑一条贴题悬赏，把路线研判写进章节答卷。'
+      noteLine: routePact ? routePact.rewardLine ? `合卷奖励：${routePact.rewardLine}` : routePact.summary : alignedBounties.length > 0 ? !state.observatoryLink?.selectedBonusId || !selectedBranch ? `补齐${!state.observatoryLink?.selectedBonusId ? '观星线索' : '支线锁定'}后即可开始合卷。` : '继续沿观星路线推进，就能把这一卷真正写实。' : practiceTopic.compareHint || '优先挑一条贴题悬赏，把路线研判写进章节答卷。'
     });
     const goals = [routeGoal, executionGoal, synthesisGoal];
     const completedGoals = goals.filter(goal => goal.completed).length;
@@ -789,9 +800,9 @@ const expeditionHubMethods = Object.create(null);
     if (!selectedBonus) {
       nextSuggestion = '先从精选命盘里锁 1 条线索，让这章真正开始记分。';
     } else if (!selectedBranch) {
-      nextSuggestion = recommendedBranchNames.length > 0 ? `优先切到 ${recommendedBranchNames.join(' / ')}，把样本节奏先定进主线。` : '先锁定一条更贴样本的支线，让这章真正开始作答。';
+      nextSuggestion = recommendedBranchNames.length > 0 ? `优先切到 ${recommendedBranchNames.join(' / ')}，把命盘倾向先定进主线。` : '先锁定一条更贴命盘指引的支线，让这章真正开始作答。';
     } else if (routeGoal.deviated) {
-      nextSuggestion = recommendedBranchNames.length > 0 ? `当前路线偏题，优先切回 ${recommendedBranchNames.join(' / ')} 再继续推进。` : `当前路线偏离样本，优先改回更常经过 ${executionFocusLine} 的支线。`;
+      nextSuggestion = recommendedBranchNames.length > 0 ? `当前路线偏题，优先切回 ${recommendedBranchNames.join(' / ')} 再继续推进。` : `当前路线偏离观星指引，优先改回更常经过 ${executionFocusLine} 的支线。`;
     } else if (!executionGoal.completed) {
       nextSuggestion = `继续沿 ${executionFocusLine} 线推进 ${Math.max(0, executionGoal.target - executionGoal.progress)} 次，补齐实操段。`;
     } else if (!synthesisGoal.completed) {
@@ -799,7 +810,7 @@ const expeditionHubMethods = Object.create(null);
     } else {
       nextSuggestion = practiceTopic.compareHint ? `结章时回看：${practiceTopic.compareHint}` : `这章已经贴题，可以带着当前节奏完成收束。`;
     }
-    const overviewLine = routeGoal.deviated ? `已完成 ${completedGoals}/${goals.length} 条作答目标，当前路线偏题，建议先修回样本主轴。` : `已完成 ${completedGoals}/${goals.length} 条作答目标，当前评级为「${ratingLabel}」。`;
+    const overviewLine = routeGoal.deviated ? `已完成 ${completedGoals}/${goals.length} 条作答目标，当前路线偏题，建议先修回命盘主轴。` : `已完成 ${completedGoals}/${goals.length} 条作答目标，当前评级为「${ratingLabel}」。`;
     return {
       topicId: String(practiceTopic.id || ''),
       clueLocked: !!selectedBonus,
@@ -817,7 +828,7 @@ const expeditionHubMethods = Object.create(null);
         ratingLabel,
         ratingTone,
         overviewLine,
-        highlightLine: routeGoal.deviated ? `当前路线与「${practiceTopic.sourceTitle || '当前样本'}」存在偏差，建议先修回贴题路线。` : `本章围绕「${practiceTopic.sourceTitle || '当前样本'}」作答，当前节奏已经开始成卷。`,
+        highlightLine: routeGoal.deviated ? `当前路线与「${practiceTopic.sourceTitle || '当前命盘'}」存在偏差，建议先修回贴题路线。` : `本章围绕「${practiceTopic.sourceTitle || '当前命盘'}」作答，当前节奏已经开始成卷。`,
         trainingAdvice: nextSuggestion,
         goalHighlights: goals.map(goal => `${goal.label}：${goal.statusLine}`).slice(0, 3),
         tags: [practiceTopic.themeLabel ? `课题·${practiceTopic.themeLabel}` : '', practiceTopic.trainingTags?.[0] ? `训练·${practiceTopic.trainingTags[0]}` : '', `评级·${ratingLabel}`].filter(Boolean).slice(0, 4)
@@ -2077,9 +2088,9 @@ const expeditionHubMethods = Object.create(null);
       routeFocusLine,
       insight: null,
       trainingTags,
-      coachBrief: `优先沿 ${focusLine} 补齐当前章节样本，再决定要并卷的悬赏目标。`,
-      drillObjective: `先在 ${focusLine} 线完成至少 2 次推进，把本章答卷打成可复用的观星样本。`,
-      expeditionNote: `当前没有可复用的精选命盘，先用本章线路情报生成一份临时观星样本。`,
+      coachBrief: `优先沿 ${focusLine} 补齐当前章节路线，再决定要并卷的悬赏目标。`,
+      drillObjective: `先在 ${focusLine} 线完成至少 2 次推进，把本章答卷打成可复用的观星指引。`,
+      expeditionNote: `当前没有可复用的精选命盘，先用本章线路情报生成一份临时观星指引。`,
       compareHint: `对比 ${focusLine} 的节点密度、悬赏吻合度与追猎压力，避免章节答卷跑偏。`
     };
   };
@@ -2291,7 +2302,7 @@ const expeditionHubMethods = Object.create(null);
     if (typeof Utils !== 'undefined' && Utils?.showBattleLog) {
       const parts = formatObservatoryRewardLine(resolved) ? formatObservatoryRewardLine(resolved).split(' / ') : [];
       if (parts.length > 0) {
-        Utils.showBattleLog(`【观星线索】${label || '样本加成'}：${parts.join(' / ')}`);
+        Utils.showBattleLog(`【观星线索】${label || '观星加成'}：${parts.join(' / ')}`);
       }
     }
     return resolved;
@@ -2326,7 +2337,7 @@ const expeditionHubMethods = Object.create(null);
     });
     if (completed) {
       if (typeof Utils !== 'undefined' && Utils?.showBattleLog) {
-        Utils.showBattleLog(`【命盘共鸣】已按样本踏入 ${formatExpeditionNodeLabels(resonance.focusNodeTypes, '关键线路')}，兑现「${resonance.label}」。`);
+        Utils.showBattleLog(`【命盘共鸣】已依照命盘指引踏入 ${formatExpeditionNodeLabels(resonance.focusNodeTypes, '关键线路')}，兑现「${resonance.label}」。`);
       }
       this.grantExpeditionObservatoryReward(link.resonance.reward, link.resonance.label || '命盘共鸣');
     } else if (typeof Utils !== 'undefined' && Utils?.showBattleLog) {
@@ -2353,7 +2364,7 @@ const expeditionHubMethods = Object.create(null);
     });
     if (completed) {
       if (typeof Utils !== 'undefined' && Utils?.showBattleLog) {
-        Utils.showBattleLog(`【路线合卷】已把「${routePact.bountyName}」与样本路线真正并成一卷，额外兑现章节奖励。`);
+        Utils.showBattleLog(`【路线合卷】已把「${routePact.bountyName}」与观星路线真正并成一卷，额外兑现章节奖励。`);
       }
       this.grantExpeditionObservatoryReward(link.routePact.reward, `${link.routePact.label || '路线合卷'}·${link.routePact.bountyName || '章节悬赏'}`);
     } else if (typeof Utils !== 'undefined' && Utils?.showBattleLog) {
@@ -3774,7 +3785,7 @@ const expeditionHubMethods = Object.create(null);
       endingName: ending.name,
       endingIcon: ending.icon,
       score,
-      scoreBreakdown: [`${ending.icon} ${ending.name}`, practiceTopic?.sourceTitle ? `课题样本：${practiceTopic.sourceTitle}` : null, answerSheet ? `章节答卷：${answerSheet.ratingLabel} · ${answerSheet.completedGoals}/${answerSheet.totalGoals} 项达成` : null, answerReview?.trainingAdvice ? `训练建议：${answerReview.trainingAdvice}` : null, `已完成悬赏 ${completedBounties.length} 条`, source.activeNemesis?.name ? `仇敌结果：${source.activeNemesis.name} · ${nemesisStatusMeta.label}${source.activeNemesis.alliedFactionName ? ` · ${source.activeNemesis.alliedFactionName}` : ''}` : '仇敌结果：暂无', currentVariant?.label ? `仇敌变体：${currentVariant.label}` : null, source.activeNemesis?.clueRevealed && source.activeNemesis?.clueLine ? `线索回看：${source.activeNemesis.clueLine}` : null, source.observatoryLink?.sourceTitle ? `观星线索：${source.observatoryLink.sourceTitle}${selectedObservatoryBonus ? ` · ${selectedObservatoryBonus.label}` : ''}` : null, source.observatoryLink?.trainingTags?.length ? `训练标签：${source.observatoryLink.trainingTags.join(' / ')}` : null, source.observatoryLink?.drillObjective ? `演练目标：${source.observatoryLink.drillObjective}` : source.observatoryLink?.coachBrief ? `教练提示：${source.observatoryLink.coachBrief}` : null, source.observatoryLink?.routeFocusLine ? `样本路径：${source.observatoryLink.routeFocusLine}` : null, answerReview?.highlightLine ? `回响结论：${answerReview.highlightLine}` : null, observatoryResonance?.completed ? `命盘共鸣：${observatoryResonance.label}${observatoryResonance.rewardLine ? ` · ${observatoryResonance.rewardLine}` : ''}` : observatoryResonance && selectedObservatoryBonus ? `命盘共鸣：${observatoryResonance.progress}/${observatoryResonance.target}` : null, observatoryRoutePact?.completed ? `路线合卷：${observatoryRoutePact.bountyName}${observatoryRoutePact.rewardLine ? ` · ${observatoryRoutePact.rewardLine}` : ''}` : observatoryRoutePact ? `路线合卷：${observatoryRoutePact.progress}/${observatoryRoutePact.target} · ${observatoryRoutePact.bountyName}` : null, `势力态势：${source.factions.map(entry => `${entry.name}${entry.stance > 0 ? '+' : ''}${entry.stance}`).join(' / ')}`].filter(Boolean),
+      scoreBreakdown: [`${ending.icon} ${ending.name}`, practiceTopic?.sourceTitle ? `修行课题：${practiceTopic.sourceTitle}` : null, answerSheet ? `章节答卷：${answerSheet.ratingLabel} · ${answerSheet.completedGoals}/${answerSheet.totalGoals} 项达成` : null, answerReview?.trainingAdvice ? `训练建议：${answerReview.trainingAdvice}` : null, `已完成悬赏 ${completedBounties.length} 条`, source.activeNemesis?.name ? `仇敌结果：${source.activeNemesis.name} · ${nemesisStatusMeta.label}${source.activeNemesis.alliedFactionName ? ` · ${source.activeNemesis.alliedFactionName}` : ''}` : '仇敌结果：暂无', currentVariant?.label ? `仇敌变体：${currentVariant.label}` : null, source.activeNemesis?.clueRevealed && source.activeNemesis?.clueLine ? `线索回看：${source.activeNemesis.clueLine}` : null, source.observatoryLink?.sourceTitle ? `观星线索：${source.observatoryLink.sourceTitle}${selectedObservatoryBonus ? ` · ${selectedObservatoryBonus.label}` : ''}` : null, source.observatoryLink?.trainingTags?.length ? `训练标签：${source.observatoryLink.trainingTags.join(' / ')}` : null, source.observatoryLink?.drillObjective ? `演练目标：${source.observatoryLink.drillObjective}` : source.observatoryLink?.coachBrief ? `教练提示：${source.observatoryLink.coachBrief}` : null, source.observatoryLink?.routeFocusLine ? `路线指引：${source.observatoryLink.routeFocusLine}` : null, answerReview?.highlightLine ? `回响结论：${answerReview.highlightLine}` : null, observatoryResonance?.completed ? `命盘共鸣：${observatoryResonance.label}${observatoryResonance.rewardLine ? ` · ${observatoryResonance.rewardLine}` : ''}` : observatoryResonance && selectedObservatoryBonus ? `命盘共鸣：${observatoryResonance.progress}/${observatoryResonance.target}` : null, observatoryRoutePact?.completed ? `路线合卷：${observatoryRoutePact.bountyName}${observatoryRoutePact.rewardLine ? ` · ${observatoryRoutePact.rewardLine}` : ''}` : observatoryRoutePact ? `路线合卷：${observatoryRoutePact.progress}/${observatoryRoutePact.target} · ${observatoryRoutePact.bountyName}` : null, `势力态势：${source.factions.map(entry => `${entry.name}${entry.stance > 0 ? '+' : ''}${entry.stance}`).join(' / ')}`].filter(Boolean),
       branchName: branch?.name || '未锁定支线',
       bountyNames: completedBounties.map(entry => entry.name),
       factionSummary: source.factions.map(entry => `${entry.name}·${getFactionStatusMeta(entry.stance).label}`),
@@ -3800,10 +3811,10 @@ const expeditionHubMethods = Object.create(null);
     const branchName = String(source.branchName || '');
     const hasLockedBranch = !!branchName && !/未锁/.test(branchName);
     const fallbackRatingLabel = hasLockedBranch ? '待复盘' : '待锁线';
-    const fallbackHighlightLine = hasLockedBranch ? `这一章已留下「${branchName}」的归卷留痕，下一章继续沿同轴线路补题，就能把观星样本写成完整答卷。` : `这一章暂时只留下 ${source.endingName || '章节留痕'}，下一章需要先锁定主线，再把观星样本补成答卷。`;
-    const fallbackTrainingAdvice = hasLockedBranch ? `继续沿「${branchName}」推进，并至少完成 1 条同轴悬赏，把这一章从留痕补成成卷答复。` : '先锁定 1 条章节主线，再沿观星样本推进关键线路与悬赏，把章节答卷真正做成卷。';
+    const fallbackHighlightLine = hasLockedBranch ? `这一章已留下「${branchName}」的归卷留痕，下一章继续沿同轴线路补题，就能把观星指引写成完整答卷。` : `这一章暂时只留下 ${source.endingName || '章节留痕'}，下一章需要先锁定主线，再把观星指引补成答卷。`;
+    const fallbackTrainingAdvice = hasLockedBranch ? `继续沿「${branchName}」推进，并至少完成 1 条同轴悬赏，把这一章从留痕补成成卷答复。` : '先锁定 1 条章节主线，再沿观星指引推进关键线路与悬赏，把章节答卷真正做成卷。';
     const fallbackFocusLines = [hasLockedBranch ? `路线锁定：已按「${branchName}」归卷，下一章继续沿同轴线路补题。` : '路线锁定：本章尚未锁主线，下一章先补主线再做观星答卷。', breakdown.find(line => /悬赏/.test(line || '')) || '', breakdown.find(line => /仇敌结果/.test(line || '')) || ''].filter(Boolean).slice(0, 3);
-    const diagnosticLines = focusLines.length > 0 ? focusLines : fallbackFocusLines.length > 0 ? fallbackFocusLines : breakdown.filter(line => /章节答卷|回响结论|命盘共鸣|路线合卷|训练建议|课题样本/.test(line || '')).slice(0, 3);
+    const diagnosticLines = focusLines.length > 0 ? focusLines : fallbackFocusLines.length > 0 ? fallbackFocusLines : breakdown.filter(line => /章节答卷|回响结论|命盘共鸣|路线合卷|训练建议|修行课题|课题样本/.test(line || '')).slice(0, 3);
     const agendaResolution = options?.agendaResolution && typeof options.agendaResolution === 'object' ? options.agendaResolution : typeof this.getSanctumAgendaExpeditionSnapshot === 'function' ? this.getSanctumAgendaExpeditionSnapshot({
       latestRunId: String(source.id || '')
     })?.lastResolved || null : null;
@@ -3979,10 +3990,10 @@ const expeditionHubMethods = Object.create(null);
       silentSync: true
     }) : null;
     const scoreBreakdown = readArray(source.scoreBreakdown).map(line => String(line || '').trim()).filter(Boolean);
-    const sourceTitle = String(practiceTopic?.sourceTitle || observatoryLink?.sourceTitle || scoreBreakdown.find(line => /^课题样本：/.test(line))?.replace(/^课题样本：/, '') || scoreBreakdown.find(line => /^观星线索：/.test(line))?.replace(/^观星线索：/, '').split(' · ')[0] || selectedGuide?.title || '').trim();
+    const sourceTitle = String(practiceTopic?.sourceTitle || observatoryLink?.sourceTitle || scoreBreakdown.find(line => /^修行课题：/.test(line))?.replace(/^修行课题：/, '') || scoreBreakdown.find(line => /^课题样本：/.test(line))?.replace(/^课题样本：/, '') || scoreBreakdown.find(line => /^观星线索：/.test(line))?.replace(/^观星线索：/, '').split(' · ')[0] || selectedGuide?.title || '').trim();
     const themeLabel = String(practiceTopic?.themeLabel || observatoryLink?.sourceThemeLabel || readArray(source.tags).find(tag => /^课题·/.test(String(tag || '')))?.replace(/^课题·/, '') || readArray(source.tags).find(tag => /^观星·/.test(String(tag || '')))?.replace(/^观星·/, '') || selectedGuide?.themeLabel || '').trim();
     const themeKey = resolveExpeditionObservatoryThemeKey(practiceTopic?.themeKey || observatoryLink?.sourceThemeKey || EXPEDITION_OBSERVATORY_THEME_KEY_BY_LABEL[themeLabel] || selectedGuide?.themeKey, themeLabel);
-    const routeFocusLine = String(practiceTopic?.routeHint || observatoryLink?.routeFocusLine || scoreBreakdown.find(line => /^样本路径：/.test(line))?.replace(/^样本路径：/, '') || selectedGuide?.routeFocusLine || '').trim();
+    const routeFocusLine = String(practiceTopic?.routeHint || observatoryLink?.routeFocusLine || scoreBreakdown.find(line => /^路线指引：/.test(line))?.replace(/^路线指引：/, '') || scoreBreakdown.find(line => /^样本路径：/.test(line))?.replace(/^样本路径：/, '') || selectedGuide?.routeFocusLine || '').trim();
     const compareHint = String(practiceTopic?.compareHint || observatoryLink?.compareHint || selectedGuide?.compareHint || '').trim();
     const trainingTags = Array.from(new Set([...readArray(practiceTopic?.trainingTags), ...readArray(observatoryLink?.trainingTags), ...readArray(selectedGuide?.trainingTags), ...readArray(source.tags).map(tag => String(tag || '').trim()).filter(tag => /^训练·/.test(tag)).map(tag => tag.replace(/^训练·/, ''))].map(entry => String(entry || '').trim()).filter(Boolean))).slice(0, 4);
     return {
@@ -4475,7 +4486,7 @@ const expeditionHubMethods = Object.create(null);
     const observatoryRecommendedBranches = readArray(observatoryLink?.recommendedBranches);
     const observatoryRecommendedNames = observatoryRecommendedBranches.map(entry => String(entry?.name || '').trim()).filter(Boolean).join(' / ');
     const observatorySelectedRecommendedBranch = observatoryRecommendedBranches.find(entry => entry.id === state.selectedBranchId) || null;
-    const observatoryRecommendedSummary = observatoryRecommendedBranches.length > 0 ? observatorySelectedRecommendedBranch ? `观星建议会把样本节奏直接映射到本章支线，你仍可改走其他路线。当前推荐路线：${observatorySelectedRecommendedBranch.name}。` : selectedBranch ? `观星建议会把样本节奏直接映射到本章支线，你仍可改走其他路线。当前可直接切回：${observatoryRecommendedNames}。` : `观星建议会把样本节奏直接映射到本章支线，你仍可改走其他路线。推荐路线：${observatoryRecommendedNames}。` : '';
+    const observatoryRecommendedSummary = observatoryRecommendedBranches.length > 0 ? observatorySelectedRecommendedBranch ? `观星建议会把命盘倾向映射到本章支线，你仍可改走其他路线。当前推荐路线：${observatorySelectedRecommendedBranch.name}。` : selectedBranch ? `观星建议会把命盘倾向映射到本章支线，你仍可改走其他路线。当前可直接切回：${observatoryRecommendedNames}。` : `观星建议会把命盘倾向映射到本章支线，你仍可改走其他路线。推荐路线：${observatoryRecommendedNames}。` : '';
     const branchEngineeringMap = new Map(state.branchOptions.map(entry => [entry.id, this.getExpeditionBranchEngineeringInsight(state, entry, engineeringInfluence)]));
     const bountySignalMap = new Map(state.bountyDraft.map(entry => [entry.id, this.getExpeditionBountySignalModel(state, entry)]));
     const bountyConflictWarnings = this.getExpeditionBountyConflictWarnings(state, bountySignalMap);
@@ -4492,7 +4503,7 @@ const expeditionHubMethods = Object.create(null);
                     <span class="expedition-chip">${escapeHtml(state.activeNemesis?.name || '暂无仇敌')} · ${escapeHtml(nemesisMeta.label || '未定')}</span>
                     ${nemesisForecast?.pressureLabel ? `<span class="expedition-chip">${escapeHtml(`追猎预判 · ${nemesisForecast.pressureLabel}`)}</span>` : ''}
                     ${engineeringInfluence ? `<span class="expedition-chip">${escapeHtml(`工程主轴 · ${engineeringInfluence.engineeringTrackName} ${engineeringInfluence.engineeringTierLabel}`)}</span>` : ''}
-                    ${observatoryLink?.sourceThemeLabel ? `<span class="expedition-chip">${escapeHtml(observatoryLink.sourceThemeLabel)} · 观星样本</span>` : ''}
+                    ${observatoryLink?.sourceThemeLabel ? `<span class="expedition-chip">${escapeHtml(observatoryLink.sourceThemeLabel)} · 观星指引</span>` : ''}
                     ${selectedObservatoryBonus?.label ? `<span class="expedition-chip">${escapeHtml(selectedObservatoryBonus.label)}${selectedObservatoryBonus.consumed ? ' · 已触发' : ''}</span>` : ''}
                     ${observatoryResonance ? `<span class="expedition-chip">${escapeHtml(`命盘共鸣 ${observatoryResonance.progress}/${observatoryResonance.target}${observatoryResonance.completed ? ' · 已兑现' : ''}`)}</span>` : ''}
                     ${observatoryRoutePact ? `<span class="expedition-chip">${escapeHtml(`路线合卷 ${observatoryRoutePact.progress}/${observatoryRoutePact.target}${observatoryRoutePact.completed ? ' · 已合卷' : ''}`)}</span>` : ''}
@@ -4520,7 +4531,7 @@ const expeditionHubMethods = Object.create(null);
                                     <span>${escapeHtml(`工程收益：${branchEngineering.rewardBias || '均衡'}`)}</span>
                                 </div>
                                 <div class="expedition-observatory-note">${escapeHtml(`工程联动：${branchEngineering.engineeringNote}`)}</div>` : ''}
-                            ${this.isExpeditionRecommendedBranch(state, entry.id) ? `<div class="expedition-observatory-note">观星建议：这条路线更贴近「${escapeHtml(observatoryLink?.sourceThemeLabel || '精选命盘')}」的样本节奏。</div>` : ''}
+                            ${this.isExpeditionRecommendedBranch(state, entry.id) ? `<div class="expedition-observatory-note">观星建议：这条路线更贴近「${escapeHtml(observatoryLink?.sourceThemeLabel || '精选命盘')}」的命盘倾向。</div>` : ''}
                             <button type="button" class="collection-inline-btn ${entry.id === state.selectedBranchId ? 'secondary' : ''}"
                                 data-expedition-action="select-branch"
                                 data-branch-id="${escapeHtml(entry.id)}">${entry.id === state.selectedBranchId ? '当前路线' : '锁定路线'}</button>
@@ -4542,7 +4553,7 @@ const expeditionHubMethods = Object.create(null);
                         <article class="expedition-choice-card ${state.activeBountyIds.includes(entry.id) ? 'selected' : ''} ${entry.completed ? 'completed' : ''}">
                             <div class="expedition-choice-head">
                                 <strong>${escapeHtml(entry.icon)} ${escapeHtml(entry.name)}</strong>
-                                <span>${escapeHtml(entry.type)}</span>
+                                <span>${escapeHtml(getExpeditionBountyTypeLabel(entry.type))}</span>
                             </div>
                             <p>${escapeHtml(entry.summary)}</p>
                             <div class="expedition-choice-meta">
@@ -4653,9 +4664,9 @@ const expeditionHubMethods = Object.create(null);
                                     <strong data-practice-topic-title="true">${escapeHtml(practiceTopic.title || '修行课题')}</strong>
                                     <span>${escapeHtml(practiceTopic.sourceFeaturedTier || '章节课题')}</span>
                                 </div>
-                                <p>${escapeHtml(practiceTopic.summary || practiceTopic.objective || '本章会围绕当前样本来作答。')}</p>
+                                <p>${escapeHtml(practiceTopic.summary || practiceTopic.objective || '本章会围绕当前命盘来作答。')}</p>
                                 <div class="expedition-chip-row">
-                                    <span class="expedition-chip">${escapeHtml(practiceTopic.sourceTitle || observatoryLink.sourceTitle || '当前样本')}</span>
+                                    <span class="expedition-chip">${escapeHtml(practiceTopic.sourceTitle || observatoryLink.sourceTitle || '当前命盘')}</span>
                                     ${practiceTopic.themeLabel ? `<span class="expedition-chip">${escapeHtml(practiceTopic.themeLabel)}</span>` : ''}
                                     ${practiceTopic.sourceSeedSignature ? `<span class="expedition-chip">${escapeHtml(practiceTopic.sourceSeedSignature)}</span>` : ''}
                                 </div>
@@ -4680,12 +4691,12 @@ const expeditionHubMethods = Object.create(null);
                         ${observatoryRecommendedBranches.length > 0 ? `<div class="expedition-observatory-actions">
                             ${observatoryRecommendedBranches.map(entry => {
       const isSelected = entry.id === state.selectedBranchId;
-      const actionLabel = isSelected ? '当前推荐路线' : selectedBranch ? '切到该路线' : '按样本锁线';
+      const actionLabel = isSelected ? '当前推荐路线' : selectedBranch ? '切到该路线' : '按指引锁线';
       return `
                                 <div class="expedition-observatory-action ${isSelected ? 'selected' : ''}" data-observatory-recommended-card="${escapeHtml(entry.id)}"${isSelected ? ' data-selected-recommended-branch="true"' : ''}>
                                     <div class="expedition-choice-head">
                                         <strong>${escapeHtml(entry.name)}</strong>
-                                        <span>${escapeHtml(`贴合 ${clampInt(entry.matchCount, 0, 9)} 项样本特征`)}</span>
+                                        <span>${escapeHtml(`贴合 ${clampInt(entry.matchCount, 0, 9)} 项路线特征`)}</span>
                                     </div>
                                     <button type="button" class="collection-inline-btn ${isSelected ? 'secondary' : ''}"
                                         data-observatory-recommended-branch="${escapeHtml(entry.id)}"
@@ -4698,7 +4709,7 @@ const expeditionHubMethods = Object.create(null);
     }).join('')}
                         </div>` : ''}
                         ${observatoryResonance ? `<div class="expedition-observatory-note">${escapeHtml(observatoryLink.selectedBonusId ? `命盘共鸣 ${observatoryResonance.progress}/${observatoryResonance.target}：沿 ${formatExpeditionNodeLabels(observatoryResonance.focusNodeTypes, '关键线路')} 线推进，${observatoryResonance.completed ? `已兑现 ${observatoryResonance.label}${observatoryResonance.rewardLine ? `（${observatoryResonance.rewardLine}）` : ''}` : `可兑现 ${observatoryResonance.label}${observatoryResonance.rewardLine ? `（${observatoryResonance.rewardLine}）` : ''}`}` : `锁定 1 条观星线索后，可沿 ${formatExpeditionNodeLabels(observatoryResonance.focusNodeTypes, '关键线路')} 线推进 ${observatoryResonance.target} 次，兑现 ${observatoryResonance.label}${observatoryResonance.rewardLine ? `（${observatoryResonance.rewardLine}）` : ''}`)}</div>` : ''}
-                        ${observatoryRoutePact ? `<div class="expedition-observatory-note">${escapeHtml(observatoryRoutePact.completed ? `路线合卷已把「${observatoryRoutePact.bountyName}」并成章节答卷${observatoryRoutePact.rewardLine ? `（${observatoryRoutePact.rewardLine}）` : ''}` : `路线合卷 ${observatoryRoutePact.progress}/${observatoryRoutePact.target}：把「${observatoryRoutePact.bountyName}」并入答卷，沿 ${formatExpeditionNodeLabels(observatoryRoutePact.focusNodeTypes, '关键线路')} 线推进，可额外兑现 ${observatoryRoutePact.rewardLine || '章节奖励'}`)}</div>` : observatoryLink.selectedBonusId ? `<div class="expedition-observatory-note">${escapeHtml('路线合卷：锁定支线后，承接 1 条与样本路线重合的悬赏，可把研判真正并成章节答卷。')}</div>` : ''}
+                        ${observatoryRoutePact ? `<div class="expedition-observatory-note">${escapeHtml(observatoryRoutePact.completed ? `路线合卷已把「${observatoryRoutePact.bountyName}」并成章节答卷${observatoryRoutePact.rewardLine ? `（${observatoryRoutePact.rewardLine}）` : ''}` : `路线合卷 ${observatoryRoutePact.progress}/${observatoryRoutePact.target}：把「${observatoryRoutePact.bountyName}」并入答卷，沿 ${formatExpeditionNodeLabels(observatoryRoutePact.focusNodeTypes, '关键线路')} 线推进，可额外兑现 ${observatoryRoutePact.rewardLine || '章节奖励'}`)}</div>` : observatoryLink.selectedBonusId ? `<div class="expedition-observatory-note">${escapeHtml('路线合卷：锁定支线后，承接 1 条与观星路线重合的悬赏，可把研判真正并成章节答卷。')}</div>` : ''}
                         ${observatoryEngineering?.huntIntel ? `<div class="expedition-observatory-note">${escapeHtml(`工程情报：${observatoryEngineering.huntIntel}`)}</div>` : ''}
                         ${observatoryEngineering?.conflictPreview ? `<div class="expedition-observatory-note">${escapeHtml(observatoryEngineering.conflictPreview)}</div>` : ''}
                         ${answerSheet ? `<div class="expedition-choice-list expedition-answer-sheet-list">
@@ -4748,7 +4759,7 @@ const expeditionHubMethods = Object.create(null);
                                 </div>
                                 <p>${escapeHtml(entry.summary)}</p>
                                 <div class="expedition-choice-meta">
-                                    <span>节点：${escapeHtml(entry.nodeTypes.join(' / ') || '任意')}</span>
+                                    <span>节点：${escapeHtml(formatExpeditionNodeLabels(entry.nodeTypes, '任意节点', 4))}</span>
                                     <span>${escapeHtml(observatoryLink.selectedBonusId === entry.id ? entry.consumed ? '已触发' : '本章已锁定' : '可启用 1 条')}</span>
                                 </div>
                                 <button type="button" class="collection-inline-btn ${observatoryLink.selectedBonusId === entry.id ? 'secondary' : ''}"
@@ -4790,7 +4801,7 @@ const expeditionHubMethods = Object.create(null);
                     <p>${escapeHtml(`仇敌追猎：${state.activeNemesis?.intro || '当前本章未锁定特殊仇敌。'}`)}</p>
                     <div class="expedition-choice-meta">
                         <span>变体：${escapeHtml(nemesisVariant?.label || '追猎压制')}</span>
-                        <span>${escapeHtml(state.activeNemesis?.alliedFactionName ? `投靠：${state.activeNemesis.alliedFactionName}` : `出没：${(state.activeNemesis?.triggerNodeTypes || []).join(' / ') || '未知'}`)}</span>
+                        <span>${escapeHtml(state.activeNemesis?.alliedFactionName ? `投靠：${state.activeNemesis.alliedFactionName}` : `出没：${formatExpeditionNodeLabels(state.activeNemesis?.triggerNodeTypes, '未知节点', 4)}`)}</span>
                     </div>
                     <div class="expedition-choice-meta">
                         <span>${escapeHtml(state.activeNemesis?.clueRevealed ? `线索：${state.activeNemesis.clueLine || '已显露'}` : '线索：尚未显露')}</span>
@@ -5912,7 +5923,7 @@ const expeditionHubMethods = Object.create(null);
       snapshot.gaps.push(`悬赏冲突：${bountyConflictWarnings[0].line}`);
     }
     if (practiceTopic) {
-      snapshot.strengths.push(`修行课题当前围绕【${practiceTopic.sourceTitle || practiceTopic.title}】展开，主轴是「${practiceTopic.themeLabel || '章节样本'}」。`);
+      snapshot.strengths.push(`修行课题当前围绕【${practiceTopic.sourceTitle || practiceTopic.title}】展开，主轴是「${practiceTopic.themeLabel || '章节命盘'}」。`);
       if (practiceTopic.trainingTags?.length > 0) {
         snapshot.nextTargets.push(`答卷标签：${practiceTopic.trainingTags.join(' / ')}`);
       }
@@ -5923,7 +5934,7 @@ const expeditionHubMethods = Object.create(null);
       if (answerSheet.ratingTone === 'completed') {
         snapshot.strengths.push(`当前答卷评级为【${answerSheet.ratingLabel}】，这章已经开始真正成卷。`);
       } else if (answerSheet.goals.some(goal => goal.deviated)) {
-        snapshot.gaps.push('当前答卷存在偏题风险，建议优先把路线修回样本主轴。');
+        snapshot.gaps.push('当前答卷存在偏题风险，建议优先把路线修回命盘主轴。');
       }
     }
     if (activeAgenda) {
@@ -5945,12 +5956,12 @@ const expeditionHubMethods = Object.create(null);
     }
     if (expedition.observatoryLink?.sourceTitle) {
       const selectedBonus = this.getSelectedExpeditionObservatoryBonus(expedition);
-      snapshot.strengths.push(`观星线索当前读取【${expedition.observatoryLink.sourceTitle}】（${expedition.observatoryLink.sourceThemeLabel}），可把挑战样本反哺到本章远征。`);
+      snapshot.strengths.push(`观星线索当前读取【${expedition.observatoryLink.sourceTitle}】（${expedition.observatoryLink.sourceThemeLabel}），可把挑战战录反哺到本章远征。`);
       if (expedition.observatoryLink.trainingTags?.length > 0) {
         snapshot.strengths.push(`观星训练标签：${expedition.observatoryLink.trainingTags.join(' / ')}。`);
       }
       if (expedition.observatoryLink.routeFocusLine) {
-        snapshot.nextTargets.push(`样本路径：${expedition.observatoryLink.routeFocusLine}。`);
+        snapshot.nextTargets.push(`路线指引：${expedition.observatoryLink.routeFocusLine}。`);
       }
       if (expedition.observatoryLink.drillObjective) {
         snapshot.nextTargets.push(`观星演练：${expedition.observatoryLink.drillObjective}`);
@@ -5960,7 +5971,7 @@ const expeditionHubMethods = Object.create(null);
       if (selectedBonus) {
         snapshot.strengths.push(`观星加成已锁定为「${selectedBonus.label}」${selectedBonus.consumed ? '，本章已触发过一次。' : '，接下来会在对应节点给出一次章节支援。'}`);
         if (observatoryResonance?.completed) {
-          snapshot.strengths.push(`命盘共鸣已兑现「${observatoryResonance.label}」${observatoryResonance.rewardLine ? `（${observatoryResonance.rewardLine}）` : ''}，本章的样本路线已经真正跑通。`);
+          snapshot.strengths.push(`命盘共鸣已兑现「${observatoryResonance.label}」${observatoryResonance.rewardLine ? `（${observatoryResonance.rewardLine}）` : ''}，本章的观星路线已经真正跑通。`);
         } else if (observatoryResonance) {
           snapshot.nextTargets.push(`命盘共鸣：${observatoryResonance.progress}/${observatoryResonance.target}，继续沿 ${formatExpeditionNodeLabels(observatoryResonance.focusNodeTypes, '关键线路')} 线推进，可兑现「${observatoryResonance.label}」${observatoryResonance.rewardLine ? `（${observatoryResonance.rewardLine}）` : ''}。`);
         }
@@ -5969,13 +5980,13 @@ const expeditionHubMethods = Object.create(null);
         } else if (observatoryRoutePact) {
           snapshot.nextTargets.push(`路线合卷：${observatoryRoutePact.progress}/${observatoryRoutePact.target}，继续沿 ${formatExpeditionNodeLabels(observatoryRoutePact.focusNodeTypes, '关键线路')} 线推进，把「${observatoryRoutePact.bountyName}」并成章节答卷。`);
         } else {
-          snapshot.nextTargets.push('路线合卷：锁定支线后，承接 1 条与样本路线重合的悬赏，可把研判真正并成章节答卷。');
+          snapshot.nextTargets.push('路线合卷：锁定支线后，承接 1 条与观星路线重合的悬赏，可把研判真正并成章节答卷。');
         }
       } else {
         snapshot.nextTargets.push('观星线索：从精选命盘里挑 1 条观星加成，本章会额外得到一次章节支援。');
       }
       if (expedition.observatoryLink.recommendedBranches.length > 0 && !selectedBranch) {
-        snapshot.nextTargets.push(`观星建议：优先锁定 ${expedition.observatoryLink.recommendedBranches.map(entry => `【${entry.name}】`).join(' / ')} 这几条更贴样本节奏的路线。`);
+        snapshot.nextTargets.push(`观星建议：优先锁定 ${expedition.observatoryLink.recommendedBranches.map(entry => `【${entry.name}】`).join(' / ')} 这几条更贴命盘倾向的路线。`);
       }
     } else {
       snapshot.nextTargets.push('观星线索：当前还没有精选命盘，先去观星台完成一轮挑战，为远征解出额外选项。');

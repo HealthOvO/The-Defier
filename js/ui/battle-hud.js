@@ -241,6 +241,7 @@ import { escapeAttr as importedEscapeAttr, escapeHtml as importedEscapeHtml } fr
     const systems = input.systems && typeof input.systems === 'object' ? input.systems : {};
     const advisor = input.advisor && typeof input.advisor === 'object' ? input.advisor : {};
     const advisorExpanded = !!input.advisorExpanded;
+    const advisorDetailsExpanded = !!input.advisorDetailsExpanded;
     const spirit = advisor.spirit && typeof advisor.spirit === 'object' ? advisor.spirit : null;
     const systemStripMarkup = api.buildBattleSystemsStripMarkup({
       items: Array.isArray(systems.stripItems) ? systems.stripItems : []
@@ -346,49 +347,58 @@ import { escapeAttr as importedEscapeAttr, escapeHtml as importedEscapeHtml } fr
             `).join('') : '';
     const executionChainIndex = advisor.executionChain && advisor.executionChain.index != null && Number.isFinite(Number(advisor.executionChain.index)) ? Math.floor(Number(advisor.executionChain.index)) : -1;
     const advisorBody = `
-            ${tempoRail ? `
-                <div class="battle-advisor-block battle-advisor-tempo-block">
-                    <div class="battle-advisor-section-head">
-                        <span class="battle-advisor-section-title">回合节奏条</span>
-                        <span class="battle-advisor-section-note">${escapeHtml(advisor.tempoRail?.summary || '')}</span>
-                    </div>
-                    <div class="battle-advisor-tempo-grid">${tempoRail}</div>
+            <div class="battle-advisor-focus">
+                <div class="battle-advisor-threat-list">${threatChips}</div>
+                <p class="battle-advisor-line battle-advisor-recommend">建议回路：${escapeHtml(advisor.recommendation?.label || '')} · ${escapeHtml(advisor.recommendation?.desc || '')}</p>
+                ${advisor.cardPlanHint ? `<p class="battle-advisor-line battle-advisor-cardplan">${escapeHtml(advisor.cardPlanHint)}</p>` : ''}
+                ${cardPlanSteps ? `<div class="battle-advisor-cardplan-steps">${cardPlanSteps}</div>` : ''}
+            </div>
+            <details class="battle-advisor-details" ${advisorDetailsExpanded ? 'open' : ''}>
+                <summary>
+                    <span>更多战术数据</span>
+                    <small>节奏、状态、系统与命环</small>
+                </summary>
+                <div class="battle-advisor-details-body">
+                    <p class="battle-advisor-line battle-advisor-readiness">${escapeHtml(advisor.readiness || '')}</p>
+                    ${advisor.formationHint ? `<p class="battle-advisor-line battle-advisor-formation">${escapeHtml(advisor.formationHint)}</p>` : ''}
+                    ${executionChainItems ? `
+                        <div class="battle-advisor-block battle-advisor-chain"
+                             data-card-index="${executionChainIndex}">
+                            <div class="battle-advisor-section-head">
+                                <span class="battle-advisor-section-title">${escapeHtml(advisor.executionChain?.kicker || '执行链')}</span>
+                                <span class="battle-advisor-section-note">${escapeHtml(advisor.executionChain?.summary || '')}</span>
+                            </div>
+                            <div class="battle-advisor-chain-title">${escapeHtml(advisor.executionChain?.title || '')}</div>
+                            ${executionChainTags ? `<div class="battle-advisor-chain-tags">${executionChainTags}</div>` : ''}
+                            <div class="battle-advisor-chain-steps">${executionChainItems}</div>
+                        </div>
+                    ` : ''}
+                    ${tempoRail ? `
+                        <div class="battle-advisor-block battle-advisor-tempo-block">
+                            <div class="battle-advisor-section-head">
+                                <span class="battle-advisor-section-title">回合节奏条</span>
+                                <span class="battle-advisor-section-note">${escapeHtml(advisor.tempoRail?.summary || '')}</span>
+                            </div>
+                            <div class="battle-advisor-tempo-grid">${tempoRail}</div>
+                        </div>
+                    ` : ''}
+                    ${statusIslands ? `
+                        <div class="battle-advisor-block battle-advisor-status-block">
+                            <div class="battle-advisor-section-head">
+                                <span class="battle-advisor-section-title">关键状态岛</span>
+                                <span class="battle-advisor-section-note">把资源、共鸣与 Boss 节奏聚合查看。</span>
+                            </div>
+                            <div class="battle-advisor-status-strip">${statusIslands}</div>
+                        </div>
+                    ` : ''}
+                    ${systemDetailMarkup}
+                    ${spiritPanel}
+                    ${advisor.matrixHint ? `<p class="battle-advisor-line battle-advisor-matrix">${escapeHtml(advisor.matrixHint)}</p>` : ''}
+                    ${advisor.pendingModeLabel ? `<p class="battle-advisor-line battle-advisor-pending-mode">模式预设：${escapeHtml(advisor.pendingModeLabel)}</p>` : ''}
+                    ${matrixControls ? `<div class="battle-advisor-matrix-controls">${matrixControls}</div>` : ''}
+                    ${advisor.lastModeLabel ? `<p class="battle-advisor-line battle-advisor-last">上次命环模式：${escapeHtml(advisor.lastModeLabel)}</p>` : ''}
                 </div>
-            ` : ''}
-            ${statusIslands ? `
-                <div class="battle-advisor-block battle-advisor-status-block">
-                    <div class="battle-advisor-section-head">
-                        <span class="battle-advisor-section-title">关键状态岛</span>
-                        <span class="battle-advisor-section-note">把资源、共鸣与 Boss 节奏聚合查看。</span>
-                    </div>
-                    <div class="battle-advisor-status-strip">${statusIslands}</div>
-                </div>
-            ` : ''}
-            ${systemDetailMarkup}
-            ${spiritPanel}
-            <div class="battle-advisor-threat-list">${threatChips}</div>
-            <p class="battle-advisor-line battle-advisor-recommend">建议回路：${escapeHtml(advisor.recommendation?.label || '')} · ${escapeHtml(advisor.recommendation?.desc || '')}</p>
-            <p class="battle-advisor-line battle-advisor-readiness">${escapeHtml(advisor.readiness || '')}</p>
-            ${advisor.formationHint ? `<p class="battle-advisor-line battle-advisor-formation">${escapeHtml(advisor.formationHint)}</p>` : ''}
-            ${advisor.cardPlanHint ? `<p class="battle-advisor-line battle-advisor-cardplan">${escapeHtml(advisor.cardPlanHint)}</p>` : ''}
-            ${cardPlanSteps ? `<div class="battle-advisor-cardplan-steps">${cardPlanSteps}</div>` : ''}
-            ${executionChainItems ? `
-                <div class="battle-advisor-block battle-advisor-chain"
-                     data-card-index="${executionChainIndex}">
-                    <div class="battle-advisor-section-head">
-                        <span class="battle-advisor-section-title">${escapeHtml(advisor.executionChain?.kicker || '执行链')}</span>
-                        <span class="battle-advisor-section-note">${escapeHtml(advisor.executionChain?.summary || '')}</span>
-                    </div>
-                    <div class="battle-advisor-chain-title">${escapeHtml(advisor.executionChain?.title || '')}</div>
-                    ${executionChainTags ? `<div class="battle-advisor-chain-tags">${executionChainTags}</div>` : ''}
-                    <div class="battle-advisor-chain-steps">${executionChainItems}</div>
-                </div>
-            ` : ''}
-            ${advisor.matrixHint ? `<p class="battle-advisor-line battle-advisor-matrix">${escapeHtml(advisor.matrixHint)}</p>` : ''}
-            ${advisor.pendingModeLabel ? `<p class="battle-advisor-line battle-advisor-pending-mode">模式预设：${escapeHtml(advisor.pendingModeLabel)}</p>` : ''}
-            ${matrixControls ? `<div class="battle-advisor-matrix-controls">${matrixControls}</div>` : ''}
-            ${matrixControls ? '<p class="battle-advisor-line battle-advisor-hotkey">快捷预设：H开关助手 · 1自适应 2守势 3破阵 4净域 5歼灭</p>' : '<p class="battle-advisor-line battle-advisor-hotkey">快捷预设：H 开关助手</p>'}
-            ${advisor.lastModeLabel ? `<p class="battle-advisor-line battle-advisor-last">上次命环模式：${escapeHtml(advisor.lastModeLabel)}</p>` : ''}
+            </details>
         `;
     return `
             <div class="battle-command-header">

@@ -12,6 +12,597 @@
     box-shadow: var(--fd-shadow-panel);
 }
 
+/* Decision modals prioritize choices; supporting context stays available on demand. */
+#event-modal .modal-content.event-view {
+    width: min(820px, calc(100vw - 24px));
+    max-height: min(88dvh, 760px) !important;
+}
+
+#event-modal .event-header {
+    padding: 14px 18px;
+}
+
+#event-modal .event-view .event-icon {
+    width: 56px;
+    height: 56px;
+    margin-bottom: 6px;
+    border-radius: 8px;
+    font-size: 2rem;
+}
+
+#event-modal .event-view h2 {
+    margin: 0;
+    font-size: 1.45rem;
+    letter-spacing: 0;
+}
+
+#event-modal .event-body {
+    padding: 16px 18px 18px;
+}
+
+#event-modal .event-desc {
+    margin: 0 0 10px;
+    line-height: 1.5;
+}
+
+#event-modal .event-atmosphere {
+    margin-bottom: 10px;
+    padding: 8px 10px;
+    border-radius: 8px;
+}
+
+#event-modal .event-system-summary {
+    margin: 0 0 10px;
+    padding: 0;
+    overflow: hidden;
+    border-radius: 8px;
+}
+
+#event-modal .event-summary-toggle {
+    min-height: 44px;
+    padding: 9px 11px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    cursor: pointer;
+    list-style: none;
+}
+
+#event-modal .event-summary-toggle::-webkit-details-marker {
+    display: none;
+}
+
+#event-modal .event-summary-label {
+    margin: 0;
+    color: rgba(244, 220, 173, 0.9);
+    font-size: 0.76rem;
+    letter-spacing: 0;
+    text-transform: none;
+}
+
+#event-modal .event-summary-toggle-copy {
+    flex: 0 0 auto;
+    color: var(--text-muted);
+    font-size: 0;
+}
+
+#event-modal .event-summary-toggle-copy::after {
+    content: "展开";
+    font-size: 0.74rem;
+}
+
+#event-modal .event-system-summary[open] .event-summary-toggle-copy::after {
+    content: "收起";
+}
+
+#event-modal .event-system-summary[open] .event-summary-toggle {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+#event-modal .event-system-summary .event-summary-chip-list {
+    padding: 10px 11px 11px;
+}
+
+#event-modal .event-choices {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+}
+
+#event-modal .event-choice {
+    min-height: 92px;
+    margin: 0;
+    padding: 11px 13px;
+    align-items: flex-start;
+    justify-content: center;
+    border-radius: 8px;
+}
+
+#event-modal .event-choice .choice-title {
+    width: 100%;
+    line-height: 1.35;
+}
+
+#event-modal .event-choice .choice-effect {
+    margin-top: 5px;
+    line-height: 1.35;
+}
+
+#event-modal .event-choice .choice-summary {
+    margin-top: 7px;
+}
+
+@media (min-width: 769px) {
+    #event-modal .event-header {
+        display: grid;
+        grid-template-columns: 56px minmax(0, 1fr);
+        align-items: center;
+        gap: 12px;
+        text-align: left;
+    }
+
+    #event-modal .event-view .event-icon {
+        margin: 0;
+    }
+
+    #event-modal .event-choices {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+    }
+}
+
+@media (max-width: 559px) {
+    #event-modal .modal-content.event-view {
+        width: calc(100vw - 24px);
+        max-height: calc(100dvh - 32px) !important;
+    }
+
+    #event-modal .event-header {
+        padding: 12px 14px;
+    }
+
+    #event-modal .event-view .event-icon {
+        width: 50px;
+        height: 50px;
+        font-size: 1.75rem;
+    }
+
+    #event-modal .event-body {
+        padding: 12px 14px 14px;
+    }
+
+    #event-modal .event-desc,
+    #event-modal .event-atmosphere {
+        font-size: 0.84rem;
+    }
+
+    #event-modal .event-choice {
+        min-height: 86px;
+        padding: 10px 11px;
+    }
+}
+
+/* Run results use one clear summary and keep every exit action in the first viewport. */
+#game-over-screen.active {
+    padding: clamp(12px, 3vw, 32px);
+    justify-content: center;
+    overflow-y: auto;
+}
+
+#game-over-screen.active::before,
+#game-over-screen.active::after {
+    display: none;
+}
+
+#game-over-screen .game-over-container {
+    width: min(720px, 100%);
+    min-height: 0;
+    margin: auto;
+    padding: clamp(20px, 4vw, 32px);
+    gap: 18px;
+    flex-shrink: 1;
+    border: 1px solid rgba(129, 161, 210, 0.28);
+    border-radius: 8px;
+    background: rgba(7, 13, 30, 0.92);
+    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.42);
+}
+
+#game-over-screen .game-over-hero {
+    display: grid;
+    justify-items: center;
+    gap: 7px;
+    text-align: center;
+}
+
+#game-over-screen .game-over-kicker {
+    color: rgba(226, 196, 128, 0.9);
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0;
+}
+
+#game-over-screen .game-over-title {
+    margin: 0;
+    font-size: clamp(2.4rem, 6vw, 4rem);
+    line-height: 1;
+    letter-spacing: 0;
+}
+
+#game-over-screen .game-over-text {
+    max-width: 540px;
+    margin: 0;
+    font-size: 1rem;
+    line-height: 1.55;
+    text-align: center;
+}
+
+#game-over-screen .run-stats {
+    width: 100%;
+    min-width: 0;
+    padding: 0;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0;
+    overflow: hidden;
+    border: 1px solid rgba(129, 161, 210, 0.22);
+    border-radius: 8px;
+    background: transparent;
+}
+
+#game-over-screen .stat-row {
+    min-width: 0;
+    min-height: 62px;
+    padding: 10px 14px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border-bottom: 1px solid rgba(129, 161, 210, 0.16);
+}
+
+#game-over-screen .stat-row:nth-child(odd) {
+    border-right: 1px solid rgba(129, 161, 210, 0.16);
+}
+
+#game-over-screen .stat-row:nth-last-child(-n + 2) {
+    border-bottom: 0;
+}
+
+#game-over-screen .stat-row span:first-child {
+    flex: 0 0 auto;
+    color: var(--text-muted);
+    font-size: 0.82rem;
+    white-space: nowrap;
+}
+
+#game-over-screen .stat-row span:last-child {
+    flex: 1 1 auto;
+    min-width: 0;
+    color: var(--text-primary);
+    font-weight: 700;
+    text-align: right;
+    overflow-wrap: anywhere;
+}
+
+#game-over-screen .game-over-buttons {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+}
+
+#game-over-screen .game-over-buttons .menu-btn {
+    width: 100%;
+    min-width: 0;
+    min-height: 44px;
+    margin: 0;
+    padding: 10px 12px;
+    border-radius: 8px;
+    white-space: normal;
+}
+
+#game-over-screen[data-run-result="victory"] .game-over-container {
+    border-color: rgba(226, 196, 128, 0.42);
+}
+
+@media (max-width: 559px) {
+    #game-over-screen .game-over-container {
+        padding: 20px 16px;
+        gap: 16px;
+    }
+
+    #game-over-screen .game-over-title {
+        font-size: 2.65rem;
+    }
+
+    #game-over-screen .run-stats {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    #game-over-screen .stat-row,
+    #game-over-screen .stat-row:nth-child(odd),
+    #game-over-screen .stat-row:nth-last-child(-n + 2) {
+        border-right: 0;
+        border-bottom: 1px solid rgba(129, 161, 210, 0.16);
+    }
+
+    #game-over-screen .stat-row:last-child {
+        border-bottom: 0;
+    }
+
+    #game-over-screen .game-over-buttons {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 8px;
+    }
+}
+
+@media (min-width: 560px) and (max-height: 520px) and (orientation: landscape) {
+    #game-over-screen.active {
+        padding: 10px;
+    }
+
+    #game-over-screen .game-over-container {
+        width: min(820px, 100%);
+        padding: 16px 18px;
+        display: grid;
+        grid-template-columns: minmax(190px, 0.78fr) minmax(0, 1.22fr);
+        grid-template-areas:
+            "hero stats"
+            "hero actions";
+        align-items: center;
+        gap: 12px 18px;
+    }
+
+    #game-over-screen .game-over-hero {
+        grid-area: hero;
+    }
+
+    #game-over-screen .game-over-title {
+        font-size: 2.45rem;
+    }
+
+    #game-over-screen .game-over-text {
+        font-size: 0.82rem;
+    }
+
+    #game-over-screen .run-stats {
+        grid-area: stats;
+    }
+
+    #game-over-screen .stat-row {
+        min-height: 52px;
+        padding: 7px 10px;
+        font-size: 0.78rem;
+    }
+
+    #game-over-screen .game-over-buttons {
+        grid-area: actions;
+        gap: 8px;
+    }
+
+    #game-over-screen .game-over-buttons .menu-btn {
+        padding: 8px;
+        font-size: 0.78rem;
+    }
+}
+
+/* One scroll owner keeps the opening screen calm on short desktop viewports. */
+#main-menu {
+    overflow: hidden;
+}
+
+#main-menu .menu-content {
+    flex: 1 1 auto;
+    min-height: 0;
+    max-height: 100%;
+}
+
+/* Short landscape devices need a selection board, not six full-height dossiers. */
+@media (min-width: 540px) and (max-width: 960px) and (max-height: 520px) {
+    #character-selection-screen .character-selection-container {
+        gap: 8px;
+        padding: 4px 8px 10px;
+    }
+
+    #character-selection-screen .story-intro-summary {
+        min-height: 46px;
+        padding: 6px 10px;
+    }
+
+    #character-selection-screen .story-intro-kicker {
+        font-size: 0.62rem;
+    }
+
+    #character-selection-screen .story-intro-summary strong {
+        font-size: 0.78rem;
+    }
+
+    #character-selection-screen .story-intro-toggle::before {
+        width: 30px;
+        height: 30px;
+    }
+
+    #character-selection-screen .character-cards-wrapper {
+        min-height: 158px;
+        height: 158px;
+        padding: 0 4px 6px;
+        grid-auto-columns: calc((100% - 16px) / 3);
+        gap: 8px;
+        scroll-padding-inline: 4px;
+    }
+
+    #character-selection-screen .character-card,
+    #character-selection-screen .character-card-select {
+        min-height: 148px;
+        height: 148px;
+    }
+
+    #character-selection-screen .character-card-select .card-inner {
+        min-height: 0;
+        height: 100%;
+        display: grid;
+        grid-template-columns: 68px minmax(0, 1fr);
+    }
+
+    #character-selection-screen .character-card .char-header {
+        width: 68px;
+        height: 100%;
+        min-height: 0;
+        flex-basis: auto;
+        border-right: 1px solid rgba(255, 255, 255, 0.06);
+    }
+
+    #character-selection-screen .character-card .char-avatar-wrapper {
+        flex: 0 0 54px;
+        width: 54px;
+        min-width: 54px;
+        max-width: 54px;
+        height: 54px;
+        min-height: 54px;
+        max-height: 54px;
+    }
+
+    #character-selection-screen .character-card .char-body {
+        min-width: 0;
+        padding: 8px;
+        gap: 3px;
+        justify-content: center;
+        overflow: hidden;
+    }
+
+    #character-selection-screen .character-card .char-name {
+        font-size: 1rem;
+        letter-spacing: 0;
+    }
+
+    #character-selection-screen .character-card .char-title {
+        max-width: 100%;
+        margin-top: 0;
+        padding: 1px 6px;
+        overflow: hidden;
+        font-size: 0.62rem;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    #character-selection-screen .character-card .char-desc,
+    #character-selection-screen .character-card .char-identity-strip,
+    #character-selection-screen .character-card .char-keyword-strip,
+    #character-selection-screen .character-card .char-relic-info,
+    #character-selection-screen .character-card .char-story-panel {
+        display: none !important;
+    }
+
+    #character-selection-screen .character-card .char-stats-preview {
+        margin-top: 5px;
+        padding-top: 5px;
+        gap: 10px;
+    }
+
+    #character-selection-screen .character-card .stat-value {
+        font-size: 0.78rem;
+    }
+
+    #character-selection-screen .character-card .stat-label {
+        font-size: 0.56rem;
+    }
+
+    #character-selection-screen .run-destiny-section {
+        gap: 6px;
+        padding-bottom: 4px;
+    }
+
+    #character-selection-screen .run-destiny-header {
+        min-height: 48px;
+        padding: 7px 9px;
+        gap: 8px;
+        align-items: center;
+    }
+
+    #character-selection-screen .run-destiny-kicker {
+        margin-bottom: 2px;
+        font-size: 0.58rem;
+    }
+
+    #character-selection-screen .run-destiny-header h3 {
+        font-size: 0.86rem;
+        letter-spacing: 0;
+    }
+
+    #character-selection-screen .run-destiny-header p {
+        max-width: 52%;
+        font-size: 0.68rem;
+        line-height: 1.3;
+        -webkit-line-clamp: 2;
+    }
+
+    #character-selection-screen .run-destiny-grid {
+        min-height: 124px;
+        height: 124px;
+        padding: 0 4px 6px;
+        grid-auto-columns: calc((100% - 16px) / 3);
+        gap: 8px;
+        scroll-padding-inline: 4px;
+    }
+
+    #character-selection-screen .run-destiny-card,
+    #character-selection-screen .run-destiny-empty {
+        min-height: 114px;
+        height: 114px;
+        padding: 8px;
+        gap: 4px;
+        overflow: hidden;
+        border-radius: 8px;
+    }
+
+    #character-selection-screen .run-destiny-head {
+        gap: 6px;
+    }
+
+    #character-selection-screen .run-destiny-icon {
+        width: 30px;
+        height: 30px;
+        border-radius: 7px;
+        font-size: 1rem;
+    }
+
+    #character-selection-screen .run-destiny-name {
+        font-size: 0.84rem;
+        letter-spacing: 0;
+    }
+
+    #character-selection-screen .run-destiny-tier {
+        overflow: hidden;
+        font-size: 0.58rem;
+        letter-spacing: 0;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    #character-selection-screen .run-destiny-desc,
+    #character-selection-screen .run-destiny-tags {
+        display: none;
+    }
+
+    #character-selection-screen .run-destiny-summary {
+        padding: 5px 6px;
+        display: -webkit-box;
+        overflow: hidden;
+        font-size: 0.64rem;
+        line-height: 1.3;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 2;
+    }
+
+    #character-selection-screen .character-selection-footer {
+        padding: 6px 10px 8px;
+    }
+
+    #character-selection-screen .character-selection-footer .menu-btn {
+        min-height: 48px;
+    }
+}
+
 /* ===================================
    Secondary flow density and disclosure pass
    =================================== */
@@ -226,7 +817,7 @@
     #save-slots-modal .slot-actions .save-history-btn {
         width: 100% !important;
         min-width: 0;
-        min-height: 42px;
+        min-height: 44px;
         margin: 0 !important;
         transform: none !important;
     }
@@ -243,7 +834,7 @@
     }
 
     #save-slots-modal .save-slots-footer .talisman-btn {
-        min-height: 42px;
+        min-height: 44px;
         margin: 0;
         transform: none;
     }
@@ -541,6 +1132,7 @@
     to { transform: rotate(360deg); }
 }
 
+#pvp-screen .deferred-screen-shell,
 #season-ops-screen .deferred-screen-shell,
 #fate-chronicle-screen .deferred-screen-shell {
     position: relative;
@@ -554,6 +1146,17 @@
         linear-gradient(180deg, #07101f 0%, #050a12 100%);
 }
 
+#pvp-screen[data-deferred-module="pvp"] > :not(.deferred-screen-shell) {
+    visibility: hidden;
+}
+
+#pvp-screen .deferred-screen-shell {
+    position: absolute;
+    inset: 0;
+    z-index: 100;
+}
+
+#pvp-screen .deferred-screen-back,
 #season-ops-screen .deferred-screen-back,
 #fate-chronicle-screen .deferred-screen-back {
     position: absolute;
@@ -570,6 +1173,7 @@
     cursor: pointer;
 }
 
+#pvp-screen .deferred-screen-state,
 #season-ops-screen .deferred-screen-state,
 #fate-chronicle-screen .deferred-screen-state {
     width: min(100%, 420px);
@@ -580,6 +1184,7 @@
     text-align: center;
 }
 
+#pvp-screen .deferred-screen-spinner,
 #season-ops-screen .deferred-screen-spinner,
 #fate-chronicle-screen .deferred-screen-spinner {
     display: block;
@@ -592,6 +1197,7 @@
     animation: runtime-load-spin 0.9s linear infinite;
 }
 
+#pvp-screen [data-pvp-loading-shell][data-load-state="error"] .deferred-screen-spinner,
 #season-ops-screen [data-season-ops-loading-shell][data-load-state="error"] .deferred-screen-spinner,
 #fate-chronicle-screen [data-fate-chronicle-loading-shell][data-load-state="error"] .deferred-screen-spinner {
     animation: none;
@@ -599,6 +1205,7 @@
     border-top-color: #ec7f70;
 }
 
+#pvp-screen .deferred-screen-kicker,
 #season-ops-screen .deferred-screen-kicker,
 #fate-chronicle-screen .deferred-screen-kicker {
     margin: 0 0 8px;
@@ -607,6 +1214,7 @@
     font-weight: 700;
 }
 
+#pvp-screen .deferred-screen-state h2,
 #season-ops-screen .deferred-screen-state h2,
 #fate-chronicle-screen .deferred-screen-state h2 {
     margin: 0;
@@ -615,6 +1223,7 @@
     letter-spacing: 0;
 }
 
+#pvp-screen .deferred-screen-state p:last-child,
 #season-ops-screen .deferred-screen-state p:last-child,
 #fate-chronicle-screen .deferred-screen-state p:last-child {
     margin: 12px 0 0;
@@ -1160,6 +1769,15 @@
 
 #battle-screen #battle-command-panel {
     box-sizing: border-box;
+}
+
+@media screen and (min-width: 769px) {
+    #main-menu .util-btn {
+        width: 44px;
+        min-width: 44px;
+        height: 44px;
+        min-height: 44px;
+    }
 }
 
 @media screen and (max-width: 768px) {
@@ -3052,6 +3670,276 @@ body:has(.modal-overlay.active) .battle-log-panel {
     cursor: not-allowed;
 }
 
+#shop-screen .shop-tab-summary {
+    display: grid;
+    grid-template-columns: minmax(180px, 0.68fr) minmax(0, 1.32fr);
+    gap: 12px;
+    padding: 12px 14px;
+    align-items: stretch;
+}
+
+#shop-screen .shop-summary-lead {
+    min-width: 0;
+    display: grid;
+    align-content: center;
+    gap: 5px;
+}
+
+#shop-screen .shop-summary-title {
+    margin: 0;
+}
+
+#shop-screen .shop-summary-text {
+    font-size: 0.84rem;
+    line-height: 1.42;
+}
+
+#shop-screen .shop-spend-advice {
+    min-width: 0;
+    margin: 0;
+    padding: 9px 11px;
+    align-content: center;
+    gap: 7px;
+}
+
+#shop-screen .shop-advice-primary {
+    min-width: 0;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 8px;
+    align-items: center;
+}
+
+#shop-screen .shop-advice-text {
+    min-width: 0;
+    font-size: 0.8rem;
+    line-height: 1.42;
+    overflow-wrap: anywhere;
+}
+
+#shop-screen .shop-advice-details {
+    min-width: 0;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+#shop-screen .shop-advice-details > summary {
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    color: rgba(220, 232, 250, 0.78);
+    font-size: 0.78rem;
+    cursor: pointer;
+    list-style: none;
+}
+
+#shop-screen .shop-advice-details > summary::-webkit-details-marker {
+    display: none;
+}
+
+#shop-screen .shop-advice-details > summary::before {
+    content: '＋';
+    color: var(--accent-gold);
+    font-weight: 700;
+}
+
+#shop-screen .shop-advice-details[open] > summary::before {
+    content: '−';
+}
+
+#shop-screen .shop-advice-detail-body {
+    display: grid;
+    gap: 7px;
+    padding: 0 0 4px;
+}
+
+#shop-screen .shop-summary-history {
+    grid-column: 1 / -1;
+    margin-top: 0;
+}
+
+@media (min-width: 769px) and (max-height: 680px) {
+    #shop-screen .shop-screen-header {
+        align-items: center;
+        flex-wrap: nowrap;
+        gap: 12px;
+        padding: 8px 20px;
+    }
+
+    #shop-screen .shop-header-title {
+        min-width: 0;
+        gap: 2px;
+    }
+
+    #shop-screen .shop-header-title h2 {
+        margin: 0;
+        font-size: 1.45rem;
+        text-align: left;
+    }
+
+    #shop-screen .shop-header-title p {
+        overflow: hidden;
+        font-size: 0.78rem;
+        line-height: 1.25;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    #shop-screen .shop-currency-strip {
+        flex-wrap: nowrap;
+        gap: 7px;
+    }
+
+    #shop-screen .shop-currency {
+        gap: 6px;
+        padding: 6px 10px;
+    }
+
+    #shop-screen .shop-container {
+        gap: 12px;
+        padding: 10px 28px 20px;
+    }
+
+    #shop-screen .shop-tab-btn {
+        min-height: 44px;
+        padding: 8px 14px;
+    }
+
+    #shop-screen .shop-tab-summary {
+        grid-template-columns: minmax(160px, 0.56fr) minmax(0, 1.44fr);
+        gap: 10px;
+        padding: 8px 10px;
+    }
+
+    #shop-screen .shop-summary-text,
+    #shop-screen .shop-advice-text {
+        font-size: 0.76rem;
+        line-height: 1.34;
+    }
+
+    #shop-screen .shop-spend-advice {
+        gap: 4px;
+        padding: 6px 8px;
+    }
+
+    #shop-screen .shop-section {
+        padding: 12px 16px;
+    }
+
+    #shop-screen .shop-section h3 {
+        margin-bottom: 8px;
+        font-size: 1.1rem;
+    }
+}
+
+#treasure-compendium .compendium-advanced-filters {
+    flex: 1 1 100%;
+    min-width: 0;
+    border: 1px solid rgba(117, 181, 255, 0.2);
+    border-radius: 8px;
+    background: rgba(7, 14, 30, 0.64);
+}
+
+#treasure-compendium .compendium-advanced-filters > summary {
+    min-height: var(--fd-hit-target);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 8px 11px;
+    color: rgba(235, 242, 255, 0.9);
+    cursor: pointer;
+    list-style: none;
+}
+
+#treasure-compendium .compendium-advanced-filters > summary::-webkit-details-marker {
+    display: none;
+}
+
+#treasure-compendium .compendium-advanced-filters > summary::after {
+    content: '+';
+    flex: 0 0 auto;
+    color: var(--accent-gold);
+    font-weight: 700;
+}
+
+#treasure-compendium .compendium-advanced-filters[open] > summary::after {
+    content: '-';
+}
+
+#treasure-compendium .compendium-filter-summary-meta {
+    margin-left: auto;
+    color: rgba(190, 207, 234, 0.64);
+    font-size: 0.74rem;
+}
+
+#treasure-compendium .compendium-advanced-filters .compendium-chip-groups {
+    padding: 4px 11px 11px;
+}
+
+@media (max-width: 768px) {
+    #treasure-compendium .compendium-toolbar {
+        gap: 8px;
+        padding: 10px;
+    }
+
+    #treasure-compendium .treasure-compendium-main {
+        width: 100%;
+    }
+
+    #treasure-compendium .compendium-advanced-filters {
+        width: 100%;
+    }
+
+    #treasure-compendium .compendium-filter-summary-meta {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    #treasure-compendium .compendium-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+    }
+
+    #treasure-compendium .compendium-item {
+        min-width: 0;
+        aspect-ratio: 0.82;
+    }
+
+    #treasure-compendium .compendium-item-inner {
+        padding: 8px;
+    }
+
+    #treasure-compendium .compendium-icon {
+        margin-bottom: 6px;
+        font-size: 2.15rem;
+    }
+
+    #treasure-compendium .compendium-name {
+        font-size: 0.78rem;
+    }
+
+    #treasure-compendium .compendium-item-sub {
+        gap: 4px;
+        margin-top: 6px;
+    }
+
+    #treasure-compendium .compendium-mini-badge {
+        padding: 3px 6px;
+        font-size: 0.58rem;
+    }
+
+    #treasure-compendium .compendium-mini-text {
+        font-size: 0.62rem;
+        line-height: 1.28;
+    }
+
+    #treasure-compendium .compendium-chip {
+        min-height: var(--fd-hit-target);
+    }
+}
+
 #deck-view-cards.event-upgrade-layout {
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(260px, 320px);
@@ -3059,6 +3947,51 @@ body:has(.modal-overlay.active) .battle-log-panel {
     width: 100%;
     min-height: 0;
     align-items: stretch;
+}
+
+#event-modal .event-body {
+    overscroll-behavior: contain;
+}
+
+#event-modal .event-choices {
+    flex: 0 0 auto;
+    min-height: auto;
+    overflow: visible;
+}
+
+.save-conflict-info {
+    margin: 0;
+    min-width: 0;
+    color: var(--text-muted);
+    line-height: 1.5;
+}
+
+.treasure-bag-modal .close-btn {
+    width: var(--fd-hit-target);
+    height: var(--fd-hit-target);
+    display: inline-grid;
+    place-items: center;
+    padding: 0;
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    border-radius: 50%;
+    background: rgba(5, 9, 20, 0.72);
+    line-height: 1;
+}
+
+.treasure-bag-modal .modal-content.large-modal {
+    height: auto;
+    min-height: 0;
+    max-height: min(85dvh, 760px);
+}
+
+.treasure-bag-modal .treasure-bag-layout {
+    min-height: 0;
+}
+
+#reward-screen .reward-expedition-handoff-btn {
+    min-height: var(--fd-hit-target);
+    padding: 9px 12px;
+    font-size: 0.76rem;
 }
 
 .event-upgrade-list {
@@ -3639,6 +4572,88 @@ body:has(.modal-overlay.active) .battle-log-panel {
 }
 
 @media (max-width: 768px) {
+    #shop-screen .shop-tab-summary {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 9px;
+        padding: 11px 12px;
+    }
+
+    #shop-screen .shop-advice-primary {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 6px;
+    }
+
+    .modal.upgrade-mode .modal-content {
+        width: calc(100vw - 20px);
+        height: calc(100dvh - 20px) !important;
+        max-height: calc(100dvh - 20px) !important;
+    }
+
+    .modal.upgrade-mode .modal-content > h2 {
+        position: relative;
+        z-index: 3;
+        min-height: 52px;
+        margin: 0;
+        padding: 14px 64px 10px 16px;
+        border-bottom: 1px solid rgba(207, 170, 112, 0.2);
+        background: var(--event-bg-dark);
+        color: var(--text-primary);
+        font-size: 1.15rem;
+        line-height: 1.35;
+        text-align: left;
+    }
+
+    .modal.upgrade-mode #deck-view-cards {
+        min-height: 0;
+        overflow: hidden;
+    }
+
+    .modal.upgrade-mode .upgrade-modal-layout {
+        min-height: 0;
+        flex-direction: column;
+    }
+
+    .modal.upgrade-mode .upgrade-card-grid {
+        flex: 0 0 clamp(184px, 25dvh, 220px);
+        width: 100%;
+        min-height: 0;
+        padding: 12px 14px 14px;
+        flex-wrap: nowrap;
+        justify-content: flex-start;
+        gap: 12px;
+        overflow-x: auto;
+        overflow-y: hidden;
+        scroll-snap-type: x proximity;
+        overscroll-behavior-x: contain;
+    }
+
+    .modal.upgrade-mode .upgrade-card-grid .card {
+        flex: 0 0 auto;
+        scroll-snap-align: start;
+    }
+
+    .modal.upgrade-mode .upgrade-preview-panel {
+        flex: 1 1 0;
+        width: 100%;
+        min-width: 0;
+        min-height: 0;
+        padding: 12px 16px 16px;
+        border-top: 1px solid var(--gold-accent);
+        border-left: 0;
+        overflow-x: hidden;
+        overflow-y: auto;
+        box-shadow: 0 -8px 18px rgba(0, 0, 0, 0.32);
+    }
+
+    .modal.upgrade-mode .preview-title {
+        margin: 0;
+        font-size: 1.45rem;
+    }
+
+    .modal.upgrade-mode .preview-placeholder {
+        margin: auto 0;
+    }
+
     #deck-view-cards.event-upgrade-layout {
         grid-template-columns: minmax(0, 1fr);
         gap: 12px;
@@ -3681,6 +4696,17 @@ body:has(.modal-overlay.active) .battle-log-panel {
     #pvp-screen .pvp-live-secondary-grid .pvp-live-invite-panel,
     #pvp-screen .pvp-live-secondary-grid .pvp-live-loadout-selector {
         padding: 10px;
+    }
+
+    .challenge-reward-top,
+    .challenge-record-item {
+        flex-wrap: wrap;
+    }
+
+    .challenge-reward-progress,
+    .challenge-record-item > span {
+        flex: 1 1 100%;
+        white-space: normal;
     }
 
     #map-screen .map-canvas-header {
@@ -3826,30 +4852,68 @@ body:has(.modal-overlay.active) .battle-log-panel {
     }
 
     #reward-screen .reward-card-stage {
-        overflow: hidden;
+        overflow: visible;
     }
 
     #reward-screen .reward-cards {
-        display: flex;
-        flex-direction: row;
-        flex-wrap: nowrap;
-        justify-content: flex-start;
-        gap: 12px;
-        padding: 6px 4px 12px;
-        overflow-x: auto;
-        overflow-y: hidden;
-        scroll-snap-type: x mandatory;
-        scrollbar-width: thin;
-        overscroll-behavior-x: contain;
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        justify-content: center;
+        gap: 8px;
+        padding: 6px 0 10px;
+        overflow: visible;
+        scroll-snap-type: none;
     }
 
     #reward-screen .reward-card,
     #reward-screen .reward-cards .card,
     #reward-screen .reward-card-stage .card {
-        flex: 0 0 min(278px, calc(100% - 24px));
-        width: min(278px, calc(100% - 24px));
-        min-height: 310px;
-        scroll-snap-align: center;
+        width: 100%;
+        min-width: 0;
+        max-width: 180px;
+        min-height: 236px;
+        padding: 9px 7px;
+        justify-self: center;
+        scroll-snap-align: none;
+    }
+
+    #reward-screen .reward-cards .card-cost,
+    #reward-screen .reward-card-stage .card-cost {
+        top: -8px;
+        left: -7px;
+        width: 30px;
+        height: 30px;
+        font-size: 0.92rem;
+    }
+
+    #reward-screen .reward-cards .card-header,
+    #reward-screen .reward-card-stage .card-header {
+        min-height: 30px;
+        padding-left: 13px;
+    }
+
+    #reward-screen .reward-cards .card-name,
+    #reward-screen .reward-card-stage .card-name {
+        font-size: 0.86rem;
+        line-height: 1.18;
+    }
+
+    #reward-screen .reward-cards .card-image,
+    #reward-screen .reward-cards .card-art,
+    #reward-screen .reward-card-stage .card-image,
+    #reward-screen .reward-card-stage .card-art {
+        min-height: 36px;
+        flex-basis: 36px;
+        font-size: 2.15rem;
+    }
+
+    #reward-screen .reward-cards .card-desc,
+    #reward-screen .reward-card-stage .card-desc {
+        flex: 0 0 auto;
+        padding: 6px;
+        font-size: 0.84rem;
+        line-height: 1.38;
+        overflow-wrap: anywhere;
     }
 
     #character-select .ink-scroll-container {
@@ -4144,6 +5208,11 @@ body:has(.modal-overlay.active) .battle-log-panel {
 }
 
 @media (max-width: 768px) {
+    #battle-screen #battle-command-panel .battle-advisor-toggle {
+        min-height: var(--fd-hit-target);
+        padding: 6px 10px;
+    }
+
     #map-screen .map-content-wrapper {
         padding-bottom: clamp(140px, 18dvh, 168px);
     }
@@ -4193,15 +5262,15 @@ body:has(.modal-overlay.active) .battle-log-panel {
     }
 
     #battle-screen #battle-command-panel:has(#battle-tactical-advisor:not(.collapsed)) {
-        max-height: 158px;
+        flex: 0 0 auto;
+        max-height: clamp(208px, 31dvh, 266px);
         overflow-x: hidden;
-        overflow-y: auto;
+        overflow-y: hidden;
     }
 
-    #battle-screen .battle-control-rail:has(#battle-tactical-advisor:not(.collapsed)) > #battle-environment,
-    #battle-screen .battle-control-rail:has(#battle-tactical-advisor:not(.collapsed)) > #legacy-mission-tracker,
-    #battle-screen .battle-control-rail:has(#battle-tactical-advisor:not(.collapsed)) > #boss-act-panel {
-        display: none !important;
+    #battle-screen #battle-command-panel:has(#battle-tactical-advisor:not(.collapsed)) .battle-command-list,
+    #battle-screen #battle-command-panel:has(#battle-tactical-advisor:not(.collapsed)) .battle-system-strip {
+        display: none;
     }
 
     #battle-screen .resources-container {
@@ -4347,6 +5416,47 @@ body:has(.modal-overlay.active) .battle-log-panel {
 }
 
 @media (max-width: 768px) {
+    #map-screen .map-screen-v3.show-map-intel,
+    #map-screen .map-screen-v3.show-map-intel.show-map-tools {
+        grid-template-columns: minmax(0, 1fr);
+        grid-template-rows: auto clamp(170px, 23dvh, 210px) minmax(0, 1fr);
+        overflow: hidden;
+    }
+
+    #map-screen .map-screen-v3.show-map-intel .map-scroll-container {
+        grid-row: 2;
+        grid-column: 1;
+        min-height: 0;
+        max-height: none;
+        padding: 4px 8px;
+        overflow-x: hidden !important;
+        overflow-y: auto !important;
+        border-bottom: 1px solid rgba(155, 190, 255, 0.2);
+        opacity: 1;
+        visibility: visible;
+        pointer-events: none;
+    }
+
+    #map-screen .map-screen-v3.show-map-intel .map-canvas-header {
+        display: none;
+    }
+
+    #map-screen .map-screen-v3.show-map-intel .map-intel-drawer {
+        grid-row: 3;
+        grid-column: 1;
+        min-height: 0;
+        height: auto;
+        max-height: none;
+        padding: 10px 10px calc(16px + env(safe-area-inset-bottom));
+        overflow-x: hidden;
+        overflow-y: auto;
+        box-shadow: 0 -10px 28px rgba(0, 0, 0, 0.28);
+    }
+
+    #map-screen .map-screen-v3.show-map-intel .map-footer {
+        display: none;
+    }
+
     #map-screen .map-screen-v3.show-map-intel .map-situation-overview {
         padding: 8px;
     }
@@ -4368,5 +5478,1110 @@ body:has(.modal-overlay.active) .battle-log-panel {
         overflow-y: auto;
         overscroll-behavior: contain;
         scrollbar-width: thin;
+    }
+
+    #battle-screen .battle-container:has(#battle-tactical-advisor:not(.collapsed)) {
+        --battle-control-space: clamp(276px, 38dvh, 322px);
+    }
+
+    #battle-screen .battle-container:has(#boss-act-panel:not([hidden])):has(#battle-tactical-advisor:not(.collapsed)) {
+        --battle-control-space: clamp(324px, 44dvh, 372px);
+    }
+
+    #battle-screen .battle-control-rail:has(#battle-tactical-advisor:not(.collapsed)) {
+        max-height: calc(var(--battle-control-space) - 10px);
+        overflow-x: hidden;
+        overflow-y: auto;
+    }
+
+    #battle-screen .battle-control-rail:has(#battle-tactical-advisor:not(.collapsed)) > #battle-environment {
+        display: flex;
+        flex-wrap: nowrap;
+        max-height: 34px;
+        overflow-x: auto;
+        overflow-y: hidden;
+        white-space: nowrap;
+    }
+
+    #battle-screen .battle-control-rail:has(#battle-tactical-advisor:not(.collapsed)) > #legacy-mission-tracker {
+        max-height: 34px;
+    }
+
+    #battle-screen .battle-control-rail:has(#battle-tactical-advisor:not(.collapsed)) > #boss-act-panel {
+        max-height: 44px;
+    }
+
+    #battle-screen #battle-command-panel:has(#battle-tactical-advisor:not(.collapsed)) .battle-advisor-body {
+        padding-right: 2px;
+    }
+
+    #battle-screen #battle-command-panel:has(#battle-tactical-advisor:not(.collapsed)) .battle-tactical-advisor {
+        padding-block: 5px;
+    }
+
+    #battle-screen #battle-command-panel:has(#battle-tactical-advisor:not(.collapsed)) .battle-advisor-header {
+        min-height: 20px;
+    }
+
+    #battle-screen #battle-command-panel:has(#battle-tactical-advisor:not(.collapsed)) .battle-advisor-cardplan {
+        display: none;
+    }
+
+    #battle-screen #battle-command-panel:has(#battle-tactical-advisor:not(.collapsed)) .battle-advisor-threat-list,
+    #battle-screen #battle-command-panel:has(#battle-tactical-advisor:not(.collapsed)) .battle-advisor-recommend {
+        margin-top: 2px;
+    }
+
+    #battle-screen #battle-command-panel:has(#battle-tactical-advisor:not(.collapsed)) .battle-advisor-cardplan-steps {
+        margin-top: 3px;
+    }
+
+    #battle-screen #battle-command-panel:has(#battle-tactical-advisor:not(.collapsed)) .battle-advisor-details {
+        margin-top: 6px;
+    }
+}
+
+/* Phone landscape and short-tablet battle composition.
+   The desktop grid keeps large min-content widths, so a short viewport needs a
+   dedicated stage: controls own the left rail while combat and the hand share
+   the remaining width without horizontal clipping. */
+@media (min-width: 560px) and (max-width: 1180px) and (max-height: 560px) and (orientation: landscape) {
+    #battle-screen {
+        overflow: hidden;
+    }
+
+    #battle-screen .battle-bg-ring {
+        display: none;
+    }
+
+    #battle-screen .battle-container::before {
+        display: none;
+    }
+
+    #battle-screen .battle-container,
+    #battle-screen .battle-container:has(#boss-act-panel:not([hidden])),
+    #battle-screen .battle-container:has(#battle-tactical-advisor:not(.collapsed)),
+    #battle-screen .battle-container:has(#boss-act-panel:not([hidden])):has(#battle-tactical-advisor:not(.collapsed)) {
+        --battle-landscape-rail: clamp(236px, 31vw, 270px);
+        --battle-landscape-hand: clamp(138px, 38dvh, 158px);
+        display: block;
+        width: 100%;
+        min-width: 0;
+        height: 100%;
+        padding: 0;
+        overflow: hidden;
+    }
+
+    #battle-screen .battle-control-rail,
+    #battle-screen .battle-control-rail:has(#battle-tactical-advisor:not(.collapsed)) {
+        top: 8px;
+        right: auto;
+        bottom: 8px;
+        left: 8px;
+        width: calc(var(--battle-landscape-rail) - 16px);
+        max-height: none;
+        gap: 5px;
+        overflow-x: hidden;
+        overflow-y: auto;
+        scrollbar-width: thin;
+    }
+
+    #battle-screen .battle-control-rail > #battle-environment,
+    #battle-screen .battle-control-rail:has(#battle-tactical-advisor:not(.collapsed)) > #battle-environment {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        flex: 0 0 auto;
+        max-height: 64px;
+        padding: 6px;
+        gap: 4px;
+        overflow-x: hidden;
+        overflow-y: auto;
+        white-space: normal;
+    }
+
+    #battle-screen .battle-control-rail > #battle-environment > * {
+        min-width: 0;
+        overflow: hidden;
+    }
+
+    #battle-screen .battle-control-rail > #legacy-mission-tracker {
+        flex: 0 0 auto;
+        max-height: 44px;
+        padding: 5px 7px;
+        overflow: hidden;
+    }
+
+    #battle-screen .battle-control-rail > #boss-act-panel,
+    #battle-screen .battle-control-rail:has(#battle-tactical-advisor:not(.collapsed)) > #boss-act-panel {
+        flex: 0 0 auto;
+        max-height: 126px;
+        padding: 8px 9px;
+        overflow-x: hidden;
+        overflow-y: auto;
+    }
+
+    #battle-screen .battle-control-rail > #battle-command-panel,
+    #battle-screen #battle-command-panel:has(#battle-tactical-advisor.collapsed),
+    #battle-screen #battle-command-panel:has(#battle-tactical-advisor:not(.collapsed)) {
+        flex: 1 0 92px;
+        min-height: 92px;
+        max-height: none;
+        padding: 7px;
+        overflow-x: hidden;
+        overflow-y: auto;
+    }
+
+    #battle-screen #battle-command-panel:has(#battle-tactical-advisor.collapsed) .battle-command-list {
+        display: grid;
+    }
+
+    #battle-screen .battle-control-rail .battle-tactical-advisor.collapsed {
+        display: none;
+    }
+
+    #battle-screen .battle-control-rail .battle-command-list {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 4px;
+        margin-top: 5px;
+        overflow: visible;
+        scrollbar-width: none;
+    }
+
+    #battle-screen .battle-control-rail .battle-command-btn {
+        width: 100%;
+        min-width: 0;
+        min-height: 40px;
+        padding: 5px 6px;
+    }
+
+    #battle-screen .battle-control-rail .battle-command-meta,
+    #battle-screen .battle-control-rail .battle-system-strip,
+    #battle-screen .battle-control-rail .battle-advisor-details {
+        display: none;
+    }
+
+    #battle-screen .battle-control-rail .battle-tactical-advisor:not(.collapsed) {
+        max-height: 112px;
+        overflow-y: auto;
+    }
+
+    #battle-screen .player-area {
+        position: absolute;
+        top: 56px;
+        right: auto;
+        bottom: auto;
+        left: calc(var(--battle-landscape-rail) + 12px);
+        width: clamp(238px, 34vw, 286px);
+        height: 116px;
+        min-height: 0;
+        margin: 0;
+        padding: 0;
+        display: grid;
+        grid-template-rows: 78px 34px;
+        gap: 4px;
+        align-content: start;
+        justify-content: stretch;
+        z-index: 30;
+    }
+
+    #battle-screen .player-character {
+        width: 100%;
+        height: 78px;
+        min-height: 78px;
+        grid-template-columns: 58px minmax(0, 1fr) 44px;
+        gap: 7px;
+        padding: 7px 8px;
+        border-radius: 12px;
+    }
+
+    #battle-screen .player-character::after {
+        display: none;
+    }
+
+    #battle-screen .player-avatar {
+        width: 58px;
+        height: 58px;
+        border-width: 2px;
+    }
+
+    #battle-screen .player-avatar::before {
+        inset: -4px;
+    }
+
+    #battle-screen .player-avatar > span,
+    #battle-screen .player-avatar > #player-name-display {
+        bottom: -4px;
+        min-width: 54px;
+        padding: 2px 5px;
+        font-size: 0.56rem;
+    }
+
+    #battle-screen .player-status-stack {
+        gap: 3px;
+    }
+
+    #battle-screen .player-status-stack .buff-list {
+        max-height: 20px;
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        overflow-y: hidden;
+    }
+
+    #battle-screen #active-skill-btn {
+        width: 44px;
+        min-width: 44px;
+        height: 44px;
+        min-height: 44px;
+    }
+
+    #battle-screen .resources-container {
+        position: relative;
+        inset: auto;
+        width: 100%;
+        max-width: 100%;
+        height: 34px;
+        margin: 0;
+        display: flex;
+        flex-direction: row;
+        align-items: center;
+        justify-content: center;
+        gap: 5px;
+        overflow-x: auto;
+        overflow-y: hidden;
+        transform: none;
+        scrollbar-width: none;
+    }
+
+    #battle-screen .resources-container .resource-item,
+    #battle-screen .resources-container .energy-display,
+    #battle-screen .resources-container .candy-display,
+    #battle-screen .resources-container #candy-container {
+        flex: 0 0 auto;
+        flex-direction: row;
+        align-items: center;
+        gap: 4px;
+        margin: 0;
+    }
+
+    #battle-screen .energy-orbs,
+    #battle-screen .candy-orbs {
+        flex-wrap: nowrap;
+        gap: 2px;
+    }
+
+    #battle-screen .energy-orb,
+    #battle-screen .candy-orb {
+        width: 20px;
+        height: 20px;
+        font-size: 16px;
+    }
+
+    #battle-screen .enemy-area {
+        position: absolute;
+        top: 52px;
+        right: 116px;
+        bottom: var(--battle-landscape-hand);
+        left: calc(var(--battle-landscape-rail) + clamp(260px, 36vw, 308px));
+        width: auto;
+        height: auto;
+        min-width: 0;
+        min-height: 0;
+        margin: 0;
+        padding: 0;
+        align-items: center;
+        justify-content: center;
+        transform: none;
+        overflow: visible;
+        z-index: 22;
+    }
+
+    #battle-screen .enemy-container {
+        gap: 6px;
+        transform: scale(0.72);
+        transform-origin: center;
+    }
+
+    #battle-screen .battle-middle,
+    body[data-current-screen="battle-screen"] #battle-log,
+    #battle-screen .battle-log {
+        display: none;
+    }
+
+    #battle-screen .hand-area {
+        position: absolute;
+        right: 8px;
+        bottom: 0;
+        left: var(--battle-landscape-rail);
+        width: auto;
+        height: var(--battle-landscape-hand);
+        min-height: var(--battle-landscape-hand);
+        max-height: var(--battle-landscape-hand);
+        margin: 0;
+        padding: 4px 4px 8px;
+        gap: 4px;
+        align-items: flex-end;
+        overflow: visible;
+        transform: none;
+        z-index: 40;
+    }
+
+    #battle-screen .deck-pile,
+    #battle-screen .discard-pile {
+        flex: 0 0 60px;
+        width: 60px;
+        height: 84px;
+        min-width: 60px;
+        min-height: 84px;
+    }
+
+    #battle-screen .hand-cards {
+        flex: 1 1 auto;
+        min-width: 0;
+        height: 100%;
+        padding: 0 2px;
+        justify-content: center;
+        align-items: flex-end;
+        overflow-x: auto;
+        overflow-y: visible;
+        scrollbar-width: none;
+    }
+
+    #battle-screen #hand-cards .card {
+        flex: 0 0 108px;
+        width: 108px;
+        min-width: 108px;
+        height: 142px;
+        min-height: 142px;
+        margin-left: -14px;
+        padding: 6px;
+        transform: rotateX(5deg) translateY(0) scale(0.9);
+    }
+
+    #battle-screen #hand-cards .card:first-child {
+        margin-left: 0;
+    }
+
+    #battle-screen #hand-cards .card:hover,
+    #battle-screen #hand-cards .card:focus-visible {
+        transform: translateY(-16px) scale(1) rotateX(0deg) !important;
+    }
+
+    #battle-screen #hand-cards .card.selected {
+        transform: translateY(-26px) scale(1.04) rotateX(0deg) !important;
+    }
+
+    #battle-screen #hand-cards .card.advisor-focus {
+        transform: translateY(-14px) scale(1) rotateX(0deg) !important;
+    }
+
+    #battle-screen #end-turn-btn {
+        position: fixed !important;
+        top: 8px;
+        right: 10px;
+        bottom: auto;
+        width: 106px;
+        min-width: 106px;
+        min-height: 44px;
+        padding: 8px 12px;
+        font-size: 0.82rem;
+        letter-spacing: 1px;
+    }
+}
+
+@media (min-width: 560px) and (max-width: 768px) and (max-height: 520px) and (orientation: landscape) {
+    #battle-screen .battle-container,
+    #battle-screen .battle-container:has(#boss-act-panel:not([hidden])),
+    #battle-screen .battle-container:has(#battle-tactical-advisor:not(.collapsed)),
+    #battle-screen .battle-container:has(#boss-act-panel:not([hidden])):has(#battle-tactical-advisor:not(.collapsed)) {
+        --battle-landscape-rail: clamp(180px, 28vw, 196px);
+        --battle-landscape-hand: clamp(132px, 38dvh, 146px);
+    }
+
+    #battle-screen .enemy-container {
+        transform: scale(0.62);
+    }
+
+    #battle-screen #battle-command-panel .battle-command-list {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+        gap: 4px;
+        overflow: visible;
+    }
+
+    #battle-screen #battle-command-panel .battle-command-btn {
+        min-height: 44px;
+        flex: none;
+    }
+
+    #battle-screen #end-turn-btn {
+        right: 8px;
+        width: 98px;
+        min-width: 98px;
+    }
+}
+
+/* Short landscape card actions keep selection and confirmation visible together. */
+@media (min-width: 560px) and (max-width: 768px) and (max-height: 520px) and (orientation: landscape) {
+    .modal.upgrade-mode .modal-content > h2 {
+        min-height: 48px;
+        padding-top: 12px;
+        padding-bottom: 8px;
+        font-size: 1.05rem;
+    }
+
+    .modal.upgrade-mode .upgrade-modal-layout {
+        flex-direction: row;
+    }
+
+    .modal.upgrade-mode .upgrade-card-grid {
+        flex: 1 1 auto;
+        width: auto;
+        height: auto;
+        padding: 8px 10px 12px;
+        flex-wrap: wrap;
+        justify-content: center;
+        align-content: flex-start;
+        gap: 8px 6px;
+        overflow-x: hidden;
+        overflow-y: auto;
+        scroll-snap-type: none;
+    }
+
+    .modal.upgrade-mode .upgrade-preview-panel {
+        flex: 0 0 min(43vw, 300px);
+        width: min(43vw, 300px);
+        min-width: 260px;
+        padding: 8px 10px 10px;
+        border-top: 0;
+        border-left: 1px solid var(--gold-accent);
+        box-shadow: -8px 0 18px rgba(0, 0, 0, 0.32);
+    }
+
+    .modal.upgrade-mode .preview-title {
+        font-size: 1.2rem;
+    }
+
+    .modal.upgrade-mode .preview-placeholder {
+        font-size: 0.86rem;
+    }
+
+    #purification-modal .purification-header {
+        margin-bottom: 6px;
+    }
+
+    #purification-modal .purification-title {
+        margin: 0;
+        font-size: 2.15rem;
+        letter-spacing: 0.12em;
+    }
+
+    #purification-modal .purification-subtitle {
+        font-size: 0.68rem;
+    }
+
+    #purification-modal .purification-scroll-area {
+        padding: 6px 8px 8px;
+    }
+
+    #purification-modal .purification-grid {
+        grid-template-columns: repeat(auto-fit, minmax(112px, 1fr));
+        gap: 10px 6px;
+        padding-bottom: 8px;
+        justify-items: center;
+    }
+
+    #purification-modal .purification-footer {
+        grid-template-columns: minmax(0, 1fr) repeat(2, minmax(132px, 180px));
+        gap: 6px;
+        padding: 6px 8px 0;
+    }
+
+    #purification-modal .purification-cost {
+        grid-column: auto;
+        align-self: center;
+        text-align: left;
+        font-size: 0.82rem;
+    }
+
+    #purification-modal .purification-btn {
+        min-height: 40px;
+        padding: 7px 10px;
+        font-size: 0.9rem;
+    }
+}
+
+/* Reward choice and confirmation stay in the same viewport on shallow displays. */
+@media (min-width: 560px) and (max-height: 650px) and (orientation: landscape) {
+    #reward-screen .reward-container {
+        padding: 10px 12px 14px;
+    }
+
+    #reward-screen .reward-shell {
+        width: 100%;
+        max-width: 1120px;
+        gap: 9px;
+    }
+
+    #reward-screen .reward-header {
+        grid-template-columns: auto auto minmax(0, 1fr);
+        justify-items: start;
+        align-items: center;
+        gap: 8px 12px;
+        text-align: left;
+    }
+
+    #reward-screen .reward-kicker {
+        padding: 4px 9px;
+        font-size: 0.66rem;
+        letter-spacing: 0.12em;
+    }
+
+    #reward-screen .reward-title {
+        font-size: clamp(1.45rem, 3vw, 1.9rem);
+        white-space: nowrap;
+    }
+
+    #reward-screen .reward-subtitle {
+        max-width: none;
+        font-size: 0.76rem;
+        line-height: 1.38;
+    }
+
+    #reward-screen .reward-layout {
+        grid-template-columns: minmax(0, 1.35fr) minmax(240px, 0.65fr);
+        gap: 10px;
+        align-items: stretch;
+    }
+
+    #reward-screen .reward-main-column,
+    #reward-screen .reward-side-column {
+        min-width: 0;
+        gap: 8px;
+    }
+
+    #reward-screen .reward-side-column {
+        max-height: calc(100dvh - 76px);
+        padding-right: 3px;
+        overflow-x: hidden;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+    }
+
+    #reward-screen .reward-card-stage,
+    #reward-screen .reward-summary-card {
+        padding: 10px 12px;
+    }
+
+    #reward-screen .reward-section-heading,
+    #reward-screen .reward-section-heading.compact {
+        gap: 3px;
+        margin-bottom: 8px;
+    }
+
+    #reward-screen .reward-section-eyebrow {
+        font-size: 0.62rem;
+        letter-spacing: 0.12em;
+    }
+
+    #reward-screen .reward-section-heading h3 {
+        font-size: 1.05rem;
+    }
+
+    #reward-screen .reward-section-heading p {
+        font-size: 0.72rem;
+        line-height: 1.35;
+    }
+
+    #reward-screen .reward-cards {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+        padding: 2px 0 0;
+        overflow-x: visible;
+        scroll-snap-type: none;
+    }
+
+    #reward-screen .reward-card,
+    #reward-screen .reward-cards .card,
+    #reward-screen .reward-card-stage .card {
+        width: 100%;
+        max-width: 190px;
+        min-width: 0;
+        flex: none;
+        justify-self: center;
+        min-height: clamp(205px, 55dvh, 270px);
+        height: clamp(205px, 55dvh, 270px);
+    }
+
+    #reward-screen .reward-resources {
+        gap: 6px;
+    }
+
+    #reward-screen .reward-item {
+        padding: 8px 9px;
+        border-radius: 8px;
+        font-size: 0.76rem;
+        line-height: 1.35;
+    }
+
+    #reward-screen .reward-battle-meta,
+    #reward-screen .reward-narrative-brief,
+    #reward-screen .reward-expedition-meta,
+    #reward-screen .reward-run-path-meta {
+        margin-top: 7px;
+        padding: 8px 9px;
+        border-radius: 8px;
+        font-size: 0.72rem;
+    }
+
+    #reward-screen .reward-actions {
+        position: sticky;
+        bottom: 0;
+        z-index: 2;
+        gap: 6px;
+        padding: 8px;
+        background: rgba(5, 10, 24, 0.96);
+    }
+
+    #reward-screen .reward-next-step-card {
+        min-height: 0;
+        padding: 7px 8px;
+        font-size: 0.72rem;
+    }
+
+    #reward-screen .reward-actions button {
+        min-height: 44px;
+        padding: 8px 10px;
+        border-radius: 8px;
+        font-size: 0.78rem;
+    }
+}
+
+/* Event decisions stay comparable instead of becoming a one-card vertical tunnel. */
+@media (min-width: 560px) and (max-width: 768px) and (max-height: 520px) and (orientation: landscape) {
+    #event-modal.active::before,
+    #event-modal.active::after {
+        min-height: 8px;
+    }
+
+    #event-modal .modal-content.event-view {
+        width: min(620px, calc(100vw - 24px));
+        height: calc(100dvh - 20px);
+        max-height: calc(100dvh - 20px) !important;
+    }
+
+    #event-modal .event-header {
+        display: grid;
+        grid-template-columns: 46px minmax(0, 1fr);
+        align-items: center;
+        gap: 10px;
+        padding: 8px 14px;
+        text-align: left;
+    }
+
+    #event-modal .event-view .event-icon {
+        width: 44px;
+        height: 44px;
+        margin: 0;
+        border-radius: 8px;
+        font-size: 1.55rem;
+    }
+
+    #event-modal .event-view h2 {
+        font-size: 1.25rem;
+        line-height: 1.2;
+    }
+
+    #event-modal .event-body {
+        display: grid;
+        grid-template-columns: minmax(170px, 0.72fr) minmax(0, 1.5fr);
+        grid-template-rows: auto auto minmax(0, 1fr);
+        gap: 7px 10px;
+        padding: 8px 12px 10px;
+        overflow: hidden;
+    }
+
+    #event-modal .event-desc {
+        grid-column: 1;
+        grid-row: 1;
+        margin: 0;
+        font-size: 0.76rem;
+        line-height: 1.38;
+    }
+
+    #event-modal .event-atmosphere {
+        grid-column: 1;
+        grid-row: 2;
+        margin: 0;
+        padding: 7px 8px;
+        font-size: 0.7rem;
+        line-height: 1.35;
+    }
+
+    #event-modal .event-system-summary {
+        grid-column: 1;
+        grid-row: 3;
+        align-self: start;
+        max-height: 100%;
+        margin: 0;
+        padding: 7px 8px;
+        overflow-y: auto;
+        font-size: 0.7rem;
+        line-height: 1.35;
+    }
+
+    #event-modal .event-choices {
+        display: grid;
+        grid-column: 2;
+        grid-row: 1 / 4;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        align-self: center;
+        gap: 8px;
+        padding: 0;
+    }
+
+    #event-modal .event-choice {
+        min-height: 64px;
+        margin: 0;
+        padding: 8px 10px;
+        align-items: flex-start;
+        justify-content: center;
+        border-radius: 8px;
+    }
+
+    #event-modal .event-choice .choice-title {
+        width: 100%;
+        gap: 4px 8px;
+    }
+
+    #event-modal .event-choice .choice-effect,
+    #event-modal .event-choice .choice-summary {
+        margin-top: 4px;
+        font-size: 0.7rem;
+        line-height: 1.32;
+    }
+}
+
+/* Compact landscape maps keep the route visible while opening stage intelligence beside it. */
+@media (min-width: 560px) and (max-width: 768px) and (max-height: 520px) and (orientation: landscape) {
+    #map-screen .map-v3-header {
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr);
+        align-items: center;
+        gap: 8px;
+        padding: 6px 10px;
+    }
+
+    #map-screen .map-v3-header .back-btn {
+        align-self: center;
+        min-height: 40px;
+        padding: 6px 10px;
+        font-size: 0.74rem;
+        white-space: nowrap;
+    }
+
+    #map-screen .map-header-right {
+        width: 100%;
+        min-width: 0;
+    }
+
+    #map-screen .map-header-toolbar {
+        display: flex;
+        flex-direction: row;
+        flex-wrap: nowrap;
+        align-items: center;
+        gap: 6px;
+    }
+
+    #map-screen .player-status-bar {
+        flex: 1 1 auto;
+        width: auto;
+        min-width: 0;
+        margin: 0;
+        padding: 0;
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 4px;
+    }
+
+    #map-screen .status-item {
+        min-width: 0;
+        min-height: 40px;
+        padding: 5px 6px;
+        gap: 4px;
+        border-radius: 10px;
+        font-size: 0.68rem;
+    }
+
+    #map-screen .status-item .icon {
+        font-size: 0.78rem;
+    }
+
+    #map-screen .map-header-actions {
+        flex: 0 0 136px;
+        width: 136px;
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 4px;
+    }
+
+    #map-screen .map-header-toggle {
+        min-width: 0;
+        min-height: 40px;
+        padding: 5px 6px;
+        border-radius: 10px;
+        font-size: 0.68rem;
+        white-space: nowrap;
+    }
+
+    #map-screen .map-scroll-container {
+        padding: 8px 10px 54px;
+    }
+
+    #map-screen .map-screen-v3.show-map-intel,
+    #map-screen .map-screen-v3.show-map-intel.show-map-tools {
+        grid-template-columns: minmax(0, 1.35fr) minmax(250px, 1fr);
+        grid-template-rows: auto minmax(0, 1fr);
+        overflow: hidden;
+    }
+
+    #map-screen .map-screen-v3.show-map-intel .map-scroll-container {
+        grid-row: 2;
+        grid-column: 1;
+        min-height: 0;
+        max-height: none;
+        padding: 4px 6px 44px;
+        border-right: 1px solid rgba(155, 190, 255, 0.18);
+        border-bottom: 0;
+        opacity: 1;
+        visibility: visible;
+        pointer-events: auto;
+    }
+
+    #map-screen .map-screen-v3.show-map-intel .map-intel-drawer {
+        grid-row: 2;
+        grid-column: 2;
+        min-height: 0;
+        height: 100%;
+        max-height: none;
+        padding: 8px 8px 12px;
+        overflow-x: hidden;
+        overflow-y: auto;
+        box-shadow: -10px 0 28px rgba(0, 0, 0, 0.24);
+    }
+
+    #map-screen .map-screen-v3.show-map-intel .map-chapter-risk-card {
+        min-height: 0;
+        max-height: none;
+    }
+}
+
+/* Authoritative short-landscape closure after the legacy mobile rail rules. */
+@media (min-width: 540px) and (max-width: 960px) and (max-height: 520px) {
+    #character-selection-screen .character-selection-container {
+        gap: 8px;
+        padding: 4px 8px 10px;
+    }
+
+    #character-selection-screen .story-intro-summary {
+        min-height: 46px;
+        padding: 6px 10px;
+    }
+
+    #character-selection-screen .story-intro-kicker {
+        font-size: 0.62rem;
+    }
+
+    #character-selection-screen .story-intro-summary strong {
+        font-size: 0.78rem;
+    }
+
+    #character-selection-screen .character-cards-wrapper {
+        min-height: 158px;
+        height: 158px;
+        padding: 0 4px 6px;
+        grid-template-columns: none;
+        grid-auto-flow: column;
+        grid-auto-columns: calc((100% - 16px) / 3);
+        gap: 8px;
+        overflow-x: auto;
+        overflow-y: hidden;
+        scroll-padding-inline: 4px;
+    }
+
+    #character-selection-screen .character-card,
+    #character-selection-screen .character-card-select {
+        min-height: 148px;
+        height: 148px;
+    }
+
+    #character-selection-screen .character-card-select .card-inner {
+        min-height: 0;
+        height: 100%;
+        display: grid;
+        grid-template-columns: 68px minmax(0, 1fr);
+    }
+
+    #character-selection-screen .character-card .char-header {
+        width: 68px;
+        height: 100%;
+        min-height: 0;
+        flex-basis: auto;
+        border-right: 1px solid rgba(255, 255, 255, 0.06);
+    }
+
+    #character-selection-screen .character-card .char-avatar-wrapper {
+        flex: 0 0 54px;
+        width: 54px;
+        min-width: 54px;
+        max-width: 54px;
+        height: 54px;
+        min-height: 54px;
+        max-height: 54px;
+    }
+
+    #character-selection-screen .character-card .char-body {
+        min-width: 0;
+        padding: 8px;
+        gap: 3px;
+        justify-content: center;
+        overflow: hidden;
+    }
+
+    #character-selection-screen .character-card .char-name {
+        font-size: 1rem;
+        letter-spacing: 0;
+    }
+
+    #character-selection-screen .character-card .char-title {
+        max-width: 100%;
+        margin-top: 0;
+        padding: 1px 6px;
+        overflow: hidden;
+        font-size: 0.62rem;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    #character-selection-screen .character-card .char-desc,
+    #character-selection-screen .character-card .char-identity-strip,
+    #character-selection-screen .character-card .char-keyword-strip,
+    #character-selection-screen .character-card .char-relic-info,
+    #character-selection-screen .character-card .char-story-panel {
+        display: none !important;
+    }
+
+    #character-selection-screen .character-card .char-stats-preview {
+        margin-top: 5px;
+        padding-top: 5px;
+        gap: 10px;
+    }
+
+    #character-selection-screen .character-card .stat-value {
+        font-size: 0.78rem;
+    }
+
+    #character-selection-screen .character-card .stat-label {
+        font-size: 0.56rem;
+    }
+
+    #character-selection-screen .run-destiny-section {
+        gap: 6px;
+        padding-bottom: 4px;
+    }
+
+    #character-selection-screen .run-destiny-header {
+        min-height: 48px;
+        padding: 7px 9px;
+        gap: 8px;
+        align-items: center;
+    }
+
+    #character-selection-screen .run-destiny-kicker {
+        margin-bottom: 2px;
+        font-size: 0.58rem;
+    }
+
+    #character-selection-screen .run-destiny-header h3 {
+        font-size: 0.86rem;
+        letter-spacing: 0;
+    }
+
+    #character-selection-screen .run-destiny-header p {
+        max-width: 52%;
+        font-size: 0.68rem;
+        line-height: 1.3;
+        -webkit-line-clamp: 2;
+    }
+
+    #character-selection-screen .run-destiny-grid {
+        min-height: 124px;
+        height: 124px;
+        padding: 0 4px 6px;
+        grid-template-columns: none;
+        grid-auto-flow: column;
+        grid-auto-columns: calc((100% - 16px) / 3);
+        gap: 8px;
+        overflow-x: auto;
+        overflow-y: hidden;
+        scroll-padding-inline: 4px;
+    }
+
+    #character-selection-screen .run-destiny-card,
+    #character-selection-screen .run-destiny-empty {
+        min-height: 114px;
+        height: 114px;
+        padding: 8px;
+        gap: 4px;
+        overflow: hidden;
+        border-radius: 8px;
+    }
+
+    #character-selection-screen .run-destiny-head {
+        gap: 6px;
+    }
+
+    #character-selection-screen .run-destiny-icon {
+        width: 30px;
+        height: 30px;
+        border-radius: 7px;
+        font-size: 1rem;
+    }
+
+    #character-selection-screen .run-destiny-name {
+        font-size: 0.84rem;
+        letter-spacing: 0;
+    }
+
+    #character-selection-screen .run-destiny-tier {
+        overflow: hidden;
+        font-size: 0.58rem;
+        letter-spacing: 0;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    #character-selection-screen .run-destiny-desc,
+    #character-selection-screen .run-destiny-tags {
+        display: none;
+    }
+
+    #character-selection-screen .run-destiny-summary {
+        padding: 5px 6px;
+        display: -webkit-box;
+        overflow: hidden;
+        font-size: 0.64rem;
+        line-height: 1.3;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 2;
+    }
+
+    #character-selection-screen .character-selection-footer {
+        padding: 6px 10px 8px;
+    }
+
+    #character-selection-screen .character-selection-footer .menu-btn {
+        min-height: 48px;
     }
 }

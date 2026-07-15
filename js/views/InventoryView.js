@@ -271,12 +271,12 @@ export class InventoryView {
       });
       modal.__treasureBagDelegatesBound = true;
     }
-    modal.style.display = 'flex';
     this.updateTreasureBagUI();
+    this.game.openModalWithFocus(modal, '[data-inventory-action="close-treasure-bag"]');
   }
   closeTreasureBagModal(modal = document.getElementById('treasure-bag-modal')) {
     if (!modal) return;
-    modal.style.display = 'none';
+    this.game.closeModalElement(modal);
     if (this.game.currentScreen === 'map-screen' && typeof this.game.updateMapUI === 'function') {
       this.game.updateMapUI();
     }

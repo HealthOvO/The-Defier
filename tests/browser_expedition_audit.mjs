@@ -784,8 +784,8 @@ function hasPositiveResourceDelta(before, after) {
       branchProbe.note.includes(branchProbe.branchName) &&
       branchProbe.selectedCard.includes(branchProbe.branchName) &&
       getAnswerSheetModel(branchProbe.answerSheet).routeGoal?.completed === true &&
-      /已按样本锁定|贴题/.test(getAnswerSheetModel(branchProbe.answerSheet).routeGoal?.statusLine || '') &&
-      /章节答卷状态|已按样本锁定|训练建议/.test(branchProbe.answerSheetText || ''),
+      /已按指引锁定|贴题/.test(getAnswerSheetModel(branchProbe.answerSheet).routeGoal?.statusLine || '') &&
+      /章节答卷状态|已按指引锁定|训练建议/.test(branchProbe.answerSheetText || ''),
     JSON.stringify(branchProbe || null)
   );
   await safeAuditScreenshot(page, path.join(outDir, 'expedition-branch-selected.png'), 'browser_expedition_audit', { timeout: 9000 });
@@ -1521,7 +1521,7 @@ function hasPositiveResourceDelta(before, after) {
       finalizeProbe.panelHidden &&
       finalizeProbe.buildHasExpedition &&
       finalizeProbe.payloadExpedition?.latestSlate?.id === finalizeProbe.slate.id &&
-      finalizeProbe.latestSlateBreakdown.some((line) => /章节答卷|训练建议|课题样本|命盘共鸣|路线合卷/.test(line || '')) &&
+      finalizeProbe.latestSlateBreakdown.some((line) => /章节答卷|训练建议|修行课题|命盘共鸣|路线合卷/.test(line || '')) &&
       typeof finalizeProbe.latestSlateAnswerReview?.ratingLabel === 'string' &&
       finalizeProbe.latestSlateAnswerReview.ratingLabel.length > 0 &&
       typeof finalizeProbe.latestSlateAnswerReview?.trainingAdvice === 'string' &&

@@ -3,6 +3,7 @@ import { BackendClient, SESSION_STORAGE_KEY } from "../services/backend-client.j
 import { RelayExpeditionService } from "../services/relay-expedition-service.js";
 import { AuthoritativeRunPanel } from "./AuthoritativeRunPanel.js";
 import { buildDataAttributes, escapeHtml } from "../ui/render-safe.js";
+import { safePlayerMessage } from "../ui/player-message.js";
 
 export function loadSeasonOpsStyles() {
   if (typeof import.meta.env !== 'object') return Promise.resolve();
@@ -427,7 +428,7 @@ export class SeasonOpsView {
   }
 
   applyRefreshFailure(result = null) {
-    const message = normalizeText(result && result.message, "赛季司读取失败");
+    const message = safePlayerMessage(result, "赛季司读取失败，请稍后重试");
     const reason = normalizeText(result && result.reason);
     const currentUserId = this.getCurrentUserId();
     const accountChanged = ["season_ops_account_changed", "progression_account_changed"].includes(reason);
@@ -752,8 +753,8 @@ export class SeasonOpsView {
           ><span aria-hidden="true">←</span></button>
           <div class="season-ops-title-copy">
             <div class="season-ops-kicker">赛季司</div>
-            <h2>契约、外观、权威榜、账本与权威试炼</h2>
-            <p>${escapeHtml(season ? buildFallbackSeasonLabel(season) : "登录后读取本账号赛季卷宗。")}</p>
+            <h2>${escapeHtml(season ? season.title : "赛季卷宗")}</h2>
+            <p>${escapeHtml(season ? `${stateMeta.label} · 当前账号卷宗` : "登录后读取本账号赛季卷宗。")}</p>
           </div>
         </div>
         <div class="season-ops-header-actions">
@@ -770,8 +771,10 @@ export class SeasonOpsView {
             class="menu-btn small season-ops-refresh-btn ${this.isRefreshing ? "is-busy" : ""}"
             data-season-ops-action="refresh"
             data-season-ops-focus-key="refresh"
+            aria-label="刷新赛季卷宗"
+            title="刷新赛季卷宗"
             ${this.phase === "loading" && !this.dashboard ? "disabled" : ""}
-          >${this.isRefreshing ? "刷新中..." : "刷新卷宗"}</button>
+          ><span class="season-ops-refresh-icon" aria-hidden="true">↻</span><span class="season-ops-refresh-label">${this.isRefreshing ? "刷新中..." : "刷新卷宗"}</span></button>
         </div>
       </header>
     `;
@@ -1080,7 +1083,7 @@ export class SeasonOpsView {
           <div class="season-ops-section-head">
             <div>
               <h3>权威榜单</h3>
-              <p>只统计正式真人对局的服务端权威结算。镜像、练习与旧 PVP 不入卷。</p>
+              <p>只统计正式真人对局，练习与镜像不计入排名。</p>
             </div>
             <div class="season-ops-counter-chip">${entries.length} 席</div>
           </div>
@@ -1280,9 +1283,9 @@ export class SeasonOpsView {
       if (!result || !result.success) {
         const reason = normalizeText(result && result.reason);
         if (["progression_account_changed", "season_ops_account_changed"].includes(reason)) {
-          this.notice = { tone: "warning", text: normalizeText(result && result.message, "登录账号已变化，请刷新赛季司后重试。") };
+          this.notice = { tone: "warning", text: safePlayerMessage(result, "登录账号已变化，请刷新赛季司后重试。") };
         } else {
-          this.notice = { tone: "danger", text: normalizeText(result && result.message, "契约领取失败。") };
+          this.notice = { tone: "danger", text: safePlayerMessage(result, "契约领取失败，请稍后重试。") };
         }
         return;
       }
@@ -1363,9 +1366,9 @@ export class SeasonOpsView {
       if (!result || !result.success) {
         const reason = normalizeText(result && result.reason);
         if (["progression_account_changed", "season_ops_account_changed"].includes(reason)) {
-          this.notice = { tone: "warning", text: normalizeText(result && result.message, "账号已变化，原购买回执未应用到当前界面。") };
+          this.notice = { tone: "warning", text: safePlayerMessage(result, "账号已变化，原购买回执未应用到当前界面。") };
         } else {
-          this.notice = { tone: "danger", text: normalizeText(result && result.message, "赛季商品购买失败。") };
+          this.notice = { tone: "danger", text: safePlayerMessage(result, "赛季商品购买失败，请稍后重试。") };
         }
         return;
       }
@@ -1440,7 +1443,7 @@ export class SeasonOpsView {
       if (!result || !result.success) {
         this.notice = {
           tone: "danger",
-          text: normalizeText(result && result.message, "更早账本记录读取失败。")
+          text: safePlayerMessage(result, "更早账本记录读取失败，请稍后重试。")
         };
         return result;
       }

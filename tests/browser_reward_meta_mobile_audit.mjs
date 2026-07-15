@@ -20,6 +20,79 @@ function recordConsoleError(text) {
   consoleErrors.push(message);
 }
 
+async function probeRewardCtaViewport(page) {
+  return page.evaluate(async () => {
+    const toRect = (el) => {
+      if (!el) return null;
+      const rect = el.getBoundingClientRect();
+      return {
+        left: Math.round(rect.left),
+        top: Math.round(rect.top),
+        right: Math.round(rect.right),
+        bottom: Math.round(rect.bottom),
+        width: Math.round(rect.width),
+        height: Math.round(rect.height),
+      };
+    };
+    const inspectButtonReach = async (selector) => {
+      const button = document.querySelector(selector);
+      if (!button) return { ok: false, reason: 'missing_button', selector };
+      const beforeRect = toRect(button);
+      const beforeScrollY = Math.round(window.scrollY || 0);
+      if (typeof button.scrollIntoView === 'function') {
+        button.scrollIntoView({ block: 'center', inline: 'nearest' });
+        await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      }
+      const afterRect = toRect(button);
+      const centerX = afterRect ? Math.round(afterRect.left + (afterRect.width / 2)) : null;
+      const centerY = afterRect ? Math.round(afterRect.top + (afterRect.height / 2)) : null;
+      const centerInsideViewport = Number.isFinite(centerX)
+        && Number.isFinite(centerY)
+        && centerX >= 0
+        && centerX <= window.innerWidth
+        && centerY >= 0
+        && centerY <= window.innerHeight;
+      const safeBottomLimit = Math.min(
+        window.innerHeight,
+        Math.round((window.visualViewport?.height || window.innerHeight) - 12)
+      );
+      const safeAreaOk = !!afterRect
+        && afterRect.top >= 0
+        && afterRect.bottom <= safeBottomLimit
+        && afterRect.left >= 0
+        && afterRect.right <= window.innerWidth;
+      const hit = centerInsideViewport ? document.elementFromPoint(centerX, centerY) : null;
+      const hitMatches = !!hit && (hit === button || button.contains(hit));
+      return {
+        ok: !!afterRect && centerInsideViewport && safeAreaOk && hitMatches,
+        selector,
+        text: (button.textContent || '').replace(/\s+/g, ' ').trim(),
+        dataset: { ...button.dataset },
+        beforeRect,
+        afterRect,
+        beforeScrollY,
+        afterScrollY: Math.round(window.scrollY || 0),
+        center: centerInsideViewport ? { x: centerX, y: centerY } : null,
+        centerInsideViewport,
+        safeBottomLimit,
+        safeAreaOk,
+        hitMatches,
+        hitTag: hit?.tagName || null,
+        hitText: hit ? (hit.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 80) : '',
+      };
+    };
+
+    const laneReward = await inspectButtonReach('#reward-expedition-meta [data-season-board-lane-reward-claim="true"]');
+    const handoff = await inspectButtonReach('#reward-expedition-meta [data-season-board-action-reward="true"] [data-season-board-handoff-cta="true"]');
+    return {
+      viewportWidth: window.innerWidth,
+      viewportHeight: window.innerHeight,
+      laneReward,
+      handoff,
+    };
+  });
+}
+
 (async () => {
   const browser = await chromium.launch({
     headless: true,
@@ -414,76 +487,7 @@ function recordConsoleError(text) {
     JSON.stringify({ before: rewardDisclosureBefore, after: rewardDisclosureAfter })
   );
 
-  const rewardCtaViewportProbe = await page.evaluate(async () => {
-    const toRect = (el) => {
-      if (!el) return null;
-      const rect = el.getBoundingClientRect();
-      return {
-        left: Math.round(rect.left),
-        top: Math.round(rect.top),
-        right: Math.round(rect.right),
-        bottom: Math.round(rect.bottom),
-        width: Math.round(rect.width),
-        height: Math.round(rect.height),
-      };
-    };
-    const inspectButtonReach = async (selector) => {
-      const button = document.querySelector(selector);
-      if (!button) return { ok: false, reason: 'missing_button', selector };
-      const beforeRect = toRect(button);
-      const beforeScrollY = Math.round(window.scrollY || 0);
-      if (typeof button.scrollIntoView === 'function') {
-        button.scrollIntoView({ block: 'center', inline: 'nearest' });
-        await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-      }
-      const afterRect = toRect(button);
-      const centerX = afterRect ? Math.round(afterRect.left + (afterRect.width / 2)) : null;
-      const centerY = afterRect ? Math.round(afterRect.top + (afterRect.height / 2)) : null;
-      const centerInsideViewport = Number.isFinite(centerX)
-        && Number.isFinite(centerY)
-        && centerX >= 0
-        && centerX <= window.innerWidth
-        && centerY >= 0
-        && centerY <= window.innerHeight;
-      const safeBottomLimit = Math.min(
-        window.innerHeight,
-        Math.round((window.visualViewport?.height || window.innerHeight) - 12)
-      );
-      const safeAreaOk = !!afterRect
-        && afterRect.top >= 0
-        && afterRect.bottom <= safeBottomLimit
-        && afterRect.left >= 0
-        && afterRect.right <= window.innerWidth;
-      const hit = centerInsideViewport ? document.elementFromPoint(centerX, centerY) : null;
-      const hitMatches = !!hit && (hit === button || button.contains(hit));
-      return {
-        ok: !!afterRect && centerInsideViewport && safeAreaOk && hitMatches,
-        selector,
-        text: (button.textContent || '').replace(/\s+/g, ' ').trim(),
-        dataset: { ...button.dataset },
-        beforeRect,
-        afterRect,
-        beforeScrollY,
-        afterScrollY: Math.round(window.scrollY || 0),
-        center: centerInsideViewport ? { x: centerX, y: centerY } : null,
-        centerInsideViewport,
-        safeBottomLimit,
-        safeAreaOk,
-        hitMatches,
-        hitTag: hit?.tagName || null,
-        hitText: hit ? (hit.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 80) : '',
-      };
-    };
-
-    const laneReward = await inspectButtonReach('#reward-expedition-meta [data-season-board-lane-reward-claim="true"]');
-    const handoff = await inspectButtonReach('#reward-expedition-meta [data-season-board-action-reward="true"] [data-season-board-handoff-cta="true"]');
-    return {
-      viewportWidth: window.innerWidth,
-      viewportHeight: window.innerHeight,
-      laneReward,
-      handoff,
-    };
-  });
+  const rewardCtaViewportProbe = await probeRewardCtaViewport(page);
 
   add(
     'reward mobile CTA buttons scroll into the 390x844 viewport and win center-point hit testing',
@@ -492,6 +496,27 @@ function recordConsoleError(text) {
     JSON.stringify(rewardCtaViewportProbe || null)
   );
   await safeAuditScreenshot(page, path.join(outDir, 'reward-mobile-390-cta.png'), 'browser_reward_meta_mobile_audit', { timeout: 9000 });
+
+  await page.setViewportSize({ width: 844, height: 390 });
+  await page.waitForTimeout(160);
+  const rewardCtaLandscapeProbe = await probeRewardCtaViewport(page);
+  add(
+    'reward mobile CTA buttons scroll into the 844x390 viewport and remain hit-testable',
+    rewardCtaLandscapeProbe?.viewportWidth === 844
+      && rewardCtaLandscapeProbe?.viewportHeight === 390
+      && !!rewardCtaLandscapeProbe?.laneReward?.ok
+      && !!rewardCtaLandscapeProbe?.handoff?.ok
+      && rewardCtaLandscapeProbe?.laneReward?.afterRect?.height >= 44
+      && rewardCtaLandscapeProbe?.handoff?.afterRect?.height >= 44
+      && rewardCtaLandscapeProbe?.laneReward?.afterRect?.right <= 844
+      && rewardCtaLandscapeProbe?.handoff?.afterRect?.right <= 844
+      && rewardCtaLandscapeProbe?.laneReward?.afterRect?.bottom <= 390
+      && rewardCtaLandscapeProbe?.handoff?.afterRect?.bottom <= 390,
+    JSON.stringify(rewardCtaLandscapeProbe || null)
+  );
+  await safeAuditScreenshot(page, path.join(outDir, 'reward-mobile-844x390-cta.png'), 'browser_reward_meta_mobile_audit', { timeout: 9000 });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.waitForTimeout(120);
 
   const laneRewardButton = page.locator('#reward-expedition-meta [data-season-board-lane-reward-claim="true"]').first();
   let laneRewardClickProbe = null;

@@ -37,25 +37,34 @@ export class ShopView {
       }
       const history = Array.isArray(rumors.history) && rumors.history.length > 0 ? `<div class="shop-summary-history">最近锁定：${rumors.history.slice(-2).join(' ｜ ')}</div>` : '';
       summaryEl.innerHTML = `
-                <div class="shop-summary-title">${activeTab?.icon || '🏪'} ${activeTab?.label || '基础页'}</div>
-                <div class="shop-summary-text">${summaryText}</div>
+                <div class="shop-summary-lead">
+                    <div class="shop-summary-title">${activeTab?.icon || '🏪'} ${activeTab?.label || '基础页'}</div>
+                    <div class="shop-summary-text">${summaryText}</div>
+                </div>
                 <div class="shop-spend-advice tone-${advice.tone || 'save'}">
-                    <span class="shop-advice-badge">${advice.action}</span>
-                    <div class="shop-advice-text">${advice.reason}</div>
-                    ${advice.forecast?.summary ? `<div class="shop-advice-forecast ${advice.forecast.danger || 'low'}">${advice.forecast.summary}</div>` : ''}
-                    ${advice.economy ? `
-                        <div class="shop-advice-economy">
-                            <span class="shop-economy-chip ${advice.economy.status || 'tight'}">预算 ${advice.economy.budget}</span>
-                            <span class="shop-economy-chip ${advice.economy.status || 'tight'}">储备线 ${advice.economy.reserveTarget}</span>
-                            <span class="shop-economy-chip ${advice.economy.status || 'tight'}">建议单次 ≤ ${advice.economy.spendCeiling}</span>
-                            <span class="shop-economy-chip ${advice.economy.status || 'tight'}">${advice.economy.statusLabel}</span>
-                        </div>
-                        <div class="shop-advice-note">${advice.economy.note}</div>
-                    ` : ''}
-                    <div class="shop-advice-meta">
-                        <span>最佳卡牌：${advice.bestCard?.item?.card?.name || '暂无'}</span>
-                        <span>最佳服务：${advice.bestService?.item?.name || '暂无'}</span>
+                    <div class="shop-advice-primary">
+                        <span class="shop-advice-badge">${advice.action}</span>
+                        <div class="shop-advice-text">${advice.reason}</div>
                     </div>
+                    <details class="shop-advice-details">
+                        <summary>预算与前路</summary>
+                        <div class="shop-advice-detail-body">
+                            ${advice.forecast?.summary ? `<div class="shop-advice-forecast ${advice.forecast.danger || 'low'}">${advice.forecast.summary}</div>` : ''}
+                            ${advice.economy ? `
+                                <div class="shop-advice-economy">
+                                    <span class="shop-economy-chip ${advice.economy.status || 'tight'}">预算 ${advice.economy.budget}</span>
+                                    <span class="shop-economy-chip ${advice.economy.status || 'tight'}">储备线 ${advice.economy.reserveTarget}</span>
+                                    <span class="shop-economy-chip ${advice.economy.status || 'tight'}">建议单次 ≤ ${advice.economy.spendCeiling}</span>
+                                    <span class="shop-economy-chip ${advice.economy.status || 'tight'}">${advice.economy.statusLabel}</span>
+                                </div>
+                                <div class="shop-advice-note">${advice.economy.note}</div>
+                            ` : ''}
+                            <div class="shop-advice-meta">
+                                <span>最佳卡牌：${advice.bestCard?.item?.card?.name || '暂无'}</span>
+                                <span>最佳服务：${advice.bestService?.item?.name || '暂无'}</span>
+                            </div>
+                        </div>
+                    </details>
                 </div>
                 ${history}
             `;
@@ -170,9 +179,11 @@ export class ShopView {
         event.preventDefault();
         openServiceDetail();
       });
+      const btn = el.querySelector('.buy-btn');
       if (!service.sold) {
-        const btn = el.querySelector('.buy-btn');
         btn.addEventListener('click', () => this.game.buyItem('service', index));
+      } else {
+        btn.disabled = true;
       }
       serviceContainer.appendChild(el);
     });

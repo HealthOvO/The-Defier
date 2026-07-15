@@ -128,7 +128,13 @@
 #season-ops-screen .season-ops-refresh-btn {
     border-radius: 8px;
     border-color: rgba(207, 170, 112, 0.34);
+    min-height: 44px;
     min-width: 110px;
+}
+
+#season-ops-screen .season-ops-refresh-icon {
+    display: none;
+    font-size: 1.1rem;
 }
 
 #season-ops-screen .season-ops-refresh-btn.is-busy {
@@ -587,7 +593,7 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-height: 40px;
+    min-height: 44px;
     padding: 8px 14px;
     border-radius: 8px;
     border: 1px solid rgba(204, 173, 121, 0.18);
@@ -1170,10 +1176,6 @@
 }
 
 @media (max-width: 1080px) {
-    #season-ops-screen .season-ops-summary-grid {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-
     #season-ops-screen .season-ops-offer-grid {
         grid-template-columns: 1fr;
     }
@@ -1263,11 +1265,50 @@
 
     #season-ops-screen .season-ops-summary-grid,
     #season-ops-screen .season-ops-tab-bar {
-        grid-template-columns: 1fr 1fr;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    #season-ops-screen .season-ops-summary-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+    }
+
+    #season-ops-screen .season-ops-summary-card {
+        min-height: 72px;
+        padding: 10px 11px;
+        gap: 3px;
+    }
+
+    #season-ops-screen .season-ops-summary-value {
+        font-size: 1.12rem;
+    }
+
+    #season-ops-screen .season-ops-summary-hint {
+        display: none;
+    }
+
+    #season-ops-screen .season-ops-header-actions {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 44px;
+        align-items: stretch;
+    }
+
+    #season-ops-screen .season-ops-refresh-btn {
+        width: 44px;
+        min-width: 44px;
+        padding: 0;
+    }
+
+    #season-ops-screen .season-ops-refresh-icon {
+        display: inline;
+    }
+
+    #season-ops-screen .season-ops-refresh-label {
+        display: none;
     }
 
     #season-ops-screen .season-ops-tab-btn {
-        min-height: 42px;
+        min-height: 44px;
         padding: 9px 10px;
         font-size: 0.86rem;
     }
@@ -1290,8 +1331,7 @@
         align-items: stretch;
     }
 
-    #season-ops-screen .season-ops-inline-btn,
-    #season-ops-screen .season-ops-refresh-btn {
+    #season-ops-screen .season-ops-inline-btn {
         width: 100%;
     }
 

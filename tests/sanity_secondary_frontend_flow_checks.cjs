@@ -8,6 +8,8 @@ const read = (relativePath) => fs.readFileSync(path.join(root, relativePath), 'u
 const indexHtml = read('index.html');
 const gameSource = read('js/game.js');
 const frontendUpgradeCss = read('css/frontend-upgrade.css');
+const styleCss = read('css/style.css');
+const eventsCss = read('css/events.css');
 const challengeHubSource = read('js/core/challenge_hub.js');
 const rewardViewSource = read('js/views/RewardView.js');
 const systemViewSource = read('js/views/SystemView.js');
@@ -267,6 +269,129 @@ assertHasPattern(
 assert.ok(
   countMatches(rewardViewSource, /<summary class="reward-disclosure-summary">/) >= 2,
   'RewardView should render disclosure summaries for both expedition and run-path reward panels',
+);
+
+assertHasPattern(
+  gameSource,
+  /resetScreenScrollPosition\(screen\)[\s\S]{0,500}'\.reward-container'/,
+  'screen navigation should reset the reward scroll owner before each reward entry',
+);
+assertHasPattern(
+  systemViewSource,
+  /<div class="intro-character-grid">/,
+  'guide character cards should use a responsive class instead of a fixed inline grid',
+);
+assertHasPattern(
+  styleCss,
+  /@media \(max-width: 480px\)[\s\S]{0,180}\.intro-character-grid\s*\{[\s\S]{0,100}grid-template-columns:\s*minmax\(0, 1fr\);/,
+  'guide character cards should collapse to one column on narrow phones',
+);
+assertHasPattern(
+  styleCss,
+  /\.collection-inline-btn\.compact\s*\{[\s\S]{0,100}min-width:\s*44px;/,
+  'compact challenge controls should still meet the 44px touch target',
+);
+assertHasPattern(
+  eventsCss,
+  /#event-modal \.event-body\s*\{[\s\S]{0,260}overflow-y:\s*auto;/,
+  'long event and camp choices should scroll inside the stable modal frame',
+);
+assertHasPattern(
+  frontendUpgradeCss,
+  /#battle-screen #battle-command-panel \.battle-advisor-toggle\s*\{[\s\S]{0,140}min-height:\s*var\(--fd-hit-target\);/,
+  'mobile battle advisor toggle should keep the design-system hit target despite legacy specificity',
+);
+assertHasPattern(
+  styleCss,
+  /\.battle-advisor-details > summary\s*\{[\s\S]{0,120}min-height:\s*44px;/,
+  'battle advisor detail disclosure should keep a 44px touch target',
+);
+assertHasPattern(
+  gameSource,
+  /if \(!\['localhost', '127\.0\.0\.1', '::1'\]\.includes\(host\)\) return null;/,
+  'automation boot routes should stay unavailable on production hosts',
+);
+assertHasPattern(
+  gameSource,
+  /if \(config\.mode === 'guest-camp'\) \{[\s\S]{0,260}this\.showCampfire\(surfaceNode\);/,
+  'local automation should expose a deterministic camp state for browser layout audits',
+);
+assertHasPattern(
+  gameSource,
+  /'guest-event'[\s\S]{0,160}'guest-trial'[\s\S]{0,160}'guest-forge'[\s\S]{0,160}'guest-shop'[\s\S]{0,160}'guest-reward'/,
+  'local automation should expose deterministic strategic surfaces instead of relying on random map generation',
+);
+assertHasPattern(
+  gameSource,
+  /if \(config\.mode === 'guest-event'\) \{[\s\S]{0,320}cloneEventTemplate\(config\.eventId\)[\s\S]{0,180}this\.showEventModal\(event, surfaceNode\);/,
+  'event automation should resolve a real event template and open the production modal path',
+);
+assertHasPattern(
+  gameSource,
+  /if \(config\.mode === 'guest-shop'\) \{[\s\S]{0,260}this\.showShop\(surfaceNode\);/,
+  'shop automation should render the production shop screen with a stable wallet',
+);
+assertHasPattern(
+  gameSource,
+  /if \(config\.mode === 'guest-reward'\) \{[\s\S]{0,300}this\.showRewardScreen\(config\.rewardGold, false, null, config\.rewardRingExp/,
+  'reward automation should render the production reward screen with deterministic rewards',
+);
+assertHasPattern(
+  gameSource,
+  /if \(config\.mode === 'guest-save-slots'\) \{[\s\S]{0,700}renderSaveSlots\([\s\S]{0,420}currentHp: 0/,
+  'save slots automation should expose a deterministic mobile history entry',
+);
+assertHasPattern(
+  gameSource,
+  /if \(config\.mode === 'guest-save-conflict'\) \{[\s\S]{0,320}this\.showSaveConflictModal\([\s\S]{0,260}currentHp: 0, gold: 0/,
+  'save conflict automation should preserve and expose legitimate zero values',
+);
+assertHasPattern(
+  gameSource,
+  /if \(config\.mode === 'guest-save-history'\) \{[\s\S]{0,1400}renderCloudSaveHistory\([\s\S]{0,900}currentHp: 0, gold: 0/,
+  'save history automation should expose a deterministic restorable revision',
+);
+assertHasPattern(
+  systemViewSource,
+  /const formatNumber = value => value !== null && value !== '' && Number\.isFinite\(Number\(value\)\) \? Number\(value\) : '\?';/,
+  'save conflict summaries should render numeric zero instead of treating it as missing',
+);
+assertHasPattern(
+  systemViewSource,
+  /const hpValue = slotData\.player\?\.currentHp;[\s\S]{0,180}Number\.isFinite\(Number\(hpValue\)\)/,
+  'save slot summaries should render numeric zero instead of treating it as missing',
+);
+assertHasPattern(
+  frontendUpgradeCss,
+  /#save-slots-modal \.slot-actions \.talisman-btn,[\s\S]{0,180}#save-slots-modal \.slot-actions \.save-history-btn[\s\S]{0,180}min-height:\s*44px;/,
+  'mobile save slot actions should keep a 44px touch target',
+);
+assertSelectorBlockHas(
+  styleCss,
+  '.save-history-btn',
+  [/min-height:\s*44px;/],
+  'save history entry button',
+);
+assertSelectorBlockHas(
+  styleCss,
+  '.cloud-history-restore-btn',
+  [/min-height:\s*44px;/],
+  'cloud history restore button',
+);
+assertHasPattern(
+  frontendUpgradeCss,
+  /@media \(min-width: 769px\) and \(max-height: 680px\)[\s\S]{0,1800}#shop-screen \.shop-section h3/,
+  'short desktop shop should compact its header, summary and section rhythm together',
+);
+assertHasPattern(
+  frontendUpgradeCss,
+  /\.modal\.upgrade-mode \.upgrade-card-grid\s*\{[\s\S]{0,520}scroll-snap-type:\s*x proximity;/,
+  'mobile camp upgrades should expose a readable horizontal card rail',
+);
+assertHasPattern(
+  frontendUpgradeCss,
+  /@media \(min-width: 560px\) and \(max-width: 768px\) and \(max-height: 520px\)[\s\S]{0,900}\.modal\.upgrade-mode \.upgrade-modal-layout\s*\{[\s\S]{0,80}flex-direction:\s*row;/,
+  'short landscape camp upgrades should keep selection and preview visible side by side',
 );
 
 console.log('Secondary frontend flow sanity checks passed.');
