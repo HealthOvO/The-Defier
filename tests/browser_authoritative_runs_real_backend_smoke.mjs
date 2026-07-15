@@ -733,7 +733,7 @@ try {
   add('public projection hides seed and ordered draw pile', !/"(?:seed|rng|drawPile)"/.test(publicProjectionJson));
   const routeContracts = panel.projection?.route?.choices?.map(choice => choice.routeContract) || [];
   const routePlayerCopy = await page.locator('.season-ops-authoritative-panel').innerText();
-  add('v5 route projection exposes two readable contracts without private coefficients', panel.projection?.contentVersion === 'authoritative-trials-v5'
+  add('v6 route projection exposes two readable contracts without private coefficients', panel.projection?.contentVersion === 'authoritative-trials-v6'
     && Number(panel.projection?.route?.contractVersion) === 1
     && routeContracts.length === 2
     && routeContracts.every(contract => Number(contract?.version) === 1

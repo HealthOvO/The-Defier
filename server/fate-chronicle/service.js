@@ -323,6 +323,9 @@ function formatRotation(rotation, now = Date.now()) {
                 scenarioId: String(oath.scenarioId || ''),
                 title: String(oath.title || ''),
                 description: String(oath.description || ''),
+                readCue: String(oath.readCue || ''),
+                counterplayLine: String(oath.counterplayLine || ''),
+                buildHint: String(oath.buildHint || ''),
                 encounterCount: clampInt(oath.encounterCount),
                 maxHp: clampInt(oath.maxHp),
                 turnBudget: clampInt(oath.turnBudget),
@@ -902,7 +905,9 @@ function buildProgressState(rotation, progressRows, resultRows, claimMap) {
             : !!previousChapter && Array.isArray(previousChapter.completedOaths) && previousChapter.completedOaths.length > 0;
         const unlocked = chapter.chapterIndex === 1 || previousCompleted;
         const chapterCompleted = completedOaths.size > 0;
-        const dualCompleted = completedOaths.size >= (chapter.oaths || []).length;
+        const oathCount = (chapter.oaths || []).length;
+        const allOathsCompleted = oathCount > 0 && completedOaths.size >= oathCount;
+        const dualCompleted = allOathsCompleted;
         if (chapterCompleted) completedChapterCount += 1;
         if (dualCompleted) dualChapterCount += 1;
         completedOathCount += completedOaths.size;
@@ -918,8 +923,11 @@ function buildProgressState(rotation, progressRows, resultRows, claimMap) {
             firstCompletedAt: clampInt(row && row.firstCompletedAt),
             dualCompleted,
             dualCompletedAt: clampInt(row && row.dualCompletedAt),
+            allOathsCompleted,
+            allOathsCompletedAt: clampInt(row && row.dualCompletedAt),
             bestResult: formatResult(bestResult),
             completedOathCount: completedOaths.size,
+            oathCount,
             oaths: (chapter.oaths || []).map(oath => {
                 const oathKey = `${chapter.chapterId}:${oath.oathId}`;
                 const firstRow = oathFirstCompletion.get(oathKey) || null;
@@ -928,6 +936,9 @@ function buildProgressState(rotation, progressRows, resultRows, claimMap) {
                     scenarioId: String(oath.scenarioId || ''),
                     title: String(oath.title || ''),
                     description: String(oath.description || ''),
+                    readCue: String(oath.readCue || ''),
+                    counterplayLine: String(oath.counterplayLine || ''),
+                    buildHint: String(oath.buildHint || ''),
                     encounterCount: clampInt(oath.encounterCount),
                     maxHp: clampInt(oath.maxHp),
                     turnBudget: clampInt(oath.turnBudget),
@@ -949,7 +960,7 @@ function buildProgressState(rotation, progressRows, resultRows, claimMap) {
             unlockedAt = clampInt(chapterView && chapterView.firstCompletedAt);
             claimable = unlockedAt > 0;
         } else if (milestoneType === 'chapter_dual') {
-            unlockedAt = clampInt(chapterView && chapterView.dualCompletedAt);
+            unlockedAt = clampInt(chapterView && chapterView.allOathsCompletedAt);
             claimable = unlockedAt > 0;
         } else if (milestoneType === 'full_clear') {
             const allCleared = chapters.every(chapter => chapter.completed);
@@ -983,6 +994,7 @@ function buildProgressState(rotation, progressRows, resultRows, claimMap) {
             completedChapterCount,
             completedOathCount,
             dualChapterCount,
+            allOathChapterCount: dualChapterCount,
             chronicleCertificateEarned: completedOathCount > 0,
             claimableRewardCount: milestones.filter(entry => entry.claimable).length,
             claimedRewardCount: milestones.filter(entry => entry.claimed).length
@@ -1034,7 +1046,7 @@ function validateProjectionInputs(rotation, attempt, run, receiptPayload, receip
     }
 }
 
-async function upsertProgressForResult(connection, resultRow, now = Date.now()) {
+async function upsertProgressForResult(connection, resultRow, rotation, now = Date.now()) {
     const existingRow = await dbGet(
         connection,
         `SELECT *
@@ -1052,7 +1064,12 @@ async function upsertProgressForResult(connection, resultRow, now = Date.now()) 
     const firstCompletedAt = existing && existing.firstCompletedAt > 0
         ? clampInt(existing.firstCompletedAt)
         : clampInt(resultRow.submitted_at);
-    const dualCompletedAt = completedOaths.size >= 2
+    const chapter = getRotationChapter(rotation, resultRow.chapter_id);
+    const oathCount = chapter && Array.isArray(chapter.oaths) ? chapter.oaths.length : 0;
+    if (oathCount < 1) {
+        throw makeError(500, 'fate_chronicle_chapter_snapshot_invalid', '命途长卷章节快照缺少誓约');
+    }
+    const dualCompletedAt = completedOaths.size >= oathCount
         ? existing && existing.dualCompletedAt > 0
             ? clampInt(existing.dualCompletedAt)
             : clampInt(resultRow.submitted_at)
@@ -1207,7 +1224,7 @@ async function projectAttemptResult(connection, attempt, now = Date.now(), sourc
         if (!raced) throw error;
         return { attempt: await loadAttemptById(connection, syncedAttempt.user_id, syncedAttempt.attempt_id), result: raced, projected: false };
     }
-    await upsertProgressForResult(connection, resultRow, now);
+    await upsertProgressForResult(connection, resultRow, rotation, now);
     await dbRun(
         connection,
         `UPDATE fate_chronicle_attempts

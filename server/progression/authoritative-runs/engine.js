@@ -168,6 +168,106 @@ function projectRouteContract(contract) {
     };
 }
 
+function projectChapterBranch(source) {
+    if (!source || !SAFE_REF.test(String(source.branchId || ''))) return null;
+    return {
+        branchId: String(source.branchId || ''),
+        title: String(source.title || ''),
+        description: String(source.description || ''),
+        counterplay: String(source.counterplay || ''),
+        buildFocus: String(source.buildFocus || ''),
+        consequenceSummary: String(source.consequenceSummary || '')
+    };
+}
+
+function getChapterBranchPlan(scenario) {
+    const plan = scenario && scenario.branchPlan;
+    if (!plan) return null;
+    if (clampInt(plan.version, 0, 10) !== 1
+        || !Array.isArray(plan.options)
+        || plan.options.length !== 2
+        || clampInt(plan.triggerStage, 0) < 1
+        || clampInt(plan.triggerStage, 0) > (scenario.stages || []).length) {
+        throw makeRuleError('chapter_branch_plan_invalid', '章中分岔定义非法', 500);
+    }
+    const branchIds = new Set();
+    for (const option of plan.options) {
+        const branchId = String(option && option.branchId || '');
+        if (!SAFE_REF.test(branchId)
+            || branchIds.has(branchId)
+            || !SAFE_REF.test(String(option && option.enemyId || ''))
+            || !SAFE_REF.test(String(option && option.contractId || ''))
+            || !projectChapterBranch(option)) {
+            throw makeRuleError('chapter_branch_option_invalid', '章中分岔选项非法', 500);
+        }
+        branchIds.add(branchId);
+    }
+    return plan;
+}
+
+function getSelectedChapterBranchOption(state, scenario) {
+    const plan = getChapterBranchPlan(scenario);
+    const selected = state && state.route && state.route.chapterBranch;
+    if (!selected) return null;
+    if (!plan) throw makeRuleError('chapter_branch_state_invalid', '章中分岔状态与内容不匹配', 500);
+    const option = plan.options.find(entry => String(entry.branchId || '') === String(selected.branchId || ''));
+    if (!option) throw makeRuleError('chapter_branch_state_invalid', '章中分岔状态不存在', 500);
+    return option;
+}
+
+function resolveScenarioStage(state, scenario) {
+    const baseStage = scenario.stages[state.route.stageIndex];
+    if (!baseStage) return null;
+    const plan = getChapterBranchPlan(scenario);
+    const stageNumber = state.route.stageIndex + 1;
+    if (!plan || stageNumber <= clampInt(plan.triggerStage, 1)) return baseStage;
+    const option = getSelectedChapterBranchOption(state, scenario);
+    if (!option) throw makeRuleError('chapter_branch_required', '必须先完成章中分岔', 500);
+    const futureStages = option.futureStages && typeof option.futureStages === 'object'
+        ? option.futureStages
+        : {};
+    const override = futureStages[String(stageNumber)];
+    if (!override) return baseStage;
+    if (!Array.isArray(override.pool) || override.pool.length === 0) {
+        throw makeRuleError('chapter_branch_stage_invalid', '章中分岔后续关卡非法', 500);
+    }
+    return { ...baseStage, ...override };
+}
+
+function resolveSelectedBranchScenario(state, scenario) {
+    const option = getSelectedChapterBranchOption(state, scenario);
+    if (!option) return scenario;
+    const branchScoreMultiplier = Number(option.scoreMultiplier);
+    return {
+        ...scenario,
+        scoreMultiplier: Number.isFinite(branchScoreMultiplier) && branchScoreMultiplier > 0
+            ? branchScoreMultiplier
+            : scenario.scoreMultiplier,
+        rewardCardPool: Array.isArray(option.rewardCardPool) && option.rewardCardPool.length > 0
+            ? option.rewardCardPool
+            : scenario.rewardCardPool,
+        rewardProfile: {
+            ...(scenario.rewardProfile && typeof scenario.rewardProfile === 'object' ? scenario.rewardProfile : {}),
+            ...(option.rewardProfile && typeof option.rewardProfile === 'object' ? option.rewardProfile : {})
+        }
+    };
+}
+
+function projectPendingChapterBranchDecision(state, scenario) {
+    const plan = getChapterBranchPlan(scenario);
+    if (!plan
+        || state.route.chapterBranch
+        || state.route.stageIndex + 1 !== clampInt(plan.triggerStage, 1)) {
+        return null;
+    }
+    return {
+        version: 1,
+        triggerStage: clampInt(plan.triggerStage, 1),
+        title: String(plan.title || ''),
+        prompt: String(plan.prompt || '')
+    };
+}
+
 function resolveCardDefinition(content, instance) {
     const definition = getCard(content, instance.cardId);
     if (!getDeckCraftingRules(content) || !instance.upgraded || !definition.upgrade) return definition;
@@ -216,9 +316,43 @@ function createCardInstance(state, cardId, content) {
 
 function generateRouteChoices(state, content) {
     const scenario = getScenario(content, state.mode, state.scenarioId);
-    const stage = scenario.stages[state.route.stageIndex];
+    const stage = resolveScenarioStage(state, scenario);
     if (!stage) return [];
+    if (!Array.isArray(stage.pool) || stage.pool.length === 0) {
+        throw makeRuleError('route_stage_invalid', '路线关卡定义不存在', 500);
+    }
     const routeRules = getRouteContractRules(content);
+    const branchPlan = getChapterBranchPlan(scenario);
+    const stageNumber = state.route.stageIndex + 1;
+    if (branchPlan
+        && stageNumber === clampInt(branchPlan.triggerStage, 1)
+        && !state.route.chapterBranch) {
+        if (!routeRules) throw makeRuleError('chapter_branch_contracts_missing', '章中分岔缺少路线合同', 500);
+        return branchPlan.options.map(option => {
+            const enemy = getEnemy(content, option.enemyId);
+            const profile = routeRules.profiles[option.contractId];
+            if (!profile || String(profile.contractId || '') !== String(option.contractId || '')) {
+                throw makeRuleError('chapter_branch_contract_missing', '章中分岔路线合同不存在', 500);
+            }
+            const routeContract = buildRouteContract(
+                profile,
+                enemy,
+                state.route.stageIndex >= state.route.totalStages - 1
+            );
+            return {
+                nodeId: `stage-${stageNumber}-${enemy.enemyId}-${routeContract.contractId}-${option.branchId}`,
+                stage: stageNumber,
+                type: stage.type,
+                enemyId: enemy.enemyId,
+                name: enemy.name,
+                threat: enemy.threat,
+                maxHp: scaleByBps(enemy.maxHp, routeContract.enemyAdjustments.maxHpBps),
+                boss: !!enemy.boss,
+                routeContract,
+                chapterBranch: projectChapterBranch(option)
+            };
+        });
+    }
     if (routeRules) {
         const pairIndex = Math.min(state.route.stageIndex, routeRules.stagePairs.length - 1);
         const configuredPair = Array.isArray(stage.contractIds) && stage.contractIds.length === 2
@@ -442,7 +576,8 @@ function beginBattle(state, content, node) {
             vulnerable: 0,
             intentIndex: 0
         },
-        ...(routeContract ? { routeContract } : {})
+        ...(routeContract ? { routeContract } : {}),
+        ...(node.chapterBranch ? { chapterBranch: projectChapterBranch(node.chapterBranch) } : {})
     };
     state.player.block = 0;
     state.player.energy = scenario.energyPerTurn;
@@ -469,7 +604,7 @@ function applyDamageToEnemy(state, amount) {
 }
 
 function makeLegacyRewardChoices(state, content) {
-    const scenario = getScenario(content, state.mode, state.scenarioId);
+    const scenario = resolveSelectedBranchScenario(state, getScenario(content, state.mode, state.scenarioId));
     const rewardCardPool = Array.isArray(scenario.rewardCardPool) && scenario.rewardCardPool.length > 0
         ? scenario.rewardCardPool
         : content.rewardCardPool;
@@ -616,7 +751,7 @@ function applyRouteRewardAdjustments(rules, routeContract) {
 }
 
 function makeRewardChoices(state, content, routeContract = null) {
-    const scenario = getScenario(content, state.mode, state.scenarioId);
+    const scenario = resolveSelectedBranchScenario(state, getScenario(content, state.mode, state.scenarioId));
     const baseRules = getDeckCraftingRules(content, scenario);
     const rules = baseRules ? applyRouteRewardAdjustments(baseRules, routeContract) : null;
     if (!rules) return makeLegacyRewardChoices(state, content);
@@ -624,7 +759,7 @@ function makeRewardChoices(state, content, routeContract = null) {
 }
 
 function buildSummary(state, content, result, reason) {
-    const scenario = getScenario(content, state.mode, state.scenarioId);
+    const scenario = resolveSelectedBranchScenario(state, getScenario(content, state.mode, state.scenarioId));
     const base = state.stats.encountersWon * 120
         + state.stats.bossWins * 180
         + state.player.hp * 3
@@ -673,6 +808,9 @@ function buildSummary(state, content, result, reason) {
                 totalBonus: routeBonus,
                 selections: routeSelections
             }
+        } : {}),
+        ...(state.route.chapterBranch ? {
+            chapterBranchResolution: projectChapterBranch(state.route.chapterBranch)
         } : {})
     };
     if (getDeckCraftingRules(content, scenario)) {
@@ -694,6 +832,9 @@ function finishEncounter(state, content, events) {
         ...(routeContract ? {
             stage: state.route.stageIndex + 1,
             routeContract
+        } : {}),
+        ...(state.battle.chapterBranch ? {
+            chapterBranch: projectChapterBranch(state.battle.chapterBranch)
         } : {})
     };
     state.route.completedNodes.push(completedNode);
@@ -708,7 +849,8 @@ function finishEncounter(state, content, events) {
         ...(routeContract ? {
             routeContractId: routeContract.contractId,
             routeScoreBonus: routeContract.scoreBonus
-        } : {})
+        } : {}),
+        ...(completedNode.chapterBranch ? { chapterBranchId: completedNode.chapterBranch.branchId } : {})
     });
     state.player.hand = [];
     state.player.drawPile = [];
@@ -833,7 +975,7 @@ function chooseReward(state, content, payload, events) {
     const reward = state.reward.choices.find(choice => choice.rewardId === payload.rewardId);
     if (!reward) throw makeRuleError('reward_not_available', '奖励不在权威选项中');
     const routeContract = state.reward.routeContract ? cloneJson(state.reward.routeContract) : null;
-    const scenario = getScenario(content, state.mode, state.scenarioId);
+    const scenario = resolveSelectedBranchScenario(state, getScenario(content, state.mode, state.scenarioId));
     const deckCraftingRules = getDeckCraftingRules(content, scenario);
     if (reward.kind === 'card') {
         getCard(content, reward.cardId);
@@ -913,12 +1055,24 @@ function applyCommand(currentState, content, command, rawPayload) {
         if (state.phase !== 'route') throw makeRuleError('command_not_allowed', '当前阶段不能选择路线');
         const node = state.route.choices.find(choice => choice.nodeId === payload.nodeId);
         if (!node) throw makeRuleError('node_not_available', '路线节点不在权威选项中');
+        if (node.chapterBranch) {
+            if (state.route.chapterBranch) {
+                throw makeRuleError('chapter_branch_already_selected', '章中分岔已经锁定');
+            }
+            state.route.chapterBranch = projectChapterBranch(node.chapterBranch);
+            events.push({
+                type: 'chapter_branch_selected',
+                branchId: state.route.chapterBranch.branchId,
+                title: state.route.chapterBranch.title
+            });
+        }
         beginBattle(state, content, node);
         events.push({
             type: 'encounter_started',
             nodeId: node.nodeId,
             enemyId: node.enemyId,
-            ...(node.routeContract ? { routeContractId: node.routeContract.contractId } : {})
+            ...(node.routeContract ? { routeContractId: node.routeContract.contractId } : {}),
+            ...(node.chapterBranch ? { chapterBranchId: node.chapterBranch.branchId } : {})
         });
     } else if (command === 'play_card') {
         playCard(state, content, payload, events);
@@ -964,7 +1118,8 @@ function projectRouteChoice(choice) {
         threat: String(choice.threat || ''),
         maxHp: clampInt(choice.maxHp, 1),
         boss: !!choice.boss,
-        ...(choice.routeContract ? { routeContract: projectRouteContract(choice.routeContract) } : {})
+        ...(choice.routeContract ? { routeContract: projectRouteContract(choice.routeContract) } : {}),
+        ...(choice.chapterBranch ? { chapterBranch: projectChapterBranch(choice.chapterBranch) } : {})
     };
 }
 
@@ -977,13 +1132,16 @@ function projectCompletedNode(node) {
         ...(node.routeContract ? {
             stage: clampInt(node.stage, 1),
             routeContract: projectRouteContract(node.routeContract)
-        } : {})
+        } : {}),
+        ...(node.chapterBranch ? { chapterBranch: projectChapterBranch(node.chapterBranch) } : {})
     };
 }
 
 function projectState(state, content) {
     const scenario = getScenario(content, state.mode, state.scenarioId);
-    const deckCraftingRules = getDeckCraftingRules(content, scenario);
+    const rewardScenario = resolveSelectedBranchScenario(state, scenario);
+    const deckCraftingRules = getDeckCraftingRules(content, rewardScenario);
+    const pendingChapterBranchDecision = projectPendingChapterBranchDecision(state, scenario);
     const deckCounts = {};
     const upgradedDeckCounts = {};
     state.player.deck.forEach(instance => {
@@ -1007,6 +1165,9 @@ function projectState(state, content) {
         },
         ...(state.battle.routeContract ? {
             routeContract: projectRouteContract(state.battle.routeContract)
+        } : {}),
+        ...(state.battle.chapterBranch ? {
+            chapterBranch: projectChapterBranch(state.battle.chapterBranch)
         } : {})
     } : null;
     return {
@@ -1049,7 +1210,9 @@ function projectState(state, content) {
             totalStages: state.route.totalStages,
             choices: state.route.choices.map(projectRouteChoice),
             completedNodes: state.route.completedNodes.map(projectCompletedNode),
-            ...(state.route.contractVersion ? { contractVersion: state.route.contractVersion } : {})
+            ...(state.route.contractVersion ? { contractVersion: state.route.contractVersion } : {}),
+            ...(pendingChapterBranchDecision ? { chapterBranchDecision: pendingChapterBranchDecision } : {}),
+            ...(state.route.chapterBranch ? { chapterBranch: projectChapterBranch(state.route.chapterBranch) } : {})
         },
         battle,
         reward: state.reward ? {

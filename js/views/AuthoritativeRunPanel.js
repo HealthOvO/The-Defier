@@ -54,8 +54,8 @@ const MODE_META = Object.freeze({
   fate_chronicle: {
     label: "命途长卷",
     shortLabel: "长卷",
-    summary: "三章双誓约的天道见证主线；失败不扣次数，当前卷面可跨设备恢复。",
-    tags: ["单人主线", "双誓约", "失败可重试"]
+    summary: "三章周卷的天道见证主线；新卷中的处置誓约会根据章中选择改写后续路线。",
+    tags: ["单人主线", "周卷誓约", "失败可重试"]
   }
 });
 
@@ -241,7 +241,22 @@ function formatRewardReceiptLabel(event = {}) {
 function describeRouteNode(node = {}) {
   const typeLabel = formatMappedLabel(NODE_TYPE_LABELS, node.nodeType || node.type, "路线战斗");
   const enemyLabel = normalizeText(node.name) || formatMappedLabel(ENEMY_LABELS, node.enemyId, "未知敌手");
-  return `${typeLabel} · ${enemyLabel}${node.boss ? " · 首领" : ""}`;
+  const branch = normalizeChapterBranch(node.chapterBranch);
+  return `${branch ? `${branch.title} · ` : ""}${typeLabel} · ${enemyLabel}${node.boss ? " · 首领" : ""}`;
+}
+
+function normalizeChapterBranch(source = null) {
+  if (!source
+    || (source.version !== undefined && clampInt(source.version, 0) !== 1)
+    || !normalizeText(source.branchId)) return null;
+  return {
+    branchId: normalizeText(source.branchId),
+    title: normalizeText(source.title, "已选命途"),
+    description: normalizeText(source.description),
+    counterplay: normalizeText(source.counterplay),
+    buildFocus: normalizeText(source.buildFocus),
+    consequenceSummary: normalizeText(source.consequenceSummary)
+  };
 }
 
 function normalizeRouteContract(contract = null) {
@@ -1572,15 +1587,21 @@ export class AuthoritativeRunPanel {
     const route = projection && projection.route ? projection.route : {};
     const choices = normalizeArray(route.choices);
     const history = normalizeArray(route.completedNodes);
+    const branchDecision = route.chapterBranchDecision && typeof route.chapterBranchDecision === "object"
+      ? route.chapterBranchDecision
+      : null;
     return `
       <section class="season-ops-section-card season-ops-authoritative-section">
         <div class="season-ops-section-head">
           <div>
             <h3>路线选择</h3>
-            <p>当前开放两条候选路线，选择后将锁定本次遭遇与奖励。</p>
+            <p>${escapeHtml(branchDecision
+              ? normalizeText(branchDecision.prompt, "根据当前构筑证据锁定后续命途。")
+              : `当前开放 ${choices.length} 条候选路线，选择后将锁定本次遭遇与奖励。`)}</p>
           </div>
           <div class="season-ops-counter-chip">第 ${clampInt(route.stage, 1)} / ${clampInt(route.totalStages, 3)} 站</div>
         </div>
+        ${this.renderChapterBranchPanel(route.chapterBranch, { title: "已锁定章中命途" })}
         <div class="season-ops-authoritative-choice-grid">
           ${choices.map(choice => this.renderRouteChoice(choice)).join("") || `<div class="season-ops-inline-empty">当前没有可选路线，请恢复本次历练。</div>`}
         </div>
@@ -1599,13 +1620,23 @@ export class AuthoritativeRunPanel {
 
   renderRouteChoice(choice = {}) {
     const focusKey = buildFocusKey("authoritative:node", choice.nodeId);
+    const branch = normalizeChapterBranch(choice.chapterBranch);
     return `
       <article class="season-ops-authoritative-choice-card" tabindex="-1" data-season-ops-focus-fallback="${escapeHtml(focusKey)}">
         <div class="season-ops-authoritative-choice-top">
-          <strong>${escapeHtml(choice.name || formatMappedLabel(ENEMY_LABELS, choice.enemyId, "未知敌手"))}</strong>
+          <strong>${escapeHtml(branch ? branch.title : choice.name || formatMappedLabel(ENEMY_LABELS, choice.enemyId, "未知敌手"))}</strong>
           <span class="season-ops-meta-chip">${escapeHtml(choice.threat || formatMappedLabel(NODE_TYPE_LABELS, choice.type, "路线战斗"))}</span>
         </div>
-        <p>${escapeHtml(`${formatMappedLabel(NODE_TYPE_LABELS, choice.type, "路线战斗")} · 敌人上限 ${clampInt(choice.maxHp)} HP${choice.boss ? " · 首领" : ""}`)}</p>
+        <p>${escapeHtml(branch
+          ? `${branch.description} 对阵 ${choice.name || formatMappedLabel(ENEMY_LABELS, choice.enemyId, "未知敌手")} · 上限 ${clampInt(choice.maxHp)} HP。`
+          : `${formatMappedLabel(NODE_TYPE_LABELS, choice.type, "路线战斗")} · 敌人上限 ${clampInt(choice.maxHp)} HP${choice.boss ? " · 首领" : ""}`)}</p>
+        ${branch ? `
+          <div class="season-ops-authoritative-branch-copy" data-authoritative-branch-option="${escapeHtml(branch.branchId)}">
+            ${branch.counterplay ? `<div><span>选择依据</span><strong>${escapeHtml(branch.counterplay)}</strong></div>` : ""}
+            ${branch.buildFocus ? `<div><span>构筑方向</span><strong>${escapeHtml(branch.buildFocus)}</strong></div>` : ""}
+            ${branch.consequenceSummary ? `<div><span>后续变化</span><strong>${escapeHtml(branch.consequenceSummary)}</strong></div>` : ""}
+          </div>
+        ` : ""}
         ${this.renderRouteContractPanel(choice.routeContract)}
         <button
           type="button"
@@ -1635,6 +1666,7 @@ export class AuthoritativeRunPanel {
           </div>
           <div class="season-ops-counter-chip">回合 ${clampInt(battle.turn, 1)}</div>
         </div>
+        ${this.renderChapterBranchPanel(projection && projection.route && projection.route.chapterBranch)}
         ${this.renderRouteContractPanel(battle.routeContract, { title: "已选路线合同" })}
         <div class="season-ops-authoritative-battle-grid">
           <article class="season-ops-authoritative-combatant">
@@ -1718,6 +1750,7 @@ export class AuthoritativeRunPanel {
           </div>
           <div class="season-ops-counter-chip">整备 ${clampInt(scenario.betweenEncounterHeal)} HP</div>
         </div>
+        ${this.renderChapterBranchPanel(projection && projection.route && projection.route.chapterBranch)}
         ${this.renderRouteContractPanel(reward.routeContract, { title: "已选路线合同" })}
         <div class="season-ops-authoritative-choice-grid">
           ${choices.map(choice => this.renderRewardChoice(choice)).join("") || `<div class="season-ops-inline-empty">当前没有可选奖励，请恢复本次历练。</div>`}
@@ -1786,6 +1819,7 @@ export class AuthoritativeRunPanel {
           <div class="season-ops-counter-chip">${escapeHtml(summary.grade || "未评级")}</div>
         </div>
         ${this.renderSummaryGrid(summary)}
+        ${this.renderChapterBranchPanel(summary.chapterBranchResolution, { title: "章中命途结论" })}
         ${this.renderRouteScorePanel(summary)}
         ${this.renderSettlementCard(receipt, settled)}
         ${this.renderRouteHistory()}
@@ -1853,6 +1887,7 @@ export class AuthoritativeRunPanel {
           <div class="season-ops-counter-chip">${escapeHtml(formatMappedLabel(TERMINAL_REASON_LABELS, summary.reason, abandoned ? "主动封卷" : "历练结束"))}</div>
         </div>
         ${this.renderSummaryGrid(summary)}
+        ${this.renderChapterBranchPanel(summary.chapterBranchResolution || (projection && projection.route && projection.route.chapterBranch), { title: "章中命途结论" })}
         ${this.renderRouteScorePanel(summary)}
         ${this.renderRouteHistory()}
         <div class="season-ops-state-actions season-ops-authoritative-inline-actions">
@@ -1934,6 +1969,28 @@ export class AuthoritativeRunPanel {
         <div class="season-ops-authoritative-contract-grid">
           ${this.renderRouteContractField("敌方压力", contract.difficultySummary || "沿用本轮常规强度")}
           ${this.renderRouteContractField("奖励摘要", contract.rewardSummary || "沿用本轮常规回报")}
+        </div>
+      </div>
+    `;
+  }
+
+  renderChapterBranchPanel(branchSource = null, { title = "已选章中命途" } = {}) {
+    const branch = normalizeChapterBranch(branchSource);
+    if (!branch) return "";
+    return `
+      <div class="season-ops-authoritative-branch-panel" data-authoritative-chapter-branch="${escapeHtml(branch.branchId)}">
+        <div class="season-ops-authoritative-choice-top">
+          <div class="season-ops-authoritative-branch-heading">
+            <span class="season-ops-inline-note">${escapeHtml(title)}</span>
+            <strong>${escapeHtml(branch.title)}</strong>
+          </div>
+          <span class="season-ops-meta-chip">后续路线已锁定</span>
+        </div>
+        ${branch.description ? `<p>${escapeHtml(branch.description)}</p>` : ""}
+        <div class="season-ops-authoritative-branch-copy">
+          ${branch.counterplay ? `<div><span>选择依据</span><strong>${escapeHtml(branch.counterplay)}</strong></div>` : ""}
+          ${branch.buildFocus ? `<div><span>构筑方向</span><strong>${escapeHtml(branch.buildFocus)}</strong></div>` : ""}
+          ${branch.consequenceSummary ? `<div><span>后续变化</span><strong>${escapeHtml(branch.consequenceSummary)}</strong></div>` : ""}
         </div>
       </div>
     `;
@@ -2111,6 +2168,7 @@ export class AuthoritativeRunPanel {
 
   describeEvent(event = {}) {
     const type = normalizeText(event.type);
+    if (type === "chapter_branch_selected") return `章中命途已锁定：${normalizeText(event.title, event.branchId || "已选路线")}。`;
     if (type === "encounter_started") return `遭遇已锁定：${formatMappedLabel(ENEMY_LABELS, event.enemyId, "未知敌手")}。`;
     if (type === "card_played") return `已打出「${formatMappedLabel(CARD_LABELS, event.cardId, "未知牌")}」，伤害 ${clampInt(event.damage)}，格挡 ${clampInt(event.block)}。`;
     if (type === "enemy_intent_resolved") return `敌方意图结算，承受 ${clampInt(event.damageTaken)} 伤害，敌方获得 ${clampInt(event.enemyBlock)} 格挡。`;

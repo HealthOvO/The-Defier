@@ -1,5 +1,23 @@
 Original prompt: 进入全自动审查与修复模式，按顺序审查并修复 The Defier 的核心模块（battle/card effects、events/fateRing、PvP/网络同步、game/data），发现问题直接改、加防御性编程并闭环自检，最终输出整体修复结论。
 
+- 2026-07-15: V11-S111 命途长卷 · 章节异题内容包 V2
+  - 本轮完成
+    - 命途长卷新周卷升级为 `fate-chronicle-catalog-v2 / fate-chronicle-rotation-v2`，形成 3 章各 3 条誓约：在原守誓、锋誓外，分别加入定稿誓、审镜誓与封卷誓。完成任一誓约仍解锁下一章，只有完成快照内全部实际誓约才达成“全誓”纯外观里程碑。
+    - 权威内容目录新增不可变 `authoritative-trials-v6`；三条处置誓约分别在第 2、3、4 站出现二选一，选择会改变当前遭遇、后续敌人池、路线合同组合、卡牌奖励池和精修/裁牌偏向，不新增命令、数据库表、账号级战力或客户端自报结果。
+    - 章中选择继续复用 `select_node` 与 `schemaVersion 2`；canonical route 持久化公开分支结论，战斗、奖励、路线留痕和终局摘要持续展示选择依据、构筑方向与后续变化。公开投影不下发 `futureStages / rewardCardPool / rewardProfile / enemyAdjustments / rewardAdjustments` 等内部规则。
+    - 当前周若已存在自洽的 v1 冻结快照，bootstrap 会原样保留两誓约卷面；新周才写入 v2 九誓约快照。同版本内容漂移、篡改哈希或伪造 legacy 结构继续 fail closed，旧 v1-v5 authoritative run 仍按创建时目录重放。
+    - 修复三誓约下 `dual_completed_at` 仍按固定 `>= 2` 提前写入的问题，改为读取轮换快照中的实际誓约数；API 新增 `allOathsCompleted / allOathsCompletedAt / oathCount`，保留原字段作为兼容别名。
+    - 命途长卷首页、权威战局面板、游戏内指南、独立介绍页和后端契约文档已同步 3x3、章中分岔、全誓与旧周兼容口径；旧 v1 两誓约响应不会在前端补出虚假的第三誓约。
+    - 完整回归额外暴露并修复周档案双进程启动竞态：`weekly_archive_cycles` 改为幂等插入后回读并逐字节验证，同一快照并发启动会收敛，真实 drift 仍 fail closed；并发门禁同时断言只生成上周、本周、下周 3 条唯一快照。
+  - 已验证
+    - 最终完整 Node 门禁 `PVP_LIVE_WS_FANOUT_MESSAGE_TIMEOUT_MS=60000 npm run test:node` 通过并输出 `All node checks passed.`；覆盖权威引擎、迁移、真实后端结算、旧目录重放、2/3 不提前领奖、3/3 全誓、legacy 两誓约 UI、并发启动及既有 PVP/存档/E2E 回归。
+    - 新增 24 个固定种子乘 6 条分支的 144 局平衡门禁，全部在 121 动作内通关；抢稿、兑付、抢卷的高分分别以更多受伤、更低余血或更长回合支付可见成本，没有无代价支配稳稿、校验与保真。
+    - `node tests/sanity_fate_chronicle_catalog_bootstrap_compatibility_checks.cjs` 锁定 previous/current v1 整行不变、新周 v2、伪 legacy、标量漂移及篡改 `scenarioId` 后重算自洽哈希仍 fail closed；`npm run build:pages` 通过。
+    - 本轮最新 fresh 浏览器门禁 `output/s111-fate-chronicle-final2` 汇总权威战局与命途长卷 87/87 findings、32 张截图、0 failed、0 console error，missing / duplicate / unknown module 均为空；真实页面完成定稿誓、选择抢稿并验证分支在战斗、奖励、终局持续可见，桌面与 390px 移动端截图已人工复核。
+    - `gpt-5.4` 挑战者发现 legacy v1 仅按部分结构特征放行的 P2；现已改为确定性重建唯一合法 v1 catalog/rotation，并要求完整 catalog hash、snapshot、镜像列逐项一致。挑战者复核确认该问题关闭，未发现剩余 actionable P1/P2。
+  - 当前结论
+    - S111 已完成设计、开发、分支平衡、完整回归、真实浏览器验收与挑战者终审；本轮只合并推送，不把 S111 部署到生产，线上继续运行已验证的 S110。
+
 - 2026-07-15: V11-S110 天穹裂隙战役指令 V1
   - 本轮完成
     - 世界裂隙周目录升级为冻结的 `world-rift-catalog-v2 / world-rift-rotation-v2`，每周从三套战役题面中确定个人、小队与全服各一条指令；个人换路、小队多路线协作和全服阶段推进分别形成可读目标，不新增独立大厅、货币或永久战力。

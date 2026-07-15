@@ -18,16 +18,28 @@ const CHAPTER_BLUEPRINTS = Object.freeze([
     summary: "先把稳住节奏与主动抢终结区分开。",
     vows: [
       {
+        oathId: "guard",
         fallbackId: "chronicle-ember-guard",
         title: "稳健誓约",
         summary: "3 战，较高生命与护盾牌。",
         tone: "guard"
       },
       {
+        oathId: "edge",
         fallbackId: "chronicle-ember-edge",
         title: "进取誓约",
         summary: "3 战，较低生命与进攻/易伤牌。",
         tone: "edge"
+      },
+      {
+        oathId: "proof",
+        fallbackId: "chronicle-ember-proof",
+        title: "定稿誓",
+        summary: "首战后在稳稿与抢稿之间锁定后半卷。",
+        readCue: "先看首战血线与首份奖励，再决定后两战方向。",
+        counterplayLine: "血线不稳先稳稿；循环成形再抢稿。",
+        buildHint: "护盾反击或易伤快攻。",
+        tone: "proof"
       }
     ]
   },
@@ -38,16 +50,28 @@ const CHAPTER_BLUEPRINTS = Object.freeze([
     summary: "开始要求你在回复、抽滤和回合预算里做取舍。",
     vows: [
       {
+        oathId: "guard",
         fallbackId: "chronicle-mirror-guard",
         title: "稳健誓约",
         summary: "4 战，强调回复与抽滤。",
         tone: "guard"
       },
       {
+        oathId: "edge",
         fallbackId: "chronicle-mirror-edge",
         title: "进取誓约",
         summary: "4 战，总回合预算更紧。",
         tone: "edge"
+      },
+      {
+        oathId: "audit",
+        fallbackId: "chronicle-mirror-audit",
+        title: "审镜誓",
+        summary: "中段选择继续校验结构或立即兑付节奏。",
+        readCue: "第二战后依据牌组厚度与循环质量作答。",
+        counterplayLine: "牌组臃肿先校验；循环齐备再兑付。",
+        buildHint: "抽滤、精修、裁牌与能量循环。",
+        tone: "audit"
       }
     ]
   },
@@ -58,16 +82,28 @@ const CHAPTER_BLUEPRINTS = Object.freeze([
     summary: "最后一章把容错压低，只奖励更干净的路线。",
     vows: [
       {
+        oathId: "guard",
         fallbackId: "chronicle-rift-guard",
         title: "稳健誓约",
         summary: "5 战，战间小幅回复。",
         tone: "guard"
       },
       {
+        oathId: "edge",
         fallbackId: "chronicle-rift-edge",
         title: "进取誓约",
         summary: "5 战，低容错与更高倍率。",
         tone: "edge"
+      },
+      {
+        oathId: "seal",
+        fallbackId: "chronicle-rift-seal",
+        title: "封卷誓",
+        summary: "终章中段选择保真入卷或直接抢卷。",
+        readCue: "第三战后检查血线、牌组厚度与终结链。",
+        counterplayLine: "构筑未成先保真；终结链完整再抢卷。",
+        buildHint: "薄牌组、终结牌精修与资源压缩。",
+        tone: "seal"
       }
     ]
   }
@@ -307,11 +343,16 @@ export function normalizeChronicleModel(state = {}) {
         || getValue(source, "routes")
         || getValue(source, "variants")
     );
-    const vows = blueprint.vows.map((template, vowIndex) => {
-      const matchingSource = vowSource.find(entry => {
-        const id = normalizeText(entry && (entry.vowId || entry.oathId || entry.covenantId || entry.variantId || entry.id));
-        return id === template.fallbackId;
-      }) || vowSource[vowIndex] || {};
+    const vowEntries = vowSource.length > 0
+      ? vowSource.map((entry, vowIndex) => {
+        const sourceId = normalizeText(entry && (entry.vowId || entry.oathId || entry.covenantId || entry.variantId || entry.id));
+        const template = blueprint.vows.find(candidate => sourceId === candidate.oathId || sourceId === candidate.fallbackId)
+          || blueprint.vows[vowIndex]
+          || {};
+        return { template, source: entry };
+      })
+      : blueprint.vows.map(template => ({ template, source: {} }));
+    const vows = vowEntries.map(({ template, source: matchingSource }) => {
       const vow = normalizeObject(matchingSource);
       const vowId = normalizeText(
         vow.vowId
@@ -319,6 +360,7 @@ export function normalizeChronicleModel(state = {}) {
           || vow.covenantId
           || vow.variantId
           || vow.id
+          || template.oathId
           || template.fallbackId
       );
       const completed = normalizeBoolean(vow.completed, completedVows.has(vowId));
@@ -326,6 +368,9 @@ export function normalizeChronicleModel(state = {}) {
         vowId,
         title: normalizeText(vow.title || vow.label || vow.name, template.title),
         summary: normalizeText(vow.summary || vow.description, template.summary),
+        readCue: normalizeText(vow.readCue, template.readCue),
+        counterplayLine: normalizeText(vow.counterplayLine, template.counterplayLine),
+        buildHint: normalizeText(vow.buildHint, template.buildHint),
         tone: normalizeText(vow.tone || template.tone, template.tone),
         encounters: clampInt(vow.encounterCount || vow.encounters || vow.battles || vow.stageCount, 0),
         available: normalizeBoolean(
@@ -335,6 +380,15 @@ export function normalizeChronicleModel(state = {}) {
         completed
       };
     });
+    const completedVowCount = vows.filter(vow => vow.completed).length;
+    const allOathsSource = getValue(source, "allOathsCompleted")
+      ?? getValue(chapterProgress, "allOathsCompleted")
+      ?? getValue(source, "dualCompleted")
+      ?? getValue(chapterProgress, "dualCompleted");
+    const allOathsCompleted = normalizeBoolean(
+      allOathsSource,
+      vows.length > 0 && completedVowCount >= vows.length
+    );
     return {
       order: blueprint.order,
       chapterId,
@@ -345,9 +399,21 @@ export function normalizeChronicleModel(state = {}) {
         ? blueprint.order === 1
         : normalizeBoolean(explicitUnlocked, blueprint.order === 1),
       completed: chapterCompleted,
-      dualCompleted: normalizeBoolean(
-        getValue(source, "dualCompleted") || getValue(chapterProgress, "dualCompleted"),
-        vows.filter(vow => vow.completed).length >= 2
+      dualCompleted: allOathsCompleted,
+      allOathsCompleted,
+      allOathsCompletedAt: clampInt(
+        getValue(source, "allOathsCompletedAt")
+          ?? getValue(chapterProgress, "allOathsCompletedAt")
+          ?? getValue(source, "dualCompletedAt")
+          ?? getValue(chapterProgress, "dualCompletedAt")
+      ),
+      completedOathCount: clampInt(
+        getValue(source, "completedOathCount") ?? getValue(chapterProgress, "completedOathCount"),
+        completedVowCount
+      ),
+      oathCount: clampInt(
+        getValue(source, "oathCount") ?? getValue(chapterProgress, "oathCount"),
+        vows.length
       ),
       bestScore: clampInt(
         getValue(source, "bestScore")
@@ -1189,7 +1255,7 @@ export class FateChronicleView {
       <section class="fate-chronicle-state-card" data-fate-chronicle-state="loading">
         <div class="fate-chronicle-kicker">命途长卷</div>
         <h2>正在恢复服务器卷面</h2>
-        <p>章节解锁、双誓约、进行中的长卷战局与三证归卷都以本周固定卷面为准，客户端不会本地补全。</p>
+        <p>章节解锁、全部誓约、进行中的长卷战局与三证归卷都以本周固定卷面为准，客户端不会本地补全。</p>
       </section>
     `;
   }
@@ -1210,13 +1276,16 @@ export class FateChronicleView {
   renderHeader(model) {
     const archiveWindow = model.window.endAt > 0 ? `结卷 ${formatUtcDateTime(model.window.endAt, { compact: true })}` : "等待服务器开卷";
     const claimWindow = model.window.claimUntil > 0 ? `领奖至 ${formatUtcDateTime(model.window.claimUntil, { compact: true })}` : "宽限窗口待定";
+    const hasBranchOaths = model.chapters.some(chapter => chapter.vows.some(vow => vow.readCue || vow.counterplayLine || vow.buildHint));
     return `
       <section class="fate-chronicle-header" data-fate-chronicle-state="ready">
         <button type="button" class="back-btn" data-fate-chronicle-action="return-menu" aria-label="返回主菜单" title="返回主菜单">↩</button>
         <div class="fate-chronicle-title-group">
           <div class="fate-chronicle-kicker">天道见证</div>
           <h1>命途长卷</h1>
-          <p>三章顺序解锁、双誓约固定周种子、失败不扣次数，结算后再把长卷证折进本周三证归卷。</p>
+          <p>${escapeHtml(hasBranchOaths
+            ? "三章顺序解锁、每条誓约固定周种子、失败不扣次数；处置誓约会在章中根据当前构筑锁定后续命途。"
+            : "三章顺序解锁、每条誓约固定周种子、失败不扣次数；本周冻结卷面会保持创建时的誓约数量与规则。")}</p>
         </div>
         <div class="fate-chronicle-header-side">
           <div class="fate-chronicle-account-card" data-fate-chronicle-account="${escapeHtml(this.boundUserId || "guest")}">
@@ -1300,7 +1369,7 @@ export class FateChronicleView {
           <div>
             <div class="fate-chronicle-kicker">纯外观里程碑</div>
             <h2>长卷奖励</h2>
-            <p>章节完成、同章双解与全卷收口都只发长卷自身里程碑，不改战力。</p>
+            <p>章节完成、同章全誓与全卷收口都只发长卷自身里程碑，不改战力。</p>
           </div>
         </div>
         <div class="fate-chronicle-milestone-grid">
@@ -1339,13 +1408,14 @@ export class FateChronicleView {
     const activeAttempt = normalizeObject(model.activeAttempt);
     const activeChapterId = normalizeText(activeAttempt.chapterId || getValue(activeAttempt, "chapter.chapterId"));
     const activeVowId = normalizeText(activeAttempt.vowId || activeAttempt.oathId || activeAttempt.covenantId || activeAttempt.variantId);
+    const totalOathCount = model.chapters.reduce((total, chapter) => total + chapter.vows.length, 0);
     return `
       <section class="fate-chronicle-section" data-fate-chronicle-state="chapters">
         <div class="fate-chronicle-section-head">
           <div>
             <div class="fate-chronicle-kicker">三章顺序解锁</div>
-            <h2>本周章节与双誓约</h2>
-            <p>完成任一誓约即可解锁下一章；同章两条誓约都完成时记为双解，仅影响档案展示与纯外观里程碑。</p>
+            <h2>${escapeHtml(`本周三章与 ${totalOathCount} 条誓约`)}</h2>
+            <p>完成任一誓约即可解锁下一章；同章全部誓约完成后记为全誓，仅影响档案展示与纯外观里程碑。</p>
           </div>
           <div class="fate-chronicle-inline-stack">
             ${model.activeRunId ? chronicleChip("存在进行中的长卷战局", "success") : chronicleChip("当前无进行中战局", "muted")}
@@ -1381,7 +1451,8 @@ export class FateChronicleView {
               <div class="fate-chronicle-inline-stack">
                 ${chronicleChip(chapter.unlocked ? "已解锁" : "需先完成前章", chapter.unlocked ? "success" : "muted")}
                 ${chronicleChip(chapter.completed ? "任一誓约已通关" : "待首通", chapter.completed ? "info" : "muted")}
-                ${chronicleChip(chapter.dualCompleted ? "同章双解" : "未双解", chapter.dualCompleted ? "success" : "muted")}
+                ${chronicleChip(`本章 ${chapter.vows.filter(vow => vow.completed).length}/${chapter.vows.length}`, chapter.completed ? "info" : "muted")}
+                ${chronicleChip(chapter.allOathsCompleted ? "同章全誓" : "全誓未成", chapter.allOathsCompleted ? "success" : "muted")}
                 ${chapter.bestScore > 0 ? chronicleChip(`最佳 ${chapter.bestScore}${chapter.bestGrade ? ` · ${chapter.bestGrade}` : ""}`) : ""}
               </div>
               <div class="fate-chronicle-vow-list">
@@ -1413,6 +1484,13 @@ export class FateChronicleView {
               <h3>${escapeHtml(selectedChapter.title)} · ${escapeHtml(selectedVow.title)}</h3>
               <p>${escapeHtml(selectedVow.summary)}</p>
             </div>
+            ${selectedVow.readCue || selectedVow.counterplayLine || selectedVow.buildHint ? `
+              <div class="fate-chronicle-vow-brief" data-fate-chronicle-vow-brief="true">
+                ${selectedVow.readCue ? `<div><span>读局</span><strong>${escapeHtml(selectedVow.readCue)}</strong></div>` : ""}
+                ${selectedVow.counterplayLine ? `<div><span>应对</span><strong>${escapeHtml(selectedVow.counterplayLine)}</strong></div>` : ""}
+                ${selectedVow.buildHint ? `<div><span>构筑</span><strong>${escapeHtml(selectedVow.buildHint)}</strong></div>` : ""}
+              </div>
+            ` : ""}
             <div class="fate-chronicle-inline-stack">
               ${chronicleChip(selectedChapter.unlocked ? "章节可进入" : "章节未解锁", selectedChapter.unlocked ? "success" : "muted")}
               ${chronicleChip(selectedVow.completed ? "本誓约已完成" : "本誓约待完成", selectedVow.completed ? "info" : "warning")}

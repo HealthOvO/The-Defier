@@ -40,6 +40,8 @@ node tests/sanity_authoritative_runs_migration_checks.cjs
 node tests/sanity_authoritative_runs_platform_checks.cjs
 node tests/sanity_authoritative_runs_client_checks.mjs
 node tests/sanity_authoritative_runs_ui_checks.mjs
+node tests/sanity_fate_chronicle_branch_balance_checks.cjs
+node tests/sanity_fate_chronicle_catalog_bootstrap_compatibility_checks.cjs
 node tests/sanity_fate_chronicle_platform_checks.cjs
 node tests/sanity_weekly_archive_platform_checks.cjs
 node tests/sanity_fate_chronicle_client_checks.mjs

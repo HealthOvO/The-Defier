@@ -392,6 +392,34 @@
   gap: 10px;
 }
 
+#fate-chronicle-screen .fate-chronicle-vow-brief {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+#fate-chronicle-screen .fate-chronicle-vow-brief > div {
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid rgba(205, 174, 122, 0.16);
+  border-radius: 8px;
+  background: rgba(255, 248, 235, 0.03);
+  display: grid;
+  gap: 4px;
+}
+
+#fate-chronicle-screen .fate-chronicle-vow-brief span {
+  color: rgba(209, 195, 166, 0.62);
+  font-size: 0.72rem;
+}
+
+#fate-chronicle-screen .fate-chronicle-vow-brief strong {
+  color: #f4ead1;
+  font-size: 0.86rem;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
 #fate-chronicle-screen .fate-chronicle-inline-note,
 #fate-chronicle-screen .season-ops-inline-note {
   color: rgba(223, 216, 199, 0.72);
@@ -423,6 +451,48 @@
 #fate-chronicle-screen .season-ops-authoritative-contract-list {
   display: grid;
   gap: 10px;
+}
+
+#fate-chronicle-screen .season-ops-authoritative-branch-panel {
+  margin-top: 10px;
+  padding: 12px 14px;
+  border-left: 3px solid rgba(214, 179, 114, 0.5);
+  background: rgba(82, 62, 29, 0.16);
+  display: grid;
+  gap: 10px;
+}
+
+#fate-chronicle-screen .season-ops-authoritative-branch-heading {
+  display: grid;
+  gap: 3px;
+}
+
+#fate-chronicle-screen .season-ops-authoritative-branch-copy {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+#fate-chronicle-screen .season-ops-authoritative-choice-card .season-ops-authoritative-branch-copy {
+  grid-template-columns: 1fr;
+}
+
+#fate-chronicle-screen .season-ops-authoritative-branch-copy > div {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+#fate-chronicle-screen .season-ops-authoritative-branch-copy span {
+  color: rgba(209, 195, 166, 0.62);
+  font-size: 0.72rem;
+}
+
+#fate-chronicle-screen .season-ops-authoritative-branch-copy strong {
+  color: #f4ead1;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
 }
 
 #fate-chronicle-screen .season-ops-authoritative-battle-grid {
@@ -600,7 +670,9 @@
   #fate-chronicle-screen .season-ops-authoritative-choice-grid,
   #fate-chronicle-screen .season-ops-authoritative-hand-grid,
   #fate-chronicle-screen .season-ops-authoritative-battle-grid,
-  #fate-chronicle-screen .season-ops-authoritative-contract-grid {
+  #fate-chronicle-screen .season-ops-authoritative-contract-grid,
+  #fate-chronicle-screen .fate-chronicle-vow-brief,
+  #fate-chronicle-screen .season-ops-authoritative-branch-copy {
     grid-template-columns: 1fr;
   }
 }

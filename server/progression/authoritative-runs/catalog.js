@@ -1,15 +1,18 @@
 const { cloneJson, hashCanonical, stableStringify } = require('./canonical');
 
 const PROTOCOL_VERSION = 'authoritative-run-v2';
-const CONTENT_VERSION = 'authoritative-trials-v5';
+const CONTENT_VERSION = 'authoritative-trials-v6';
 const RELAY_EXPEDITION_SCENARIO_IDS = ['vanguard', 'bulwark', 'insight'];
 const FATE_CHRONICLE_SCENARIO_IDS = [
     'chronicle-ember-guard',
     'chronicle-ember-edge',
+    'chronicle-ember-proof',
     'chronicle-mirror-guard',
     'chronicle-mirror-edge',
+    'chronicle-mirror-audit',
     'chronicle-rift-guard',
-    'chronicle-rift-edge'
+    'chronicle-rift-edge',
+    'chronicle-rift-seal'
 ];
 
 function deepFreeze(value) {
@@ -587,6 +590,81 @@ const CONTENT_SNAPSHOT = deepFreeze({
                 { type: 'boss', pool: ['trial_adjudicator'] }
             ]
         },
+        'chronicle-ember-proof': {
+            scenarioId: 'chronicle-ember-proof',
+            mode: 'fate_chronicle',
+            title: '照火问心 · 定稿誓',
+            description: '先用一战读取当前构筑，再在稳稿与抢稿之间锁定后半卷。',
+            maxHp: 56,
+            energyPerTurn: 3,
+            handSize: 5,
+            turnBudget: 24,
+            betweenEncounterHeal: 2,
+            scoreMultiplier: 1.15,
+            starterDeck: [
+                'strike', 'strike', 'strike',
+                'guard', 'guard',
+                'insight', 'ember_riposte', 'mirror_breath', 'fracture', 'flowing_qi'
+            ],
+            rewardCardPool: ['ember_riposte', 'mirror_breath', 'fracture', 'flowing_qi', 'severing_flow'],
+            rewardProfile: {
+                healAmount: 10,
+                healThresholdPercent: 55,
+                upgradePriority: ['ember_riposte', 'mirror_breath', 'severing_flow', 'strike'],
+                removePriority: ['strike', 'guard']
+            },
+            branchPlan: {
+                version: 1,
+                triggerStage: 2,
+                title: '照火定稿',
+                prompt: '首战已经给出构筑证据。稳住血线再收束，还是把现有节奏兑现成高压路线？',
+                options: [
+                    {
+                        branchId: 'proof_hold',
+                        title: '稳稿',
+                        description: '先把血线与防守反击写稳，再用司命镇守完成归卷。',
+                        counterplay: '首战失血较多，或尚未拿到稳定进攻循环时选择。',
+                        buildFocus: '护盾、回复、反击与稳定精修。',
+                        consequenceSummary: '当前站走稳进合同，后续首领开放稳进或争衡。',
+                        enemyId: 'oath_guard',
+                        contractId: 'steady',
+                        rewardCardPool: ['iron_mandate', 'mirror_breath', 'life_siphon', 'ember_riposte'],
+                        rewardProfile: {
+                            healAmount: 13,
+                            healThresholdPercent: 68,
+                            upgradePriority: ['guard', 'iron_mandate', 'mirror_breath', 'life_siphon']
+                        },
+                        futureStages: {
+                            '3': { type: 'boss', pool: ['fate_warden'], contractIds: ['steady', 'contested'] }
+                        }
+                    },
+                    {
+                        branchId: 'proof_rush',
+                        title: '抢稿',
+                        description: '把已经成形的攻击循环立即兑现，用高压路线换更强构筑候选。',
+                        counterplay: '血线健康且易伤、能量或终结牌已经衔接时选择。',
+                        buildFocus: '易伤、能量循环与短回合终结。',
+                        consequenceSummary: '当前站走险锋合同，后续首领只开放争衡或险锋。',
+                        enemyId: 'mirror_duelist',
+                        contractId: 'perilous',
+                        rewardCardPool: ['fracture', 'severing_flow', 'sky_pierce', 'archive_surge'],
+                        rewardProfile: {
+                            cardOfferCount: 3,
+                            healThresholdPercent: 42,
+                            upgradePriority: ['severing_flow', 'sky_pierce', 'archive_surge', 'strike']
+                        },
+                        futureStages: {
+                            '3': { type: 'boss', pool: ['trial_adjudicator'], contractIds: ['contested', 'perilous'] }
+                        }
+                    }
+                ]
+            },
+            stages: [
+                { type: 'chronicle', pool: ['ink_scout', 'ash_acolyte', 'ember_revenant'] },
+                { type: 'chronicle_elite', pool: ['oath_guard', 'mirror_duelist'] },
+                { type: 'boss', pool: ['fate_warden'] }
+            ]
+        },
         'chronicle-mirror-guard': {
             scenarioId: 'chronicle-mirror-guard',
             mode: 'fate_chronicle',
@@ -645,6 +723,84 @@ const CONTENT_SNAPSHOT = deepFreeze({
                 { type: 'chronicle', pool: ['oath_scribe', 'ember_revenant', 'ash_acolyte'] },
                 { type: 'chronicle_elite', pool: ['mirror_duelist', 'chain_colossus', 'void_archivist'] },
                 { type: 'boss', pool: ['rift_sovereign'] }
+            ]
+        },
+        'chronicle-mirror-audit': {
+            scenarioId: 'chronicle-mirror-audit',
+            mode: 'fate_chronicle',
+            title: '镜命辨真 · 审镜誓',
+            description: '前两战积累构筑证据，中段决定继续校验结构还是立刻兑付节奏。',
+            maxHp: 60,
+            energyPerTurn: 3,
+            handSize: 5,
+            turnBudget: 34,
+            betweenEncounterHeal: 2,
+            scoreMultiplier: 1.18,
+            starterDeck: [
+                'strike', 'strike', 'strike',
+                'guard', 'guard',
+                'insight', 'insight', 'mirror_breath', 'fracture', 'flowing_qi'
+            ],
+            rewardCardPool: ['insight', 'mirror_breath', 'fracture', 'flowing_qi', 'severing_flow'],
+            rewardProfile: {
+                healAmount: 10,
+                healThresholdPercent: 54,
+                upgradePriority: ['mirror_breath', 'flowing_qi', 'severing_flow', 'insight'],
+                removePriority: ['strike', 'guard']
+            },
+            branchPlan: {
+                version: 1,
+                triggerStage: 3,
+                title: '镜命审计',
+                prompt: '牌组已经暴露真实形态。继续修正结构，还是把循环直接兑付为终局压力？',
+                options: [
+                    {
+                        branchId: 'audit_verify',
+                        title: '先校验',
+                        description: '保留精修与裁牌空间，以较稳的首领合同检验牌组。',
+                        counterplay: '牌组仍偏厚，或关键牌尚未精修时选择。',
+                        buildFocus: '抽滤、精修、裁牌与稳定回复。',
+                        consequenceSummary: '当前站争衡，后续首领开放稳进或争衡。',
+                        enemyId: 'mirror_seer',
+                        contractId: 'contested',
+                        rewardCardPool: ['insight', 'mirror_breath', 'iron_mandate', 'life_siphon'],
+                        rewardProfile: {
+                            healThresholdPercent: 62,
+                            removeUnlockStage: 2,
+                            upgradePriority: ['mirror_breath', 'insight', 'iron_mandate', 'life_siphon'],
+                            removePriority: ['strike', 'guard']
+                        },
+                        futureStages: {
+                            '4': { type: 'boss', pool: ['trial_adjudicator'], contractIds: ['steady', 'contested'] }
+                        }
+                    },
+                    {
+                        branchId: 'audit_cashout',
+                        title: '先兑付',
+                        description: '停止继续修稿，把能量循环和易伤立即兑现为终局攻势。',
+                        counterplay: '牌组已经精简并能稳定连续出牌时选择。',
+                        buildFocus: '能量、易伤、连续出牌与攻击精修。',
+                        consequenceSummary: '当前站险锋，后续首领只开放争衡或险锋。',
+                        scoreMultiplier: 1.26,
+                        enemyId: 'mirror_duelist',
+                        contractId: 'perilous',
+                        rewardCardPool: ['flowing_qi', 'fracture', 'severing_flow', 'archive_surge'],
+                        rewardProfile: {
+                            cardOfferCount: 3,
+                            healThresholdPercent: 40,
+                            upgradePriority: ['severing_flow', 'archive_surge', 'flowing_qi', 'strike']
+                        },
+                        futureStages: {
+                            '4': { type: 'boss', pool: ['trial_adjudicator'], contractIds: ['contested', 'perilous'] }
+                        }
+                    }
+                ]
+            },
+            stages: [
+                { type: 'chronicle', pool: ['ink_scout', 'oath_scribe', 'ash_acolyte'] },
+                { type: 'chronicle', pool: ['ember_revenant', 'ash_acolyte', 'oath_scribe'] },
+                { type: 'chronicle_elite', pool: ['mirror_seer', 'mirror_duelist'] },
+                { type: 'boss', pool: ['trial_adjudicator'] }
             ]
         },
         'chronicle-rift-guard': {
@@ -707,6 +863,85 @@ const CONTENT_SNAPSHOT = deepFreeze({
                 { type: 'chronicle', pool: ['ember_revenant', 'ink_scout', 'ash_acolyte'] },
                 { type: 'chronicle_elite', pool: ['mirror_duelist', 'oath_guard', 'mirror_seer'] },
                 { type: 'chronicle_elite', pool: ['void_archivist', 'chain_colossus', 'mirror_duelist'] },
+                { type: 'boss', pool: ['heaven_breaker'] }
+            ]
+        },
+        'chronicle-rift-seal': {
+            scenarioId: 'chronicle-rift-seal',
+            mode: 'fate_chronicle',
+            title: '裂天归卷 · 封卷誓',
+            description: '前三战压缩牌组，终章中段判断该保真入卷还是直接抢卷。',
+            maxHp: 62,
+            energyPerTurn: 3,
+            handSize: 5,
+            turnBudget: 42,
+            betweenEncounterHeal: 2,
+            scoreMultiplier: 1.24,
+            starterDeck: [
+                'strike', 'strike', 'strike',
+                'guard', 'guard',
+                'insight', 'iron_mandate', 'mirror_breath', 'severing_flow', 'archive_surge'
+            ],
+            rewardCardPool: ['iron_mandate', 'mirror_breath', 'severing_flow', 'archive_surge', 'flowing_qi'],
+            rewardProfile: {
+                healAmount: 11,
+                healThresholdPercent: 55,
+                maxHpAmount: 5,
+                upgradePriority: ['severing_flow', 'archive_surge', 'mirror_breath', 'iron_mandate'],
+                removePriority: ['strike', 'guard']
+            },
+            branchPlan: {
+                version: 1,
+                triggerStage: 4,
+                title: '终章封卷',
+                prompt: '终结牌、血线和牌组厚度都已定形。保真进首领，还是把最后资源押在抢卷？',
+                options: [
+                    {
+                        branchId: 'seal_preserve',
+                        title: '保真',
+                        description: '守住可验证的血线与牌组质量，再稳步完成最终封卷。',
+                        counterplay: '血线偏低、牌组仍厚或终结牌未精修时选择。',
+                        buildFocus: '护盾、回复、精修与最后一次裁牌。',
+                        consequenceSummary: '当前站争衡，裂天首领开放稳进或争衡。',
+                        enemyId: 'chain_colossus',
+                        contractId: 'contested',
+                        rewardCardPool: ['iron_mandate', 'mirror_breath', 'life_siphon', 'ember_riposte'],
+                        rewardProfile: {
+                            healAmount: 14,
+                            healThresholdPercent: 66,
+                            removeUnlockStage: 2,
+                            upgradePriority: ['mirror_breath', 'iron_mandate', 'life_siphon', 'guard']
+                        },
+                        futureStages: {
+                            '5': { type: 'boss', pool: ['heaven_breaker'], contractIds: ['steady', 'contested'] }
+                        }
+                    },
+                    {
+                        branchId: 'seal_rush',
+                        title: '抢卷',
+                        description: '放弃最后缓冲，把精简牌组的全部节奏压进终局。',
+                        counterplay: '牌组已经精简，且终结牌与能量循环都已到位时选择。',
+                        buildFocus: '薄牌组、攻击精修、能量循环与短回合收官。',
+                        consequenceSummary: '当前站险锋，裂天首领只开放争衡或险锋。',
+                        enemyId: 'void_archivist',
+                        contractId: 'perilous',
+                        rewardCardPool: ['severing_flow', 'archive_surge', 'sky_pierce', 'fracture'],
+                        rewardProfile: {
+                            cardOfferCount: 3,
+                            healThresholdPercent: 38,
+                            upgradePriority: ['severing_flow', 'archive_surge', 'sky_pierce', 'strike']
+                        },
+                        futureStages: {
+                            '5': { type: 'boss', pool: ['heaven_breaker'], contractIds: ['contested', 'perilous'] }
+                        }
+                    }
+                ]
+            },
+            stages: [
+                { type: 'chronicle', pool: ['ink_scout', 'ash_acolyte', 'ember_revenant'] },
+                { type: 'chronicle', pool: ['oath_scribe', 'ember_revenant', 'ash_acolyte'] },
+                { type: 'chronicle_elite', pool: ['oath_guard', 'mirror_seer', 'mirror_duelist'] },
+                { type: 'chronicle_elite', pool: ['chain_colossus', 'void_archivist'] },
                 { type: 'boss', pool: ['heaven_breaker'] }
             ]
         }

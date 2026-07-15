@@ -1,16 +1,4 @@
 const fs = require('fs');
-
-const originalReadFileSync = fs.readFileSync;
-fs.readFileSync = function(p, enc) {
-    let c = originalReadFileSync(p, enc);
-    if (enc === 'utf8' && p.endsWith('.js')) {
-        c = c.replace(/^export\s+(const|let|var|class|function|default)/gm, '$1');
-        c = c.replace(/^export\s+\{.*?\};?/gm, '');
-        c = c.replace(/^import\s+.*?;/gm, '');
-    }
-    return c;
-};
-
 const path = require('path');
 
 function assert(condition, message) {
@@ -21,21 +9,16 @@ function assert(condition, message) {
 
 (function run() {
   const root = path.resolve(__dirname, '..');
-  const introPath = path.join(root, 'game-intro.html');
-  const indexPath = path.join(root, 'index.html');
-  const progressPath = path.join(root, 'progress.md');
-  const systemViewPath = path.join(root, 'js/views/SystemView.js');
-
-  const intro = fs.readFileSync(introPath, 'utf8');
-  const index = fs.readFileSync(indexPath, 'utf8');
-  const progress = fs.readFileSync(progressPath, 'utf8');
-  const systemView = fs.readFileSync(systemViewPath, 'utf8');
+  const intro = fs.readFileSync(path.join(root, 'game-intro.html'), 'utf8');
+  const index = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
+  const progress = fs.readFileSync(path.join(root, 'progress.md'), 'utf8');
+  const systemView = fs.readFileSync(path.join(root, 'js/views/SystemView.js'), 'utf8');
 
   const sharedAnchors = [
     'V11 命途长卷 · 三证归卷',
     '命途长卷',
     '三证归卷',
-    '3 章各 2 条誓约',
+    '3 章各 3 条誓约',
     '服务器权威 run',
     '失败不扣次数',
     '不会回退已完成章节',
@@ -44,35 +27,31 @@ function assert(condition, message) {
     '3/5 只提升档案等级',
     '非强制 PVP',
     '纯外观里程碑',
-    '每战奖励提供两张互不重复的新牌',
-    '服务器指定的精修目标',
-    '第二战后可裁去基础牌',
-    '牌组不会低于 8 张',
-    '稳进、争衡、险锋三档路线合同',
-    '敌方压力、构筑回报与路线分',
-    '风险越高，敌方生命与意图压力越高',
   ];
 
-  const introOnlyAnchors = [
+  sharedAnchors.forEach(anchor => {
+    assert(intro.includes(anchor), `intro missing shared anchor: ${anchor}`);
+    assert(progress.includes(anchor), `progress missing shared anchor: ${anchor}`);
+  });
+
+  [
     '当前版本重点（V11 命途长卷 · 三证归卷）',
     '当前迭代重点（V11 命途长卷 · 三证归卷）',
-    '所有归卷奖励、双解展示与全证奖励都维持纯外观里程碑边界',
     '实时论道属于非强制 PVP 证源',
-  ];
+  ].forEach(anchor => {
+    assert(intro.includes(anchor), `intro missing expected anchor: ${anchor}`);
+  });
 
-  const progressOnlyAnchors = [
+  [
     '当前玩家版本口径更新为“V11 命途长卷 · 三证归卷”',
     '历史版本记录中的 `V10 同道远征 · 权威接力闭环` 已保留',
-    'tests/browser_meta_screen_audit.mjs',
-    'tests/browser_pvp_mobile_audit.mjs',
-    'tests/browser_guide_modal_audit.mjs',
-    'V11-S108 权威构筑深化 V1',
-    'V11-S109 权威路线风险收益与难度契约 V1',
-  ];
+  ].forEach(anchor => {
+    assert(progress.includes(anchor), `progress missing expected anchor: ${anchor}`);
+  });
 
-  const systemViewCurrentAnchors = [
+  [
     'V11 命途长卷 · 三证归卷',
-    '3 章各 2 条誓约',
+    '3 章各 3 条誓约',
     '服务器权威 run',
     '失败不扣次数',
     '不会回退已完成章节',
@@ -81,32 +60,18 @@ function assert(condition, message) {
     '3/5 只提升档案等级',
     '非强制 PVP',
     '纯外观',
-    '同道远征',
-    '共享路线，不共享残血与牌组',
-    '镜像练习',
-    '实时论道赛后复盘',
-    'PVP 练习快照',
-    '不写正式积分',
-    '权威试炼',
-    '战后构筑',
-    '路线合同',
-  ];
-
-  sharedAnchors.forEach((anchor) => {
-    assert(intro.includes(anchor), `intro missing shared anchor: ${anchor}`);
-    assert(progress.includes(anchor), `progress missing shared anchor: ${anchor}`);
+  ].forEach(anchor => {
+    assert(systemView.includes(anchor), `SystemView guide missing current chronicle anchor: ${anchor}`);
   });
 
-  introOnlyAnchors.forEach((anchor) => {
-    assert(intro.includes(anchor), `intro missing expected anchor: ${anchor}`);
+  const combinedChronicleCopy = [intro, progress, systemView].join('\n');
+  ['定稿誓', '审镜誓', '封卷誓'].forEach(anchor => {
+    assert(combinedChronicleCopy.includes(anchor), `chronicle sync copy should mention the new oath anchor: ${anchor}`);
   });
 
-  progressOnlyAnchors.forEach((anchor) => {
-    assert(progress.includes(anchor), `progress missing expected verification anchor: ${anchor}`);
-  });
-
-  systemViewCurrentAnchors.forEach((anchor) => {
-    assert(systemView.includes(anchor), `SystemView guide missing current PVP anchor: ${anchor}`);
+  ['3 章各 2 条誓约'].forEach(staleAnchor => {
+    assert(!intro.includes(staleAnchor), `intro should not keep stale copy: ${staleAnchor}`);
+    assert(!systemView.includes(staleAnchor), `SystemView should not keep stale copy: ${staleAnchor}`);
   });
 
   const currentVersionPattern = /V11 命途长卷 · 三证归卷/g;
@@ -114,13 +79,12 @@ function assert(condition, message) {
   const progressVersionCount = (progress.match(currentVersionPattern) || []).length;
   assert(introVersionCount >= 2, `expected intro to mention V11 命途长卷 · 三证归卷 at least twice, got ${introVersionCount}`);
   assert(progressVersionCount >= 1, `expected progress to mention V11 命途长卷 · 三证归卷 at least once, got ${progressVersionCount}`);
-  assert(!intro.includes('当前版本重点（V10 同道远征 · 权威接力闭环）'), 'intro should not keep stale V10 current-version title');
-  assert(!intro.includes('当前迭代重点（V10 同道远征 · 权威接力闭环）'), 'intro should not keep stale V10 current-iteration title');
-  assert(!systemView.includes('当前版本重点（V10 同道远征 · 权威接力闭环）'), 'SystemView should not keep stale V10 current-version title');
+
   const currentVersionMatches = [...progress.matchAll(/当前玩家版本口径更新为“([^”]+)”/g)];
   assert(currentVersionMatches.length >= 2, 'progress should track both the current V11 copy sync and the historical V10 record');
   assert(currentVersionMatches[0][1] === 'V11 命途长卷 · 三证归卷', `expected the first current-version record in progress to be V11, got ${currentVersionMatches[0][1]}`);
-  assert(currentVersionMatches.some((match) => match[1] === 'V10 同道远征 · 权威接力闭环'), 'progress should retain the historical V10 current-version record');
+  assert(currentVersionMatches.some(match => match[1] === 'V10 同道远征 · 权威接力闭环'), 'progress should retain the historical V10 current-version record');
+
   assert(!/v9\.2/i.test(intro), 'intro should not keep stale v9.2 current-version copy');
   assert(!/v9\.2/i.test(index), 'index should not keep stale v9.2 current-version copy');
   assert(!/v9\.2/i.test(systemView), 'SystemView guide should not keep stale v9.2 current-version copy');

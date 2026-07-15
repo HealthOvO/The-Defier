@@ -1,8 +1,8 @@
 const { cloneJson, hashCanonical } = require('../progression/authoritative-runs/canonical');
 
 const PROTOCOL_VERSION = 'authoritative-fate-chronicle-v1';
-const CATALOG_VERSION = 'fate-chronicle-catalog-v1';
-const ROTATION_RULE_VERSION = 'fate-chronicle-rotation-v1';
+const CATALOG_VERSION = 'fate-chronicle-catalog-v2';
+const ROTATION_RULE_VERSION = 'fate-chronicle-rotation-v2';
 const REWARD_CURRENCY = 'renown';
 const REWARD_IMPACT = 'cosmetic_only';
 const POWER_IMPACT = 'none';
@@ -47,6 +47,20 @@ const CHAPTERS = deepFreeze([
                 turnBudget: 20,
                 betweenEncounterHeal: 2,
                 scoreMultiplier: 1.12
+            },
+            {
+                oathId: 'proof',
+                scenarioId: 'chronicle-ember-proof',
+                title: '定稿誓',
+                description: '首战后在稳稿与抢稿之间定向，后两战沿所选命途展开。',
+                readCue: '首战掉血与首份奖励，决定你该稳住牌组还是提前抢节奏。',
+                counterplayLine: '血线或防守件不足选稳稿；进攻循环已经成形再选抢稿。',
+                buildHint: '混合起手，章中转为护盾反击或易伤快攻。',
+                encounterCount: 3,
+                maxHp: 56,
+                turnBudget: 24,
+                betweenEncounterHeal: 2,
+                scoreMultiplier: 1.15
             }
         ]
     },
@@ -78,6 +92,20 @@ const CHAPTERS = deepFreeze([
                 turnBudget: 28,
                 betweenEncounterHeal: 2,
                 scoreMultiplier: 1.2
+            },
+            {
+                oathId: 'audit',
+                scenarioId: 'chronicle-mirror-audit',
+                title: '审镜誓',
+                description: '中段审视牌组，选择继续校验结构或立即兑付进攻节奏。',
+                readCue: '第二战后的牌组厚度与循环质量，会决定后半卷该修正还是兑现。',
+                counterplayLine: '牌组仍臃肿就先校验；精修与循环齐备才走兑付。',
+                buildHint: '抽滤、精修与裁牌构成中段决策的证据。',
+                encounterCount: 4,
+                maxHp: 60,
+                turnBudget: 34,
+                betweenEncounterHeal: 2,
+                scoreMultiplier: 1.18
             }
         ]
     },
@@ -109,6 +137,20 @@ const CHAPTERS = deepFreeze([
                 turnBudget: 38,
                 betweenEncounterHeal: 3,
                 scoreMultiplier: 1.3
+            },
+            {
+                oathId: 'seal',
+                scenarioId: 'chronicle-rift-seal',
+                title: '封卷誓',
+                description: '终章中段判断构筑是否足以收官，再选择保真或抢卷。',
+                readCue: '第三战后的血线、牌组厚度与终结牌，决定最后两战的形态。',
+                counterplayLine: '血线低或牌组未成型先保真；终结链完整再抢卷。',
+                buildHint: '薄牌组、精修终结牌与 Boss 前资源压缩。',
+                encounterCount: 5,
+                maxHp: 62,
+                turnBudget: 42,
+                betweenEncounterHeal: 2,
+                scoreMultiplier: 1.24
             }
         ]
     }
@@ -140,21 +182,21 @@ const MILESTONES = deepFreeze([
         milestoneId: 'chapter-1-dual',
         milestoneType: 'chapter_dual',
         chapterId: 'chapter-1',
-        title: '照火双誓',
+        title: '照火全誓',
         reward: { currency: REWARD_CURRENCY, amount: 20, rewardImpact: REWARD_IMPACT, powerImpact: POWER_IMPACT }
     },
     {
         milestoneId: 'chapter-2-dual',
         milestoneType: 'chapter_dual',
         chapterId: 'chapter-2',
-        title: '镜命双誓',
+        title: '镜命全誓',
         reward: { currency: REWARD_CURRENCY, amount: 25, rewardImpact: REWARD_IMPACT, powerImpact: POWER_IMPACT }
     },
     {
         milestoneId: 'chapter-3-dual',
         milestoneType: 'chapter_dual',
         chapterId: 'chapter-3',
-        title: '裂天双誓',
+        title: '裂天全誓',
         reward: { currency: REWARD_CURRENCY, amount: 35, rewardImpact: REWARD_IMPACT, powerImpact: POWER_IMPACT }
     },
     {
@@ -213,7 +255,7 @@ function buildRotationSnapshotForStart(startMs) {
         rotationRuleVersion: ROTATION_RULE_VERSION,
         catalogHash: CATALOG_HASH,
         title: '命途长卷',
-        description: '三章双誓约的服务端主线篇章，同章无限重试，同账号同一时刻仅一条 active run。',
+        description: '三章九誓的服务端主线篇章，处置誓约含章中分岔；同章无限重试，同账号同一时刻仅一条 active run。',
         startsAt,
         endsAt,
         graceEndsAt,

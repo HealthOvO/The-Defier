@@ -113,12 +113,20 @@ async function runConcurrentStartupCheck() {
     `SELECT
        (SELECT COUNT(*) FROM season_ops_seasons) AS seasons,
        (SELECT COUNT(*) FROM season_ops_offers) AS offers,
-       (SELECT COUNT(*) FROM schema_migrations WHERE id = '0005_season_ops_economy') AS migrations`,
+       (SELECT COUNT(*) FROM schema_migrations WHERE id = '0005_season_ops_economy') AS migrations,
+       (SELECT COUNT(*) FROM weekly_archive_cycles) AS archiveCycles,
+       (SELECT COUNT(DISTINCT snapshot_hash) FROM weekly_archive_cycles) AS archiveHashes`,
   );
   assert.deepStrictEqual(
     Object.fromEntries(Object.entries(catalogCounts).map(([key, value]) => [key, Number(value)])),
-    { seasons: SEASONS.length, offers: OFFERS.length, migrations: 1 },
-    'concurrent startup should converge on one immutable catalog and one migration record',
+    {
+      seasons: SEASONS.length,
+      offers: OFFERS.length,
+      migrations: 1,
+      archiveCycles: 3,
+      archiveHashes: 3,
+    },
+    'concurrent startup should converge on one immutable catalog, one migration record, and three weekly archive snapshots',
   );
 }
 

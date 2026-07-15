@@ -28,6 +28,22 @@ let port = 0;
 let apiUrl = "";
 let userId = "";
 let allowExpectedArchive503ConsoleError = false;
+const PRIVATE_BRANCH_FIELDS = [
+  "rewardCardPool",
+  "rewardProfile",
+  "futureStages",
+  "enemyAdjustments",
+  "rewardAdjustments",
+  "seed",
+];
+const PUBLIC_BRANCH_KEYS = [
+  "branchId",
+  "title",
+  "description",
+  "counterplay",
+  "buildFocus",
+  "consequenceSummary",
+].sort();
 
 fs.mkdirSync(outDir, { recursive: true });
 fs.rmSync(reportPath, { force: true });
@@ -136,6 +152,31 @@ async function waitForHealth() {
 
 function cssValue(value) {
   return String(value || "").replace(/\\/g, "\\\\").replace(/"/g, "\\\"");
+}
+
+function assertPublicBranch(branch, label) {
+  if (!branch || typeof branch !== "object") {
+    throw new Error(`${label} should expose a public chapterBranch`);
+  }
+  const keys = Object.keys(branch).sort();
+  if (JSON.stringify(keys) !== JSON.stringify(PUBLIC_BRANCH_KEYS)) {
+    throw new Error(`${label} should only expose public chapterBranch fields: ${keys.join(",")}`);
+  }
+  const json = JSON.stringify(branch);
+  PRIVATE_BRANCH_FIELDS.forEach(field => {
+    if (json.includes(field)) {
+      throw new Error(`${label} leaked private field ${field}`);
+    }
+  });
+}
+
+function assertNoPrivateBranchFields(value, label) {
+  const json = JSON.stringify(value || null);
+  PRIVATE_BRANCH_FIELDS.forEach(field => {
+    if (json.includes(field)) {
+      throw new Error(`${label} leaked private field ${field}`);
+    }
+  });
 }
 
 async function prepareLoggedInPage(page) {
@@ -274,10 +315,14 @@ async function readChronicle(page) {
   });
 }
 
-function chooseDecision(projection) {
+function chooseDecision(projection, { preferredBranchId = "" } = {}) {
   if (!projection) return null;
   if (projection.phase === "route") {
-    const choice = [...(projection.route?.choices || [])].sort((left, right) => (
+    const choices = [...(projection.route?.choices || [])];
+    const preferred = preferredBranchId
+      ? choices.find(choice => choice.chapterBranch?.branchId === preferredBranchId)
+      : null;
+    const choice = preferred || choices.sort((left, right) => (
       Number(left.routeContract?.difficultyRating || 0) - Number(right.routeContract?.difficultyRating || 0)
     )).at(-1);
     return choice ? {
@@ -340,13 +385,32 @@ async function waitForRunChange(page, before) {
   return readChronicle(page);
 }
 
-async function driveCurrentRun(page) {
+async function driveCurrentRun(page, { preferredBranchId = "" } = {}) {
   let state = await readChronicle(page);
   let actions = 0;
   const rewardKinds = [];
   const rewardUi = [];
   const routeContractPhases = { battle: null, reward: null, perilousBattle: null, perilousReward: null };
+  const branchPhases = { decision: null, battle: null, reward: null, terminal: null };
   while (!new Set(["completed", "defeated", "abandoned"]).has(state.projection?.phase) && actions < 256) {
+    assertNoPrivateBranchFields(state.projection, `projection step ${actions}`);
+    if (state.projection?.phase === "route"
+      && state.projection?.route?.chapterBranchDecision
+      && !branchPhases.decision) {
+      const options = state.projection?.route?.choices?.map(choice => choice.chapterBranch).filter(Boolean) || [];
+      options.forEach((branch, index) => assertPublicBranch(branch, `branch option ${index}`));
+      branchPhases.decision = {
+        decision: state.projection.route.chapterBranchDecision,
+        options,
+        text: state.text,
+      };
+      await safeAuditScreenshot(
+        page,
+        path.join(outDir, "fate-chronicle-branch-choice.png"),
+        "browser_fate_chronicle_real_backend_smoke",
+        { timeout: 9000 }
+      );
+    }
     if (state.projection?.phase === "battle" && !routeContractPhases.battle) {
       const visibility = await page.locator('[data-authoritative-phase="battle"]').evaluate(element => {
         const root = element.closest('#fate-chronicle-screen');
@@ -374,6 +438,21 @@ async function driveCurrentRun(page) {
       );
     }
     if (state.projection?.phase === "battle"
+      && state.projection?.route?.chapterBranch
+      && !branchPhases.battle) {
+      assertPublicBranch(state.projection.route.chapterBranch, "battle route chapterBranch");
+      branchPhases.battle = {
+        branch: state.projection.route.chapterBranch,
+        text: state.text,
+      };
+      await safeAuditScreenshot(
+        page,
+        path.join(outDir, "branch-resolved.png"),
+        "browser_fate_chronicle_real_backend_smoke",
+        { timeout: 9000 }
+      );
+    }
+    if (state.projection?.phase === "battle"
       && state.projection?.battle?.routeContract?.contractId === "perilous"
       && !routeContractPhases.perilousBattle) {
       routeContractPhases.perilousBattle = {
@@ -394,6 +473,15 @@ async function driveCurrentRun(page) {
       };
     }
     if (state.projection?.phase === "reward"
+      && state.projection?.route?.chapterBranch
+      && !branchPhases.reward) {
+      assertPublicBranch(state.projection.route.chapterBranch, "reward route chapterBranch");
+      branchPhases.reward = {
+        branch: state.projection.route.chapterBranch,
+        text: state.text,
+      };
+    }
+    if (state.projection?.phase === "reward"
       && state.projection?.reward?.routeContract?.contractId === "perilous"
       && !routeContractPhases.perilousReward) {
       routeContractPhases.perilousReward = {
@@ -408,7 +496,7 @@ async function driveCurrentRun(page) {
         { timeout: 9000 }
       );
     }
-    const decision = chooseDecision(state.projection);
+    const decision = chooseDecision(state.projection, { preferredBranchId });
     if (!decision) throw new Error(`fate chronicle has no playable command: ${JSON.stringify(state)}`);
     const before = { runId: state.projection.runId, version: state.projection.version };
     const target = page.locator(decision.selector).first();
@@ -447,7 +535,17 @@ async function driveCurrentRun(page) {
     state = await waitForRunChange(page, before);
     actions += 1;
   }
-  return { state, actions, rewardKinds, rewardUi, routeContractPhases };
+  assertNoPrivateBranchFields(state.projection, "terminal projection");
+  if (state.projection?.summary?.chapterBranchResolution) {
+    assertPublicBranch(state.projection.summary.chapterBranchResolution, "terminal summary chapterBranchResolution");
+    assertPublicBranch(state.projection.route?.chapterBranch, "terminal route chapterBranch");
+    branchPhases.terminal = {
+      branch: state.projection.route.chapterBranch,
+      resolution: state.projection.summary.chapterBranchResolution,
+      text: state.text,
+    };
+  }
+  return { state, actions, rewardKinds, rewardUi, routeContractPhases, branchPhases };
 }
 
 async function readLayout(page) {
@@ -531,9 +629,9 @@ try {
   await prepareLoggedInPage(page);
   const initial = await openChronicle(page);
   add(
-    "fate chronicle renders three chapters six oaths and five archive proofs",
+    "fate chronicle renders three chapters nine oaths and five archive proofs",
     initial.chapterCardCount === 3
-      && initial.vowButtonCount === 6
+      && initial.vowButtonCount === 9
       && initial.voucherCount === 5
       && initial.voucherCardCount === 5
       && initial.chapters[0]?.unlocked === true
@@ -551,6 +649,15 @@ try {
   );
   await safeAuditScreenshot(page, path.join(outDir, "fate-chronicle-before.png"), "browser_fate_chronicle_real_backend_smoke", { timeout: 9000 });
 
+  await page.locator('[data-fate-chronicle-action="select-vow"][data-chapter-id="chapter-1"][data-vow-id="proof"]').click({ force: true });
+  await page.waitForFunction(
+    () => {
+      const selected = document.querySelector('[data-fate-chronicle-selected]');
+      return selected?.getAttribute('data-fate-chronicle-selected') === 'chapter-1:proof';
+    },
+    null,
+    { timeout: 10000 }
+  );
   await page.locator('[data-fate-chronicle-action="start"]').click({ force: true });
   await page.waitForFunction(
     () => {
@@ -564,18 +671,18 @@ try {
   const started = await readChronicle(page);
   const runId = started.projection?.runId || "";
   add(
-    "chapter oath starts a server-authoritative fate run",
+    "chapter-1 proof oath starts a server-authoritative fate run",
     !!runId
       && started.activeRunId === runId
       && started.projection?.mode === "fate_chronicle"
-      && started.projection?.scenario?.scenarioId === "chronicle-ember-guard",
+      && started.projection?.scenario?.scenarioId === "chronicle-ember-proof",
     JSON.stringify({ runId, activeRunId: started.activeRunId, projection: started.projection })
   );
   const startedProjectionJson = JSON.stringify(started.projection || null);
   const startedContracts = started.projection?.route?.choices?.map(choice => choice.routeContract) || [];
   add(
-    "fate route renders two readable v5 contracts without private coefficients",
-    started.projection?.contentVersion === "authoritative-trials-v5"
+    "fate route renders two readable v6 contracts without private coefficients",
+    started.projection?.contentVersion === "authoritative-trials-v6"
       && Number(started.projection?.route?.contractVersion) === 1
       && startedContracts.length === 2
       && startedContracts.every(contract => Number(contract?.version) === 1
@@ -601,11 +708,35 @@ try {
     JSON.stringify({ runId, activeRunId: resumed.activeRunId, projection: resumed.projection })
   );
 
-  const driven = await driveCurrentRun(page);
+  const driven = await driveCurrentRun(page, { preferredBranchId: "proof_rush" });
   add(
-    "real fate chronicle UI completes the first guard oath",
+    "real fate chronicle UI completes the chapter-1 proof oath",
     driven.state.projection?.phase === "completed" && driven.actions > 0 && driven.actions < 256,
     JSON.stringify({ actions: driven.actions, projection: driven.state.projection })
+  );
+  add(
+    "proof route captures two public branch options before lock-in",
+    Number(driven.branchPhases.decision?.decision?.version) === 1
+      && Number(driven.branchPhases.decision?.decision?.triggerStage) === 2
+      && driven.branchPhases.decision?.options?.length === 2
+      && driven.branchPhases.decision.options.every(branch => branch && branch.branchId && branch.counterplay && branch.buildFocus && branch.consequenceSummary)
+      && /根据当前构筑证据锁定后续命途|选择依据|构筑方向|后续变化/.test(driven.branchPhases.decision?.text || "")
+      && !/rewardCardPool|rewardProfile|futureStages|enemyAdjustments|rewardAdjustments|seed/.test(JSON.stringify(driven.branchPhases.decision)),
+    JSON.stringify(driven.branchPhases.decision)
+  );
+  add(
+    "selected proof branch stays visible through battle reward and terminal projections",
+    driven.branchPhases.battle?.branch?.branchId === "proof_rush"
+      && driven.branchPhases.reward?.branch?.branchId === "proof_rush"
+      && driven.branchPhases.terminal?.branch?.branchId === "proof_rush"
+      && driven.branchPhases.terminal?.resolution?.branchId === "proof_rush"
+      && [driven.branchPhases.battle, driven.branchPhases.reward, driven.branchPhases.terminal].every(entry =>
+        /选择依据/.test(entry?.text || "")
+        && /构筑方向/.test(entry?.text || "")
+        && /后续变化/.test(entry?.text || "")
+      )
+      && !/rewardCardPool|rewardProfile|futureStages|enemyAdjustments|rewardAdjustments|seed/.test(JSON.stringify(driven.branchPhases)),
+    JSON.stringify(driven.branchPhases)
   );
   add(
     "fate battle and reward retain the server-selected route contract",
@@ -649,7 +780,8 @@ try {
     "fate terminal projection carries additive route score and per-stage resolution",
     Number(driven.state.projection?.summary?.scoreBreakdown?.finalScore) === Number(driven.state.projection?.summary?.score)
       && Number(driven.state.projection?.summary?.scoreBreakdown?.routeBonus) === Number(driven.state.projection?.summary?.routeResolution?.totalBonus)
-      && driven.state.projection?.summary?.routeResolution?.selections?.length === driven.state.projection?.route?.totalStages,
+      && driven.state.projection?.summary?.routeResolution?.selections?.length === driven.state.projection?.route?.totalStages
+      && driven.state.projection?.summary?.chapterBranchResolution?.branchId === "proof_rush",
     JSON.stringify(driven.state.projection?.summary)
   );
   add(

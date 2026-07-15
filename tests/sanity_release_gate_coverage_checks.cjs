@@ -526,6 +526,8 @@ assert.match(
   'sanity_authoritative_runs_platform_checks.cjs',
   'sanity_authoritative_runs_client_checks.mjs',
   'sanity_authoritative_runs_ui_checks.mjs',
+  'sanity_fate_chronicle_branch_balance_checks.cjs',
+  'sanity_fate_chronicle_catalog_bootstrap_compatibility_checks.cjs',
   'sanity_fate_chronicle_platform_checks.cjs',
   'sanity_weekly_archive_platform_checks.cjs',
   'sanity_fate_chronicle_client_checks.mjs',
@@ -562,7 +564,7 @@ assert.match(
 });
 
 [
-  [authoritativeRunsCatalog, "CONTENT_VERSION = 'authoritative-trials-v5'"],
+  [authoritativeRunsCatalog, "CONTENT_VERSION = 'authoritative-trials-v6'"],
   [authoritativeRunsCatalog, "reportVersion: 'authoritative-deck-crafting-v1'"],
   [authoritativeRunsCatalog, "reportVersion: 'authoritative-route-contract-v1'"],
   [authoritativeRunsCatalog, "contractId: 'steady'"],
@@ -597,9 +599,11 @@ assert.match(
   [authoritativeRunsUiChecks, 'cross-mode refresh must not fetch the previous mode run id'],
   [authoritativeRunsUiChecks, 'suppressed response must not replace panel metadata'],
   [authoritativeRunsDocumentation, 'full journal replay'],
+  [authoritativeRunsDocumentation, '`authoritative-trials-v6`'],
   [authoritativeRunsDocumentation, '`authoritative-trials-v5`'],
   [authoritativeRunsDocumentation, '`routeContracts.version = 1`'],
-  [authoritativeRunsDocumentation, 'immutable v1-v4'],
+  [authoritativeRunsMigrationChecks, 'V5_BOOTSTRAP_CATALOG_FIXTURE'],
+  [authoritativeRunsMigrationChecks, 'v5 bootstrap should insert the immutable v5 catalog row alongside v1-v4 history'],
   [authoritativeRunsDocumentation, '`deckCrafting.version = 1`'],
 ].forEach(([source, needle]) => {
   assert.ok(source.includes(needle), `authoritative runs V2 should pin release marker: ${needle}`);
@@ -712,7 +716,8 @@ assert.match(
   [fateChroniclePlatformChecks, "expectReason(weeklyWrongRouteSignature, 403, 'session-signature-mismatch')"],
   [weeklyArchivePlatformChecks, 'Weekly archive platform checks passed.'],
   [fateChronicleClientChecks, 'a read started before a mutation must not overwrite mutation state'],
-  [fateChronicleUiChecks, "2/5 evidence must not override the server's explicit claim-window decision"],
+  [fateChronicleUiChecks, 'v2 2/3 must not expose the chapter full-oath reward as claimable'],
+  [fateChronicleUiChecks, 'v2 3/3 should keep the chapter full-oath reward claimable'],
   [fateChronicleDocumentation, '不强制参与 PVP'],
 ].forEach(([source, needle]) => {
   assert.ok(source.includes(needle), `fate chronicle V1 should pin release marker: ${needle}`);
@@ -1300,6 +1305,7 @@ assert.strictEqual(
   'real UI completes and settles all three base authoritative modes alongside challenge ladder and world rift',
   'all base-mode real UI runs execute exact-target upgrade and one legal trim',
   'all base modes challenge ladder and world rift mint exactly one receipt and event per settled run',
+  'v6 route projection exposes two readable contracts without private coefficients',
   'world rift GET current returns shared boss and five formal attempts',
   'world rift hub renders real shared state without simulated participants',
   'formal world rift attempt binds a server-authoritative shared seed',
@@ -1341,13 +1347,18 @@ assert.strictEqual(
 
 [
   'real backend boots fate chronicle schema V12',
-  'fate chronicle renders three chapters six oaths and five archive proofs',
+  'fate chronicle renders three chapters nine oaths and five archive proofs',
   'real fate chronicle desktop milestone controls stay within cards',
-  'chapter oath starts a server-authoritative fate run',
+  'chapter-1 proof oath starts a server-authoritative fate run',
+  'fate route renders two readable v6 contracts without private coefficients',
   'full browser reload resumes the same fate chronicle run',
-  'real fate chronicle UI completes the first guard oath',
+  'real fate chronicle UI completes the chapter-1 proof oath',
+  'proof route captures two public branch options before lock-in',
+  'selected proof branch stays visible through battle reward and terminal projections',
   'fate chronicle real UI executes exact-target upgrade and one legal trim',
   'completed fate chronicle UI preserves the deck-crafting payoff',
+  'fate-chronicle-branch-choice.png',
+  'branch-resolved.png',
   'fate-chronicle-completed.png',
   'fate-chronicle-reward-upgrade.png',
   'fate-chronicle-reward-trim.png',

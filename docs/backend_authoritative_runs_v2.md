@@ -98,6 +98,28 @@ relay vanguard, and a five-encounter fate chronicle. The gate requires a monoton
 premium and turn-cost ladder, a visible damage cost, bounded actions, and a real
 challenge completion-rate tradeoff instead of a cosmetic risk label.
 
+## S111 fate chronicle chapter branches
+
+`authoritative-trials-v6` keeps protocol `authoritative-run-v2`, canonical state schema 2,
+and the existing `select_node` command. It adds three fate chronicle scenarios with a
+single authored branch point: `chronicle-ember-proof`, `chronicle-mirror-audit`, and
+`chronicle-rift-seal`. Each branch choice changes the current encounter, later enemy
+pool and route-contract pair, plus the reward card pool and deck-crafting priorities.
+It does not add a client-authored event, permanent account power, or a second progress
+ledger.
+
+The canonical route stores the selected `chapterBranch`. Public route choices, battle,
+reward, history, and terminal summary expose only `branchId`, title, description,
+counterplay, build focus, and the readable consequence. Internal reward pools, reward
+profiles, future-stage overrides, enemy coefficients, and reward coefficients remain in
+the immutable server catalog. Replay resolves those internal rules from the run's stored
+content version, so the selected branch remains deterministic without copying private
+configuration into the projection.
+
+Catalog v1-v5 rows remain immutable. Runs created with those snapshots have no
+`branchPlan`, retain their original RNG calls and projection shape, and replay through the
+same schema-2 reducer. V6 is inserted as a new catalog row and never rewrites a v5 run.
+
 ## Failure model
 
 - Network failure: the client keeps the last confirmed projection and retries with

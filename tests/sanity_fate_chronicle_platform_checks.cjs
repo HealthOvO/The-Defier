@@ -17,6 +17,22 @@ const OPS_TOKEN = 'fate-chronicle-platform-ops-token';
 const FATE_PROTOCOL = 'authoritative-fate-chronicle-v1';
 const WEEKLY_PROTOCOL = 'weekly-archive-v1';
 const BLOCK_CARDS = new Set(['guard', 'iron_mandate']);
+const PRIVATE_BRANCH_FIELDS = [
+  'rewardCardPool',
+  'rewardProfile',
+  'futureStages',
+  'enemyAdjustments',
+  'rewardAdjustments',
+  'seed'
+];
+const PUBLIC_BRANCH_KEYS = [
+  'branchId',
+  'title',
+  'description',
+  'counterplay',
+  'buildFocus',
+  'consequenceSummary'
+].sort();
 
 function resolveSqlite3() {
   for (const candidate of [
@@ -151,8 +167,29 @@ async function registerAndLogin() {
   };
 }
 
-function chooseCommand(projection) {
-  if (projection.phase === 'route') return ['select_node', { nodeId: projection.route.choices[0].nodeId }];
+function assertPublicBranch(branch, label) {
+  assert(branch && typeof branch === 'object', `${label} should expose a public chapter branch`);
+  assert.deepEqual(Object.keys(branch).sort(), PUBLIC_BRANCH_KEYS, `${label} should only expose public chapter branch fields`);
+  const json = JSON.stringify(branch);
+  PRIVATE_BRANCH_FIELDS.forEach(field => {
+    assert(!json.includes(field), `${label} must not leak private field ${field}`);
+  });
+}
+
+function assertNoPrivateBranchFields(value, label) {
+  const json = JSON.stringify(value || null);
+  PRIVATE_BRANCH_FIELDS.forEach(field => {
+    assert(!json.includes(field), `${label} must not leak private field ${field}`);
+  });
+}
+
+function chooseCommand(projection, { preferredBranchId = '' } = {}) {
+  if (projection.phase === 'route') {
+    const preferred = preferredBranchId
+      ? projection.route.choices.find(choice => choice.chapterBranch?.branchId === preferredBranchId)
+      : null;
+    return ['select_node', { nodeId: (preferred || projection.route.choices[0]).nodeId }];
+  }
   if (projection.phase === 'reward') {
     const reward = (projection.player.hp < 22
       ? projection.reward.choices.find(choice => choice.kind === 'heal')
@@ -186,15 +223,55 @@ async function submitRunAction(token, run, command, payload) {
   return response.payload.run;
 }
 
-async function driveRun(token, initialRun, { stopAfter = null } = {}) {
+async function startFateAttempt(token, { rotationId, chapterId, oathId, clientAttemptId, mutationId }) {
+  const response = await signedV2('/api/fate-chronicle/attempts', token, {
+    protocolVersion: FATE_PROTOCOL,
+    rotationId,
+    chapterId,
+    oathId,
+    clientAttemptId,
+    mutationId
+  });
+  assert.equal(response.status, 200, JSON.stringify(response.payload));
+  return response;
+}
+
+async function settleAuthoritativeRun(token, runId, stateVersion, mutationId) {
+  const response = await signedV2(
+    `/api/progression/authoritative-runs/${encodeURIComponent(runId)}/settle`,
+    token,
+    {
+      runId,
+      mutationId,
+      expectedVersion: stateVersion
+    },
+    '/api/progression/authoritative-runs/:runId/settle'
+  );
+  assert.equal(response.status, 200, JSON.stringify(response.payload));
+  return response;
+}
+
+async function submitFateResult(token, runId, mutationId) {
+  const response = await signedV2('/api/fate-chronicle/results', token, {
+    protocolVersion: FATE_PROTOCOL,
+    runId,
+    mutationId
+  });
+  assert.equal(response.status, 200, JSON.stringify(response.payload));
+  return response;
+}
+
+async function driveRun(token, initialRun, { stopAfter = null, preferredBranchId = '', onProjection = null } = {}) {
   let run = initialRun;
   let actions = 0;
   while (run.status === 'active' && actions < 256) {
     if (stopAfter !== null && actions >= stopAfter) break;
-    const [command, payload] = chooseCommand(run.projection || run.state);
+    if (typeof onProjection === 'function') onProjection(run.projection || run.state);
+    const [command, payload] = chooseCommand(run.projection || run.state, { preferredBranchId });
     run = await submitRunAction(token, run, command, payload);
     actions += 1;
   }
+  if (typeof onProjection === 'function') onProjection(run.projection || run.state);
   assert(actions < 256, 'fate run must stay under the authoritative action cap');
   return { run, actions };
 }
@@ -283,8 +360,7 @@ function expectReason(response, status, reason) {
     });
     expectReason(wrongRoute, 403, 'session-signature-mismatch');
 
-    const started = await signedV2('/api/fate-chronicle/attempts', account.token, startRequest);
-    assert.equal(started.status, 200, JSON.stringify(started.payload));
+    const started = await startFateAttempt(account.token, startRequest);
     assert.equal(started.payload?.attempt?.chapterId, 'chapter-1');
     assert.equal(started.payload?.attempt?.oathId, 'guard');
     assert.equal(started.payload?.run?.mode, 'fate_chronicle');
@@ -292,25 +368,17 @@ function expectReason(response, status, reason) {
     assert(!JSON.stringify(started.payload).includes(SEED_SECRET), 'seed secret must never reach the client');
     assert(!JSON.stringify(started.payload).includes('seedHex'), 'raw seed must never reach the client');
 
-    const startReplay = await signedV2('/api/fate-chronicle/attempts', account.token, startRequest);
-    assert.equal(startReplay.status, 200, JSON.stringify(startReplay.payload));
+    const startReplay = await startFateAttempt(account.token, startRequest);
     assert.equal(startReplay.payload?.attempt?.attemptId, started.payload?.attempt?.attemptId);
     assert.equal(startReplay.payload?.run?.runId, started.payload?.run?.runId);
 
     const firstDriven = await driveRun(account.token, started.payload.run);
     assert.equal(firstDriven.run.status, 'completed');
-    const submitRequest = {
-      protocolVersion: FATE_PROTOCOL,
-      runId: firstDriven.run.runId,
-      mutationId: 'fate-submit-chapter1-0001'
-    };
-    const submitted = await signedV2('/api/fate-chronicle/results', account.token, submitRequest);
-    assert.equal(submitted.status, 200, JSON.stringify(submitted.payload));
+    const submitted = await submitFateResult(account.token, firstDriven.run.runId, 'fate-submit-chapter1-0001');
     assert.equal(submitted.payload?.result?.chapterId, 'chapter-1');
     assert.equal(submitted.payload?.rotation?.progress?.chapters?.[0]?.completed, true);
     assert.equal(submitted.payload?.rotation?.progress?.chapters?.[1]?.unlocked, true);
-    const submitReplay = await signedV2('/api/fate-chronicle/results', account.token, submitRequest);
-    assert.equal(submitReplay.status, 200, JSON.stringify(submitReplay.payload));
+    const submitReplay = await submitFateResult(account.token, firstDriven.run.runId, 'fate-submit-chapter1-0001');
     assert.equal(submitReplay.payload?.result?.resultId, submitted.payload?.result?.resultId);
 
     const claimRequest = {
@@ -327,6 +395,132 @@ function expectReason(response, status, reason) {
     const claimReplay = await signedV2('/api/fate-chronicle/rewards/chapter-1-clear/claim', account.token, claimRequest);
     assert.equal(claimReplay.status, 200, JSON.stringify(claimReplay.payload));
     assert.equal(claimReplay.payload?.claim?.claimId, claimed.payload?.claim?.claimId);
+
+    const edgeStarted = await startFateAttempt(account.token, {
+      rotationId,
+      chapterId: 'chapter-1',
+      oathId: 'edge',
+      clientAttemptId: 'fate-attempt-chapter1-edge-0001',
+      mutationId: 'fate-start-chapter1-edge-0001'
+    });
+    assert.equal(edgeStarted.payload?.run?.scenarioId, 'chronicle-ember-edge');
+    const edgeDriven = await driveRun(account.token, edgeStarted.payload.run);
+    assert.equal(edgeDriven.run.status, 'completed');
+    const edgeSubmitted = await submitFateResult(account.token, edgeDriven.run.runId, 'fate-submit-chapter1-edge-0001');
+    const edgeChapter = edgeSubmitted.payload?.rotation?.progress?.chapters?.find(chapter => chapter.chapterId === 'chapter-1');
+    const edgeDualMilestone = edgeSubmitted.payload?.rotation?.progress?.milestones?.find(entry => entry.milestoneId === 'chapter-1-dual');
+    assert.equal(edgeChapter?.completedOathCount, 2, 'chapter-1 should report 2 completed oaths after guard+edge');
+    assert.equal(edgeChapter?.oathCount, 3, 'chapter-1 should expose the v2 three-oath count');
+    assert.equal(edgeChapter?.allOathsCompleted, false, 'chapter-1 2/3 must not report full completion');
+    assert.equal(edgeChapter?.dualCompleted, false, 'dualCompleted compatibility alias must stay false at 2/3');
+    assert.equal(edgeChapter?.allOathsCompletedAt, 0, 'chapter-1 2/3 must not set the full-completion timestamp');
+    assert.equal(edgeDualMilestone?.claimable, false, 'chapter-1 dual milestone must not be claimable at 2/3');
+    const chapterOneAfterEdge = await dbGet(
+      `SELECT completed_oaths_json, dual_completed_at
+       FROM fate_chronicle_progress
+       WHERE user_id = ? AND rotation_id = ? AND chapter_id = 'chapter-1'`,
+      [account.userId, rotationId]
+    );
+    assert.deepEqual(
+      JSON.parse(String(chapterOneAfterEdge?.completed_oaths_json || '[]')).sort(),
+      ['edge', 'guard'],
+      'chapter-1 progress row should keep exactly the first two completed oaths after 2/3',
+    );
+    assert.equal(Number(chapterOneAfterEdge?.dual_completed_at || 0), 0, 'chapter-1 2/3 must keep dual_completed_at at 0');
+
+    const proofStarted = await startFateAttempt(account.token, {
+      rotationId,
+      chapterId: 'chapter-1',
+      oathId: 'proof',
+      clientAttemptId: 'fate-attempt-chapter1-proof-0001',
+      mutationId: 'fate-start-chapter1-proof-0001'
+    });
+    assert.equal(proofStarted.payload?.run?.scenarioId, 'chronicle-ember-proof');
+    const proofBranch = {
+      decision: null,
+      routeOptions: null,
+      battle: null,
+      reward: null,
+      terminal: null
+    };
+    const proofDriven = await driveRun(account.token, proofStarted.payload.run, {
+      preferredBranchId: 'proof_rush',
+      onProjection(projection) {
+        assertNoPrivateBranchFields(projection, 'proof projection');
+        if (projection?.phase === 'route' && projection?.route?.chapterBranchDecision && !proofBranch.decision) {
+          proofBranch.decision = projection.route.chapterBranchDecision;
+          proofBranch.routeOptions = projection.route.choices.map(choice => choice.chapterBranch).filter(Boolean);
+        }
+        if (projection?.phase === 'battle' && projection?.battle?.chapterBranch && !proofBranch.battle) {
+          proofBranch.battle = projection.battle.chapterBranch;
+        }
+        if (projection?.phase === 'reward' && projection?.route?.chapterBranch && !proofBranch.reward) {
+          proofBranch.reward = projection.route.chapterBranch;
+        }
+        if (projection?.phase === 'completed' && projection?.summary?.chapterBranchResolution && !proofBranch.terminal) {
+          proofBranch.terminal = {
+            route: projection.route?.chapterBranch || null,
+            summary: projection.summary.chapterBranchResolution
+          };
+        }
+      }
+    });
+    assert.equal(proofDriven.run.status, 'completed');
+    assert.equal(proofBranch.decision?.version, 1, 'proof run should expose chapterBranchDecision v1 before branch lock-in');
+    assert.equal(proofBranch.decision?.triggerStage, 2, 'proof run should branch at stage 2');
+    assert.equal(proofBranch.routeOptions?.length, 2, 'proof run should surface exactly two public branch options');
+    proofBranch.routeOptions?.forEach((branch, index) => assertPublicBranch(branch, `proof option ${index}`));
+    assert.equal(proofBranch.routeOptions?.some(branch => branch.branchId === 'proof_rush'), true, 'proof run should expose the proof_rush branch option');
+    assertPublicBranch(proofBranch.battle, 'proof battle branch');
+    assert.equal(proofBranch.battle?.branchId, 'proof_rush');
+    assertPublicBranch(proofBranch.reward, 'proof reward branch');
+    assert.equal(proofBranch.reward?.branchId, 'proof_rush');
+    assertPublicBranch(proofBranch.terminal?.route, 'proof terminal route branch');
+    assertPublicBranch(proofBranch.terminal?.summary, 'proof terminal summary branch');
+    assert.equal(proofBranch.terminal?.route?.branchId, 'proof_rush');
+    assert.equal(proofBranch.terminal?.summary?.branchId, 'proof_rush');
+
+    const proofSettled = await settleAuthoritativeRun(
+      account.token,
+      proofDriven.run.runId,
+      proofDriven.run.stateVersion,
+      'fate-authoritative-settle-proof-0001'
+    );
+    assert.equal(proofSettled.payload?.receipt?.integrity?.fullReplayPassed, true, 'proof authoritative settle must pass full replay');
+    const proofSettleReplay = await settleAuthoritativeRun(
+      account.token,
+      proofDriven.run.runId,
+      proofDriven.run.stateVersion,
+      'fate-authoritative-settle-proof-0001'
+    );
+    assert.equal(
+      proofSettleReplay.payload?.receipt?.receiptId,
+      proofSettled.payload?.receipt?.receiptId,
+      'proof authoritative settle replay should return the same receipt',
+    );
+    const proofSubmitted = await submitFateResult(account.token, proofDriven.run.runId, 'fate-submit-chapter1-proof-0001');
+    const proofSubmitReplay = await submitFateResult(account.token, proofDriven.run.runId, 'fate-submit-chapter1-proof-0001');
+    assert.equal(proofSubmitReplay.payload?.result?.resultId, proofSubmitted.payload?.result?.resultId, 'proof result submit should replay idempotently');
+    const proofChapter = proofSubmitted.payload?.rotation?.progress?.chapters?.find(chapter => chapter.chapterId === 'chapter-1');
+    const proofDualMilestone = proofSubmitted.payload?.rotation?.progress?.milestones?.find(entry => entry.milestoneId === 'chapter-1-dual');
+    assert.equal(proofChapter?.completedOathCount, 3, 'chapter-1 should report 3 completed oaths after proof');
+    assert.equal(proofChapter?.oathCount, 3, 'chapter-1 should keep the v2 three-oath count after proof');
+    assert.equal(proofChapter?.allOathsCompleted, true, 'chapter-1 3/3 must report full completion');
+    assert.equal(proofChapter?.dualCompleted, true, 'dualCompleted compatibility alias must become true at 3/3');
+    assert(Number(proofChapter?.allOathsCompletedAt || 0) > 0, 'chapter-1 3/3 must expose allOathsCompletedAt');
+    assert.equal(proofDualMilestone?.claimable, true, 'chapter-1 dual milestone must become claimable at 3/3');
+    const chapterOneAfterProof = await dbGet(
+      `SELECT completed_oaths_json, dual_completed_at
+       FROM fate_chronicle_progress
+       WHERE user_id = ? AND rotation_id = ? AND chapter_id = 'chapter-1'`,
+      [account.userId, rotationId]
+    );
+    assert.deepEqual(
+      JSON.parse(String(chapterOneAfterProof?.completed_oaths_json || '[]')).sort(),
+      ['edge', 'guard', 'proof'],
+      'chapter-1 progress row should keep all three completed oaths after 3/3',
+    );
+    assert(Number(chapterOneAfterProof?.dual_completed_at || 0) > 0, 'chapter-1 3/3 must persist dual_completed_at');
 
     const secondStartRequest = {
       protocolVersion: FATE_PROTOCOL,

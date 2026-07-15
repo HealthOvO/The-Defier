@@ -3,9 +3,18 @@ const {
     buildRotationSnapshot,
     buildRotationSnapshotForStart
 } = require('./catalog');
-const { stableStringify } = require('../progression/authoritative-runs/canonical');
+const { hashCanonical, stableStringify } = require('../progression/authoritative-runs/canonical');
 
 const ROTATION_DRIFT_CODE = 'FATE_CHRONICLE_ROTATION_DRIFT';
+const LEGACY_CATALOG_VERSION = 'fate-chronicle-catalog-v1';
+const LEGACY_ROTATION_RULE_VERSION = 'fate-chronicle-rotation-v1';
+const LEGACY_CATALOG_HASH = 'fedf4ecb07da4a5acabced56b0e8aa3a6941bb920595e5b670bb76e26b70896c';
+const LEGACY_DESCRIPTION = '三章双誓约的服务端主线篇章，同章无限重试，同账号同一时刻仅一条 active run。';
+const LEGACY_DUAL_TITLES = Object.freeze({
+    'chapter-1-dual': '照火双誓',
+    'chapter-2-dual': '镜命双誓',
+    'chapter-3-dual': '裂天双誓'
+});
 
 function dbRun(db, sql, params = []) {
     return new Promise((resolve, reject) => {
@@ -31,25 +40,122 @@ function makeError(code, message) {
     return error;
 }
 
-async function ensureRotationRow(connection, snapshot, now = Date.now()) {
-    const existing = await dbGet(
+function rotationRowMatchesSnapshot(row, snapshot, snapshotJson = stableStringify(snapshot)) {
+    if (!row || !snapshot) return false;
+    return String(row.rotation_id || '') === String(snapshot.rotationId || '')
+        && String(row.protocol_version || '') === String(snapshot.protocolVersion || '')
+        && String(row.catalog_version || '') === String(snapshot.catalogVersion || '')
+        && String(row.rule_version || '') === String(snapshot.rotationRuleVersion || '')
+        && String(row.catalog_hash || '') === String(snapshot.catalogHash || '')
+        && String(row.title || '') === String(snapshot.title || '')
+        && String(row.description || '') === String(snapshot.description || '')
+        && Number(row.starts_at) === Number(snapshot.startsAt)
+        && Number(row.ends_at) === Number(snapshot.endsAt)
+        && Number(row.grace_ends_at) === Number(snapshot.graceEndsAt)
+        && Number(row.claim_ends_at) === Number(snapshot.claimEndsAt)
+        && Number(row.run_ttl_ms) === Number(snapshot.runTtlMs)
+        && String(row.reward_currency || '') === String(snapshot.rewardCurrency || '')
+        && String(row.reward_impact || '') === String(snapshot.rewardImpact || '')
+        && String(row.power_impact || '') === String(snapshot.powerImpact || '')
+        && String(row.chapters_json || '') === stableStringify(snapshot.chapters)
+        && String(row.milestones_json || '') === stableStringify(snapshot.milestones)
+        && String(row.snapshot_hash || '') === String(snapshot.snapshotHash || '')
+        && String(row.snapshot_json || '') === snapshotJson;
+}
+
+function loadRotationRow(connection, rotationId) {
+    return dbGet(
         connection,
-        `SELECT snapshot_hash, snapshot_json
+        `SELECT rotation_id, protocol_version, catalog_version, rule_version, catalog_hash,
+                title, description, starts_at, ends_at, grace_ends_at, claim_ends_at, run_ttl_ms,
+                reward_currency, reward_impact, power_impact, chapters_json, milestones_json,
+                snapshot_hash, snapshot_json
          FROM fate_chronicle_rotations
          WHERE rotation_id = ?`,
-        [snapshot.rotationId]
+        [rotationId]
     );
+}
+
+function buildKnownLegacyRotation(nextSnapshot) {
+    if (!nextSnapshot || !Array.isArray(nextSnapshot.chapters) || !Array.isArray(nextSnapshot.milestones)) {
+        return null;
+    }
+    const chapters = nextSnapshot.chapters.map(chapter => ({
+        ...chapter,
+        oaths: Array.isArray(chapter.oaths) ? chapter.oaths.slice(0, 2) : []
+    }));
+    const milestones = nextSnapshot.milestones.map(milestone => ({
+        ...milestone,
+        title: LEGACY_DUAL_TITLES[milestone.milestoneId] || milestone.title
+    }));
+    const legacyCatalog = {
+        protocolVersion: nextSnapshot.protocolVersion,
+        catalogVersion: LEGACY_CATALOG_VERSION,
+        rotationRuleVersion: LEGACY_ROTATION_RULE_VERSION,
+        rewardCurrency: nextSnapshot.rewardCurrency,
+        rewardImpact: nextSnapshot.rewardImpact,
+        powerImpact: nextSnapshot.powerImpact,
+        runTtlMs: nextSnapshot.runTtlMs,
+        settlementGraceMs: Number(nextSnapshot.graceEndsAt) - Number(nextSnapshot.endsAt),
+        claimWindowMs: Number(nextSnapshot.claimEndsAt) - Number(nextSnapshot.endsAt),
+        chapters,
+        milestones
+    };
+    if (hashCanonical(legacyCatalog) !== LEGACY_CATALOG_HASH) return null;
+    const legacy = {
+        rotationId: nextSnapshot.rotationId,
+        protocolVersion: nextSnapshot.protocolVersion,
+        catalogVersion: LEGACY_CATALOG_VERSION,
+        rotationRuleVersion: LEGACY_ROTATION_RULE_VERSION,
+        catalogHash: LEGACY_CATALOG_HASH,
+        title: '命途长卷',
+        description: LEGACY_DESCRIPTION,
+        startsAt: nextSnapshot.startsAt,
+        endsAt: nextSnapshot.endsAt,
+        graceEndsAt: nextSnapshot.graceEndsAt,
+        claimEndsAt: nextSnapshot.claimEndsAt,
+        runTtlMs: nextSnapshot.runTtlMs,
+        rewardCurrency: nextSnapshot.rewardCurrency,
+        rewardImpact: nextSnapshot.rewardImpact,
+        powerImpact: nextSnapshot.powerImpact,
+        chapters,
+        milestones,
+        fairness: {
+            settledBy: 'server_authoritative',
+            sharedSeedPerWeek: true,
+            accountWideSingleActiveRun: true,
+            retries: 'unlimited',
+            leaderboard: false
+        }
+    };
+    return { ...legacy, snapshotHash: hashCanonical(legacy) };
+}
+
+function isKnownLegacyRotation(existing, nextSnapshot) {
+    let parsed;
+    try {
+        parsed = JSON.parse(String(existing && existing.snapshot_json || ''));
+    } catch (error) {
+        return false;
+    }
+    const expected = buildKnownLegacyRotation(nextSnapshot);
+    if (!expected || !parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return false;
+    const expectedJson = stableStringify(expected);
+    return stableStringify(parsed) === expectedJson
+        && rotationRowMatchesSnapshot(existing, expected, expectedJson);
+}
+
+async function ensureRotationRow(connection, snapshot, now = Date.now()) {
+    const existing = await loadRotationRow(connection, snapshot.rotationId);
     const snapshotJson = stableStringify(snapshot);
     if (existing) {
-        if (String(existing.snapshot_hash || '') !== String(snapshot.snapshotHash || '')
-            || String(existing.snapshot_json || '') !== snapshotJson) {
-            throw makeError(ROTATION_DRIFT_CODE, `fate chronicle rotation drift detected for ${snapshot.rotationId}`);
-        }
-        return;
+        if (rotationRowMatchesSnapshot(existing, snapshot, snapshotJson)) return;
+        if (isKnownLegacyRotation(existing, snapshot)) return;
+        throw makeError(ROTATION_DRIFT_CODE, `fate chronicle rotation drift detected for ${snapshot.rotationId}`);
     }
     await dbRun(
         connection,
-        `INSERT INTO fate_chronicle_rotations (
+        `INSERT OR IGNORE INTO fate_chronicle_rotations (
             rotation_id,
             protocol_version,
             catalog_version,
@@ -94,6 +200,10 @@ async function ensureRotationRow(connection, snapshot, now = Date.now()) {
             now
         ]
     );
+    const persisted = await loadRotationRow(connection, snapshot.rotationId);
+    if (rotationRowMatchesSnapshot(persisted, snapshot, snapshotJson)) return;
+    if (isKnownLegacyRotation(persisted, snapshot)) return;
+    throw makeError(ROTATION_DRIFT_CODE, `fate chronicle rotation drift detected for ${snapshot.rotationId}`);
 }
 
 async function ensureChapterProgressRows(connection) {

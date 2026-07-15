@@ -11,7 +11,7 @@ const AUTHORITATIVE_RUN_SAFE_ID = /^[A-Za-z0-9._:-]{8,128}$/;
 const AUTHORITATIVE_RUN_ENTITY_ID = /^[A-Za-z0-9._:-]{1,128}$/;
 const AUTHORITATIVE_RUN_MODES = new Set(['pve', 'challenge', 'expedition', 'challenge_ladder', 'world_rift', 'relay_expedition', 'fate_chronicle']);
 const AUTHORITATIVE_RUN_COMMANDS = new Set(['select_node', 'play_card', 'end_turn', 'choose_reward', 'abandon']);
-const AUTHORITATIVE_RUN_CONTENT_VERSION = 'authoritative-trials-v5';
+const AUTHORITATIVE_RUN_CONTENT_VERSION = 'authoritative-trials-v6';
 export const BackendClient = {
   provider: 'server',
   initError: null,

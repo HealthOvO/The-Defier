@@ -40,6 +40,17 @@ function makeError(code, message) {
     return error;
 }
 
+function assertCycleSnapshot(existing, snapshot, snapshotJson) {
+    if (!existing
+        || String(existing.snapshot_hash || '') !== String(snapshot.snapshotHash || '')
+        || String(existing.snapshot_json || '') !== snapshotJson) {
+        throw makeError(
+            CYCLE_DRIFT_CODE,
+            `weekly archive cycle drift detected for ${snapshot.cycleId}`
+        );
+    }
+}
+
 async function ensureCycleRow(connection, snapshot, now = Date.now()) {
     const existing = await dbGet(
         connection,
@@ -50,18 +61,12 @@ async function ensureCycleRow(connection, snapshot, now = Date.now()) {
     );
     const snapshotJson = stableStringify(snapshot);
     if (existing) {
-        if (String(existing.snapshot_hash || '') !== String(snapshot.snapshotHash || '')
-            || String(existing.snapshot_json || '') !== snapshotJson) {
-            throw makeError(
-                CYCLE_DRIFT_CODE,
-                `weekly archive cycle drift detected for ${snapshot.cycleId}`
-            );
-        }
+        assertCycleSnapshot(existing, snapshot, snapshotJson);
         return;
     }
     await dbRun(
         connection,
-        `INSERT INTO weekly_archive_cycles (
+        `INSERT OR IGNORE INTO weekly_archive_cycles (
             cycle_id,
             protocol_version,
             catalog_version,
@@ -104,6 +109,14 @@ async function ensureCycleRow(connection, snapshot, now = Date.now()) {
             now
         ]
     );
+    const persisted = await dbGet(
+        connection,
+        `SELECT snapshot_hash, snapshot_json
+         FROM weekly_archive_cycles
+         WHERE cycle_id = ?`,
+        [snapshot.cycleId]
+    );
+    assertCycleSnapshot(persisted, snapshot, snapshotJson);
 }
 
 async function bootstrapWeeklyArchiveSchema(connection, now = Date.now(), { extraCycleIds = [] } = {}) {
