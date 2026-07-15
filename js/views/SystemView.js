@@ -141,6 +141,8 @@ export class SystemView {
     }
   }
   showVictoryScreen() {
+    const resultScreen = document.getElementById('game-over-screen');
+    if (resultScreen) resultScreen.dataset.runResult = 'victory';
     document.getElementById('game-over-title').textContent = '逆天成功！';
     document.getElementById('game-over-title').classList.add('victory');
     document.getElementById('game-over-text').textContent = '你打破了命运的枷锁，成为了真正的逆命者！';
@@ -151,6 +153,8 @@ export class SystemView {
     if (legacyStat) {
       legacyStat.textContent = `+${this.game.lastLegacyGain || 0}（库存 ${this.game.legacyProgress.essence}）`;
     }
+    const restartBtn = document.getElementById('restart-realm-btn');
+    if (restartBtn) restartBtn.style.display = 'none';
     this.showScreen('game-over-screen');
   }
   showCheatMonsterSelector() {

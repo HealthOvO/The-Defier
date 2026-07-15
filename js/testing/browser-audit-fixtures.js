@@ -248,3 +248,44 @@ export async function showSocialRelayAuditState(game) {
   view.render();
   return true;
 }
+
+export function showRunResultAuditState(game, outcome = 'victory') {
+  if (!game?.player || !game?.map) return false;
+  const isVictory = outcome === 'victory';
+  game.player.enemiesDefeated = 17;
+  game.player.collectedLaws = [{ id: 'audit-law-1' }, { id: 'audit-law-2' }, { id: 'audit-law-3' }];
+  game.lastLegacyGain = isVictory ? 24 : 8;
+  game.legacyProgress = game.legacyProgress || {};
+  game.legacyProgress.essence = 86;
+
+  if (isVictory) {
+    game.showVictoryScreen();
+    return true;
+  }
+
+  game.player.currentHp = 0;
+  const screen = document.getElementById('game-over-screen');
+  const title = document.getElementById('game-over-title');
+  const text = document.getElementById('game-over-text');
+  const restartBtn = document.getElementById('restart-realm-btn');
+  if (screen) screen.dataset.runResult = 'defeat';
+  if (title) {
+    title.textContent = '陨落...';
+    title.classList.remove('victory');
+  }
+  if (text) text.textContent = '逆命之路暂时中断，但本轮积累已经收入轮回档案。';
+  const floor = document.getElementById('stat-floor');
+  const enemies = document.getElementById('stat-enemies');
+  const laws = document.getElementById('stat-laws');
+  const legacy = document.getElementById('stat-legacy');
+  if (floor) floor.textContent = game.map.getRealmName(game.player.realm);
+  if (enemies) enemies.textContent = String(game.player.enemiesDefeated);
+  if (laws) laws.textContent = String(game.player.collectedLaws.length);
+  if (legacy) legacy.textContent = `+${game.lastLegacyGain}（库存 ${game.legacyProgress.essence}）`;
+  if (restartBtn) {
+    restartBtn.style.display = 'inline-flex';
+    restartBtn.title = '保留当前属性和牌组，重新挑战本重天域';
+  }
+  game.showScreen('game-over-screen');
+  return true;
+}

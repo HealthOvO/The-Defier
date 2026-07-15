@@ -332,6 +332,12 @@ export class Game {
   updateDeferredModuleSurface(owner, state = 'loading') {
     if (typeof document === 'undefined') return;
     const surfaceByOwner = {
+      pvp: {
+        selector: '[data-pvp-loading-shell]',
+        loadingTitle: '正在接通天道榜',
+        errorTitle: '天道榜未能开启',
+        loadingDescription: '实时论道、榜单与练习场将在载入后显示。'
+      },
       season: {
         selector: '[data-season-ops-loading-shell]',
         loadingTitle: '正在展开卷宗',
@@ -458,12 +464,15 @@ export class Game {
       this.showScreen('pvp-screen');
       return Promise.resolve(this.getPvpScene());
     }
+    this.ensurePvpLoadingShell();
+    this.showScreen('pvp-screen');
     return this.runDeferredModuleAction({
       owner: 'pvp',
       loadingMessage: '正在接通天道榜...',
       errorMessage: '天道榜暂时无法开启。',
       load: () => this.ensurePvpSceneLoaded(),
       action: async scene => {
+        this.clearPvpLoadingShell();
         this.showScreen('pvp-screen');
         if (scene && typeof scene.onShow === 'function') await scene.onShow();
         return scene;
@@ -890,12 +899,15 @@ export class Game {
         if (el) el.classList.remove('active');
       });
     }
+    this.ensurePvpLoadingShell();
+    this.showScreen('pvp-screen');
     return this.runDeferredModuleAction({
       owner: 'pvp',
       loadingMessage: '正在读取公开战报...',
       errorMessage: '公开战报暂时无法开启。',
       load: () => this.ensurePvpSceneLoaded(),
       action: scene => {
+        this.clearPvpLoadingShell();
         this.showScreen('pvp-screen');
         if (!scene || typeof scene.openLiveReplayShareViewer !== 'function') return false;
         scene.openLiveReplayShareViewer(config.shareToken);
@@ -926,6 +938,8 @@ export class Game {
       'guest-forge',
       'guest-shop',
       'guest-reward',
+      'guest-game-over',
+      'guest-victory',
       'guest-treasure-bag',
       'guest-collection',
       'guest-treasure-compendium',
@@ -1038,6 +1052,8 @@ export class Game {
       'guest-forge',
       'guest-shop',
       'guest-reward',
+      'guest-game-over',
+      'guest-victory',
       'guest-treasure-bag',
       'guest-collection',
       'guest-treasure-compendium'
@@ -1053,6 +1069,11 @@ export class Game {
         return true;
       }
       this.startRealm(config.realm, false);
+      if (config.mode === 'guest-game-over' || config.mode === 'guest-victory') {
+        const outcome = config.mode === 'guest-victory' ? 'victory' : 'defeat';
+        return import('./testing/browser-audit-fixtures.js')
+          .then(module => module.showRunResultAuditState(this, outcome));
+      }
       const surfaceTypeByMode = {
         'guest-camp': 'rest',
         'guest-event': 'event',
@@ -5834,6 +5855,41 @@ export class Game {
     return result;
   }
 
+  ensurePvpLoadingShell() {
+    if (this.getPvpScene() || typeof document === 'undefined') return;
+    const container = document.getElementById('pvp-screen');
+    if (!container) return;
+    container.dataset.deferredModule = 'pvp';
+    let shell = container.querySelector('[data-pvp-loading-shell]');
+    if (!shell) {
+      shell = document.createElement('div');
+      shell.className = 'deferred-screen-shell';
+      shell.dataset.pvpLoadingShell = '';
+      shell.innerHTML = `
+        <button type="button" class="deferred-screen-back" data-pvp-loading-back aria-label="返回主菜单">&larr;</button>
+        <div class="deferred-screen-state" role="status" aria-live="polite">
+          <span class="deferred-screen-spinner" aria-hidden="true"></span>
+          <p class="deferred-screen-kicker">实时论道</p>
+          <h2>正在接通天道榜</h2>
+          <p>实时论道、榜单与练习场将在载入后显示。</p>
+        </div>
+      `;
+      container.prepend(shell);
+      shell.querySelector('[data-pvp-loading-back]')?.addEventListener('click', () => {
+        this.showScreen('main-menu');
+        window.__THE_DEFIER_LOAD_STATUS__?.hide?.('pvp');
+      });
+    }
+    this.updateDeferredModuleSurface('pvp', 'loading');
+  }
+
+  clearPvpLoadingShell() {
+    if (typeof document === 'undefined') return;
+    const container = document.getElementById('pvp-screen');
+    container?.querySelector('[data-pvp-loading-shell]')?.remove();
+    if (container) delete container.dataset.deferredModule;
+  }
+
   ensureSeasonOpsLoadingShell() {
     if (this.seasonOpsView || typeof document === 'undefined') return;
     const container = document.getElementById('season-ops-screen');
@@ -7188,6 +7244,8 @@ export class Game {
     }
     document.getElementById('game-over-title').textContent = '陨落...';
     document.getElementById('game-over-title').classList.remove('victory');
+    const resultScreen = document.getElementById('game-over-screen');
+    if (resultScreen) resultScreen.dataset.runResult = 'defeat';
     if (this.endlessState && this.endlessState.lastSeasonCollapse && this.endlessState.lastSeasonCollapse.label) {
       document.getElementById('game-over-text').textContent = `逆命之路，暂时中断｜崩盘主因：${this.endlessState.lastSeasonCollapse.label}`;
     } else {
@@ -7204,7 +7262,7 @@ export class Game {
     // 显示重修此界按钮 (仅在非第一层或有一定进度时？为了体验，总是显示)
     const restartBtn = document.getElementById('restart-realm-btn');
     if (restartBtn) {
-      restartBtn.style.display = 'inline-block';
+      restartBtn.style.display = 'inline-flex';
       restartBtn.title = '保留当前属性和牌组，重新挑战本重天域';
     }
     this.showScreen('game-over-screen');
@@ -10264,6 +10322,9 @@ export class Game {
   }
   continueAfterReward() {
     return Game.prototype.ensureRewardView.call(this).continueAfterReward();
+  }
+  skipRewardCard() {
+    return Game.prototype.ensureRewardView.call(this).skipRewardCard();
   }
   followRewardSeasonBoardHandoff(sourceKey = 'primary') {
     return Game.prototype.ensureRewardView.call(this).followRewardSeasonBoardHandoff(sourceKey);

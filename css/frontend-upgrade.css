@@ -12,6 +12,380 @@
     box-shadow: var(--fd-shadow-panel);
 }
 
+/* Decision modals prioritize choices; supporting context stays available on demand. */
+#event-modal .modal-content.event-view {
+    width: min(820px, calc(100vw - 24px));
+    max-height: min(88dvh, 760px) !important;
+}
+
+#event-modal .event-header {
+    padding: 14px 18px;
+}
+
+#event-modal .event-view .event-icon {
+    width: 56px;
+    height: 56px;
+    margin-bottom: 6px;
+    border-radius: 8px;
+    font-size: 2rem;
+}
+
+#event-modal .event-view h2 {
+    margin: 0;
+    font-size: 1.45rem;
+    letter-spacing: 0;
+}
+
+#event-modal .event-body {
+    padding: 16px 18px 18px;
+}
+
+#event-modal .event-desc {
+    margin: 0 0 10px;
+    line-height: 1.5;
+}
+
+#event-modal .event-atmosphere {
+    margin-bottom: 10px;
+    padding: 8px 10px;
+    border-radius: 8px;
+}
+
+#event-modal .event-system-summary {
+    margin: 0 0 10px;
+    padding: 0;
+    overflow: hidden;
+    border-radius: 8px;
+}
+
+#event-modal .event-summary-toggle {
+    min-height: 44px;
+    padding: 9px 11px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    cursor: pointer;
+    list-style: none;
+}
+
+#event-modal .event-summary-toggle::-webkit-details-marker {
+    display: none;
+}
+
+#event-modal .event-summary-label {
+    margin: 0;
+    color: rgba(244, 220, 173, 0.9);
+    font-size: 0.76rem;
+    letter-spacing: 0;
+    text-transform: none;
+}
+
+#event-modal .event-summary-toggle-copy {
+    flex: 0 0 auto;
+    color: var(--text-muted);
+    font-size: 0;
+}
+
+#event-modal .event-summary-toggle-copy::after {
+    content: "展开";
+    font-size: 0.74rem;
+}
+
+#event-modal .event-system-summary[open] .event-summary-toggle-copy::after {
+    content: "收起";
+}
+
+#event-modal .event-system-summary[open] .event-summary-toggle {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+#event-modal .event-system-summary .event-summary-chip-list {
+    padding: 10px 11px 11px;
+}
+
+#event-modal .event-choices {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+}
+
+#event-modal .event-choice {
+    min-height: 92px;
+    margin: 0;
+    padding: 11px 13px;
+    align-items: flex-start;
+    justify-content: center;
+    border-radius: 8px;
+}
+
+#event-modal .event-choice .choice-title {
+    width: 100%;
+    line-height: 1.35;
+}
+
+#event-modal .event-choice .choice-effect {
+    margin-top: 5px;
+    line-height: 1.35;
+}
+
+#event-modal .event-choice .choice-summary {
+    margin-top: 7px;
+}
+
+@media (min-width: 769px) {
+    #event-modal .event-header {
+        display: grid;
+        grid-template-columns: 56px minmax(0, 1fr);
+        align-items: center;
+        gap: 12px;
+        text-align: left;
+    }
+
+    #event-modal .event-view .event-icon {
+        margin: 0;
+    }
+
+    #event-modal .event-choices {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+    }
+}
+
+@media (max-width: 559px) {
+    #event-modal .modal-content.event-view {
+        width: calc(100vw - 24px);
+        max-height: calc(100dvh - 32px) !important;
+    }
+
+    #event-modal .event-header {
+        padding: 12px 14px;
+    }
+
+    #event-modal .event-view .event-icon {
+        width: 50px;
+        height: 50px;
+        font-size: 1.75rem;
+    }
+
+    #event-modal .event-body {
+        padding: 12px 14px 14px;
+    }
+
+    #event-modal .event-desc,
+    #event-modal .event-atmosphere {
+        font-size: 0.84rem;
+    }
+
+    #event-modal .event-choice {
+        min-height: 86px;
+        padding: 10px 11px;
+    }
+}
+
+/* Run results use one clear summary and keep every exit action in the first viewport. */
+#game-over-screen.active {
+    padding: clamp(12px, 3vw, 32px);
+    justify-content: center;
+    overflow-y: auto;
+}
+
+#game-over-screen.active::before,
+#game-over-screen.active::after {
+    display: none;
+}
+
+#game-over-screen .game-over-container {
+    width: min(720px, 100%);
+    min-height: 0;
+    margin: auto;
+    padding: clamp(20px, 4vw, 32px);
+    gap: 18px;
+    flex-shrink: 1;
+    border: 1px solid rgba(129, 161, 210, 0.28);
+    border-radius: 8px;
+    background: rgba(7, 13, 30, 0.92);
+    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.42);
+}
+
+#game-over-screen .game-over-hero {
+    display: grid;
+    justify-items: center;
+    gap: 7px;
+    text-align: center;
+}
+
+#game-over-screen .game-over-kicker {
+    color: rgba(226, 196, 128, 0.9);
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0;
+}
+
+#game-over-screen .game-over-title {
+    margin: 0;
+    font-size: clamp(2.4rem, 6vw, 4rem);
+    line-height: 1;
+    letter-spacing: 0;
+}
+
+#game-over-screen .game-over-text {
+    max-width: 540px;
+    margin: 0;
+    font-size: 1rem;
+    line-height: 1.55;
+    text-align: center;
+}
+
+#game-over-screen .run-stats {
+    width: 100%;
+    min-width: 0;
+    padding: 0;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0;
+    overflow: hidden;
+    border: 1px solid rgba(129, 161, 210, 0.22);
+    border-radius: 8px;
+    background: transparent;
+}
+
+#game-over-screen .stat-row {
+    min-width: 0;
+    min-height: 62px;
+    padding: 10px 14px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border-bottom: 1px solid rgba(129, 161, 210, 0.16);
+}
+
+#game-over-screen .stat-row:nth-child(odd) {
+    border-right: 1px solid rgba(129, 161, 210, 0.16);
+}
+
+#game-over-screen .stat-row:nth-last-child(-n + 2) {
+    border-bottom: 0;
+}
+
+#game-over-screen .stat-row span:first-child {
+    flex: 0 0 auto;
+    color: var(--text-muted);
+    font-size: 0.82rem;
+    white-space: nowrap;
+}
+
+#game-over-screen .stat-row span:last-child {
+    flex: 1 1 auto;
+    min-width: 0;
+    color: var(--text-primary);
+    font-weight: 700;
+    text-align: right;
+    overflow-wrap: anywhere;
+}
+
+#game-over-screen .game-over-buttons {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+}
+
+#game-over-screen .game-over-buttons .menu-btn {
+    width: 100%;
+    min-width: 0;
+    min-height: 44px;
+    margin: 0;
+    padding: 10px 12px;
+    border-radius: 8px;
+    white-space: normal;
+}
+
+#game-over-screen[data-run-result="victory"] .game-over-container {
+    border-color: rgba(226, 196, 128, 0.42);
+}
+
+@media (max-width: 559px) {
+    #game-over-screen .game-over-container {
+        padding: 20px 16px;
+        gap: 16px;
+    }
+
+    #game-over-screen .game-over-title {
+        font-size: 2.65rem;
+    }
+
+    #game-over-screen .run-stats {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    #game-over-screen .stat-row,
+    #game-over-screen .stat-row:nth-child(odd),
+    #game-over-screen .stat-row:nth-last-child(-n + 2) {
+        border-right: 0;
+        border-bottom: 1px solid rgba(129, 161, 210, 0.16);
+    }
+
+    #game-over-screen .stat-row:last-child {
+        border-bottom: 0;
+    }
+
+    #game-over-screen .game-over-buttons {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 8px;
+    }
+}
+
+@media (min-width: 560px) and (max-height: 520px) and (orientation: landscape) {
+    #game-over-screen.active {
+        padding: 10px;
+    }
+
+    #game-over-screen .game-over-container {
+        width: min(820px, 100%);
+        padding: 16px 18px;
+        display: grid;
+        grid-template-columns: minmax(190px, 0.78fr) minmax(0, 1.22fr);
+        grid-template-areas:
+            "hero stats"
+            "hero actions";
+        align-items: center;
+        gap: 12px 18px;
+    }
+
+    #game-over-screen .game-over-hero {
+        grid-area: hero;
+    }
+
+    #game-over-screen .game-over-title {
+        font-size: 2.45rem;
+    }
+
+    #game-over-screen .game-over-text {
+        font-size: 0.82rem;
+    }
+
+    #game-over-screen .run-stats {
+        grid-area: stats;
+    }
+
+    #game-over-screen .stat-row {
+        min-height: 52px;
+        padding: 7px 10px;
+        font-size: 0.78rem;
+    }
+
+    #game-over-screen .game-over-buttons {
+        grid-area: actions;
+        gap: 8px;
+    }
+
+    #game-over-screen .game-over-buttons .menu-btn {
+        padding: 8px;
+        font-size: 0.78rem;
+    }
+}
+
 /* One scroll owner keeps the opening screen calm on short desktop viewports. */
 #main-menu {
     overflow: hidden;
@@ -758,6 +1132,7 @@
     to { transform: rotate(360deg); }
 }
 
+#pvp-screen .deferred-screen-shell,
 #season-ops-screen .deferred-screen-shell,
 #fate-chronicle-screen .deferred-screen-shell {
     position: relative;
@@ -771,6 +1146,17 @@
         linear-gradient(180deg, #07101f 0%, #050a12 100%);
 }
 
+#pvp-screen[data-deferred-module="pvp"] > :not(.deferred-screen-shell) {
+    visibility: hidden;
+}
+
+#pvp-screen .deferred-screen-shell {
+    position: absolute;
+    inset: 0;
+    z-index: 100;
+}
+
+#pvp-screen .deferred-screen-back,
 #season-ops-screen .deferred-screen-back,
 #fate-chronicle-screen .deferred-screen-back {
     position: absolute;
@@ -787,6 +1173,7 @@
     cursor: pointer;
 }
 
+#pvp-screen .deferred-screen-state,
 #season-ops-screen .deferred-screen-state,
 #fate-chronicle-screen .deferred-screen-state {
     width: min(100%, 420px);
@@ -797,6 +1184,7 @@
     text-align: center;
 }
 
+#pvp-screen .deferred-screen-spinner,
 #season-ops-screen .deferred-screen-spinner,
 #fate-chronicle-screen .deferred-screen-spinner {
     display: block;
@@ -809,6 +1197,7 @@
     animation: runtime-load-spin 0.9s linear infinite;
 }
 
+#pvp-screen [data-pvp-loading-shell][data-load-state="error"] .deferred-screen-spinner,
 #season-ops-screen [data-season-ops-loading-shell][data-load-state="error"] .deferred-screen-spinner,
 #fate-chronicle-screen [data-fate-chronicle-loading-shell][data-load-state="error"] .deferred-screen-spinner {
     animation: none;
@@ -816,6 +1205,7 @@
     border-top-color: #ec7f70;
 }
 
+#pvp-screen .deferred-screen-kicker,
 #season-ops-screen .deferred-screen-kicker,
 #fate-chronicle-screen .deferred-screen-kicker {
     margin: 0 0 8px;
@@ -824,6 +1214,7 @@
     font-weight: 700;
 }
 
+#pvp-screen .deferred-screen-state h2,
 #season-ops-screen .deferred-screen-state h2,
 #fate-chronicle-screen .deferred-screen-state h2 {
     margin: 0;
@@ -832,6 +1223,7 @@
     letter-spacing: 0;
 }
 
+#pvp-screen .deferred-screen-state p:last-child,
 #season-ops-screen .deferred-screen-state p:last-child,
 #fate-chronicle-screen .deferred-screen-state p:last-child {
     margin: 12px 0 0;
@@ -4460,30 +4852,68 @@ body:has(.modal-overlay.active) .battle-log-panel {
     }
 
     #reward-screen .reward-card-stage {
-        overflow: hidden;
+        overflow: visible;
     }
 
     #reward-screen .reward-cards {
-        display: flex;
-        flex-direction: row;
-        flex-wrap: nowrap;
-        justify-content: flex-start;
-        gap: 12px;
-        padding: 6px 4px 12px;
-        overflow-x: auto;
-        overflow-y: hidden;
-        scroll-snap-type: x mandatory;
-        scrollbar-width: thin;
-        overscroll-behavior-x: contain;
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        justify-content: center;
+        gap: 8px;
+        padding: 6px 0 10px;
+        overflow: visible;
+        scroll-snap-type: none;
     }
 
     #reward-screen .reward-card,
     #reward-screen .reward-cards .card,
     #reward-screen .reward-card-stage .card {
-        flex: 0 0 min(278px, calc(100% - 24px));
-        width: min(278px, calc(100% - 24px));
-        min-height: 310px;
-        scroll-snap-align: center;
+        width: 100%;
+        min-width: 0;
+        max-width: 180px;
+        min-height: 236px;
+        padding: 9px 7px;
+        justify-self: center;
+        scroll-snap-align: none;
+    }
+
+    #reward-screen .reward-cards .card-cost,
+    #reward-screen .reward-card-stage .card-cost {
+        top: -8px;
+        left: -7px;
+        width: 30px;
+        height: 30px;
+        font-size: 0.92rem;
+    }
+
+    #reward-screen .reward-cards .card-header,
+    #reward-screen .reward-card-stage .card-header {
+        min-height: 30px;
+        padding-left: 13px;
+    }
+
+    #reward-screen .reward-cards .card-name,
+    #reward-screen .reward-card-stage .card-name {
+        font-size: 0.86rem;
+        line-height: 1.18;
+    }
+
+    #reward-screen .reward-cards .card-image,
+    #reward-screen .reward-cards .card-art,
+    #reward-screen .reward-card-stage .card-image,
+    #reward-screen .reward-card-stage .card-art {
+        min-height: 36px;
+        flex-basis: 36px;
+        font-size: 2.15rem;
+    }
+
+    #reward-screen .reward-cards .card-desc,
+    #reward-screen .reward-card-stage .card-desc {
+        flex: 0 0 auto;
+        padding: 6px;
+        font-size: 0.84rem;
+        line-height: 1.38;
+        overflow-wrap: anywhere;
     }
 
     #character-select .ink-scroll-container {
@@ -5737,7 +6167,8 @@ body:has(.modal-overlay.active) .battle-log-panel {
 
     #event-modal .modal-content.event-view {
         width: min(620px, calc(100vw - 24px));
-        max-height: calc(100dvh - 16px) !important;
+        height: calc(100dvh - 20px);
+        max-height: calc(100dvh - 20px) !important;
     }
 
     #event-modal .event-header {
@@ -5763,27 +6194,51 @@ body:has(.modal-overlay.active) .battle-log-panel {
     }
 
     #event-modal .event-body {
+        display: grid;
+        grid-template-columns: minmax(170px, 0.72fr) minmax(0, 1.5fr);
+        grid-template-rows: auto auto minmax(0, 1fr);
+        gap: 7px 10px;
         padding: 8px 12px 10px;
+        overflow: hidden;
     }
 
     #event-modal .event-desc {
-        margin-bottom: 7px;
+        grid-column: 1;
+        grid-row: 1;
+        margin: 0;
         font-size: 0.76rem;
         line-height: 1.38;
     }
 
-    #event-modal .event-atmosphere,
-    #event-modal .event-system-summary {
-        margin-bottom: 7px;
+    #event-modal .event-atmosphere {
+        grid-column: 1;
+        grid-row: 2;
+        margin: 0;
         padding: 7px 8px;
+        font-size: 0.7rem;
+        line-height: 1.35;
+    }
+
+    #event-modal .event-system-summary {
+        grid-column: 1;
+        grid-row: 3;
+        align-self: start;
+        max-height: 100%;
+        margin: 0;
+        padding: 7px 8px;
+        overflow-y: auto;
         font-size: 0.7rem;
         line-height: 1.35;
     }
 
     #event-modal .event-choices {
         display: grid;
+        grid-column: 2;
+        grid-row: 1 / 4;
         grid-template-columns: repeat(2, minmax(0, 1fr));
+        align-self: center;
         gap: 8px;
+        padding: 0;
     }
 
     #event-modal .event-choice {

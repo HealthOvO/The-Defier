@@ -297,6 +297,14 @@ export class EventManager {
     };
     return profiles[path] || profiles.awakened;
   }
+  resolveEventCatalogName(catalog = null, entryId = '') {
+    const normalizedId = String(entryId || '').trim();
+    if (!normalizedId || !catalog || typeof catalog !== 'object') return '';
+    const direct = catalog[normalizedId];
+    if (direct?.name) return String(direct.name);
+    const matched = Object.values(catalog).find(entry => entry && String(entry.id || '') === normalizedId);
+    return matched?.name ? String(matched.name) : '';
+  }
   buildEventChoiceEffectSummary(choice = {}) {
     const summary = [];
     const effects = Array.isArray(choice.effects) ? choice.effects : [];
@@ -359,10 +367,10 @@ export class EventManager {
           summary.push(`推进命途 ${Math.max(1, Math.floor(Number(effect.amount) || 1))}`);
           break;
         case 'law':
-          summary.push(effect.random ? '随机获得法则' : `获得法则 ${effect.lawId || ''}`.trim());
+          summary.push(effect.random ? '随机获得法则' : `获得法则 ${this.resolveEventCatalogName(LAWS, effect.lawId) || '指定法则'}`);
           break;
         case 'card':
-          summary.push(effect.cardId ? `获得卡牌 ${effect.cardId}` : '获得卡牌');
+          summary.push(effect.cardId ? `获得卡牌 ${this.resolveEventCatalogName(CARDS, effect.cardId) || '指定卡牌'}` : '获得卡牌');
           break;
         case 'battle':
           summary.push('立即进入战斗');
@@ -374,7 +382,7 @@ export class EventManager {
           summary.push('强化 1 张卡牌');
           break;
         case 'treasure':
-          summary.push(effect.random ? '获得随机法宝' : `获得法宝 ${effect.treasureId || ''}`.trim());
+          summary.push(effect.random ? '获得随机法宝' : `获得法宝 ${this.resolveEventCatalogName(TREASURES, effect.treasureId) || '指定法宝'}`);
           break;
         case 'randomGold':
           summary.push(`获得 ${Math.floor(Number(effect.min) || 0)}-${Math.floor(Number(effect.max) || 0)} 灵石`);

@@ -2193,8 +2193,9 @@ async function safeScreenshot(page, outPath) {
       Number(scoutPackLocalizationProbe.rarityBadgeCount || 0) >= 3 &&
       !scoutPackLocalizationProbe.hasEnglishRarity &&
       scoutPackLocalizationProbe.iconText === '🎒' &&
-      Number(scoutPackLocalizationProbe.iconWidth || 0) >= 60 &&
-      Number(scoutPackLocalizationProbe.iconHeight || 0) >= 60 &&
+      Number(scoutPackLocalizationProbe.iconWidth || 0) >= 50 &&
+      Number(scoutPackLocalizationProbe.iconWidth || 0) <= 64 &&
+      Number(scoutPackLocalizationProbe.iconHeight || 0) === Number(scoutPackLocalizationProbe.iconWidth || 0) &&
       !!scoutPackLocalizationProbe.iconCentered,
     JSON.stringify(scoutPackLocalizationProbe || null)
   );

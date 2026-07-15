@@ -102,12 +102,16 @@ export class EventView {
     const summaryItems = Array.isArray(presentation.summaryItems) ? presentation.summaryItems.filter(Boolean) : [];
     if (refs.summaryEl) {
       refs.summaryEl.innerHTML = summaryItems.length > 0 ? `
-                    <span class="event-summary-label">${escape(presentation.summaryLabel || '局内摘要')}</span>
+                    <summary class="event-summary-toggle">
+                        <span class="event-summary-label">${escape(presentation.summaryLabel || '局内摘要')}</span>
+                        <span class="event-summary-toggle-copy" aria-hidden="true"></span>
+                    </summary>
                     <div class="event-summary-chip-list">
                         ${summaryItems.map(item => `<span class="event-summary-chip">${escape(item)}</span>`).join('')}
                     </div>
                 ` : '';
       refs.summaryEl.style.display = summaryItems.length > 0 ? '' : 'none';
+      refs.summaryEl.open = false;
     }
   }
   showEventModal(event, node) {

@@ -20,6 +20,23 @@
   gap: 16px;
 }
 
+#fate-chronicle-screen .fate-chronicle-state-shell {
+  min-height: 100dvh;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+#fate-chronicle-screen .fate-chronicle-state-card {
+  width: min(680px, 100%);
+  align-self: center;
+  justify-self: center;
+  display: grid;
+  gap: 10px;
+}
+
+#fate-chronicle-screen .fate-chronicle-state-card .fate-chronicle-actions {
+  margin-top: 4px;
+}
+
 #fate-chronicle-screen .fate-chronicle-header,
 #fate-chronicle-screen .fate-chronicle-section,
 #fate-chronicle-screen .fate-chronicle-state-card,

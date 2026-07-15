@@ -306,9 +306,9 @@ async function runDeferredModuleRecoveryScenario(browser, scenario) {
     statusText: document.querySelector('[data-runtime-load-text]')?.textContent || '',
     retryText: document.querySelector('[data-runtime-load-retry]')?.textContent || '',
     currentScreen: window.game?.currentScreen || '',
-    loadingShellText: document.querySelector('[data-season-ops-loading-shell], [data-fate-chronicle-loading-shell]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
+    loadingShellText: document.querySelector('[data-pvp-loading-shell], [data-season-ops-loading-shell], [data-fate-chronicle-loading-shell]')?.textContent?.replace(/\s+/g, ' ').trim() || '',
     backButtonVisible: (() => {
-      const button = document.querySelector('[data-season-ops-loading-back], [data-fate-chronicle-loading-back]');
+      const button = document.querySelector('[data-pvp-loading-back], [data-season-ops-loading-back], [data-fate-chronicle-loading-back]');
       const rect = button?.getBoundingClientRect();
       return !!(rect && rect.width > 0 && rect.height > 0);
     })(),
@@ -331,6 +331,19 @@ async function runDeferredModuleRecoveryScenario(browser, scenario) {
     }[kind];
     return window.game?.currentScreen === screen && !!ready?.();
   }, { screen: expectedScreen, kind: readyKind }, { timeout: 12000 });
+  await page.waitForFunction(({ stylesheetSource }) => {
+    const statusHidden = !!document.getElementById('runtime-load-status')?.hidden;
+    const stylesheetLoaded = !stylesheetSource
+      || [...document.styleSheets].some((sheet) => {
+        const owner = sheet.ownerNode;
+        const source = sheet.href
+          || owner?.getAttribute?.('data-vite-dev-id')
+          || owner?.getAttribute?.('href')
+          || '';
+        return new RegExp(stylesheetSource).test(String(source));
+      });
+    return statusHidden && stylesheetLoaded;
+  }, { stylesheetSource: stylesheetPattern?.source || '' }, { timeout: 12000 });
   const recoveryProbe = await page.evaluate(({ kind, stylesheetSource }) => ({
     statusVisible: !document.getElementById('runtime-load-status')?.hidden,
     currentScreen: window.game?.currentScreen || '',
@@ -558,6 +571,7 @@ const deferredRecoveryScenarios = [
     expectedErrorText: /天道榜暂时无法开启/,
     readyKind: 'pvp',
     stylesheetPattern: /(?:pvp-[^/]+|css\/pvp)\.css/,
+    loadingShellPattern: /天道榜未能开启/,
   },
   {
     scenarioId: 'challenge-module-recovery',
@@ -677,6 +691,8 @@ async function runScenario(browser, scenario) {
     eventSurface: (() => {
       const modal = document.getElementById('event-modal');
       const choices = Array.from(document.querySelectorAll('#event-modal .event-choice'));
+      const choicesRoot = document.getElementById('event-choices');
+      const summary = document.getElementById('event-system-summary');
       const contentRect = modal?.querySelector('.modal-content')?.getBoundingClientRect();
       const firstRect = choices[0]?.getBoundingClientRect();
       const hitAtCenter = (element, rect) => {
@@ -691,6 +707,16 @@ async function runScenario(browser, scenario) {
         title: document.getElementById('event-title')?.textContent?.trim() || '',
         active: !!modal?.classList.contains('active'),
         choiceCount: choices.length,
+        choiceColumns: choicesRoot ? getComputedStyle(choicesRoot).gridTemplateColumns.split(/\s+/).filter(Boolean).length : 0,
+        fullyVisibleChoiceCount: choices.filter((choice) => {
+          const rect = choice.getBoundingClientRect();
+          return rect.left >= -1
+            && rect.right <= window.innerWidth + 1
+            && rect.top >= -1
+            && rect.bottom <= window.innerHeight + 1;
+        }).length,
+        summaryIsDisclosure: summary?.tagName === 'DETAILS',
+        summaryCollapsed: summary?.tagName === 'DETAILS' && !summary.open,
         focusInside: !!modal?.contains(document.activeElement),
         contentInsideViewport: !!(contentRect
           && contentRect.left >= -1
@@ -915,13 +941,54 @@ async function runScenario(browser, scenario) {
         && rect.top >= -1
         && rect.bottom <= window.innerHeight + 1);
       const cardRects = cards.map((card) => card.getBoundingClientRect());
+      const cardLefts = Array.from(new Set(cardRects.map((rect) => Math.round(rect.left))));
+      const descriptionFontSizes = cards
+        .map((card) => Number.parseFloat(getComputedStyle(card.querySelector('.card-desc') || card).fontSize) || 0)
+        .filter((size) => size > 0);
+      const sameRow = cardRects.length >= 2
+        && Math.max(...cardRects.map((rect) => rect.top)) - Math.min(...cardRects.map((rect) => rect.top)) <= 2;
       return {
         rewardCardCount: cards.length,
+        minDescriptionFontSize: descriptionFontSizes.length > 0 ? Math.min(...descriptionFontSizes) : 0,
         cardsInsideViewport: cardRects.length >= 2 && cardRects.every(fullyInside),
+        choiceColumns: cardLefts.length,
+        choicesShareRow: sameRow,
         actionsInsideViewport: fullyInside(actionRect),
         actionButtonsInsideViewport: buttons.length >= 2 && buttons.every((button) => fullyInside(button.getBoundingClientRect())),
         cardActionOverlap: !!actionRect && cardRects.some((rect) => rect.right > actionRect.left && rect.left < actionRect.right),
         summaryVisible: !!document.querySelector('#reward-screen .reward-summary-card'),
+        documentOverflowsX: document.documentElement.scrollWidth > window.innerWidth + 1,
+      };
+    })(),
+    runResultSurface: (() => {
+      const screen = document.getElementById('game-over-screen');
+      const container = screen?.querySelector('.game-over-container');
+      const actions = Array.from(screen?.querySelectorAll('[data-run-result-action]') || []);
+      const stats = Array.from(screen?.querySelectorAll('.stat-row') || []);
+      const containerRect = container?.getBoundingClientRect();
+      const fullyInside = (rect) => !!(rect
+        && rect.left >= -1
+        && rect.right <= window.innerWidth + 1
+        && rect.top >= -1
+        && rect.bottom <= window.innerHeight + 1);
+      return {
+        active: !!screen?.classList.contains('active'),
+        outcome: screen?.dataset.runResult || '',
+        title: document.getElementById('game-over-title')?.textContent?.trim() || '',
+        statCount: stats.length,
+        actionCount: actions.length,
+        restartVisible: (() => {
+          const restart = screen?.querySelector('[data-run-result-action="restart"]');
+          if (!restart) return false;
+          const rect = restart.getBoundingClientRect();
+          return rect.width > 0 && rect.height > 0;
+        })(),
+        containerInsideViewport: fullyInside(containerRect),
+        actionsInsideViewport: actions.filter((action) => {
+          const rect = action.getBoundingClientRect();
+          return rect.width > 0 && rect.height > 0;
+        }).every((action) => fullyInside(action.getBoundingClientRect())),
+        minActionHeight: actions.length > 0 ? Math.min(...actions.filter((action) => action.getBoundingClientRect().height > 0).map((action) => action.getBoundingClientRect().height)) : 0,
         documentOverflowsX: document.documentElement.scrollWidth > window.innerWidth + 1,
       };
     })(),
@@ -1167,6 +1234,34 @@ async function runScenario(browser, scenario) {
       JSON.stringify({ initialProbe, closeProbe }),
     );
   }
+  if (scenario.verifyRewardSkip) {
+    const beforeSkip = await page.evaluate(() => ({
+      gold: Number(window.game?.player?.gold),
+      cost: Number(window.game?.rewardView?.getRewardSkipCost?.()),
+    }));
+    await page.locator('#reward-screen .skip-reward-btn').click();
+    await page.waitForFunction(() => (
+      document.getElementById('map-screen')?.classList.contains('active')
+        && !document.getElementById('reward-screen')?.classList.contains('active')
+    ), null, { timeout: 5000 });
+    const afterSkip = await page.evaluate(() => ({
+      gold: Number(window.game?.player?.gold),
+      rewardCardSelected: !!window.game?.rewardCardSelected,
+      mapActive: !!document.getElementById('map-screen')?.classList.contains('active'),
+      rewardActive: !!document.getElementById('reward-screen')?.classList.contains('active'),
+    }));
+    add(
+      'reward skip spends the displayed cost and returns to the map',
+      Number.isFinite(beforeSkip.gold)
+        && Number.isFinite(beforeSkip.cost)
+        && beforeSkip.cost > 0
+        && afterSkip.gold === beforeSkip.gold - beforeSkip.cost
+        && afterSkip.rewardCardSelected
+        && afterSkip.mapActive
+        && !afterSkip.rewardActive,
+      JSON.stringify({ beforeSkip, afterSkip }),
+    );
+  }
   if (scenario.verifyReplayExit) {
     await page.locator('[data-live-replay-share-close]').click();
     await page.waitForFunction(() => {
@@ -1361,7 +1456,47 @@ const scenarios = [
       && /古老祭坛/.test(probe.eventSurface.title)
       && probe.eventSurface.active
       && probe.eventSurface.choiceCount >= 2
+      && probe.eventSurface.choiceColumns === 1
+      && probe.eventSurface.summaryIsDisclosure
+      && probe.eventSurface.summaryCollapsed
       && probe.eventSurface.focusInside
+      && probe.eventSurface.contentInsideViewport
+      && probe.eventSurface.firstChoiceTopHit
+      && !probe.eventSurface.documentOverflowsX
+    )
+  },
+  {
+    id: 'guest-event-desktop',
+    query: '?autotest=guest-event&character=linFeng&destiny=foldedEdge&spirit=swordWraith&path=insight&realm=1&eventId=ancientAltar',
+    viewport: { width: 1280, height: 720 },
+    name: 'desktop event decisions expose every option beside collapsed context',
+    assert: ({ probe }) => (
+      probe.screen === 'map-screen'
+      && probe.guestMode
+      && /古老祭坛/.test(probe.eventSurface.title)
+      && probe.eventSurface.active
+      && probe.eventSurface.choiceCount >= 4
+      && probe.eventSurface.choiceColumns === 2
+      && probe.eventSurface.fullyVisibleChoiceCount === probe.eventSurface.choiceCount
+      && probe.eventSurface.summaryCollapsed
+      && probe.eventSurface.contentInsideViewport
+      && !probe.eventSurface.documentOverflowsX
+    )
+  },
+  {
+    id: 'guest-event-short-landscape',
+    query: '?autotest=guest-event&character=linFeng&destiny=foldedEdge&spirit=swordWraith&path=insight&realm=1&eventId=ancientAltar',
+    viewport: { width: 667, height: 375 },
+    name: 'short landscape event decisions remain fully reachable in two columns',
+    assert: ({ probe }) => (
+      probe.screen === 'map-screen'
+      && probe.guestMode
+      && /\u53e4\u8001\u796d\u575b/.test(probe.eventSurface.title)
+      && probe.eventSurface.active
+      && probe.eventSurface.choiceCount >= 4
+      && probe.eventSurface.choiceColumns === 2
+      && probe.eventSurface.fullyVisibleChoiceCount === probe.eventSurface.choiceCount
+      && probe.eventSurface.summaryCollapsed
       && probe.eventSurface.contentInsideViewport
       && probe.eventSurface.firstChoiceTopHit
       && !probe.eventSurface.documentOverflowsX
@@ -1399,6 +1534,64 @@ const scenarios = [
       && probe.rewardSurface.summaryVisible
       && !probe.rewardSurface.cardActionOverlap
       && !probe.rewardSurface.documentOverflowsX
+    )
+  },
+  {
+    id: 'guest-reward-mobile',
+    query: '?autotest=guest-reward&character=linFeng&destiny=foldedEdge&spirit=swordWraith&path=insight&realm=1&rewardGold=128&rewardRingExp=36',
+    viewport: { width: 390, height: 844 },
+    verifyRewardSkip: true,
+    name: 'mobile reward keeps both card choices visible for direct comparison',
+    assert: ({ probe }) => (
+      probe.screen === 'reward-screen'
+      && probe.guestMode
+      && probe.rewardSurface.rewardCardCount >= 2
+      && probe.rewardSurface.cardsInsideViewport
+      && probe.rewardSurface.choiceColumns === 2
+      && probe.rewardSurface.choicesShareRow
+      && probe.rewardSurface.minDescriptionFontSize >= 11.5
+      && probe.rewardSurface.summaryVisible
+      && !probe.rewardSurface.documentOverflowsX
+    )
+  },
+  {
+    id: 'guest-victory-mobile',
+    query: '?autotest=guest-victory&character=linFeng&destiny=foldedEdge&spirit=swordWraith&path=insight&realm=4',
+    viewport: { width: 390, height: 844 },
+    name: 'mobile victory keeps the complete result and valid exits visible',
+    assert: ({ probe }) => (
+      probe.screen === 'game-over-screen'
+      && probe.guestMode
+      && probe.runResultSurface.active
+      && probe.runResultSurface.outcome === 'victory'
+      && /逆天成功/.test(probe.runResultSurface.title)
+      && probe.runResultSurface.statCount === 4
+      && probe.runResultSurface.actionCount === 3
+      && !probe.runResultSurface.restartVisible
+      && probe.runResultSurface.containerInsideViewport
+      && probe.runResultSurface.actionsInsideViewport
+      && probe.runResultSurface.minActionHeight >= 44
+      && !probe.runResultSurface.documentOverflowsX
+    )
+  },
+  {
+    id: 'guest-game-over-landscape',
+    query: '?autotest=guest-game-over&character=linFeng&destiny=foldedEdge&spirit=swordWraith&path=insight&realm=4',
+    viewport: { width: 667, height: 375 },
+    name: 'shallow landscape defeat keeps stats and all recovery actions visible',
+    assert: ({ probe }) => (
+      probe.screen === 'game-over-screen'
+      && probe.guestMode
+      && probe.runResultSurface.active
+      && probe.runResultSurface.outcome === 'defeat'
+      && /陨落/.test(probe.runResultSurface.title)
+      && probe.runResultSurface.statCount === 4
+      && probe.runResultSurface.actionCount === 3
+      && probe.runResultSurface.restartVisible
+      && probe.runResultSurface.containerInsideViewport
+      && probe.runResultSurface.actionsInsideViewport
+      && probe.runResultSurface.minActionHeight >= 44
+      && !probe.runResultSurface.documentOverflowsX
     )
   },
   {
@@ -1470,7 +1663,7 @@ const scenarios = [
       && probe.saveSlotsSurface.historyButtonCount === 1
       && probe.saveSlotsSurface.minActionHeight >= 44
       && probe.saveSlotsSurface.minHistoryHeight >= 44
-      && /生命 0/.test(probe.saveSlotsSurface.firstSlotText)
+      && /(?:生命|❤️)\s*0/.test(probe.saveSlotsSurface.firstSlotText)
       && probe.saveSlotsSurface.railScrollableX
       && !probe.saveSlotsSurface.documentOverflowsX
     )

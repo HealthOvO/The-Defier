@@ -286,7 +286,7 @@ export class RewardView {
         state: 'archived',
         kicker: '命盘档案',
         title: `洞府已收录 · ${recordName}`,
-        body: String(archive.note || `${pathName || '这条命途'}的圆满样本已同步到洞府与构筑快照，可继续复盘下一轮路线。`),
+        body: String(archive.note || `${pathName || '这条命途'}的圆满战录已收入洞府与构筑记录，可继续复盘下一轮路线。`),
         foot: archive.firstClear ? '首次收录 · 可回藏经阁继续复盘' : `累计收录 ${clears} 次 · 可回藏经阁继续复盘`
       };
     }
@@ -297,9 +297,9 @@ export class RewardView {
         surface: 'runPath',
         state: runPathMeta?.completed ? 'completed' : 'tracking',
         kicker: '命盘档案',
-        title: phaseLabel ? `${pathName || '命途样本'} · ${phaseLabel}` : `${pathName || '命途样本'} · 本场样本已更新`,
-        body: nextLabel ? `下一段会追到 ${nextLabel}，现在可以按这份样本决定继续补件、改线或预留资源。` : '本场战利已先写入命盘样本，可回藏经阁对照这条路线的稳定解法。',
-        foot: String(latestEntry.rewardText || '圆满后会同步收入洞府与构筑快照。')
+        title: phaseLabel ? `${pathName || '命途战录'} · ${phaseLabel}` : `${pathName || '命途战录'} · 本场战绩已记下`,
+        body: nextLabel ? `下一段会追到 ${nextLabel}，现在可以按这份战录决定继续补件、改线或预留资源。` : '本场战利已记入命盘战录，可回藏经阁复盘这条路线的稳定解法。',
+        foot: String(latestEntry.rewardText || '圆满后会收入洞府与构筑记录。')
       };
     }
     if (currentRunPath) {
@@ -307,9 +307,9 @@ export class RewardView {
         surface: 'runPath',
         state: 'tracking',
         kicker: '命盘档案',
-        title: `${currentRunPath.name || '当前命途'} · 样本持续归档中`,
-        body: '本场战利会先写成命盘留痕；三段目标圆满后，会同步收入洞府与构筑快照。',
-        foot: '去挑战或藏经阁继续对照样本，把这条路线磨成可复刻答卷。'
+        title: `${currentRunPath.name || '当前命途'} · 战录持续推进中`,
+        body: '本场战利会记入命盘战录；三段目标圆满后，会收入洞府与构筑记录。',
+        foot: '去挑战或藏经阁继续复盘，把这条路线磨成稳定解法。'
       };
     }
     return null;
@@ -645,11 +645,11 @@ export class RewardView {
         case 'risky_sheet':
           return '先整理本场战利，再把这一章的险卷送去补一条外场验证，别让主轴只停在章节内。';
         case 'positive_sheet':
-          return '先整理本场战利，再决定这张正卷要继续扩样、冲榜，还是补更高压证明。';
+          return '先整理本场战利，再决定这张正卷要继续巩固战绩、冲榜，还是补更高压证明。';
         case 'locking_sheet':
           return '先整理本场战利，再沿押卷承诺继续锁线，把下一章行动写成可兑现的主轴。';
         case 'sampling_sheet':
-          return '先整理本场战利，再把这章样本压成可押卷的主练方向。';
+          return '先整理本场战利，再把这章战果定成可押卷的主练方向。';
         default:
           return '先整理本场战利，再确认这一章的答卷评级、偏题诊断与训练建议，决定下一章继续补哪条主线。';
       }
@@ -661,11 +661,11 @@ export class RewardView {
       screenEl.dataset.rewardNextActionSource = headerActionSource;
     }
     if (titleEl) {
-      titleEl.textContent = narrative?.surface === 'expedition' ? seasonSettlementOutcomeId ? '战斗胜利 · 赛季裁定' : '战斗胜利 · 章节归卷' : narrative?.state === 'archived' ? '战斗胜利 · 命途圆满' : narrative ? '战斗胜利 · 样本更新' : '战斗胜利！';
+      titleEl.textContent = narrative?.surface === 'expedition' ? seasonSettlementOutcomeId ? '战斗胜利 · 赛季裁定' : '战斗胜利 · 章节归卷' : narrative?.state === 'archived' ? '战斗胜利 · 命途圆满' : narrative ? '战斗胜利 · 战录更新' : '战斗胜利！';
       titleEl.dataset.rewardHeaderOutcome = seasonSettlementOutcomeId;
     }
     if (subtitleEl) {
-      subtitleEl.textContent = narrative?.surface === 'expedition' ? expeditionSubtitle : narrative?.state === 'archived' ? '先整理本场战利，再把这份圆满样本压成命盘档案，决定下一轮继续追哪条修行线。' : narrative ? '先整理法则余烬，再确认这份命盘样本会如何写入档案、影响下一阶段推进。' : '先整理法则余烬，再把本场战利与关键留痕收成命盘线索，决定下一段推进节奏。';
+      subtitleEl.textContent = narrative?.surface === 'expedition' ? expeditionSubtitle : narrative?.state === 'archived' ? '先整理本场战利，再把这份圆满战录收入命盘，决定下一轮继续追哪条修行线。' : narrative ? '先整理法则余烬，再确认这份战录将如何影响下一阶段推进。' : '先整理法则余烬，再把本场战利与关键留痕收成命盘线索，决定下一段推进节奏。';
       subtitleEl.dataset.rewardNextActionSource = headerActionSource;
     }
   }
@@ -685,7 +685,7 @@ export class RewardView {
     panel.classList.toggle('is-archived', brief.state === 'archived');
     panel.innerHTML = `
             <div class="reward-narrative-kicker">${escape(brief.kicker || '命盘档案')}</div>
-            <div class="reward-narrative-title">${escape(brief.title || '本场样本已更新')}</div>
+            <div class="reward-narrative-title">${escape(brief.title || '本场战录已更新')}</div>
             <div class="reward-narrative-body">${escape(brief.body || '')}</div>
             ${brief.foot ? `<div class="reward-narrative-foot">${escape(brief.foot)}</div>` : ''}
         `;
@@ -1143,7 +1143,7 @@ export class RewardView {
     const archiveMarkup = meta.completed && meta.archive ? `
             <div class="reward-run-path-archive">
                 <div class="reward-run-path-archive-title">已收入洞府 · ${escape(meta.archive.recordName || meta.archive.name || '命途战录')}</div>
-                <div class="reward-run-path-archive-copy">${escape(meta.archive.note || '圆满样本已同步到洞府，可在藏经阁继续复盘。')}</div>
+                <div class="reward-run-path-archive-copy">${escape(meta.archive.note || '圆满战录已收入洞府，可在藏经阁继续复盘。')}</div>
                 <div class="reward-run-path-archive-meta">
                     ${escape(meta.archive.firstClear ? '首次收录' : `累计收录 ${meta.archive.clears || 1} 次`)}
                     ${meta.archive.lastCharacterName ? ` · 最近行者 ${escape(meta.archive.lastCharacterName)}` : ''}

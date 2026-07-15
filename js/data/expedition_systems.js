@@ -21,7 +21,7 @@ export const EXPEDITION_BRANCH_REGIONS = {
     tone: '生存 / 守阵 / 稳线',
     summary: '外城有旧朝军阵残痕，适合把早章的危险回合稳成可解局面。',
     reward: '更偏向营地、守势法宝与缓冲节点',
-    risk: '收益较慢，爆发 build 容易错过前期滚雪球',
+    risk: '收益较慢，爆发构筑容易错过前期滚雪球',
     nodeBias: ['rest', 'shop', 'forge'],
     factionImpact: {
       frontier_bureau: 1,
@@ -62,7 +62,7 @@ export const EXPEDITION_BRANCH_REGIONS = {
     icon: '🔥',
     name: '炉海窑道',
     tone: '炼器 / 厚甲 / 资源燃烧',
-    summary: '炉海会逼你在锻造与续航之间赌一边，适合偏法宝与护阵 build。',
+    summary: '炉海会逼你在锻造与续航之间赌一边，适合偏法宝与护阵的构筑。',
     reward: '更偏向炼器坊、护阵收益与法宝件',
     risk: '若没有足够经济，容易被高费用节点拖慢',
     nodeBias: ['forge', 'shop', 'elite'],
@@ -78,7 +78,7 @@ export const EXPEDITION_BRANCH_REGIONS = {
     tone: '交易 / 口粮 / 生存',
     summary: '商埠擅长把高压章拆成可呼吸的节奏，但需要你及时拿走补给。',
     reward: '更偏向商店、营地与恢复收益',
-    risk: '爆发 build 在这里容易少拿关键输出件',
+    risk: '爆发构筑在这里容易少拿关键输出件',
     nodeBias: ['shop', 'rest', 'event'],
     factionImpact: {
       caravan_union: 1,
@@ -92,7 +92,7 @@ export const EXPEDITION_BRANCH_REGIONS = {
     tone: '试炼 / 对局检定 / 高收益',
     summary: '裁庭偏爱明确的答卷，会把试炼收益与失误惩罚一起放大。',
     reward: '更偏向试炼、精英与命盘评分',
-    risk: '失误成本更高，低容错 build 容易断档',
+    risk: '失误成本更高，低容错构筑容易断档',
     nodeBias: ['trial', 'elite', 'enemy'],
     factionImpact: {
       frontier_bureau: 1,
@@ -105,7 +105,7 @@ export const EXPEDITION_BRANCH_REGIONS = {
     icon: '📚',
     name: '沉星档库',
     tone: '法则 / 预埋 / 命盘',
-    summary: '古庭的旧档案偏爱计算型 build，能让预埋与法则编织更早成形。',
+    summary: '古庭的旧档案偏爱计算型构筑，能让预埋与法则编织更早成形。',
     reward: '更偏向观星、记忆裂隙与法则收益',
     risk: '即时牌面强度提升较慢',
     nodeBias: ['observatory', 'memory_rift', 'event'],
@@ -133,7 +133,7 @@ export const EXPEDITION_BRANCH_REGIONS = {
     icon: '🪐',
     name: '寂轨回廊',
     tone: '控制 / 守势 / 读局',
-    summary: '寂轨更适合慢热型 build，用更强的信息与缓冲换更稳的终局。',
+    summary: '寂轨更适合慢热型构筑，用更强的信息与缓冲换更稳的终局。',
     reward: '更偏向营地、观星与控制型支援',
     risk: '推进速度较慢，悬赏完成线更吃路线精度',
     nodeBias: ['rest', 'observatory', 'shop'],
@@ -178,7 +178,7 @@ export const EXPEDITION_BRANCH_REGIONS = {
     tone: '复制 / 回响 / 套利',
     summary: '采井会反复放大你的强项，也会更快暴露同一条轴的脆弱点。',
     reward: '更偏向记忆裂隙、法则与复制收益',
-    risk: '单轴 build 更易被镜像针对',
+    risk: '单轴构筑更易被镜像针对',
     nodeBias: ['memory_rift', 'observatory', 'elite'],
     factionImpact: {
       covenant_lodge: 1,
@@ -191,7 +191,7 @@ export const EXPEDITION_BRANCH_REGIONS = {
     icon: '🩸',
     name: '血月祭垣',
     tone: '献祭 / 压血 / 收割',
-    summary: '祭垣会把压血与收头拉到最刺激的位置，适合敢赌命的 build。',
+    summary: '祭垣会把压血与收头拉到最刺激的位置，适合敢赌命的构筑。',
     reward: '更偏向精英、禁术与终结收益',
     risk: '任何误判都会被放大成残胜甚至断局',
     nodeBias: ['elite', 'forbidden_altar', 'trial'],
@@ -206,9 +206,9 @@ export const EXPEDITION_BRANCH_REGIONS = {
     icon: '🩹',
     name: '烬灯疗站',
     tone: '医护 / 调整 / 再战',
-    summary: '疗站适合把高压 build 从濒危拉回可控，同时继续保持推进能力。',
+    summary: '疗站适合把高压构筑从濒危拉回可控，同时继续保持推进能力。',
     reward: '更偏向营地、恢复与辅助收益',
-    risk: '爆发 build 会觉得这里太慢',
+    risk: '爆发构筑会觉得这里太慢',
     nodeBias: ['rest', 'shop', 'spirit_grotto'],
     factionImpact: {
       caravan_union: 1,
@@ -235,9 +235,9 @@ export const EXPEDITION_BRANCH_REGIONS = {
     icon: '☯️',
     name: '终律前庭',
     tone: '多轴 / 审核 / 终局',
-    summary: '前庭会提前检定你的答卷完整度，让多轴 build 更容易拿到终章回报。',
+    summary: '前庭会提前检定你的答卷完整度，让多轴构筑更容易拿到终章回报。',
     reward: '更偏向法则、观星与终局评分',
-    risk: '单轴 build 在这里会被看穿',
+    risk: '单轴构筑在这里会被看穿',
     nodeBias: ['observatory', 'trial', 'memory_rift'],
     factionImpact: {
       star_seers: 1,
@@ -307,7 +307,7 @@ export const EXPEDITION_BOUNTY_TEMPLATES = [{
     gold: 70,
     ringExp: 32
   },
-  routeHint: '适合想冲命盘评分的 build',
+  routeHint: '适合想冲命盘评分的构筑',
   riskHint: '需要稳定处理高压敌人'
 }, {
   id: 'omen_route',
@@ -345,7 +345,7 @@ export const EXPEDITION_BOUNTY_TEMPLATES = [{
     ringExp: 26,
     heavenlyInsight: 1
   },
-  routeHint: '适合围绕中期转折的 build',
+  routeHint: '适合围绕中期转折的构筑',
   riskHint: '部分裂隙收益偏慢热'
 }, {
   id: 'forge_contract',
@@ -358,7 +358,7 @@ export const EXPEDITION_BOUNTY_TEMPLATES = [{
     nodeType: 'forge',
     target: 1
   },
-  summary: '至少完成 1 次炼器坊操作，让 build 在章节中段完成明确补件。',
+  summary: '至少完成 1 次炼器坊操作，让构筑在章节中段完成明确补件。',
   reward: {
     score: 28,
     gold: 35,
@@ -383,7 +383,7 @@ export const EXPEDITION_BOUNTY_TEMPLATES = [{
     heavenlyInsight: 1,
     ringExp: 20
   },
-  routeHint: '更适合连段、续航与灵契驱动 build',
+  routeHint: '更适合连段、续航与灵契驱动构筑',
   riskHint: '节点稀缺，路线需要提前锁定'
 }, {
   id: 'no_rest_clear',
@@ -401,7 +401,7 @@ export const EXPEDITION_BOUNTY_TEMPLATES = [{
     gold: 80,
     ringExp: 36
   },
-  routeHint: '只适合已经成型或极强前压 build',
+  routeHint: '只适合已经成型或极强前压构筑',
   riskHint: '容错极低，错一步就很难补救'
 }, {
   id: 'high_hp_finish',
@@ -414,14 +414,14 @@ export const EXPEDITION_BOUNTY_TEMPLATES = [{
     threshold: 0.62,
     target: 1
   },
-  summary: '以较高血线通过本章，证明这套 build 不只是能赢，而是真正可控。',
+  summary: '以较高血线通过本章，证明这套构筑不只是能赢，而是真正可控。',
   reward: {
     score: 40,
     gold: 42,
     ringExp: 24
   },
   routeHint: '更适合守势、续航与信息型路线',
-  riskHint: '激进 build 容易在收官前透支血线'
+  riskHint: '激进构筑容易在收官前透支血线'
 }, {
   id: 'altar_oath',
   name: '禁契试刀',
@@ -458,7 +458,7 @@ export const EXPEDITION_BOUNTY_TEMPLATES = [{
     gold: 45,
     ringExp: 25
   },
-  routeHint: '适合想确认 build 真强度的路线',
+  routeHint: '适合想确认构筑强度的路线',
   riskHint: '试炼会放大当前短板'
 }];
 export const EXPEDITION_FACTION_PROFILES = {
@@ -545,7 +545,7 @@ export const EXPEDITION_FACTION_PROFILES = {
     id: 'covenant_lodge',
     icon: '📜',
     name: '契律馆',
-    agenda: '偏爱法宝、法则、炼器与结构完整的 build，不喜无序冒进。',
+    agenda: '偏爱法宝、法则、炼器与结构完整的构筑，不喜无序冒进。',
     likes: ['forge', 'memory_rift', 'observatory'],
     dislikes: ['enemy'],
     supportNodeTypes: ['forge', 'memory_rift'],

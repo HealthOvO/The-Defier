@@ -1168,8 +1168,8 @@ export class FateChronicleView {
     return `
       <section class="fate-chronicle-state-card" data-fate-chronicle-state="guest">
         <div class="fate-chronicle-kicker">账号绑定</div>
-        <h2>游客无法恢复长卷</h2>
-        <p>命途长卷与三证归卷都依赖账号签名。登录后才能读取每周章节、恢复进行中的长卷战局和领取 2/5 基础归卷奖励。</p>
+        <h2>登录后继续命途长卷</h2>
+        <p>登录后可读取每周章节、恢复进行中的长卷战局，并领取阶段归卷奖励。</p>
         <div class="fate-chronicle-actions">
           <button type="button" class="menu-btn primary" data-fate-chronicle-action="login">前往登录</button>
         </div>
@@ -1181,8 +1181,8 @@ export class FateChronicleView {
     return `
       <section class="fate-chronicle-state-card" data-fate-chronicle-state="loading">
         <div class="fate-chronicle-kicker">命途长卷</div>
-        <h2>正在恢复服务器卷面</h2>
-        <p>章节解锁、双誓约、进行中的长卷战局与三证归卷都以本周固定卷面为准，客户端不会本地补全。</p>
+        <h2>正在展开命途长卷</h2>
+        <p>正在读取每周章节、誓约与未完战局。</p>
       </section>
     `;
   }
@@ -1192,7 +1192,7 @@ export class FateChronicleView {
       <section class="fate-chronicle-state-card" data-fate-chronicle-state="error" role="alert">
         <div class="fate-chronicle-kicker">命途长卷</div>
         <h2>读取失败</h2>
-        <p>${escapeHtml(this.errorMessage || "命途长卷读取失败。")}</p>
+        <p>${escapeHtml(this.errorMessage || "命途长卷暂时无法展开，请稍后重试。")}</p>
         <div class="fate-chronicle-actions">
           <button type="button" class="menu-btn primary" data-fate-chronicle-action="refresh">重试</button>
         </div>
