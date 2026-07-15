@@ -472,8 +472,8 @@ export class Game {
       errorMessage: '天道榜暂时无法开启。',
       load: () => this.ensurePvpSceneLoaded(),
       action: async scene => {
-        this.clearPvpLoadingShell();
         this.showScreen('pvp-screen');
+        this.clearPvpLoadingShell();
         if (scene && typeof scene.onShow === 'function') await scene.onShow();
         return scene;
       }
