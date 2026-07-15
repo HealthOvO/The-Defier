@@ -115,6 +115,10 @@ function emptyIntentSummary() {
     opportunities: 0,
     successes: 0,
     failures: 0,
+    standardSuccesses: 0,
+    advancedSuccesses: 0,
+    firstCardSuccesses: 0,
+    turnOneSuccesses: 0,
   };
 }
 
@@ -152,14 +156,24 @@ function createSample(scenario, preferredContractId, index) {
   };
 }
 
-function collectEvents(sample, events) {
+function collectEvents(sample, events, turnNumber = 0) {
   events.forEach((event) => {
     if (event.type === 'enemy_tactic_resolved') {
       const bucket = sample.intentSummary[event.intentType];
       if (!bucket) return;
       bucket.opportunities += 1;
-      if (event.success) bucket.successes += 1;
-      else bucket.failures += 1;
+      if (event.success) {
+        bucket.successes += 1;
+        if (event.tier === 'standard') bucket.standardSuccesses += 1;
+        if (event.tier === 'advanced') bucket.advancedSuccesses += 1;
+        const selectedLine = Array.isArray(event.lines)
+          ? event.lines.find(line => line.lineId === event.lineId)
+          : null;
+        if (selectedLine && Number(selectedLine.cardsPlayed || 0) <= 1) bucket.firstCardSuccesses += 1;
+        if (turnNumber <= 1) bucket.turnOneSuccesses += 1;
+      } else {
+        bucket.failures += 1;
+      }
     }
     if (event.type === 'card_played' && sample.conditionalCards[event.cardId]) {
       const bucket = sample.conditionalCards[event.cardId];
@@ -173,11 +187,12 @@ function collectEvents(sample, events) {
 
 function executeSample(sample) {
   while (!TERMINAL_PHASES.has(sample.state.phase) && sample.actions < 256) {
+    const turnNumber = Number(sample.state.battle?.turn || 0);
     const [command, payload] = chooseCommand(sample.state, sample.preferredContractId);
     const result = applyCommand(sample.state, CONTENT_SNAPSHOT, command, payload);
     sample.state = result.state;
     sample.actions += 1;
-    collectEvents(sample, result.events);
+    collectEvents(sample, result.events, turnNumber);
   }
   assert(TERMINAL_PHASES.has(sample.state.phase), `${sample.scenario.key}/${sample.preferredContractId}/${sample.index} must terminate`);
   assert(sample.actions <= 256, `${sample.scenario.key}/${sample.preferredContractId}/${sample.index} exceeded the action budget`);
@@ -229,6 +244,10 @@ function summarize(results) {
       target.opportunities += source.opportunities;
       target.successes += source.successes;
       target.failures += source.failures;
+      target.standardSuccesses += source.standardSuccesses;
+      target.advancedSuccesses += source.advancedSuccesses;
+      target.firstCardSuccesses += source.firstCardSuccesses;
+      target.turnOneSuccesses += source.turnOneSuccesses;
     });
     ['warding_stride', 'sealbreaker'].forEach((cardId) => {
       const target = summary.combatTactics.conditionalCards[cardId];
@@ -267,6 +286,10 @@ for (const scenario of REPRESENTATIVE_SCENARIOS) {
       combined[intentType].opportunities += summary.combatTactics.intents[intentType].opportunities;
       combined[intentType].successes += summary.combatTactics.intents[intentType].successes;
       combined[intentType].failures += summary.combatTactics.intents[intentType].failures;
+      combined[intentType].standardSuccesses += summary.combatTactics.intents[intentType].standardSuccesses;
+      combined[intentType].advancedSuccesses += summary.combatTactics.intents[intentType].advancedSuccesses;
+      combined[intentType].firstCardSuccesses += summary.combatTactics.intents[intentType].firstCardSuccesses;
+      combined[intentType].turnOneSuccesses += summary.combatTactics.intents[intentType].turnOneSuccesses;
     });
     ['warding_stride', 'sealbreaker'].forEach((cardId) => {
       combined[cardId].plays += summary.combatTactics.conditionalCards[cardId].plays;
@@ -296,6 +319,13 @@ assert(contestedTradeoffScenarios >= 2, 'contested routing should still create a
   assert(combined[intentType].opportunities > 0, `${intentType} tactic should be reachable in the representative balance matrix`);
   assert(combined[intentType].successes > 0, `${intentType} tactic should be completable in the representative balance matrix`);
   assert(combined[intentType].failures > 0, `${intentType} tactic should still admit failure cases in the representative balance matrix`);
+  assert(combined[intentType].standardSuccesses > 0, `${intentType} standard line should be reachable in the representative balance matrix`);
+  assert(combined[intentType].advancedSuccesses > 0, `${intentType} advanced line should be reachable in the representative balance matrix`);
+  assert.strictEqual(combined[intentType].firstCardSuccesses, 0, `${intentType} should not accidentally auto-success on the first card`);
+  assert(
+    combined[intentType].turnOneSuccesses < combined[intentType].successes,
+    `${intentType} should keep landing successful resolutions beyond the opening turn`,
+  );
 });
 
 ['warding_stride', 'sealbreaker'].forEach((cardId) => {

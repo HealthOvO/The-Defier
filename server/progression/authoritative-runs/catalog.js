@@ -1,7 +1,7 @@
 const { cloneJson, hashCanonical, stableStringify } = require('./canonical');
 
 const PROTOCOL_VERSION = 'authoritative-run-v2';
-const CONTENT_VERSION = 'authoritative-trials-v7';
+const CONTENT_VERSION = 'authoritative-trials-v8';
 const RELAY_EXPEDITION_SCENARIO_IDS = ['vanguard', 'bulwark', 'insight'];
 const FATE_CHRONICLE_SCENARIO_IDS = [
     'chronicle-ember-guard',
@@ -105,39 +105,102 @@ const CONTENT_SNAPSHOT = deepFreeze({
         ]
     },
     combatTactics: {
-        version: 1,
-        reportVersion: 'authoritative-combat-tactics-v1',
+        version: 2,
+        reportVersion: 'authoritative-combat-tactics-v2',
         rewardCardPool: ['warding_stride', 'sealbreaker'],
         profiles: {
             attack: {
-                tacticId: 'brace',
-                title: '守势',
-                prompt: '在敌方进攻落下前建立足够格挡。',
-                blockThresholdBps: 7000,
-                minBlockThreshold: 4,
-                damageReduction: 2,
-                rewardSummary: '达成后本次敌方伤害减少 2 点。'
+                tacticId: 'answer_attack',
+                title: '迎击双解',
+                prompt: '稳住伤势，或用攻式后接守式夺回节奏。',
+                lines: [
+                    {
+                        lineId: 'brace',
+                        tier: 'standard',
+                        title: '基础解 · 守势',
+                        prompt: '建立足够格挡，直接压低本次伤害。',
+                        blockThresholdBps: 7000,
+                        minBlockThreshold: 4,
+                        damageReduction: 2,
+                        rewardSummary: '本次敌方伤害减少 2 点。'
+                    },
+                    {
+                        lineId: 'counterflow',
+                        tier: 'advanced',
+                        title: '逆解 · 先攻后守',
+                        prompt: '先出攻式，再出守式，并在 3 张牌内完成。',
+                        sequence: ['attack', 'guard'],
+                        maxCardsPlayed: 3,
+                        blockThresholdBps: 5000,
+                        minBlockThreshold: 3,
+                        damageReduction: 4,
+                        rewardSummary: '本次敌方伤害减少 4 点。'
+                    }
+                ]
             },
             fortify: {
-                tacticId: 'break',
-                title: '破阵',
-                prompt: '在敌方结印前打出足够伤害，压缩其护势。',
-                damageThresholdBps: 7500,
-                minDamageThreshold: 5,
-                blockReductionBps: 5000,
-                rewardSummary: '达成后本次敌方格挡减半。'
+                tacticId: 'answer_fortify',
+                title: '破印双解',
+                prompt: '持续破阵，或用更少的牌抢在结印前击穿。',
+                lines: [
+                    {
+                        lineId: 'break',
+                        tier: 'standard',
+                        title: '基础解 · 破阵',
+                        prompt: '造成足够伤害，压缩敌方即将形成的格挡。',
+                        damageThresholdBps: 7500,
+                        minDamageThreshold: 5,
+                        blockReductionBps: 5000,
+                        rewardSummary: '本次敌方格挡减少一半。'
+                    },
+                    {
+                        lineId: 'swiftbreak',
+                        tier: 'advanced',
+                        title: '逆解 · 两式速破',
+                        prompt: '恰用 2 张牌打出更高伤害。',
+                        minCardsPlayed: 2,
+                        maxCardsPlayed: 2,
+                        damageThresholdBps: 8500,
+                        minDamageThreshold: 6,
+                        blockReductionBps: 7500,
+                        rewardSummary: '本次敌方格挡减少四分之三。'
+                    }
+                ]
             },
             defend_attack: {
-                tacticId: 'balance',
-                title: '争衡',
-                prompt: '同时完成进攻与防守，拆解敌方攻守一体。',
-                damageThresholdBps: 5000,
-                blockThresholdBps: 5000,
-                minDamageThreshold: 4,
-                minBlockThreshold: 3,
-                damageReduction: 2,
-                blockReduction: 2,
-                rewardSummary: '达成后本次敌方伤害与格挡各减少 2 点。'
+                tacticId: 'answer_balance',
+                title: '争衡双解',
+                prompt: '同时兼顾攻防，或用守式后接攻式完成逆转。',
+                lines: [
+                    {
+                        lineId: 'balance',
+                        tier: 'standard',
+                        title: '基础解 · 争衡',
+                        prompt: '同时完成进攻与防守，拆解攻守一体。',
+                        damageThresholdBps: 5000,
+                        blockThresholdBps: 5000,
+                        minDamageThreshold: 4,
+                        minBlockThreshold: 3,
+                        damageReduction: 2,
+                        blockReduction: 2,
+                        rewardSummary: '本次敌方伤害与格挡各减少 2 点。'
+                    },
+                    {
+                        lineId: 'turnabout',
+                        tier: 'advanced',
+                        title: '逆解 · 先守后攻',
+                        prompt: '先出守式，再出攻式，并在 3 张牌内完成。',
+                        sequence: ['guard', 'attack'],
+                        maxCardsPlayed: 3,
+                        damageThresholdBps: 5000,
+                        blockThresholdBps: 5000,
+                        minDamageThreshold: 4,
+                        minBlockThreshold: 3,
+                        damageReduction: 3,
+                        blockReduction: 3,
+                        rewardSummary: '本次敌方伤害与格挡各减少 3 点。'
+                    }
+                ]
             }
         }
     },

@@ -115,7 +115,14 @@ function createRunEnvelope({
   playerHand = null,
   rewardChoices = null
 } = {}) {
-  const includeCombatTactics = contentVersion === "authoritative-trials-v7";
+  const combatTacticsVersion = (
+    contentVersion === "authoritative-trials-v8"
+      ? 2
+      : contentVersion === "authoritative-trials-v7"
+        ? 1
+        : 0
+  );
+  const includeCombatTactics = combatTacticsVersion > 0;
   const routeContracts = includeRouteContracts ? {
     steady: {
       version: 1,
@@ -164,8 +171,8 @@ function createRunEnvelope({
     }
   } : null;
   const hand = Array.isArray(playerHand) ? playerHand : [
-    { instanceId: "card-1", cardId: "strike", name: "破势", description: "造成 8 点伤害。", cost: 1 },
-    { instanceId: "card-2", cardId: "guard", name: "守心", description: "获得 6 点格挡。", cost: 1 }
+    { instanceId: "card-1", cardId: "strike", name: "破势", description: "造成 8 点伤害。", cost: 1, ...(combatTacticsVersion === 2 ? { tacticRole: "attack" } : {}) },
+    { instanceId: "card-2", cardId: "guard", name: "守心", description: "获得 6 点格挡。", cost: 1, ...(combatTacticsVersion === 2 ? { tacticRole: "guard" } : {}) }
   ];
   const rewardChoiceList = Array.isArray(rewardChoices) ? rewardChoices : [
     { rewardId: "reward-card", kind: "card", name: "纳入「穿云」", description: "造成 13 点伤害。" },
@@ -182,7 +189,8 @@ function createRunEnvelope({
       {
         "authoritative-trials-v5": "b1787bc02a98b459641c5dce541a56e3c3476724c7ae3083efc1b2e8e372b280",
         "authoritative-trials-v6": "ec26095949bfadf81a322f454b092ec96dbfe09199c607513ea3e2f44501b301",
-        "authoritative-trials-v7": "a89a387d2558df8e982de8951979f930c96891574fcae2b68d28fb5ae2a7a062"
+        "authoritative-trials-v7": "a89a387d2558df8e982de8951979f930c96891574fcae2b68d28fb5ae2a7a062",
+        "authoritative-trials-v8": "e41817fac808bb93072d18a463972ea8ca046c66eba38e9506b671fee2e983db"
       }[contentVersion] || "a89a387d2558df8e982de8951979f930c96891574fcae2b68d28fb5ae2a7a062"
     ),
     authorityLevel: "server",
@@ -313,18 +321,61 @@ function createRunEnvelope({
         },
         ...(includeCombatTactics ? {
           tactic: {
-            version: 1,
-            tacticId: "brace",
-            intentType: "attack",
-            title: "守势",
-            prompt: "在敌方进攻落下前建立足够格挡。",
-            rewardSummary: "达成后本次敌方伤害减少 2 点。",
-            requirements: [
-              { metric: "blockGained", label: "本回合获得格挡", target: 7, actual: 6, met: false }
-            ],
-            cardsPlayed: 1,
-            status: "in_progress",
-            completed: false
+            ...(combatTacticsVersion === 2 ? {
+              version: 2,
+              tacticId: "answer_attack",
+              intentType: "attack",
+              title: "迎击双解",
+              prompt: "稳住伤势，或用攻式后接守式夺回节奏。",
+              lines: [
+                {
+                  lineId: "brace",
+                  tier: "standard",
+                  title: "基础解 · 守势",
+                  prompt: "建立足够格挡，直接压低本次伤害。",
+                  rewardSummary: "本次敌方伤害减少 2 点。",
+                  effects: { damageReduction: 2, blockReduction: 0 },
+                  requirements: [
+                    { metric: "blockGained", label: "本回合获得格挡", target: 7, actual: 6, comparison: "gte", met: false }
+                  ],
+                  cardsPlayed: 2,
+                  status: "in_progress",
+                  completed: false
+                },
+                {
+                  lineId: "counterflow",
+                  tier: "advanced",
+                  title: "逆解 · 先攻后守",
+                  prompt: "先出攻式，再出守式，并在 3 张牌内完成。",
+                  rewardSummary: "本次敌方伤害减少 4 点。",
+                  effects: { damageReduction: 4, blockReduction: 0 },
+                  requirements: [
+                    { metric: "roleSequence", label: "攻式后接守式", target: 2, actual: 1, comparison: "gte", met: false },
+                    { metric: "cardsPlayedMax", label: "本回合出牌数", target: 3, actual: 2, comparison: "lte", met: true },
+                    { metric: "blockGained", label: "本回合获得格挡", target: 3, actual: 2, comparison: "gte", met: false }
+                  ],
+                  cardsPlayed: 2,
+                  status: "in_progress",
+                  completed: false
+                }
+              ],
+              cardsPlayed: 2,
+              status: "in_progress",
+              completed: false
+            } : {
+              version: 1,
+              tacticId: "brace",
+              intentType: "attack",
+              title: "守势",
+              prompt: "在敌方进攻落下前建立足够格挡。",
+              rewardSummary: "达成后本次敌方伤害减少 2 点。",
+              requirements: [
+                { metric: "blockGained", label: "本回合获得格挡", target: 7, actual: 6, met: false }
+              ],
+              cardsPlayed: 1,
+              status: "in_progress",
+              completed: false
+            })
           }
         } : {})
       } : null,
@@ -334,9 +385,61 @@ function createRunEnvelope({
       } : null,
       ...(includeCombatTactics ? {
         combatTactics: {
-          version: 1,
-          reportVersion: "authoritative-combat-tactics-v1",
-          lastResolution: {
+          version: combatTacticsVersion,
+          reportVersion: combatTacticsVersion === 2 ? "authoritative-combat-tactics-v2" : "authoritative-combat-tactics-v1",
+          lastResolution: combatTacticsVersion === 2 ? {
+            version: 2,
+            tacticId: "answer_balance",
+            intentType: "defend_attack",
+            title: "争衡双解",
+            success: true,
+            lineId: "turnabout",
+            tier: "advanced",
+            lineTitle: "逆解 · 先守后攻",
+            requirements: [
+              { metric: "roleSequence", label: "守式后接攻式", target: 2, actual: 2, comparison: "gte", met: true },
+              { metric: "cardsPlayedMax", label: "本回合出牌数", target: 3, actual: 2, comparison: "lte", met: true },
+              { metric: "damageDealt", label: "本回合造成伤害", target: 4, actual: 8, comparison: "gte", met: true },
+              { metric: "blockGained", label: "本回合获得格挡", target: 3, actual: 6, comparison: "gte", met: true }
+            ],
+            lines: [
+              {
+                lineId: "balance",
+                tier: "standard",
+                title: "基础解 · 争衡",
+                prompt: "同时完成进攻与防守，拆解攻守一体。",
+                rewardSummary: "本次敌方伤害与格挡各减少 2 点。",
+                effects: { damageReduction: 2, blockReduction: 2 },
+                requirements: [
+                  { metric: "damageDealt", label: "本回合造成伤害", target: 4, actual: 8, comparison: "gte", met: true },
+                  { metric: "blockGained", label: "本回合获得格挡", target: 3, actual: 6, comparison: "gte", met: true }
+                ],
+                cardsPlayed: 2,
+                status: "ready",
+                completed: true
+              },
+              {
+                lineId: "turnabout",
+                tier: "advanced",
+                title: "逆解 · 先守后攻",
+                prompt: "先出守式，再出攻式，并在 3 张牌内完成。",
+                rewardSummary: "本次敌方伤害与格挡各减少 3 点。",
+                effects: { damageReduction: 3, blockReduction: 3 },
+                requirements: [
+                  { metric: "roleSequence", label: "守式后接攻式", target: 2, actual: 2, comparison: "gte", met: true },
+                  { metric: "cardsPlayedMax", label: "本回合出牌数", target: 3, actual: 2, comparison: "lte", met: true },
+                  { metric: "damageDealt", label: "本回合造成伤害", target: 4, actual: 8, comparison: "gte", met: true },
+                  { metric: "blockGained", label: "本回合获得格挡", target: 3, actual: 6, comparison: "gte", met: true }
+                ],
+                cardsPlayed: 2,
+                status: "ready",
+                completed: true
+              }
+            ],
+            rewardSummary: "本次敌方伤害与格挡各减少 3 点。",
+            damageReduction: 3,
+            blockReduction: 3
+          } : {
             version: 1,
             tacticId: "break",
             intentType: "fortify",
@@ -364,7 +467,8 @@ function createRunEnvelope({
         cardsRemoved: 1,
         ...(includeCombatTactics ? {
           combatTacticOpportunities: 5,
-          combatTacticSuccesses: 3
+          combatTacticSuccesses: 3,
+          ...(combatTacticsVersion === 2 ? { combatTacticAdvancedSuccesses: 1 } : {})
         } : {})
       },
       summary: ["completed", "defeated", "abandoned"].includes(phase) ? {
@@ -398,10 +502,11 @@ function createRunEnvelope({
         } : null,
         ...(includeCombatTactics ? {
           combatTactics: {
-            version: 1,
-            reportVersion: "authoritative-combat-tactics-v1",
+            version: combatTacticsVersion,
+            reportVersion: combatTacticsVersion === 2 ? "authoritative-combat-tactics-v2" : "authoritative-combat-tactics-v1",
             opportunities: 5,
             successes: 3,
+            ...(combatTacticsVersion === 2 ? { advancedSuccesses: 1 } : {}),
             successRateBps: 6000
           }
         } : {})
@@ -522,6 +627,36 @@ assert.doesNotMatch(html, /play_card|strike|blockGained|brace/);
 
 panel.applyResult({
   success: true,
+  reportVersion: "authoritative-runs-ui-test-battle-v2",
+  run: createRunEnvelope({
+    mode: "pve",
+    phase: "battle",
+    status: "active",
+    contentVersion: "authoritative-trials-v8",
+    playerHand: [
+      { instanceId: "card-1", cardId: "strike", name: "破势", description: "造成 8 点伤害。", cost: 1, tacticRole: "attack" },
+      { instanceId: "card-2", cardId: "guard", name: "守心·极", description: "获得 8 点格挡。", cost: 1, upgraded: true, tacticRole: "guard" }
+    ]
+  })
+});
+html = panel.render();
+assert.match(html, /迎击双解/);
+assert.match(html, />基础解</);
+assert.match(html, />逆解</);
+assert.match(html, /守势/);
+assert.match(html, /先攻后守/);
+assert.match(html, /攻式后接守式/);
+assert.match(html, /1\/2/);
+assert.match(html, /2 \/ 上限 3/);
+assert.match(html, /攻式/);
+assert.match(html, /守式/);
+assert.match(html, /data-authoritative-tactic-line="基础解"/);
+assert.match(html, /data-authoritative-tactic-line="逆解"/);
+assert.equal((html.match(/data-authoritative-tactic-line=/g) || []).length, 2, "V2 tactic panel should render exactly two public lines");
+assert.doesNotMatch(html, /answer_attack|counterflow|authoritative-combat-tactics-v2|advancedSuccesses|successRateBps/);
+
+panel.applyResult({
+  success: true,
   reportVersion: "authoritative-runs-ui-test-tactic-receipt",
   action: {
     command: "end_turn",
@@ -553,6 +688,61 @@ assert.match(html, /争衡反制成功，敌方伤害 -2、格挡 -2/);
 assert.match(html, /敌方获得 4 格挡（阻止 2 伤害 · 压低 2 格挡）/);
 assert.match(html, /进入第 4 回合/);
 assert.doesNotMatch(html, /defend_attack|damageDealt|blockGained|balance/);
+
+panel.applyResult({
+  success: true,
+  reportVersion: "authoritative-runs-ui-test-tactic-receipt-v2",
+  action: {
+    command: "end_turn",
+    acceptedAt: Date.UTC(2026, 6, 11, 8, 21),
+    events: [
+      {
+        type: "enemy_tactic_resolved",
+        version: 2,
+        tacticId: "answer_balance",
+        intentType: "defend_attack",
+        title: "争衡双解",
+        success: true,
+        lineId: "turnabout",
+        tier: "advanced",
+        lineTitle: "逆解 · 先守后攻",
+        requirements: [
+          { metric: "roleSequence", label: "守式后接攻式", target: 2, actual: 2, comparison: "gte", met: true },
+          { metric: "cardsPlayedMax", label: "本回合出牌数", target: 3, actual: 2, comparison: "lte", met: true }
+        ],
+        lines: [
+          {
+            lineId: "balance",
+            tier: "standard",
+            title: "基础解 · 争衡",
+            requirements: [
+              { metric: "damageDealt", label: "本回合造成伤害", target: 4, actual: 8, comparison: "gte", met: true },
+              { metric: "blockGained", label: "本回合获得格挡", target: 3, actual: 6, comparison: "gte", met: true }
+            ]
+          },
+          {
+            lineId: "turnabout",
+            tier: "advanced",
+            title: "逆解 · 先守后攻",
+            requirements: [
+              { metric: "roleSequence", label: "守式后接攻式", target: 2, actual: 2, comparison: "gte", met: true },
+              { metric: "cardsPlayedMax", label: "本回合出牌数", target: 3, actual: 2, comparison: "lte", met: true }
+            ]
+          }
+        ],
+        rewardSummary: "本次敌方伤害与格挡各减少 3 点。",
+        damageReduction: 3,
+        blockReduction: 3
+      },
+      { type: "enemy_intent_resolved", intentType: "defend_attack", damageTaken: 0, enemyBlock: 3, damagePrevented: 3, blockPrevented: 3 }
+    ]
+  },
+  run: createRunEnvelope({ mode: "pve", phase: "battle", status: "active", contentVersion: "authoritative-trials-v8" })
+});
+html = panel.render();
+assert.match(html, /逆解 · 先守后攻反制成功，敌方伤害 -3、格挡 -3/);
+assert.match(html, /敌方获得 3 格挡（阻止 3 伤害 · 压低 3 格挡）/);
+assert.doesNotMatch(html, /answer_balance|turnabout|defend_attack/);
 
 panel.applyResult({
   success: true,
@@ -617,6 +807,28 @@ assert.match(html, /data-reward-kind="upgrade_card"/);
 assert.match(html, /data-reward-kind="remove_card"/);
 assert.match(html, /data-target-card-instance-id="card-17"/);
 assert.match(html, /data-target-card-instance-id="card-29"/);
+
+panel.applyResult({
+  success: true,
+  reportVersion: "authoritative-runs-ui-test-reward-v2",
+  run: createRunEnvelope({
+    mode: "expedition",
+    phase: "reward",
+    status: "active",
+    contentVersion: "authoritative-trials-v8"
+  })
+});
+html = panel.render();
+assert.match(html, /上一手反制回执/);
+assert.match(html, /争衡双解/);
+assert.match(html, /逆解 · 先守后攻/);
+assert.match(html, /本回合出牌数 2 \/ 上限 3/);
+assert.match(html, /基础解 已达成/);
+assert.match(html, /逆解 已达成/);
+assert.match(html, /data-authoritative-tactic-resolution-lines="true"/);
+assert.match(html, /敌方伤害 -3/);
+assert.match(html, /敌方格挡 -3/);
+assert.doesNotMatch(html, /answer_balance|turnabout|authoritative-combat-tactics-v2/);
 
 panel.applyResult({
   success: true,
@@ -697,6 +909,18 @@ assert.match(html, /data-combat-tactic-summary="true"/);
 assert.match(html, /第 1 站 · 常规战 · 墨痕斥候/);
 assert.match(html, /稳进/);
 assert.doesNotMatch(html, /状态哈希|完整重放|arun-challenge-completed/);
+
+panel.applyResult({
+  success: true,
+  reportVersion: "authoritative-runs-ui-test-completed-v2",
+  run: createRunEnvelope({ mode: "challenge", phase: "completed", status: "completed", contentVersion: "authoritative-trials-v8" })
+});
+html = panel.render();
+assert.match(html, /敌意题面 5/);
+assert.match(html, /成功反制 3/);
+assert.match(html, /逆解成功 1/);
+assert.match(html, /反制率 60%/);
+assert.doesNotMatch(html, /advancedSuccesses|authoritative-combat-tactics-v2|6000/);
 
 panel.applyResult({
   success: true,

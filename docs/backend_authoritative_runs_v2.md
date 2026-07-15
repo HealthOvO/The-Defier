@@ -153,6 +153,31 @@ row. The tactic balance gate runs 24 fixed seeds across three contracts and thre
 scenarios, while the route gate remains tactic-aware and keeps every sample within the action
 budget.
 
+## S113 dual-line counterplay
+
+`authoritative-trials-v8` keeps protocol `authoritative-run-v2`, canonical state schema 2,
+and the five-command surface unchanged. `combatTactics.version = 2` expands each public enemy
+question into exactly two alternatives: a dependable standard line and a stronger advanced
+line. The server evaluates both at end turn and automatically resolves the highest completed
+tier, so the client still submits only card-play and end-turn commands.
+
+The standard lines retain the V7 damage/block thresholds. Advanced lines trade tighter card
+budgets or ordered card roles for a larger reduction: attack intents ask for attack then guard,
+fortify intents ask for enough damage in exactly two cards, and mixed intents ask for guard then
+attack. Pure damage cards project as `attack`, pure block cards as `guard`, and hybrid/utility
+cards do not advance either sequence. These roles derive from the immutable card effects on the
+server; the client cannot declare or override them.
+
+Both lines, exact progress, card limit, order, and reward are public before end turn. If neither
+line succeeds, the original intent resolves without an extra debuff, discard, damage, or hidden
+penalty. A successful advanced line increments an additive `advancedSuccesses` counter in the
+terminal summary. No new card, currency, page, permanent power, RNG call, or reward track is
+introduced.
+
+V7 remains an immutable Combat Tactics V1 snapshot. V8 migration bootstraps a new catalog row,
+while V1-V7 runs continue loading their stored content and preserve their historical tactic
+projection, resolution receipt, replay, and hash behavior.
+
 ## Failure model
 
 - Network failure: the client keeps the last confirmed projection and retries with

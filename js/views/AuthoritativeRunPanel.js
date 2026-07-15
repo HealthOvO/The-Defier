@@ -114,6 +114,16 @@ const COMMAND_LABELS = Object.freeze({
   abandon: "历练已放弃"
 });
 
+const COMBAT_TACTIC_TIER_LABELS = Object.freeze({
+  standard: "基础解",
+  advanced: "逆解"
+});
+
+const COMBAT_TACTIC_ROLE_LABELS = Object.freeze({
+  attack: "攻式",
+  guard: "守式"
+});
+
 const REWARD_KIND_LABELS = Object.freeze({
   card: "新卡牌",
   upgrade_card: "精修卡牌",
@@ -317,25 +327,72 @@ function normalizeCombatTacticRequirement(source = null) {
   if (!metric) return null;
   const target = Math.max(1, clampInt(source.target, 1));
   const actual = Math.max(0, clampInt(source.actual, 0));
+  const comparison = normalizeText(source.comparison) === "lte" ? "lte" : "gte";
   return {
     metric,
     label: normalizeText(source.label, "反制进度"),
     target,
     actual,
-    met: source.met === true || actual >= target
+    comparison,
+    met: source.met === true || (comparison === "lte" ? actual <= target : actual >= target)
   };
 }
 
 function normalizeCombatTactic(source = null) {
-  if (!source || clampInt(source.version, 0) !== 1 || !normalizeText(source.tacticId)) return null;
+  if (!source || !normalizeText(source.tacticId)) return null;
+  const version = clampInt(source.version, 0);
+  if (version === 1) {
+    const requirements = normalizeArray(source.requirements)
+      .map(normalizeCombatTacticRequirement)
+      .filter(Boolean);
+    if (!requirements.length) return null;
+    return {
+      version: 1,
+      tacticId: normalizeText(source.tacticId),
+      intentType: normalizeText(source.intentType),
+      title: normalizeText(source.title, "敌意反制"),
+      prompt: normalizeText(source.prompt),
+      rewardSummary: normalizeText(source.rewardSummary),
+      effects: {
+        damageReduction: Math.max(0, clampInt(source.effects && source.effects.damageReduction, 0)),
+        blockReduction: Math.max(0, clampInt(source.effects && source.effects.blockReduction, 0))
+      },
+      requirements,
+      cardsPlayed: Math.max(0, clampInt(source.cardsPlayed, 0)),
+      completed: source.completed === true || requirements.every(requirement => requirement.met)
+    };
+  }
+  if (version !== 2) return null;
+  const lines = normalizeArray(source.lines)
+    .map(normalizeCombatTacticLine)
+    .filter(Boolean)
+    .sort((left, right) => Number(left.tier === "advanced") - Number(right.tier === "advanced"));
+  if (lines.length !== 2 || new Set(lines.map(line => line.tier)).size !== 2) return null;
+  return {
+    version: 2,
+    tacticId: normalizeText(source.tacticId),
+    intentType: normalizeText(source.intentType),
+    title: normalizeText(source.title, "敌意双解"),
+    prompt: normalizeText(source.prompt),
+    lines,
+    cardsPlayed: Math.max(0, clampInt(source.cardsPlayed, 0)),
+    status: normalizeText(source.status, lines.some(line => line.completed) ? "ready" : "in_progress"),
+    completed: source.completed === true || lines.some(line => line.completed)
+  };
+}
+
+function normalizeCombatTacticLine(source = null) {
+  if (!source || typeof source !== "object") return null;
+  const lineId = normalizeText(source.lineId);
+  const tier = normalizeText(source.tier);
+  if (!lineId || !["standard", "advanced"].includes(tier)) return null;
   const requirements = normalizeArray(source.requirements)
     .map(normalizeCombatTacticRequirement)
     .filter(Boolean);
-  if (!requirements.length) return null;
   return {
-    tacticId: normalizeText(source.tacticId),
-    intentType: normalizeText(source.intentType),
-    title: normalizeText(source.title, "敌意反制"),
+    lineId,
+    tier,
+    title: normalizeText(source.title, "未命名解法"),
     prompt: normalizeText(source.prompt),
     rewardSummary: normalizeText(source.rewardSummary),
     effects: {
@@ -344,35 +401,84 @@ function normalizeCombatTactic(source = null) {
     },
     requirements,
     cardsPlayed: Math.max(0, clampInt(source.cardsPlayed, 0)),
-    completed: source.completed === true || requirements.every(requirement => requirement.met)
+    status: normalizeText(source.status, source.completed === true ? "ready" : "in_progress"),
+    completed: source.completed === true || (requirements.length > 0 && requirements.every(requirement => requirement.met))
   };
 }
 
 function normalizeCombatTacticResolution(source = null) {
-  if (!source || clampInt(source.version, 0) !== 1 || !normalizeText(source.tacticId)) return null;
+  if (!source || !normalizeText(source.tacticId)) return null;
+  const version = clampInt(source.version, 0);
+  if (version === 1) {
+    return {
+      version: 1,
+      tacticId: normalizeText(source.tacticId),
+      intentType: normalizeText(source.intentType),
+      title: normalizeText(source.title, "敌意反制"),
+      success: source.success === true,
+      requirements: normalizeArray(source.requirements)
+        .map(normalizeCombatTacticRequirement)
+        .filter(Boolean),
+      rewardSummary: normalizeText(source.rewardSummary),
+      damageReduction: Math.max(0, clampInt(source.damageReduction, 0)),
+      blockReduction: Math.max(0, clampInt(source.blockReduction, 0))
+    };
+  }
+  if (version !== 2) return null;
+  const lines = normalizeArray(source.lines)
+    .map(normalizeCombatTacticLine)
+    .filter(Boolean)
+    .sort((left, right) => Number(left.tier === "advanced") - Number(right.tier === "advanced"));
+  const lineId = normalizeText(source.lineId);
+  const tier = normalizeText(source.tier);
+  const selectedLine = lines.find(line => line.lineId === lineId) || lines.find(line => line.tier === tier) || null;
   return {
+    version: 2,
     tacticId: normalizeText(source.tacticId),
     intentType: normalizeText(source.intentType),
-    title: normalizeText(source.title, "敌意反制"),
+    title: normalizeText(source.title, "敌意双解"),
     success: source.success === true,
+    lineId,
+    tier: selectedLine ? selectedLine.tier : tier,
+    lineTitle: normalizeText(source.lineTitle, selectedLine && selectedLine.title),
     requirements: normalizeArray(source.requirements)
       .map(normalizeCombatTacticRequirement)
       .filter(Boolean),
-    rewardSummary: normalizeText(source.rewardSummary),
+    lines,
+    rewardSummary: normalizeText(source.rewardSummary, selectedLine && selectedLine.rewardSummary),
     damageReduction: Math.max(0, clampInt(source.damageReduction, 0)),
     blockReduction: Math.max(0, clampInt(source.blockReduction, 0))
   };
 }
 
 function normalizeCombatTacticSummary(source = null) {
-  if (!source || clampInt(source.version, 0) !== 1) return null;
+  if (!source || ![1, 2].includes(clampInt(source.version, 0))) return null;
   const opportunities = Math.max(0, clampInt(source.opportunities, 0));
   const successes = Math.min(opportunities, Math.max(0, clampInt(source.successes, 0)));
+  const advancedSuccesses = Math.min(successes, Math.max(0, clampInt(source.advancedSuccesses, 0)));
   return {
+    version: clampInt(source.version, 1, 2),
     opportunities,
     successes,
+    advancedSuccesses,
     successRateBps: Math.max(0, Math.min(10000, clampInt(source.successRateBps, 0)))
   };
+}
+
+function formatCombatTacticTierLabel(tier = "") {
+  return COMBAT_TACTIC_TIER_LABELS[normalizeText(tier)] || "解法";
+}
+
+function formatCombatTacticRoleLabel(role = "") {
+  return COMBAT_TACTIC_ROLE_LABELS[normalizeText(role)] || "";
+}
+
+function formatCombatTacticLineTitle(line = null) {
+  const rawTitle = normalizeText(line && line.title, "未命名解法");
+  const tierLabel = formatCombatTacticTierLabel(line && line.tier);
+  const segments = rawTitle.split("·").map(part => normalizeText(part)).filter(Boolean);
+  if (segments.length >= 2 && segments[0] === tierLabel) return segments.slice(1).join(" · ");
+  return rawTitle;
 }
 
 function formatRouteScoreValue(scoreBonus = 0) {
@@ -1725,7 +1831,8 @@ export class AuthoritativeRunPanel {
     const hand = normalizeArray(player.hand);
     const intent = enemy && enemy.intent ? enemy.intent : null;
     const tactic = battle && battle.tactic ? battle.tactic : null;
-    const tacticsEnabled = clampInt(projection && projection.combatTactics && projection.combatTactics.version, 0) === 1;
+    const tacticsVersion = clampInt(projection && projection.combatTactics && projection.combatTactics.version, 0);
+    const tacticsEnabled = tacticsVersion === 1 || tacticsVersion === 2;
     return `
       <section class="season-ops-section-card season-ops-authoritative-section">
         <div class="season-ops-section-head">
@@ -1779,6 +1886,7 @@ export class AuthoritativeRunPanel {
     const playable = clampInt(card.cost, 0) <= clampInt(energy, 0);
     const focusKey = buildFocusKey("authoritative:card", card.instanceId);
     const upgraded = !!card.upgraded;
+    const tacticRoleLabel = formatCombatTacticRoleLabel(card.tacticRole);
     return `
       <article
         class="season-ops-authoritative-hand-card ${playable ? "is-playable" : "is-locked"}"
@@ -1793,7 +1901,12 @@ export class AuthoritativeRunPanel {
           <strong>${escapeHtml(card.name || formatMappedLabel(CARD_LABELS, card.cardId, "未知牌"))}</strong>
           <span class="season-ops-authoritative-card-cost">${clampInt(card.cost)}</span>
         </div>
-        ${upgraded ? `<div class="season-ops-inline-note">已精修</div>` : ""}
+        ${upgraded || tacticRoleLabel ? `
+          <div class="season-ops-authoritative-card-flags">
+            ${upgraded ? `<span class="season-ops-inline-note">已精修</span>` : ""}
+            ${tacticRoleLabel ? renderChip(tacticRoleLabel) : ""}
+          </div>
+        ` : ""}
         <p>${escapeHtml(card.description || "这张牌暂时没有更多描述。")}</p>
         <button
           type="button"
@@ -2021,12 +2134,98 @@ export class AuthoritativeRunPanel {
     `;
   }
 
+  renderCombatTacticRequirementRow(requirement = {}) {
+    const comparison = normalizeText(requirement.comparison) === "lte" ? "lte" : "gte";
+    const target = Math.max(1, clampInt(requirement.target, 1));
+    const actual = Math.max(0, clampInt(requirement.actual, 0));
+    const percent = comparison === "lte"
+      ? Math.min(100, Math.floor(Math.min(actual, target) * 100 / target))
+      : Math.min(100, Math.floor(actual * 100 / target));
+    const valueLabel = comparison === "lte"
+      ? `${actual} / 上限 ${target}`
+      : `${actual}/${target}`;
+    const ariaValueNow = comparison === "lte"
+      ? Math.min(actual, target)
+      : Math.min(actual, target);
+    const ariaValueText = comparison === "lte"
+      ? `当前 ${actual}，要求不超过 ${target}`
+      : `当前 ${actual}，目标 ${target}`;
+    return `
+      <div class="season-ops-authoritative-tactic-row ${requirement.met ? "is-met" : "is-unmet"} ${comparison === "lte" ? "is-limit" : ""}">
+        <div class="season-ops-authoritative-tactic-row-copy">
+          <span>${escapeHtml(requirement.label)}</span>
+          <strong>${escapeHtml(valueLabel)}</strong>
+        </div>
+        <div
+          class="season-ops-authoritative-tactic-track ${comparison === "lte" ? "is-limit" : ""}"
+          role="progressbar"
+          aria-label="${escapeHtml(requirement.label)}"
+          aria-valuemin="0"
+          aria-valuemax="${target}"
+          aria-valuenow="${ariaValueNow}"
+          aria-valuetext="${escapeHtml(ariaValueText)}"
+        >
+          <span style="width: ${percent}%"></span>
+        </div>
+      </div>
+    `;
+  }
+
+  renderCombatTacticEffectCopy(source = null) {
+    const effectParts = [];
+    if (clampInt(source && source.effects && source.effects.damageReduction, 0) > 0) {
+      effectParts.push(`敌方伤害 -${clampInt(source.effects.damageReduction, 0)}`);
+    }
+    if (clampInt(source && source.effects && source.effects.blockReduction, 0) > 0) {
+      effectParts.push(`敌方格挡 -${clampInt(source.effects.blockReduction, 0)}`);
+    }
+    return effectParts.length
+      ? `达成收益：${effectParts.join(" · ")}`
+      : normalizeText(source && source.rewardSummary, "达成后会削弱本次敌方意图。");
+  }
+
+  renderCombatTacticLine(line = {}) {
+    const tierLabel = formatCombatTacticTierLabel(line.tier);
+    const publicTitle = formatCombatTacticLineTitle(line);
+    return `
+      <div class="season-ops-authoritative-tactic-line ${line.completed ? "is-ready" : "is-active"}" data-authoritative-tactic-line="${escapeHtml(tierLabel)}">
+        <div class="season-ops-authoritative-choice-top">
+          <div class="season-ops-authoritative-tactic-heading">
+            <span class="season-ops-inline-note">${escapeHtml(tierLabel)}</span>
+            <strong>${escapeHtml(publicTitle)}</strong>
+          </div>
+          <span class="season-ops-meta-chip">${line.completed ? "已就绪" : "推进中"}</span>
+        </div>
+        ${line.prompt ? `<p>${escapeHtml(line.prompt)}</p>` : ""}
+        <div class="season-ops-authoritative-tactic-progress">
+          ${line.requirements.map(requirement => this.renderCombatTacticRequirementRow(requirement)).join("")}
+        </div>
+        <div class="season-ops-inline-note">${escapeHtml(this.renderCombatTacticEffectCopy(line))}</div>
+      </div>
+    `;
+  }
+
   renderCombatTacticPanel(source = null) {
     const tactic = normalizeCombatTactic(source);
     if (!tactic) return "";
-    const effectParts = [];
-    if (tactic.effects.damageReduction > 0) effectParts.push(`敌方伤害 -${tactic.effects.damageReduction}`);
-    if (tactic.effects.blockReduction > 0) effectParts.push(`敌方格挡 -${tactic.effects.blockReduction}`);
+    if (tactic.version === 2) {
+      const readyCount = tactic.lines.filter(line => line.completed).length;
+      return `
+        <article class="season-ops-authoritative-tactic" data-authoritative-tactic="true">
+          <div class="season-ops-authoritative-choice-top">
+            <div class="season-ops-authoritative-tactic-heading">
+              <span class="season-ops-inline-note">当前敌意题面</span>
+              <strong>${escapeHtml(tactic.title)}</strong>
+            </div>
+            <span class="season-ops-meta-chip">${readyCount > 0 ? `已就绪 ${readyCount}/2` : "双解进行中"}</span>
+          </div>
+          ${tactic.prompt ? `<p>${escapeHtml(tactic.prompt)}</p>` : ""}
+          <div class="season-ops-authoritative-tactic-line-grid">
+            ${tactic.lines.map(line => this.renderCombatTacticLine(line)).join("")}
+          </div>
+        </article>
+      `;
+    }
     return `
       <article class="season-ops-authoritative-tactic" data-authoritative-tactic="true">
         <div class="season-ops-authoritative-choice-top">
@@ -2038,24 +2237,9 @@ export class AuthoritativeRunPanel {
         </div>
         ${tactic.prompt ? `<p>${escapeHtml(tactic.prompt)}</p>` : ""}
         <div class="season-ops-authoritative-tactic-progress">
-          ${tactic.requirements.map(requirement => {
-            const percent = Math.min(100, Math.floor(requirement.actual * 100 / requirement.target));
-            return `
-              <div class="season-ops-authoritative-tactic-row">
-                <div class="season-ops-authoritative-tactic-row-copy">
-                  <span>${escapeHtml(requirement.label)}</span>
-                  <strong>${requirement.actual}/${requirement.target}</strong>
-                </div>
-                <div class="season-ops-authoritative-tactic-track" role="progressbar" aria-label="${escapeHtml(requirement.label)}" aria-valuemin="0" aria-valuemax="${requirement.target}" aria-valuenow="${Math.min(requirement.actual, requirement.target)}">
-                  <span style="width: ${percent}%"></span>
-                </div>
-              </div>
-            `;
-          }).join("")}
+          ${tactic.requirements.map(requirement => this.renderCombatTacticRequirementRow(requirement)).join("")}
         </div>
-        <div class="season-ops-inline-note">${escapeHtml(effectParts.length
-          ? `达成收益：${effectParts.join(" · ")}`
-          : (tactic.rewardSummary || "达成后会削弱本次敌方意图。"))}</div>
+        <div class="season-ops-inline-note">${escapeHtml(this.renderCombatTacticEffectCopy(tactic))}</div>
       </article>
     `;
   }
@@ -2066,6 +2250,9 @@ export class AuthoritativeRunPanel {
     const effectParts = [];
     if (resolution.damageReduction > 0) effectParts.push(`敌方伤害 -${resolution.damageReduction}`);
     if (resolution.blockReduction > 0) effectParts.push(`敌方格挡 -${resolution.blockReduction}`);
+    const selectedLineLabel = resolution.version === 2 && resolution.success
+      ? `${formatCombatTacticTierLabel(resolution.tier)} · ${formatCombatTacticLineTitle({ tier: resolution.tier, title: resolution.lineTitle })}`
+      : "";
     return `
       <article class="season-ops-authoritative-tactic is-resolution ${resolution.success ? "is-success" : "is-missed"}" data-authoritative-tactic-resolution="true">
         <div class="season-ops-authoritative-choice-top">
@@ -2075,8 +2262,14 @@ export class AuthoritativeRunPanel {
           </div>
           <span class="season-ops-meta-chip">${resolution.success ? "反制成功" : "未达成"}</span>
         </div>
+        ${selectedLineLabel ? `<div class="season-ops-authoritative-meta-row">${renderChip(selectedLineLabel)}</div>` : ""}
+        ${resolution.version === 2 && resolution.lines.length > 0 ? `
+          <div class="season-ops-authoritative-meta-row" data-authoritative-tactic-resolution-lines="true">
+            ${resolution.lines.map(line => renderChip(`${formatCombatTacticTierLabel(line.tier)} ${line.completed ? "已达成" : "未达成"}`)).join("")}
+          </div>
+        ` : ""}
         <div class="season-ops-authoritative-meta-row">
-          ${resolution.requirements.map(requirement => renderChip(`${requirement.label} ${requirement.actual}/${requirement.target}`)).join("")}
+          ${resolution.requirements.map(requirement => renderChip(`${requirement.label} ${normalizeText(requirement.comparison) === "lte" ? `${requirement.actual} / 上限 ${requirement.target}` : `${requirement.actual}/${requirement.target}`}`)).join("")}
         </div>
         <p>${escapeHtml(resolution.success
           ? (effectParts.join(" · ") || resolution.rewardSummary || "本次敌意已经削弱。")
@@ -2093,6 +2286,7 @@ export class AuthoritativeRunPanel {
       <div class="season-ops-authoritative-meta-row" data-combat-tactic-summary="true">
         ${renderChip(`敌意题面 ${summary.opportunities}`)}
         ${renderChip(`成功反制 ${summary.successes}`)}
+        ${summary.version === 2 ? renderChip(`逆解成功 ${summary.advancedSuccesses}`) : ""}
         ${renderChip(`反制率 ${rate}%`)}
       </div>
     `;
@@ -2333,9 +2527,15 @@ export class AuthoritativeRunPanel {
       const reductions = [];
       if (resolution.damageReduction > 0) reductions.push(`伤害 -${resolution.damageReduction}`);
       if (resolution.blockReduction > 0) reductions.push(`格挡 -${resolution.blockReduction}`);
+      const title = resolution.version === 2 && resolution.success && normalizeText(resolution.lineTitle)
+        ? `${formatCombatTacticTierLabel(resolution.tier)} · ${formatCombatTacticLineTitle({ tier: resolution.tier, title: resolution.lineTitle })}`
+        : resolution.title;
+      const lineResults = resolution.version === 2
+        ? resolution.lines.map(line => `${formatCombatTacticTierLabel(line.tier)}${line.completed ? "已达成" : "未达成"}`).join(" · ")
+        : "";
       return resolution.success
-        ? `${resolution.title}反制成功${reductions.length ? `，敌方${reductions.join("、")}` : ""}。`
-        : `${resolution.title}未达成；不追加额外惩罚。`;
+        ? `${title}反制成功${reductions.length ? `，敌方${reductions.join("、")}` : ""}。`
+        : `${resolution.title}未达成${lineResults ? `（${lineResults}）` : ""}；不追加额外惩罚。`;
     }
     if (type === "enemy_intent_resolved") {
       const prevented = [];

@@ -93,24 +93,82 @@ function chooseReward(view) {
   return ['choose_reward', { rewardId: reward.rewardId }];
 }
 
+function getTacticLineRequirement(line, metric) {
+  return Array.isArray(line?.requirements)
+    ? line.requirements.find(requirement => requirement?.metric === metric) || null
+    : null;
+}
+
+function parseRoleSequence(line) {
+  const requirement = getTacticLineRequirement(line, 'roleSequence');
+  const roles = String(requirement?.label || '')
+    .split('后接')
+    .map((segment) => {
+      if (segment === '攻式') return 'attack';
+      if (segment === '守式') return 'guard';
+      return '';
+    })
+    .filter(Boolean);
+  return roles.length > 0 ? roles : [];
+}
+
+function getNextRequiredRole(line) {
+  const requirement = getTacticLineRequirement(line, 'roleSequence');
+  const expectedRoles = parseRoleSequence(line);
+  if (!requirement || expectedRoles.length === 0) return '';
+  const progress = Math.max(0, Math.min(expectedRoles.length, Number(requirement.actual || 0)));
+  return progress < expectedRoles.length ? expectedRoles[progress] : '';
+}
+
+function isAttackCard(card) {
+  return card?.tacticRole === 'attack' || DAMAGE_CARDS.has(card?.cardId);
+}
+
+function isGuardCard(card) {
+  return card?.tacticRole === 'guard' || BLOCK_CARDS.has(card?.cardId);
+}
+
+function getCompletedLineDamageReduction(tactic) {
+  if (!Array.isArray(tactic?.lines)) {
+    return tactic?.completed ? Number(tactic.effects?.damageReduction || 0) : 0;
+  }
+  const completedLines = Array.isArray(tactic?.lines)
+    ? tactic.lines.filter(line => line?.completed)
+    : [];
+  const selectedLine = completedLines.find(line => line?.tier === 'advanced')
+    || completedLines.find(line => line?.tier === 'standard')
+    || null;
+  return Number(selectedLine?.effects?.damageReduction || 0);
+}
+
 function chooseBattleAction(view) {
   const incomingDamage = Number(view.battle?.enemy?.intent?.amount || 0);
   const enemyBlock = Number(view.battle?.enemy?.block || 0);
   const tactic = view.battle?.tactic;
-  const requirements = Array.isArray(tactic?.requirements) ? tactic.requirements : [];
-  const blockRequirement = requirements.find(requirement => requirement.metric === 'blockGained');
-  const damageRequirement = requirements.find(requirement => requirement.metric === 'damageDealt');
-  const needsBlock = blockRequirement && !blockRequirement.met;
-  const needsDamage = damageRequirement && !damageRequirement.met;
+  const hand = Array.isArray(view.player?.hand) ? view.player.hand : [];
+  const preferredLine = Array.isArray(tactic?.lines)
+    ? tactic.lines.find(line => line?.tier === 'standard') || tactic.lines[0] || null
+    : tactic;
+  const blockRequirement = getTacticLineRequirement(preferredLine, 'blockGained');
+  const damageRequirement = getTacticLineRequirement(preferredLine, 'damageDealt');
+  const nextRole = getNextRequiredRole(preferredLine);
+  const needsBlock = !!blockRequirement && !blockRequirement.met;
+  const needsDamage = !!damageRequirement && !damageRequirement.met;
   const effectiveIncomingDamage = Math.max(
     0,
-    incomingDamage - (tactic?.completed ? Number(tactic.effects?.damageReduction || 0) : 0),
+    incomingDamage - getCompletedLineDamageReduction(tactic),
   );
-  const cards = view.player.hand.slice().sort((left, right) => {
-    const leftBlocks = BLOCK_CARDS.has(left.cardId) ? 1 : 0;
-    const rightBlocks = BLOCK_CARDS.has(right.cardId) ? 1 : 0;
-    const leftDamages = DAMAGE_CARDS.has(left.cardId) ? 1 : 0;
-    const rightDamages = DAMAGE_CARDS.has(right.cardId) ? 1 : 0;
+  const cards = hand.slice().sort((left, right) => {
+    const leftBlocks = isGuardCard(left) ? 1 : 0;
+    const rightBlocks = isGuardCard(right) ? 1 : 0;
+    const leftDamages = isAttackCard(left) ? 1 : 0;
+    const rightDamages = isAttackCard(right) ? 1 : 0;
+    const leftRoleMatch = nextRole && left.tacticRole === nextRole ? 1 : 0;
+    const rightRoleMatch = nextRole && right.tacticRole === nextRole ? 1 : 0;
+    const roleOrder = rightRoleMatch - leftRoleMatch;
+    const mixedRequirementOrder = needsBlock && needsDamage
+      ? (rightBlocks + rightDamages) - (leftBlocks + leftDamages)
+      : 0;
     const tacticOrder = needsBlock
       ? rightBlocks - leftBlocks
       : needsDamage
@@ -119,10 +177,17 @@ function chooseBattleAction(view) {
     const defenseOrder = effectiveIncomingDamage > view.player.block
       ? rightBlocks - leftBlocks
       : leftBlocks - rightBlocks;
-    return tacticOrder || defenseOrder || right.cost - left.cost || left.instanceId.localeCompare(right.instanceId);
+    const guardBreakOrder = enemyBlock > 0 ? rightDamages - leftDamages : 0;
+    return roleOrder
+      || mixedRequirementOrder
+      || tacticOrder
+      || defenseOrder
+      || guardBreakOrder
+      || right.cost - left.cost
+      || left.instanceId.localeCompare(right.instanceId);
   });
-  const damageIntoGuard = enemyBlock > 0
-    ? cards.find(entry => DAMAGE_CARDS.has(entry.cardId) && entry.cost <= view.player.energy)
+  const damageIntoGuard = enemyBlock > 0 && nextRole !== 'guard'
+    ? cards.find(entry => isAttackCard(entry) && entry.cost <= view.player.energy)
     : null;
   const card = damageIntoGuard || cards.find(entry => entry.cost <= view.player.energy);
   return card
@@ -254,7 +319,7 @@ function assertHigherScorePaysCost(scenarioId, left, right) {
   );
 }
 
-assert.equal(CONTENT_VERSION, 'authoritative-trials-v7');
+assert.equal(CONTENT_VERSION, 'authoritative-trials-v8');
 
 const report = {
   reportVersion: 'fate-chronicle-branch-balance-v1',

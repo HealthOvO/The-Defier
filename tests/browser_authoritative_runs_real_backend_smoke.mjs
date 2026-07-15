@@ -398,13 +398,14 @@ async function exerciseWorldRiftAccountSwitch(page, { runId, version }) {
   }
 }
 
-function chooseDecision(projection, { routePolicy = 'safe' } = {}) {
+function chooseDecision(projection, { routePolicy = 'safe', routeEnemyId = '' } = {}) {
   if (!projection) return null;
   if (projection.phase === 'route') {
     const choices = [...(projection.route?.choices || [])].sort((left, right) => (
       Number(left.routeContract?.difficultyRating || 0) - Number(right.routeContract?.difficultyRating || 0)
     ));
-    const choice = routePolicy === 'risky' ? choices.at(-1) : choices[0];
+    const choice = choices.find(entry => entry.enemyId === routeEnemyId)
+      || (routePolicy === 'risky' ? choices.at(-1) : choices[0]);
     return choice ? {
       command: 'select_node',
       selector: `[data-season-ops-action="authoritative-select-node"][data-node-id="${cssValue(choice.nodeId)}"]`,
@@ -442,27 +443,57 @@ function chooseDecision(projection, { routePolicy = 'safe' } = {}) {
   const blockCards = new Set(['guard', 'iron_mandate', 'ember_riposte', 'mirror_breath', 'warding_stride']);
   const damageCards = new Set(['strike', 'sky_pierce', 'life_siphon', 'fracture', 'ember_riposte', 'severing_flow', 'archive_surge', 'sealbreaker']);
   const tactic = projection.battle?.tactic;
-  const requirements = Array.isArray(tactic?.requirements) ? tactic.requirements : [];
+  const tacticLines = Array.isArray(tactic?.lines) && tactic.lines.length > 0
+    ? tactic.lines
+    : tactic ? [tactic] : [];
+  const advancedLine = tacticLines.find(line => line.tier === 'advanced') || null;
+  if (advancedLine?.completed) {
+    return {
+      command: 'end_turn',
+      selector: '[data-season-ops-action="authoritative-end-turn"]',
+    };
+  }
+  const advancedMax = advancedLine?.requirements?.find(requirement => requirement.metric === 'cardsPlayedMax');
+  const advancedStillReachable = advancedLine
+    && (!advancedMax || Number(advancedMax.actual) < Number(advancedMax.target));
+  const targetLine = advancedStillReachable
+    ? advancedLine
+    : tacticLines.find(line => line.tier === 'standard') || tacticLines[0] || null;
+  const requirements = Array.isArray(targetLine?.requirements) ? targetLine.requirements : [];
   const blockRequirement = requirements.find(requirement => requirement.metric === 'blockGained');
   const damageRequirement = requirements.find(requirement => requirement.metric === 'damageDealt');
+  const sequenceRequirement = requirements.find(requirement => requirement.metric === 'roleSequence');
   const needsBlock = blockRequirement && !blockRequirement.met;
   const needsDamage = damageRequirement && !damageRequirement.met;
+  const sequenceLabel = String(sequenceRequirement?.label || '');
+  const sequenceProgress = Number(sequenceRequirement?.actual || 0);
+  const desiredRole = sequenceRequirement && !sequenceRequirement.met
+    ? sequenceLabel.startsWith('攻式')
+      ? sequenceProgress === 0 ? 'attack' : 'guard'
+      : sequenceProgress === 0 ? 'guard' : 'attack'
+    : '';
+  const completedLine = tacticLines.find(line => line.tier === 'advanced' && line.completed)
+    || tacticLines.find(line => line.completed)
+    || null;
   const effectiveIncoming = Math.max(
     0,
-    incoming - (tactic?.completed ? Number(tactic.effects?.damageReduction || 0) : 0),
+    incoming - Number(completedLine?.effects?.damageReduction || 0),
   );
   const cards = [...(projection.player?.hand || [])].sort((left, right) => {
     const leftBlocks = blockCards.has(left.cardId) ? 1 : 0;
     const rightBlocks = blockCards.has(right.cardId) ? 1 : 0;
     const leftDamages = damageCards.has(left.cardId) ? 1 : 0;
     const rightDamages = damageCards.has(right.cardId) ? 1 : 0;
+    const roleOrder = desiredRole
+      ? Number(right.tacticRole === desiredRole) - Number(left.tacticRole === desiredRole)
+      : 0;
     const tacticOrder = needsBlock
       ? rightBlocks - leftBlocks
       : needsDamage
         ? rightDamages - leftDamages
         : 0;
     const defenseOrder = effectiveIncoming > playerBlock ? rightBlocks - leftBlocks : leftBlocks - rightBlocks;
-    return tacticOrder || defenseOrder || Number(right.cost || 0) - Number(left.cost || 0)
+    return roleOrder || tacticOrder || defenseOrder || Number(right.cost || 0) - Number(left.cost || 0)
       || String(left.instanceId).localeCompare(String(right.instanceId));
   });
   const damageIntoGuard = enemyBlock > 0
@@ -561,6 +592,26 @@ async function readLayout(page) {
       }).filter(entry => entry.width < 40 || entry.height < 40),
     };
   });
+}
+
+async function captureLatestReceiptScreenshot(page, screenshotPath) {
+  const receiptCard = page.locator('.season-ops-authoritative-settlement')
+    .filter({ hasText: '最近战况' })
+    .first();
+  if (await receiptCard.count()) {
+    await receiptCard.screenshot({
+      path: screenshotPath,
+      animations: 'disabled',
+      timeout: 9000,
+    });
+    return;
+  }
+  await safeAuditScreenshot(
+    page,
+    screenshotPath,
+    'browser_authoritative_runs_real_backend_smoke',
+    { fullPage: false, timeout: 9000 },
+  );
 }
 
 async function completeAdditionalMode(page, mode, { maxAttempts = 3, routePolicy = 'safe' } = {}) {
@@ -776,8 +827,8 @@ try {
   add('public projection hides seed and ordered draw pile', !/"(?:seed|rng|drawPile)"/.test(publicProjectionJson));
   const routeContracts = panel.projection?.route?.choices?.map(choice => choice.routeContract) || [];
   const routePlayerCopy = await page.locator('.season-ops-authoritative-panel').innerText();
-  add('v7 route projection exposes tactics and two readable contracts without private coefficients', panel.projection?.contentVersion === 'authoritative-trials-v7'
-    && panel.projection?.combatTactics?.version === 1
+  add('v8 route projection exposes dual tactics and two readable contracts without private coefficients', panel.projection?.contentVersion === 'authoritative-trials-v8'
+    && panel.projection?.combatTactics?.version === 2
     && Number(panel.projection?.route?.contractVersion) === 1
     && routeContracts.length === 2
     && routeContracts.every(contract => Number(contract?.version) === 1
@@ -803,15 +854,38 @@ try {
   let openingFairnessChecked = false;
   let routeContractRewardChecked = false;
   let tacticPanelProof = null;
-  let tacticReceiptProof = null;
+  let failedTacticReceiptProof = null;
+  let defendTurnaboutProof = null;
   let persistentEnemyBlockProof = null;
   let enemyBlockAbsorptionProof = null;
   let tacticMobileProof = null;
+  const ladderRoutePolicies = new Map([
+    [1, 'risky'],
+    [2, 'risky'],
+    [3, 'safe'],
+  ]);
+  const ladderRouteEnemies = new Map([
+    [1, 'oath_scribe'],
+    [2, 'mirror_seer'],
+  ]);
   const ladderRewardKinds = [];
   const ladderRewardUi = [];
   while (!['completed', 'defeated', 'abandoned'].includes(panel.projection?.phase) && actionCount < 256) {
     const before = panel;
-    const decision = chooseDecision(before.projection);
+    const routeStage = Number(before.projection?.route?.stage || 0);
+    const routePolicy = ladderRoutePolicies.get(routeStage) || 'safe';
+    const routeEnemyId = ladderRouteEnemies.get(routeStage) || '';
+    const forceFailure = !failedTacticReceiptProof
+      && before.projection?.phase === 'battle'
+      && before.projection?.battle?.enemy?.enemyId === 'oath_scribe'
+      && before.projection?.battle?.enemy?.intent?.type === 'fortify'
+      && Number(before.projection?.battle?.tactic?.cardsPlayed || 0) === 0;
+    const decision = forceFailure
+      ? {
+          command: 'end_turn',
+          selector: '[data-season-ops-action="authoritative-end-turn"]',
+        }
+      : chooseDecision(before.projection, { routePolicy, routeEnemyId });
     if (!decision) throw new Error(`no playable UI command: ${JSON.stringify(before)}`);
     const selectedCard = decision.command === 'play_card'
       ? before.projection?.player?.hand?.find(card => card.instanceId === decision.cardInstanceId)
@@ -873,18 +947,49 @@ try {
     actionCount += 1;
 
     const actionEvents = Array.isArray(panel.receipt?.events) ? panel.receipt.events : [];
-    if (decision.command === 'end_turn' && !tacticReceiptProof) {
-      const tacticEvent = actionEvents.find(event => event.type === 'enemy_tactic_resolved');
+    if (decision.command === 'end_turn' && !failedTacticReceiptProof) {
+      const tacticEvent = actionEvents.find(event => event.type === 'enemy_tactic_resolved'
+        && Number(event.version) === 2
+        && event.success === false);
       if (tacticEvent) {
+        const enemyEvent = actionEvents.find(event => event.type === 'enemy_intent_resolved');
+        const intent = before.projection?.battle?.enemy?.intent || {};
+        const playerBlock = Number(before.projection?.player?.block || 0);
+        const playerHp = Number(before.projection?.player?.hp || 0);
         const tacticReceiptCopy = await page.locator('.season-ops-authoritative-panel').innerText();
-        tacticReceiptProof = {
+        failedTacticReceiptProof = {
           tacticEvent,
+          enemyEvent,
           projected: panel.projection?.combatTactics?.lastResolution || null,
-          textVisible: tacticEvent.success
-            ? /反制成功/.test(tacticReceiptCopy)
-            : /未达成|不追加额外惩罚/.test(tacticReceiptCopy),
+          intent,
+          playerBlock,
+          expectedDamageTaken: Math.min(playerHp, Math.max(0, Number(intent.amount || 0) - playerBlock)),
+          expectedEnemyBlock: Number(intent.block || 0),
+          textVisible: /未达成/.test(tacticReceiptCopy) && /不追加额外惩罚/.test(tacticReceiptCopy),
           privateFieldsHidden: !/damageThresholdBps|blockThresholdBps|blockReductionBps|tacticId|intentType/.test(tacticReceiptCopy),
         };
+        await captureLatestReceiptScreenshot(page, path.join(outDir, 'combat-tactic-failure-receipt-desktop.png'));
+      }
+    }
+    if (decision.command === 'end_turn' && !defendTurnaboutProof) {
+      const tacticEvent = actionEvents.find(event => event.type === 'enemy_tactic_resolved'
+        && event.success
+        && event.intentType === 'defend_attack'
+        && event.tier === 'advanced'
+        && event.lineId === 'turnabout');
+      if (tacticEvent) {
+        const enemyEvent = actionEvents.find(event => event.type === 'enemy_intent_resolved');
+        const tacticReceiptCopy = await page.locator('.season-ops-authoritative-panel').innerText();
+        defendTurnaboutProof = {
+          tacticEvent,
+          enemyEvent,
+          projected: panel.projection?.combatTactics?.lastResolution || null,
+          textVisible: /反制成功/.test(tacticReceiptCopy)
+            && !!tacticEvent.lineTitle
+            && tacticReceiptCopy.includes(tacticEvent.lineTitle),
+          privateFieldsHidden: !/damageThresholdBps|blockThresholdBps|blockReductionBps|tacticId|intentType/.test(tacticReceiptCopy),
+        };
+        await captureLatestReceiptScreenshot(page, path.join(outDir, 'combat-tactic-turnabout-receipt-desktop.png'));
       }
     }
 
@@ -908,6 +1013,8 @@ try {
       tacticMobileProof = {
         layout: mobileTacticLayout,
         textVisible: /当前敌意题面/.test(mobileTacticCopy)
+          && /基础解/.test(mobileTacticCopy)
+          && /逆解/.test(mobileTacticCopy)
           && /当前格挡会吸收本回合伤害/.test(mobileTacticCopy),
       };
       await safeAuditScreenshot(page, path.join(outDir, 'combat-tactic-persistent-block-mobile.png'), 'browser_authoritative_runs_real_backend_smoke', { timeout: 9000 });
@@ -941,14 +1048,33 @@ try {
         && battlePlayerCopy.includes(battleContract.difficultySummary)
         && !/enemyAdjustments|rewardAdjustments/.test(JSON.stringify(panel.projection?.battle || null)), battlePlayerCopy);
       const tactic = panel.projection.battle?.tactic;
+      const tacticLines = Array.isArray(tactic?.lines) ? tactic.lines : [];
+      const tacticLineCount = await page.locator('[data-authoritative-tactic-line]').count();
+      const tacticRoleLabels = [...new Set((panel.projection.player?.hand || [])
+        .map(card => card.tacticRole === 'attack' ? '攻式' : card.tacticRole === 'guard' ? '守式' : '')
+        .filter(Boolean))];
+      const cardLimit = tacticLines
+        .flatMap(line => line.requirements || [])
+        .find(requirement => requirement.metric === 'cardsPlayedMax');
       tacticPanelProof = {
         tactic,
+        tacticLineCount,
+        tacticRoleLabels,
         textVisible: /当前敌意题面/.test(battlePlayerCopy)
           && !!tactic?.title
           && battlePlayerCopy.includes(tactic.title)
-          && (tactic.requirements || []).every(requirement => battlePlayerCopy.includes(`${requirement.actual}/${requirement.target}`)),
+          && tacticLines.length === 2
+          && tacticLines.every(line => battlePlayerCopy.includes(line.tier === 'advanced' ? '逆解' : '基础解')
+            && battlePlayerCopy.includes(String(line.title || '').split('·').at(-1).trim())
+            && line.requirements.every(requirement => battlePlayerCopy.includes(requirement.label)))
+          && tacticRoleLabels.length > 0
+          && tacticRoleLabels.every(label => battlePlayerCopy.includes(label))
+          && !!cardLimit
+          && battlePlayerCopy.includes(`${cardLimit.actual} / 上限 ${cardLimit.target}`),
         privateFieldsHidden: !/blockThresholdBps|damageThresholdBps|blockReductionBps/.test(JSON.stringify(panel.projection)),
       };
+      await page.locator('[data-authoritative-tactic="true"]').scrollIntoViewIfNeeded();
+      await safeAuditScreenshot(page, path.join(outDir, 'combat-tactic-dual-lines-desktop.png'), 'browser_authoritative_runs_real_backend_smoke', { timeout: 9000 });
       const battlePhaseLayout = await page.locator('[data-authoritative-phase="battle"]').evaluate(element => {
         const root = element.closest('#season-ops-screen');
         const rootRect = root?.getBoundingClientRect();
@@ -1015,19 +1141,49 @@ try {
     }
   }
 
-  add('v7 battle UI renders exact public tactic progress and effects without private coefficients', !!tacticPanelProof?.tactic
-    && Number(tacticPanelProof.tactic.version) === 1
-    && Array.isArray(tacticPanelProof.tactic.requirements)
-    && tacticPanelProof.tactic.requirements.length > 0
-    && tacticPanelProof.tactic.requirements.every(requirement => Number(requirement.target) > 0)
+  add('v8 battle UI renders both public tactic lines and exact progress without private coefficients', !!tacticPanelProof?.tactic
+    && Number(tacticPanelProof.tactic.version) === 2
+    && Array.isArray(tacticPanelProof.tactic.lines)
+    && tacticPanelProof.tactic.lines.length === 2
+    && tacticPanelProof.tacticLineCount === 2
+    && tacticPanelProof.tactic.lines.some(line => line.tier === 'standard')
+    && tacticPanelProof.tactic.lines.some(line => line.tier === 'advanced')
+    && tacticPanelProof.tactic.lines.every(line => line.requirements.length > 0
+      && line.requirements.every(requirement => Number(requirement.target) > 0))
     && tacticPanelProof.textVisible
     && tacticPanelProof.privateFieldsHidden, JSON.stringify(tacticPanelProof));
-  add('real end-turn receipt keeps tactic success or failure readable and authoritative', !!tacticReceiptProof?.tacticEvent
-    && Number(tacticReceiptProof.tacticEvent.version) === 1
-    && tacticReceiptProof.projected?.tacticId === tacticReceiptProof.tacticEvent.tacticId
-    && tacticReceiptProof.projected?.success === tacticReceiptProof.tacticEvent.success
-    && tacticReceiptProof.textVisible
-    && tacticReceiptProof.privateFieldsHidden, JSON.stringify(tacticReceiptProof));
+  add('real end-turn receipt keeps tactic success or failure readable and authoritative', !!failedTacticReceiptProof?.tacticEvent
+    && Number(failedTacticReceiptProof.tacticEvent.version) === 2
+    && failedTacticReceiptProof.tacticEvent.success === false
+    && Number(failedTacticReceiptProof.tacticEvent.damageReduction) === 0
+    && Number(failedTacticReceiptProof.tacticEvent.blockReduction) === 0
+    && Number(failedTacticReceiptProof.enemyEvent?.damagePrevented) === 0
+    && Number(failedTacticReceiptProof.enemyEvent?.blockPrevented) === 0
+    && Number(failedTacticReceiptProof.enemyEvent?.damageTaken) === Number(failedTacticReceiptProof.expectedDamageTaken)
+    && Number(failedTacticReceiptProof.enemyEvent?.enemyBlock) === Number(failedTacticReceiptProof.expectedEnemyBlock)
+    && failedTacticReceiptProof.projected?.tacticId === failedTacticReceiptProof.tacticEvent.tacticId
+    && failedTacticReceiptProof.projected?.success === false
+    && failedTacticReceiptProof.textVisible
+    && failedTacticReceiptProof.privateFieldsHidden, JSON.stringify(failedTacticReceiptProof));
+  const turnaboutRoleSequence = defendTurnaboutProof?.tacticEvent?.requirements
+    ?.find(requirement => requirement.metric === 'roleSequence');
+  const turnaboutCardLimit = defendTurnaboutProof?.tacticEvent?.requirements
+    ?.find(requirement => requirement.metric === 'cardsPlayedMax');
+  add('real strategy completes and locks an advanced counterplay line', !!defendTurnaboutProof?.tacticEvent
+    && defendTurnaboutProof.tacticEvent.intentType === 'defend_attack'
+    && defendTurnaboutProof.tacticEvent.lineId === 'turnabout'
+    && defendTurnaboutProof.projected?.lineId === 'turnabout'
+    && defendTurnaboutProof.projected?.tier === 'advanced'
+    && Number(turnaboutRoleSequence?.actual) === 2
+    && turnaboutRoleSequence?.met === true
+    && turnaboutCardLimit?.met === true
+    && Number(turnaboutCardLimit?.actual) <= Number(turnaboutCardLimit?.target)
+    && Number(defendTurnaboutProof.tacticEvent.damageReduction) === 3
+    && Number(defendTurnaboutProof.tacticEvent.blockReduction) === 3
+    && Number(defendTurnaboutProof.enemyEvent?.damagePrevented) === 3
+    && Number(defendTurnaboutProof.enemyEvent?.blockPrevented) === 3
+    && defendTurnaboutProof.textVisible
+    && defendTurnaboutProof.privateFieldsHidden, JSON.stringify(defendTurnaboutProof));
   add('enemy fortify or mixed guard persists into the following real player turn', Number(persistentEnemyBlockProof?.resolvedBlock) > 0
     && Number(persistentEnemyBlockProof?.persistedBlock) === Number(persistentEnemyBlockProof?.resolvedBlock)
     && Number(persistentEnemyBlockProof?.persistedBlock) <= Number(persistentEnemyBlockProof?.advertisedBlock)
@@ -1048,12 +1204,15 @@ try {
     && Number(panel.projection?.summary?.scoreBreakdown?.routeBonus) === Number(panel.projection?.summary?.routeResolution?.totalBonus)
     && panel.projection?.summary?.routeResolution?.selections?.length === panel.projection?.route?.totalStages, JSON.stringify(panel.projection?.summary));
   const tacticTerminalCopy = await page.locator('.season-ops-authoritative-panel').innerText();
-  add('terminal projection and UI summarize real combat tactic opportunities and successes', Number(panel.projection?.summary?.combatTactics?.version) === 1
+  add('terminal projection and UI summarize real combat tactic opportunities and advanced successes', Number(panel.projection?.summary?.combatTactics?.version) === 2
     && Number(panel.projection?.summary?.combatTactics?.opportunities) > 0
     && Number(panel.projection?.summary?.combatTactics?.successes) >= 0
     && Number(panel.projection?.summary?.combatTactics?.successes) <= Number(panel.projection?.summary?.combatTactics?.opportunities)
+    && Number(panel.projection?.summary?.combatTactics?.advancedSuccesses) > 0
+    && Number(panel.projection?.summary?.combatTactics?.advancedSuccesses) <= Number(panel.projection?.summary?.combatTactics?.successes)
     && /敌意题面/.test(tacticTerminalCopy)
     && /成功反制/.test(tacticTerminalCopy)
+    && /逆解/.test(tacticTerminalCopy)
     && /反制率/.test(tacticTerminalCopy), tacticTerminalCopy);
   add('challenge ladder real UI exercises targeted upgrade and bounded trim', Number(panel.projection?.stats?.cardsUpgraded) >= 1
     && Number(panel.projection?.stats?.cardsRemoved) === 1

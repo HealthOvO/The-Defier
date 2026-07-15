@@ -132,16 +132,16 @@ assert.equal(defaultBeginResult.success, true);
 assert.deepEqual(signingCalls.at(-1).payload, {
   clientRunId: 'ar-client-api-default-0001',
   mode: 'pve',
-  contentVersion: 'authoritative-trials-v7'
-}, 'begin signature should default to the current v7 content snapshot without changing the signed field set');
+  contentVersion: 'authoritative-trials-v8'
+}, 'begin signature should default to the current v8 content snapshot without changing the signed field set');
 assert.deepEqual(requestCalls.at(-1).options.data, {
   clientRunId: 'ar-client-api-default-0001',
   mode: 'pve',
-  contentVersion: 'authoritative-trials-v7',
+  contentVersion: 'authoritative-trials-v8',
   salt: 'authoritative-client-salt',
   signature: 'b'.repeat(64),
   signatureMode: 'session'
-}, 'begin request body should keep the existing signed payload shape when defaulting to v7');
+}, 'begin request body should keep the existing signed payload shape when defaulting to v8');
 assert.equal(
   defaultBeginResult.projection?.contentVersion,
   'authoritative-trials-v6',
@@ -394,7 +394,7 @@ const serviceBegin = await service.begin({ mode: 'pve', expectedUserId: 'service
 assert.equal(serviceBegin.success, true);
 assert.equal(beginCalls.length, 1);
 assert.equal(beginCalls[0].payload.clientRunId, 'ar-client-generated-0001', 'service begin should generate and cache a clientRunId');
-assert.equal(beginCalls[0].payload.contentVersion, 'authoritative-trials-v7', 'service begin should pin the current authoritative content snapshot');
+assert.equal(beginCalls[0].payload.contentVersion, 'authoritative-trials-v8', 'service begin should pin the current authoritative content snapshot');
 assert.equal(service.getState().runId, 'ar-service-run-0001');
 assert.equal(service.getState().projection.contentVersion, 'authoritative-trials-v6', 'service should preserve a legacy v6 response projection without rewriting it to v7');
 assert.equal(service.getState().projection.version, 1);

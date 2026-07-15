@@ -252,7 +252,12 @@ function createTacticProbe({
   state.player.drawPile = [];
   state.player.discardPile = [];
   if (state.battle.tacticTurn) {
-    state.battle.tacticTurn = { damageDealt: 0, blockGained: 0, cardsPlayed: 0 };
+    state.battle.tacticTurn = {
+      damageDealt: 0,
+      blockGained: 0,
+      cardsPlayed: 0,
+      ...(content.combatTactics?.version === 2 ? { roles: [] } : {}),
+    };
   }
   return state;
 }
@@ -273,9 +278,104 @@ function findEvent(events, type) {
   return events.find(event => event.type === type);
 }
 
+function findTacticLine(tactic, lineId) {
+  return tactic?.lines?.find(line => line.lineId === lineId) || null;
+}
+
+const FROZEN_V5_CONTENT_HASH = 'b1787bc02a98b459641c5dce541a56e3c3476724c7ae3083efc1b2e8e372b280';
+const FROZEN_V6_CONTENT_HASH = '25e7e2f3fab1b58f477f6c016d7bdea6c43292bcabf635b5f0f9d8ff241c9abc';
+const FROZEN_V7_CONTENT_HASH = 'a89a387d2558df8e982de8951979f930c96891574fcae2b68d28fb5ae2a7a062';
+const HISTORICAL_V7_COMBAT_TACTICS = Object.freeze({
+  version: 1,
+  reportVersion: 'authoritative-combat-tactics-v1',
+  rewardCardPool: ['warding_stride', 'sealbreaker'],
+  profiles: {
+    attack: {
+      tacticId: 'brace',
+      title: '守势',
+      prompt: '在敌方进攻落下前建立足够格挡。',
+      blockThresholdBps: 7000,
+      minBlockThreshold: 4,
+      damageReduction: 2,
+      rewardSummary: '达成后本次敌方伤害减少 2 点。'
+    },
+    fortify: {
+      tacticId: 'break',
+      title: '破阵',
+      prompt: '在敌方结印前打出足够伤害，压缩其护势。',
+      damageThresholdBps: 7500,
+      minDamageThreshold: 5,
+      blockReductionBps: 5000,
+      rewardSummary: '达成后本次敌方格挡减半。'
+    },
+    defend_attack: {
+      tacticId: 'balance',
+      title: '争衡',
+      prompt: '同时完成进攻与防守，拆解敌方攻守一体。',
+      damageThresholdBps: 5000,
+      blockThresholdBps: 5000,
+      minDamageThreshold: 4,
+      minBlockThreshold: 3,
+      damageReduction: 2,
+      blockReduction: 2,
+      rewardSummary: '达成后本次敌方伤害与格挡各减少 2 点。'
+    },
+  },
+});
+
+function createHistoricalV7Content() {
+  const content = cloneState(CONTENT_SNAPSHOT);
+  content.contentVersion = 'authoritative-trials-v7';
+  content.combatTactics = cloneState(HISTORICAL_V7_COMBAT_TACTICS);
+  return content;
+}
+
+function createHistoricalV6Content() {
+  const content = cloneState(CONTENT_SNAPSHOT);
+  content.contentVersion = 'authoritative-trials-v6';
+  delete content.combatTactics;
+  delete content.cards.warding_stride;
+  delete content.cards.sealbreaker;
+  const auditCashout = content.scenarios['chronicle-mirror-audit'].branchPlan.options
+    .find(option => option.branchId === 'audit_cashout');
+  const sealRush = content.scenarios['chronicle-rift-seal'].branchPlan.options
+    .find(option => option.branchId === 'seal_rush');
+  auditCashout.enemyId = 'mirror_duelist';
+  delete sealRush.scoreMultiplier;
+  return content;
+}
+
+function createHistoricalV5Content() {
+  const content = createHistoricalV6Content();
+  content.contentVersion = 'authoritative-trials-v5';
+  BRANCHED_FATE_SCENARIO_IDS.forEach((scenarioId) => {
+    delete content.scenarios[scenarioId];
+  });
+  return content;
+}
+
+const HISTORICAL_V5_CONTENT = createHistoricalV5Content();
+const HISTORICAL_V6_CONTENT = createHistoricalV6Content();
+const HISTORICAL_V7_CONTENT = createHistoricalV7Content();
+
 assert.strictEqual(PROTOCOL_VERSION, 'authoritative-run-v2');
-assert.strictEqual(CONTENT_VERSION, 'authoritative-trials-v7');
+assert.strictEqual(CONTENT_VERSION, 'authoritative-trials-v8');
 assert.match(CONTENT_HASH, /^[a-f0-9]{64}$/i, 'content hash should stay a canonical SHA-256');
+assert.strictEqual(
+  hashCanonical(HISTORICAL_V5_CONTENT),
+  FROZEN_V5_CONTENT_HASH,
+  'historical v5 content must preserve the frozen compatibility hash',
+);
+assert.strictEqual(
+  hashCanonical(HISTORICAL_V6_CONTENT),
+  FROZEN_V6_CONTENT_HASH,
+  'historical v6 content must preserve the frozen compatibility hash',
+);
+assert.strictEqual(
+  crypto.createHash('sha256').update(stableStringify(HISTORICAL_V7_CONTENT)).digest('hex'),
+  FROZEN_V7_CONTENT_HASH,
+  'historical v7 content must preserve the frozen compatibility hash',
+);
 assert.deepStrictEqual(FATE_CHRONICLE_SCENARIO_IDS, [
   'chronicle-ember-guard',
   'chronicle-ember-edge',
@@ -374,11 +474,12 @@ assert(!publicJson.includes('"drawPile":'), 'public projection must not expose o
 assert.strictEqual(publicInitial.route.contractVersion, 1);
 assert.strictEqual(publicInitial.route.choices.length, 2);
 assert(publicInitial.route.choices.every(choice => choice.routeContract?.version === 1));
-assert.strictEqual(publicInitial.combatTactics.version, 1);
+assert.strictEqual(publicInitial.combatTactics.version, 2);
 assert.strictEqual(publicInitial.combatTactics.reportVersion, CONTENT_SNAPSHOT.combatTactics.reportVersion);
 assert.strictEqual(publicInitial.combatTactics.lastResolution, null);
 assert.strictEqual(publicInitial.stats.combatTacticOpportunities, 0);
 assert.strictEqual(publicInitial.stats.combatTacticSuccesses, 0);
+assert.strictEqual(publicInitial.stats.combatTacticAdvancedSuccesses, 0);
 assert(!publicJson.includes('enemyAdjustments'), 'public projection must not expose private enemy coefficients');
 assert(!publicJson.includes('rewardAdjustments'), 'public projection must not expose private reward coefficients');
 assert.throws(
@@ -391,7 +492,7 @@ assert.throws(
   error => error.reason === 'command_not_allowed',
 );
 assert.strictEqual(stableStringify(initial), initialCopy, 'rejected commands must not mutate canonical state');
-assert(initial.player.deck.every(card => card.upgraded === false), 'v7 genesis should explicitly pin every card as unupgraded');
+assert(initial.player.deck.every(card => card.upgraded === false), 'v8 genesis should explicitly pin every card as unupgraded');
 assert.deepStrictEqual(publicInitial.player.upgradedDeckCounts, {});
 assert.strictEqual(publicInitial.player.deckCrafting.minDeckSize, 8);
 
@@ -445,7 +546,297 @@ assert.throws(
   'commands must not execute against a different immutable content snapshot',
 );
 
-const tacticThresholdCases = [
+const tacticRoleProbe = createTacticProbe({
+  label: 'tactic-role-projection',
+  handCardIds: ['strike', 'guard', 'insight', 'ember_riposte'],
+});
+const projectedTacticRoleHand = Object.fromEntries(
+  projectState(tacticRoleProbe, CONTENT_SNAPSHOT).player.hand.map(card => [card.cardId, card.tacticRole]),
+);
+assert.strictEqual(projectedTacticRoleHand.strike, 'attack');
+assert.strictEqual(projectedTacticRoleHand.guard, 'guard');
+assert.strictEqual(projectedTacticRoleHand.insight, undefined);
+assert.strictEqual(projectedTacticRoleHand.ember_riposte, undefined);
+
+const attackProgressProbe = createTacticProbe({
+  label: 'attack-progress',
+  contractId: 'steady',
+  enemyId: 'ink_scout',
+  intentIndex: 0,
+  handCardIds: ['strike', 'guard'],
+});
+const attackProjectedBefore = projectState(attackProgressProbe, CONTENT_SNAPSHOT);
+assert.strictEqual(attackProjectedBefore.battle.tactic.version, 2);
+assert.strictEqual(attackProjectedBefore.battle.tactic.tacticId, 'answer_attack');
+assert.deepStrictEqual(attackProjectedBefore.battle.tactic.lines.map(line => line.lineId), ['brace', 'counterflow']);
+assert.strictEqual(findTacticLine(attackProjectedBefore.battle.tactic, 'brace').requirements[0].target, 4);
+assert.strictEqual(
+  findTacticLine(attackProjectedBefore.battle.tactic, 'counterflow').requirements.find(requirement => requirement.metric === 'roleSequence').actual,
+  0,
+  'attack advanced line should start with zero sequence progress',
+);
+const attackAfterStrike = applyCommand(
+  attackProgressProbe,
+  CONTENT_SNAPSHOT,
+  'play_card',
+  { cardInstanceId: attackProgressProbe.player.hand[0].instanceId },
+);
+assert.strictEqual(findEvent(attackAfterStrike.events, 'card_played').tacticRole, 'attack');
+const attackProjectedMid = projectState(attackAfterStrike.state, CONTENT_SNAPSHOT);
+assert.strictEqual(
+  findTacticLine(attackProjectedMid.battle.tactic, 'counterflow').requirements.find(requirement => requirement.metric === 'roleSequence').actual,
+  1,
+  'attack advanced line should record attack->guard sequence progress after the opening attack',
+);
+const attackAdvancedResult = runTacticProbe(
+  attackAfterStrike.state,
+  [attackProgressProbe.player.hand[1].instanceId],
+);
+const attackAdvancedResolution = findEvent(attackAdvancedResult.endTurnEvents, 'enemy_tactic_resolved');
+const attackAdvancedIntent = findEvent(attackAdvancedResult.endTurnEvents, 'enemy_intent_resolved');
+assert.strictEqual(attackAdvancedResolution.success, true);
+assert.strictEqual(attackAdvancedResolution.tacticId, 'answer_attack');
+assert.strictEqual(attackAdvancedResolution.lineId, 'counterflow');
+assert.strictEqual(attackAdvancedResolution.tier, 'advanced');
+assert.strictEqual(attackAdvancedResolution.damageReduction, 4);
+assert.strictEqual(attackAdvancedIntent.damageTaken, 0);
+assert.strictEqual(findTacticLine(attackAdvancedResolution, 'brace').completed, true);
+assert.strictEqual(findTacticLine(attackAdvancedResolution, 'counterflow').completed, true);
+assert.strictEqual(attackAdvancedResult.state.stats.combatTacticAdvancedSuccesses, 1);
+assert.strictEqual(projectState(attackAdvancedResult.state, CONTENT_SNAPSHOT).combatTactics.lastResolution.lineId, 'counterflow');
+
+const defendProgressProbe = createTacticProbe({
+  label: 'defend-progress',
+  contractId: 'steady',
+  enemyId: 'mirror_seer',
+  intentIndex: 0,
+  handCardIds: ['guard', 'strike'],
+});
+const defendAfterGuard = applyCommand(
+  defendProgressProbe,
+  CONTENT_SNAPSHOT,
+  'play_card',
+  { cardInstanceId: defendProgressProbe.player.hand[0].instanceId },
+);
+assert.strictEqual(findEvent(defendAfterGuard.events, 'card_played').tacticRole, 'guard');
+const defendProjectedMid = projectState(defendAfterGuard.state, CONTENT_SNAPSHOT);
+assert.strictEqual(
+  findTacticLine(defendProjectedMid.battle.tactic, 'turnabout').requirements.find(requirement => requirement.metric === 'roleSequence').actual,
+  1,
+  'defend_attack advanced line should record guard->attack sequence progress after the opening guard',
+);
+const defendAdvancedResult = runTacticProbe(
+  defendAfterGuard.state,
+  [defendProgressProbe.player.hand[1].instanceId],
+);
+const defendAdvancedResolution = findEvent(defendAdvancedResult.endTurnEvents, 'enemy_tactic_resolved');
+assert.strictEqual(defendAdvancedResolution.lineId, 'turnabout');
+assert.strictEqual(defendAdvancedResolution.tier, 'advanced');
+assert.strictEqual(defendAdvancedResolution.damageReduction, 3);
+assert.strictEqual(defendAdvancedResolution.blockReduction, 3);
+assert.strictEqual(defendAdvancedResult.state.stats.combatTacticAdvancedSuccesses, 1);
+
+const v2DualLinePriorityCases = [
+  {
+    label: 'attack-steady',
+    contractId: 'steady',
+    enemyId: 'ink_scout',
+    intentIndex: 0,
+    successCards: ['strike', 'guard'],
+    expectedSuccess: {
+      tacticId: 'answer_attack',
+      lineId: 'counterflow',
+      tier: 'advanced',
+      damageReduction: 4,
+      blockReduction: 0,
+      damageTaken: 0,
+    },
+  },
+  {
+    label: 'fortify-contested',
+    contractId: 'contested',
+    enemyId: 'ash_acolyte',
+    intentIndex: 1,
+    successCards: ['strike', 'strike'],
+    expectedSuccess: {
+      tacticId: 'answer_fortify',
+      lineId: 'swiftbreak',
+      tier: 'advanced',
+      damageReduction: 0,
+      blockReduction: 6,
+      damageTaken: 0,
+    },
+  },
+  {
+    label: 'defend-attack-perilous',
+    contractId: 'perilous',
+    enemyId: 'mirror_seer',
+    intentIndex: 0,
+    successCards: ['guard', 'strike'],
+    expectedSuccess: {
+      tacticId: 'answer_balance',
+      lineId: 'turnabout',
+      tier: 'advanced',
+      damageReduction: 3,
+      blockReduction: 3,
+      damageTaken: 0,
+    },
+  },
+];
+
+for (const tacticCase of v2DualLinePriorityCases) {
+  const successProbe = createTacticProbe({
+    label: `${tacticCase.label}:success`,
+    contractId: tacticCase.contractId,
+    enemyId: tacticCase.enemyId,
+    intentIndex: tacticCase.intentIndex,
+    handCardIds: tacticCase.successCards,
+  });
+  const projectedBefore = projectState(successProbe, CONTENT_SNAPSHOT);
+  assert.strictEqual(projectedBefore.battle.tactic.version, 2);
+  assert.strictEqual(projectedBefore.battle.tactic.tacticId, tacticCase.expectedSuccess.tacticId);
+  assert(projectedBefore.battle.tactic.lines.some(line => line.tier === 'standard'));
+  assert(projectedBefore.battle.tactic.lines.some(line => line.tier === 'advanced'));
+  assert.strictEqual(projectedBefore.battle.tactic.completed, false);
+  const successResult = runTacticProbe(
+    successProbe,
+    successProbe.player.hand.map(card => card.instanceId),
+  );
+  const successResolution = findEvent(successResult.endTurnEvents, 'enemy_tactic_resolved');
+  const successIntent = findEvent(successResult.endTurnEvents, 'enemy_intent_resolved');
+  assert(successResolution, `${tacticCase.label} should emit an enemy_tactic_resolved receipt`);
+  assert(successIntent, `${tacticCase.label} should emit an enemy_intent_resolved receipt`);
+  assert.strictEqual(successResolution.success, true, `${tacticCase.label} should succeed when both lines are satisfied`);
+  assert.strictEqual(successResolution.tacticId, tacticCase.expectedSuccess.tacticId);
+  assert.strictEqual(successResolution.lineId, tacticCase.expectedSuccess.lineId);
+  assert.strictEqual(successResolution.tier, tacticCase.expectedSuccess.tier);
+  assert.strictEqual(successResolution.damageReduction, tacticCase.expectedSuccess.damageReduction);
+  assert.strictEqual(successResolution.blockReduction, tacticCase.expectedSuccess.blockReduction);
+  assert.strictEqual(findTacticLine(successResolution, tacticCase.expectedSuccess.lineId).completed, true);
+  assert(successResolution.requirements.every(requirement => requirement.met), `${tacticCase.label} success receipt should mark every selected-line requirement as met`);
+  assert.strictEqual(successIntent.damageTaken, tacticCase.expectedSuccess.damageTaken);
+  assert.strictEqual(successResult.state.stats.combatTacticOpportunities, 1);
+  assert.strictEqual(successResult.state.stats.combatTacticSuccesses, 1);
+  assert.strictEqual(successResult.state.stats.combatTacticAdvancedSuccesses, 1);
+  const projectedAfter = projectState(successResult.state, CONTENT_SNAPSHOT);
+  assert.strictEqual(projectedAfter.combatTactics.lastResolution.success, true);
+  assert.strictEqual(projectedAfter.combatTactics.lastResolution.lineId, tacticCase.expectedSuccess.lineId);
+}
+
+const fortifyMaxCardProbe = createTacticProbe({
+  label: 'fortify-max-cards',
+  contractId: 'contested',
+  enemyId: 'ash_acolyte',
+  intentIndex: 1,
+  handCardIds: ['strike', 'insight', 'strike'],
+});
+const fortifyAfterFirstCard = applyCommand(
+  fortifyMaxCardProbe,
+  CONTENT_SNAPSHOT,
+  'play_card',
+  { cardInstanceId: fortifyMaxCardProbe.player.hand[0].instanceId },
+);
+assert.deepStrictEqual(
+  findTacticLine(projectState(fortifyAfterFirstCard.state, CONTENT_SNAPSHOT).battle.tactic, 'swiftbreak')
+    .requirements.find(requirement => requirement.metric === 'cardsPlayedMin'),
+  {
+    metric: 'cardsPlayedMin',
+    label: '本回合至少出牌',
+    target: 2,
+    actual: 1,
+    comparison: 'gte',
+    met: false,
+  },
+  'fortify advanced line must not resolve from the first card',
+);
+assert.strictEqual(
+  findTacticLine(projectState(fortifyAfterFirstCard.state, CONTENT_SNAPSHOT).battle.tactic, 'swiftbreak').completed,
+  false,
+  'fortify advanced line must remain incomplete even when the first strike already meets its damage target',
+);
+const fortifyAfterSecondCard = applyCommand(
+  fortifyAfterFirstCard.state,
+  CONTENT_SNAPSHOT,
+  'play_card',
+  { cardInstanceId: fortifyMaxCardProbe.player.hand[1].instanceId },
+);
+assert.strictEqual(
+  findTacticLine(projectState(fortifyAfterSecondCard.state, CONTENT_SNAPSHOT).battle.tactic, 'swiftbreak')
+    .requirements.find(requirement => requirement.metric === 'cardsPlayedMin').met,
+  true,
+  'fortify advanced line should open only after the second card',
+);
+assert.strictEqual(
+  findTacticLine(projectState(fortifyAfterSecondCard.state, CONTENT_SNAPSHOT).battle.tactic, 'swiftbreak').completed,
+  true,
+  'fortify advanced line should resolve after exactly two cards when its damage target is met',
+);
+assert.strictEqual(
+  findTacticLine(projectState(fortifyAfterSecondCard.state, CONTENT_SNAPSHOT).battle.tactic, 'swiftbreak')
+    .requirements.find(requirement => requirement.metric === 'cardsPlayedMax').actual,
+  2,
+  'fortify advanced line should stay within the card cap before the third play',
+);
+const fortifyMaxCardResult = runTacticProbe(
+  fortifyAfterSecondCard.state,
+  [fortifyMaxCardProbe.player.hand[2].instanceId],
+);
+const fortifyMaxCardResolution = findEvent(fortifyMaxCardResult.endTurnEvents, 'enemy_tactic_resolved');
+assert.strictEqual(fortifyMaxCardResolution.lineId, 'break');
+assert.strictEqual(fortifyMaxCardResolution.tier, 'standard');
+assert.strictEqual(
+  findTacticLine(fortifyMaxCardResolution, 'swiftbreak').requirements.find(requirement => requirement.metric === 'cardsPlayedMax').actual,
+  3,
+  'fortify advanced line must stop resolving once the player exceeds the max-card constraint',
+);
+assert.strictEqual(
+  findTacticLine(fortifyMaxCardResolution, 'swiftbreak').requirements.find(requirement => requirement.metric === 'cardsPlayedMax').met,
+  false,
+  'fortify advanced line must fail its cardsPlayedMax requirement after the third play',
+);
+
+const failedAttackProbe = createTacticProbe({
+  label: 'attack-failure-no-extra-penalty',
+  contractId: 'steady',
+  enemyId: 'ink_scout',
+  intentIndex: 0,
+  handCardIds: [],
+});
+const failedAttackBefore = projectState(failedAttackProbe, CONTENT_SNAPSHOT);
+const failedAttackResult = runTacticProbe(failedAttackProbe, []);
+const failedAttackResolution = findEvent(failedAttackResult.endTurnEvents, 'enemy_tactic_resolved');
+const failedAttackIntent = findEvent(failedAttackResult.endTurnEvents, 'enemy_intent_resolved');
+assert.strictEqual(failedAttackResolution.success, false);
+assert.strictEqual(failedAttackResolution.lineId, '');
+assert.strictEqual(failedAttackResolution.tier, '');
+assert.strictEqual(failedAttackResolution.damageReduction, 0);
+assert.strictEqual(failedAttackResolution.blockReduction, 0);
+assert.strictEqual(failedAttackResolution.requirements.length, 0);
+assert(failedAttackResolution.lines.every(line => line.completed === false), 'failed turn should not auto-complete any tactic line');
+assert.strictEqual(failedAttackIntent.damagePrevented, 0);
+assert.strictEqual(failedAttackIntent.blockPrevented, 0);
+assert.strictEqual(
+  failedAttackIntent.damageTaken,
+  Number(failedAttackBefore.battle.enemy.intent.amount || 0) - Number(failedAttackBefore.player.block || 0),
+  'failed turn should resolve only the base enemy intent without an extra tactic penalty',
+);
+assert.strictEqual(failedAttackResult.state.stats.combatTacticSuccesses, 0);
+assert.strictEqual(failedAttackResult.state.stats.combatTacticAdvancedSuccesses, 0);
+assert.strictEqual(projectState(failedAttackResult.state, CONTENT_SNAPSHOT).combatTactics.lastResolution.success, false);
+
+const historicalV7Initial = create(
+  'pve',
+  'historical-v7:initial',
+  'historical-v7-initial-0001',
+  '',
+  HISTORICAL_V7_CONTENT,
+);
+const historicalV7PublicInitial = projectState(historicalV7Initial, HISTORICAL_V7_CONTENT);
+assert.strictEqual(historicalV7PublicInitial.contentVersion, 'authoritative-trials-v7');
+assert.strictEqual(historicalV7PublicInitial.combatTactics.version, 1);
+assert.strictEqual(historicalV7PublicInitial.stats.combatTacticAdvancedSuccesses, undefined);
+
+const historicalV7TacticCases = [
   {
     label: 'attack-steady',
     contractId: 'steady',
@@ -502,63 +893,83 @@ const tacticThresholdCases = [
   },
 ];
 
-for (const tacticCase of tacticThresholdCases) {
+for (const tacticCase of historicalV7TacticCases) {
   const successProbe = createTacticProbe({
-    label: `${tacticCase.label}:success`,
+    label: `historical-v7:${tacticCase.label}:success`,
     contractId: tacticCase.contractId,
     enemyId: tacticCase.enemyId,
     intentIndex: tacticCase.intentIndex,
     handCardIds: tacticCase.successCards,
+    content: HISTORICAL_V7_CONTENT,
   });
-  const projectedBefore = projectState(successProbe, CONTENT_SNAPSHOT);
+  const projectedBefore = projectState(successProbe, HISTORICAL_V7_CONTENT);
+  assert.strictEqual(projectedBefore.battle.tactic.version, 1);
+  assert.deepStrictEqual(
+    Object.keys(projectedBefore.battle.tactic).sort(),
+    ['cardsPlayed', 'completed', 'effects', 'intentType', 'prompt', 'requirements', 'rewardSummary', 'status', 'tacticId', 'title', 'version'],
+    `${tacticCase.label} historical v7 public tactic shape drifted`,
+  );
+  assert(projectedBefore.player.hand.every(card => card.tacticRole === undefined), `${tacticCase.label} historical v7 hand projection must not add tacticRole`);
   assert.strictEqual(projectedBefore.battle.tactic.tacticId, tacticCase.expectedPublic.tacticId);
   assert.strictEqual(projectedBefore.battle.tactic.intentType, tacticCase.expectedPublic.intentType);
   assert.deepStrictEqual(
     projectedBefore.battle.tactic.requirements.map(requirement => requirement.target),
     tacticCase.expectedPublic.targets,
-    `${tacticCase.label} public tactic thresholds drifted`,
+    `${tacticCase.label} historical v7 public tactic thresholds drifted`,
   );
-  assert.strictEqual(projectedBefore.battle.tactic.status, 'in_progress');
   const successResult = runTacticProbe(
     successProbe,
     successProbe.player.hand.map(card => card.instanceId),
+    HISTORICAL_V7_CONTENT,
   );
   const successResolution = findEvent(successResult.endTurnEvents, 'enemy_tactic_resolved');
   const successIntent = findEvent(successResult.endTurnEvents, 'enemy_intent_resolved');
-  assert(successResolution, `${tacticCase.label} should emit an enemy_tactic_resolved receipt`);
-  assert(successIntent, `${tacticCase.label} should emit an enemy_intent_resolved receipt`);
-  assert.strictEqual(successResolution.success, true, `${tacticCase.label} should succeed when its thresholds are met`);
+  assert.deepStrictEqual(
+    Object.keys(successResolution).sort(),
+    ['blockReduction', 'damageReduction', 'intentType', 'requirements', 'rewardSummary', 'success', 'tacticId', 'title', 'type', 'version'],
+    `${tacticCase.label} historical v7 tactic receipt shape drifted`,
+  );
+  assert.strictEqual(successResolution.version, 1);
+  assert.strictEqual(successResolution.success, true);
   assert.strictEqual(successResolution.tacticId, tacticCase.expectedPublic.tacticId);
   assert.strictEqual(successResolution.intentType, tacticCase.expectedPublic.intentType);
   assert.strictEqual(successResolution.damageReduction, tacticCase.expectedSuccess.damageReduction);
   assert.strictEqual(successResolution.blockReduction, tacticCase.expectedSuccess.blockReduction);
-  assert(successResolution.requirements.every(requirement => requirement.met), `${tacticCase.label} success receipt should mark every requirement as met`);
+  assert(successResolution.requirements.every(requirement => requirement.met), `${tacticCase.label} historical v7 success receipt should mark every requirement as met`);
   assert.strictEqual(successIntent.damageTaken, tacticCase.expectedSuccess.damageTaken);
   assert.strictEqual(successResult.state.stats.combatTacticOpportunities, 1);
   assert.strictEqual(successResult.state.stats.combatTacticSuccesses, 1);
-  const projectedAfter = projectState(successResult.state, CONTENT_SNAPSHOT);
-  assert.strictEqual(projectedAfter.combatTactics.lastResolution.success, true);
-  assert.strictEqual(projectedAfter.combatTactics.lastResolution.tacticId, tacticCase.expectedPublic.tacticId);
+  assert.strictEqual(successResult.state.stats.combatTacticAdvancedSuccesses, undefined);
+  const projectedAfter = projectState(successResult.state, HISTORICAL_V7_CONTENT);
+  assert.deepStrictEqual(
+    Object.keys(projectedAfter.combatTactics.lastResolution).sort(),
+    ['blockReduction', 'damageReduction', 'intentType', 'requirements', 'rewardSummary', 'success', 'tacticId', 'title', 'version'],
+    `${tacticCase.label} historical v7 projected lastResolution shape drifted`,
+  );
 
   const failureProbe = createTacticProbe({
-    label: `${tacticCase.label}:failure`,
+    label: `historical-v7:${tacticCase.label}:failure`,
     contractId: tacticCase.contractId,
     enemyId: tacticCase.enemyId,
     intentIndex: tacticCase.intentIndex,
     handCardIds: tacticCase.failureCards,
+    content: HISTORICAL_V7_CONTENT,
   });
   const failureResult = runTacticProbe(
     failureProbe,
     failureProbe.player.hand.map(card => card.instanceId),
+    HISTORICAL_V7_CONTENT,
   );
   const failureResolution = findEvent(failureResult.endTurnEvents, 'enemy_tactic_resolved');
-  assert(failureResolution, `${tacticCase.label} failure case should still emit a tactic receipt`);
-  assert.strictEqual(failureResolution.success, false, `${tacticCase.label} failure receipt must remain explicit`);
-  assert(failureResolution.requirements.some(requirement => !requirement.met), `${tacticCase.label} failure receipt should preserve the unmet requirement`);
-  assert.strictEqual(failureResult.state.stats.combatTacticOpportunities, 1);
+  assert.deepStrictEqual(
+    Object.keys(failureResolution).sort(),
+    ['blockReduction', 'damageReduction', 'intentType', 'requirements', 'rewardSummary', 'success', 'tacticId', 'title', 'type', 'version'],
+    `${tacticCase.label} historical v7 failure receipt shape drifted`,
+  );
+  assert.strictEqual(failureResolution.success, false, `${tacticCase.label} historical v7 failure receipt must remain explicit`);
+  assert(failureResolution.requirements.some(requirement => !requirement.met), `${tacticCase.label} historical v7 failure receipt should preserve the unmet requirement`);
   assert.strictEqual(failureResult.state.stats.combatTacticSuccesses, 0);
-  const failureProjection = projectState(failureResult.state, CONTENT_SNAPSHOT);
-  assert.strictEqual(failureProjection.combatTactics.lastResolution.success, false);
+  assert.strictEqual(projectState(failureResult.state, HISTORICAL_V7_CONTENT).combatTactics.lastResolution.success, false);
 }
 
 const persistentBlockExpectations = [
@@ -615,7 +1026,7 @@ const fortifyCarryClear = applyCommand(fortifyCarryHit.state, CONTENT_SNAPSHOT, 
 assert.strictEqual(
   findEvent(fortifyCarryClear.events, 'enemy_intent_resolved').enemyBlock,
   0,
-  'legacy persistent block must clear before the next enemy intent resolves',
+  'persistent fortify block must clear before the next enemy intent resolves',
 );
 assert.strictEqual(fortifyCarryClear.state.battle.enemy.block, 0);
 
@@ -853,9 +1264,7 @@ assert.deepStrictEqual(legacyRewardResult.events, [{
   rewardKind: 'card',
 }]);
 
-const legacyV6Content = JSON.parse(stableStringify(CONTENT_SNAPSHOT));
-legacyV6Content.contentVersion = 'authoritative-trials-v6';
-delete legacyV6Content.combatTactics;
+const legacyV6Content = cloneState(HISTORICAL_V6_CONTENT);
 const legacyV6Initial = create(
   'pve',
   'legacy-v6:tactics:0',
@@ -993,17 +1402,12 @@ for (const scenarioId of BRANCHED_FATE_SCENARIO_IDS) {
   }
 }
 
-const branchlessLegacyContent = JSON.parse(stableStringify(CONTENT_SNAPSHOT));
-branchlessLegacyContent.contentVersion = 'authoritative-trials-v5';
-delete branchlessLegacyContent.combatTactics;
-for (const scenarioId of BRANCHED_FATE_SCENARIO_IDS) {
-  delete branchlessLegacyContent.scenarios[scenarioId].branchPlan;
-}
+const branchlessLegacyContent = cloneState(HISTORICAL_V5_CONTENT);
 const branchlessLegacyInitial = create(
   'fate_chronicle',
   'fate:branchless-legacy:0',
   'fate-branchless-legacy-0001',
-  'chronicle-ember-proof',
+  'chronicle-ember-guard',
   branchlessLegacyContent,
 );
 const branchlessLegacyProjection = projectState(branchlessLegacyInitial, branchlessLegacyContent);
@@ -1016,7 +1420,7 @@ const branchlessLegacyResult = drive(
   'fate_chronicle',
   'fate:branchless-legacy:0',
   'fate-branchless-legacy-0001',
-  'chronicle-ember-proof',
+  'chronicle-ember-guard',
   branchlessLegacyContent,
 );
 assert.strictEqual(branchlessLegacyResult.state.summary?.chapterBranchResolution, undefined, 'legacy branchless replays should not synthesize chapterBranchResolution');
@@ -1073,6 +1477,12 @@ for (const mode of ['pve', 'challenge', 'expedition']) {
   assert.strictEqual(first.state.stats.cardsRemoved, 1, `${mode} golden run must exercise one bounded trim`);
   assert.strictEqual(first.state.summary.bossWins, 1, `${mode} must complete through a boss`);
   assert.strictEqual(first.state.summary.routeResolution.selections.length, first.state.route.totalStages);
+  assert.strictEqual(first.state.summary.combatTactics.version, 2, `${mode} summary must stay on combat tactics v2`);
+  assert(Number.isInteger(first.state.summary.combatTactics.advancedSuccesses), `${mode} summary must expose advancedSuccesses`);
+  assert(
+    first.state.summary.combatTactics.advancedSuccesses <= first.state.summary.combatTactics.successes,
+    `${mode} advanced tactic successes must stay bounded by total successes`,
+  );
   assert.strictEqual(
     first.state.summary.scoreBreakdown.routeBonus,
     first.state.summary.routeResolution.totalBonus,

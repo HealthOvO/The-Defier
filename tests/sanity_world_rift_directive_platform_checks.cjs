@@ -325,6 +325,77 @@ function dbRun(sql, params = []) {
   });
 }
 
+function getTacticLineRequirement(line, metric) {
+  return Array.isArray(line?.requirements)
+    ? line.requirements.find(requirement => requirement?.metric === metric) || null
+    : null;
+}
+
+function parseRoleSequence(line) {
+  const requirement = getTacticLineRequirement(line, 'roleSequence');
+  const roles = String(requirement?.label || '')
+    .split('后接')
+    .map((segment) => {
+      if (segment === '攻式') return 'attack';
+      if (segment === '守式') return 'guard';
+      return '';
+    })
+    .filter(Boolean);
+  return roles.length > 0 ? roles : [];
+}
+
+function getNextRequiredRole(line) {
+  const requirement = getTacticLineRequirement(line, 'roleSequence');
+  const expectedRoles = parseRoleSequence(line);
+  if (!requirement || expectedRoles.length === 0) return '';
+  const progress = Math.max(0, Math.min(expectedRoles.length, Number(requirement.actual || 0)));
+  return progress < expectedRoles.length ? expectedRoles[progress] : '';
+}
+
+function isAttackCard(card) {
+  return card?.tacticRole === 'attack' || DAMAGE_CARDS.has(card?.cardId);
+}
+
+function isGuardCard(card) {
+  return card?.tacticRole === 'guard' || BLOCK_CARDS.has(card?.cardId);
+}
+
+function canStillReachLine(line, cards, energy) {
+  if (!line) return false;
+  const maxCardsRequirement = getTacticLineRequirement(line, 'cardsPlayedMax');
+  if (maxCardsRequirement && Number(maxCardsRequirement.actual || 0) >= Number(maxCardsRequirement.target || 0)) {
+    return false;
+  }
+  if (line.completed) return true;
+  const nextRole = getNextRequiredRole(line);
+  if (nextRole) {
+    return cards.some(card => card.cost <= energy && card.tacticRole === nextRole);
+  }
+  return true;
+}
+
+function selectPreferredTacticLine(tactic, cards, energy) {
+  const lines = Array.isArray(tactic?.lines) ? tactic.lines : [];
+  if (lines.length === 0) return tactic || null;
+  const standard = lines.find(line => line?.tier === 'standard') || null;
+  const advanced = lines.find(line => line?.tier === 'advanced') || null;
+  if (advanced && canStillReachLine(advanced, cards, energy)) return advanced;
+  return standard || advanced || null;
+}
+
+function getCompletedLineDamageReduction(tactic) {
+  if (!Array.isArray(tactic?.lines)) {
+    return tactic?.completed ? Number(tactic.effects?.damageReduction || 0) : 0;
+  }
+  const completedLines = Array.isArray(tactic?.lines)
+    ? tactic.lines.filter(line => line?.completed)
+    : [];
+  const selectedLine = completedLines.find(line => line?.tier === 'advanced')
+    || completedLines.find(line => line?.tier === 'standard')
+    || null;
+  return Number(selectedLine?.effects?.damageReduction || 0);
+}
+
 function chooseCommandFromProjection(projection, strategy = {}) {
   if (projection.phase === 'route') {
     const choices = Array.isArray(projection.route?.choices) ? projection.route.choices : [];
@@ -357,20 +428,32 @@ function chooseCommandFromProjection(projection, strategy = {}) {
   const incomingDamage = Number(projection.battle?.enemy?.intent?.amount || 0);
   const enemyBlock = Number(projection.battle?.enemy?.block || 0);
   const tactic = projection.battle?.tactic;
-  const requirements = Array.isArray(tactic?.requirements) ? tactic.requirements : [];
-  const blockRequirement = requirements.find(requirement => requirement.metric === 'blockGained');
-  const damageRequirement = requirements.find(requirement => requirement.metric === 'damageDealt');
-  const needsBlock = blockRequirement && !blockRequirement.met;
-  const needsDamage = damageRequirement && !damageRequirement.met;
+  const hand = Array.isArray(projection.player?.hand) ? projection.player.hand : [];
+  const completedAdvancedLine = Array.isArray(tactic?.lines)
+    ? tactic.lines.find(line => line?.tier === 'advanced' && line.completed)
+    : null;
+  if (completedAdvancedLine) return ['end_turn', {}];
+  const preferredLine = selectPreferredTacticLine(tactic, hand, projection.player.energy);
+  const blockRequirement = getTacticLineRequirement(preferredLine, 'blockGained');
+  const damageRequirement = getTacticLineRequirement(preferredLine, 'damageDealt');
+  const nextRole = getNextRequiredRole(preferredLine);
+  const needsBlock = !!blockRequirement && !blockRequirement.met;
+  const needsDamage = !!damageRequirement && !damageRequirement.met;
   const effectiveIncomingDamage = Math.max(
     0,
-    incomingDamage - (tactic?.completed ? Number(tactic.effects?.damageReduction || 0) : 0),
+    incomingDamage - getCompletedLineDamageReduction(tactic),
   );
-  const cards = projection.player.hand.slice().sort((left, right) => {
-    const leftBlocks = BLOCK_CARDS.has(left.cardId) ? 1 : 0;
-    const rightBlocks = BLOCK_CARDS.has(right.cardId) ? 1 : 0;
-    const leftDamages = DAMAGE_CARDS.has(left.cardId) ? 1 : 0;
-    const rightDamages = DAMAGE_CARDS.has(right.cardId) ? 1 : 0;
+  const cards = hand.slice().sort((left, right) => {
+    const leftBlocks = isGuardCard(left) ? 1 : 0;
+    const rightBlocks = isGuardCard(right) ? 1 : 0;
+    const leftDamages = isAttackCard(left) ? 1 : 0;
+    const rightDamages = isAttackCard(right) ? 1 : 0;
+    const leftRoleMatch = nextRole && left.tacticRole === nextRole ? 1 : 0;
+    const rightRoleMatch = nextRole && right.tacticRole === nextRole ? 1 : 0;
+    const roleOrder = rightRoleMatch - leftRoleMatch;
+    const mixedRequirementOrder = needsBlock && needsDamage
+      ? (rightBlocks + rightDamages) - (leftBlocks + leftDamages)
+      : 0;
     const tacticOrder = needsBlock
       ? rightBlocks - leftBlocks
       : needsDamage
@@ -379,10 +462,17 @@ function chooseCommandFromProjection(projection, strategy = {}) {
     const defenseOrder = effectiveIncomingDamage > projection.player.block
       ? rightBlocks - leftBlocks
       : leftBlocks - rightBlocks;
-    return tacticOrder || defenseOrder || right.cost - left.cost || left.instanceId.localeCompare(right.instanceId);
+    const guardBreakOrder = enemyBlock > 0 ? rightDamages - leftDamages : 0;
+    return roleOrder
+      || mixedRequirementOrder
+      || tacticOrder
+      || defenseOrder
+      || guardBreakOrder
+      || right.cost - left.cost
+      || left.instanceId.localeCompare(right.instanceId);
   });
-  const damageIntoGuard = enemyBlock > 0
-    ? cards.find(entry => DAMAGE_CARDS.has(entry.cardId) && entry.cost <= projection.player.energy)
+  const damageIntoGuard = enemyBlock > 0 && nextRole !== 'guard'
+    ? cards.find(entry => isAttackCard(entry) && entry.cost <= projection.player.energy)
     : null;
   const card = damageIntoGuard || cards.find(entry => entry.cost <= projection.player.energy);
   return card
