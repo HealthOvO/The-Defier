@@ -1,0 +1,57 @@
+css/frontend-upgrade.css
+  s_ca5652313828d6::t_f8cb2e45c52652 2070,2077,3880-3883,4310-4318,4341-4355,4360-4362,4368-4369,4376,4392-4436,4574-4586,6002-6011,6164
+game-intro.html
+  s_0310150dd793a1::t_749d90c0acc94a 138,165,188
+js/game.js
+  s_ca5652313828d6::t_444fa4e0b9aa10 10320-10322
+js/scenes/pvp-scene.js
+  s_bae69f1b7fab46::t_5ec35c6f53dbf0 2253-2254,2683,3270,4024,4348
+js/views/AuthoritativeRunPanel.js
+  s_0310150dd793a1::t_e5688096ca843c 500,503,505,513,1718,2402,2468
+js/views/InventoryView.js
+  s_ca5652313828d6::t_59394f1d60e91c 274,1065
+js/views/SystemView.js
+  s_0310150dd793a1::t_31a792566a5332 400,415
+tests/browser_frontend_layout_audit.mjs
+  s_ca5652313828d6::t_6b558ffded6be7 236,1515-1518,3070-3073
+tests/sanity_intro_progress_sync_checks.cjs
+  s_0310150dd793a1::t_5f75cd2b43c232 3,17,67-113
+tests/sanity_pvp_live_ui_contract_checks.cjs
+  s_ca5652313828d6::t_c338f125eb1092 1015-1020
+tests/sanity_secondary_frontend_flow_checks.cjs
+  s_ca5652313828d6::t_6ddfb9eac3fde2 52-73
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "ea856fe0adde598cabe18b3fafd0f7f7544863c1",
+  "prompts": {},
+  "sessions": {
+    "s_0310150dd793a1": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f6688-2296-7b53-865b-7a29ecf92362",
+        "model": "unknown"
+      },
+      "human_author": "AI Agent <bot@example.com>"
+    },
+    "s_bae69f1b7fab46": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ed4f6-e7ac-73e0-a29e-119f3eddb407",
+        "model": "unknown"
+      },
+      "human_author": "AI Agent <bot@example.com>"
+    },
+    "s_ca5652313828d6": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019f3fed-94d5-77b2-9af0-61333559ff38",
+        "model": "unknown"
+      },
+      "human_author": "AI Agent <bot@example.com>"
+    }
+  },
+  "attestation_metadata": {},
+  "remote_transcripts": {}
+}
