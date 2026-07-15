@@ -21,6 +21,12 @@
   letter-spacing: 0;
 }
 
+.social-screen-header .back-btn {
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
+}
+
 #social-status {
   margin: 0;
   min-height: 1.3em;
@@ -146,7 +152,7 @@
 }
 
 .social-content button {
-  min-height: 40px;
+  min-height: 44px;
   border: 1px solid #a98a45;
   border-radius: 4px;
   background: #b7964b;
@@ -182,7 +188,7 @@
 }
 
 .social-content button.icon-btn {
-  width: 40px;
+  width: 44px;
   padding: 0;
   font-size: 1.15rem;
 }
@@ -279,6 +285,23 @@
   padding: 20px;
 }
 
+.social-session-expired {
+  min-height: min(320px, 48dvh);
+  align-content: center;
+  gap: 10px;
+}
+
+.social-session-expired strong {
+  color: #f1d58e;
+  font-size: 1.05rem;
+}
+
+.social-session-expired span {
+  max-width: 440px;
+  color: #aeb6b2;
+  line-height: 1.55;
+}
+
 .social-squad-summary {
   padding: 22px 0;
 }
@@ -292,6 +315,89 @@
   max-width: 720px;
   color: #aeb6b2;
   line-height: 1.6;
+}
+
+.social-squad-compact {
+  padding: 14px 0 10px;
+}
+
+.social-squad-overview {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.social-squad-overview p {
+  margin: 4px 0 0;
+  color: #aeb6b2;
+  font-size: 0.84rem;
+}
+
+.social-squad-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.social-status-chip {
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 10px;
+  border: 1px solid rgba(216, 183, 101, 0.22);
+  border-radius: 4px;
+  color: #c8c1ae;
+  background: rgba(216, 183, 101, 0.06);
+  font-size: 0.8rem;
+}
+
+.social-status-chip.is-locked {
+  border-color: rgba(121, 216, 193, 0.18);
+  color: #9dc7bb;
+  background: rgba(84, 191, 168, 0.06);
+}
+
+.social-squad-roster {
+  margin-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.social-squad-roster summary {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: #d9ddda;
+  cursor: pointer;
+  list-style: none;
+}
+
+.social-squad-roster summary::-webkit-details-marker {
+  display: none;
+}
+
+.social-squad-roster summary::after {
+  content: '+';
+  color: #d8b765;
+  font-size: 1.15rem;
+}
+
+.social-squad-roster[open] summary::after {
+  content: '−';
+}
+
+.social-squad-roster summary strong {
+  margin-left: auto;
+  color: #909994;
+  font-size: 0.82rem;
+}
+
+.social-squad-roster .social-members {
+  margin: 0;
 }
 
 .social-score {
@@ -391,8 +497,15 @@
 .social-relay-route-grid,
 .social-relay-tactic-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
+}
+
+.social-relay-route-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.social-relay-tactic-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .social-relay-route-grid {
@@ -512,9 +625,9 @@
   line-height: 1.45;
 }
 
-@media (max-width: 720px) {
+@media (max-width: 768px) {
   .social-screen-header {
-    grid-template-columns: 42px minmax(0, 1fr);
+    grid-template-columns: 44px minmax(0, 1fr);
     min-height: 70px;
   }
 
@@ -563,6 +676,16 @@
   .social-security-grid {
     grid-template-columns: 1fr;
     gap: 8px;
+  }
+
+  .social-squad-overview {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .social-squad-actions {
+    justify-content: flex-start;
   }
 
   .social-relay-hero,

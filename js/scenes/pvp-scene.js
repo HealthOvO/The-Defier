@@ -4,6 +4,7 @@ import { PVP_SHOP_ITEMS } from "../data/shop-items.js";
 import { Utils } from "../core/utils.js";
 import { GhostEnemy } from "../entities/ghost-enemy.js";
 import { escapeHtml as renderEscapeHtml } from "../ui/render-safe.js";
+import { safePlayerMessage } from "../ui/player-message.js";
 
 export function loadPvpSceneStyles() {
   if (typeof import.meta.env !== 'object') return Promise.resolve();
@@ -87,7 +88,7 @@ export const PVPScene = {
   onShow() {
     this.setMatchingState(false);
     this.updateMyRankInfo();
-    this.switchTab('live');
+    return this.switchTab('live');
   },
   init(context = {}) {
     this.context = {
@@ -312,7 +313,7 @@ export const PVPScene = {
       panel.innerHTML = `
                 <div class="pvp-risk-kicker">榜单推演</div>
                 <div class="pvp-risk-title">正在推演本轮对手画像…</div>
-                <div class="pvp-risk-footnote">读取榜位、境界、赛季账本与套路结构，稍候即可查看 PVP DRI、对手档案、分段标签、历史交手留痕、多场趋势、样本筛面摘要与焦点约战单。</div>
+                <div class="pvp-risk-footnote">正在读取榜位、境界与对手套路。</div>
             `;
       this.renderChallengeIntent();
       return;
@@ -322,7 +323,7 @@ export const PVPScene = {
       panel.innerHTML = `
                 <div class="pvp-risk-kicker">榜单推演</div>
                 <div class="pvp-risk-title">选择一名对手，查看本场读题建议</div>
-                <div class="pvp-risk-footnote">这里会显示 PVP DRI、对手档案、赛季题面、分段标签、跨场对照、历史交手留痕、多场趋势、赛季账本筛面、样本筛面摘要、主导风险轴、对策、资源预留与焦点约战单。</div>
+                <div class="pvp-risk-footnote">锁定榜单目标后生成风险、对策与约战收益。</div>
             `;
       this.renderChallengeIntent();
       return;
@@ -369,7 +370,17 @@ export const PVPScene = {
                 ${(profile.tags || []).map(tag => `<span class="pvp-risk-chip">${this.escapeHtml(tag)}</span>`).join('')}
             </div>
             <div class="pvp-risk-summary">${this.escapeHtml(profile.summary || '推演完成后会在这里展示风险摘要。')}</div>
-            ${dossier ? `
+            <div class="pvp-risk-line pvp-risk-primary-line">
+                <span class="label">对策</span>
+                <span class="value">${this.escapeHtml(profile.counterplay || '优先稳住首拍与净化链。')}</span>
+            </div>
+            <details class="pvp-ranking-details">
+                <summary class="pvp-ranking-details-toggle">
+                    <span>完整战报</span>
+                    <span class="pvp-ranking-details-note">档案 · 风险轴 · 约战收益</span>
+                </summary>
+                <div class="pvp-ranking-details-body">
+                ${dossier ? `
                 <div class="pvp-dossier">
                     <div class="pvp-dossier-kicker">对手档案</div>
                     <div class="pvp-dossier-grid">
@@ -418,10 +429,6 @@ export const PVPScene = {
                 `).join('')}
             </div>
             <div class="pvp-risk-line">
-                <span class="label">对策</span>
-                <span class="value">${this.escapeHtml(profile.counterplay || '优先稳住首拍与净化链。')}</span>
-            </div>
-            <div class="pvp-risk-line">
                 <span class="label">预留</span>
                 <span class="value">${this.escapeHtml(profile.reserveGuidance || '保留至少一次稳态回合与止损手段。')}</span>
             </div>
@@ -454,6 +461,8 @@ export const PVPScene = {
                 </div>
             ` : ''}
             <div class="pvp-risk-footnote">${this.escapeHtml(profile.note || '')}</div>
+                </div>
+            </details>
         `;
     this.renderChallengeIntent();
   },
@@ -500,10 +509,12 @@ export const PVPScene = {
     });
 
     // Load Data
-    if (!shouldSkipLoad && tabName === 'ranking') this.loadRankings();
-    if (!shouldSkipLoad && tabName === 'live') this.loadLivePanel();
-    if (!shouldSkipLoad && tabName === 'defense') this.loadDefenseInfo();
-    if (!shouldSkipLoad && tabName === 'shop') this.loadShop();
+    let loadTask = null;
+    if (!shouldSkipLoad && tabName === 'ranking') loadTask = this.loadRankings();
+    if (!shouldSkipLoad && tabName === 'live') loadTask = this.loadLivePanel();
+    if (!shouldSkipLoad && tabName === 'defense') loadTask = this.loadDefenseInfo();
+    if (!shouldSkipLoad && tabName === 'shop') loadTask = this.loadShop();
+    return loadTask;
   },
   handleTabKeydown(event) {
     const currentTab = event?.target?.closest?.('#pvp-screen .rune-tab[data-pvp-tab]');
@@ -1636,9 +1647,12 @@ export const PVPScene = {
     const label = labels[status] || status;
     const lastSyncAt = Math.max(0, Math.floor(Number(state && state.lastRealtimeSyncAt) || 0));
     const syncText = lastSyncAt > 0 ? ` · 最近同步 ${new Date(lastSyncAt).toLocaleTimeString()}` : '';
-    const reason = String(state && state.lastError && state.lastError.reason || '');
-    const reasonText = reason && (status === 'reconnecting' || status === 'error' || status === 'unavailable') ? ` · ${reason}` : '';
-    return `同步：${label}${syncText}${reasonText}`;
+    const recoveryText = status === 'reconnecting'
+      ? ' · 正在恢复'
+      : status === 'error' || status === 'unavailable'
+        ? ' · 可稍后重试'
+        : '';
+    return `同步：${label}${syncText}${recoveryText}`;
   },
   getLiveOpeningSafeguardReport(view) {
     const report = view && view.openingSafeguardReport && typeof view.openingSafeguardReport === 'object' ? view.openingSafeguardReport : null;
@@ -3258,7 +3272,7 @@ export const PVPScene = {
     return `${statusLabel} · ${impact} · 房主 ${this.escapeHtml(hostName)}${targetLabel} · 房间码 ${this.escapeHtml(code)}`;
   },
   formatLivePlayerMessage(message = '') {
-    return String(message || '')
+    const normalized = String(message || '')
       .replace(/好友约战邀请码/g, '好友房间码')
       .replace(/好友约战/g, '好友房间')
       .replace(/友谊约战/g, '好友对局')
@@ -3267,6 +3281,8 @@ export const PVPScene = {
       .replace(/分享邀请码/g, '分享房间码')
       .replace(/重新创建约战/g, '重新创建房间')
       .replace(/进入公共匹配/g, '开始真人匹配');
+    if (!normalized.trim()) return '';
+    return safePlayerMessage(normalized, '联机暂时不可用，请稍后重试。', { maxLength: 180 });
   },
   renderLiveInviteInbox(invites = []) {
     const list = Array.isArray(invites) ? invites : [];
@@ -4955,7 +4971,7 @@ export const PVPScene = {
         <section class="pvp-live-replay-share-card" data-live-replay-share-viewer data-live-replay-share-viewer-status="loading">
           <div class="pvp-live-dispute-receipt-head">
             <span>公开战报</span>
-            <span>replay_public</span>
+            <span>公开只读</span>
           </div>
           <div class="pvp-live-dispute-receipt-line">正在读取公开战报...</div>
           ${returnAction}
@@ -4963,14 +4979,15 @@ export const PVPScene = {
       `;
     }
     if (status === 'error') {
+      const visibleMessage = safePlayerMessage(viewer, '公开战报已失效或暂不可读。', { maxLength: 120 });
       return `
         <section class="pvp-live-replay-share-card error" data-live-replay-share-viewer data-live-replay-share-viewer-status="error">
           <div class="pvp-live-dispute-receipt-head">
             <span>公开战报不可用</span>
-            <span>${this.escapeHtml(viewer.reason || 'unavailable')}</span>
+            <span>暂不可用</span>
           </div>
-          <div class="pvp-live-dispute-receipt-line">${this.escapeHtml(viewer.message || '公开战报已失效或暂不可读。')}</div>
-          <div class="pvp-live-dispute-receipt-boundary">公开 viewer 只读取 replay_public，不读取本人回放、隐藏手牌、牌库或结算奖励。</div>
+          <div class="pvp-live-dispute-receipt-line">${this.escapeHtml(visibleMessage)}</div>
+          <div class="pvp-live-dispute-receipt-boundary">公开战报仅展示双方可见的对局摘要。</div>
           ${returnAction}
         </section>
       `;
@@ -4984,7 +5001,6 @@ export const PVPScene = {
     const loserSeat = String(publicSummary.loserSeat || '--');
     const matchRef = String(share.matchRef || '--');
     const eventCount = Math.max(0, Math.floor(Number(replay.eventCount) || (Array.isArray(replay.events) ? replay.events.length : 0)));
-    const hiddenScan = replay.hiddenScan && typeof replay.hiddenScan === 'object' ? replay.hiddenScan : {};
     const highlights = this.getLiveReplayShareHighlights(replay, publicSummary);
     const highlightRows = highlights.length > 0 ? highlights.map((item) => {
       const sequence = item.sequence ? `#${item.sequence} · ` : '';
@@ -5007,9 +5023,6 @@ export const PVPScene = {
         </div>
       `;
     }).join('') : '<div class="pvp-live-empty">暂无公开事件</div>';
-    const forbiddenTotal = Math.max(0, Math.floor(Number(hiddenScan.forbiddenTokenCount) || 0))
-      + Math.max(0, Math.floor(Number(hiddenScan.forbiddenKeyCount) || 0))
-      + Math.max(0, Math.floor(Number(hiddenScan.forbiddenStringCount) || 0));
     return `
       <section
         class="pvp-live-replay-share-card"
@@ -5020,21 +5033,21 @@ export const PVPScene = {
       >
         <div class="pvp-live-dispute-receipt-head">
           <span>公开战报</span>
-          <span>${this.escapeHtml(visibility)}</span>
+          <span>公开只读</span>
         </div>
         <div class="pvp-live-replay-share-summary" data-live-replay-share-summary>
           <span>战报 ${this.escapeHtml(matchRef)}</span>
           <span>${this.escapeHtml(finishLabel)}</span>
           <span>胜方 ${this.escapeHtml(winnerSeat)} / 败方 ${this.escapeHtml(loserSeat)}</span>
-          <span>公开事件 ${this.escapeHtml(eventCount)}</span>
+          <span>关键记录 ${this.escapeHtml(eventCount)}</span>
         </div>
-        <div class="pvp-live-dispute-receipt-evidence">隐私扫描 ${this.escapeHtml(forbiddenTotal)} 项命中 · 不含原始战局 ID · 不含本人结算或赛季荣誉</div>
+        <div class="pvp-live-dispute-receipt-evidence">仅展示双方共同可见的对局信息</div>
         <div class="pvp-live-replay-share-highlights" data-live-replay-share-highlight-list>
           <div class="pvp-live-replay-share-highlight-head">关键节点</div>
           ${highlightRows}
         </div>
         <div class="pvp-live-event-log" data-live-replay-share-event-log>${eventRows}</div>
-        <div class="pvp-live-dispute-receipt-boundary">${this.escapeHtml(share.boundary || '公开战报分享只暴露 replay_public 脱敏回放，不读取隐藏手牌、牌库、随机种子或本人结算。')}</div>
+        <div class="pvp-live-dispute-receipt-boundary">公开战报不包含隐藏手牌、私人牌库或个人结算。</div>
         ${returnAction}
       </section>
     `;
@@ -5544,22 +5557,33 @@ export const PVPScene = {
       selectedEl.textContent = `当前：${selectedPreset.label}`;
     }
     if (!presetsEl) return;
-    presetsEl.innerHTML = presets.map(preset => {
+    const existingOptions = Array.from(presetsEl.querySelectorAll('[data-live-loadout-preset]'));
+    const structureMatches = existingOptions.length === presets.length
+      && presets.every((preset, index) => existingOptions[index]?.dataset.liveLoadoutPreset === preset.id);
+    if (!structureMatches) {
+      presetsEl.innerHTML = presets.map(preset => `
+          <button
+            type="button"
+            class="pvp-live-loadout-option"
+            data-live-loadout-preset="${this.escapeHtml(preset.id)}"
+            onclick="PVPScene.setLiveLoadoutPreset('${this.escapeHtml(preset.id)}')"
+          >
+            <span class="pvp-live-loadout-name">${this.escapeHtml(preset.label)}</span>
+            <span class="pvp-live-loadout-desc">${this.escapeHtml(preset.summary)}</span>
+          </button>
+        `).join('');
+    }
+    Array.from(presetsEl.querySelectorAll('[data-live-loadout-preset]')).forEach((option, index) => {
+      const preset = presets[index];
       const isSelected = preset.id === selectedPreset.id;
-      return `
-        <button
-          type="button"
-          class="pvp-live-loadout-option ${isSelected ? 'selected' : ''}"
-          data-live-loadout-preset="${this.escapeHtml(preset.id)}"
-          aria-pressed="${isSelected ? 'true' : 'false'}"
-          onclick="PVPScene.setLiveLoadoutPreset('${this.escapeHtml(preset.id)}')"
-          ${editable ? '' : 'disabled'}
-        >
-          <span class="pvp-live-loadout-name">${this.escapeHtml(preset.label)}</span>
-          <span class="pvp-live-loadout-desc">${this.escapeHtml(preset.summary)}</span>
-        </button>
-      `;
-    }).join('');
+      option.classList.toggle('selected', isSelected);
+      option.setAttribute('aria-pressed', isSelected ? 'true' : 'false');
+      option.disabled = !editable;
+      const name = option.querySelector('.pvp-live-loadout-name');
+      const description = option.querySelector('.pvp-live-loadout-desc');
+      if (name) name.textContent = preset.label;
+      if (description) description.textContent = preset.summary;
+    });
   },
   getLiveLoadoutSummary(seat) {
     if (!seat || typeof seat !== 'object') return null;
@@ -5751,6 +5775,8 @@ export const PVPScene = {
       this.renderLivePanel();
       return;
     }
+    // Replace the static guest copy before any resume request can yield.
+    this.renderLivePanel();
     const liveState = session.getState();
     if (liveState.phase === 'idle' && !liveState.queueTicket && !liveState.matchId) {
       await this.resumeLiveMatch();
@@ -6105,11 +6131,7 @@ export const PVPScene = {
     const queueCooldownCountdown = this.getLiveQueueCooldownCountdown(state);
     const rawErrorText = state.lastError ? `${state.lastError.message || state.lastError.reason}` : '';
     const playerErrorText = this.formatLivePlayerMessage(rawErrorText);
-    const safeErrorText = /未登录|token|登录失效|登录过期/i.test(rawErrorText)
-      ? '登录状态已失效，请重新登录后匹配。'
-      : /\/api\/|https?:|websocket|服务端|endpoint/i.test(rawErrorText)
-        ? '联机暂时不可用，请稍后重试。'
-        : playerErrorText;
+    const safeErrorText = playerErrorText;
     const errorText = this.formatLivePlayerMessage(this.liveInlineHint) || (queueCooldownCountdown
       ? queueCooldownCountdown.hint
       : safeErrorText
@@ -6850,7 +6872,7 @@ export const PVPScene = {
     if (lastError && lastError.reason === 'queue_cooldown' && lastError.matchmakingGuard) {
       this.liveInlineHint = '';
     } else if (lastError && lastError.message) {
-      this.liveInlineHint = lastError.message;
+      this.liveInlineHint = this.formatLivePlayerMessage(lastError.message);
     } else {
       this.liveInlineHint = '已退出真人排位队列；可稍后重试或先进入问道练习。';
     }
@@ -6862,7 +6884,7 @@ export const PVPScene = {
     await session.cancelRematch();
     const state = session.getState();
     this.liveInlineHint = state.lastError && state.lastError.message
-      ? state.lastError.message
+      ? this.formatLivePlayerMessage(state.lastError.message)
       : '已取消低压力再战等待；本局复盘保留，不写正式积分。';
     this.stopLivePolling();
     this.renderLivePanel();
@@ -7711,7 +7733,7 @@ export const PVPScene = {
       statusText.className = "value status-inactive";
     }
     if (powerVal) powerVal.textContent = "---";
-    if (defTime) defTime.textContent = "上次注入: 无记录";
+    if (defTime) defTime.textContent = "上次注入：无记录";
 
     // Fetch Data
     try {
@@ -7728,7 +7750,7 @@ export const PVPScene = {
         if (snapshot.saveTime) {
           const date = new Date(snapshot.saveTime);
           const timeStr = `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
-          if (defTime) defTime.textContent = `上次注入: ${timeStr}`;
+          if (defTime) defTime.textContent = `上次注入：${timeStr}`;
         }
 
         // Personality
@@ -7784,7 +7806,7 @@ export const PVPScene = {
       const now = new Date();
       const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
       const timeEl = document.getElementById('def-time');
-      if (timeEl) timeEl.textContent = `上次注入: ${timeStr}`;
+      if (timeEl) timeEl.textContent = `上次注入：${timeStr}`;
       const powerEl = document.getElementById('def-power-val');
       if (powerEl) powerEl.textContent = snapshot.powerScore;
 

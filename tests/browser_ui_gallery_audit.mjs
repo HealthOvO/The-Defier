@@ -978,6 +978,9 @@ function collectCoreLoopDesignSystemProbe(options = {}) {
     const container = document.querySelector('#reward-screen .reward-container');
     const shell = document.querySelector('.reward-shell');
     if (!container || !shell) return { ok: false, reason: 'missing_reward_shell' };
+    container.scrollTop = Math.min(320, Math.max(0, container.scrollHeight - container.clientHeight));
+    game.showRewardScreen(145, true, { stealLaw: lawId, stealChance: 1 }, 32, { insight: 8, karma: 3 });
+    const repeatedEntryScrollTop = Math.round(container.scrollTop);
     const containerRect = container.getBoundingClientRect();
     const shellRect = shell.getBoundingClientRect();
     const containerStyle = getComputedStyle(container);
@@ -993,6 +996,7 @@ function collectCoreLoopDesignSystemProbe(options = {}) {
         shellRect.right <= window.innerWidth - 8 &&
         containerOwnsScroll &&
         shellAvoidsNestedScroll &&
+        repeatedEntryScrollTop <= 1 &&
         document.documentElement.scrollWidth <= window.innerWidth + 2,
       containerOwnsScroll,
       shellAvoidsNestedScroll,
@@ -1002,6 +1006,7 @@ function collectCoreLoopDesignSystemProbe(options = {}) {
       containerClientHeight: Math.round(container.clientHeight),
       shellScrollHeight: Math.round(shell.scrollHeight),
       shellClientHeight: Math.round(shell.clientHeight),
+      repeatedEntryScrollTop,
       rect: {
         left: Math.round(shellRect.left),
         top: Math.round(shellRect.top),

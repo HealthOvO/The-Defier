@@ -5103,8 +5103,8 @@ body {
     position: absolute;
     top: var(--spacing-md);
     right: var(--spacing-md);
-    width: 32px;
-    height: 32px;
+    width: 44px;
+    height: 44px;
     display: flex;
     justify-content: center;
     align-items: center;
@@ -9635,7 +9635,7 @@ body {
 
 .save-history-btn {
     min-width: 112px;
-    min-height: 34px;
+    min-height: 44px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -9732,7 +9732,7 @@ body {
 
 .cloud-history-restore-btn {
     width: 84px;
-    min-height: 38px;
+    min-height: 44px;
     border: 1px solid var(--accent-gold);
     border-radius: 6px;
     background: rgba(95, 70, 30, 0.7);
@@ -12941,6 +12941,18 @@ body {
     background: linear-gradient(90deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.02));
 }
 
+.intro-character-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+}
+
+@media (max-width: 480px) {
+    .intro-character-grid {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+
 @keyframes introPanelIn {
     from {
         transform: translateY(4px);
@@ -15902,6 +15914,49 @@ body {
     border-radius: 10px;
     border: 1px solid rgba(108, 179, 255, 0.18);
     background: rgba(7, 18, 38, 0.42);
+}
+
+.battle-advisor-focus {
+    display: grid;
+    gap: 2px;
+}
+
+.battle-advisor-details {
+    margin-top: 8px;
+    overflow: clip;
+    border: 1px solid rgba(108, 179, 255, 0.2);
+    border-radius: 8px;
+    background: rgba(7, 18, 38, 0.46);
+}
+
+.battle-advisor-details > summary {
+    min-height: 44px;
+    padding: 5px 8px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    color: rgba(212, 233, 255, 0.94);
+    font-size: 0.68rem;
+    line-height: 1.3;
+    letter-spacing: 0;
+    cursor: pointer;
+}
+
+.battle-advisor-details > summary small {
+    display: inline;
+    margin: 0;
+    color: rgba(164, 194, 228, 0.76);
+    font-size: 0.58rem;
+    line-height: 1.25;
+}
+
+.battle-advisor-details[open] > summary {
+    border-bottom: 1px solid rgba(108, 179, 255, 0.16);
+}
+
+.battle-advisor-details-body {
+    padding: 0 7px 8px;
 }
 
 .battle-advisor-section-head {
@@ -20376,7 +20431,7 @@ body {
 
 .collection-inline-btn.compact {
     padding-inline: 10px;
-    min-width: 42px;
+    min-width: 44px;
 }
 
 .challenge-reward-card,

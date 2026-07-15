@@ -94,6 +94,17 @@ async function waitForChallengeHubReady(page, expectedTab = 'daily') {
     const rewardCount = document.querySelectorAll('#challenge-hub-rewards .challenge-reward-card').length;
     const tabCount = document.querySelectorAll('#challenge-screen .challenge-tab-btn').length;
     const dangerChipCount = document.querySelectorAll('#challenge-hub-summary .challenge-danger-chip').length;
+    const sideColumn = document.querySelector('#challenge-screen .challenge-side-column');
+    const launch = document.getElementById('challenge-hub-launch');
+    const launchButton = launch?.querySelector('.challenge-launch-btn');
+    const challengeScroller = document.querySelector('#challenge-screen .challenge-scroll-container');
+    const launchRect = launchButton?.getBoundingClientRect() || null;
+    const scrollerRect = challengeScroller?.getBoundingClientRect() || null;
+    const launchFirst = sideColumn?.firstElementChild?.id === 'challenge-hub-launch';
+    const launchVisibleInFirstViewport = !!launchRect
+      && !!scrollerRect
+      && launchRect.top >= scrollerRect.top
+      && launchRect.bottom <= Math.min(scrollerRect.bottom, window.innerHeight);
     return {
       mode: payload?.mode || '',
       challenge: payload?.challenge || null,
@@ -103,7 +114,14 @@ async function waitForChallengeHubReady(page, expectedTab = 'daily') {
       sideText,
       rewardCount,
       tabCount,
-      dangerChipCount
+      dangerChipCount,
+      launchFirst,
+      launchVisibleInFirstViewport,
+      launchRect: launchRect ? {
+        top: Math.round(launchRect.top),
+        bottom: Math.round(launchRect.bottom),
+        height: Math.round(launchRect.height),
+      } : null,
     };
   });
   add(
@@ -118,6 +136,8 @@ async function waitForChallengeHubReady(page, expectedTab = 'daily') {
       challengeHubProbe.rewardCount >= 1 &&
       challengeHubProbe.tabCount === 4 &&
       challengeHubProbe.dangerChipCount === 4 &&
+      challengeHubProbe.launchFirst &&
+      challengeHubProbe.launchVisibleInFirstViewport &&
       challengeHubProbe.challenge?.hub?.activeTab === 'daily' &&
       (challengeHubProbe.challenge?.hub?.dangerProfile?.axes?.length || 0) === 4 &&
       (challengeHubProbe.challenge?.hub?.dangerProfile?.index || 0) >= 1 &&

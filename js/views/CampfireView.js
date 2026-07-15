@@ -43,6 +43,7 @@ export class CampfireView {
       upgradeBtn.onclick = () => this.showCampfireUpgrade();
     } else {
       upgradeBtn.classList.add('disabled');
+      upgradeBtn.disabled = true;
       upgradeBtn.style.opacity = '0.5';
       upgradeBtn.style.cursor = 'not-allowed';
     }
@@ -102,6 +103,7 @@ export class CampfireView {
       insightBtn.onclick = () => this.campfireInsight(insightCostHp);
     } else {
       insightBtn.classList.add('disabled');
+      insightBtn.disabled = true;
       insightBtn.style.opacity = '0.5';
       insightBtn.style.cursor = 'not-allowed';
     }
@@ -118,7 +120,7 @@ export class CampfireView {
       removeBtn.onclick = () => this.showCampfireRemove();
       choicesEl.appendChild(removeBtn);
     }
-    modal.classList.add('active');
+    this.game.openModalWithFocus(modal, '.event-choice:not(.disabled)');
   }
   campfireRest() {
     const healAmount = Math.max(1, Math.floor(this.game.player.maxHp * 0.2 * this.game.getEndlessHealingMultiplier()));
@@ -253,9 +255,12 @@ export class CampfireView {
 
       // Create standard card
       const cardEl = Utils.createCardElement(card, index);
+      cardEl.setAttribute('role', 'button');
+      cardEl.setAttribute('tabindex', '0');
+      cardEl.setAttribute('aria-label', `预览进阶：${card.name || '未命名卡牌'}`);
 
       // Interaction
-      cardEl.addEventListener('click', () => {
+      const selectCard = () => {
         // Audio
         if (typeof audioManager !== 'undefined') audioManager.playSFX('click');
 
@@ -267,6 +272,12 @@ export class CampfireView {
 
         // Show Preview
         this.updateUpgradePreview(card, placeholder, contentArea, cardContainer, diffBox, confirmBtn);
+      };
+      cardEl.addEventListener('click', selectCard);
+      cardEl.addEventListener('keydown', event => {
+        if (event.key !== 'Enter' && event.key !== ' ') return;
+        event.preventDefault();
+        selectCard();
       });
       cardGrid.appendChild(cardEl);
     });
@@ -293,7 +304,7 @@ export class CampfireView {
         this.completeCampfire();
       }, 500);
     };
-    modal.classList.add('active');
+    this.game.openModalWithFocus(modal, '.upgrade-card-grid [role="button"]');
 
     // Update Title (Optional override)
     const title = modal.querySelector('h2');
@@ -397,7 +408,6 @@ export class CampfireView {
 
     // Reset State
     grid.innerHTML = '';
-    modal.classList.add('active');
 
     // Campfire specific adjustments
     costDisplay.innerHTML = '<span style="color: var(--accent-green); font-size: 1.1em;">✨ 净化心灵</span>';
@@ -410,6 +420,9 @@ export class CampfireView {
     this.game.player.deck.forEach((card, index) => {
       const wrapper = document.createElement('div');
       wrapper.className = 'purification-card-wrapper';
+      wrapper.setAttribute('role', 'button');
+      wrapper.setAttribute('tabindex', '0');
+      wrapper.setAttribute('aria-label', `选择移除：${card.name || '未命名卡牌'}`);
 
       // Create standard card element
       const cardEl = Utils.createCardElement(card, index);
@@ -422,7 +435,7 @@ export class CampfireView {
       wrapper.appendChild(overlay);
 
       // Selection Logic
-      wrapper.addEventListener('click', () => {
+      const selectCard = () => {
         // Deselect others
         document.querySelectorAll('.purification-card-wrapper').forEach(el => el.classList.remove('selected'));
         if (selectedIndex === index) {
@@ -435,9 +448,15 @@ export class CampfireView {
           selectedIndex = index;
           wrapper.classList.add('selected');
           confirmBtn.disabled = false;
-          confirmBtn.textContent = `确认焚毁 (Burn)`;
+          confirmBtn.textContent = '确认焚毁';
           if (typeof audioManager !== 'undefined') audioManager.playSFX('click');
         }
+      };
+      wrapper.addEventListener('click', selectCard);
+      wrapper.addEventListener('keydown', event => {
+        if (event.key !== 'Enter' && event.key !== ' ') return;
+        event.preventDefault();
+        selectCard();
       });
       grid.appendChild(wrapper);
     });
@@ -462,6 +481,7 @@ export class CampfireView {
         // Actually campfireRemoveCard calls closeModal/completeCampfire, so we are good.
       }, 800);
     };
+    this.game.openModalWithFocus(modal, '.purification-card-wrapper');
   }
   campfireRemoveCard(index) {
     const card = this.game.player.deck[index];

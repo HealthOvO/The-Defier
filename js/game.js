@@ -42,6 +42,8 @@ import { SeasonBoardManager } from "./managers/SeasonBoardManager.js";
 import { SanctumAgendaManager } from "./managers/SanctumAgendaManager.js";
 import { CampfireView } from "./views/CampfireView.js";
 import { attachRegisteredHubControllers } from "./runtime/hub-registry.js";
+import { cloneEventTemplate } from "./data/events.js";
+import { safePlayerMessage } from "./ui/player-message.js";
 
 const PENDING_CHALLENGE_SLOT_RELOAD_KEY = 'theDefierPendingChallengeSlotReloadV1';
 const PENDING_CHALLENGE_SLOT_RELOAD_TTL_MS = 5 * 60 * 1000;
@@ -452,8 +454,8 @@ export class Game {
   }
   showPvpScreen() {
     if (this.recoverDeferredModuleWarmup('open-pvp', 'pvp')) return Promise.resolve(null);
-    this.showScreen('pvp-screen');
     if (typeof window === 'undefined' || !window.__THE_DEFIER_BOOT__) {
+      this.showScreen('pvp-screen');
       return Promise.resolve(this.getPvpScene());
     }
     return this.runDeferredModuleAction({
@@ -462,6 +464,7 @@ export class Game {
       errorMessage: '天道榜暂时无法开启。',
       load: () => this.ensurePvpSceneLoaded(),
       action: async scene => {
+        this.showScreen('pvp-screen');
         if (scene && typeof scene.onShow === 'function') await scene.onShow();
         return scene;
       }
@@ -902,6 +905,8 @@ export class Game {
   }
   parseAutomationBootConfig() {
     if (typeof window === 'undefined' || !window.location || !window.location.search) return null;
+    const host = String(window.location.hostname || '').toLowerCase();
+    if (!['localhost', '127.0.0.1', '::1'].includes(host)) return null;
     let params = null;
     try {
       params = new URLSearchParams(window.location.search);
@@ -910,7 +915,29 @@ export class Game {
       return null;
     }
     const mode = String(params.get('autotest') || '').trim();
-    const allowedModes = new Set(['guest-character-selection', 'guest-run-path-selection', 'guest-map', 'guest-battle', 'guest-pvp']);
+    const allowedModes = new Set([
+      'guest-character-selection',
+      'guest-run-path-selection',
+      'guest-map',
+      'guest-battle',
+      'guest-camp',
+      'guest-event',
+      'guest-trial',
+      'guest-forge',
+      'guest-shop',
+      'guest-reward',
+      'guest-treasure-bag',
+      'guest-collection',
+      'guest-treasure-compendium',
+      'guest-save-slots',
+      'guest-save-conflict',
+      'guest-save-history',
+      'guest-pvp',
+      'guest-expired-auth',
+      'season-ops-ledger',
+      'season-ops-leaderboard',
+      'social-relay-workspace'
+    ]);
     if (!allowedModes.has(mode)) return null;
     return {
       mode,
@@ -919,7 +946,12 @@ export class Game {
       spiritCompanionId: String(params.get('spirit') || 'swordWraith').trim() || 'swordWraith',
       runPathId: String(params.get('path') || 'insight').trim() || 'insight',
       realm: Math.max(1, Math.min(18, Math.floor(Number(params.get('realm')) || 1))),
-      battleType: String(params.get('battleType') || 'normal').trim() || 'normal'
+      battleType: String(params.get('battleType') || 'normal').trim() || 'normal',
+      campAction: String(params.get('campAction') || '').trim(),
+      eventId: String(params.get('eventId') || 'ancientAltar').trim() || 'ancientAltar',
+      shopTab: ['base', 'rumor', 'contract'].includes(String(params.get('shopTab') || 'base').trim()) ? String(params.get('shopTab') || 'base').trim() : 'base',
+      rewardGold: Math.max(0, Math.min(9999, Math.floor(Number(params.get('rewardGold')) || 128))),
+      rewardRingExp: Math.max(0, Math.min(9999, Math.floor(Number(params.get('rewardRingExp')) || 36)))
     };
   }
   scheduleAutomationBoot() {
@@ -946,21 +978,176 @@ export class Game {
       }
       return true;
     }
-    if (config.mode === 'guest-map' || config.mode === 'guest-battle') {
+    if (config.mode === 'guest-save-slots') {
+      this.showScreen('main-menu');
+      if (!this.systemView) this.systemView = new SystemView(this);
+      this.systemView.renderSaveSlots([{
+        timestamp: Date.UTC(2026, 6, 15, 9, 45, 0),
+        unlockedRealms: [1, 2, 3, 4],
+        player: {
+          characterId: 'linFeng',
+          realm: 4,
+          currentHp: 0,
+          gold: 0
+        }
+      }, null, null, null]);
+      return true;
+    }
+    if (config.mode === 'guest-save-conflict') {
+      this.showScreen('main-menu');
+      const localTime = Date.UTC(2026, 6, 14, 8, 30, 0);
+      const cloudTime = Date.UTC(2026, 6, 15, 9, 45, 0);
+      this.showSaveConflictModal({
+        timestamp: localTime,
+        player: { realm: 3, currentHp: 0, gold: 0 }
+      }, {
+        timestamp: cloudTime,
+        player: { realm: 4, currentHp: 72, gold: 186 }
+      }, cloudTime);
+      return true;
+    }
+    if (config.mode === 'guest-save-history') {
+      this.showScreen('main-menu');
+      if (!this.systemView) this.systemView = new SystemView(this);
+      this.systemView.renderCloudSaveHistory({
+        slotIndex: 0,
+        headRevisionId: 'revision-3',
+        revisions: [{
+          revisionId: 'revision-3',
+          revisionNumber: 3,
+          isHead: true,
+          operation: 'normal',
+          clientUpdatedAt: Date.UTC(2026, 6, 15, 9, 45, 0),
+          saveData: { player: { realm: 4, currentHp: 72, gold: 186 } }
+        }, {
+          revisionId: 'revision-2',
+          revisionNumber: 2,
+          operation: 'restore',
+          clientUpdatedAt: Date.UTC(2026, 6, 14, 8, 30, 0),
+          saveData: { player: { realm: 3, currentHp: 0, gold: 0 } }
+        }]
+      });
+      return true;
+    }
+    const runSurfaceModes = new Set([
+      'guest-map',
+      'guest-battle',
+      'guest-camp',
+      'guest-event',
+      'guest-trial',
+      'guest-forge',
+      'guest-shop',
+      'guest-reward',
+      'guest-treasure-bag',
+      'guest-collection',
+      'guest-treasure-compendium'
+    ]);
+    if (runSurfaceModes.has(config.mode)) {
       this.startNewGame(config.characterId, {
         runDestinyId: config.runDestinyId,
         spiritCompanionId: config.spiritCompanionId,
         runPathId: config.runPathId
       });
-      if (config.mode === 'guest-map') {
-        this.startRealm(config.realm, false);
+      if (config.mode === 'guest-battle') {
+        this.startDebugBattle(config.realm, config.battleType);
         return true;
       }
-      this.startDebugBattle(config.realm, config.battleType);
+      this.startRealm(config.realm, false);
+      const surfaceTypeByMode = {
+        'guest-camp': 'rest',
+        'guest-event': 'event',
+        'guest-trial': 'trial',
+        'guest-forge': 'forge',
+        'guest-shop': 'shop',
+        'guest-reward': 'elite',
+        'guest-treasure-bag': 'event',
+        'guest-collection': 'event',
+        'guest-treasure-compendium': 'event'
+      };
+      const surfaceNode = {
+        id: 91002,
+        row: 2,
+        type: surfaceTypeByMode[config.mode] || 'normal',
+        completed: false,
+        accessible: true
+      };
+      if (config.mode === 'guest-map') return true;
+      if (config.mode === 'guest-camp') {
+        surfaceNode.type = 'rest';
+        this.showCampfire(surfaceNode);
+        if (config.campAction === 'upgrade') this.showCampfireUpgrade();
+        if (config.campAction === 'purify') this.showCampfireRemove();
+        return true;
+      }
+      if (config.mode === 'guest-event') {
+        surfaceNode.type = 'event';
+        const event = cloneEventTemplate(config.eventId) || cloneEventTemplate('ancientAltar');
+        if (event) this.showEventModal(event, surfaceNode);
+        return !!event;
+      }
+      if (config.mode === 'guest-trial') {
+        surfaceNode.type = 'trial';
+        this.currentBattleNode = surfaceNode;
+        this.showTrialChallengeSelection(surfaceNode);
+        return true;
+      }
+      if (config.mode === 'guest-forge') {
+        surfaceNode.type = 'forge';
+        this.player.gold = Math.max(240, Math.floor(Number(this.player.gold) || 0));
+        this.currentBattleNode = surfaceNode;
+        this.showForgeChoiceModal(surfaceNode);
+        return true;
+      }
+      if (config.mode === 'guest-shop') {
+        surfaceNode.type = 'shop';
+        this.player.gold = Math.max(320, Math.floor(Number(this.player.gold) || 0));
+        this.shopActiveTab = config.shopTab;
+        this.showShop(surfaceNode);
+        return true;
+      }
+      if (config.mode === 'guest-reward') {
+        surfaceNode.type = 'elite';
+        this.currentBattleNode = surfaceNode;
+        this.showRewardScreen(config.rewardGold, false, null, config.rewardRingExp, {
+          insight: 2,
+          karma: 1
+        });
+        return true;
+      }
+      if (config.mode === 'guest-treasure-bag') {
+        this.showTreasureBag();
+        return true;
+      }
+      if (config.mode === 'guest-collection') {
+        this.showCollection();
+        return true;
+      }
+      if (config.mode === 'guest-treasure-compendium') {
+        this.showTreasureCompendium();
+        return true;
+      }
       return true;
     }
     if (config.mode === 'guest-pvp') {
       return this.showPvpScreen().then(() => true);
+    }
+    if (config.mode === 'season-ops-ledger' || config.mode === 'season-ops-leaderboard') {
+      const tab = config.mode === 'season-ops-leaderboard' ? 'leaderboard' : 'ledger';
+      return import('./testing/browser-audit-fixtures.js')
+        .then(module => module.showSeasonOpsAuditState(this, tab));
+    }
+    if (config.mode === 'social-relay-workspace') {
+      return import('./testing/browser-audit-fixtures.js')
+        .then(module => module.showSocialRelayAuditState(this));
+    }
+    if (config.mode === 'guest-expired-auth') {
+      this.showScreen('social-screen');
+      this.setSocialHubLoadingState('ready');
+      return this.ensureSocialViewLoaded().then(view => {
+        view.bind();
+        view.handleSessionExpired({ openLogin: false });
+        return true;
+      });
     }
     return false;
   }
@@ -2763,11 +2950,10 @@ export class Game {
   resetModalPresentation(modal) {
     return Game.prototype.ensureEventManager.call(this).resetModalPresentation(modal);
   }
-  activateModal(modal) {
+  activateModal(modal, preferredSelector = '.event-choice:not(.disabled)') {
     if (!modal) return false;
     this.resetModalPresentation(modal);
-    modal.classList.add('active');
-    return true;
+    return this.openModalWithFocus(modal, preferredSelector);
   }
   finishStrategicNode(node, title, message, icon = '✨') {
     const eventModal = document.getElementById('event-modal');
@@ -4227,7 +4413,7 @@ export class Game {
     // 云功能可用时才强制登录
     if (typeof AuthService === 'undefined') {
       console.error('[Debug] AuthService missing');
-      alert('登录系统未就绪，请刷新重试！(AuthService missing)');
+      alert('登录系统暂时不可用，请刷新后重试。');
       return;
     }
     if (AuthService.isCloudEnabled && AuthService.isCloudEnabled() && !AuthService.isLoggedIn()) {
@@ -5591,7 +5777,7 @@ export class Game {
   // 显示界面
   resetScreenScrollPosition(screen) {
     if (!screen) return;
-    const scrollTargets = [screen, ...Array.from(screen.querySelectorAll(['.map-scroll-container', '.codex-scroll-container', '.treasure-compendium-layout', '.ink-scroll-container', '.shop-container', '.reward-shell', '.challenge-scroll-container'].join(',')))];
+    const scrollTargets = [screen, ...Array.from(screen.querySelectorAll(['.map-scroll-container', '.codex-scroll-container', '.treasure-compendium-layout', '.ink-scroll-container', '.shop-container', '.reward-container', '.reward-shell', '.challenge-scroll-container'].join(',')))];
     try {
       if (typeof window !== 'undefined' && typeof window.scrollTo === 'function') {
         window.scrollTo(0, 0);
@@ -7478,6 +7664,91 @@ export class Game {
       particles.playCardEffect(targetEl, cardType);
     }
   }
+  getModalFocusTargets(modal) {
+    if (!modal || typeof modal.querySelectorAll !== 'function') return [];
+    return Array.from(modal.querySelectorAll('button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'))
+      .filter(element => typeof HTMLElement === 'undefined' || (element instanceof HTMLElement && element.offsetParent !== null));
+  }
+  restoreModalInvoker(modal) {
+    const returnFocus = modal && modal.__returnFocus;
+    if (modal) modal.__returnFocus = null;
+    queueMicrotask(() => {
+      if (returnFocus && returnFocus.isConnected && !returnFocus.disabled && typeof returnFocus.focus === 'function') {
+        returnFocus.focus({ preventScroll: true });
+      }
+    });
+  }
+  closeModalElement(modal, { restoreFocus = true } = {}) {
+    if (!modal || !modal.classList?.contains('active')) return false;
+    modal.classList.remove('active');
+    modal.classList.remove('upgrade-mode');
+    if (restoreFocus) this.restoreModalInvoker(modal);
+    return true;
+  }
+  openModalWithFocus(modal, preferredSelector = '') {
+    if (!modal) return false;
+    const activeElement = typeof document !== 'undefined' ? document.activeElement : null;
+    if (!modal.classList.contains('active') && activeElement && !modal.contains(activeElement)) {
+      modal.__returnFocus = activeElement;
+    }
+    modal.setAttribute('role', modal.getAttribute('role') || 'dialog');
+    modal.setAttribute('aria-modal', 'true');
+    if (modal.__focusKeydownHandler) {
+      modal.removeEventListener('keydown', modal.__focusKeydownHandler);
+    }
+    const keydownHandler = event => {
+      if (!modal.classList.contains('active')) return;
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        event.stopPropagation();
+        this.closeModalElement(modal);
+        return;
+      }
+      if (event.key !== 'Tab') return;
+      const controls = this.getModalFocusTargets(modal);
+      if (controls.length === 0) {
+        event.preventDefault();
+        return;
+      }
+      const first = controls[0];
+      const last = controls[controls.length - 1];
+      if (event.shiftKey && (document.activeElement === first || !modal.contains(document.activeElement))) {
+        event.preventDefault();
+        last.focus({ preventScroll: true });
+      } else if (!event.shiftKey && (document.activeElement === last || !modal.contains(document.activeElement))) {
+        event.preventDefault();
+        first.focus({ preventScroll: true });
+      }
+    };
+    modal.addEventListener('keydown', keydownHandler);
+    modal.__focusKeydownHandler = keydownHandler;
+    if (modal.__focusClassObserver) {
+      modal.__focusClassObserver.disconnect();
+    }
+    if (typeof MutationObserver !== 'undefined') {
+      const focusClassObserver = new MutationObserver(() => {
+        if (modal.classList.contains('active')) return;
+        focusClassObserver.disconnect();
+        if (modal.__focusClassObserver === focusClassObserver) modal.__focusClassObserver = null;
+        this.restoreModalInvoker(modal);
+      });
+      focusClassObserver.observe(modal, {
+        attributes: true,
+        attributeFilter: ['class']
+      });
+      modal.__focusClassObserver = focusClassObserver;
+    }
+    modal.classList.add('active');
+    const focusFirstControl = () => {
+      if (!modal.classList.contains('active')) return;
+      const preferred = preferredSelector ? modal.querySelector(preferredSelector) : null;
+      const target = preferred && !preferred.disabled ? preferred : this.getModalFocusTargets(modal)[0];
+      if (target && typeof target.focus === 'function') target.focus({ preventScroll: true });
+    };
+    if (typeof requestAnimationFrame === 'function') requestAnimationFrame(focusFirstControl);
+    else queueMicrotask(focusFirstControl);
+    return true;
+  }
   closeRewardModal(options = {}) {
     const modal = document.getElementById('reward-modal');
     if (!modal || !modal.classList || !modal.classList.contains('active')) return false;
@@ -7501,6 +7772,11 @@ export class Game {
       activeConfirm.__systemCancelHandler();
     }
     const invokeRewardCallback = options.invokeRewardCallback !== false;
+    const activeModals = Array.from(document.querySelectorAll('.modal.active'));
+    const focusOwner = activeModals.find(modal => modal.contains(document.activeElement))
+      || [...activeModals].reverse().find(modal => modal.__returnFocus)
+      || activeModals[activeModals.length - 1]
+      || null;
     this.closeRewardModal({
       invokeCallback: invokeRewardCallback
     });
@@ -7513,6 +7789,7 @@ export class Game {
     // Specific Modals (lacking generic class)
     const purification = document.getElementById('purification-modal');
     if (purification) purification.classList.remove('active');
+    if (focusOwner) this.restoreModalInvoker(focusOwner);
   }
 
   // ========== 商店功能 ==========
@@ -8494,25 +8771,34 @@ export class Game {
       }
       const history = Array.isArray(rumors.history) && rumors.history.length > 0 ? `<div class="shop-summary-history">最近锁定：${rumors.history.slice(-2).join(' ｜ ')}</div>` : '';
       summaryEl.innerHTML = `
-                <div class="shop-summary-title">${activeTab?.icon || '🏪'} ${activeTab?.label || '基础页'}</div>
-                <div class="shop-summary-text">${summaryText}</div>
+                <div class="shop-summary-lead">
+                    <div class="shop-summary-title">${activeTab?.icon || '🏪'} ${activeTab?.label || '基础页'}</div>
+                    <div class="shop-summary-text">${summaryText}</div>
+                </div>
                 <div class="shop-spend-advice tone-${advice.tone || 'save'}">
-                    <span class="shop-advice-badge">${advice.action}</span>
-                    <div class="shop-advice-text">${advice.reason}</div>
-                    ${advice.forecast?.summary ? `<div class="shop-advice-forecast ${advice.forecast.danger || 'low'}">${advice.forecast.summary}</div>` : ''}
-                    ${advice.economy ? `
-                        <div class="shop-advice-economy">
-                            <span class="shop-economy-chip ${advice.economy.status || 'tight'}">预算 ${advice.economy.budget}</span>
-                            <span class="shop-economy-chip ${advice.economy.status || 'tight'}">储备线 ${advice.economy.reserveTarget}</span>
-                            <span class="shop-economy-chip ${advice.economy.status || 'tight'}">建议单次 ≤ ${advice.economy.spendCeiling}</span>
-                            <span class="shop-economy-chip ${advice.economy.status || 'tight'}">${advice.economy.statusLabel}</span>
-                        </div>
-                        <div class="shop-advice-note">${advice.economy.note}</div>
-                    ` : ''}
-                    <div class="shop-advice-meta">
-                        <span>最佳卡牌：${advice.bestCard?.item?.card?.name || '暂无'}</span>
-                        <span>最佳服务：${advice.bestService?.item?.name || '暂无'}</span>
+                    <div class="shop-advice-primary">
+                        <span class="shop-advice-badge">${advice.action}</span>
+                        <div class="shop-advice-text">${advice.reason}</div>
                     </div>
+                    <details class="shop-advice-details">
+                        <summary>预算与前路</summary>
+                        <div class="shop-advice-detail-body">
+                            ${advice.forecast?.summary ? `<div class="shop-advice-forecast ${advice.forecast.danger || 'low'}">${advice.forecast.summary}</div>` : ''}
+                            ${advice.economy ? `
+                                <div class="shop-advice-economy">
+                                    <span class="shop-economy-chip ${advice.economy.status || 'tight'}">预算 ${advice.economy.budget}</span>
+                                    <span class="shop-economy-chip ${advice.economy.status || 'tight'}">储备线 ${advice.economy.reserveTarget}</span>
+                                    <span class="shop-economy-chip ${advice.economy.status || 'tight'}">建议单次 ≤ ${advice.economy.spendCeiling}</span>
+                                    <span class="shop-economy-chip ${advice.economy.status || 'tight'}">${advice.economy.statusLabel}</span>
+                                </div>
+                                <div class="shop-advice-note">${advice.economy.note}</div>
+                            ` : ''}
+                            <div class="shop-advice-meta">
+                                <span>最佳卡牌：${advice.bestCard?.item?.card?.name || '暂无'}</span>
+                                <span>最佳服务：${advice.bestService?.item?.name || '暂无'}</span>
+                            </div>
+                        </div>
+                    </details>
                 </div>
                 ${history}
             `;
@@ -8531,7 +8817,10 @@ export class Game {
         cardEl.classList.add(`rarity-${item.card.rarity || 'common'}`);
         if (item.sold) cardEl.classList.add('sold');
         cardEl.style.cursor = 'zoom-in';
-        cardEl.addEventListener('click', () => {
+        cardEl.setAttribute('role', 'button');
+        cardEl.setAttribute('tabindex', '0');
+        cardEl.setAttribute('aria-label', `查看卡牌详情：${item.card.name || '未命名卡牌'}`);
+        const openCardDetail = () => {
           const fit = this.evaluateShopCardDeckFit(item.card);
           Utils.showCardDetail(item.card, {
             sectionLabel: '商店详情',
@@ -8542,13 +8831,21 @@ export class Game {
             extraSummaryRows: fit.summaryRows,
             closeLabel: '返回商店'
           });
+        };
+        cardEl.addEventListener('click', openCardDetail);
+        cardEl.addEventListener('keydown', event => {
+          if (event.key !== 'Enter' && event.key !== ' ') return;
+          event.preventDefault();
+          openCardDetail();
         });
-        const priceBtn = document.createElement('div');
+        const priceBtn = document.createElement('button');
+        priceBtn.type = 'button';
         priceBtn.className = `card-price ${this.canAffordShopItem(item) && !item.sold ? '' : 'cannot-afford'}`.trim();
         priceBtn.innerHTML = item.sold ? '已售出' : this.formatShopPrice(item);
         if (!item.sold) {
           priceBtn.addEventListener('click', () => this.buyItem('card', index));
-          priceBtn.style.cursor = 'pointer';
+        } else {
+          priceBtn.disabled = true;
         }
         wrapper.appendChild(cardEl);
         wrapper.appendChild(priceBtn);
@@ -8574,6 +8871,9 @@ export class Game {
       const fit = this.evaluateShopServiceFit(service);
       el.className = `shop-service currency-${currency}${service.riskLabel ? ' is-risky' : ''}`;
       el.id = `service-${service.id}`;
+      el.setAttribute('role', 'button');
+      el.setAttribute('tabindex', '0');
+      el.setAttribute('aria-label', `查看服务详情：${service.name || '未命名服务'}`);
       if (service.sold) el.style.opacity = '0.5';
       const tags = [service.tagLabel ? {
         value: service.tagLabel,
@@ -8595,18 +8895,29 @@ export class Game {
                     <div class="service-desc">${service.desc}</div>
                     <div class="service-fit-note">${fit.reason}</div>
                 </div>
-                <button class="buy-btn ${isAffordable && !service.sold ? '' : 'disabled'}">
+                <button type="button" class="buy-btn ${isAffordable && !service.sold ? '' : 'disabled'}">
                     <span class="price">${service.sold ? '已售出' : this.formatShopPrice(service)}</span>
                 </button>
-            `;
+      `;
       el.style.cursor = 'zoom-in';
+      const openServiceDetail = () => {
+        Utils.showShopServiceDetail(service, this.buildShopServiceDetailMeta(service, activeTab));
+      };
       el.addEventListener('click', event => {
         if (event.target && event.target.closest && event.target.closest('.buy-btn')) return;
-        Utils.showShopServiceDetail(service, this.buildShopServiceDetailMeta(service, activeTab));
+        openServiceDetail();
       });
+      el.addEventListener('keydown', event => {
+        if (event.key !== 'Enter' && event.key !== ' ') return;
+        if (event.target && event.target.closest && event.target.closest('.buy-btn')) return;
+        event.preventDefault();
+        openServiceDetail();
+      });
+      const btn = el.querySelector('.buy-btn');
       if (!service.sold) {
-        const btn = el.querySelector('.buy-btn');
         btn.addEventListener('click', () => this.buyItem('service', index));
+      } else {
+        btn.disabled = true;
       }
       serviceContainer.appendChild(el);
     });
@@ -8916,7 +9227,7 @@ export class Game {
           // Deselect if clicking same
           selectedIndex = -1;
           confirmBtn.disabled = true;
-          confirmBtn.textContent = '确认移除 (Confirm)';
+          confirmBtn.textContent = '确认移除';
         } else {
           // Select new
           selectedIndex = index;
@@ -9083,7 +9394,7 @@ export class Game {
       if (result.success) {
         await this.onLoginSuccess(messageEl, '登录成功！');
       } else {
-        messageEl.innerText = result.message || '登录失败';
+        messageEl.innerText = safePlayerMessage(result, '登录失败，请检查账号和密码');
         messageEl.style.color = '#ff6b6b';
       }
     } catch (error) {
@@ -9405,8 +9716,11 @@ export class Game {
         // 注册响应已经带有持久会话，避免重复登录制造第二个设备会话。
         await this.onLoginSuccess(msg, '注册成功！已绑定旧存档');
       } else {
-        msg.innerText = result.message || '注册未完成，请检查道号和密语规则';
+        msg.innerText = safePlayerMessage(result, '注册未完成，请检查道号和密语规则');
       }
+    } catch (error) {
+      console.error('handleRegister failed:', error);
+      msg.innerText = '注册暂时不可用，请稍后再试';
     } finally {
       this.isAuthBusy = false;
     }

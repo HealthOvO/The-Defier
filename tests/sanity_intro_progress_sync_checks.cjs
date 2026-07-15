@@ -118,6 +118,8 @@ function assert(condition, message) {
   assert(!intro.includes('镜像演武'), 'intro current guide should use 镜像练习 instead of stale 镜像演武 copy');
   assert(!index.includes('镜像演武'), 'index current PVP entry should use 镜像练习 instead of stale 镜像演武 copy');
   assert(!systemView.includes('镜像演武'), 'SystemView current guide should use 镜像练习 instead of stale 镜像演武 copy');
+  assert(systemView.includes('界面反馈'), 'SystemView controls guide should describe interface feedback');
+  assert(!/常用快捷键|按\s*L|按\s*F|<strong>Esc<\/strong>|快捷预设/.test(systemView), 'SystemView should not expose keyboard shortcut copy in the player guide');
 
   console.log(`Intro/progress/SystemView sync checks passed (${sharedAnchors.length} shared anchors).`);
 })();

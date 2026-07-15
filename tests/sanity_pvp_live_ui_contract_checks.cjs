@@ -21,6 +21,66 @@ const css = read('css/pvp.css');
 const nodeGate = read('tests/run_node_checks.sh');
 const browserGate = read('tests/run_browser_release_checks.sh');
 const liveBrowserAudit = read('tests/browser_pvp_live_audit.mjs');
+const frontendLayoutAudit = read('tests/browser_frontend_layout_audit.mjs');
+
+const onShowBody = methodBody(scene, 'onShow');
+const initialLoadLivePanelBody = methodBody(scene, 'loadLivePanel');
+assert.ok(
+  onShowBody.includes("return this.switchTab('live');"),
+  'PVP onShow should keep the deferred route pending until the live entry finishes loading',
+);
+assert.ok(
+  initialLoadLivePanelBody.indexOf('this.renderLivePanel();') >= 0
+    && initialLoadLivePanelBody.indexOf('this.renderLivePanel();') < initialLoadLivePanelBody.indexOf('await this.resumeLiveMatch();'),
+  'authenticated PVP entry should replace static guest copy before awaiting resume requests',
+);
+assert.ok(
+  /action:\s*async scene => \{\s*this\.showScreen\('pvp-screen'\);/.test(game),
+  'the player route should reveal PVP only after its lazy scene and stylesheet have loaded',
+);
+assert.ok(
+  scene.includes('<details class="pvp-ranking-details">')
+    && scene.includes('pvp-risk-primary-line'),
+  'ranking should keep counterplay visible and collapse secondary analysis behind a disclosure',
+);
+assert.ok(
+  /#pvp-screen \.pvp-content-container\s*\{[\s\S]*?overflow-y:\s*auto;/.test(css),
+  'PVP content should own vertical overflow on short desktop viewports',
+);
+assert.ok(
+  /@media \(max-width: 520px\)[\s\S]*?#pvp-screen #tab-live \.pvp-live-loadout-presets\s*\{[\s\S]*?grid-template-columns:\s*repeat\(3, minmax\(0, 1fr\)\);/.test(css),
+  'mobile live PVP should keep all three loadout presets in a complete three-column row',
+);
+assert.ok(
+  frontendLayoutAudit.includes("live: ['[data-live-action=\"join-queue\"]', '[data-live-loadout-preset]']"),
+  'mobile layout audit should include every live loadout preset as a critical target',
+);
+assert.ok(
+  scene.includes('const structureMatches = existingOptions.length === presets.length')
+    && scene.includes("option.setAttribute('aria-pressed', isSelected ? 'true' : 'false')"),
+  'live loadout polling should update stable buttons instead of replacing a control during interaction',
+);
+assert.ok(
+  /@media \(min-width: 961px\) and \(max-width: 1180px\)[\s\S]*?#pvp-screen \.defense-layout-split\s*\{[\s\S]*?flex-direction:\s*column;/.test(css),
+  'the defense editor should stack before its desktop columns overflow',
+);
+assert.ok(
+  /\.talisman-card:focus-within \.buy-overlay\s*\{[\s\S]*?height:\s*60px;/.test(css)
+    && /@media \(min-width: 961px\) and \(max-width: 1180px\)[\s\S]*?#pvp-screen \.buy-overlay\s*\{[\s\S]*?height:\s*48px;/.test(css),
+  'shop actions should be keyboard-revealed and persistently visible on compact desktop',
+);
+assert.ok(
+  html.includes('<span class="btn-text">注入神念</span>')
+    && !html.includes('注入神念 (上传数据)'),
+  'the defense action should use player-facing copy instead of transport terminology',
+);
+assert.ok(
+  frontendLayoutAudit.includes("{ id: 'desktop-compact-1024', width: 1024, height: 640, isMobile: false }")
+    && frontendLayoutAudit.includes('inspectPvpCompactDesktopSurface(page, scenario.id)')
+    && frontendLayoutAudit.includes('focusButtonFocused = document.activeElement === focusButton')
+    && frontendLayoutAudit.includes('pvpCompactDesktopSurface?.ok'),
+  'the frontend layout gate should exercise compact desktop PVP at 1024x640',
+);
 
 [
   {

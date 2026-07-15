@@ -856,6 +856,31 @@ const browserAutomationBootAudit = read('tests/browser_automation_boot_audit.mjs
 });
 
 [
+  "id: 'guest-event'",
+  "id: 'guest-shop'",
+  "id: 'guest-reward'",
+  "id: 'guest-treasure-bag'",
+  "id: 'guest-forge'",
+  "id: 'guest-save-slots'",
+  "id: 'guest-save-conflict'",
+  "id: 'guest-save-history'",
+  'verifyTreasureBagKeyboard',
+  'probe.shopSurface.adviceCollapsed',
+  'probe.shopSurface.firstRowFullyVisible',
+  '!probe.rewardSurface.cardActionOverlap',
+  'probe.forgeSurface.visibleChoiceCount === 5',
+  'probe.saveSlotsSurface.minHistoryHeight >= 44',
+  'probe.saveConflictSurface.minButtonHeight >= 44',
+  'probe.cloudHistorySurface.minButtonHeight >= 44',
+  'treasure bag focuses its close control and supports Escape dismissal',
+].forEach((needle) => {
+  assert.ok(
+    browserAutomationBootAudit.includes(needle),
+    `automation boot browser audit should cover secondary frontend surface marker: ${needle}`,
+  );
+});
+
+[
   "id: 'endless-paranoia-modal'",
   'activateEndlessParanoiaModal',
   'showEndlessParanoiaSelection(26)',
@@ -1339,6 +1364,9 @@ assert.ok(
   "page.locator('#reward-run-path-meta > summary')",
   'await expeditionSummary.click()',
   'await runPathSummary.click()',
+  'reward mobile CTA buttons scroll into the 844x390 viewport and remain hit-testable',
+  'page.setViewportSize({ width: 844, height: 390 })',
+  'reward-mobile-844x390-cta.png',
 ].forEach((needle) => {
   assert.ok(
     browserRewardMetaMobileAudit.includes(needle),

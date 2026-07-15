@@ -159,7 +159,10 @@ export class EventView {
       }
       const btn = document.createElement('button');
       btn.className = 'event-choice';
-      if (!canChoose) btn.classList.add('disabled');
+      if (!canChoose) {
+        btn.classList.add('disabled');
+        btn.disabled = true;
+      }
       const choiceSummary = this.game.buildEventChoiceEffectSummary(choice);
       const escape = value => String(value == null ? '' : value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
       btn.innerHTML = `
@@ -175,7 +178,7 @@ export class EventView {
       }
       refs.choicesEl.appendChild(btn);
     });
-    modal.classList.add('active');
+    this.game.openModalWithFocus(modal, '.event-choice:not(.disabled)');
   }
   showTrialChallengeSelection(node) {
     const {
@@ -325,7 +328,7 @@ export class EventView {
       result: '保留资源，继续前进。',
       canChoose: true,
       handler: () => {
-        modal.classList.remove('active');
+        this.game.closeModalElement(modal);
         if (this.game.map && typeof this.game.map.completeNode === 'function') {
           this.game.map.completeNode(node);
         }
@@ -338,7 +341,10 @@ export class EventView {
     options.forEach(option => {
       const btn = document.createElement('button');
       btn.className = 'event-choice';
-      if (!option.canChoose) btn.classList.add('disabled');
+      if (!option.canChoose) {
+        btn.classList.add('disabled');
+        btn.disabled = true;
+      }
       btn.innerHTML = `
                 <div>${option.icon} ${option.text}</div>
                 <div class="choice-effect">${option.result}</div>
@@ -355,7 +361,7 @@ export class EventView {
       }
       choicesEl.appendChild(btn);
     });
-    modal.classList.add('active');
+    this.game.openModalWithFocus(modal, '.event-choice:not(.disabled)');
   }
   showForgeCardDraft(node, costs = {}) {
     this.game.currentBattleNode = node;
@@ -404,7 +410,10 @@ export class EventView {
     options.forEach(option => {
       const btn = document.createElement('button');
       btn.className = 'event-choice';
-      if (!option.canChoose) btn.classList.add('disabled');
+      if (!option.canChoose) {
+        btn.classList.add('disabled');
+        btn.disabled = true;
+      }
       btn.innerHTML = `
                 <div>${option.icon} ${option.text}</div>
                 <div class="choice-effect">${option.result}</div>
@@ -419,7 +428,7 @@ export class EventView {
             });
             return;
           }
-          modal.classList.remove('active');
+          this.game.closeModalElement(modal);
           if (this.game.map && typeof this.game.map.applyForgeChoice === 'function') {
             this.game.map.applyForgeChoice(node, option.id, {
               forgeCost,
@@ -584,7 +593,7 @@ export class EventView {
     if (!modal || !titleEl || !iconEl || !descEl || !choicesEl) return;
     const offers = this.game.getTemporaryEventShopOffers(effect);
     const continueFromMarket = () => {
-      modal.classList.remove('active');
+      this.game.closeModalElement(modal);
       this.game.onEventComplete();
     };
     titleEl.textContent = effect.title || '裂隙行商';
@@ -595,7 +604,10 @@ export class EventView {
       const canBuy = this.game.player.gold >= offer.price;
       const btn = document.createElement('button');
       btn.className = 'event-choice';
-      if (!canBuy) btn.classList.add('disabled');
+      if (!canBuy) {
+        btn.classList.add('disabled');
+        btn.disabled = true;
+      }
       btn.innerHTML = `
                 <div>${offer.icon} ${offer.name}（-${offer.price} 灵石）</div>
                 <div class="choice-effect">${offer.desc}</div>
@@ -631,7 +643,7 @@ export class EventView {
         `;
     leaveBtn.onclick = continueFromMarket;
     choicesEl.appendChild(leaveBtn);
-    modal.classList.add('active');
+    this.game.openModalWithFocus(modal, '.event-choice:not(.disabled)');
   }
   showEventUpgradeCard() {
     const modal = document.getElementById('deck-modal');
@@ -742,7 +754,7 @@ export class EventView {
       this.game.closeModal();
       this.game.onEventComplete();
     };
-    modal.classList.add('active');
+    this.game.openModalWithFocus(modal, '.event-upgrade-list [role="button"]');
   }
 }
 

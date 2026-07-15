@@ -238,14 +238,33 @@
 
 /* --- Fixes for User Scroll Requests --- */
 
-/* 1. Event Modal: Disable scrolling as requested */
+/* Keep the frame stable while letting long event and camp choices remain reachable. */
 #event-modal .modal-content {
     overflow: hidden !important;
-    /* Force no scrollbar */
     display: flex;
     flex-direction: column;
-    justify-content: center;
-    max-height: 80vh !important;
+    justify-content: flex-start;
+    width: min(720px, calc(100vw - 24px));
+    max-height: min(88dvh, 760px) !important;
+    padding: 0;
+}
+
+#event-modal .event-header {
+    flex: 0 0 auto;
+}
+
+#event-modal .event-body {
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(207, 170, 112, 0.72) rgba(255, 255, 255, 0.05);
+}
+
+#event-modal .event-choice {
+    min-height: 44px;
+    margin-bottom: 0;
 }
 
 /* 2. Upgrade Modal: Fix scrolling for card grid */

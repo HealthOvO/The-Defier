@@ -122,6 +122,20 @@ async function safeScreenshot(page, outPath) {
     };
   });
   add('guide modal renders overview content promptly on desktop', !!desktopProbe?.ok, JSON.stringify(desktopProbe || null));
+  const focusEntryProbe = await page.evaluate(() => {
+    const modal = document.getElementById('settings-modal');
+    const active = document.activeElement;
+    return {
+      modalActive: !!modal?.classList.contains('active'),
+      focusInside: !!modal?.contains(active),
+      activeLabel: active?.getAttribute?.('aria-label') || active?.textContent?.trim() || '',
+    };
+  });
+  add(
+    'guide modal moves keyboard focus into the active dialog',
+    focusEntryProbe.modalActive && focusEntryProbe.focusInside,
+    JSON.stringify(focusEntryProbe),
+  );
   await safeScreenshot(page, path.join(outDir, 'guide-desktop.png'));
 
   await page.click("button[data-tab='controls']", { force: true });
@@ -131,7 +145,14 @@ async function safeScreenshot(page, outPath) {
     const activeTab = document.querySelector('.intro-tab-btn.active');
     const text = (activePanel?.textContent || '').replace(/\s+/g, ' ').trim();
     return {
-      ok: !!activePanel && !!activeTab && activeTab.textContent.trim() === '操作' && /回合|快捷键|日志/.test(text),
+      ok:
+        !!activePanel &&
+        !!activeTab &&
+        activeTab.textContent.trim() === '操作' &&
+        /结束回合/.test(text) &&
+        /战斗记录/.test(text) &&
+        /界面反馈/.test(text) &&
+        !/常用快捷键|按\s*L|按\s*F|\bEsc\b|快捷预设/.test(text),
       activeTab: activeTab?.textContent?.trim() || '',
       textSample: text.slice(0, 180),
     };
@@ -167,6 +188,20 @@ async function safeScreenshot(page, outPath) {
     !!updateProbe?.ok,
     JSON.stringify(updateProbe || null)
   );
+
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(100);
+  const focusReturnProbe = await page.evaluate(() => ({
+    modalActive: !!document.getElementById('settings-modal')?.classList.contains('active'),
+    activeBootAction: document.activeElement?.getAttribute?.('data-boot-action') || '',
+  }));
+  add(
+    'guide modal closes with Escape and restores focus to its launcher',
+    !focusReturnProbe.modalActive && focusReturnProbe.activeBootAction === 'open-guide',
+    JSON.stringify(focusReturnProbe),
+  );
+  await page.click('button[data-boot-action="open-guide"]', { force: true });
+  await page.waitForTimeout(250);
 
   await page.setViewportSize({ width: 390, height: 844 });
   await page.waitForTimeout(250);

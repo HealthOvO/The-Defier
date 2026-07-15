@@ -13,7 +13,7 @@ export class SystemView {
   showFirstBattleGuide() {
     if (!this.game.guideState || this.game.guideState.firstBattleGuideSeen) return;
     this.game.markGuideSeen('firstBattleGuideSeen');
-    const tips = ['新手提示：先看敌方意图，再决定是进攻还是防御。', '新手提示：打完牌后，点击“结束回合”推进战斗。', '新手提示：按 L 可以打开战斗记录，复盘每次触发。'];
+    const tips = ['新手提示：先看敌方意图，再决定是进攻还是防御。', '新手提示：打完牌后，点击“结束回合”推进战斗。'];
     tips.forEach((msg, idx) => {
       setTimeout(() => {
         if (this.game.currentScreen !== 'battle-screen') return;
@@ -116,13 +116,6 @@ export class SystemView {
           this.game.refreshLegacyMissionTrackers();
           if (!this.game.guideState.battleLogHintSeen) {
             this.game.markGuideSeen('battleLogHintSeen');
-            setTimeout(() => {
-              if (this.game.currentScreen !== 'battle-screen') return;
-              Utils.showBattleLog('提示：按 L 可查看战斗记录面板。', {
-                category: 'system',
-                duration: 2600
-              });
-            }, 350);
           }
         } else if (screenId === 'collection') {
           this.game.initCollection();
@@ -282,7 +275,7 @@ export class SystemView {
 
             <div class="intro-section">
                 <h3>👥 可选角色（6位）</h3>
-                <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                <div class="intro-character-grid">
                     <div class="char-highlight" style="border-color: var(--accent-gold);">
                         <strong style="color: var(--accent-gold);">🤺 林风 · 逆命者</strong>
                         <p style="font-size: 0.85rem; margin-top: 6px;">命环成长收益高，适合长期养成与后期爆发。</p>
@@ -319,7 +312,7 @@ export class SystemView {
                     <li><strong>手牌与灵力</strong>：灵力决定本回合能打多少牌，先安排费用再追求连锁。</li>
                     <li><strong>敌方意图</strong>：敌人会提前展示攻击、防御、控场或特殊动作；高压回合优先防守、净化或打断。</li>
                     <li><strong>护盾与生命</strong>：护盾多为当回合保护，生命损失会持续影响后续路线。</li>
-                    <li><strong>战斗日志</strong>：按 L 打开日志，复盘伤害、法宝、法则和状态的触发顺序。</li>
+                    <li><strong>战斗记录</strong>：汇总伤害、法宝、法则和状态的触发顺序，便于复盘回合得失。</li>
                 </ul>
             </div>
 
@@ -368,11 +361,11 @@ export class SystemView {
             </div>
 
             <div class="intro-section">
-                <h3>⌨️ 常用快捷键</h3>
+                <h3>🧭 界面反馈</h3>
                 <ul class="intro-list">
-                    <li><strong>L</strong>：打开/关闭战斗日志面板。</li>
-                    <li><strong>F</strong>：切换全屏模式。</li>
-                    <li><strong>Esc</strong>：退出全屏或关闭当前弹窗。</li>
+                    <li><strong>战斗记录</strong>：保留回合内的伤害、状态与系统触发顺序。</li>
+                    <li><strong>状态提示</strong>：只保留当前操作需要的反馈，避免遮住战场与手牌。</li>
+                    <li><strong>弹窗层级</strong>：重要确认会暂时置顶，关闭后回到原来的游戏位置。</li>
                 </ul>
             </div>
 
@@ -485,7 +478,7 @@ export class SystemView {
         </div>
         `;
     this.bindSystemIntroDelegates(settingsContainer);
-    modal.classList.add('active');
+    this.game.openModalWithFocus(modal, '.modal-close');
     if (typeof requestAnimationFrame === 'function') {
       requestAnimationFrame(() => this.game.switchIntroTab('overview'));
     } else {
@@ -506,7 +499,7 @@ export class SystemView {
         descEl.textContent = this.game.player.activeSkill.description;
       }
     }
-    modal.classList.add('active');
+    this.game.openModalWithFocus(modal, '.skill-confirm-actions button');
   }
   showConfirmModal(message, onConfirm, onCancel = null) {
     const returnFocus = typeof HTMLElement !== 'undefined' && document.activeElement instanceof HTMLElement ? document.activeElement : null;
@@ -674,7 +667,7 @@ export class SystemView {
       if (closeBtn.__systemClickHandler) {
         closeBtn.removeEventListener('click', closeBtn.__systemClickHandler);
       }
-      const closeHandler = () => modal.classList.remove('active');
+      const closeHandler = () => this.game.closeModalElement(modal);
       closeBtn.addEventListener('click', closeHandler);
       closeBtn.__systemClickHandler = closeHandler;
     }
@@ -684,12 +677,12 @@ export class SystemView {
       }
       const okHandler = () => {
         if (onOk) onOk();
-        modal.classList.remove('active');
+        this.game.closeModalElement(modal);
       };
       okBtn.addEventListener('click', okHandler);
       okBtn.__systemClickHandler = okHandler;
     }
-    modal.classList.add('active');
+    this.game.openModalWithFocus(modal, '#generic-alert-btn');
   }
   showLoginModal() {
     const modal = document.getElementById('auth-modal');
@@ -708,7 +701,7 @@ export class SystemView {
       return;
     }
     if (modal) {
-      modal.classList.add('active');
+      this.game.openModalWithFocus(modal, '#auth-username');
       // Clear inputs
       const u = document.getElementById('auth-username');
       const p = document.getElementById('auth-password');
@@ -742,7 +735,8 @@ export class SystemView {
           dateLabel = "注册";
         }
         const realm = slotData.player && slotData.player.realm ? slotData.player.realm : 1;
-        const hp = slotData.player && slotData.player.currentHp ? slotData.player.currentHp : '?';
+        const hpValue = slotData.player?.currentHp;
+        const hp = hpValue !== null && hpValue !== '' && Number.isFinite(Number(hpValue)) ? Number(hpValue) : '?';
         const roleId = slotData.player && slotData.player.characterId;
         let roleName = '未知角色';
         let roleIcon = '👤';
@@ -815,7 +809,7 @@ export class SystemView {
       container.appendChild(slotEl);
     });
     this.bindSaveSlotDelegates(container);
-    modal.classList.add('active');
+    this.game.openModalWithFocus(modal, '[data-system-action="select-slot"]');
   }
   bindSystemIntroDelegates(settingsContainer) {
     if (!settingsContainer || settingsContainer.__systemIntroDelegatesBound) return;
@@ -922,7 +916,7 @@ export class SystemView {
       });
       list.__cloudHistoryDelegateBound = true;
     }
-    modal.classList.add('active');
+    this.game.openModalWithFocus(modal, '.cloud-history-restore-btn:not([disabled])');
   }
   showSaveConflictModal(localData, cloudData, cloudTime) {
     const modal = document.getElementById('save-conflict-modal');
@@ -935,9 +929,10 @@ export class SystemView {
     const formatInfo = (data, time) => {
       if (!data) return '无数据';
       const date = time ? new Date(time).toLocaleString() : data.timestamp ? new Date(data.timestamp).toLocaleString() : '未知时间';
-      const realm = data.player && data.player.realm ? data.player.realm : '?';
-      const hp = data.player && data.player.currentHp ? data.player.currentHp : '?';
-      const gold = data.player && data.player.gold ? data.player.gold : '?';
+      const formatNumber = value => value !== null && value !== '' && Number.isFinite(Number(value)) ? Number(value) : '?';
+      const realm = formatNumber(data.player?.realm);
+      const hp = formatNumber(data.player?.currentHp);
+      const gold = formatNumber(data.player?.gold);
       return `
                     <div style="margin-bottom:4px">📅 ${date}</div>
                 <div style="margin-bottom:4px">🏔️ 第 ${realm} 重天</div>
@@ -950,7 +945,7 @@ export class SystemView {
 
     // Store temp data
     this.game.tempCloudData = cloudData;
-    modal.classList.add('active');
+    this.game.openModalWithFocus(modal, '.save-conflict-options button');
   }
 }
 if (typeof window !== 'undefined') {}

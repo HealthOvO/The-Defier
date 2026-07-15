@@ -60,7 +60,7 @@ assert.equal((html.match(/href="css\/season-ops\.css"/g) || []).length, 0, 'seas
   'data-season-ops-action="purchase"',
   'data-season-ops-action="load-ledger"',
   'getSeasonOpsLedger({',
-  '只统计正式真人对局的服务端权威结算',
+  '只统计正式真人对局，练习与镜像不计入排名',
   '奖励不影响战力',
 ].forEach(marker => {
   assert.ok(view.includes(marker), `season ops view should include ${marker}`);
